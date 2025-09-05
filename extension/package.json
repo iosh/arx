@@ -1,15 +1,17 @@
 {
-  "name": "arx",
+  "name": "@arx/extension",
   "description": "manifest.json description",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wxt",
+    "dev:chrome": "wxt -b chrome",
     "dev:firefox": "wxt -b firefox",
-    "build": "wxt build",
+    "build": "pnpm build:chrome && pnpm build:firefox",
+    "build:chrome": "wxt build -b chrome",
     "build:firefox": "wxt build -b firefox",
-    "zip": "wxt zip",
+    "zip": "pnpm zip:chrome && pnpm zip:firefox",
+    "zip:chrome": "wxt zip -b chrome",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare"

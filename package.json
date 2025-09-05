@@ -8,12 +8,17 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
+    "format": "biome format --write",
+    "lint": "pnpm exec biome lint --write",
+    "check": "biome check --write",
     "build": "turbo build",
+    "build:chrome": "pnpm --filter @arx/extension build:chrome",
+    "build:firefox": "pnpm --filter @arx/extension build:firefox",
     "dev": "turbo dev",
-    "lint": "turbo lint",
-    "test": "turbo test",
-    "type-check": "turbo type-check",
-    "clean": "turbo clean"
+    "dev:chrome": "pnpm --filter @arx/extension dev:chrome",
+    "dev:firefox": "pnpm --filter @arx/extension dev:firefox",
+    "zip": "pnpm --filter @arx/extension zip",
+    "test": "turbo test"
   },
   "devDependencies": {
     "turbo": "2.5.6",

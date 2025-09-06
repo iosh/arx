@@ -1,6 +1,13 @@
+import { defineContentScript } from "wxt/utils/define-content-script";
+import { injectScript } from "wxt/utils/inject-script";
+
 export default defineContentScript({
-  matches: ["*://*.google.com/*"],
-  main() {
-    console.log("Hello content.");
+  matches: ["http://*/*", "https://*/*"],
+  async main() {
+    console.log("Injecting script...");
+    await injectScript("/provider.js", {
+      keepInDom: true,
+    });
+    console.log("Done!");
   },
 });

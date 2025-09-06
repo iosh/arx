@@ -4,4 +4,13 @@ import { defineConfig } from "wxt";
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   srcDir: "src",
+  imports: false,
+  manifest: {
+    web_accessible_resources: [
+      {
+        resources: ["provider.js"],
+        matches: ["<all_urls>"],
+      },
+    ],
+  },
 });

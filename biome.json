@@ -7,7 +7,11 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["src/**/*.{ts,tsx,js,jsx,json,css,md}"]
+    "includes": [
+      "packages/**/*.{ts,tsx,js,jsx,json,css,md}",
+      "extension/**/*.{ts,tsx,js,jsx,json,css,md}",
+      "app/**/*.{ts,tsx,js,jsx,json,css,md}"
+    ]
   },
   "formatter": {
     "enabled": true,

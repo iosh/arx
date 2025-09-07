@@ -1,14 +1,7 @@
 import type { EIP1193ProviderRpcError, JsonRpcRequest, JsonRpcResponse, Transport } from "@arx/provider-core/types";
 import { EventEmitter } from "eventemitter3";
-
-const CHANNEL = "arx:provider" as const;
-
-type Envelope =
-  | { channel: typeof CHANNEL; type: "handshake"; payload: { version: string } }
-  | { channel: typeof CHANNEL; type: "handshake_ack"; payload?: { chainId?: string } }
-  | { channel: typeof CHANNEL; type: "request"; id: string; payload: JsonRpcRequest }
-  | { channel: typeof CHANNEL; type: "response"; id: string; payload: JsonRpcResponse }
-  | { channel: typeof CHANNEL; type: "event"; payload: { event: string; params?: unknown[] } };
+import { CHANNEL } from "./constants.js";
+import type { Envelope } from "./types.js";
 
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;

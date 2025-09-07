@@ -1,0 +1,26 @@
+{
+  "name": "@arx/provider-extension",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.15.0",
+  "exports": {
+    "./inpage": "./src/inpage.ts",
+    "./content": "./src/content.ts",
+    "./background": "./src/background.ts"
+  },
+  "dependencies": {
+    "@arx/provider-core": "workspace:*",
+    "eventemitter3": "5.0.1",
+    "webextension-polyfill": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

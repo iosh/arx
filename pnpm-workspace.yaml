@@ -1,7 +1,8 @@
 packages:
-  - "packages/*"
+  - "packages/**"
   - "extension"
   - "app"
 
 catalog:
   typescript: 5.9.2
+  webextension-polyfill: 0.12.0

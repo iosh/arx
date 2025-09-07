@@ -1,24 +1,43 @@
-import type { EIP1193Provider } from "./eip1193.js";
+import type { EIP1193ProviderRpcError } from "./eip1193.js";
 
-export interface Transport extends EIP1193Provider {
-  connect?(): Promise<void>;
-  disconnect?(): Promise<void>;
-}
+export type JsonRpcVersion = "2.0";
+export type JsonRpcId = string;
 
-export interface TransportMessage {
-  id: string;
-  jsonrpc: string;
+export interface JsonRpcRequest {
+  id: JsonRpcId;
+  jsonrpc: JsonRpcVersion;
   method: string;
-  params?: unknown[];
+  params?: readonly unknown[] | object;
 }
 
-export interface TransportResponse {
-  id: string;
-  jsonrpc: string;
-  result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
+export interface JsonRpcSuccess<T = unknown> {
+  id: JsonRpcId;
+  jsonrpc: JsonRpcVersion;
+  result: T;
 }
+
+export type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
+
+export interface JsonRpcError {
+  id: JsonRpcId;
+  jsonrpc: JsonRpcVersion;
+  error: EIP1193ProviderRpcError;
+}
+
+export interface Transport {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  isConnected(): boolean;
+  send(message: JsonRpcRequest): Promise<JsonRpcResponse>;
+
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  removeListener(event: string, listener: (...args: unknown[]) => void): void;
+}
+
+export interface EventMessage {
+  type: "event";
+  eventName: string;
+  params: unknown[];
+}
+
+export type TransportMessage = JsonRpcRequest | JsonRpcResponse | EventMessage;

@@ -12,7 +12,8 @@
   "author": "",
   "license": "MIT",
   "exports": {
-    "./types": "./src/types/index.ts"
+    "./types": "./src/types/index.ts",
+    "./provider": "./src/provider.ts"
   },
   "devDependencies": {
     "typescript": "catalog:"

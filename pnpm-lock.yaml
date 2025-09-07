@@ -32,6 +32,12 @@ importers:
 
   extension:
     dependencies:
+      '@arx/provider-core':
+        specifier: workspace:*
+        version: link:../packages/adapters/provider-core
+      '@arx/provider-extension':
+        specifier: workspace:*
+        version: link:../packages/adapters/provider-extension
       react:
         specifier: 19.1.1
         version: 19.1.1

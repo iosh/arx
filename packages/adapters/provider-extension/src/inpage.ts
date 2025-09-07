@@ -1,5 +1,5 @@
-import { EventEmitter } from "eventemitter3";
 import type { EIP1193ProviderRpcError, JsonRpcRequest, JsonRpcResponse, Transport } from "@arx/provider-core/types";
+import { EventEmitter } from "eventemitter3";
 
 const CHANNEL = "arx:provider" as const;
 

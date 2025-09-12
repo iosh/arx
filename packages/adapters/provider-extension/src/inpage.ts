@@ -1,4 +1,11 @@
-import type { EIP1193ProviderRpcError, JsonRpcRequest, JsonRpcResponse, Transport } from "@arx/provider-core/types";
+import { evmProviderErrors } from "@arx/provider-core/errors";
+import type {
+  EIP1193ProviderRpcError,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  RequestArguments,
+  Transport,
+} from "@arx/provider-core/types";
 import { EventEmitter } from "eventemitter3";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
@@ -15,18 +22,31 @@ export class InpageTransport extends EventEmitter implements Transport {
     }
   >();
 
+  #id = 0n;
+
   constructor() {
     super();
 
     window.addEventListener("message", this.#handleMessage);
   }
 
-  send(request: JsonRpcRequest): Promise<JsonRpcResponse> {
-    const id = request.id;
+  async request(args: RequestArguments): Promise<unknown> {
+    if (!this.#connected) {
+      throw evmProviderErrors.disconnected();
+    }
 
+    const { method, params = [] } = args;
+
+    const request: JsonRpcRequest = {
+      id: (this.#id++).toString(),
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
+    const id = request.id;
     const env: Envelope = { channel: CHANNEL, type: "request", id, payload: request };
 
-    const promise = new Promise<JsonRpcResponse>((resolve, reject) => {
+    const rpc = await new Promise<JsonRpcResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.#pendingRequests.delete(id);
         reject({ code: 408, message: "Request timed out" });
@@ -44,9 +64,15 @@ export class InpageTransport extends EventEmitter implements Transport {
         timer,
       });
     });
-
     window.postMessage(env, "*");
-    return promise;
+
+    if ("error" in rpc) {
+      throw Object.assign(new Error(rpc.error.message), {
+        code: rpc.error.code,
+        data: rpc.error.data,
+      });
+    }
+    return rpc.result;
   }
 
   #handleMessage = (event: MessageEvent) => {
@@ -61,7 +87,7 @@ export class InpageTransport extends EventEmitter implements Transport {
         if (!this.#connected) {
           this.#connected = true;
           const chainId = data.payload?.chainId ?? "0x0";
-          queueMicrotask(() => this.emit("connect", { chainId }));
+          this.emit("connect", { chainId });
         }
         break;
       }
@@ -113,8 +139,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#connected = false;
     window.removeEventListener("message", this.#handleMessage);
 
-    const error: EIP1193ProviderRpcError = { code: 4900, message: "The Provider is disconnected from all chains." };
-
+    const error = evmProviderErrors.disconnected();
     for (const [id, { reject }] of this.#pendingRequests) {
       reject(error);
       this.#pendingRequests.delete(id);

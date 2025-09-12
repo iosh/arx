@@ -1,4 +1,4 @@
-import type { EIP1193ProviderRpcError } from "./eip1193.js";
+import type { EIP1193ProviderRpcError, RequestArguments } from "./eip1193.js";
 
 export type JsonRpcVersion = "2.0";
 export type JsonRpcId = string;
@@ -28,7 +28,7 @@ export interface Transport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
-  send(message: JsonRpcRequest): Promise<JsonRpcResponse>;
+  request(args: RequestArguments): Promise<unknown>;
 
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeListener(event: string, listener: (...args: unknown[]) => void): void;

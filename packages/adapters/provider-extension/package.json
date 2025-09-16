@@ -13,7 +13,9 @@
   "exports": {
     "./inpage": "./src/inpage.ts",
     "./content": "./src/content.ts",
-    "./background": "./src/background.ts"
+    "./background": "./src/background.ts",
+    "./constants": "./src/constants.ts",
+    "./types": "./src/types.ts"
   },
   "dependencies": {
     "@arx/provider-core": "workspace:*",

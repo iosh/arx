@@ -6,9 +6,9 @@ import type {
   RequestArguments,
   Transport,
 } from "@arx/provider-core/types";
-import { EventEmitter } from "eventemitter3";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
+import { EventEmitter } from "@arx/provider-core";
 
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;

@@ -12,12 +12,14 @@
   "author": "",
   "license": "MIT",
   "exports": {
+    ".": "./src/index.ts",
     "./types": "./src/types/index.ts",
     "./provider": "./src/provider.ts",
     "./errors": "./src/errors.ts"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "eventemitter3": "catalog:"
   },
   "dependencies": {
     "@metamask/rpc-errors": "^7.0.3"

@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@arx/provider-core": "workspace:*",
-    "eventemitter3": "5.0.1",
     "webextension-polyfill": "catalog:"
   },
   "devDependencies": {

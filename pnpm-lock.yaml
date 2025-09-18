@@ -9,6 +9,9 @@ catalogs:
     '@types/webextension-polyfill':
       specifier: 0.12.3
       version: 0.12.3
+    eventemitter3:
+      specifier: 5.0.1
+      version: 5.0.1
     typescript:
       specifier: 5.9.2
       version: 5.9.2
@@ -76,6 +79,9 @@ importers:
         specifier: ^7.0.3
         version: 7.0.3
     devDependencies:
+      eventemitter3:
+        specifier: 'catalog:'
+        version: 5.0.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
@@ -86,7 +92,7 @@ importers:
         specifier: workspace:*
         version: link:../provider-core
       eventemitter3:
-        specifier: 5.0.1
+        specifier: 'catalog:'
         version: 5.0.1
       webextension-polyfill:
         specifier: 'catalog:'

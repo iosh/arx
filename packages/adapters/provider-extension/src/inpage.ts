@@ -10,8 +10,12 @@ import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 import { EventEmitter } from "@arx/provider-core";
 
+type ConnectPayload = { chainId: string; accounts: string[]; isUnlocked?: boolean };
+
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;
+  #chainId: string | null = null;
+  #accounts: string[] = [];
   #timeoutMs = 120_000;
   #pendingRequests = new Map<
     string,
@@ -28,6 +32,23 @@ export class InpageTransport extends EventEmitter implements Transport {
     super();
 
     window.addEventListener("message", this.#handleMessage);
+  }
+
+  #setConnection(payload: ConnectPayload) {
+    this.#connected = true;
+    this.#chainId = payload.chainId;
+    this.#accounts = payload.accounts;
+    this.emit("connect", payload);
+  }
+
+  #setAccounts(accounts: string[]) {
+    this.#accounts = accounts;
+    this.emit("accountsChanged", accounts);
+  }
+
+  #setChain(chainId: string) {
+    this.#chainId = chainId;
+    this.emit("chainChanged", chainId);
   }
 
   async request(args: RequestArguments): Promise<unknown> {
@@ -85,9 +106,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     switch (data.type) {
       case "handshake_ack": {
         if (!this.#connected) {
-          this.#connected = true;
-          const chainId = data.payload?.chainId ?? "0x0";
-          this.emit("connect", { chainId });
+          this.#setConnection(data.payload);
         }
         break;
       }
@@ -146,5 +165,10 @@ export class InpageTransport extends EventEmitter implements Transport {
     }
 
     this.emit("disconnect", error);
+  };
+
+  destroy = () => {
+    window.removeEventListener("message", this.#handleMessage);
+    this.removeAllListeners();
   };
 }

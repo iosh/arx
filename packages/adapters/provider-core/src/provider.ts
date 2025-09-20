@@ -1,6 +1,7 @@
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, RequestArguments } from "./types/eip1193.js";
 import type { Transport } from "./types/transport.js";
+import { evmProviderErrors, evmRpcErrors } from "./errors.js";
 
 const PROVIDER_INFO = {
   uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",
@@ -12,6 +13,9 @@ const PROVIDER_INFO = {
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #listenersBound = false;
 
+  #initializedResolve?: () => void;
+  #initializedPromise: Promise<void>;
+
   constructor({ transport }: { transport: Transport }) {
     super();
     this.#transport = transport;
@@ -19,6 +23,10 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#transport.on("disconnect", this.#handleTransportDisconnect);
     this.#transport.on("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.on("chainChanged", this.#handleTransportChainChanged);
+
+    this.#initializedPromise = new Promise((resolve) => {
+      this.#initializedResolve = resolve;
+    });
   }
   static readonly providerInfo = PROVIDER_INFO;
 
@@ -46,6 +54,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #markInitialized() {
     if (!this.#initialized) {
       this.#initialized = true;
+      this.#initializedResolve?.();
       this.emit("_initialized");
     }
   }
@@ -56,6 +65,13 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   #updateAccounts(accounts: string[]) {
     this.#accounts = accounts;
+  }
+
+  #resetInitialization() {
+    this.#initialized = false;
+    this.#initializedPromise = new Promise((resolve) => {
+      this.#initializedResolve = resolve;
+    });
   }
 
   #handleTransportConnect = (payload: unknown) => {
@@ -81,13 +97,40 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    this.#initialized = false;
+    this.#resetInitialization();
     this.#updateChain(null);
     this.#updateAccounts([]);
     this.emit("disconnect", error);
   };
+
   request = async (args: RequestArguments) => {
-    return this.#transport.request(args);
+    const { method } = args;
+
+    if (!this.#initialized) {
+      if (method !== "eth_requestAccounts") {
+        throw evmProviderErrors.disconnected();
+      }
+      await this.#initializedPromise;
+    }
+
+    try {
+      const result = await this.#transport.request(args);
+      if (method === "eth_requestAccounts" && Array.isArray(result)) {
+        const next = result.filter((item): item is string => typeof item === "string");
+        this.#updateAccounts(next);
+        this.emit("accountsChanged", [...this.#accounts]);
+      }
+      return result;
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error) {
+        throw error;
+      }
+
+      throw evmRpcErrors.internal({
+        message: error instanceof Error ? error.message : String(error),
+        data: { originalError: error },
+      });
+    }
   };
 
   destroy() {

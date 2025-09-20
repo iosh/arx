@@ -1,6 +1,6 @@
 import { EventEmitter } from "eventemitter3";
-import type { EIP1193Provider, RequestArguments } from "./types/eip1193.js";
-import type { Transport } from "./types/transport.js";
+import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
+import type { JsonRpcRequest, JsonRpcResponse, Transport } from "./types/transport.js";
 import { evmProviderErrors, evmRpcErrors } from "./errors.js";
 
 const PROVIDER_INFO = {
@@ -9,6 +9,12 @@ const PROVIDER_INFO = {
   icon: "data:image/svg+xml;base64,...",
   rdns: "wallet.arx",
 } as const;
+
+type LegacyCallback = (error: EIP1193ProviderRpcError | null, response: JsonRpcResponse | undefined) => void;
+
+type LegacyPayload = Partial<Pick<JsonRpcRequest, "id" | "jsonrpc">> & Pick<JsonRpcRequest, "method" | "params">;
+
+const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
 
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #listenersBound = false;
@@ -103,6 +109,20 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.emit("disconnect", error);
   };
 
+  #buildRequestArgs(method: string, params?: RequestArguments["params"]): RequestArguments {
+    return params === undefined ? { method } : { method, params };
+  }
+
+  #toRpcError(error: unknown): EIP1193ProviderRpcError {
+    if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
+      return error as EIP1193ProviderRpcError;
+    }
+    return evmRpcErrors.internal({
+      message: error instanceof Error ? error.message : String(error),
+      data: { originalError: error },
+    });
+  }
+
   request = async (args: RequestArguments) => {
     const { method } = args;
 
@@ -122,15 +142,46 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       }
       return result;
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error) {
-        throw error;
-      }
+      throw this.#toRpcError(error);
+    }
+  };
 
+  enable = async () => {
+    const result = await this.request({ method: "eth_requestAccounts" });
+    if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
       throw evmRpcErrors.internal({
-        message: error instanceof Error ? error.message : String(error),
-        data: { originalError: error },
+        message: "eth_requestAccounts did not return an array of accounts",
+        data: { result },
       });
     }
+    return result;
+  };
+
+  send = (methodOrPayload: string | LegacyPayload, paramsOrCallback?: unknown) => {
+    if (typeof methodOrPayload === "string") {
+      return this.request(this.#buildRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]));
+    }
+
+    if (isLegacyCallback(paramsOrCallback)) {
+      this.sendAsync(methodOrPayload, paramsOrCallback);
+      return;
+    }
+
+    return this.request(this.#buildRequestArgs(methodOrPayload.method, methodOrPayload.params));
+  };
+
+  sendAsync = (payload: LegacyPayload, callback: LegacyCallback) => {
+    const requestArgs = this.#buildRequestArgs(payload.method, payload.params);
+    const id = String(payload.id ?? Date.now());
+    const jsonrpc = payload.jsonrpc ?? "2.0";
+    this.request(requestArgs)
+      .then((result) => {
+        callback(null, { id, jsonrpc, result });
+      })
+      .catch((error) => {
+        const rpcError = this.#toRpcError(error);
+        callback(rpcError, { id, jsonrpc, error: rpcError });
+      });
   };
 
   destroy() {

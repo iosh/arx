@@ -124,7 +124,27 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   request = async (args: RequestArguments) => {
-    const { method } = args;
+    if (!args || typeof args !== "object" || Array.isArray(args)) {
+      throw evmRpcErrors.invalidRequest({
+        message: "Invalid request arguments",
+        data: { args },
+      });
+    }
+
+    const { method, params } = args;
+
+    if (typeof method !== "string" || method.length === 0) {
+      throw evmRpcErrors.invalidRequest({
+        message: "Invalid request method",
+        data: { args },
+      });
+    }
+    if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
+      throw evmRpcErrors.invalidRequest({
+        message: "Invalid request params",
+        data: { args },
+      });
+    }
 
     if (!this.#initialized) {
       if (method !== "eth_requestAccounts") {

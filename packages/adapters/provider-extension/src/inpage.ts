@@ -10,11 +10,12 @@ import type {
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 
-type ConnectPayload = { chainId: string; accounts: string[]; isUnlocked?: boolean };
+type ConnectPayload = { chainId: string; caip2?: string; accounts: string[]; isUnlocked?: boolean };
 
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;
   #chainId: string | null = null;
+  #caip2: string | null = null;
   #accounts: string[] = [];
   #timeoutMs = 120_000;
   #pendingRequests = new Map<
@@ -36,6 +37,7 @@ export class InpageTransport extends EventEmitter implements Transport {
 
   #setConnection(payload: ConnectPayload) {
     this.#connected = true;
+    this.#caip2 = payload.caip2 ?? null;
     this.#chainId = payload.chainId;
     this.#accounts = payload.accounts;
     this.emit("connect", payload);

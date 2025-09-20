@@ -3,6 +3,7 @@ import type { CHANNEL } from "./constants.js";
 
 export type HandshakeAckPayload = {
   chainId: string;
+  caip2: string;
   accounts: string[];
   isUnlocked?: boolean;
 };

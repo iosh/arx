@@ -1,3 +1,5 @@
+import { evmRpcErrors } from "@arx/provider-core/errors";
+import type { JsonRpcResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
@@ -8,6 +10,23 @@ const DEFAULT_ACCOUNTS = ["0x0000000000000000000000000000000000000001"];
 
 const postEnvelope = (port: browser.Runtime.Port, envelope: Envelope) => {
   port.postMessage(envelope);
+};
+
+const emitEvent = (port: browser.Runtime.Port, event: string, params: unknown[]) => {
+  postEnvelope(port, {
+    channel: CHANNEL,
+    type: "event",
+    payload: { event, params },
+  });
+};
+
+const replyRequest = (port: browser.Runtime.Port, id: string, payload: JsonRpcResponse) => {
+  postEnvelope(port, {
+    channel: CHANNEL,
+    type: "response",
+    id,
+    payload,
+  });
 };
 
 export default defineBackground(() => {
@@ -26,17 +45,8 @@ export default defineBackground(() => {
       });
     };
 
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "event",
-      payload: { event: "accountsChanged", params: [DEFAULT_ACCOUNTS] },
-    });
-
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "event",
-      payload: { event: "chainChanged", params: [DEFAULT_CHAIN.chainId] },
-    });
+    emitEvent(port, "accountsChanged", [DEFAULT_ACCOUNTS]);
+    emitEvent(port, "chainChanged", [DEFAULT_CHAIN.chainId]);
 
     const handleMessage = (message: unknown) => {
       const envelope = message as Envelope | undefined;
@@ -46,8 +56,38 @@ export default defineBackground(() => {
         case "handshake":
           handleHandshake();
           break;
-        case "request":
+        case "request": {
+          const { id: rpcId, jsonrpc, method } = envelope.payload;
+          const respond = (result: unknown) => {
+            replyRequest(port, envelope.id, { id: rpcId, jsonrpc, result });
+          };
+
+          const respondMethodNotFound = () => {
+            const error = evmRpcErrors.methodNotFound({
+              message: `The method ${method} does not exist/is not available`,
+              data: { method },
+            });
+            replyRequest(port, envelope.id, {
+              id: rpcId,
+              jsonrpc,
+              error: error.serialize(),
+            });
+          };
+
+          switch (method) {
+            case "eth_chainId":
+              respond(DEFAULT_CHAIN.chainId);
+              break;
+            case "eth_accounts":
+              respond(DEFAULT_ACCOUNTS);
+              break;
+            default:
+              respondMethodNotFound();
+              break;
+          }
+
           break;
+        }
         default:
           break;
       }

@@ -1,3 +1,4 @@
+import { EventEmitter } from "@arx/provider-core";
 import { evmProviderErrors } from "@arx/provider-core/errors";
 import type {
   EIP1193ProviderRpcError,
@@ -8,7 +9,6 @@ import type {
 } from "@arx/provider-core/types";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
-import { EventEmitter } from "@arx/provider-core";
 
 type ConnectPayload = { chainId: string; accounts: string[]; isUnlocked?: boolean };
 
@@ -84,8 +84,8 @@ export class InpageTransport extends EventEmitter implements Transport {
         },
         timer,
       });
+      window.postMessage(env, "*");
     });
-    window.postMessage(env, "*");
 
     if ("error" in rpc) {
       throw Object.assign(new Error(rpc.error.message), {

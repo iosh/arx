@@ -1,7 +1,7 @@
 import { EventEmitter } from "eventemitter3";
+import { evmProviderErrors, evmRpcErrors } from "./errors.js";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
 import type { JsonRpcRequest, JsonRpcResponse, Transport } from "./types/transport.js";
-import { evmProviderErrors, evmRpcErrors } from "./errors.js";
 
 const PROVIDER_INFO = {
   uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",

@@ -19,7 +19,7 @@ const postEnvelope = (port: browser.Runtime.Port, envelope: Envelope) => {
   port.postMessage(envelope);
 };
 
-const emitEvent = (port: browser.Runtime.Port, event: string, params: unknown[]) => {
+const emitEventToPort = (port: browser.Runtime.Port, event: string, params: unknown[]) => {
   postEnvelope(port, {
     channel: CHANNEL,
     type: "event",
@@ -36,23 +36,32 @@ const replyRequest = (port: browser.Runtime.Port, id: string, payload: JsonRpcRe
   });
 };
 
-const setChain = (port: browser.Runtime.Port, chainId: string) => {
-  if (providerState.chainId !== chainId) {
-    providerState.chainId = chainId;
-    emitEvent(port, "chainChanged", [chainId]);
-  }
+const setChain = (chainId: string) => {
+  if (providerState.chainId === chainId) return;
+  providerState.chainId = chainId;
+  broadcastEvent("chainChanged", [chainId]);
 };
 
-const setAccounts = (port: browser.Runtime.Port, accounts: string[]) => {
+const setAccounts = (accounts: string[]) => {
   const next = accounts.filter((item) => typeof item === "string");
   if (JSON.stringify(providerState.accounts) === JSON.stringify(next)) return;
   providerState.accounts = next;
-  emitEvent(port, "accountsChanged", [next]);
+  broadcastEvent("accountsChanged", [next]);
+};
+
+const connections = new Set<browser.Runtime.Port>();
+
+const broadcastEvent = (event: string, params: unknown[]) => {
+  for (const port of connections) {
+    emitEventToPort(port, event, params);
+  }
 };
 
 export default defineBackground(() => {
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== CHANNEL) return;
+
+    connections.add(port);
 
     const handleHandshake = () => {
       const current = getState();
@@ -66,11 +75,6 @@ export default defineBackground(() => {
         },
       });
     };
-
-    const initialState = getState();
-
-    emitEvent(port, "accountsChanged", [initialState.accounts]);
-    emitEvent(port, "chainChanged", [initialState.chainId]);
 
     const handleMessage = (message: unknown) => {
       const envelope = message as Envelope | undefined;
@@ -108,7 +112,7 @@ export default defineBackground(() => {
               break;
             case "eth_requestAccounts": {
               const next = state.accounts.length ? state.accounts : DEFAULT_ACCOUNTS;
-              setAccounts(port, next);
+              setAccounts(next);
               respond(next);
               break;
             }
@@ -124,9 +128,19 @@ export default defineBackground(() => {
       }
     };
 
-    port.onMessage.addListener(handleMessage);
-    port.onDisconnect.addListener(() => {
+    const handleDisconnect = () => {
+      connections.delete(port);
       port.onMessage.removeListener(handleMessage);
-    });
+      port.onDisconnect.removeListener(handleDisconnect);
+    };
+
+    const initialState = getState();
+
+    emitEventToPort(port, "accountsChanged", [initialState.accounts]);
+    emitEventToPort(port, "chainChanged", [initialState.chainId]);
+
+    port.onMessage.addListener(handleMessage);
+
+    port.onDisconnect.addListener(handleDisconnect);
   });
 });

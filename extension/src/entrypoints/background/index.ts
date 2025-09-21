@@ -1,15 +1,51 @@
-import { evmRpcErrors } from "@arx/provider-core/errors";
-import type { EIP1193ProviderRpcError, JsonRpcResponse } from "@arx/provider-core/types";
+import { evmProviderErrors, evmRpcErrors } from "@arx/provider-core/errors";
+import type { EIP1193ProviderRpcError, JsonRpcResponse, JsonRpcVersion } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 
-const DEFAULT_CHAIN = { chainId: "0x1", caip2: "eip155:1" };
-const DEFAULT_ACCOUNTS = ["0x0000000000000000000000000000000000000001"];
+const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion }>>();
+
+const getPendingBucket = (port: browser.Runtime.Port) => {
+  let bucket = pendingRequests.get(port);
+  if (!bucket) {
+    bucket = new Map();
+    pendingRequests.set(port, bucket);
+  }
+
+  return bucket;
+};
+
+const clearPendingForPort = (port: browser.Runtime.Port) => {
+  pendingRequests.delete(port);
+};
+
+const rejectPendingWithDisconnect = (port: browser.Runtime.Port) => {
+  const bucket = pendingRequests.get(port);
+  if (!bucket) return;
+  const error = evmProviderErrors.disconnected().serialize();
+
+  for (const [messageId, { rpcId, jsonrpc }] of bucket) {
+    replyRequest(port, messageId, {
+      id: rpcId,
+      jsonrpc,
+      error,
+    });
+  }
+
+  clearPendingForPort(port);
+};
+
+const DEFAULT_ACCOUNTS: string[] = [];
+
+const getDefaultChain = () => {
+  // TODO: replace this with chainRegistry lookup
+  return { chainId: "0x1", caip2: "eip155:1" };
+};
 
 const providerState = {
-  chain: { ...DEFAULT_CHAIN },
+  chain: { ...getDefaultChain() },
   accounts: [...DEFAULT_ACCOUNTS],
 };
 
@@ -103,6 +139,9 @@ const toJsonRpcError = (error: unknown, method: string): EIP1193ProviderRpcError
 
 const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
   const { id: rpcId, jsonrpc, method } = envelope.payload;
+  const pendingBucket = getPendingBucket(port);
+  pendingBucket.set(envelope.id, { rpcId, jsonrpc });
+
   const handler = rpcHandlers[method];
   if (!handler) {
     const error = createMethodNotFoundError(method);
@@ -123,6 +162,11 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
       jsonrpc,
       error: toJsonRpcError(error, method),
     });
+  } finally {
+    pendingBucket.delete(envelope.id);
+    if (pendingBucket.size === 0) {
+      clearPendingForPort(port);
+    }
   }
 };
 
@@ -164,6 +208,8 @@ export default defineBackground(() => {
     };
 
     const handleDisconnect = () => {
+      emitEventToPort(port, "disconnect", []);
+      rejectPendingWithDisconnect(port);
       connections.delete(port);
       port.onMessage.removeListener(handleMessage);
       port.onDisconnect.removeListener(handleDisconnect);

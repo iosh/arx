@@ -36,22 +36,42 @@ export class InpageTransport extends EventEmitter implements Transport {
   }
 
   #setConnection(payload: ConnectPayload) {
+    const accounts = Array.isArray(payload.accounts)
+      ? payload.accounts.filter((item): item is string => typeof item === "string")
+      : [];
     this.#connected = true;
     this.#caip2 = payload.caip2 ?? null;
     this.#chainId = payload.chainId;
-    this.#accounts = payload.accounts;
-    this.emit("connect", payload);
+    this.#accounts = accounts;
+    this.emit("connect", { chainId: payload.chainId, accounts });
   }
 
   #setAccounts(accounts: string[]) {
-    this.#accounts = accounts;
-    this.emit("accountsChanged", accounts);
+    const next = accounts.filter((item): item is string => typeof item === "string");
+    this.#accounts = next;
+    this.emit("accountsChanged", next);
   }
 
   #setChain(chainId: string) {
     this.#chainId = chainId;
     this.emit("chainChanged", chainId);
   }
+
+  #handleDisconnect = () => {
+    if (!this.#connected) {
+      return;
+    }
+    this.#connected = false;
+    this.#caip2 = null;
+    this.#chainId = null;
+    this.#accounts = [];
+    const error = evmProviderErrors.disconnected();
+    for (const [id, { reject }] of this.#pendingRequests) {
+      reject(error);
+      this.#pendingRequests.delete(id);
+    }
+    this.emit("disconnect", error);
+  };
 
   async request(args: RequestArguments): Promise<unknown> {
     if (!this.#connected) {
@@ -123,8 +143,31 @@ export class InpageTransport extends EventEmitter implements Transport {
       }
 
       case "event": {
-        const { event, params = [] } = data.payload;
-        this.emit(event, ...params);
+        const { event: eventName, params = [] } = data.payload;
+
+        switch (eventName) {
+          case "accountsChanged": {
+            const [accounts] = params;
+            if (Array.isArray(accounts)) {
+              this.#setAccounts(accounts);
+            }
+            break;
+          }
+          case "chainChanged": {
+            const [chainId] = params;
+            if (typeof chainId === "string") {
+              this.#setChain(chainId);
+            }
+            break;
+          }
+          case "disconnect":
+            this.#handleDisconnect();
+            break;
+
+          default:
+            this.emit(eventName, ...params);
+        }
+
         break;
       }
 
@@ -153,22 +196,9 @@ export class InpageTransport extends EventEmitter implements Transport {
   };
 
   disconnect = async () => {
-    if (!this.#connected) {
-      window.removeEventListener("message", this.#handleMessage);
-      return;
-    }
-    this.#connected = false;
     window.removeEventListener("message", this.#handleMessage);
-
-    const error = evmProviderErrors.disconnected();
-    for (const [id, { reject }] of this.#pendingRequests) {
-      reject(error);
-      this.#pendingRequests.delete(id);
-    }
-
-    this.emit("disconnect", error);
+    this.#handleDisconnect();
   };
-
   destroy = () => {
     window.removeEventListener("message", this.#handleMessage);
     this.removeAllListeners();

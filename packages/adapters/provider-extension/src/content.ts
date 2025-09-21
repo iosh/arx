@@ -27,6 +27,7 @@ export const bootstrapContent = async () => {
   window.addEventListener("message", handleWindowMessage);
   port.onMessage.addListener(handlePortMessage);
   port.onDisconnect.addListener(() => {
+    window.postMessage({ channel: CHANNEL, type: "event", payload: { event: "disconnect", params: [] } }, "*");
     window.removeEventListener("message", handleWindowMessage);
     port.onMessage.removeListener(handlePortMessage);
   });

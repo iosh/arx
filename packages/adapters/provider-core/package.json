@@ -19,6 +19,6 @@
     "eventemitter3": "catalog:"
   },
   "dependencies": {
-    "@metamask/rpc-errors": "^7.0.3"
+    "@metamask/rpc-errors": "7.0.3"
   }
 }

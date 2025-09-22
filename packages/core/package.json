@@ -11,6 +11,9 @@
     ".": "./src/index.ts",
     "./messenger": "./src/messenger/index.ts"
   },
+  "dependencies": {
+    "@metamask/rpc-errors": "7.0.3"
+  },
   "devDependencies": {
     "typescript": "catalog:"
   }

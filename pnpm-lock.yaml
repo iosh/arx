@@ -91,9 +91,6 @@ importers:
       '@arx/provider-core':
         specifier: workspace:*
         version: link:../provider-core
-      eventemitter3:
-        specifier: 'catalog:'
-        version: 5.0.1
       webextension-polyfill:
         specifier: 'catalog:'
         version: 0.12.0
@@ -101,6 +98,12 @@ importers:
       '@types/webextension-polyfill':
         specifier: 'catalog:'
         version: 0.12.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+
+  packages/core:
+    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 5.9.2

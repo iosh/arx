@@ -10,7 +10,7 @@ export type Caip2ChainId = `${string}:${string}`;
 
 export type ChainState = {
   caip2: Caip2ChainId;
-  chainId: number;
+  chainId: `0x${string}`;
   rpcUrl: string;
   name: string;
   nativeCurrency: NativeCurrency;
@@ -29,7 +29,8 @@ export type NetworkMessengerTopic = {
 export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
 
 export type NetworkController = {
-  getState: () => NetworkState;
-  switchChain: (target: Caip2ChainId) => Promise<ChainState>;
-  onChainChanged: (handler: (state: ChainState) => void) => void;
+  getState(): NetworkState;
+  switchChain(target: Caip2ChainId): Promise<ChainState>;
+  addChain(chain: ChainState, options?: { activate?: boolean; replaceExisting?: boolean }): Promise<ChainState>;
+  onChainChanged(handler: (state: ChainState) => void): () => void;
 };

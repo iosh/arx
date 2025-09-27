@@ -9,3 +9,6 @@ export * from "./network/types.js";
 
 export * from "./permission/PermissionController.js";
 export * from "./permission/types.js";
+
+export * from "./transaction/TransactionController.js";
+export * from "./transaction/types.js";

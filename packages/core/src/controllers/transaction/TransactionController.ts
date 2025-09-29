@@ -1,5 +1,5 @@
 import type { AccountAddress, AccountController } from "../account/types.js";
-import { ApprovalTypes, type ApprovalController, type ApprovalStrategy } from "../approval/types.js";
+import { type ApprovalController, type ApprovalStrategy, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import type {
   TransactionApprovalTask,

@@ -1,6 +1,5 @@
 import { JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
-
-import { ControllerMessenger, type CompareFn } from "../messenger/ControllerMessenger.js";
+import type { Json, JsonRpcParams } from "@metamask/utils";
 import { InMemoryAccountController } from "../controllers/account/AccountController.js";
 import type {
   AccountController,
@@ -31,7 +30,7 @@ import type {
   TransactionMessenger,
   TransactionMessengerTopics,
 } from "../controllers/transaction/types.js";
-import type { Json, JsonRpcParams } from "@metamask/utils";
+import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &

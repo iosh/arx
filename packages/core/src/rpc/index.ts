@@ -1,5 +1,5 @@
-import { type PermissionScope, type PermissionScopeResolver, PermissionScopes } from "../controllers/index.js";
-import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/eip155.js";
+import type { Caip2ChainId, PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
+import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type { HandlerControllers, MethodDefinition, Namespace, RpcRequest } from "./handlers/types.js";
 
 export type MethodHandler = (context: {
@@ -40,3 +40,17 @@ export const createMethodExecutor =
     }
     return definition.handler({ origin, request, controllers });
   };
+
+export type DomainChainService = {
+  setDomainChain(origin: string, caip2: Caip2ChainId): Promise<void>;
+  getDomainChain(origin: string): Promise<Caip2ChainId | null>;
+};
+
+export const createDomainChainService = (): DomainChainService => ({
+  async setDomainChain() {
+    throw new Error("Not implemented yet");
+  },
+  async getDomainChain() {
+    throw new Error("Not implemented yet");
+  },
+});

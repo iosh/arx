@@ -2,6 +2,13 @@ import type { Caip2ChainId, PermissionScope, PermissionScopeResolver } from "../
 import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type { HandlerControllers, MethodDefinition, Namespace, RpcRequest } from "./handlers/types.js";
 
+export const createMethodDefinitionResolver = (controllers: HandlerControllers) => {
+  return (method: string) => {
+    const namespace = resolveNamespace(controllers);
+    return DEFINITIONS_BY_NAMESPACE[namespace]?.[method];
+  };
+};
+
 export type MethodHandler = (context: {
   origin: string;
   request: RpcRequest;
@@ -19,6 +26,7 @@ const resolveNamespace = (controllers: HandlerControllers): Namespace => {
 };
 
 export const createPermissionScopeResolver = (
+  namespaceResolver: () => Namespace,
   overrides?: Partial<Record<string, PermissionScope | null>>,
 ): PermissionScopeResolver => {
   return (method) => {
@@ -26,7 +34,8 @@ export const createPermissionScopeResolver = (
       const value = overrides[method];
       return value === null ? undefined : value;
     }
-    return DEFINITIONS_BY_NAMESPACE[EIP155_NAMESPACE]?.[method]?.scope;
+    const namespace = namespaceResolver();
+    return DEFINITIONS_BY_NAMESPACE[namespace]?.[method]?.scope;
   };
 };
 

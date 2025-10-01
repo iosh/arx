@@ -31,6 +31,8 @@ import type {
   TransactionMessengerTopics,
 } from "../controllers/transaction/types.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
+import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
+import { createPermissionScopeResolver } from "../rpc/index.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
@@ -113,6 +115,15 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
   });
 
+  const resolveNamespace = () => {
+    const active = networkController.getState().active;
+    const [namespace] = active.caip2.split(":");
+    return namespace ?? EIP155_NAMESPACE;
+  };
+
+  const permissionScopeResolver = permissionOptions?.scopeResolver ?? createPermissionScopeResolver(resolveNamespace);
+
+  
   const accountController = new InMemoryAccountController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
     initialState: accountOptions?.initialState ?? DEFAULT_ACCOUNTS_STATE,

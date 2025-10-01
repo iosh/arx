@@ -1,6 +1,7 @@
 import {
   createAsyncMiddleware,
   createBackgroundServices,
+  createMethodDefinitionResolver,
   createMethodExecutor,
   createPermissionScopeResolver,
   getProviderErrors,
@@ -16,27 +17,160 @@ import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 
-const extensionOrigin = browser.runtime.getURL("").replace(/\/$/, "");
-const permissionScopeResolver = createPermissionScopeResolver();
+type BackgroundContext = {
+  services: ReturnType<typeof createBackgroundServices>;
+  controllers: ReturnType<typeof createBackgroundServices>["controllers"];
+  engine: ReturnType<typeof createBackgroundServices>["engine"];
+};
 
-const services = createBackgroundServices({
-  permissions: { scopeResolver: permissionScopeResolver },
-});
-const { controllers, engine } = services;
-
-services.lifecycle.start();
-
-const executeMethod = createMethodExecutor(controllers);
-
-const getNamespace = () => controllers.network.getState().active.caip2;
-
-const resolveProviderErrors = () => getProviderErrors(getNamespace());
-const resolveRpcErrors = () => getRpcErrors(getNamespace());
-
-const INTERNAL_METHODS_ALLOWING_APPROVAL = new Set(["eth_requestAccounts"]);
-const isInternalOrigin = (origin: string) => origin === extensionOrigin;
-
+let context: BackgroundContext | null = null;
+const connections = new Set<browser.Runtime.Port>();
 const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion }>>();
+const unsubscribeControllerEvents: Array<() => void> = [];
+
+let currentExecuteMethod: ReturnType<typeof createMethodExecutor> | null = null;
+let currentResolveProviderErrors: (() => ReturnType<typeof getProviderErrors>) | null = null;
+let currentResolveRpcErrors: (() => ReturnType<typeof getRpcErrors>) | null = null;
+
+const FALLBACK_NAMESPACE = "eip155";
+
+const ensureContext = () => {
+  if (context) return context;
+
+  let namespaceResolver = () => FALLBACK_NAMESPACE;
+
+  const services = createBackgroundServices({
+    permissions: {
+      scopeResolver: createPermissionScopeResolver(() => namespaceResolver()),
+    },
+  });
+  const { controllers, engine } = services;
+
+  namespaceResolver = () => {
+    const active = controllers.network.getState().active;
+    const [namespace] = active.caip2.split(":");
+    return namespace || FALLBACK_NAMESPACE;
+  };
+
+  services.lifecycle.start();
+
+  const executeMethod = createMethodExecutor(controllers);
+  const getNamespace = () => controllers.network.getState().active.caip2;
+  const resolveProviderErrors = () => getProviderErrors(getNamespace());
+  const resolveRpcErrors = () => getRpcErrors(getNamespace());
+  const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
+
+  engine.push(
+    createAsyncMiddleware(async (req, res, next) => {
+      try {
+        await next();
+      } catch (middlewareError) {
+        res.error = toJsonRpcError(middlewareError, req.method);
+      }
+    }),
+  );
+
+  engine.push(
+    createAsyncMiddleware(async (req, _res, next) => {
+      const origin = (req as { origin?: string }).origin ?? "unknown://";
+
+      if (origin === "unknown://") {
+        throw resolveProviderErrors().unauthorized({
+          message: "Request origin could not be resolved",
+          data: { method: req.method },
+        });
+      }
+
+      if (isInternalOrigin(origin)) {
+        return next();
+      }
+
+      const definition = resolveMethodDefinition(req.method);
+      const scope = definition?.scope;
+      if (!scope) {
+        return next();
+      }
+
+      try {
+        await controllers.permissions.ensurePermission(origin, req.method);
+        return next();
+      } catch (error) {
+        const maybeError = error as { code?: unknown };
+        const code = typeof maybeError.code === "number" ? maybeError.code : undefined;
+        const isPermissionError = code === 4001 || code === 4100;
+
+        if (!isPermissionError) {
+          throw error;
+        }
+
+        if (definition?.approvalRequired === true) {
+          return next();
+        }
+
+        throw resolveProviderErrors().unauthorized({
+          message: `Origin ${origin} is not authorized to call ${req.method}`,
+          data: { origin, method: req.method },
+        });
+      }
+    }),
+  );
+
+  engine.push(
+    createAsyncMiddleware(async (req, _res, next) => {
+      const definition = resolveMethodDefinition(req.method);
+      if (!definition?.approvalRequired) {
+        return next();
+      }
+
+      // TODO: integrate approval UI/flow here
+      return next();
+    }),
+  );
+
+  engine.push(
+    createAsyncMiddleware(async (req, res) => {
+      const origin = (req as { origin?: string }).origin ?? "unknown://";
+      const result = await executeMethod({
+        origin,
+        request: { method: req.method, params: req.params as JsonRpcParams },
+      });
+      res.result = result as Json;
+    }),
+  );
+
+  unsubscribeControllerEvents.push(
+    controllers.network.onChainChanged((chain) => {
+      broadcastEvent("chainChanged", [chain.chainId]);
+    }),
+  );
+  unsubscribeControllerEvents.push(
+    controllers.accounts.onAccountsChanged((state) => {
+      broadcastEvent("accountsChanged", [state.all]);
+    }),
+  );
+
+  context = { services, controllers, engine };
+  currentExecuteMethod = executeMethod;
+  currentResolveProviderErrors = resolveProviderErrors;
+  currentResolveRpcErrors = resolveRpcErrors;
+
+  return context;
+};
+const extensionOrigin = browser.runtime.getURL("").replace(/\/$/, "");
+
+const getActiveControllers = () => ensureContext().controllers;
+
+const getActiveProviderErrors = () => {
+  ensureContext();
+  return currentResolveProviderErrors!();
+};
+
+const getActiveRpcErrors = () => {
+  ensureContext();
+  return currentResolveRpcErrors!();
+};
+
+const isInternalOrigin = (origin: string) => origin === extensionOrigin;
 
 const getPendingBucket = (port: browser.Runtime.Port) => {
   let bucket = pendingRequests.get(port);
@@ -55,7 +189,7 @@ const clearPendingForPort = (port: browser.Runtime.Port) => {
 const rejectPendingWithDisconnect = (port: browser.Runtime.Port) => {
   const bucket = pendingRequests.get(port);
   if (!bucket) return;
-  const error = resolveProviderErrors().disconnected().serialize();
+  const error = getActiveProviderErrors().disconnected().serialize();
 
   for (const [messageId, { rpcId, jsonrpc }] of bucket) {
     replyRequest(port, messageId, {
@@ -89,6 +223,7 @@ const replyRequest = (port: browser.Runtime.Port, id: string, payload: JsonRpcRe
   });
 };
 const getControllerSnapshot = () => {
+  const controllers = getActiveControllers();
   const networkState = controllers.network.getState();
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
@@ -96,26 +231,11 @@ const getControllerSnapshot = () => {
   };
 };
 
-const connections = new Set<browser.Runtime.Port>();
-
 const broadcastEvent = (event: string, params: unknown[]) => {
   for (const port of connections) {
     emitEventToPort(port, event, params);
   }
 };
-
-const unsubscribeControllerEvents: (() => void)[] = [];
-unsubscribeControllerEvents.push(
-  controllers.network.onChainChanged((chain) => {
-    broadcastEvent("chainChanged", [chain.chainId]);
-  }),
-);
-
-unsubscribeControllerEvents.push(
-  controllers.accounts.onAccountsChanged((state) => {
-    broadcastEvent("accountsChanged", [state.all]);
-  }),
-);
 
 const resolveOrigin = (port: browser.Runtime.Port) => {
   const sender = port.sender;
@@ -158,7 +278,7 @@ const toJsonRpcError = (error: unknown, method: string): JsonRpcError => {
     };
   }
 
-  return resolveRpcErrors()
+  return getActiveRpcErrors()
     .internal({
       message: `Unexpected error while handling ${method}`,
       data: { method },
@@ -166,65 +286,8 @@ const toJsonRpcError = (error: unknown, method: string): JsonRpcError => {
     .serialize();
 };
 
-engine.push(
-  createAsyncMiddleware(async (req, res, next) => {
-    try {
-      await next();
-    } catch (middlewareError) {
-      if (!res.error) {
-        res.error = toJsonRpcError(middlewareError, req.method);
-      }
-    }
-  }),
-);
-
-engine.push(
-  createAsyncMiddleware(async (req, _res, next) => {
-    const origin = (req as { origin?: string }).origin ?? "unknown://";
-
-    if (origin === "unknown://") {
-      throw resolveProviderErrors().unauthorized({
-        message: "Request origin could not be resolved",
-        data: { method: req.method },
-      });
-    }
-
-    if (isInternalOrigin(origin)) {
-      return next();
-    }
-
-    const requiredScope = permissionScopeResolver(req.method);
-    if (!requiredScope) {
-      return next();
-    }
-
-    try {
-      await controllers.permissions.ensurePermission(origin, req.method);
-      return next();
-    } catch (error) {
-      if (INTERNAL_METHODS_ALLOWING_APPROVAL.has(req.method)) {
-        return next();
-      }
-
-      throw resolveProviderErrors().unauthorized({
-        message: `Origin ${origin} is not authorized to call ${req.method}`,
-        data: { origin, method: req.method },
-      });
-    }
-  }),
-);
-engine.push(
-  createAsyncMiddleware(async (req, res) => {
-    const origin = (req as { origin?: string }).origin ?? "unknown://";
-    const result = await executeMethod({
-      origin,
-      request: { method: req.method, params: req.params as JsonRpcParams },
-    });
-    res.result = result as Json;
-  }),
-);
-
 const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
+  const { engine } = ensureContext();
   const { id: rpcId, jsonrpc, method } = envelope.payload;
   const pendingBucket = getPendingBucket(port);
   pendingBucket.set(envelope.id, { rpcId, jsonrpc });
@@ -300,17 +363,12 @@ const handleConnect = (port: browser.Runtime.Port) => {
   };
 
   const handleDisconnect = () => {
-    emitEventToPort(port, "disconnect", []);
     rejectPendingWithDisconnect(port);
+    emitEventToPort(port, "disconnect", []);
     connections.delete(port);
     port.onMessage.removeListener(handleMessage);
     port.onDisconnect.removeListener(handleDisconnect);
   };
-
-  const initialState = getControllerSnapshot();
-
-  emitEventToPort(port, "accountsChanged", [initialState.accounts]);
-  emitEventToPort(port, "chainChanged", [initialState.chain.chainId]);
 
   port.onMessage.addListener(handleMessage);
 
@@ -318,5 +376,27 @@ const handleConnect = (port: browser.Runtime.Port) => {
 };
 
 export default defineBackground(() => {
+  ensureContext();
   browser.runtime.onConnect.addListener(handleConnect);
+
+  if (browser.runtime.onSuspend) {
+    browser.runtime.onSuspend.addListener(() => {
+      browser.runtime.onConnect.removeListener(handleConnect);
+
+      const toUnsubscribe = [...unsubscribeControllerEvents];
+      unsubscribeControllerEvents.length = 0;
+
+      for (const unsubscribe of toUnsubscribe) {
+        unsubscribe();
+      }
+      connections.clear();
+      pendingRequests.clear();
+
+      context?.services.lifecycle.destroy();
+      context = null;
+      currentExecuteMethod = null;
+      currentResolveProviderErrors = null;
+      currentResolveRpcErrors = null;
+    });
+  }
 });

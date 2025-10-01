@@ -216,7 +216,6 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
 
 export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   eth_chainId: {
-    scope: PermissionScopes.Basic,
     handler: handleEthChainId,
   },
   eth_accounts: {

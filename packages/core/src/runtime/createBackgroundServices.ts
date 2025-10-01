@@ -154,10 +154,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     middlewares.forEach((middleware) => {
       engine.push(middleware);
     });
-  } else {
-    engine.push((_req, _res, next, end) => {
-      end(new Error(`Method "${_req.method}" not supported`));
-    });
   }
 
   const controllers: {

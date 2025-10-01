@@ -38,6 +38,9 @@ importers:
 
   extension:
     dependencies:
+      '@arx/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@arx/provider-core':
         specifier: workspace:*
         version: link:../packages/adapters/provider-core

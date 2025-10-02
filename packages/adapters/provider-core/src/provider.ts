@@ -22,9 +22,18 @@ type LegacyPayload = Partial<Pick<JsonRpcRequest<JsonRpcParams>, "id" | "jsonrpc
   Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">;
 const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
 
+const DEFAULT_NAMESPACE = "eip155";
+
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
-  #namespace = "eip155";
+  #namespace = DEFAULT_NAMESPACE;
+  readonly isArx = true;
+  #transport: Transport;
+  #initialized = false;
   #listenersBound = false;
+  #chainId: string | null = null;
+  #caip2: string | null = null;
+  #accounts: string[] = [];
+  #isUnlocked: boolean | null = null;
 
   #initializedResolve?: () => void;
   #initializedPromise: Promise<void>;
@@ -46,18 +55,13 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
   static readonly providerInfo = PROVIDER_INFO;
 
-  readonly isArx = true;
+  get caip2() {
+    return this.#caip2;
+  }
 
-  #transport: Transport;
-  #chainId: string | null = null;
-
-  #accounts: string[] = [];
-
-  #initialized = false;
-
-  isConnected = () => {
-    return this.#transport.isConnected();
-  };
+  get isUnlocked() {
+    return this.#isUnlocked;
+  }
 
   get chainId() {
     return this.#chainId;
@@ -65,6 +69,24 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   get selectedAddress() {
     return this.#accounts[0] ?? null;
+  }
+
+  isConnected = () => {
+    return this.#transport.isConnected();
+  };
+
+  #updateNamespace(caip2: string | null | undefined) {
+    if (caip2 === undefined) return;
+
+    if (typeof caip2 === "string" && caip2.length > 0) {
+      this.#caip2 = caip2;
+      const [namespace] = caip2.split(":");
+      this.#namespace = namespace ?? DEFAULT_NAMESPACE;
+      return;
+    }
+
+    this.#caip2 = null;
+    this.#namespace = DEFAULT_NAMESPACE;
   }
 
   #markInitialized() {
@@ -91,18 +113,54 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   #handleTransportConnect = (payload: unknown) => {
-    const data = (payload ?? {}) as Partial<{ chainId: string; accounts: string[]; isUnlocked: boolean }>;
-    if (data.chainId) this.#updateChain(data.chainId);
-    if (Array.isArray(data.accounts)) this.#updateAccounts(data.accounts);
+    const data = (payload ?? {}) as Partial<{
+      chainId: string;
+      caip2: string | null;
+      accounts: string[];
+      isUnlocked: boolean;
+    }>;
+
+    if (typeof data.chainId === "string") {
+      this.#updateChain(data.chainId);
+    }
+
+    if (Array.isArray(data.accounts)) {
+      this.#updateAccounts(data.accounts.filter((item): item is string => typeof item === "string"));
+    }
+    if (typeof data.isUnlocked === "boolean") {
+      this.#isUnlocked = data.isUnlocked;
+    }
+
     this.#markInitialized();
-    if (this.#chainId) this.emit("connect", { chainId: this.#chainId });
-    if (this.#accounts.length) this.emit("accountsChanged", [...this.#accounts]);
+
+    if (this.#chainId) {
+      this.emit("connect", { chainId: this.#chainId });
+    }
+
+    if (this.#accounts.length) {
+      this.emit("accountsChanged", [...this.#accounts]);
+    }
   };
 
-  #handleTransportChainChanged = (chainId: unknown) => {
+  #handleTransportChainChanged = (payload: unknown) => {
+    if (!payload || typeof payload !== "object") return;
+
+    const { chainId, caip2, isUnlocked } = payload as Partial<{
+      chainId: unknown;
+      caip2: unknown;
+      isUnlocked: unknown;
+    }>;
+
     if (typeof chainId !== "string") return;
+
     this.#updateChain(chainId);
-    this.emit("chainChanged", chainId);
+    this.#updateNamespace(typeof caip2 === "string" || caip2 === null ? (caip2 as string | null) : undefined);
+
+    if (typeof isUnlocked === "boolean") {
+      this.#isUnlocked = isUnlocked;
+    }
+
+    this.emit("chainChanged", this.#chainId);
   };
 
   #handleTransportAccountsChanged = (accounts: unknown) => {
@@ -116,6 +174,8 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#resetInitialization();
     this.#updateChain(null);
     this.#updateAccounts([]);
+    this.#updateNamespace(null);
+    this.#isUnlocked = null;
     this.emit("disconnect", error);
   };
 

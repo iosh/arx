@@ -11,12 +11,14 @@ import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 
 type ConnectPayload = { chainId: string; caip2?: string; accounts: string[]; isUnlocked?: boolean };
+type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean };
 
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;
   #chainId: string | null = null;
   #caip2: string | null = null;
   #accounts: string[] = [];
+  #isUnlocked: boolean | null = null;
   #timeoutMs = 120_000;
   #pendingRequests = new Map<
     string,
@@ -47,7 +49,13 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#caip2 = payload.caip2 ?? null;
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
-    this.emit("connect", { chainId: payload.chainId, accounts });
+    this.#isUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
+    this.emit("connect", {
+      chainId: payload.chainId,
+      ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
+      accounts,
+      ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
+    });
   }
 
   #setAccounts(accounts: string[]) {
@@ -56,9 +64,24 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.emit("accountsChanged", next);
   }
 
-  #setChain(chainId: string) {
-    this.#chainId = chainId;
-    this.emit("chainChanged", chainId);
+  #setChain(update: ChainUpdatePayload) {
+    if (typeof update.chainId !== "string") {
+      return;
+    }
+
+    this.#chainId = update.chainId;
+    if (update.caip2 !== undefined) {
+      this.#caip2 = update.caip2 ?? null;
+    }
+    if (typeof update.isUnlocked === "boolean") {
+      this.#isUnlocked = update.isUnlocked;
+    }
+
+    this.emit("chainChanged", {
+      chainId: this.#chainId,
+      ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
+      ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
+    });
   }
 
   #handleDisconnect = () => {
@@ -70,6 +93,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#caip2 = null;
     this.#chainId = null;
     this.#accounts = [];
+    this.#isUnlocked = null;
     const error = providerErrors.disconnected();
 
     for (const [id, { reject }] of this.#pendingRequests) {
@@ -160,9 +184,13 @@ export class InpageTransport extends EventEmitter implements Transport {
             break;
           }
           case "chainChanged": {
-            const [chainId] = params;
-            if (typeof chainId === "string") {
-              this.#setChain(chainId);
+            const [payload] = params;
+            if (
+              payload &&
+              typeof payload === "object" &&
+              typeof (payload as { chainId?: unknown }).chainId === "string"
+            ) {
+              this.#setChain(payload as ChainUpdatePayload);
             }
             break;
           }

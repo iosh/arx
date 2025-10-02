@@ -140,7 +140,14 @@ const ensureContext = () => {
 
   unsubscribeControllerEvents.push(
     controllers.network.onChainChanged((chain) => {
-      broadcastEvent("chainChanged", [chain.chainId]);
+      const { isUnlocked } = getControllerSnapshot();
+      broadcastEvent("chainChanged", [
+        {
+          chainId: chain.chainId,
+          caip2: chain.caip2,
+          isUnlocked,
+        },
+      ]);
     }),
   );
   unsubscribeControllerEvents.push(
@@ -228,6 +235,7 @@ const getControllerSnapshot = () => {
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
     accounts: controllers.accounts.getAccounts(),
+    isUnlocked: true, // TODO: use UnlockController later
   };
 };
 
@@ -340,7 +348,7 @@ const handleConnect = (port: browser.Runtime.Port) => {
         chainId: current.chain.chainId,
         caip2: current.chain.caip2,
         accounts: current.accounts,
-        isUnlocked: true,
+        isUnlocked: current.isUnlocked,
       },
     });
   };

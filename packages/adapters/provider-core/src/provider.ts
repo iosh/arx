@@ -1,7 +1,8 @@
+import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
+import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
-import { evmProviderErrors, evmRpcErrors } from "./errors.js";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
-import type { JsonRpcRequest, JsonRpcResponse, Transport } from "./types/transport.js";
+import type { Transport } from "./types/transport.js";
 
 const PROVIDER_INFO = {
   uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",
@@ -10,17 +11,26 @@ const PROVIDER_INFO = {
   rdns: "wallet.arx",
 } as const;
 
-type LegacyCallback = (error: EIP1193ProviderRpcError | null, response: JsonRpcResponse | undefined) => void;
-
-type LegacyPayload = Partial<Pick<JsonRpcRequest, "id" | "jsonrpc">> & Pick<JsonRpcRequest, "method" | "params">;
-
+type LegacyResponse = {
+  id: string;
+  jsonrpc: JsonRpcVersion2;
+  result?: unknown;
+  error?: EIP1193ProviderRpcError;
+};
+type LegacyCallback = (error: EIP1193ProviderRpcError | null, response: LegacyResponse | undefined) => void;
+type LegacyPayload = Partial<Pick<JsonRpcRequest<JsonRpcParams>, "id" | "jsonrpc">> &
+  Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">;
 const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
 
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
+  #namespace = "eip155";
   #listenersBound = false;
 
   #initializedResolve?: () => void;
   #initializedPromise: Promise<void>;
+
+  #resolveProviderErrors = () => getProviderErrors(this.#namespace);
+  #resolveRpcErrors = () => getRpcErrors(this.#namespace);
 
   constructor({ transport }: { transport: Transport }) {
     super();
@@ -117,15 +127,17 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
       return error as EIP1193ProviderRpcError;
     }
-    return evmRpcErrors.internal({
+    return this.#resolveRpcErrors().internal({
       message: error instanceof Error ? error.message : String(error),
       data: { originalError: error },
     });
   }
 
   request = async (args: RequestArguments) => {
+    const rpcErrors = this.#resolveRpcErrors();
+    const providerErrors = this.#resolveProviderErrors();
     if (!args || typeof args !== "object" || Array.isArray(args)) {
-      throw evmRpcErrors.invalidRequest({
+      throw rpcErrors.invalidRequest({
         message: "Invalid request arguments",
         data: { args },
       });
@@ -134,13 +146,13 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     const { method, params } = args;
 
     if (typeof method !== "string" || method.length === 0) {
-      throw evmRpcErrors.invalidRequest({
+      throw rpcErrors.invalidRequest({
         message: "Invalid request method",
         data: { args },
       });
     }
     if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
-      throw evmRpcErrors.invalidRequest({
+      throw rpcErrors.invalidRequest({
         message: "Invalid request params",
         data: { args },
       });
@@ -148,7 +160,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
     if (!this.#initialized) {
       if (method !== "eth_requestAccounts") {
-        throw evmProviderErrors.disconnected();
+        throw providerErrors.disconnected();
       }
       await this.#initializedPromise;
     }
@@ -167,9 +179,10 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   };
 
   enable = async () => {
+    const rpcErrors = this.#resolveRpcErrors();
     const result = await this.request({ method: "eth_requestAccounts" });
     if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
-      throw evmRpcErrors.internal({
+      throw rpcErrors.internal({
         message: "eth_requestAccounts did not return an array of accounts",
         data: { result },
       });

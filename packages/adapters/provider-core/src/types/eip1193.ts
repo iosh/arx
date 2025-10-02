@@ -1,7 +1,6 @@
-export interface RequestArguments {
-  readonly method: string;
-  readonly params?: readonly unknown[] | object;
-}
+import type { JsonRpcParams, JsonRpcRequest } from "@arx/core";
+
+export type RequestArguments = Readonly<Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">>;
 
 export interface EIP1193Events {
   on(event: string, listener: (...args: unknown[]) => void): void;

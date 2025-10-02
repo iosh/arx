@@ -11,7 +11,7 @@ import {
   type JsonRpcParams,
   type JsonRpcRequest,
 } from "@arx/core";
-import type { JsonRpcResponse, JsonRpcVersion } from "@arx/provider-core/types";
+import type { JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
@@ -25,7 +25,7 @@ type BackgroundContext = {
 
 let context: BackgroundContext | null = null;
 const connections = new Set<browser.Runtime.Port>();
-const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion }>>();
+const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion2 }>>();
 const unsubscribeControllerEvents: Array<() => void> = [];
 
 let currentExecuteMethod: ReturnType<typeof createMethodExecutor> | null = null;
@@ -214,7 +214,7 @@ const emitEventToPort = (port: browser.Runtime.Port, event: string, params: unkn
   });
 };
 
-const replyRequest = (port: browser.Runtime.Port, id: string, payload: JsonRpcResponse) => {
+const replyRequest = (port: browser.Runtime.Port, id: string, payload: TransportResponse) => {
   postEnvelope(port, {
     channel: CHANNEL,
     type: "response",
@@ -303,13 +303,13 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
   };
 
   try {
-    const response = await new Promise<JsonRpcResponse>((resolve, reject) => {
+    const response = await new Promise<TransportResponse>((resolve, reject) => {
       engine.handle(request, (error, result) => {
         if (error) {
           reject(error);
           return;
         }
-        resolve(result as JsonRpcResponse);
+        resolve(result as TransportResponse);
       });
     });
 

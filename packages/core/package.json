@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./messenger": "./src/messenger/index.ts"
+    "./messenger": "./src/messenger/index.ts",
+    "./errors": "./src/errors/index.ts"
   },
   "dependencies": {
     "@metamask/json-rpc-engine": "10.0.3",

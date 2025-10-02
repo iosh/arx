@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@arx/provider-core": "workspace:*",
-    "webextension-polyfill": "catalog:"
+    "webextension-polyfill": "catalog:",
+    "@arx/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

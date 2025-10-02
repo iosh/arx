@@ -15,10 +15,11 @@
     "./errors": "./src/errors.ts"
   },
   "devDependencies": {
-    "typescript": "catalog:",
-    "eventemitter3": "catalog:"
+    "typescript": "catalog:"
   },
   "dependencies": {
-    "@metamask/rpc-errors": "7.0.3"
+    "@metamask/rpc-errors": "7.0.3",
+    "eventemitter3": "catalog:",
+    "@arx/core": "workspace:*"
   }
 }

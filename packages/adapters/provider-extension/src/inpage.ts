@@ -1,11 +1,11 @@
+import { getProviderErrors } from "@arx/core";
 import { EventEmitter } from "@arx/provider-core";
-import { evmProviderErrors } from "@arx/provider-core/errors";
 import type {
   EIP1193ProviderRpcError,
-  JsonRpcRequest,
-  JsonRpcResponse,
   RequestArguments,
   Transport,
+  TransportRequest,
+  TransportResponse,
 } from "@arx/provider-core/types";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
@@ -21,13 +21,17 @@ export class InpageTransport extends EventEmitter implements Transport {
   #pendingRequests = new Map<
     string,
     {
-      resolve: (value: JsonRpcResponse) => void;
+      resolve: (value: TransportResponse) => void;
       reject: (reason?: EIP1193ProviderRpcError) => void;
       timer?: number;
     }
   >();
 
   #id = 0n;
+
+  #getProviderErrors() {
+    return getProviderErrors(this.#caip2 ?? undefined);
+  }
 
   constructor() {
     super();
@@ -61,11 +65,13 @@ export class InpageTransport extends EventEmitter implements Transport {
     if (!this.#connected) {
       return;
     }
+    const providerErrors = this.#getProviderErrors();
     this.#connected = false;
     this.#caip2 = null;
     this.#chainId = null;
     this.#accounts = [];
-    const error = evmProviderErrors.disconnected();
+    const error = providerErrors.disconnected();
+
     for (const [id, { reject }] of this.#pendingRequests) {
       reject(error);
       this.#pendingRequests.delete(id);
@@ -75,21 +81,21 @@ export class InpageTransport extends EventEmitter implements Transport {
 
   async request(args: RequestArguments): Promise<unknown> {
     if (!this.#connected) {
-      throw evmProviderErrors.disconnected();
+      throw this.#getProviderErrors().disconnected();
     }
 
     const { method, params = [] } = args;
 
-    const request: JsonRpcRequest = {
+    const request: TransportRequest = {
       id: (this.#id++).toString(),
       jsonrpc: "2.0",
       method,
       params,
     };
-    const id = request.id;
+    const id = request.id as string;
     const env: Envelope = { channel: CHANNEL, type: "request", id, payload: request };
 
-    const rpc = await new Promise<JsonRpcResponse>((resolve, reject) => {
+    const rpc = await new Promise<TransportResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.#pendingRequests.delete(id);
         reject({ code: 408, message: "Request timed out" });

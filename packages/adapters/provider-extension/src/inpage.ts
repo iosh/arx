@@ -6,6 +6,7 @@ import type {
   Transport,
   TransportRequest,
   TransportResponse,
+  TransportState,
 } from "@arx/provider-core/types";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
@@ -31,14 +32,45 @@ export class InpageTransport extends EventEmitter implements Transport {
 
   #id = 0n;
 
-  #getProviderErrors() {
-    return getProviderErrors(this.#caip2 ?? undefined);
-  }
+  #handshakePromise: Promise<void> | null = null;
+  #handshakeResolve?: (() => void) | undefined;
+  #handshakeReject?: ((reason?: unknown) => void) | undefined;
 
   constructor() {
     super();
 
     window.addEventListener("message", this.#handleMessage);
+  }
+
+  getConnectionState(): TransportState {
+    return {
+      connected: this.#connected,
+      chainId: this.#chainId,
+      caip2: this.#caip2,
+      accounts: [...this.#accounts],
+      isUnlocked: this.#isUnlocked,
+    };
+  }
+
+  #resolveHandshake() {
+    if (!this.#handshakePromise) return;
+
+    this.#handshakeResolve?.();
+    this.#handshakePromise = null;
+    this.#handshakeResolve = undefined;
+    this.#handshakeReject = undefined;
+  }
+
+  #rejectHandshake(error: unknown) {
+    if (!this.#handshakePromise) return;
+    this.#handshakeReject?.(error);
+    this.#handshakePromise = null;
+    this.#handshakeResolve = undefined;
+    this.#handshakeReject = undefined;
+  }
+
+  #getProviderErrors() {
+    return getProviderErrors(this.#caip2 ?? undefined);
   }
 
   #setConnection(payload: ConnectPayload) {
@@ -50,6 +82,8 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
     this.#isUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
+
+    this.#resolveHandshake();
     this.emit("connect", {
       chainId: payload.chainId,
       ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
@@ -94,6 +128,8 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#chainId = null;
     this.#accounts = [];
     this.#isUnlocked = null;
+
+    this.#rejectHandshake(providerErrors.disconnected());
     const error = providerErrors.disconnected();
 
     for (const [id, { reject }] of this.#pendingRequests) {
@@ -221,12 +257,26 @@ export class InpageTransport extends EventEmitter implements Transport {
   }
 
   connect = async () => {
+    if (this.#connected) {
+      return;
+    }
+    if (this.#handshakePromise) {
+      return this.#handshakePromise;
+    }
+
+    this.#handshakePromise = new Promise<void>((resolve, reject) => {
+      this.#handshakeResolve = resolve;
+      this.#handshakeReject = reject;
+    });
+
     const msg: Envelope = {
       channel: CHANNEL,
       type: "handshake",
       payload: { version: "2.0" },
     };
     window.postMessage(msg, "*");
+
+    await this.#handshakePromise;
   };
 
   disconnect = async () => {

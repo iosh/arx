@@ -84,9 +84,6 @@ importers:
       '@arx/core':
         specifier: workspace:*
         version: link:../../core
-      '@metamask/rpc-errors':
-        specifier: 7.0.3
-        version: 7.0.3
       eventemitter3:
         specifier: 'catalog:'
         version: 5.0.1

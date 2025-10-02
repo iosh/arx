@@ -15,15 +15,23 @@ export type TransportSuccess = JsonRpcSuccess;
 export type TransportError = JsonRpcError;
 export type TransportResponse = JsonRpcResponse;
 
+export type TransportState = {
+  connected: boolean;
+  chainId: string | null;
+  caip2: string | null;
+  accounts: string[];
+  isUnlocked: boolean | null;
+};
+
 export interface Transport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
+  getConnectionState(): TransportState;
   request(args: RequestArguments): Promise<unknown>;
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeListener(event: string, listener: (...args: unknown[]) => void): void;
 }
-
 export interface EventMessage {
   type: "event";
   eventName: string;

@@ -11,14 +11,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types/index.ts",
-    "./provider": "./src/provider.ts",
-    "./errors": "./src/errors.ts"
+    "./provider": "./src/provider.ts"
   },
   "devDependencies": {
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@metamask/rpc-errors": "7.0.3",
     "eventemitter3": "catalog:",
     "@arx/core": "workspace:*"
   }

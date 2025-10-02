@@ -29,14 +29,14 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   readonly isArx = true;
   #transport: Transport;
   #initialized = false;
-  #listenersBound = false;
   #chainId: string | null = null;
   #caip2: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
 
-  #initializedResolve?: () => void;
-  #initializedPromise: Promise<void>;
+  #initializedResolve?: (() => void) | undefined;
+  #initializedReject?: ((reason?: unknown) => void) | undefined;
+  #initializedPromise!: Promise<void>;
 
   #resolveProviderErrors = () => getProviderErrors(this.#namespace);
   #resolveRpcErrors = () => getRpcErrors(this.#namespace);
@@ -44,14 +44,14 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   constructor({ transport }: { transport: Transport }) {
     super();
     this.#transport = transport;
+    this.#createInitializationPromise();
+
     this.#transport.on("connect", this.#handleTransportConnect);
     this.#transport.on("disconnect", this.#handleTransportDisconnect);
     this.#transport.on("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.on("chainChanged", this.#handleTransportChainChanged);
 
-    this.#initializedPromise = new Promise((resolve) => {
-      this.#initializedResolve = resolve;
-    });
+    this.#syncWithTransportState();
   }
   static readonly providerInfo = PROVIDER_INFO;
 
@@ -75,6 +75,35 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     return this.#transport.isConnected();
   };
 
+  #createInitializationPromise() {
+    this.#initializedPromise = new Promise((resolve, reject) => {
+      this.#initializedResolve = resolve;
+      this.#initializedReject = reject;
+    });
+  }
+
+  #syncWithTransportState() {
+    const state = this.#transport.getConnectionState();
+
+    this.#updateNamespace(state.caip2 ?? null);
+
+    if (typeof state.chainId === "string") {
+      this.#updateChain(state.chainId);
+    }
+
+    if (state.accounts.length) {
+      this.#updateAccounts(state.accounts.filter((item): item is string => typeof item === "string"));
+    }
+
+    if (typeof state.isUnlocked === "boolean") {
+      this.#isUnlocked = state.isUnlocked;
+    }
+
+    if (state.connected) {
+      this.#markInitialized();
+    }
+  }
+
   #updateNamespace(caip2: string | null | undefined) {
     if (caip2 === undefined) return;
 
@@ -93,6 +122,8 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     if (!this.#initialized) {
       this.#initialized = true;
       this.#initializedResolve?.();
+      this.#initializedReject = undefined;
+
       this.emit("_initialized");
     }
   }
@@ -105,11 +136,11 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#accounts = accounts;
   }
 
-  #resetInitialization() {
+  #resetInitialization(error?: unknown) {
     this.#initialized = false;
-    this.#initializedPromise = new Promise((resolve) => {
-      this.#initializedResolve = resolve;
-    });
+    const reason = error ?? this.#resolveProviderErrors().disconnected();
+    this.#initializedReject?.(reason);
+    this.#createInitializationPromise();
   }
 
   #handleTransportConnect = (payload: unknown) => {
@@ -119,6 +150,8 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       accounts: string[];
       isUnlocked: boolean;
     }>;
+
+    this.#updateNamespace(data.caip2 ?? null);
 
     if (typeof data.chainId === "string") {
       this.#updateChain(data.chainId);
@@ -171,12 +204,15 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    this.#resetInitialization();
+    const disconnectError = error ?? this.#resolveProviderErrors().disconnected();
+
+    this.#resetInitialization(disconnectError);
     this.#updateChain(null);
     this.#updateAccounts([]);
     this.#updateNamespace(null);
     this.#isUnlocked = null;
-    this.emit("disconnect", error);
+
+    this.emit("disconnect", disconnectError);
   };
 
   #buildRequestArgs(method: string, params?: RequestArguments["params"]): RequestArguments {
@@ -219,10 +255,11 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     }
 
     if (!this.#initialized) {
-      if (method !== "eth_requestAccounts") {
-        throw providerErrors.disconnected();
+      try {
+        await this.#initializedPromise;
+      } catch (error) {
+        throw this.#toRpcError(error);
       }
-      await this.#initializedPromise;
     }
 
     try {

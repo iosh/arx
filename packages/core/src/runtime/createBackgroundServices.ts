@@ -123,7 +123,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   const permissionScopeResolver = permissionOptions?.scopeResolver ?? createPermissionScopeResolver(resolveNamespace);
 
-  
   const accountController = new InMemoryAccountController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
     initialState: accountOptions?.initialState ?? DEFAULT_ACCOUNTS_STATE,

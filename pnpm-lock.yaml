@@ -122,6 +122,9 @@ importers:
       '@metamask/utils':
         specifier: 11.8.0
         version: 11.8.0
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -2408,6 +2411,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.1.11:
+    resolution: {integrity: sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg==}
+
 snapshots:
 
   '@1natsu/wait-element@4.1.2':
@@ -4654,3 +4660,5 @@ snapshots:
       jszip: 3.10.1
 
   zod@3.25.76: {}
+
+  zod@4.1.11: {}

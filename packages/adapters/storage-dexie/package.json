@@ -1,0 +1,22 @@
+{
+  "name": "@arx/storage-dexie",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+
+  "dependencies": {
+    "@arx/core": "workspace:*",
+    "dexie": "4.2.0"
+  },
+
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}

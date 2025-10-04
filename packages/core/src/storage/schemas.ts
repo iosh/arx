@@ -1,5 +1,5 @@
-import { z } from "zod";
 import type { ZodType } from "zod";
+import { z } from "zod";
 import { PermissionScopes } from "../controllers/permission/types.js";
 
 const CAIP2_CHAIN_ID_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;

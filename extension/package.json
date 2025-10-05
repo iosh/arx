@@ -23,6 +23,7 @@
     "@arx/provider-core": "workspace:*",
     "@arx/provider-extension": "workspace:*",
     "@arx/core": "workspace:*",
+    "@arx/storage-dexie": "workspace:*",
     "events": "3.3.0"
   },
   "devDependencies": {

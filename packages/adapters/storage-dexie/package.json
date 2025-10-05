@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
 
   "dependencies": {
@@ -17,6 +17,8 @@
     ".": "./src/index.ts"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "vitest": "catalog:",
+    "typescript": "catalog:",
+    "fake-indexeddb": "6.2.2"
   }
 }

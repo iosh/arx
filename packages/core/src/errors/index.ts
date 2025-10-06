@@ -3,6 +3,8 @@ import { providerErrors, rpcErrors } from "@metamask/rpc-errors";
 type RpcErrorFactory = typeof rpcErrors;
 type ProviderErrorFactory = typeof providerErrors;
 
+export { vaultErrors } from "./vault.js";
+
 export type ChainErrorFactory = {
   rpc?: RpcErrorFactory;
   provider?: ProviderErrorFactory;

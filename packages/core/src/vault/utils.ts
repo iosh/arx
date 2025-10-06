@@ -74,6 +74,9 @@ export const deriveKeyMaterial = async (
   salt: Uint8Array,
   iterations: number,
 ): Promise<Uint8Array> => {
+  if (!Number.isInteger(iterations) || iterations <= 0) {
+    throw new Error("PBKDF2 iteration count must be a positive integer");
+  }
   const buffer = await cryptoApi.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: toArrayBuffer(salt), iterations },
     passwordKey,
@@ -91,6 +94,9 @@ export const aesGcmEncrypt = async (
   plaintext: Uint8Array,
   ivLength: number,
 ): Promise<{ cipher: Uint8Array; iv: Uint8Array }> => {
+  if (!Number.isInteger(ivLength) || ivLength <= 0) {
+    throw new Error("AES-GCM IV length must be a positive integer");
+  }
   const iv = randomBytes(ivLength);
   const cryptoKey = await importAesKey(keyMaterial, ["encrypt"]);
   const encrypted = await cryptoApi.subtle.encrypt(
@@ -107,10 +113,16 @@ export const aesGcmDecrypt = async (
   iv: Uint8Array,
 ): Promise<Uint8Array> => {
   const cryptoKey = await importAesKey(keyMaterial, ["decrypt"]);
-  const decrypted = await cryptoApi.subtle.decrypt(
-    { name: "AES-GCM", iv: toArrayBuffer(iv) },
-    cryptoKey,
-    toArrayBuffer(ciphertext),
-  );
-  return new Uint8Array(decrypted);
+  try {
+    const decrypted = await cryptoApi.subtle.decrypt(
+      { name: "AES-GCM", iv: toArrayBuffer(iv) },
+      cryptoKey,
+      toArrayBuffer(ciphertext),
+    );
+    return new Uint8Array(decrypted);
+  } catch (cause) {
+    const error = vaultErrors.invalidCiphertext();
+    (error as Error & { cause?: unknown }).cause = cause;
+    throw error;
+  }
 };

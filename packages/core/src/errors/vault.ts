@@ -1,4 +1,4 @@
-type VaultErrorCode =
+export type VaultErrorCode =
   | "ARX_VAULT_NOT_INITIALIZED"
   | "ARX_VAULT_LOCKED"
   | "ARX_VAULT_INVALID_CIPHERTEXT"
@@ -6,7 +6,7 @@ type VaultErrorCode =
 
 type VaultError = Error & { code: VaultErrorCode };
 
-const createVaultError = (message: string, code: VaultErrorCode): VaultError => {
+export const createVaultError = (message: string, code: VaultErrorCode): VaultError => {
   const error = new Error(message) as VaultError;
   error.name = "VaultError";
   error.code = code;

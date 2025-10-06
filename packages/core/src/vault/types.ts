@@ -1,5 +1,8 @@
+export type VaultAlgorithm = "pbkdf2-sha256";
+
 export type VaultCiphertext = {
   version: number;
+  algorithm: VaultAlgorithm;
   salt: string;
   iterations: number;
   iv: string;
@@ -22,16 +25,15 @@ export type UnlockVaultParams = {
   ciphertext?: VaultCiphertext;
 };
 
+export type SealVaultParams = {
+  password: string;
+  secret: Uint8Array;
+};
+
 export type VaultConfig = {
-  pbkdf2?: {
-    targetDurationMs?: number;
-    minimumIterations?: number;
-    maximumIterations?: number;
-    saltBytes?: number;
-  };
-  aes?: {
-    ivBytes?: number;
-  };
+  iterations?: number;
+  saltBytes?: number;
+  ivBytes?: number;
   secretBytes?: number;
 };
 
@@ -40,7 +42,7 @@ export interface VaultService {
   unlock(params: UnlockVaultParams): Promise<Uint8Array>;
   lock(): void;
   exportKey(): Uint8Array;
-  seal(secret: Uint8Array): Promise<VaultCiphertext>;
+  seal(params: SealVaultParams): Promise<VaultCiphertext>;
   importCiphertext(ciphertext: VaultCiphertext): void;
   getCiphertext(): VaultCiphertext | null;
   getStatus(): VaultStatus;

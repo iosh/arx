@@ -12,3 +12,5 @@ export * from "./permission/types.js";
 
 export * from "./transaction/TransactionController.js";
 export * from "./transaction/types.js";
+export * from "./unlock/types.js";
+export * from "./unlock/UnlockController.js";

@@ -6,7 +6,7 @@ export type NativeCurrency = {
   decimals: number;
 };
 
-export type Caip2ChainId = `${string}:${string}`;
+export type Caip2ChainId = string;
 
 export type ChainState = {
   caip2: Caip2ChainId;

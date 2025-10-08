@@ -68,6 +68,7 @@ export type TransactionControllerOptions = {
   now?: () => number;
   autoApprove?: boolean;
   autoRejectMessage?: string;
+  initialState?: TransactionState;
 };
 
 export type TransactionController = {
@@ -78,4 +79,5 @@ export type TransactionController = {
   onStateChanged(handler: (state: TransactionState) => void): () => void;
   onQueued(handler: (meta: TransactionMeta) => void): () => void;
   onUpdated(handler: (meta: TransactionMeta) => void): () => void;
+  replaceState(state: TransactionState): void;
 };

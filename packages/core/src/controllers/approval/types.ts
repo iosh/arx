@@ -39,7 +39,9 @@ export type ApprovalControllerOptions = {
   messenger: ApprovalMessenger;
   defaultStrategy?: ApprovalStrategy<unknown, unknown>;
   autoRejectMessage?: string;
+  initialState?: ApprovalState;
 };
+
 export type ApprovalController = {
   getState(): ApprovalState;
   requestApproval<TInput, TResult>(
@@ -49,4 +51,5 @@ export type ApprovalController = {
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onRequest(handler: (task: ApprovalTask<unknown>) => void): () => void;
   onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void;
+  replaceState(state: ApprovalState): void;
 };

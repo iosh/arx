@@ -1,4 +1,5 @@
 import {
+  ApprovalsSnapshotSchema,
   createAsyncMiddleware,
   createBackgroundServices,
   createMethodDefinitionResolver,
@@ -10,12 +11,15 @@ import {
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
+  StorageNamespaces,
+  TransactionsSnapshotSchema,
 } from "@arx/core";
 import type { JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
+import { getExtensionStorage } from "@/platform/storage";
 
 type BackgroundContext = {
   services: ReturnType<typeof createBackgroundServices>;
@@ -34,10 +38,35 @@ let currentResolveRpcErrors: (() => ReturnType<typeof getRpcErrors>) | null = nu
 
 const FALLBACK_NAMESPACE = "eip155";
 
+const hydratePersistentState = async (
+  storage: ReturnType<typeof getExtensionStorage>,
+  controllers: ReturnType<typeof createBackgroundServices>["controllers"],
+) => {
+  try {
+    const approvalsSnapshot = await storage.loadSnapshot(StorageNamespaces.Approvals);
+    if (approvalsSnapshot) {
+      const parsed = ApprovalsSnapshotSchema.parse(approvalsSnapshot);
+      controllers.approvals.replaceState(parsed.payload);
+    }
+  } catch (error) {
+    console.warn("[background] failed to hydrate approvals snapshot", error);
+  }
+
+  try {
+    const transactionsSnapshot = await storage.loadSnapshot(StorageNamespaces.Transactions);
+    if (transactionsSnapshot) {
+      controllers.transactions.replaceState(TransactionsSnapshotSchema.parse(transactionsSnapshot).payload);
+    }
+  } catch (error) {
+    console.warn("[background] failed to hydrate transactions snapshot", error);
+  }
+};
+
 const ensureContext = () => {
   if (context) return context;
 
   let namespaceResolver = () => FALLBACK_NAMESPACE;
+  const storage = getExtensionStorage();
 
   const services = createBackgroundServices({
     permissions: {
@@ -45,6 +74,8 @@ const ensureContext = () => {
     },
   });
   const { controllers, engine } = services;
+
+  hydratePersistentState(storage, controllers);
 
   namespaceResolver = () => {
     const active = controllers.network.getState().active;

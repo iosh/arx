@@ -8,7 +8,12 @@ import type {
   AccountsState,
 } from "../controllers/account/types.js";
 import { InMemoryApprovalController } from "../controllers/approval/ApprovalController.js";
-import type { ApprovalController, ApprovalMessenger, ApprovalMessengerTopics } from "../controllers/approval/types.js";
+import type {
+  ApprovalController,
+  ApprovalMessenger,
+  ApprovalMessengerTopics,
+  ApprovalState,
+} from "../controllers/approval/types.js";
 import { InMemoryNetworkController } from "../controllers/network/NetworkController.js";
 import type {
   NetworkController,
@@ -29,10 +34,15 @@ import type {
   TransactionController,
   TransactionMessenger,
   TransactionMessengerTopics,
+  TransactionState,
 } from "../controllers/transaction/types.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import { createPermissionScopeResolver } from "../rpc/index.js";
+
+import type { StoragePort } from "../storage/index.js";
+
+import { registerStorageSync } from "./persistence/registerStorageSync.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
@@ -79,6 +89,7 @@ export type CreateBackgroundServicesOptions = {
   };
   approvals?: {
     autoRejectMessage?: string;
+    initialState?: ApprovalState;
   };
   permissions?: {
     initialState?: PermissionsState;
@@ -87,9 +98,14 @@ export type CreateBackgroundServicesOptions = {
   transactions?: {
     autoApprove?: boolean;
     autoRejectMessage?: string;
+    initialState?: TransactionState;
   };
   engine?: {
     middlewares?: JsonRpcMiddleware<JsonRpcParams, Json>[];
+  };
+  storage?: {
+    port: StoragePort;
+    now?: () => number;
   };
 };
 
@@ -104,12 +120,16 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     permissions: permissionOptions,
     transactions: transactionOptions,
     engine: engineOptions,
+    storage: storageOptions,
   } = options ?? {};
+
+  const subscriptions: Array<() => void> = [];
+  const storagePort = storageOptions?.port;
+  const resolveNow = storageOptions?.now ?? Date.now;
 
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
-
   const networkController = new InMemoryNetworkController({
     messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
@@ -133,6 +153,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     ...(approvalOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: approvalOptions.autoRejectMessage }
       : {}),
+    ...(approvalOptions?.initialState !== undefined ? { initialState: approvalOptions.initialState } : {}),
   });
 
   const permissionController = new InMemoryPermissionController({
@@ -156,7 +177,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     ...(transactionOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: transactionOptions.autoRejectMessage }
       : {}),
+    ...(transactionOptions?.initialState !== undefined ? { initialState: transactionOptions.initialState } : {}),
   });
+
   const engine = new JsonRpcEngine();
   const middlewares = engineOptions?.middlewares ?? [];
 
@@ -180,6 +203,21 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionController,
   };
 
+  const detachPersistence =
+    storagePort === undefined
+      ? undefined
+      : registerStorageSync({
+          storage: storagePort,
+          controllers: {
+            approvals: approvalController,
+            transactions: transactionController,
+          },
+          now: resolveNow,
+          logger: (message, error) => {
+            console.warn("[createBackgroundServices]", message, error);
+          },
+        });
+
   return {
     messenger,
     engine,
@@ -189,6 +227,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
         // bind platform bridge events
       },
       destroy: () => {
+        if (detachPersistence) {
+          detachPersistence();
+        }
         engine.destroy();
         messenger.clear();
       },

@@ -63,6 +63,7 @@ const isSameState = (prev?: TransactionState, next?: TransactionState) => {
     )
   );
 };
+
 export class InMemoryTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #network: Pick<NetworkController, "getState">;
@@ -72,7 +73,8 @@ export class InMemoryTransactionController implements TransactionController {
   #now: () => number;
   #autoApprove: boolean;
   #autoRejectMessage: string;
-  #state: TransactionState = { pending: [], history: [] };
+  #state: TransactionState;
+
   constructor({
     messenger,
     network,
@@ -82,6 +84,7 @@ export class InMemoryTransactionController implements TransactionController {
     now,
     autoApprove = false,
     autoRejectMessage = DEFAULT_REJECTION_MESSAGE,
+    initialState,
   }: TransactionControllerOptions) {
     this.#messenger = messenger;
     this.#network = network;
@@ -91,9 +94,9 @@ export class InMemoryTransactionController implements TransactionController {
     this.#now = now ?? Date.now;
     this.#autoApprove = autoApprove;
     this.#autoRejectMessage = autoRejectMessage;
+    this.#state = cloneState(initialState ?? { pending: [], history: [] });
     this.#publishState();
   }
-
   getState(): TransactionState {
     return cloneState(this.#state);
   }
@@ -209,6 +212,10 @@ export class InMemoryTransactionController implements TransactionController {
     return this.#messenger.subscribe(TRANSACTION_QUEUED_TOPIC, handler);
   }
 
+  replaceState(state: TransactionState): void {
+    this.#state = cloneState(state);
+    this.#publishState();
+  }
   #createApprovalTask(meta: TransactionMeta): TransactionApprovalTask {
     return {
       id: meta.id,

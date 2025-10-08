@@ -42,9 +42,9 @@ export class InMemoryApprovalController implements ApprovalController {
   #defaultStrategy: ApprovalStrategy<unknown, unknown>;
   #autoRejectMessage: string;
 
-  constructor({ messenger, defaultStrategy, autoRejectMessage }: ApprovalControllerOptions) {
+  constructor({ messenger, defaultStrategy, autoRejectMessage, initialState }: ApprovalControllerOptions) {
     this.#messenger = messenger;
-    this.#state = { pending: [] };
+    this.#state = cloneState(initialState ?? { pending: [] });
 
     this.#autoRejectMessage = autoRejectMessage ?? "Approval rejected by stub";
     this.#defaultStrategy =
@@ -94,6 +94,11 @@ export class InMemoryApprovalController implements ApprovalController {
 
   onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_FINISH_TOPIC, handler);
+  }
+
+  replaceState(state: ApprovalState): void {
+    this.#state = cloneState(state);
+    this.#publishState();
   }
 
   #enqueue(id: string) {

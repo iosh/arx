@@ -14,6 +14,7 @@ import type {
   ApprovalMessengerTopics,
   ApprovalState,
 } from "../controllers/approval/types.js";
+import type { UnlockMessengerTopics } from "../controllers/index.js";
 import { InMemoryNetworkController } from "../controllers/network/NetworkController.js";
 import type {
   NetworkController,
@@ -39,16 +40,15 @@ import type {
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import { createPermissionScopeResolver } from "../rpc/index.js";
-
 import type { StoragePort } from "../storage/index.js";
-
 import { registerStorageSync } from "./persistence/registerStorageSync.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
   NetworkMessengerTopic &
   PermissionMessengerTopics &
-  TransactionMessengerTopics;
+  TransactionMessengerTopics &
+  UnlockMessengerTopics;
 
 const DEFAULT_CHAIN: NetworkState["active"] = {
   caip2: "eip155:1",

@@ -198,6 +198,7 @@ export const StorageNamespaces = {
   Permissions: "core:permissions",
   Approvals: "core:approvals",
   Transactions: "core:transactions",
+  VaultMeta: "core:vaultMeta",
 } as const;
 
 export type StorageNamespace = (typeof StorageNamespaces)[keyof typeof StorageNamespaces];
@@ -236,12 +237,37 @@ export type PermissionsSnapshot = z.infer<typeof PermissionsSnapshotSchema>;
 export type ApprovalsSnapshot = z.infer<typeof ApprovalsSnapshotSchema>;
 export type TransactionsSnapshot = z.infer<typeof TransactionsSnapshotSchema>;
 
+const vaultCiphertextSchema = z
+  .strictObject({
+    version: z.number().int().positive(),
+    algorithm: z.literal("pbkdf2-sha256"),
+    salt: z.string().min(1),
+    iterations: z.number().int().positive(),
+    iv: z.string().min(1),
+    cipher: z.string().min(1),
+    createdAt: epochMillisecondsSchema,
+  })
+  .optional();
+export const VAULT_META_SNAPSHOT_VERSION = 1;
+
+export const VaultMetaSnapshotSchema = createSnapshotSchema({
+  version: VAULT_META_SNAPSHOT_VERSION,
+  payload: z.strictObject({
+    ciphertext: vaultCiphertextSchema.nullable(),
+    autoLockDuration: z.number().int().positive(),
+    initializedAt: epochMillisecondsSchema,
+  }),
+});
+
+export type VaultMetaSnapshot = z.infer<typeof VaultMetaSnapshotSchema>;
+
 export const StorageSnapshotSchemas = {
   [StorageNamespaces.Network]: NetworkSnapshotSchema,
   [StorageNamespaces.Accounts]: AccountsSnapshotSchema,
   [StorageNamespaces.Permissions]: PermissionsSnapshotSchema,
   [StorageNamespaces.Approvals]: ApprovalsSnapshotSchema,
   [StorageNamespaces.Transactions]: TransactionsSnapshotSchema,
+  [StorageNamespaces.VaultMeta]: VaultMetaSnapshotSchema,
 } as const satisfies Record<StorageNamespace, ZodType>;
 
 export type StorageSnapshotSchemaMap = typeof StorageSnapshotSchemas;

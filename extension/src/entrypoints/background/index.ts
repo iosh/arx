@@ -1,18 +1,27 @@
 import {
   ApprovalsSnapshotSchema,
+  type ControllerMessenger,
   createAsyncMiddleware,
   createBackgroundServices,
   createMethodDefinitionResolver,
   createMethodExecutor,
   createPermissionScopeResolver,
+  createVaultService,
   getProviderErrors,
   getRpcErrors,
+  InMemoryUnlockController,
   type Json,
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
   StorageNamespaces,
   TransactionsSnapshotSchema,
+  type UnlockController,
+  type UnlockMessengerTopics,
+  type UnlockReason,
+  VAULT_META_SNAPSHOT_VERSION,
+  type VaultMetaSnapshot,
+  type VaultService,
 } from "@arx/core";
 import type { JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
@@ -21,13 +30,23 @@ import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionStorage } from "@/platform/storage";
 
+type SessionMessage =
+  | { type: "session:getStatus" }
+  | { type: "session:unlock"; payload: { password: string } }
+  | { type: "session:lock"; payload?: { reason?: UnlockReason } }
+  | { type: "vault:initialize"; payload: { password: string } };
+
 type BackgroundContext = {
   services: ReturnType<typeof createBackgroundServices>;
   controllers: ReturnType<typeof createBackgroundServices>["controllers"];
   engine: ReturnType<typeof createBackgroundServices>["engine"];
+  vault: VaultService;
+  unlock: UnlockController;
 };
 
 let context: BackgroundContext | null = null;
+let contextPromise: Promise<BackgroundContext> | null = null;
+
 const connections = new Set<browser.Runtime.Port>();
 const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion2 }>>();
 const unsubscribeControllerEvents: Array<() => void> = [];
@@ -37,6 +56,52 @@ let currentResolveProviderErrors: (() => ReturnType<typeof getProviderErrors>) |
 let currentResolveRpcErrors: (() => ReturnType<typeof getRpcErrors>) | null = null;
 
 const FALLBACK_NAMESPACE = "eip155";
+
+const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Runtime.MessageSender) => {
+  if (sender.id !== browser.runtime.id) {
+    throw new Error("Unauthorized sender");
+  }
+
+  await ensureContext();
+  if (!context) {
+    throw new Error("Background context is not initialized");
+  }
+
+  const { unlock, vault } = context;
+
+  switch (message.type) {
+    case "session:getStatus": {
+      return {
+        state: unlock.getState(),
+        vault: vault.getStatus(),
+      };
+    }
+
+    case "session:unlock": {
+      const { password } = message.payload;
+      await unlock.unlock({ password });
+      await persistVaultMeta();
+      return unlock.getState();
+    }
+
+    case "session:lock": {
+      const reason = message.payload?.reason ?? "manual";
+      unlock.lock(reason);
+      await persistVaultMeta();
+      return unlock.getState();
+    }
+
+    case "vault:initialize": {
+      const { password } = message.payload;
+      const ciphertext = await vault.initialize({ password });
+      await persistVaultMeta();
+      return { ciphertext };
+    }
+
+    default:
+      throw new Error("Unknown session message");
+  }
+};
 
 const hydratePersistentState = async (
   storage: ReturnType<typeof getExtensionStorage>,
@@ -62,150 +127,234 @@ const hydratePersistentState = async (
   }
 };
 
-const ensureContext = () => {
-  if (context) return context;
+const persistVaultMeta = async () => {
+  if (!context) {
+    console.warn("[background] persistVaultMeta called before context initialized");
+    return;
+  }
 
-  let namespaceResolver = () => FALLBACK_NAMESPACE;
   const storage = getExtensionStorage();
 
-  const services = createBackgroundServices({
-    permissions: {
-      scopeResolver: createPermissionScopeResolver(() => namespaceResolver()),
+  const { vault, unlock } = context;
+  const ciphertext = vault.getCiphertext();
+
+  const envelope: VaultMetaSnapshot = {
+    version: VAULT_META_SNAPSHOT_VERSION,
+    updatedAt: Date.now(),
+    payload: {
+      ciphertext,
+      autoLockDuration: unlock.getState().timeoutMs,
+      initializedAt: ciphertext?.createdAt ?? Date.now(),
     },
-  });
-  const { controllers, engine } = services;
-
-  hydratePersistentState(storage, controllers);
-
-  namespaceResolver = () => {
-    const active = controllers.network.getState().active;
-    const [namespace] = active.caip2.split(":");
-    return namespace || FALLBACK_NAMESPACE;
   };
 
-  services.lifecycle.start();
+  await storage.saveVaultMeta(envelope);
+};
 
-  const executeMethod = createMethodExecutor(controllers);
-  const getNamespace = () => controllers.network.getState().active.caip2;
-  const resolveProviderErrors = () => getProviderErrors(getNamespace());
-  const resolveRpcErrors = () => getRpcErrors(getNamespace());
-  const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
+const ensureContext = async (): Promise<BackgroundContext> => {
+  if (context) {
+    return context;
+  }
 
-  engine.push(
-    createAsyncMiddleware(async (req, res, next) => {
+  if (contextPromise) {
+    return contextPromise;
+  }
+
+  contextPromise = (async () => {
+    let namespaceResolver = () => FALLBACK_NAMESPACE;
+    const storage = getExtensionStorage();
+
+    const services = createBackgroundServices({
+      permissions: {
+        scopeResolver: createPermissionScopeResolver(() => namespaceResolver()),
+      },
+    });
+    const { controllers, engine, messenger } = services;
+
+    await hydratePersistentState(storage, controllers);
+
+    namespaceResolver = () => {
+      const active = controllers.network.getState().active;
+      const [namespace] = active.caip2.split(":");
+      return namespace || FALLBACK_NAMESPACE;
+    };
+
+    const vault = createVaultService();
+    const vaultMeta = await storage.loadVaultMeta().catch((error) => {
+      console.warn("[background] failed to load vault meta", error);
+      return null;
+    });
+
+    const autoLockDuration = vaultMeta?.payload.autoLockDuration ?? 15 * 60 * 1000;
+
+    if (vaultMeta?.payload.ciphertext) {
       try {
-        await next();
-      } catch (middlewareError) {
-        res.error = toJsonRpcError(middlewareError, req.method);
-      }
-    }),
-  );
-
-  engine.push(
-    createAsyncMiddleware(async (req, _res, next) => {
-      const origin = (req as { origin?: string }).origin ?? "unknown://";
-
-      if (origin === "unknown://") {
-        throw resolveProviderErrors().unauthorized({
-          message: "Request origin could not be resolved",
-          data: { method: req.method },
+        vault.importCiphertext(vaultMeta.payload.ciphertext);
+      } catch (error) {
+        console.warn("[background] failed to import vault ciphertext", error);
+        await storage.clearVaultMeta().catch((clearError) => {
+          console.warn("[background] failed to clear vault meta", clearError);
         });
       }
+    }
+    const unlockMessenger = messenger as unknown as ControllerMessenger<UnlockMessengerTopics>;
 
-      if (isInternalOrigin(origin)) {
-        return next();
-      }
+    const unlock = new InMemoryUnlockController({
+      messenger: unlockMessenger,
+      vault: {
+        unlock: vault.unlock.bind(vault),
+        lock: vault.lock.bind(vault),
+        isUnlocked: vault.isUnlocked.bind(vault),
+      },
+      autoLockDuration,
+    });
 
-      const definition = resolveMethodDefinition(req.method);
-      const scope = definition?.scope;
-      if (!scope) {
-        return next();
-      }
+    unsubscribeControllerEvents.push(
+      unlock.onUnlocked((payload) => {
+        broadcastEvent("session:unlocked", [payload]);
+      }),
+    );
+    unsubscribeControllerEvents.push(
+      unlock.onLocked((payload) => {
+        broadcastEvent("session:locked", [payload]);
+      }),
+    );
+    services.lifecycle.start();
 
-      try {
-        await controllers.permissions.ensurePermission(origin, req.method);
-        return next();
-      } catch (error) {
-        const maybeError = error as { code?: unknown };
-        const code = typeof maybeError.code === "number" ? maybeError.code : undefined;
-        const isPermissionError = code === 4001 || code === 4100;
+    const executeMethod = createMethodExecutor(controllers);
+    const getNamespace = () => controllers.network.getState().active.caip2;
+    const resolveProviderErrors = () => getProviderErrors(getNamespace());
+    const resolveRpcErrors = () => getRpcErrors(getNamespace());
+    const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
 
-        if (!isPermissionError) {
-          throw error;
+    engine.push(
+      createAsyncMiddleware(async (req, res, next) => {
+        try {
+          await next();
+        } catch (middlewareError) {
+          res.error = toJsonRpcError(middlewareError, req.method);
+        }
+      }),
+    );
+
+    engine.push(
+      createAsyncMiddleware(async (req, _res, next) => {
+        const origin = (req as { origin?: string }).origin ?? "unknown://";
+
+        if (origin === "unknown://") {
+          throw resolveProviderErrors().unauthorized({
+            message: "Request origin could not be resolved",
+            data: { method: req.method },
+          });
         }
 
-        if (definition?.approvalRequired === true) {
+        if (isInternalOrigin(origin)) {
           return next();
         }
 
-        throw resolveProviderErrors().unauthorized({
-          message: `Origin ${origin} is not authorized to call ${req.method}`,
-          data: { origin, method: req.method },
-        });
-      }
-    }),
-  );
+        const definition = resolveMethodDefinition(req.method);
+        const scope = definition?.scope;
+        if (!scope) {
+          return next();
+        }
 
-  engine.push(
-    createAsyncMiddleware(async (req, _res, next) => {
-      const definition = resolveMethodDefinition(req.method);
-      if (!definition?.approvalRequired) {
+        try {
+          await controllers.permissions.ensurePermission(origin, req.method);
+          return next();
+        } catch (error) {
+          const maybeError = error as { code?: unknown };
+          const code = typeof maybeError.code === "number" ? maybeError.code : undefined;
+          const isPermissionError = code === 4001 || code === 4100;
+
+          if (!isPermissionError) {
+            throw error;
+          }
+
+          if (definition?.approvalRequired === true) {
+            return next();
+          }
+
+          throw resolveProviderErrors().unauthorized({
+            message: `Origin ${origin} is not authorized to call ${req.method}`,
+            data: { origin, method: req.method },
+          });
+        }
+      }),
+    );
+
+    engine.push(
+      createAsyncMiddleware(async (req, _res, next) => {
+        const definition = resolveMethodDefinition(req.method);
+        if (!definition?.approvalRequired) {
+          return next();
+        }
+
+        // TODO: integrate approval UI/flow here
         return next();
-      }
+      }),
+    );
 
-      // TODO: integrate approval UI/flow here
-      return next();
-    }),
-  );
+    engine.push(
+      createAsyncMiddleware(async (req, res) => {
+        const origin = (req as { origin?: string }).origin ?? "unknown://";
+        const result = await executeMethod({
+          origin,
+          request: { method: req.method, params: req.params as JsonRpcParams },
+        });
+        res.result = result as Json;
+      }),
+    );
 
-  engine.push(
-    createAsyncMiddleware(async (req, res) => {
-      const origin = (req as { origin?: string }).origin ?? "unknown://";
-      const result = await executeMethod({
-        origin,
-        request: { method: req.method, params: req.params as JsonRpcParams },
-      });
-      res.result = result as Json;
-    }),
-  );
+    unsubscribeControllerEvents.push(
+      controllers.network.onChainChanged((chain) => {
+        broadcastEvent("chainChanged", [
+          {
+            chainId: chain.chainId,
+            caip2: chain.caip2,
+            isUnlocked: unlock.isUnlocked(),
+          },
+        ]);
+      }),
+    );
+    unsubscribeControllerEvents.push(
+      controllers.accounts.onAccountsChanged((state) => {
+        broadcastEvent("accountsChanged", [state.all]);
+      }),
+    );
 
-  unsubscribeControllerEvents.push(
-    controllers.network.onChainChanged((chain) => {
-      const { isUnlocked } = getControllerSnapshot();
-      broadcastEvent("chainChanged", [
-        {
-          chainId: chain.chainId,
-          caip2: chain.caip2,
-          isUnlocked,
-        },
-      ]);
-    }),
-  );
-  unsubscribeControllerEvents.push(
-    controllers.accounts.onAccountsChanged((state) => {
-      broadcastEvent("accountsChanged", [state.all]);
-    }),
-  );
+    context = { services, controllers, engine, vault, unlock };
+    currentExecuteMethod = executeMethod;
+    currentResolveProviderErrors = resolveProviderErrors;
+    currentResolveRpcErrors = resolveRpcErrors;
 
-  context = { services, controllers, engine };
-  currentExecuteMethod = executeMethod;
-  currentResolveProviderErrors = resolveProviderErrors;
-  currentResolveRpcErrors = resolveRpcErrors;
+    return context;
+  })();
 
-  return context;
+  try {
+    return await contextPromise;
+  } finally {
+    contextPromise = null;
+  }
 };
 const extensionOrigin = browser.runtime.getURL("").replace(/\/$/, "");
 
-const getActiveControllers = () => ensureContext().controllers;
-
-const getActiveProviderErrors = () => {
-  ensureContext();
-  return currentResolveProviderErrors!();
+const getActiveControllers = () => {
+  if (!context) {
+    throw new Error("Background context is not initialized");
+  }
+  return context.controllers;
 };
-
+const getActiveProviderErrors = () => {
+  if (!context || !currentResolveProviderErrors) {
+    throw new Error("Background context is not initialized");
+  }
+  return currentResolveProviderErrors();
+};
 const getActiveRpcErrors = () => {
-  ensureContext();
-  return currentResolveRpcErrors!();
+  if (!context || !currentResolveRpcErrors) {
+    throw new Error("Background context is not initialized");
+  }
+  return currentResolveRpcErrors();
 };
 
 const isInternalOrigin = (origin: string) => origin === extensionOrigin;
@@ -261,12 +410,16 @@ const replyRequest = (port: browser.Runtime.Port, id: string, payload: Transport
   });
 };
 const getControllerSnapshot = () => {
-  const controllers = getActiveControllers();
+  if (!context) {
+    throw new Error("Background context is not initialized");
+  }
+  const { controllers, unlock } = context;
   const networkState = controllers.network.getState();
+
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
     accounts: controllers.accounts.getAccounts(),
-    isUnlocked: true, // TODO: use UnlockController later
+    isUnlocked: unlock.isUnlocked(),
   };
 };
 
@@ -326,7 +479,7 @@ const toJsonRpcError = (error: unknown, method: string): JsonRpcError => {
 };
 
 const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-  const { engine } = ensureContext();
+  const { engine } = await ensureContext();
   const { id: rpcId, jsonrpc, method } = envelope.payload;
   const pendingBucket = getPendingBucket(port);
   pendingBucket.set(envelope.id, { rpcId, jsonrpc });
@@ -370,8 +523,11 @@ const handleConnect = (port: browser.Runtime.Port) => {
 
   connections.add(port);
 
-  const handleHandshake = () => {
+  const handleHandshake = async () => {
+    await ensureContext();
+
     const current = getControllerSnapshot();
+
     postEnvelope(port, {
       channel: CHANNEL,
       type: "handshake_ack",
@@ -390,7 +546,7 @@ const handleConnect = (port: browser.Runtime.Port) => {
 
     switch (envelope.type) {
       case "handshake":
-        handleHandshake();
+        void handleHandshake();
         break;
       case "request": {
         handleRpcRequest(port, envelope);
@@ -414,9 +570,15 @@ const handleConnect = (port: browser.Runtime.Port) => {
   port.onDisconnect.addListener(handleDisconnect);
 };
 
+const runtimeMessageProxy = (message: unknown, sender: browser.Runtime.MessageSender) => {
+  return handleRuntimeMessage(message as SessionMessage, sender);
+};
+
 export default defineBackground(() => {
-  ensureContext();
+  void ensureContext();
+
   browser.runtime.onConnect.addListener(handleConnect);
+  browser.runtime.onMessage.addListener(runtimeMessageProxy);
 
   if (browser.runtime.onSuspend) {
     browser.runtime.onSuspend.addListener(() => {

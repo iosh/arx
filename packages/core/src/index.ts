@@ -14,3 +14,4 @@ export * from "./messenger/index.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
 export * from "./storage/index.js";
+export * from "./vault/index.js";

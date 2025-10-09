@@ -5,6 +5,8 @@ import {
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
   StorageNamespaces,
+  VAULT_META_SNAPSHOT_VERSION,
+  type VaultMetaSnapshot,
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, describe, expect, it } from "vitest";
@@ -74,5 +76,63 @@ describe("DexieStoragePort", () => {
 
     const reloaded = await storage.loadSnapshot(StorageNamespaces.Network);
     expect(reloaded).toBeNull();
+  });
+
+  it("persists and loads vault meta snapshot", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const snapshot: VaultMetaSnapshot = {
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: Date.now(),
+      payload: {
+        ciphertext: {
+          version: 1,
+          algorithm: "pbkdf2-sha256",
+          salt: "c2FsdA==",
+          iterations: 600_000,
+          iv: "YWJj",
+          cipher: "ZGVm",
+          createdAt: Date.now(),
+        },
+        autoLockDuration: 900_000,
+        initializedAt: Date.now(),
+      },
+    };
+
+    await storage.saveVaultMeta(snapshot);
+    expect(await storage.loadVaultMeta()).toEqual(snapshot);
+  });
+
+  it("drops invalid vault meta snapshot on load", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+
+    await storage.saveVaultMeta({
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: Date.now(),
+      payload: {
+        ciphertext: null,
+        autoLockDuration: 900_000,
+        initializedAt: Date.now(),
+      },
+    });
+
+    const raw = new Dexie(DB_NAME);
+    raw.version(DOMAIN_SCHEMA_VERSION).stores({
+      chains: "&namespace",
+      accounts: "&namespace",
+      permissions: "&namespace",
+      approvals: "&namespace",
+      transactions: "&namespace",
+      vaultMeta: "&id",
+    });
+    await raw.open();
+    await raw.table("vaultMeta").put({
+      id: "vault-meta",
+      version: 1,
+      updatedAt: Date.now(),
+      payload: { version: 99 },
+    });
+    await raw.close();
+
+    expect(await storage.loadVaultMeta()).toBeNull();
   });
 });

@@ -6,6 +6,9 @@ import {
   type StorageSnapshotMap,
   type StorageSnapshotSchemaMap,
   StorageSnapshotSchemas,
+  VAULT_META_SNAPSHOT_VERSION,
+  type VaultMetaSnapshot,
+  VaultMetaSnapshotSchema,
 } from "@arx/core/storage";
 import { Dexie, type PromiseExtended, type Table } from "dexie";
 
@@ -90,6 +93,39 @@ class DexieStoragePort implements StoragePort {
     await this.ready;
     const table = this.getTable(namespace);
     await table.delete(namespace);
+  }
+
+  async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
+    await this.ready;
+    const entity = await this.db.vaultMeta.get("vault-meta");
+    if (!entity) {
+      return null;
+    }
+
+    const parsed = VaultMetaSnapshotSchema.safeParse(entity.payload);
+
+    if (!parsed.success) {
+      console.warn("[storage-dexie] invalid vault meta detected", parsed.error);
+      await this.db.vaultMeta.delete("vault-meta");
+      return null;
+    }
+
+    return parsed.data;
+  }
+
+  async saveVaultMeta(envelope: VaultMetaSnapshot): Promise<void> {
+    await this.ready;
+    const checked = VaultMetaSnapshotSchema.parse(envelope);
+    await this.db.vaultMeta.put({
+      id: "vault-meta",
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: checked.updatedAt,
+      payload: checked,
+    });
+  }
+  async clearVaultMeta(): Promise<void> {
+    await this.ready;
+    await this.db.vaultMeta.delete("vault-meta");
   }
 
   private getTable(namespace: StorageNamespace) {

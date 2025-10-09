@@ -1,5 +1,4 @@
-import type { StorageNamespace, StorageSnapshotMap } from "./schemas.js";
-
+import type { StorageNamespace, StorageSnapshotMap, VaultMetaSnapshot } from "./schemas.js";
 export type SnapshotEnvelope<TPayload, TVersion extends number = number> = {
   version: TVersion;
   updatedAt: number;
@@ -15,4 +14,8 @@ export interface StoragePort {
     envelope: StorageSnapshotMap[TNamespace],
   ): Promise<void>;
   clearSnapshot(namespace: StorageNamespace): Promise<void>;
+
+  loadVaultMeta(): Promise<VaultMetaSnapshot | null>;
+  saveVaultMeta(envelope: VaultMetaSnapshot): Promise<void>;
+  clearVaultMeta(): Promise<void>;
 }

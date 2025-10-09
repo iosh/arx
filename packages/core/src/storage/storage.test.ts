@@ -9,6 +9,8 @@ import {
   PermissionsSnapshotSchema,
   TRANSACTIONS_SNAPSHOT_VERSION,
   TransactionsSnapshotSchema,
+  VAULT_META_SNAPSHOT_VERSION,
+  VaultMetaSnapshotSchema,
 } from "./schemas.js";
 
 const TIMESTAMP = 1_706_000_000_000;
@@ -173,5 +175,39 @@ describe("storage schemas", () => {
     };
 
     expect(TransactionsSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
+  });
+
+  it("accepts a valid vault meta snapshot", () => {
+    const snapshot = {
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        ciphertext: {
+          version: 1,
+          algorithm: "pbkdf2-sha256",
+          salt: "base64salt",
+          iterations: 600_000,
+          iv: "base64iv",
+          cipher: "base64cipher",
+          createdAt: TIMESTAMP,
+        },
+        autoLockDuration: 900_000,
+        initializedAt: TIMESTAMP,
+      },
+    };
+    expect(VaultMetaSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
+  });
+
+  it("rejects vault meta snapshot when ciphertext shape is invalid", () => {
+    const invalid = {
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        ciphertext: { version: 1 },
+        autoLockDuration: 900_000,
+        initializedAt: TIMESTAMP,
+      },
+    };
+    expect(VaultMetaSnapshotSchema.safeParse(invalid).success).toBe(false);
   });
 });

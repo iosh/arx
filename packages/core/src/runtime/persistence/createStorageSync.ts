@@ -29,7 +29,7 @@ type RegisterStorageSyncOptions = {
 };
 
 export const createStorageSync = ({
-  storage,
+  storage: storagePort,
   controllers,
   now = Date.now,
   logger = console.warn,
@@ -48,7 +48,7 @@ export const createStorageSync = ({
         },
       };
 
-      void storage.saveSnapshot(StorageNamespaces.Network, envelope).catch((error) => {
+      void storagePort.saveSnapshot(StorageNamespaces.Network, envelope).catch((error) => {
         logger("[persistence] failed to persist network snapshot", error);
       });
     });
@@ -63,7 +63,7 @@ export const createStorageSync = ({
           primary: state.primary,
         },
       };
-      void storage.saveSnapshot(StorageNamespaces.Accounts, envelope).catch((error) => {
+      void storagePort.saveSnapshot(StorageNamespaces.Accounts, envelope).catch((error) => {
         logger("[persistence] failed to persist accounts snapshot", error);
       });
     });
@@ -78,7 +78,7 @@ export const createStorageSync = ({
           origins: Object.fromEntries(Object.entries(state.origins).map(([origin, scopes]) => [origin, [...scopes]])),
         },
       };
-      void storage.saveSnapshot(StorageNamespaces.Permissions, envelope).catch((error) => {
+      void storagePort.saveSnapshot(StorageNamespaces.Permissions, envelope).catch((error) => {
         logger("[persistence] failed to persist permissions snapshot", error);
       });
     });
@@ -93,7 +93,7 @@ export const createStorageSync = ({
         },
       };
 
-      void storage.saveSnapshot(StorageNamespaces.Approvals, envelope).catch((error) => {
+      void storagePort.saveSnapshot(StorageNamespaces.Approvals, envelope).catch((error) => {
         logger("[persistence] failed to persist approvals snapshot", error);
       });
     });
@@ -110,7 +110,7 @@ export const createStorageSync = ({
         },
       };
 
-      void storage.saveSnapshot(StorageNamespaces.Transactions, envelope).catch((error) => {
+      void storagePort.saveSnapshot(StorageNamespaces.Transactions, envelope).catch((error) => {
         logger("[persistence] failed to persist transactions snapshot", error);
       });
     });

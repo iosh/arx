@@ -72,6 +72,14 @@ export class InMemoryAccountController<T extends AccountAddress = AccountAddress
     return cloneState(this.#state);
   }
 
+  replaceState(state: AccountsState<T>): void {
+    if (isSameState(this.#state, state)) {
+      return;
+    }
+
+    this.#state = cloneState(state);
+    this.#publishState();
+  }
   onAccountsChanged(handler: (state: AccountsState<T>) => void): () => void {
     return this.#messenger.subscribe(ACCOUNT_STATE_TOPIC, handler);
   }

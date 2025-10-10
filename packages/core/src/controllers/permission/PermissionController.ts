@@ -118,6 +118,15 @@ export class InMemoryPermissionController implements PermissionController {
     return this.#messenger.subscribe(PERMISSION_ORIGIN_TOPIC, handler);
   }
 
+  replaceState(state: PermissionsState): void {
+    if (isSameState(this.#state, state)) {
+      return;
+    }
+
+    this.#state = cloneState(state);
+    this.#publishState();
+  }
+
   #publishState() {
     this.#messenger.publish(PERMISSION_STATE_TOPIC, cloneState(this.#state), {
       compare: isSameState,

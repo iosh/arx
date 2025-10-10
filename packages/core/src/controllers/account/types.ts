@@ -19,4 +19,5 @@ export type AccountController<T extends string = string> = {
   requestAccounts(origin: string): Promise<AccountAddress<T>[]>;
   addAccount(account: AccountAddress<T>, options?: { makePrimary?: boolean }): Promise<AccountsState<T>>;
   onAccountsChanged(handler: (state: AccountsState<T>) => void): () => void;
+  replaceState(state: AccountsState<T>): void;
 };

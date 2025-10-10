@@ -41,7 +41,7 @@ import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMess
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import { createPermissionScopeResolver } from "../rpc/index.js";
 import type { StoragePort } from "../storage/index.js";
-import { registerStorageSync } from "./persistence/registerStorageSync.js";
+import { createStorageSync } from "./persistence/createStorageSync.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
@@ -203,13 +203,19 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionController,
   };
 
-  const detachPersistence =
+  const storageSync =
     storagePort === undefined
       ? undefined
-      : registerStorageSync({
+      : createStorageSync({
           storage: storagePort,
           controllers: {
             network: networkController,
+            accounts: {
+              onAccountsChanged: (handler) => accountController.onAccountsChanged(handler),
+            },
+            permissions: {
+              onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),
+            },
             approvals: approvalController,
             transactions: transactionController,
           },
@@ -225,12 +231,10 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     controllers,
     lifecycle: {
       start: () => {
-        // bind platform bridge events
+        storageSync?.attach();
       },
       destroy: () => {
-        if (detachPersistence) {
-          detachPersistence();
-        }
+        storageSync?.detach();
         engine.destroy();
         messenger.clear();
       },

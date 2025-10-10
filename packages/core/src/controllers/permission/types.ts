@@ -40,4 +40,5 @@ export type PermissionController = {
   clear(origin: string): Promise<void>;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void;
+  replaceState(state: PermissionsState): void;
 };

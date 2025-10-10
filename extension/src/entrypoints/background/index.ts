@@ -1,4 +1,5 @@
 import {
+  AccountsSnapshotSchema,
   ApprovalsSnapshotSchema,
   type ControllerMessenger,
   createAsyncMiddleware,
@@ -15,6 +16,7 @@ import {
   type JsonRpcParams,
   type JsonRpcRequest,
   NetworkSnapshotSchema,
+  PermissionsSnapshotSchema,
   StorageNamespaces,
   TransactionsSnapshotSchema,
   type UnlockController,
@@ -109,14 +111,30 @@ const hydratePersistentState = async (
   controllers: ReturnType<typeof createBackgroundServices>["controllers"],
 ) => {
   try {
-    const hydrateNetwork = await storage.loadSnapshot(StorageNamespaces.Network);
-
-    if (hydrateNetwork) {
-      const parsed = NetworkSnapshotSchema.parse(hydrateNetwork);
-      controllers.network.replaceState(parsed.payload);
+    const networkSnapshot = await storage.loadSnapshot(StorageNamespaces.Network);
+    if (networkSnapshot) {
+      controllers.network.replaceState(NetworkSnapshotSchema.parse(networkSnapshot).payload);
     }
   } catch (error) {
     console.warn("[background] failed to hydrate network snapshot", error);
+  }
+
+  try {
+    const accountsSnapshot = await storage.loadSnapshot(StorageNamespaces.Accounts);
+    if (accountsSnapshot) {
+      controllers.accounts.replaceState(AccountsSnapshotSchema.parse(accountsSnapshot).payload);
+    }
+  } catch (error) {
+    console.warn("[background] failed to hydrate accounts snapshot", error);
+  }
+
+  try {
+    const permissionsSnapshot = await storage.loadSnapshot(StorageNamespaces.Permissions);
+    if (permissionsSnapshot) {
+      controllers.permissions.replaceState(PermissionsSnapshotSchema.parse(permissionsSnapshot).payload);
+    }
+  } catch (error) {
+    console.warn("[background] failed to hydrate permissions snapshot", error);
   }
 
   try {
@@ -186,6 +204,8 @@ const ensureContext = async (): Promise<BackgroundContext> => {
 
     await hydratePersistentState(storage, controllers);
 
+    services.lifecycle.start();
+
     namespaceResolver = () => {
       const active = controllers.network.getState().active;
       const [namespace] = active.caip2.split(":");
@@ -232,7 +252,6 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         broadcastEvent("session:locked", [payload]);
       }),
     );
-    services.lifecycle.start();
 
     const executeMethod = createMethodExecutor(controllers);
     const getNamespace = () => controllers.network.getState().active.caip2;

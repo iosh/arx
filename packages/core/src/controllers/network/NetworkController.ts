@@ -128,6 +128,19 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_CHAIN_TOPIC, handler);
   }
 
+  onStateChanged(handler: (state: NetworkState) => void): () => void {
+    return this.#messenger.subscribe(NETWORK_STATE_TOPIC, handler);
+  }
+
+  replaceState(state: NetworkState): void {
+    if (isSameNetworkState(this.#state, state)) {
+      return;
+    }
+
+    this.#state = cloneState(state);
+    this.#publishState();
+  }
+
   #publishState() {
     const snapshot = cloneState(this.#state);
 

@@ -1,15 +1,20 @@
 import type { ApprovalState } from "../../controllers/approval/types.js";
+import type { NetworkState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
-import type { StoragePort } from "../../storage/index.js";
+import type { NetworkSnapshot, StoragePort } from "../../storage/index.js";
 import {
   APPROVALS_SNAPSHOT_VERSION,
   type ApprovalsSnapshot,
+  NETWORK_SNAPSHOT_VERSION,
   StorageNamespaces,
   TRANSACTIONS_SNAPSHOT_VERSION,
   type TransactionsSnapshot,
 } from "../../storage/index.js";
 
 type ControllersForSync = {
+  network: {
+    onStateChanged(handler: (state: NetworkState) => void): () => void;
+  };
   approvals: {
     onStateChanged(handler: (state: ApprovalState) => void): () => void;
   };
@@ -30,6 +35,23 @@ export const registerStorageSync = ({
   logger = console.warn,
 }: RegisterStorageSyncOptions): (() => void) => {
   const subscriptions: Array<() => void> = [];
+
+  subscriptions.push(
+    controllers.network.onStateChanged((state) => {
+      const envelope: NetworkSnapshot = {
+        version: NETWORK_SNAPSHOT_VERSION,
+        updatedAt: now(),
+        payload: {
+          active: { ...state.active },
+          knownChains: state.knownChains.map((chain) => ({ ...chain })),
+        },
+      };
+
+      void storage.saveSnapshot(StorageNamespaces.Network, envelope).catch((error) => {
+        logger("[persistence] failed to persist network snapshot", error);
+      });
+    }),
+  );
 
   subscriptions.push(
     controllers.approvals.onStateChanged((state) => {

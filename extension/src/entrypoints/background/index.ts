@@ -14,6 +14,7 @@ import {
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
+  NetworkSnapshotSchema,
   StorageNamespaces,
   TransactionsSnapshotSchema,
   type UnlockController,
@@ -108,6 +109,17 @@ const hydratePersistentState = async (
   controllers: ReturnType<typeof createBackgroundServices>["controllers"],
 ) => {
   try {
+    const hydrateNetwork = await storage.loadSnapshot(StorageNamespaces.Network);
+
+    if (hydrateNetwork) {
+      const parsed = NetworkSnapshotSchema.parse(hydrateNetwork);
+      controllers.network.replaceState(parsed.payload);
+    }
+  } catch (error) {
+    console.warn("[background] failed to hydrate network snapshot", error);
+  }
+
+  try {
     const approvalsSnapshot = await storage.loadSnapshot(StorageNamespaces.Approvals);
     if (approvalsSnapshot) {
       const parsed = ApprovalsSnapshotSchema.parse(approvalsSnapshot);
@@ -168,6 +180,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       permissions: {
         scopeResolver: createPermissionScopeResolver(() => namespaceResolver()),
       },
+      storage: { port: storage },
     });
     const { controllers, engine, messenger } = services;
 

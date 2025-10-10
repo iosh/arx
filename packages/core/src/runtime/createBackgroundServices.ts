@@ -209,6 +209,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       : registerStorageSync({
           storage: storagePort,
           controllers: {
+            network: networkController,
             approvals: approvalController,
             transactions: transactionController,
           },

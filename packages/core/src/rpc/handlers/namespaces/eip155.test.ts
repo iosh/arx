@@ -10,6 +10,9 @@ const ORIGIN = "https://dapp.example";
 describe("eip155 handlers - core error paths", () => {
   it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
     const services = createBackgroundServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
     const execute = createMethodExecutor(services.controllers);
     try {
       await expect(
@@ -31,6 +34,9 @@ describe("eip155 handlers - core error paths", () => {
 
   it("throw invalid params when eth_sendTransaction receives no payload", async () => {
     const services = createBackgroundServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
     const execute = createMethodExecutor(services.controllers);
 
     try {

@@ -1,30 +1,17 @@
 import {
-  AccountsSnapshotSchema,
-  ApprovalsSnapshotSchema,
-  type ControllerMessenger,
+  type BackgroundSessionServices,
   createAsyncMiddleware,
   createBackgroundServices,
   createMethodDefinitionResolver,
   createMethodExecutor,
   createPermissionScopeResolver,
-  createVaultService,
   getProviderErrors,
   getRpcErrors,
-  InMemoryUnlockController,
   type Json,
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
-  NetworkSnapshotSchema,
-  PermissionsSnapshotSchema,
-  StorageNamespaces,
-  TransactionsSnapshotSchema,
-  type UnlockController,
-  type UnlockMessengerTopics,
   type UnlockReason,
-  VAULT_META_SNAPSHOT_VERSION,
-  type VaultMetaSnapshot,
-  type VaultService,
 } from "@arx/core";
 import type { JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
@@ -43,8 +30,7 @@ type BackgroundContext = {
   services: ReturnType<typeof createBackgroundServices>;
   controllers: ReturnType<typeof createBackgroundServices>["controllers"];
   engine: ReturnType<typeof createBackgroundServices>["engine"];
-  vault: VaultService;
-  unlock: UnlockController;
+  session: BackgroundSessionServices;
 };
 
 let context: BackgroundContext | null = null;
@@ -70,7 +56,8 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
     throw new Error("Background context is not initialized");
   }
 
-  const { unlock, vault } = context;
+  const { session } = context;
+  const { unlock, vault } = session;
 
   switch (message.type) {
     case "session:getStatus": {
@@ -106,79 +93,17 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
   }
 };
 
-const hydratePersistentState = async (
-  storage: ReturnType<typeof getExtensionStorage>,
-  controllers: ReturnType<typeof createBackgroundServices>["controllers"],
-) => {
-  try {
-    const networkSnapshot = await storage.loadSnapshot(StorageNamespaces.Network);
-    if (networkSnapshot) {
-      controllers.network.replaceState(NetworkSnapshotSchema.parse(networkSnapshot).payload);
-    }
-  } catch (error) {
-    console.warn("[background] failed to hydrate network snapshot", error);
-  }
-
-  try {
-    const accountsSnapshot = await storage.loadSnapshot(StorageNamespaces.Accounts);
-    if (accountsSnapshot) {
-      controllers.accounts.replaceState(AccountsSnapshotSchema.parse(accountsSnapshot).payload);
-    }
-  } catch (error) {
-    console.warn("[background] failed to hydrate accounts snapshot", error);
-  }
-
-  try {
-    const permissionsSnapshot = await storage.loadSnapshot(StorageNamespaces.Permissions);
-    if (permissionsSnapshot) {
-      controllers.permissions.replaceState(PermissionsSnapshotSchema.parse(permissionsSnapshot).payload);
-    }
-  } catch (error) {
-    console.warn("[background] failed to hydrate permissions snapshot", error);
-  }
-
-  try {
-    const approvalsSnapshot = await storage.loadSnapshot(StorageNamespaces.Approvals);
-    if (approvalsSnapshot) {
-      const parsed = ApprovalsSnapshotSchema.parse(approvalsSnapshot);
-      controllers.approvals.replaceState(parsed.payload);
-    }
-  } catch (error) {
-    console.warn("[background] failed to hydrate approvals snapshot", error);
-  }
-
-  try {
-    const transactionsSnapshot = await storage.loadSnapshot(StorageNamespaces.Transactions);
-    if (transactionsSnapshot) {
-      controllers.transactions.replaceState(TransactionsSnapshotSchema.parse(transactionsSnapshot).payload);
-    }
-  } catch (error) {
-    console.warn("[background] failed to hydrate transactions snapshot", error);
-  }
-};
-
 const persistVaultMeta = async () => {
   if (!context) {
     console.warn("[background] persistVaultMeta called before context initialized");
     return;
   }
 
-  const storage = getExtensionStorage();
-
-  const { vault, unlock } = context;
-  const ciphertext = vault.getCiphertext();
-
-  const envelope: VaultMetaSnapshot = {
-    version: VAULT_META_SNAPSHOT_VERSION,
-    updatedAt: Date.now(),
-    payload: {
-      ciphertext,
-      autoLockDuration: unlock.getState().timeoutMs,
-      initializedAt: ciphertext?.createdAt ?? Date.now(),
-    },
-  };
-
-  await storage.saveVaultMeta(envelope);
+  try {
+    await context.session.persistVaultMeta();
+  } catch (error) {
+    console.warn("[background] failed to persist vault meta", error);
+  }
 };
 
 const ensureContext = async (): Promise<BackgroundContext> => {
@@ -200,10 +125,9 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       },
       storage: { port: storage },
     });
-    const { controllers, engine, messenger } = services;
+    const { controllers, engine, messenger, session } = services;
 
-    await hydratePersistentState(storage, controllers);
-
+    await services.lifecycle.initialize();
     services.lifecycle.start();
 
     namespaceResolver = () => {
@@ -212,43 +136,13 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       return namespace || FALLBACK_NAMESPACE;
     };
 
-    const vault = createVaultService();
-    const vaultMeta = await storage.loadVaultMeta().catch((error) => {
-      console.warn("[background] failed to load vault meta", error);
-      return null;
-    });
-
-    const autoLockDuration = vaultMeta?.payload.autoLockDuration ?? 15 * 60 * 1000;
-
-    if (vaultMeta?.payload.ciphertext) {
-      try {
-        vault.importCiphertext(vaultMeta.payload.ciphertext);
-      } catch (error) {
-        console.warn("[background] failed to import vault ciphertext", error);
-        await storage.clearVaultMeta().catch((clearError) => {
-          console.warn("[background] failed to clear vault meta", clearError);
-        });
-      }
-    }
-    const unlockMessenger = messenger as unknown as ControllerMessenger<UnlockMessengerTopics>;
-
-    const unlock = new InMemoryUnlockController({
-      messenger: unlockMessenger,
-      vault: {
-        unlock: vault.unlock.bind(vault),
-        lock: vault.lock.bind(vault),
-        isUnlocked: vault.isUnlocked.bind(vault),
-      },
-      autoLockDuration,
-    });
-
     unsubscribeControllerEvents.push(
-      unlock.onUnlocked((payload) => {
+      session.unlock.onUnlocked((payload) => {
         broadcastEvent("session:unlocked", [payload]);
       }),
     );
     unsubscribeControllerEvents.push(
-      unlock.onLocked((payload) => {
+      session.unlock.onLocked((payload) => {
         broadcastEvent("session:locked", [payload]);
       }),
     );
@@ -343,7 +237,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
           {
             chainId: chain.chainId,
             caip2: chain.caip2,
-            isUnlocked: unlock.isUnlocked(),
+            isUnlocked: session.unlock.isUnlocked(),
           },
         ]);
       }),
@@ -354,7 +248,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       }),
     );
 
-    context = { services, controllers, engine, vault, unlock };
+    context = { services, controllers, engine, session };
     currentExecuteMethod = executeMethod;
     currentResolveProviderErrors = resolveProviderErrors;
     currentResolveRpcErrors = resolveRpcErrors;
@@ -445,13 +339,13 @@ const getControllerSnapshot = () => {
   if (!context) {
     throw new Error("Background context is not initialized");
   }
-  const { controllers, unlock } = context;
+  const { controllers, session } = context;
   const networkState = controllers.network.getState();
 
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
     accounts: controllers.accounts.getAccounts(),
-    isUnlocked: unlock.isUnlocked(),
+    isUnlocked: session.unlock.isUnlocked(),
   };
 };
 

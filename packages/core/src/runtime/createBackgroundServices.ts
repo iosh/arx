@@ -14,7 +14,6 @@ import type {
   ApprovalMessengerTopics,
   ApprovalState,
 } from "../controllers/approval/types.js";
-import type { UnlockMessengerTopics } from "../controllers/index.js";
 import { InMemoryNetworkController } from "../controllers/network/NetworkController.js";
 import type {
   NetworkController,
@@ -37,10 +36,15 @@ import type {
   TransactionMessengerTopics,
   TransactionState,
 } from "../controllers/transaction/types.js";
+import type { UnlockController, UnlockControllerOptions, UnlockMessengerTopics } from "../controllers/unlock/types.js";
+import { InMemoryUnlockController } from "../controllers/unlock/UnlockController.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import { createPermissionScopeResolver } from "../rpc/index.js";
-import type { StoragePort } from "../storage/index.js";
+import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
+import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
+import type { VaultCiphertext, VaultService } from "../vault/types.js";
+import { createVaultService } from "../vault/vaultService.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
 
 type MessengerTopics = AccountMessengerTopics &
@@ -73,8 +77,31 @@ const DEFAULT_ACCOUNTS_STATE: AccountsState = {
   all: [],
   primary: null,
 };
+
 const DEFAULT_PERMISSIONS_STATE: PermissionsState = {
   origins: {},
+};
+
+const DEFAULT_AUTO_LOCK_MS = 15 * 60 * 1000;
+const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
+
+type VaultFactory = () => VaultService;
+type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
+
+type SessionOptions = {
+  vault?: VaultService | VaultFactory;
+  unlock?: UnlockFactory;
+  autoLockDuration?: number;
+  persistDebounceMs?: number;
+  timers?: UnlockControllerOptions["timers"];
+};
+
+export type BackgroundSessionServices = {
+  vault: VaultService;
+  unlock: UnlockController;
+  getVaultMetaState(): VaultMetaSnapshot["payload"];
+  getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
+  persistVaultMeta(): Promise<void>;
 };
 
 export type CreateBackgroundServicesOptions = {
@@ -106,11 +133,15 @@ export type CreateBackgroundServicesOptions = {
   storage?: {
     port: StoragePort;
     now?: () => number;
+    hydrate?: boolean;
+    logger?: (message: string, error: unknown) => void;
   };
+  session?: SessionOptions;
 };
 
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
+
 export const createBackgroundServices = (options?: CreateBackgroundServicesOptions) => {
   const {
     messenger: messengerOptions,
@@ -121,15 +152,13 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionOptions,
     engine: engineOptions,
     storage: storageOptions,
+    session: sessionOptions,
   } = options ?? {};
-
-  const subscriptions: Array<() => void> = [];
-  const storagePort = storageOptions?.port;
-  const resolveNow = storageOptions?.now ?? Date.now;
 
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
+
   const networkController = new InMemoryNetworkController({
     messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
@@ -203,6 +232,15 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionController,
   };
 
+  const storagePort = storageOptions?.port;
+  const storageNow = storageOptions?.now ?? Date.now;
+  const hydrationEnabled = storageOptions?.hydrate ?? true;
+  const storageLogger =
+    storageOptions?.logger ??
+    ((message: string, error: unknown) => {
+      console.warn("[createBackgroundServices]", message, error);
+    });
+
   const storageSync =
     storagePort === undefined
       ? undefined
@@ -219,25 +257,380 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
             approvals: approvalController,
             transactions: transactionController,
           },
-          now: resolveNow,
-          logger: (message, error) => {
-            console.warn("[createBackgroundServices]", message, error);
-          },
+          now: storageNow,
+          logger: storageLogger,
         });
+
+  const resolveVault = (): VaultService => {
+    const candidate = sessionOptions?.vault;
+    if (!candidate) {
+      return createVaultService();
+    }
+    return typeof candidate === "function" ? (candidate as VaultFactory)() : candidate;
+  };
+
+  const baseVault = resolveVault();
+  const unlockFactory =
+    sessionOptions?.unlock ?? ((unlockOptions: UnlockControllerOptions) => new InMemoryUnlockController(unlockOptions));
+
+  const sessionTimers = sessionOptions?.timers ?? {};
+  const sessionSetTimeout = sessionTimers.setTimeout ?? setTimeout;
+  const sessionClearTimeout = sessionTimers.clearTimeout ?? clearTimeout;
+  const baseAutoLockDuration = sessionOptions?.autoLockDuration ?? DEFAULT_AUTO_LOCK_MS;
+  const persistDebounceMs = sessionOptions?.persistDebounceMs ?? DEFAULT_PERSIST_DEBOUNCE_MS;
+
+  let vaultInitializedAt: number | null = null;
+  let lastPersistedVaultMeta: VaultMetaSnapshot | null = null;
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  let isHydrating = false;
+  let destroyed = false;
+  let storageSyncAttached = false;
+  let sessionListenersAttached = false;
+  let initializePromise: Promise<void> | null = null;
+  let initialized = false;
+
+  const ensureInitializedTimestamp = () => {
+    if (vaultInitializedAt === null) {
+      vaultInitializedAt = storageNow();
+    }
+    return vaultInitializedAt;
+  };
+
+  const updateInitializedAtFromCiphertext = (ciphertext: VaultCiphertext | null | undefined) => {
+    if (!ciphertext) {
+      return;
+    }
+    vaultInitializedAt = ciphertext.createdAt;
+  };
+
+  const vaultProxy: VaultService = {
+    async initialize(params) {
+      const ciphertext = await baseVault.initialize(params);
+      updateInitializedAtFromCiphertext(ciphertext);
+      if (!isHydrating) {
+        await persistVaultMetaImmediate();
+      }
+      return ciphertext;
+    },
+    async unlock(params) {
+      const secret = await baseVault.unlock(params);
+      if (params.ciphertext) {
+        updateInitializedAtFromCiphertext(params.ciphertext);
+      } else {
+        updateInitializedAtFromCiphertext(baseVault.getCiphertext());
+      }
+      return secret;
+    },
+    lock() {
+      baseVault.lock();
+      scheduleVaultMetaPersist();
+    },
+    exportKey() {
+      return baseVault.exportKey();
+    },
+    async seal(params) {
+      const ciphertext = await baseVault.seal(params);
+      updateInitializedAtFromCiphertext(ciphertext);
+      if (!isHydrating) {
+        await persistVaultMetaImmediate();
+      }
+      return ciphertext;
+    },
+    importCiphertext(value) {
+      baseVault.importCiphertext(value);
+      updateInitializedAtFromCiphertext(value);
+      scheduleVaultMetaPersist();
+    },
+    getCiphertext() {
+      return baseVault.getCiphertext();
+    },
+    getStatus() {
+      return baseVault.getStatus();
+    },
+    isUnlocked() {
+      return baseVault.isUnlocked();
+    },
+  };
+  const unlockOptions: UnlockControllerOptions = {
+    messenger: castMessenger<UnlockMessengerTopics>(messenger),
+    vault: {
+      unlock: vaultProxy.unlock.bind(vaultProxy),
+      lock: vaultProxy.lock.bind(vaultProxy),
+      isUnlocked: vaultProxy.isUnlocked.bind(vaultProxy),
+    },
+    autoLockDuration: baseAutoLockDuration,
+    now: storageNow,
+  };
+
+  if (sessionOptions?.timers) {
+    unlockOptions.timers = sessionOptions.timers;
+  }
+
+  const unlock = unlockFactory(unlockOptions);
+  const sessionSubscriptions: Array<() => void> = [];
+
+  const cleanupVaultPersistTimer = () => {
+    if (persistTimer !== null) {
+      sessionClearTimeout(persistTimer as Parameters<typeof clearTimeout>[0]);
+      persistTimer = null;
+    }
+  };
+
+  const persistVaultMetaImmediate = async (): Promise<void> => {
+    if (!storagePort || destroyed) {
+      return;
+    }
+
+    const ciphertext = vaultProxy.getCiphertext();
+    if (ciphertext) {
+      updateInitializedAtFromCiphertext(ciphertext);
+    }
+
+    const envelope: VaultMetaSnapshot = {
+      version: VAULT_META_SNAPSHOT_VERSION,
+      updatedAt: storageNow(),
+      payload: {
+        ciphertext,
+        autoLockDuration: unlock.getState().timeoutMs,
+        initializedAt: ensureInitializedTimestamp(),
+      },
+    };
+
+    try {
+      await storagePort.saveVaultMeta(envelope);
+      lastPersistedVaultMeta = envelope;
+    } catch (error) {
+      storageLogger("session: failed to persist vault meta", error);
+    }
+  };
+
+  const scheduleVaultMetaPersist = () => {
+    if (!storagePort || destroyed || isHydrating) {
+      return;
+    }
+
+    if (persistDebounceMs <= 0) {
+      void persistVaultMetaImmediate();
+      return;
+    }
+
+    cleanupVaultPersistTimer();
+    persistTimer = sessionSetTimeout(() => {
+      persistTimer = null;
+      void persistVaultMetaImmediate();
+    }, persistDebounceMs);
+  };
+
+  const attachSessionListeners = () => {
+    if (sessionListenersAttached) {
+      return;
+    }
+
+    sessionListenersAttached = true;
+    sessionSubscriptions.push(
+      unlock.onStateChanged(() => {
+        scheduleVaultMetaPersist();
+      }),
+    );
+    sessionSubscriptions.push(
+      unlock.onLocked(() => {
+        scheduleVaultMetaPersist();
+      }),
+    );
+    sessionSubscriptions.push(
+      unlock.onUnlocked(() => {
+        scheduleVaultMetaPersist();
+      }),
+    );
+  };
+
+  const detachSessionListeners = () => {
+    if (!sessionListenersAttached) {
+      return;
+    }
+
+    sessionListenersAttached = false;
+    sessionSubscriptions.splice(0).forEach((unsubscribe) => {
+      try {
+        unsubscribe();
+      } catch (error) {
+        storageLogger("session: failed to remove unlock listener", error);
+      }
+    });
+  };
+
+  const hydrateSnapshot = async <Namespace extends StorageNamespace>(
+    namespace: Namespace,
+    apply: (payload: StorageSnapshotMap[Namespace]["payload"]) => void,
+  ) => {
+    if (!storagePort) return;
+
+    try {
+      const snapshot = await storagePort.loadSnapshot(namespace);
+      if (!snapshot) {
+        return;
+      }
+      apply(snapshot.payload);
+    } catch (error) {
+      storageLogger(`storage: failed to hydrate ${namespace}`, error);
+      try {
+        await storagePort.clearSnapshot(namespace);
+      } catch (clearError) {
+        storageLogger(`storage: failed to clear snapshot ${namespace}`, clearError);
+      }
+    }
+  };
+
+  const hydrateControllers = async () => {
+    if (!storagePort || !hydrationEnabled) {
+      return;
+    }
+
+    await hydrateSnapshot(StorageNamespaces.Network, (payload) => {
+      controllers.network.replaceState(payload);
+    });
+    await hydrateSnapshot(StorageNamespaces.Accounts, (payload) => {
+      controllers.accounts.replaceState(payload);
+    });
+    await hydrateSnapshot(StorageNamespaces.Permissions, (payload) => {
+      controllers.permissions.replaceState(payload);
+    });
+    await hydrateSnapshot(StorageNamespaces.Approvals, (payload) => {
+      controllers.approvals.replaceState(payload);
+    });
+    await hydrateSnapshot(StorageNamespaces.Transactions, (payload) => {
+      controllers.transactions.replaceState(payload as unknown as TransactionState);
+    });
+  };
+
+  const hydrateVaultMeta = async () => {
+    if (!storagePort || !hydrationEnabled) {
+      return;
+    }
+
+    try {
+      const meta = await storagePort.loadVaultMeta();
+      if (!meta) {
+        vaultInitializedAt = null;
+        lastPersistedVaultMeta = null;
+        unlock.setAutoLockDuration(baseAutoLockDuration);
+        return;
+      }
+
+      lastPersistedVaultMeta = meta;
+      vaultInitializedAt = meta.payload.initializedAt;
+      unlock.setAutoLockDuration(meta.payload.autoLockDuration);
+
+      if (meta.payload.ciphertext) {
+        try {
+          vaultProxy.importCiphertext(meta.payload.ciphertext);
+        } catch (error) {
+          storageLogger("session: failed to import vault ciphertext", error);
+          try {
+            await storagePort.clearVaultMeta();
+          } catch (clearError) {
+            storageLogger("session: failed to clear vault meta", clearError);
+          }
+          vaultInitializedAt = null;
+          lastPersistedVaultMeta = null;
+          unlock.setAutoLockDuration(baseAutoLockDuration);
+        }
+      }
+    } catch (error) {
+      storageLogger("session: failed to hydrate vault meta", error);
+    }
+  };
+
+  const getVaultMetaState = (): VaultMetaSnapshot["payload"] => ({
+    ciphertext: vaultProxy.getCiphertext(),
+    autoLockDuration: unlock.getState().timeoutMs,
+    initializedAt: ensureInitializedTimestamp(),
+  });
+
+  const initialize = async () => {
+    if (initialized || destroyed) {
+      return;
+    }
+
+    if (initializePromise) {
+      await initializePromise;
+      return;
+    }
+
+    initializePromise = (async () => {
+      if (!storagePort || !hydrationEnabled) {
+        initialized = true;
+        return;
+      }
+
+      isHydrating = true;
+      try {
+        await hydrateControllers();
+        await hydrateVaultMeta();
+        initialized = true;
+      } finally {
+        isHydrating = false;
+      }
+    })();
+
+    try {
+      await initializePromise;
+    } finally {
+      initializePromise = null;
+    }
+  };
+
+  const start = () => {
+    if (destroyed) {
+      throw new Error("createBackgroundServices lifecycle cannot start after destroy()");
+    }
+
+    if (!initialized) {
+      throw new Error("createBackgroundServices.lifecycle.initialize() must complete before start()");
+    }
+
+    if (storageSync && !storageSyncAttached) {
+      storageSync.attach();
+      storageSyncAttached = true;
+    }
+
+    attachSessionListeners();
+  };
+
+  const destroy = () => {
+    if (destroyed) {
+      return;
+    }
+
+    destroyed = true;
+    cleanupVaultPersistTimer();
+    detachSessionListeners();
+
+    if (storageSyncAttached) {
+      storageSync?.detach();
+      storageSyncAttached = false;
+    }
+
+    engine.destroy();
+    messenger.clear();
+  };
 
   return {
     messenger,
     engine,
     controllers,
+    session: {
+      vault: vaultProxy,
+      unlock,
+      getVaultMetaState,
+      getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
+      persistVaultMeta: () => persistVaultMetaImmediate(),
+    } satisfies BackgroundSessionServices,
+    getActiveNamespace: resolveNamespace,
     lifecycle: {
-      start: () => {
-        storageSync?.attach();
-      },
-      destroy: () => {
-        storageSync?.detach();
-        engine.destroy();
-        messenger.clear();
-      },
+      initialize,
+      start,
+      destroy,
     },
   };
 };

@@ -50,6 +50,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#transport.on("disconnect", this.#handleTransportDisconnect);
     this.#transport.on("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.on("chainChanged", this.#handleTransportChainChanged);
+    this.#transport.on("unlockStateChanged", this.#handleUnlockStateChanged);
 
     this.#syncWithTransportState();
   }
@@ -203,6 +204,14 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.emit("accountsChanged", [...this.#accounts]);
   };
 
+  #handleUnlockStateChanged = (payload: unknown) => {
+    if (!payload || typeof payload !== "object") return;
+    const { isUnlocked } = payload as { isUnlocked?: unknown };
+    if (typeof isUnlocked !== "boolean") return;
+    this.#isUnlocked = isUnlocked;
+    this.emit("unlockStateChanged", { isUnlocked });
+  };
+
   #handleTransportDisconnect = (error?: unknown) => {
     const disconnectError = error ?? this.#resolveProviderErrors().disconnected();
 
@@ -319,6 +328,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#transport.removeListener("disconnect", this.#handleTransportDisconnect);
     this.#transport.removeListener("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.removeListener("chainChanged", this.#handleTransportChainChanged);
+    this.#transport.removeListener("unlockStateChanged", this.#handleUnlockStateChanged);
     this.removeAllListeners();
   }
 }

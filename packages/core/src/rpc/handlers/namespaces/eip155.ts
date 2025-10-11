@@ -220,6 +220,7 @@ export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   },
   eth_accounts: {
     scope: PermissionScopes.Accounts,
+    locked: { response: [] },
     handler: handleEthAccounts,
   },
   eth_requestAccounts: {

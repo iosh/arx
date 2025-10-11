@@ -127,6 +127,11 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     });
     const { controllers, engine, messenger, session } = services;
 
+    const publishAccountsState = () => {
+      const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts() : [];
+      broadcastEvent("accountsChanged", [accounts]);
+    };
+
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
@@ -139,11 +144,13 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     unsubscribeControllerEvents.push(
       session.unlock.onUnlocked((payload) => {
         broadcastEvent("session:unlocked", [payload]);
+        publishAccountsState();
       }),
     );
     unsubscribeControllerEvents.push(
       session.unlock.onLocked((payload) => {
         broadcastEvent("session:locked", [payload]);
+        publishAccountsState();
       }),
     );
 
@@ -164,47 +171,32 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     );
 
     engine.push(
-      createAsyncMiddleware(async (req, _res, next) => {
+      createAsyncMiddleware(async (req, res, next) => {
         const origin = (req as { origin?: string }).origin ?? "unknown://";
 
-        if (origin === "unknown://") {
-          throw resolveProviderErrors().unauthorized({
-            message: "Request origin could not be resolved",
-            data: { method: req.method },
-          });
-        }
-
-        if (isInternalOrigin(origin)) {
+        if (isInternalOrigin(origin) || session.unlock.isUnlocked()) {
           return next();
         }
 
         const definition = resolveMethodDefinition(req.method);
-        const scope = definition?.scope;
-        if (!scope) {
+        if (!definition || !definition.scope) {
           return next();
         }
 
-        try {
-          await controllers.permissions.ensurePermission(origin, req.method);
+        const locked = definition.locked ?? {};
+        if (locked.allow) {
           return next();
-        } catch (error) {
-          const maybeError = error as { code?: unknown };
-          const code = typeof maybeError.code === "number" ? maybeError.code : undefined;
-          const isPermissionError = code === 4001 || code === 4100;
-
-          if (!isPermissionError) {
-            throw error;
-          }
-
-          if (definition?.approvalRequired === true) {
-            return next();
-          }
-
-          throw resolveProviderErrors().unauthorized({
-            message: `Origin ${origin} is not authorized to call ${req.method}`,
-            data: { origin, method: req.method },
-          });
         }
+
+        if (Object.hasOwn(locked, "response")) {
+          res.result = locked.response as Json;
+          return;
+        }
+
+        throw resolveProviderErrors().unauthorized({
+          message: `Request ${req.method} requires an unlocked session`,
+          data: { origin, method: req.method },
+        });
       }),
     );
 
@@ -243,8 +235,8 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       }),
     );
     unsubscribeControllerEvents.push(
-      controllers.accounts.onAccountsChanged((state) => {
-        broadcastEvent("accountsChanged", [state.all]);
+      controllers.accounts.onAccountsChanged(() => {
+        publishAccountsState();
       }),
     );
 
@@ -341,11 +333,12 @@ const getControllerSnapshot = () => {
   }
   const { controllers, session } = context;
   const networkState = controllers.network.getState();
+  const isUnlocked = session.unlock.isUnlocked();
 
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
-    accounts: controllers.accounts.getAccounts(),
-    isUnlocked: session.unlock.isUnlocked(),
+    accounts: isUnlocked ? controllers.accounts.getAccounts() : [],
+    isUnlocked,
   };
 };
 

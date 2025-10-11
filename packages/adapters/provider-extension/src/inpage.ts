@@ -230,6 +230,23 @@ export class InpageTransport extends EventEmitter implements Transport {
             }
             break;
           }
+          case "session:locked": {
+            this.#isUnlocked = false;
+            if (this.#chainId) {
+              this.#setChain({ chainId: this.#chainId, caip2: this.#caip2 ?? null, isUnlocked: false });
+            }
+            this.#setAccounts([]);
+            this.emit("unlockStateChanged", { isUnlocked: false, payload: params[0] });
+            break;
+          }
+          case "session:unlocked": {
+            this.#isUnlocked = true;
+            if (this.#chainId) {
+              this.#setChain({ chainId: this.#chainId, caip2: this.#caip2 ?? null, isUnlocked: true });
+            }
+            this.emit("unlockStateChanged", { isUnlocked: true, payload: params[0] });
+            break;
+          }
           case "disconnect":
             this.#handleDisconnect();
             break;

@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import { createBackgroundServices } from "./createBackgroundServices.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
+  type AccountsSnapshot,
   APPROVALS_SNAPSHOT_VERSION,
+  type ApprovalsSnapshot,
   NETWORK_SNAPSHOT_VERSION,
+  type NetworkSnapshot,
   PERMISSIONS_SNAPSHOT_VERSION,
+  type PermissionsSnapshot,
   StorageNamespaces,
   TRANSACTIONS_SNAPSHOT_VERSION,
-  type AccountsSnapshot,
-  type ApprovalsSnapshot,
-  type NetworkSnapshot,
-  type PermissionsSnapshot,
   type TransactionsSnapshot,
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
+import { createBackgroundServices } from "./createBackgroundServices.js";
 
 const MAINNET_CHAIN = {
   caip2: "eip155:1",

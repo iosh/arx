@@ -31,6 +31,10 @@ export type MethodHandler = (context: {
 export type MethodDefinition = {
   scope?: PermissionScope;
   approvalRequired?: boolean;
+  locked?: {
+    allow?: boolean;
+    response?: unknown;
+  };
   handler: MethodHandler;
 };
 

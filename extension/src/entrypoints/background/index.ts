@@ -19,6 +19,7 @@ import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionStorage } from "@/platform/storage";
+import { createLockedGuardMiddleware } from "./lockedMiddleware";
 
 type SessionMessage =
   | { type: "session:getStatus" }
@@ -169,34 +170,12 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         }
       }),
     );
-
     engine.push(
-      createAsyncMiddleware(async (req, res, next) => {
-        const origin = (req as { origin?: string }).origin ?? "unknown://";
-
-        if (isInternalOrigin(origin) || session.unlock.isUnlocked()) {
-          return next();
-        }
-
-        const definition = resolveMethodDefinition(req.method);
-        if (!definition || !definition.scope) {
-          return next();
-        }
-
-        const locked = definition.locked ?? {};
-        if (locked.allow) {
-          return next();
-        }
-
-        if (Object.hasOwn(locked, "response")) {
-          res.result = locked.response as Json;
-          return;
-        }
-
-        throw resolveProviderErrors().unauthorized({
-          message: `Request ${req.method} requires an unlocked session`,
-          data: { origin, method: req.method },
-        });
+      createLockedGuardMiddleware({
+        isUnlocked: () => session.unlock.isUnlocked(),
+        isInternalOrigin,
+        resolveMethodDefinition,
+        resolveProviderErrors,
       }),
     );
 

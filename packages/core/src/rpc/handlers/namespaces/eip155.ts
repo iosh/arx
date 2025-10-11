@@ -1,4 +1,5 @@
 import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
+import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
 import {
   buildEip155TransactionRequest,
@@ -220,7 +221,7 @@ export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   },
   eth_accounts: {
     scope: PermissionScopes.Accounts,
-    locked: { response: [] },
+    locked: lockedResponse([]),
     handler: handleEthAccounts,
   },
   eth_requestAccounts: {

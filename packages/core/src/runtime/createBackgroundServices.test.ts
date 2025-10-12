@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import {
@@ -130,12 +130,15 @@ const VAULT_META: VaultMetaSnapshot = {
 
 class MemoryStoragePort implements StoragePort {
   private readonly snapshots = new Map<StorageNamespace, StorageSnapshotMap[StorageNamespace]>();
+  private readonly snapshotLoadFailures = new Map<StorageNamespace, unknown>();
   private vaultMeta: VaultMetaSnapshot | null;
   public readonly savedSnapshots: Array<{
     namespace: StorageNamespace;
     envelope: StorageSnapshotMap[StorageNamespace];
   }> = [];
+  public readonly clearedSnapshots: StorageNamespace[] = [];
   public savedVaultMeta: VaultMetaSnapshot | null = null;
+  public clearedVaultMeta = false;
 
   constructor(seed?: {
     snapshots?: Partial<Record<StorageNamespace, StorageSnapshotMap[StorageNamespace]>>;
@@ -151,6 +154,13 @@ class MemoryStoragePort implements StoragePort {
     this.vaultMeta = seed?.vaultMeta ?? null;
   }
 
+  setSnapshotLoadFailure(namespace: StorageNamespace, error: unknown) {
+    this.snapshotLoadFailures.set(namespace, error);
+  }
+
+  clearSnapshotLoadFailure(namespace: StorageNamespace) {
+    this.snapshotLoadFailures.delete(namespace);
+  }
   getSnapshot<TNamespace extends StorageNamespace>(namespace: TNamespace): StorageSnapshotMap[TNamespace] | null {
     return (this.snapshots.get(namespace) as StorageSnapshotMap[TNamespace]) ?? null;
   }
@@ -162,6 +172,9 @@ class MemoryStoragePort implements StoragePort {
   async loadSnapshot<TNamespace extends StorageNamespace>(
     namespace: TNamespace,
   ): Promise<StorageSnapshotMap[TNamespace] | null> {
+    if (this.snapshotLoadFailures.has(namespace)) {
+      throw this.snapshotLoadFailures.get(namespace);
+    }
     return this.getSnapshot(namespace);
   }
   async saveSnapshot<TNamespace extends StorageNamespace>(
@@ -174,6 +187,7 @@ class MemoryStoragePort implements StoragePort {
 
   async clearSnapshot(namespace: StorageNamespace): Promise<void> {
     this.snapshots.delete(namespace);
+    this.clearedSnapshots.push(namespace);
   }
 
   async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
@@ -187,6 +201,7 @@ class MemoryStoragePort implements StoragePort {
 
   async clearVaultMeta(): Promise<void> {
     this.vaultMeta = null;
+    this.clearedVaultMeta = true;
   }
 }
 
@@ -335,6 +350,38 @@ describe("createBackgroundServices", () => {
     expect(accountsSnapshot?.updatedAt).toBe(3_750);
     expect(accountsSnapshot?.payload.all).toEqual(["0x123"]);
 
+    now = 3_900;
+    const pendingTx = {
+      id: "tx-test-1",
+      caip2: "eip155:1",
+      origin: "https://dapp.example",
+      from: "0x123",
+      request: {
+        namespace: "eip155",
+        caip2: "eip155:1",
+        payload: {
+          chainId: "0x1",
+          from: "0x123",
+          to: "0x456",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      status: "pending" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    services.controllers.transactions.replaceState({
+      pending: [pendingTx],
+      history: [],
+    });
+
+    const transactionsSnapshot = storage.getSnapshot(StorageNamespaces.Transactions);
+    expect(transactionsSnapshot).not.toBeNull();
+    expect(transactionsSnapshot?.updatedAt).toBe(3_900);
+    expect(transactionsSnapshot?.payload.pending).toHaveLength(1);
+    expect(transactionsSnapshot?.payload.pending[0]?.id).toBe("tx-test-1");
+
     services.lifecycle.destroy();
   });
 
@@ -370,11 +417,11 @@ describe("createBackgroundServices", () => {
     let now = 10_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const vault = new FakeVault(clock);
+    const swallowLog = () => {};
 
     const first = createBackgroundServices({
-      storage: { port: storage, now: clock },
-      session: { vault, persistDebounceMs: 0, autoLockDuration: autoLockMs },
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
     await first.lifecycle.initialize();
@@ -393,19 +440,224 @@ describe("createBackgroundServices", () => {
     first.lifecycle.destroy();
 
     const second = createBackgroundServices({
-      storage: { port: storage, now: clock },
-      session: { vault, persistDebounceMs: 0, autoLockDuration: autoLockMs },
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
     await second.lifecycle.initialize();
     second.lifecycle.start();
 
     const restoredState = second.session.unlock.getState();
-    expect(restoredState.isUnlocked).toBe(true);
+    expect(restoredState.isUnlocked).toBe(false);
+    expect(restoredState.timeoutMs).toBe(autoLockMs);
 
     const persistedUnlock = second.session.getLastPersistedVaultMeta()?.payload.unlockState;
+    expect(persistedUnlock).toBeDefined();
+    expect(persistedUnlock?.isUnlocked).toBe(true);
+    expect(persistedUnlock?.lastUnlockedAt).toBe(unlockedState.lastUnlockedAt);
     expect(persistedUnlock?.nextAutoLockAt).toBe(expectedDeadline);
+    second.lifecycle.destroy();
+  });
+
+  it("clears corrupted snapshots and continues hydration", async () => {
+    const clock = () => 42_000;
+    const storage = new MemoryStoragePort({
+      snapshots: {
+        [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
+        [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
+      },
+    });
+    storage.setSnapshotLoadFailure(StorageNamespaces.Network, new Error("boom"));
+
+    const swallowLog = () => {};
+    const first = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    });
+    await first.lifecycle.initialize();
+    first.lifecycle.start();
+
+    expect(first.controllers.accounts.getAccounts()).toEqual(ACCOUNTS_SNAPSHOT.payload.all);
+    expect(first.controllers.accounts.getPrimaryAccount()).toBe(ACCOUNTS_SNAPSHOT.payload.primary);
+
+    first.controllers.accounts.replaceState({ all: ["0x999"], primary: "0x999" });
+
+    first.lifecycle.destroy();
+
+    storage.clearSnapshotLoadFailure(StorageNamespaces.Network);
+    await storage.saveSnapshot(StorageNamespaces.Network, NETWORK_SNAPSHOT);
+
+    const second = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    });
+
+    await second.lifecycle.initialize();
+    expect(second.controllers.network.getState()).toStrictEqual(NETWORK_SNAPSHOT.payload);
 
     second.lifecycle.destroy();
+  });
+
+  it("replays storage listeners after restart", async () => {
+    const now = 50_000;
+    const clock = () => now;
+    const storage = new MemoryStoragePort();
+    const swallowLog = () => {};
+
+    const first = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    });
+
+    await first.lifecycle.initialize();
+    first.lifecycle.start();
+
+    await first.controllers.network.addChain(
+      {
+        ...ALT_CHAIN,
+        rpcUrl: "https://rpc.alt.first",
+      },
+      { activate: true, replaceExisting: true },
+    );
+
+    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
+
+    first.lifecycle.destroy();
+    storage.savedSnapshots.splice(0);
+
+    const second = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    });
+
+    await second.lifecycle.initialize();
+    second.lifecycle.start();
+
+    second.controllers.accounts.replaceState({ all: ["0xabc"], primary: "0xabc" });
+
+    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(true);
+
+    second.lifecycle.destroy();
+  });
+
+  it("debounces vault meta persistence before writing", async () => {
+    let now = 70_000;
+    const clock = () => now;
+    const storage = new MemoryStoragePort();
+    const swallowLog = () => {};
+
+    let nextTimerId = 1;
+    const scheduled = new Map<number, { timeout: number; handler: () => void }>();
+
+    const setTimeoutStub = vi.fn<(handler: () => void, timeout: number) => ReturnType<typeof setTimeout>>(
+      (handler, timeout) => {
+        const id = nextTimerId++;
+        scheduled.set(id, { timeout, handler });
+        return id as unknown as ReturnType<typeof setTimeout>;
+      },
+    );
+    const clearTimeoutStub = vi.fn<(id: ReturnType<typeof setTimeout>) => void>((id) => {
+      scheduled.delete(Number(id));
+    });
+
+    const runTimer = (timeout: number) => {
+      for (const [id, entry] of scheduled) {
+        if (entry.timeout === timeout) {
+          scheduled.delete(id);
+          entry.handler();
+          break;
+        }
+      }
+    };
+
+    const services = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog },
+      session: {
+        vault: new FakeVault(clock),
+        persistDebounceMs: 100,
+        timers: {
+          setTimeout: setTimeoutStub as unknown as typeof setTimeout,
+          clearTimeout: clearTimeoutStub as unknown as typeof clearTimeout,
+        },
+      },
+    });
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    await services.session.vault.initialize({ password: "secret" });
+    await services.session.unlock.unlock({ password: "secret" });
+    //flush the initialize/unlock persistence debounce before testing the lock path
+    runTimer(100);
+
+    const beforeUpdate = storage.savedVaultMeta?.updatedAt ?? null;
+
+    now = 70_500;
+    services.session.unlock.lock("manual");
+
+    expect(Array.from(scheduled.values()).some((entry) => entry.timeout === 100)).toBe(true);
+    expect(storage.savedVaultMeta?.updatedAt ?? null).toBe(beforeUpdate);
+
+    now = 70_600;
+    runTimer(100);
+    await Promise.resolve();
+
+    expect(storage.savedVaultMeta?.updatedAt).toBe(70_600);
+    expect(storage.savedVaultMeta?.payload.unlockState?.isUnlocked).toBe(false);
+
+    services.lifecycle.destroy();
+  });
+
+  it("operates lifecycle without a storage port", async () => {
+    const now = 90_000;
+    const clock = () => now;
+
+    const services = createBackgroundServices({
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: 500 },
+    });
+
+    await expect(services.lifecycle.initialize()).resolves.toBeUndefined();
+    services.lifecycle.start();
+
+    await services.session.vault.initialize({ password: "secret" });
+    await services.session.unlock.unlock({ password: "secret" });
+
+    expect(services.session.getLastPersistedVaultMeta()).toBeNull();
+
+    services.lifecycle.destroy();
+  });
+
+  it("skips hydration when hydrate flag is false", async () => {
+    const now = 100_000;
+    const clock = () => now;
+    const storage = new MemoryStoragePort({
+      snapshots: {
+        [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
+        [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
+      },
+      vaultMeta: VAULT_META,
+    });
+    const swallowLog = () => {};
+
+    const services = createBackgroundServices({
+      storage: { port: storage, now: clock, logger: swallowLog, hydrate: false },
+      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    });
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    expect(services.controllers.network.getState().active.caip2).toBe(MAINNET_CHAIN.caip2);
+    expect(services.controllers.accounts.getPrimaryAccount()).toBeNull();
+    expect(services.session.getLastPersistedVaultMeta()).toBeNull();
+
+    services.controllers.network.replaceState(NETWORK_SNAPSHOT.payload);
+    services.session.unlock.lock("manual");
+    await services.session.persistVaultMeta();
+
+    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
+    expect(storage.savedVaultMeta).not.toBeNull();
+
+    services.lifecycle.destroy();
   });
 });

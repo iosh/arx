@@ -386,13 +386,20 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       updateInitializedAtFromCiphertext(ciphertext);
     }
 
+    const unlockState = unlock.getState();
+
     const envelope: VaultMetaSnapshot = {
       version: VAULT_META_SNAPSHOT_VERSION,
       updatedAt: storageNow(),
       payload: {
         ciphertext,
-        autoLockDuration: unlock.getState().timeoutMs,
+        autoLockDuration: unlockState.timeoutMs,
         initializedAt: ensureInitializedTimestamp(),
+        unlockState: {
+          isUnlocked: unlockState.isUnlocked,
+          lastUnlockedAt: unlockState.lastUnlockedAt,
+          nextAutoLockAt: unlockState.nextAutoLockAt,
+        },
       },
     };
 
@@ -541,12 +548,20 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
   };
 
-  const getVaultMetaState = (): VaultMetaSnapshot["payload"] => ({
-    ciphertext: vaultProxy.getCiphertext(),
-    autoLockDuration: unlock.getState().timeoutMs,
-    initializedAt: ensureInitializedTimestamp(),
-  });
+  const getVaultMetaState = (): VaultMetaSnapshot["payload"] => {
+    const unlockState = unlock.getState();
 
+    return {
+      ciphertext: vaultProxy.getCiphertext(),
+      autoLockDuration: unlockState.timeoutMs,
+      initializedAt: ensureInitializedTimestamp(),
+      unlockState: {
+        isUnlocked: unlockState.isUnlocked,
+        lastUnlockedAt: unlockState.lastUnlockedAt,
+        nextAutoLockAt: unlockState.nextAutoLockAt,
+      },
+    };
+  };
   const initialize = async () => {
     if (initialized || destroyed) {
       return;

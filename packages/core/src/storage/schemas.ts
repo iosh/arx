@@ -250,12 +250,19 @@ const vaultCiphertextSchema = z
   .optional();
 export const VAULT_META_SNAPSHOT_VERSION = 1;
 
+const unlockStateSnapshotSchema = z.strictObject({
+  isUnlocked: z.boolean(),
+  lastUnlockedAt: epochMillisecondsSchema.nullable(),
+  nextAutoLockAt: epochMillisecondsSchema.nullable(),
+});
+
 export const VaultMetaSnapshotSchema = createSnapshotSchema({
   version: VAULT_META_SNAPSHOT_VERSION,
   payload: z.strictObject({
     ciphertext: vaultCiphertextSchema.nullable(),
     autoLockDuration: z.number().int().positive(),
     initializedAt: epochMillisecondsSchema,
+    unlockState: unlockStateSnapshotSchema.optional(),
   }),
 });
 

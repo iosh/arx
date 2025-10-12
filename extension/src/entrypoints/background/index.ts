@@ -20,6 +20,7 @@ import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionStorage } from "@/platform/storage";
 import { createLockedGuardMiddleware } from "./lockedMiddleware";
+import { restoreUnlockState } from "./unlockRecovery";
 
 type SessionMessage =
   | { type: "session:getStatus" }
@@ -154,6 +155,17 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         publishAccountsState();
       }),
     );
+
+    const lastMeta = services.session.getLastPersistedVaultMeta();
+    const persistedUnlockState = lastMeta?.payload.unlockState;
+    if (persistedUnlockState) {
+      restoreUnlockState({
+        controller: session.unlock,
+        snapshot: persistedUnlockState,
+        snapshotCapturedAt: lastMeta.updatedAt,
+        now: () => Date.now(),
+      });
+    }
 
     const executeMethod = createMethodExecutor(controllers);
     const getNamespace = () => controllers.network.getState().active.caip2;

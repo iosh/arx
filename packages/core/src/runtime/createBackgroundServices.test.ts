@@ -364,4 +364,48 @@ describe("createBackgroundServices", () => {
     expect(storage.savedVaultMeta?.updatedAt).toBe(4_200);
     services.lifecycle.destroy();
   });
+
+  it("restores unlock snapshot and schedules auto lock after re-initialize", async () => {
+    const autoLockMs = 1_000;
+    let now = 10_000;
+    const clock = () => now;
+    const storage = new MemoryStoragePort();
+    const vault = new FakeVault(clock);
+
+    const first = createBackgroundServices({
+      storage: { port: storage, now: clock },
+      session: { vault, persistDebounceMs: 0, autoLockDuration: autoLockMs },
+    });
+
+    await first.lifecycle.initialize();
+    first.lifecycle.start();
+
+    await first.session.vault.initialize({ password: "secret" });
+    await first.session.unlock.unlock({ password: "secret" });
+
+    const unlockedState = first.session.unlock.getState();
+    expect(unlockedState.isUnlocked).toBe(true);
+    expect(unlockedState.nextAutoLockAt).not.toBeNull();
+    const expectedDeadline = unlockedState.nextAutoLockAt as number;
+
+    now = 10_200;
+    await first.session.persistVaultMeta();
+    first.lifecycle.destroy();
+
+    const second = createBackgroundServices({
+      storage: { port: storage, now: clock },
+      session: { vault, persistDebounceMs: 0, autoLockDuration: autoLockMs },
+    });
+
+    await second.lifecycle.initialize();
+    second.lifecycle.start();
+
+    const restoredState = second.session.unlock.getState();
+    expect(restoredState.isUnlocked).toBe(true);
+
+    const persistedUnlock = second.session.getLastPersistedVaultMeta()?.payload.unlockState;
+    expect(persistedUnlock?.nextAutoLockAt).toBe(expectedDeadline);
+
+    second.lifecycle.destroy();
+  });
 });

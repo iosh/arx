@@ -109,11 +109,11 @@ describe("vaultService", () => {
 
   it("seal allows changing password", async () => {
     const vault = createVaultService();
-    const ciphertext = await vault.initialize({ password: "old-password" });
+    await vault.initialize({ password: "old-password" });
 
     const customSecret = Uint8Array.from([1, 2, 3, 4, 5]);
     const sealed = await vault.seal({
-      password: "new-password", // 新密码
+      password: "new-password",
       secret: customSecret,
     });
 
@@ -140,5 +140,51 @@ describe("vaultService", () => {
 
     const recovered = await vault2.unlock({ password: PASSWORD });
     expect(toArray(recovered)).toEqual(toArray(secret));
+  });
+
+  it("rejects unlock attempts when ciphertext IV is tampered", async () => {
+    const vault = createVaultService();
+    const ciphertext = await vault.initialize({ password: PASSWORD });
+
+    const tamperedIv = Uint8Array.from(Buffer.from(ciphertext.iv, "base64"));
+    if (tamperedIv.length === 0) {
+      throw new Error("Ciphertext IV unexpectedly empty");
+    }
+    const firstByte = tamperedIv.at(0);
+    if (firstByte === undefined) {
+      throw new Error("Ciphertext IV unexpectedly empty");
+    }
+    tamperedIv.set([firstByte ^ 0xff], 0);
+
+    vault.lock();
+    await expect(
+      vault.unlock({
+        password: PASSWORD,
+        ciphertext: { ...ciphertext, iv: Buffer.from(tamperedIv).toString("base64") },
+      }),
+    ).rejects.toMatchObject({ code: "ARX_VAULT_INVALID_PASSWORD" });
+  });
+
+  it("rejects unlock attempts when ciphertext salt is tampered", async () => {
+    const vault = createVaultService();
+    const ciphertext = await vault.initialize({ password: PASSWORD });
+
+    const tamperedSalt = Uint8Array.from(Buffer.from(ciphertext.salt, "base64"));
+    if (tamperedSalt.length === 0) {
+      throw new Error("Ciphertext salt unexpectedly empty");
+    }
+    const firstByte = tamperedSalt.at(0);
+    if (firstByte === undefined) {
+      throw new Error("Ciphertext salt unexpectedly empty");
+    }
+    tamperedSalt.set([firstByte ^ 0xff], 0);
+
+    vault.lock();
+    await expect(
+      vault.unlock({
+        password: PASSWORD,
+        ciphertext: { ...ciphertext, salt: Buffer.from(tamperedSalt).toString("base64") },
+      }),
+    ).rejects.toMatchObject({ code: "ARX_VAULT_INVALID_PASSWORD" });
   });
 });

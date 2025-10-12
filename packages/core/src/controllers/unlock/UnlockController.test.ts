@@ -129,4 +129,43 @@ describe("InMemoryUnlockController", () => {
       nextAutoLockAt: now + 1_200,
     });
   });
+
+  it("stays locked when vault unlock throws", async () => {
+    const messenger = createMessenger();
+    const stateUpdates: UnlockState[] = [];
+    messenger.subscribe("session:stateChanged", (state) => stateUpdates.push(state));
+
+    const timers = {
+      setTimeout: vi.fn(),
+      clearTimeout: vi.fn(),
+    };
+
+    const vaultUnlock = vi.fn(async () => {
+      throw new Error("unlock failed");
+    });
+
+    const controller = new InMemoryUnlockController({
+      messenger,
+      vault: {
+        unlock: vaultUnlock,
+        lock: vi.fn(),
+        isUnlocked: () => false,
+      },
+      autoLockDuration: 1_000,
+      now: () => 10_000,
+      timers: timers as unknown as {
+        setTimeout: typeof setTimeout;
+        clearTimeout: typeof clearTimeout;
+      },
+    });
+
+    await expect(controller.unlock({ password: "secret" })).rejects.toThrow("unlock failed");
+
+    expect(controller.isUnlocked()).toBe(false);
+    expect(timers.setTimeout).not.toHaveBeenCalled();
+    expect(stateUpdates.at(-1)).toMatchObject({
+      isUnlocked: false,
+      nextAutoLockAt: null,
+    });
+  });
 });

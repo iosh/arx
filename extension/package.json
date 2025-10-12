@@ -5,6 +5,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test": "vitest run",
     "dev:chrome": "wxt -b chrome",
     "dev:firefox": "wxt -b firefox",
     "build": "pnpm build:chrome && pnpm build:firefox",

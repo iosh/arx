@@ -160,4 +160,29 @@ describe("restoreUnlockState", () => {
 
     expect(controller.scheduleAutoLock).toHaveBeenCalledWith(30_000);
   });
+
+  it("clamps negative elapsed time when clock drifts backwards", () => {
+    const controller = createController({
+      isUnlocked: true,
+      lastUnlockedAt: 1_000,
+      nextAutoLockAt: 2_000,
+      timeoutMs: 10_000,
+    });
+
+    const snapshot: UnlockStateSnapshot = {
+      isUnlocked: true,
+      lastUnlockedAt: 1_000,
+      nextAutoLockAt: 2_000,
+    };
+
+    restoreUnlockState({
+      controller,
+      snapshot,
+      snapshotCapturedAt: 2_000,
+      now: () => 1_500,
+    });
+
+    expect(controller.lock).not.toHaveBeenCalled();
+    expect(controller.scheduleAutoLock).toHaveBeenCalledWith(500);
+  });
 });

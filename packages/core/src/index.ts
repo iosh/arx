@@ -8,6 +8,7 @@ export type {
   JsonRpcSuccess,
   JsonRpcVersion2,
 } from "@metamask/utils";
+export * from "./chains/index.js";
 export * from "./controllers/index.js";
 export * from "./errors/index.js";
 export * from "./messenger/index.js";

@@ -55,8 +55,10 @@ const ACCOUNTS_SNAPSHOT: AccountsSnapshot = {
   version: ACCOUNTS_SNAPSHOT_VERSION,
   updatedAt: 1_000,
   payload: {
-    all: ["0xabc", "0xdef"],
-    primary: "0xabc",
+    namespaces: {
+      eip155: { all: ["0xabc", "0xdef"], primary: "0xabc" },
+    },
+    active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
   },
 };
 
@@ -304,7 +306,8 @@ describe("createBackgroundServices", () => {
     await services.lifecycle.initialize();
 
     expect(services.controllers.network.getState()).toStrictEqual(NETWORK_SNAPSHOT.payload);
-    expect(services.controllers.accounts.getPrimaryAccount()).toBe(ACCOUNTS_SNAPSHOT.payload.primary);
+    expect(services.controllers.accounts.getActivePointer()?.address).toBe(ACCOUNTS_SNAPSHOT.payload.active?.address);
+
     expect(services.controllers.permissions.getState()).toStrictEqual(PERMISSIONS_SNAPSHOT.payload);
     expect(services.controllers.approvals.getState()).toStrictEqual(APPROVALS_SNAPSHOT.payload);
     expect(services.controllers.transactions.getState()).toStrictEqual(TRANSACTIONS_SNAPSHOT.payload);
@@ -343,12 +346,18 @@ describe("createBackgroundServices", () => {
     expect(networkSnapshot?.payload.active.rpcUrl).toBe("https://rpc.alt.updated");
 
     now = 3_750;
-    services.controllers.accounts.replaceState({ all: ["0x123"], primary: "0x123" });
+    services.controllers.accounts.replaceState({
+      namespaces: {
+        eip155: { all: ["0x123"], primary: "0x123" },
+      },
+      active: { namespace: "eip155", chainRef: "eip155:1", address: "0x123" },
+    });
 
     const accountsSnapshot = storage.getSnapshot(StorageNamespaces.Accounts);
     expect(accountsSnapshot).not.toBeNull();
     expect(accountsSnapshot?.updatedAt).toBe(3_750);
-    expect(accountsSnapshot?.payload.all).toEqual(["0x123"]);
+    expect(accountsSnapshot?.payload.namespaces.eip155?.all).toEqual(["0x123"]);
+    expect(accountsSnapshot?.payload.active?.address).toBe("0x123");
 
     now = 3_900;
     const pendingTx = {
@@ -477,10 +486,14 @@ describe("createBackgroundServices", () => {
     await first.lifecycle.initialize();
     first.lifecycle.start();
 
-    expect(first.controllers.accounts.getAccounts()).toEqual(ACCOUNTS_SNAPSHOT.payload.all);
-    expect(first.controllers.accounts.getPrimaryAccount()).toBe(ACCOUNTS_SNAPSHOT.payload.primary);
-
-    first.controllers.accounts.replaceState({ all: ["0x999"], primary: "0x999" });
+    expect(first.controllers.accounts.getAccounts()).toEqual(ACCOUNTS_SNAPSHOT.payload.namespaces?.eip155?.all ?? []);
+    expect(first.controllers.accounts.getActivePointer()?.address).toBe(
+      ACCOUNTS_SNAPSHOT.payload.active?.address ?? null,
+    );
+    first.controllers.accounts.replaceState({
+      namespaces: { eip155: { all: ["0x999"], primary: "0x999" } },
+      active: { namespace: "eip155", chainRef: "eip155:1", address: "0x999" },
+    });
 
     first.lifecycle.destroy();
 
@@ -533,7 +546,10 @@ describe("createBackgroundServices", () => {
     await second.lifecycle.initialize();
     second.lifecycle.start();
 
-    second.controllers.accounts.replaceState({ all: ["0xabc"], primary: "0xabc" });
+    second.controllers.accounts.replaceState({
+      namespaces: { eip155: { all: ["0xabc"], primary: "0xabc" } },
+      active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
+    });
 
     expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(true);
 
@@ -648,7 +664,7 @@ describe("createBackgroundServices", () => {
     services.lifecycle.start();
 
     expect(services.controllers.network.getState().active.caip2).toBe(MAINNET_CHAIN.caip2);
-    expect(services.controllers.accounts.getPrimaryAccount()).toBeNull();
+    expect(services.controllers.accounts.getActivePointer()?.address).toBeNull();
     expect(services.session.getLastPersistedVaultMeta()).toBeNull();
 
     services.controllers.network.replaceState(NETWORK_SNAPSHOT.payload);

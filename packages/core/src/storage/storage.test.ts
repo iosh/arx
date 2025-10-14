@@ -95,26 +95,42 @@ describe("storage schemas", () => {
       version: ACCOUNTS_SNAPSHOT_VERSION,
       updatedAt: TIMESTAMP,
       payload: {
-        all: ["0xabc", "0xdef"],
-        primary: "0xabc",
+        namespaces: {
+          eip155: { all: ["0xabc", "0xdef"], primary: "0xabc" },
+        },
+        active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
       },
     };
 
     expect(AccountsSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
 
-    const invalid = {
+    const invalidPrimary = {
       ...snapshot,
       payload: {
-        all: ["0xabc"],
-        primary: "0xdef",
+        namespaces: {
+          eip155: { all: ["0xabc"], primary: "0xdef" },
+        },
+        active: snapshot.payload.active,
       },
     };
 
-    const result = AccountsSnapshotSchema.safeParse(invalid);
+    const primaryResult = AccountsSnapshotSchema.safeParse(invalidPrimary);
 
-    expect(result.success).toBe(false);
+    expect(primaryResult.success).toBe(false);
+    expect(primaryResult?.error?.issues[0]?.path).toEqual(["payload", "namespaces", "eip155", "primary"]);
 
-    expect(result?.error?.issues[0]?.path).toEqual(["payload", "primary"]);
+    const invalidActive = {
+      ...snapshot,
+      payload: {
+        namespaces: snapshot.payload.namespaces,
+        active: { namespace: "eip155", chainRef: "eip155:1", address: "0x999" },
+      },
+    };
+
+    const activeResult = AccountsSnapshotSchema.safeParse(invalidActive);
+
+    expect(activeResult.success).toBe(false);
+    expect(activeResult?.error?.issues[0]?.path).toEqual(["payload", "active"]);
   });
 
   it("reject permissions snapshots with invalid origin", () => {

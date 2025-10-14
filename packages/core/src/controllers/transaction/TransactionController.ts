@@ -67,7 +67,7 @@ const isSameState = (prev?: TransactionState, next?: TransactionState) => {
 export class InMemoryTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #network: Pick<NetworkController, "getState">;
-  #accounts: Pick<AccountController, "getPrimaryAccount">;
+  #accounts: Pick<AccountController, "getActivePointer">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #generateId: () => string;
   #now: () => number;
@@ -113,7 +113,7 @@ export class InMemoryTransactionController implements TransactionController {
 
     const timestamp = this.#now();
 
-    const fromAddress = this.#resolveFrom(request) ?? this.#accounts.getPrimaryAccount() ?? null;
+    const fromAddress = this.#resolveFrom(request) ?? this.#accounts.getActivePointer()?.address ?? null;
 
     const meta: TransactionMeta = {
       id,

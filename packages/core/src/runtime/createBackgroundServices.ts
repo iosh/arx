@@ -1,11 +1,11 @@
 import { JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
-import { InMemoryAccountController } from "../controllers/account/AccountController.js";
+import { InMemoryMultiNamespaceAccountsController } from "../controllers/account/MultiNamespaceAccountsController.js";
 import type {
   AccountController,
   AccountMessenger,
   AccountMessengerTopics,
-  AccountsState,
+  MultiNamespaceAccountsState,
 } from "../controllers/account/types.js";
 import { InMemoryApprovalController } from "../controllers/approval/ApprovalController.js";
 import type {
@@ -73,9 +73,15 @@ const DEFAULT_NETWORK_STATE: NetworkState = {
   knownChains: DEFAULT_KNOWN_CHAINS,
 };
 
-const DEFAULT_ACCOUNTS_STATE: AccountsState = {
-  all: [],
-  primary: null,
+const DEFAULT_ACCOUNTS_STATE: MultiNamespaceAccountsState = {
+  namespaces: {
+    eip155: { all: [], primary: null },
+  },
+  active: {
+    namespace: "eip155",
+    chainRef: DEFAULT_CHAIN.caip2,
+    address: null,
+  },
 };
 
 const DEFAULT_PERMISSIONS_STATE: PermissionsState = {
@@ -112,7 +118,7 @@ export type CreateBackgroundServicesOptions = {
     initialState?: NetworkState;
   };
   accounts?: {
-    initialState?: AccountsState;
+    initialState?: MultiNamespaceAccountsState;
   };
   approvals?: {
     autoRejectMessage?: string;
@@ -172,7 +178,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   const permissionScopeResolver = permissionOptions?.scopeResolver ?? createPermissionScopeResolver(resolveNamespace);
 
-  const accountController = new InMemoryAccountController({
+  const accountController = new InMemoryMultiNamespaceAccountsController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
     initialState: accountOptions?.initialState ?? DEFAULT_ACCOUNTS_STATE,
   });
@@ -197,7 +203,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       getState: () => networkController.getState(),
     },
     accounts: {
-      getPrimaryAccount: () => accountController.getPrimaryAccount(),
+      getActivePointer: () => accountController.getActivePointer(),
     },
     approvals: {
       requestApproval: (...args) => approvalController.requestApproval(...args),
@@ -249,7 +255,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           controllers: {
             network: networkController,
             accounts: {
-              onAccountsChanged: (handler) => accountController.onAccountsChanged(handler),
+              onStateChanged: (handler) => accountController.onStateChanged(handler),
             },
             permissions: {
               onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),

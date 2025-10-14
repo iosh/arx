@@ -130,7 +130,9 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     const { controllers, engine, messenger, session } = services;
 
     const publishAccountsState = () => {
-      const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts() : [];
+      const activePointer = controllers.accounts.getActivePointer();
+      const chainRef = activePointer?.chainRef ?? controllers.network.getState().active.caip2;
+      const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef }) : [];
       broadcastEvent("accountsChanged", [accounts]);
     };
 
@@ -226,7 +228,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       }),
     );
     unsubscribeControllerEvents.push(
-      controllers.accounts.onAccountsChanged(() => {
+      controllers.accounts.onStateChanged(() => {
         publishAccountsState();
       }),
     );
@@ -319,20 +321,19 @@ const replyRequest = (port: browser.Runtime.Port, id: string, payload: Transport
   });
 };
 const getControllerSnapshot = () => {
-  if (!context) {
-    throw new Error("Background context is not initialized");
-  }
+  if (!context) throw new Error("Background context is not initialized");
   const { controllers, session } = context;
   const networkState = controllers.network.getState();
+  const active = controllers.accounts.getActivePointer();
   const isUnlocked = session.unlock.isUnlocked();
+  const accounts = isUnlocked && active ? controllers.accounts.getAccounts({ chainRef: active.chainRef }) : [];
 
   return {
     chain: { chainId: networkState.active.chainId, caip2: networkState.active.caip2 },
-    accounts: isUnlocked ? controllers.accounts.getAccounts() : [],
+    accounts,
     isUnlocked,
   };
 };
-
 const broadcastEvent = (event: string, params: unknown[]) => {
   for (const port of connections) {
     emitEventToPort(port, event, params);

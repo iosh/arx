@@ -1,4 +1,5 @@
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { Caip2ChainId } from "../network/types.js";
 
 export type AccountAddress<T extends string = string> = T;
 
@@ -7,17 +8,57 @@ export type AccountsState<T extends string = string> = {
   primary: AccountAddress<T> | null;
 };
 
+export type ChainNamespace = string;
+
+export type NamespaceAccountsState<T extends string = string> = AccountsState<T>;
+
+export type ActivePointer<T extends string = string> = {
+  namespace: ChainNamespace;
+  chainRef: Caip2ChainId;
+  address: AccountAddress<T> | null;
+};
+
+export type NamespaceStateChange<T extends string = string> = {
+  namespace: ChainNamespace;
+  state: NamespaceAccountsState<T>;
+};
+
+export type MultiNamespaceAccountsState<T extends string = string> = {
+  namespaces: Record<ChainNamespace, NamespaceAccountsState<T>>;
+  active: ActivePointer<T> | null;
+};
+
 export type AccountMessengerTopics<T extends string = string> = {
   "account:stateChanged": AccountsState<T>;
+  "accounts:stateChanged": MultiNamespaceAccountsState<T>;
+  "accounts:namespaceChanged": NamespaceStateChange<T>;
+  "accounts:activeChanged": ActivePointer<T> | null;
+};
+
+export const EMPTY_MULTI_NAMESPACE_STATE: MultiNamespaceAccountsState = {
+  namespaces: {},
+  active: null,
 };
 
 export type AccountMessenger<T extends string = string> = ControllerMessenger<AccountMessengerTopics<T>>;
 
-export type AccountController<T extends string = string> = {
-  getAccounts(): AccountAddress<T>[];
-  getPrimaryAccount(): AccountAddress<T> | null;
-  requestAccounts(origin: string): Promise<AccountAddress<T>[]>;
-  addAccount(account: AccountAddress<T>, options?: { makePrimary?: boolean }): Promise<AccountsState<T>>;
-  onAccountsChanged(handler: (state: AccountsState<T>) => void): () => void;
-  replaceState(state: AccountsState<T>): void;
+export type MultiNamespaceAccountController<T extends string = string> = {
+  getState(): MultiNamespaceAccountsState<T>;
+  getActivePointer(): ActivePointer<T> | null;
+  getAccounts(params?: { chainRef?: Caip2ChainId }): AccountAddress<T>[];
+  getAccountsForNamespace(namespace: ChainNamespace): AccountAddress<T>[];
+  switchActive(params: { chainRef: Caip2ChainId; address?: AccountAddress<T> | null }): Promise<ActivePointer<T>>;
+  addAccount(params: {
+    chainRef: Caip2ChainId;
+    address: AccountAddress<T>;
+    makePrimary?: boolean;
+  }): Promise<NamespaceAccountsState<T>>;
+  removeAccount(params: { chainRef: Caip2ChainId; address: AccountAddress<T> }): Promise<NamespaceAccountsState<T>>;
+  requestAccounts(params: { origin: string; chainRef: Caip2ChainId }): Promise<AccountAddress<T>[]>;
+  replaceState(state: MultiNamespaceAccountsState<T>): void;
+  onStateChanged(handler: (state: MultiNamespaceAccountsState<T>) => void): () => void;
+  onNamespaceChanged(handler: (payload: NamespaceStateChange<T>) => void): () => void;
+  onActiveChanged(handler: (pointer: ActivePointer<T> | null) => void): () => void;
 };
+
+export type AccountController<T extends string = string> = MultiNamespaceAccountController<T>;

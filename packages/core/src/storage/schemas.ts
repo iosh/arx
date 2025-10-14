@@ -95,7 +95,14 @@ const networkStateSchema = z
     },
   );
 
-const accountsStateSchema = z
+const PERMISSION_SCOPE_VALUES = [
+  PermissionScopes.Basic,
+  PermissionScopes.Accounts,
+  PermissionScopes.Sign,
+  PermissionScopes.Transaction,
+] as const;
+
+const namespaceAccountsStateSchema = z
   .strictObject({
     all: z.array(accountAddressSchema),
     primary: accountAddressSchema.nullable(),
@@ -105,12 +112,36 @@ const accountsStateSchema = z
     path: ["primary"],
   });
 
-const PERMISSION_SCOPE_VALUES = [
-  PermissionScopes.Basic,
-  PermissionScopes.Accounts,
-  PermissionScopes.Sign,
-  PermissionScopes.Transaction,
-] as const;
+const activePointerSchema = z
+  .strictObject({
+    namespace: z.string().min(1),
+    chainRef: caip2ChainIdSchema,
+    address: accountAddressSchema.nullable(),
+  })
+  .nullable();
+
+const accountsStateSchema = z
+  .strictObject({
+    namespaces: z.record(z.string().min(1), namespaceAccountsStateSchema),
+    active: activePointerSchema,
+  })
+  .refine(
+    (value) => {
+      if (!value.active) return true;
+      const namespaceState = value.namespaces[value.active.namespace];
+      if (!namespaceState) {
+        return false;
+      }
+      if (!value.active.address) {
+        return true;
+      }
+      return namespaceState.all.includes(value.active.address);
+    },
+    {
+      error: "Active pointer must reference a registered namespace and account",
+      path: ["active"],
+    },
+  );
 
 const permissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
 

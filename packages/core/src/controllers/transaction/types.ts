@@ -62,7 +62,7 @@ export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayloa
 export type TransactionControllerOptions = {
   messenger: TransactionMessenger;
   network: Pick<NetworkController, "getState">;
-  accounts: Pick<AccountController, "getPrimaryAccount">;
+  accounts: Pick<AccountController, "getActivePointer">;
   approvals: Pick<ApprovalController, "requestApproval">;
   idGenerator?: () => string;
   now?: () => number;

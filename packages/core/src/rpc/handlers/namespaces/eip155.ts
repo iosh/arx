@@ -17,13 +17,14 @@ const handleEthChainId: MethodHandler = ({ controllers }) => {
 };
 
 const handleEthAccounts: MethodHandler = ({ controllers }) => {
-  return controllers.accounts.getAccounts();
+  const active = controllers.network.getState().active;
+  return controllers.accounts.getAccounts({ chainRef: active.caip2 });
 };
 
 const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) => {
   const providerErrors = resolveProviderErrors(controllers);
   const activeChain = controllers.network.getState().active;
-  const suggested = controllers.accounts.getAccounts();
+  const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.caip2 });
 
   const task = {
     id: createTaskId("eth_requestAccounts"),
@@ -37,7 +38,10 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
 
   try {
     const approved = await controllers.approvals.requestApproval(task, async () => {
-      const result = await controllers.accounts.requestAccounts(origin);
+      const result = await controllers.accounts.requestAccounts({
+        origin,
+        chainRef: activeChain.caip2,
+      });
       if (result.length > 0) {
         await controllers.permissions.grant(origin, PermissionScopes.Basic);
         await controllers.permissions.grant(origin, PermissionScopes.Accounts);

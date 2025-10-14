@@ -1,5 +1,6 @@
+import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { ApprovalState } from "../../controllers/approval/types.js";
-import type { AccountsState, NetworkState, PermissionsState } from "../../controllers/index.js";
+import type { NetworkState, PermissionsState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
 import {
@@ -15,7 +16,7 @@ import {
 
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
-  accounts: { onAccountsChanged(handler: (state: AccountsState) => void): () => void };
+  accounts: { onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void };
   permissions: { onPermissionsChanged(handler: (state: PermissionsState) => void): () => void };
   approvals: { onStateChanged(handler: (state: ApprovalState) => void): () => void };
   transactions: TransactionController;
@@ -54,15 +55,28 @@ export const createStorageSync = ({
     });
 
     subscriptions.push(networkUnsub);
-    const accountsUnsub = controllers.accounts.onAccountsChanged((state) => {
+
+    const accountsUnsub = controllers.accounts.onStateChanged((state) => {
       const envelope: AccountsSnapshot = {
         version: ACCOUNTS_SNAPSHOT_VERSION,
         updatedAt: now(),
         payload: {
-          all: [...state.all],
-          primary: state.primary,
+          namespaces: Object.fromEntries(
+            Object.entries(state.namespaces).map(([namespace, snapshot]) => [
+              namespace,
+              { all: [...snapshot.all], primary: snapshot.primary },
+            ]),
+          ),
+          active: state.active
+            ? {
+                namespace: state.active.namespace,
+                chainRef: state.active.chainRef,
+                address: state.active.address,
+              }
+            : null,
         },
       };
+
       void storagePort.saveSnapshot(StorageNamespaces.Accounts, envelope).catch((error) => {
         logger("[persistence] failed to persist accounts snapshot", error);
       });

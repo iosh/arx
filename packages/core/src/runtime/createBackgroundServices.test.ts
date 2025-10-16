@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
+import type {
+  ChainRegistryEntity,
+  StorageNamespace,
+  StoragePort,
+  StorageSnapshotMap,
+  VaultMetaSnapshot,
+} from "../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
   type AccountsSnapshot,
@@ -16,7 +22,8 @@ import {
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import { createBackgroundServices } from "./createBackgroundServices.js";
+import { createBackgroundServices, type CreateBackgroundServicesOptions } from "./createBackgroundServices.js";
+import type { ChainRegistryPort } from "../chains/registryPort.js";
 
 const MAINNET_CHAIN = {
   caip2: "eip155:1",
@@ -207,6 +214,51 @@ class MemoryStoragePort implements StoragePort {
   }
 }
 
+class MemoryChainRegistryPort implements ChainRegistryPort {
+  private readonly entries = new Map<string, ChainRegistryEntity>();
+
+  async get(chainRef: string): Promise<ChainRegistryEntity | null> {
+    return this.entries.get(chainRef) ?? null;
+  }
+
+  async getAll(): Promise<ChainRegistryEntity[]> {
+    return Array.from(this.entries.values());
+  }
+
+  async put(entity: ChainRegistryEntity): Promise<void> {
+    this.entries.set(entity.chainRef, entity);
+  }
+
+  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
+    for (const entity of entities) {
+      this.entries.set(entity.chainRef, entity);
+    }
+  }
+
+  async delete(chainRef: string): Promise<void> {
+    this.entries.delete(chainRef);
+  }
+
+  async clear(): Promise<void> {
+    this.entries.clear();
+  }
+}
+
+const createServices = (options: CreateBackgroundServicesOptions = {}) => {
+  const chainRegistryOptions = options.chainRegistry;
+  if (chainRegistryOptions?.port) {
+    return createBackgroundServices(options);
+  }
+
+  return createBackgroundServices({
+    ...options,
+    chainRegistry: {
+      ...chainRegistryOptions,
+      port: new MemoryChainRegistryPort(),
+    },
+  });
+};
+
 class FakeVault implements VaultService {
   #ciphertext: VaultCiphertext | null;
   #unlocked = false;
@@ -298,7 +350,7 @@ describe("createBackgroundServices", () => {
       vaultMeta: VAULT_META,
     });
 
-    const services = createBackgroundServices({
+    const services = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
@@ -323,9 +375,9 @@ describe("createBackgroundServices", () => {
     const clock = () => now;
     const storage = new MemoryStoragePort();
 
-    const services = createBackgroundServices({
+    const services = createServices({
       storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
     await services.lifecycle.initialize();
@@ -398,9 +450,9 @@ describe("createBackgroundServices", () => {
     let now = 4_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const services = createBackgroundServices({
+    const services = createServices({
       storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
     await services.lifecycle.initialize();
@@ -428,9 +480,9 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort();
     const swallowLog = () => {};
 
-    const first = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: autoLockMs },
+    const first = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
     await first.lifecycle.initialize();
@@ -448,9 +500,9 @@ describe("createBackgroundServices", () => {
     await first.session.persistVaultMeta();
     first.lifecycle.destroy();
 
-    const second = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: autoLockMs },
+    const second = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
     await second.lifecycle.initialize();
@@ -479,9 +531,9 @@ describe("createBackgroundServices", () => {
     storage.setSnapshotLoadFailure(StorageNamespaces.Network, new Error("boom"));
 
     const swallowLog = () => {};
-    const first = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    const first = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
     await first.lifecycle.initialize();
     first.lifecycle.start();
@@ -500,9 +552,9 @@ describe("createBackgroundServices", () => {
     storage.clearSnapshotLoadFailure(StorageNamespaces.Network);
     await storage.saveSnapshot(StorageNamespaces.Network, NETWORK_SNAPSHOT);
 
-    const second = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    const second = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
     await second.lifecycle.initialize();
@@ -517,9 +569,9 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort();
     const swallowLog = () => {};
 
-    const first = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    const first = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
     await first.lifecycle.initialize();
@@ -538,9 +590,9 @@ describe("createBackgroundServices", () => {
     first.lifecycle.destroy();
     storage.savedSnapshots.splice(0);
 
-    const second = createBackgroundServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
+    const second = createServices({
+      storage: { port: storage, now: clock },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
     await second.lifecycle.initialize();
@@ -586,7 +638,7 @@ describe("createBackgroundServices", () => {
       }
     };
 
-    const services = createBackgroundServices({
+    const services = createServices({
       storage: { port: storage, now: clock, logger: swallowLog },
       session: {
         vault: new FakeVault(clock),
@@ -628,7 +680,7 @@ describe("createBackgroundServices", () => {
     const now = 90_000;
     const clock = () => now;
 
-    const services = createBackgroundServices({
+    const services = createServices({
       session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: 500 },
     });
 
@@ -655,7 +707,7 @@ describe("createBackgroundServices", () => {
     });
     const swallowLog = () => {};
 
-    const services = createBackgroundServices({
+    const services = createServices({
       storage: { port: storage, now: clock, logger: swallowLog, hydrate: false },
       session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
     });

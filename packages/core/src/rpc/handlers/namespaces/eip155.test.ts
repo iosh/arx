@@ -5,11 +5,28 @@ import { createMethodExecutor } from "../../index.js";
 
 const ORIGIN = "https://dapp.example";
 
+const createServices = () =>
+  createBackgroundServices({
+    chainRegistry: {
+      port: {
+        async get() {
+          return null;
+        },
+        async getAll() {
+          return [];
+        },
+        async put() {},
+        async putMany() {},
+        async delete() {},
+        async clear() {},
+      },
+    },
+  });
 // TODO: add eth_requestAccounts rejection test once approval  -> account flow is implemented
 
 describe("eip155 handlers - core error paths", () => {
   it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
-    const services = createBackgroundServices();
+    const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
@@ -33,7 +50,7 @@ describe("eip155 handlers - core error paths", () => {
   });
 
   it("throw invalid params when eth_sendTransaction receives no payload", async () => {
-    const services = createBackgroundServices();
+    const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();
 

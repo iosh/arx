@@ -46,13 +46,23 @@ import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
+import { InMemoryChainRegistryController } from "../controllers/chainRegistry/ChainRegistryController.js";
+import type {
+  ChainRegistryController,
+  ChainRegistryMessenger,
+  ChainRegistryMessengerTopics,
+} from "../controllers/chainRegistry/types.js";
+import type { ChainRegistryPort } from "../chains/registryPort.js";
+import type { ChainMetadata } from "../chains/metadata.js";
+import { DEFAULT_CHAIN_METADATA } from "../chains/chains.seed.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
   NetworkMessengerTopic &
   PermissionMessengerTopics &
   TransactionMessengerTopics &
-  UnlockMessengerTopics;
+  UnlockMessengerTopics &
+  ChainRegistryMessengerTopics;
 
 const DEFAULT_CHAIN: NetworkState["active"] = {
   caip2: "eip155:1",
@@ -143,6 +153,13 @@ export type CreateBackgroundServicesOptions = {
     logger?: (message: string, error: unknown) => void;
   };
   session?: SessionOptions;
+  chainRegistry?: {
+    port: ChainRegistryPort;
+    seed?: ChainMetadata[];
+    now?: () => number;
+    logger?: (message: string, error?: unknown) => void;
+    schemaVersion?: number;
+  };
 };
 
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
@@ -159,6 +176,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     engine: engineOptions,
     storage: storageOptions,
     session: sessionOptions,
+    chainRegistry: chainRegistryOptions,
   } = options ?? {};
 
   const messenger = new ControllerMessenger<MessengerTopics>(
@@ -215,6 +233,19 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     ...(transactionOptions?.initialState !== undefined ? { initialState: transactionOptions.initialState } : {}),
   });
 
+  if (!chainRegistryOptions?.port) {
+    throw new Error("createBackgroundServices requires chainRegistry.port");
+  }
+
+  const chainRegistryController = new InMemoryChainRegistryController({
+    messenger: castMessenger<ChainRegistryMessengerTopics>(messenger) as ChainRegistryMessenger,
+    port: chainRegistryOptions.port,
+    seed: chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA,
+    ...(chainRegistryOptions.now ? { now: chainRegistryOptions.now } : {}),
+    ...(chainRegistryOptions.logger ? { logger: chainRegistryOptions.logger } : {}),
+    ...(chainRegistryOptions.schemaVersion !== undefined ? { schemaVersion: chainRegistryOptions.schemaVersion } : {}),
+  });
+
   const engine = new JsonRpcEngine();
   const middlewares = engineOptions?.middlewares ?? [];
 
@@ -230,12 +261,14 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     approvals: ApprovalController;
     permissions: PermissionController;
     transactions: TransactionController;
+    chainRegistry: ChainRegistryController;
   } = {
     network: networkController,
     accounts: accountController,
     approvals: approvalController,
     permissions: permissionController,
     transactions: transactionController,
+    chainRegistry: chainRegistryController,
   };
 
   const storagePort = storageOptions?.port;
@@ -579,6 +612,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     initializePromise = (async () => {
+      await chainRegistryController.whenReady();
+
       if (!storagePort || !hydrationEnabled) {
         initialized = true;
         return;

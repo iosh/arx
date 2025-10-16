@@ -1,4 +1,7 @@
+import type { ChainRegistryPort } from "@arx/core/chains";
 import {
+  type ChainRegistryEntity,
+  ChainRegistryEntitySchema,
   DOMAIN_SCHEMA_VERSION,
   type StorageNamespace,
   StorageNamespaces,
@@ -11,7 +14,9 @@ import {
   VaultMetaSnapshotSchema,
 } from "@arx/core/storage";
 import { Dexie, type PromiseExtended, type Table } from "dexie";
+import { runMigrations } from "./migrations.js";
 
+type ChainRegistryRow = ChainRegistryEntity;
 const DEFAULT_DB_NAME = "arx-storage";
 type SnapshotEntity = {
   namespace: StorageNamespace;
@@ -25,6 +30,26 @@ type VaultMetaEntity = {
   payload: unknown;
 };
 
+const databaseRegistry = new Map<string, ArxStorageDatabase>();
+
+const getOrCreateDatabase = (dbName: string): ArxStorageDatabase => {
+  const cached = databaseRegistry.get(dbName);
+  if (cached) {
+    return cached;
+  }
+
+  const db = new ArxStorageDatabase(dbName);
+  databaseRegistry.set(dbName, db);
+
+  db.on("close", () => {
+    if (databaseRegistry.get(dbName) === db) {
+      databaseRegistry.delete(dbName);
+    }
+  });
+
+  return db;
+};
+
 class ArxStorageDatabase extends Dexie {
   chains!: Table<SnapshotEntity, StorageNamespace>;
   accounts!: Table<SnapshotEntity, StorageNamespace>;
@@ -32,17 +57,23 @@ class ArxStorageDatabase extends Dexie {
   approvals!: Table<SnapshotEntity, StorageNamespace>;
   transactions!: Table<SnapshotEntity, StorageNamespace>;
   vaultMeta!: Table<VaultMetaEntity, string>;
+  chainRegistry!: Table<ChainRegistryRow, string>;
 
   constructor(name: string) {
     super(name);
-    this.version(DOMAIN_SCHEMA_VERSION).stores({
-      chains: "&namespace",
-      accounts: "&namespace",
-      permissions: "&namespace",
-      approvals: "&namespace",
-      transactions: "&namespace",
-      vaultMeta: "&id",
-    });
+    this.version(DOMAIN_SCHEMA_VERSION)
+      .stores({
+        chains: "&namespace",
+        accounts: "&namespace",
+        permissions: "&namespace",
+        approvals: "&namespace",
+        transactions: "&namespace",
+        vaultMeta: "&id",
+        chainRegistry: "&chainRef",
+      })
+      .upgrade((transaction) => {
+        return runMigrations({ db: this, transaction });
+      });
   }
 }
 
@@ -146,12 +177,86 @@ class DexieStoragePort implements StoragePort {
   }
 }
 
+class DexieChainRegistryPort implements ChainRegistryPort {
+  private readonly ready: PromiseExtended<Dexie>;
+  private readonly table: Table<ChainRegistryRow, string>;
+
+  constructor(private readonly db: ArxStorageDatabase) {
+    this.ready = this.db.open();
+    this.table = this.db.chainRegistry;
+  }
+
+  async get(chainRef: ChainRegistryRow["chainRef"]): Promise<ChainRegistryEntity | null> {
+    await this.ready;
+    const row = await this.table.get(chainRef);
+    return this.parseRow(row);
+  }
+
+  async getAll(): Promise<ChainRegistryEntity[]> {
+    await this.ready;
+    const rows = await this.table.toArray();
+    const entities: ChainRegistryEntity[] = [];
+    for (const row of rows) {
+      const parsed = await this.parseRow(row);
+      if (parsed) {
+        entities.push(parsed);
+      }
+    }
+    return entities;
+  }
+
+  async put(entity: ChainRegistryEntity): Promise<void> {
+    await this.ready;
+    const checked = ChainRegistryEntitySchema.parse(entity);
+    await this.table.put(checked);
+  }
+
+  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
+    await this.ready;
+    const checked = entities.map((entity) => ChainRegistryEntitySchema.parse(entity));
+    await this.table.bulkPut(checked);
+  }
+
+  async delete(chainRef: ChainRegistryRow["chainRef"]): Promise<void> {
+    await this.ready;
+    await this.table.delete(chainRef);
+  }
+
+  async clear(): Promise<void> {
+    await this.ready;
+    await this.table.clear();
+  }
+
+  private async parseRow(row: ChainRegistryRow | undefined): Promise<ChainRegistryEntity | null> {
+    if (!row) {
+      return null;
+    }
+    const parsed = ChainRegistryEntitySchema.safeParse(row);
+    if (!parsed.success) {
+      console.warn("[storage-dexie] invalid chain registry entry detected", parsed.error);
+      await this.table.delete(row.chainRef);
+      return null;
+    }
+    return parsed.data;
+  }
+}
+
+export type CreateDexieChainRegistryPortOptions = {
+  databaseName?: string;
+};
+
+export const createDexieChainRegistryPort = (options: CreateDexieChainRegistryPortOptions = {}): ChainRegistryPort => {
+  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
+  const db = getOrCreateDatabase(dbName);
+  return new DexieChainRegistryPort(db);
+};
+
 export type CreateDexieStorageOptions = {
   databaseName?: string;
 };
 
 export const createDexieStorage = (options: CreateDexieStorageOptions = {}): StoragePort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = new ArxStorageDatabase(dbName);
+  const db = getOrCreateDatabase(dbName);
   return new DexieStoragePort(db);
 };

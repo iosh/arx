@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import { z } from "zod";
+import { chainMetadataSchema } from "../chains/metadata.js";
 import { PermissionScopes } from "../controllers/permission/types.js";
 
 const CAIP2_CHAIN_ID_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
@@ -223,6 +224,23 @@ const createSnapshotSchema = <TPayload extends ZodType, TVersion extends number>
     payload: config.payload,
   });
 
+const chainRegistryEntitySchema = z
+  .strictObject({
+    chainRef: caip2ChainIdSchema,
+    namespace: z.string().min(1),
+    metadata: chainMetadataSchema,
+    schemaVersion: z.number().int().positive(),
+    updatedAt: epochMillisecondsSchema,
+  })
+  .refine((value) => value.metadata.chainRef === value.chainRef, {
+    error: "metadata.chainRef must match the entity chainRef",
+    path: ["metadata", "chainRef"],
+  })
+  .refine((value) => value.metadata.namespace === value.namespace, {
+    error: "metadata.namespace must match the entity namespace",
+    path: ["metadata", "namespace"],
+  });
+
 export const StorageNamespaces = {
   Network: "core:network",
   Accounts: "core:accounts",
@@ -240,6 +258,7 @@ export const ACCOUNTS_SNAPSHOT_VERSION = 1;
 export const PERMISSIONS_SNAPSHOT_VERSION = 1;
 export const APPROVALS_SNAPSHOT_VERSION = 1;
 export const TRANSACTIONS_SNAPSHOT_VERSION = 1;
+export const CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION = 1;
 
 export const NetworkSnapshotSchema = createSnapshotSchema({
   version: NETWORK_SNAPSHOT_VERSION,
@@ -267,6 +286,8 @@ export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
 export type PermissionsSnapshot = z.infer<typeof PermissionsSnapshotSchema>;
 export type ApprovalsSnapshot = z.infer<typeof ApprovalsSnapshotSchema>;
 export type TransactionsSnapshot = z.infer<typeof TransactionsSnapshotSchema>;
+export const ChainRegistryEntitySchema = chainRegistryEntitySchema;
+export type ChainRegistryEntity = z.infer<typeof ChainRegistryEntitySchema>;
 
 const vaultCiphertextSchema = z
   .strictObject({

@@ -15,73 +15,73 @@ import {
 
 const TIMESTAMP = 1_706_000_000_000;
 
+const createMetadata = (params: {
+  chainRef: string;
+  chainId: string;
+  displayName: string;
+  rpcUrl: string;
+  namespace?: string;
+  nativeCurrency?: { name: string; symbol: string; decimals: number };
+}) => ({
+  chainRef: params.chainRef,
+  namespace: params.namespace ?? params.chainRef.split(":")[0]!,
+  chainId: params.chainId,
+  displayName: params.displayName,
+  nativeCurrency: params.nativeCurrency ?? { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcEndpoints: [{ url: params.rpcUrl, type: "public" as const }],
+});
+
 describe("storage schemas", () => {
   it("accepts a valid network snapshot", () => {
-    const mainnet = {
-      caip2: "eip155:1",
+    const mainnet = createMetadata({
+      chainRef: "eip155:1",
       chainId: "0x1",
+      displayName: "Ethereum",
       rpcUrl: "https://rpc.mainnet.example",
-      name: "Ethereum",
-      nativeCurrency: {
-        name: "Ether",
-        symbol: "ETH",
-        decimals: 18,
-      },
-    };
+    });
 
-    const goerli = {
-      caip2: "eip155:5",
+    const goerli = createMetadata({
+      chainRef: "eip155:5",
       chainId: "0x5",
+      displayName: "Goerli",
+      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
       rpcUrl: "https://rpc.testnet.example",
-      name: "Goerli",
-      nativeCurrency: {
-        name: "Goerli Ether",
-        symbol: "gETH",
-        decimals: 18,
-      },
-    };
+    });
 
     const snapshot = {
       version: NETWORK_SNAPSHOT_VERSION,
       updatedAt: TIMESTAMP,
       payload: {
-        active: mainnet,
+        activeChain: mainnet.chainRef,
         knownChains: [mainnet, goerli],
+        rpcStatus: {
+          [mainnet.chainRef]: { endpointIndex: 0 },
+          [goerli.chainRef]: { endpointIndex: 1, lastError: "unreachable" },
+        },
       },
     };
 
     expect(NetworkSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
   });
 
-  it("rejects network snapshots when the active chain is mission", () => {
+  it("rejects network snapshots when the active chain is missing", () => {
+    const goerli = createMetadata({
+      chainRef: "eip155:5",
+      chainId: "0x5",
+      displayName: "Goerli",
+      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
+      rpcUrl: "https://rpc.testnet.example",
+    });
+
     const snapshot = {
       version: NETWORK_SNAPSHOT_VERSION,
       updatedAt: TIMESTAMP,
       payload: {
-        active: {
-          caip2: "eip155:1",
-          chainId: "0x1",
-          rpcUrl: "https://rpc.mainnet.example",
-          name: "Ethereum",
-          nativeCurrency: {
-            name: "Ether",
-            symbol: "ETH",
-            decimals: 18,
-          },
+        activeChain: "eip155:1",
+        knownChains: [goerli],
+        rpcStatus: {
+          [goerli.chainRef]: { endpointIndex: 0 },
         },
-        knownChains: [
-          {
-            caip2: "eip155:5",
-            chainId: "0x5",
-            rpcUrl: "https://rpc.testnet.example",
-            name: "Goerli",
-            nativeCurrency: {
-              name: "Goerli Ether",
-              symbol: "gETH",
-              decimals: 18,
-            },
-          },
-        ],
       },
     };
 
@@ -225,5 +225,62 @@ describe("storage schemas", () => {
       },
     };
     expect(VaultMetaSnapshotSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it("accepts a valid network snapshot", () => {
+    const mainnet = createMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum",
+      rpcUrl: "https://rpc.mainnet.example",
+    });
+    const goerli = createMetadata({
+      chainRef: "eip155:5",
+      chainId: "0x5",
+      displayName: "Goerli",
+      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
+      rpcUrl: "https://rpc.testnet.example",
+    });
+
+    const snapshot = {
+      version: NETWORK_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        activeChain: mainnet.chainRef,
+        knownChains: [mainnet, goerli],
+        rpcStatus: {
+          [mainnet.chainRef]: { endpointIndex: 0 },
+          [goerli.chainRef]: { endpointIndex: 1, lastError: "unreachable" },
+        },
+      },
+    };
+
+    expect(NetworkSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
+  });
+
+  it("rejects network snapshots when the active chain is missing", () => {
+    const goerli = createMetadata({
+      chainRef: "eip155:5",
+      chainId: "0x5",
+      displayName: "Goerli",
+      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
+      rpcUrl: "https://rpc.testnet.example",
+    });
+
+    const snapshot = {
+      version: NETWORK_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        activeChain: "eip155:1",
+        knownChains: [goerli],
+        rpcStatus: {
+          [goerli.chainRef]: { endpointIndex: 0 },
+        },
+      },
+    };
+
+    const result = NetworkSnapshotSchema.safeParse(snapshot);
+    expect(result.success).toBe(false);
+    expect(result?.error?.issues[0]?.path).toEqual(["payload", "knownChains"]);
   });
 });

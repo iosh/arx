@@ -48,46 +48,24 @@ const nativeCurrencySchema = z.strictObject({
   decimals: z.number().int().min(0),
 });
 
-const chainStateSchema = z
-  .strictObject({
-    caip2: caip2ChainIdSchema,
-    chainId: z.string().regex(HEX_CHAIN_ID_REGEX, {
-      error: "chainId must be a 0x-prefixed hexadecimal value",
-    }),
-    rpcUrl: nonEmptyStringSchema,
-    name: nonEmptyStringSchema,
-    nativeCurrency: nativeCurrencySchema,
-  })
-  .refine(
-    (value) => {
-      const [namespace, reference] = value.caip2.split(":");
-      if (namespace !== "eip155") {
-        return true;
-      }
-      try {
-        return BigInt(value.chainId).toString(10) === reference;
-      } catch {
-        return false;
-      }
-    },
-    {
-      error: "For eip155 chains the CAIP-2 reference must match the hex chainId value",
-      path: ["caip2"],
-    },
-  );
+const rpcStatusSchema = z.strictObject({
+  endpointIndex: z.number().int().min(0),
+  lastError: z.string().optional(),
+});
 
 const networkStateSchema = z
   .strictObject({
-    active: chainStateSchema,
-    knownChains: z.array(chainStateSchema).min(1),
+    activeChain: caip2ChainIdSchema,
+    knownChains: z.array(chainMetadataSchema).min(1),
+    rpcStatus: z.record(caip2ChainIdSchema, rpcStatusSchema).default({}),
   })
-  .refine((value) => value.knownChains.some((chain) => chain.caip2 === value.active.caip2), {
+  .refine((value) => value.knownChains.some((chain) => chain.chainRef === value.activeChain), {
     error: "Active chain must appear in knownChains",
     path: ["knownChains"],
   })
   .refine(
     (value) => {
-      const ids = value.knownChains.map((chain) => chain.caip2);
+      const ids = value.knownChains.map((chain) => chain.chainRef);
       return new Set(ids).size === ids.length;
     },
     {
@@ -95,7 +73,6 @@ const networkStateSchema = z
       path: ["knownChains"],
     },
   );
-
 const PERMISSION_SCOPE_VALUES = [
   PermissionScopes.Basic,
   PermissionScopes.Accounts,
@@ -338,7 +315,6 @@ export type StorageSnapshotMap = {
 export {
   accountsStateSchema as AccountsStateSchema,
   approvalStateSchema as ApprovalStateSchema,
-  chainStateSchema as ChainStateSchema,
   eip155TransactionPayloadSchema as Eip155TransactionPayloadSchema,
   genericTransactionRequestSchema as GenericTransactionRequestSchema,
   networkStateSchema as NetworkStateSchema,
@@ -346,4 +322,5 @@ export {
   transactionMetaSchema as TransactionMetaSchema,
   transactionRequestSchema as TransactionRequestSchema,
   transactionStateSchema as TransactionStateSchema,
+  rpcStatusSchema as RpcStatusSchema,
 };

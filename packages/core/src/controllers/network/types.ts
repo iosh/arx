@@ -1,38 +1,40 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainMetadata, NativeCurrency } from "../../chains/metadata.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 
-export type NativeCurrency = {
-  name: string;
-  symbol: string;
-  decimals: number;
-};
-
-export type Caip2ChainId = string;
-
-export type ChainState = {
-  caip2: Caip2ChainId;
-  chainId: string;
-  rpcUrl: string;
-  name: string;
-  nativeCurrency: NativeCurrency;
+export type NetworkRpcStatus = {
+  endpointIndex: number;
+  lastError?: string | undefined;
 };
 
 export type NetworkState = {
-  active: ChainState;
-  knownChains: ChainState[];
+  activeChain: Caip2ChainId;
+  knownChains: ChainMetadata[];
+  rpcStatus: Record<Caip2ChainId, NetworkRpcStatus>;
+};
+
+export type NetworkRpcStatusUpdate = {
+  chainRef: Caip2ChainId;
+  status: NetworkRpcStatus;
 };
 
 export type NetworkMessengerTopic = {
   "network:stateChanged": NetworkState;
-  "network:chainChanged": ChainState;
+  "network:chainChanged": ChainMetadata;
+  "network:rpcStatusChanged": NetworkRpcStatusUpdate;
 };
 
 export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
 
-export type NetworkController = {
+export interface NetworkController {
   getState(): NetworkState;
+  getActiveChain(): ChainMetadata;
+  getChain(chainRef: Caip2ChainId): ChainMetadata | null;
   onStateChanged(handler: (state: NetworkState) => void): () => void;
-  switchChain(target: Caip2ChainId): Promise<ChainState>;
-  addChain(chain: ChainState, options?: { activate?: boolean; replaceExisting?: boolean }): Promise<ChainState>;
-  onChainChanged(handler: (state: ChainState) => void): () => void;
+  onChainChanged(handler: (chain: ChainMetadata) => void): () => void;
+  onRpcStatusChanged(handler: (update: NetworkRpcStatusUpdate) => void): () => void;
+  switchChain(target: Caip2ChainId): Promise<ChainMetadata>;
+  addChain(chain: ChainMetadata, options?: { activate?: boolean }): Promise<ChainMetadata>;
+  updateRpcStatus(chainRef: Caip2ChainId, status: NetworkRpcStatus): void;
   replaceState(state: NetworkState): void;
-};
+}

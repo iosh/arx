@@ -13,25 +13,25 @@ import {
 } from "./utils.js";
 
 const handleEthChainId: MethodHandler = ({ controllers }) => {
-  return controllers.network.getState().active.chainId;
+  return controllers.network.getActiveChain().chainId;
 };
 
 const handleEthAccounts: MethodHandler = ({ controllers }) => {
-  const active = controllers.network.getState().active;
-  return controllers.accounts.getAccounts({ chainRef: active.caip2 });
+  const active = controllers.network.getActiveChain();
+  return controllers.accounts.getAccounts({ chainRef: active.chainRef });
 };
 
 const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) => {
   const providerErrors = resolveProviderErrors(controllers);
-  const activeChain = controllers.network.getState().active;
-  const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.caip2 });
+  const activeChain = controllers.network.getActiveChain();
+  const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });
 
   const task = {
     id: createTaskId("eth_requestAccounts"),
     type: ApprovalTypes.RequestAccounts,
     origin,
     payload: {
-      caip2: activeChain.caip2,
+      caip2: activeChain.chainRef,
       suggestedAccounts: [...suggested],
     },
   } as const;
@@ -40,7 +40,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
     const approved = await controllers.approvals.requestApproval(task, async () => {
       const result = await controllers.accounts.requestAccounts({
         origin,
-        chainRef: activeChain.caip2,
+        chainRef: activeChain.chainRef,
       });
       if (result.length > 0) {
         await controllers.permissions.grant(origin, PermissionScopes.Basic);
@@ -77,8 +77,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
 
   const state = controllers.network.getState();
   const target = state.knownChains.find((item) => {
-    if (caip2 && item.caip2 === caip2) return true;
-    if (chainId && item.chainId.toLowerCase() === chainId.toLowerCase()) return true;
+    if (caip2 && item.chainRef === caip2) return true;
+    if (chainId && item.chainId && item.chainId.toLowerCase() === chainId.toLowerCase()) return true;
     return false;
   });
 
@@ -91,7 +91,7 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   }
 
   try {
-    await controllers.network.switchChain(target.caip2);
+    await controllers.network.switchChain(target.chainRef);
     return null;
   } catch (error) {
     if (error instanceof Error && /unknown chain/i.test(error.message)) {
@@ -139,7 +139,7 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
     type: ApprovalTypes.SignMessage,
     origin,
     payload: {
-      caip2: controllers.network.getState().active.caip2,
+      caip2: controllers.network.getActiveChain().chainRef,
       from: address,
       message,
     },
@@ -175,7 +175,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
     type: ApprovalTypes.SignTypedData,
     origin,
     payload: {
-      caip2: controllers.network.getState().active.caip2,
+      caip2: controllers.network.getActiveChain().chainRef,
       from: address,
       typedData,
     },
@@ -204,8 +204,8 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
     });
   }
 
-  const activeChain = controllers.network.getState().active;
-  const txRequest = buildEip155TransactionRequest(paramsArray, rpcErrors, activeChain.caip2);
+  const activeChain = controllers.network.getActiveChain();
+  const txRequest = buildEip155TransactionRequest(paramsArray, rpcErrors, activeChain.chainRef);
 
   try {
     const meta = await controllers.transactions.submitTransaction(origin, txRequest);

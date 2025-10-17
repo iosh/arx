@@ -1,4 +1,5 @@
-import type { Caip2ChainId, Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
+import type { Caip2ChainId } from "../../../chains/ids.js";
+import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
 import { getProviderErrors, getRpcErrors } from "../../../errors/index.js";
 import type { HandlerControllers } from "../types.js";
 
@@ -14,8 +15,8 @@ export const isRpcError = (value: unknown): value is { code: number } =>
   Boolean(value && typeof value === "object" && "code" in (value as Record<string, unknown>));
 
 const resolveNamespace = (controllers: HandlerControllers) => {
-  const active = controllers.network.getState().active;
-  const [namespace] = active.caip2.split(":");
+  const active = controllers.network.getActiveChain().chainRef;
+  const [namespace] = active.split(":");
   return namespace ?? EIP155_NAMESPACE;
 };
 

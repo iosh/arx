@@ -1,8 +1,8 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalTask } from "../approval/types.js";
-import type { Caip2ChainId, NetworkController } from "../network/types.js";
-
+import type { NetworkController } from "../network/types.js";
 export type TransactionStatus = "pending" | "approved" | "submitted" | "failed";
 
 export type Eip155TransactionPayload = {
@@ -61,7 +61,7 @@ export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayloa
 
 export type TransactionControllerOptions = {
   messenger: TransactionMessenger;
-  network: Pick<NetworkController, "getState">;
+  network: Pick<NetworkController, "getActiveChain">;
   accounts: Pick<AccountController, "getActivePointer">;
   approvals: Pick<ApprovalController, "requestApproval">;
   idGenerator?: () => string;

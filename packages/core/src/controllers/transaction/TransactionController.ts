@@ -66,7 +66,7 @@ const isSameState = (prev?: TransactionState, next?: TransactionState) => {
 
 export class InMemoryTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
-  #network: Pick<NetworkController, "getState">;
+  #network: Pick<NetworkController, "getActiveChain">;
   #accounts: Pick<AccountController, "getActivePointer">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #generateId: () => string;
@@ -102,14 +102,14 @@ export class InMemoryTransactionController implements TransactionController {
   }
 
   async submitTransaction(origin: string, request: TransactionRequest): Promise<TransactionMeta> {
-    const activeChain = this.#network.getState().active;
+    const activeChain = this.#network.getActiveChain();
+    const resolvedCaip2 = request.caip2 ?? activeChain.chainRef;
 
     if (!activeChain) {
       throw new Error("Active chain is required for transactions");
     }
 
     const id = this.#generateId();
-    const resolvedCaip2 = request.caip2 ?? activeChain.caip2;
 
     const timestamp = this.#now();
 

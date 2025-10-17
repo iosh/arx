@@ -28,6 +28,7 @@ import type {
   NetworkController,
   NetworkMessenger,
   NetworkMessengerTopic,
+  NetworkRpcStatus,
   NetworkState,
 } from "../controllers/network/types.js";
 import { InMemoryPermissionController } from "../controllers/permission/PermissionController.js";
@@ -64,23 +65,26 @@ type MessengerTopics = AccountMessengerTopics &
   UnlockMessengerTopics &
   ChainRegistryMessengerTopics;
 
-const DEFAULT_CHAIN: NetworkState["active"] = {
-  caip2: "eip155:1",
+const DEFAULT_CHAIN: ChainMetadata = {
+  chainRef: "eip155:1",
+  namespace: "eip155",
   chainId: "0x1",
-  rpcUrl: "https://eth.llamarpc.com",
-  name: "Ethereum Mainnet",
+  displayName: "Ethereum Mainnet",
   nativeCurrency: {
     name: "Ether",
     symbol: "ETH",
     decimals: 18,
   },
+  rpcEndpoints: [{ url: "https://eth.llamarpc.com", type: "public" }],
 };
-
-const DEFAULT_KNOWN_CHAINS: NetworkState["knownChains"] = [DEFAULT_CHAIN];
+const DEFAULT_RPC_STATUS: NetworkRpcStatus = { endpointIndex: 0 };
 
 const DEFAULT_NETWORK_STATE: NetworkState = {
-  active: DEFAULT_CHAIN,
-  knownChains: DEFAULT_KNOWN_CHAINS,
+  activeChain: DEFAULT_CHAIN.chainRef,
+  knownChains: [DEFAULT_CHAIN],
+  rpcStatus: {
+    [DEFAULT_CHAIN.chainRef]: DEFAULT_RPC_STATUS,
+  },
 };
 
 const DEFAULT_ACCOUNTS_STATE: MultiNamespaceAccountsState = {
@@ -89,7 +93,7 @@ const DEFAULT_ACCOUNTS_STATE: MultiNamespaceAccountsState = {
   },
   active: {
     namespace: "eip155",
-    chainRef: DEFAULT_CHAIN.caip2,
+    chainRef: DEFAULT_CHAIN.chainRef,
     address: null,
   },
 };
@@ -186,11 +190,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const networkController = new InMemoryNetworkController({
     messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
+    defaultRpcStatus: DEFAULT_RPC_STATUS,
   });
 
   const resolveNamespace = () => {
-    const active = networkController.getState().active;
-    const [namespace] = active.caip2.split(":");
+    const active = networkController.getActiveChain();
+    const [namespace] = active.chainRef.split(":");
     return namespace ?? EIP155_NAMESPACE;
   };
 
@@ -218,7 +223,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const transactionController = new InMemoryTransactionController({
     messenger: castMessenger<TransactionMessengerTopics>(messenger) as TransactionMessenger,
     network: {
-      getState: () => networkController.getState(),
+      getActiveChain: () => networkController.getActiveChain(),
     },
     accounts: {
       getActivePointer: () => accountController.getActivePointer(),

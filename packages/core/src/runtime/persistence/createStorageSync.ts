@@ -1,6 +1,6 @@
 import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { ApprovalState } from "../../controllers/approval/types.js";
-import type { NetworkState, PermissionsState } from "../../controllers/index.js";
+import type { NetworkRpcStatus, NetworkState, PermissionsState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
 import {
@@ -44,8 +44,27 @@ export const createStorageSync = ({
         version: NETWORK_SNAPSHOT_VERSION,
         updatedAt: now(),
         payload: {
-          active: { ...state.active },
-          knownChains: state.knownChains.map((chain) => ({ ...chain })),
+          activeChain: state.activeChain,
+          knownChains: state.knownChains.map((chain) => ({
+            ...chain,
+            rpcEndpoints: chain.rpcEndpoints.map((endpoint) => ({ ...endpoint })),
+            blockExplorers: chain.blockExplorers
+              ? chain.blockExplorers.map((explorer) => ({ ...explorer }))
+              : undefined,
+            icon: chain.icon ? { ...chain.icon } : undefined,
+            features: chain.features ? [...chain.features] : undefined,
+            tags: chain.tags ? [...chain.tags] : undefined,
+            extensions: chain.extensions ? { ...chain.extensions } : undefined,
+          })),
+          rpcStatus: Object.fromEntries(
+            Object.entries(state.rpcStatus).map(([chainRef, status]) => {
+              const clone: NetworkRpcStatus = { endpointIndex: status.endpointIndex };
+              if (status.lastError !== undefined) {
+                clone.lastError = status.lastError;
+              }
+              return [chainRef, clone];
+            }),
+          ),
         },
       };
 

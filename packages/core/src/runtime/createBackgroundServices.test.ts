@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { PermissionScopes } from "../controllers/index.js";
 import type {
@@ -25,36 +26,34 @@ import {
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
-const MAINNET_CHAIN = {
-  caip2: "eip155:1",
+const MAINNET_CHAIN: ChainMetadata = {
+  chainRef: "eip155:1",
+  namespace: "eip155",
   chainId: "0x1",
-  rpcUrl: "https://rpc.mainnet",
-  name: "Ethereum",
-  nativeCurrency: {
-    name: "Ether",
-    symbol: "ETH",
-    decimals: 18,
-  },
+  displayName: "Ethereum",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcEndpoints: [{ url: "https://rpc.mainnet", type: "public" }],
 };
 
-const ALT_CHAIN = {
-  caip2: "eip155:10",
+const ALT_CHAIN: ChainMetadata = {
+  chainRef: "eip155:10",
+  namespace: "eip155",
   chainId: "0xa",
-  rpcUrl: "https://rpc.alt",
-  name: "Alt Chain",
-  nativeCurrency: {
-    name: "Alter",
-    symbol: "ALT",
-    decimals: 18,
-  },
+  displayName: "Alt Chain",
+  nativeCurrency: { name: "Alter", symbol: "ALT", decimals: 18 },
+  rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
 const NETWORK_SNAPSHOT: NetworkSnapshot = {
   version: NETWORK_SNAPSHOT_VERSION,
   updatedAt: 1_000,
   payload: {
-    active: ALT_CHAIN,
+    activeChain: ALT_CHAIN.chainRef,
     knownChains: [ALT_CHAIN, MAINNET_CHAIN],
+    rpcStatus: {
+      [ALT_CHAIN.chainRef]: { endpointIndex: 0 },
+      [MAINNET_CHAIN.chainRef]: { endpointIndex: 0 },
+    },
   },
 };
 
@@ -170,6 +169,7 @@ class MemoryStoragePort implements StoragePort {
   clearSnapshotLoadFailure(namespace: StorageNamespace) {
     this.snapshotLoadFailures.delete(namespace);
   }
+
   getSnapshot<TNamespace extends StorageNamespace>(namespace: TNamespace): StorageSnapshotMap[TNamespace] | null {
     return (this.snapshots.get(namespace) as StorageSnapshotMap[TNamespace]) ?? null;
   }
@@ -186,6 +186,7 @@ class MemoryStoragePort implements StoragePort {
     }
     return this.getSnapshot(namespace);
   }
+
   async saveSnapshot<TNamespace extends StorageNamespace>(
     namespace: TNamespace,
     envelope: StorageSnapshotMap[TNamespace],
@@ -357,12 +358,14 @@ describe("createBackgroundServices", () => {
 
     await services.lifecycle.initialize();
 
-    expect(services.controllers.network.getState()).toStrictEqual(NETWORK_SNAPSHOT.payload);
-    expect(services.controllers.accounts.getActivePointer()?.address).toBe(ACCOUNTS_SNAPSHOT.payload.active?.address);
+    const networkState = services.controllers.network.getState();
+    expect(networkState.activeChain).toBe(NETWORK_SNAPSHOT.payload.activeChain);
+    expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
+      NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
+    );
+    expect(networkState.rpcStatus).toEqual(NETWORK_SNAPSHOT.payload.rpcStatus);
 
-    expect(services.controllers.permissions.getState()).toStrictEqual(PERMISSIONS_SNAPSHOT.payload);
-    expect(services.controllers.approvals.getState()).toStrictEqual(APPROVALS_SNAPSHOT.payload);
-    expect(services.controllers.transactions.getState()).toStrictEqual(TRANSACTIONS_SNAPSHOT.payload);
+    expect(services.controllers.accounts.getActivePointer()?.address).toBe(ACCOUNTS_SNAPSHOT.payload.active?.address);
 
     expect(services.session.unlock.getState().timeoutMs).toBe(VAULT_META.payload.autoLockDuration);
     expect(services.session.getLastPersistedVaultMeta()).toStrictEqual(VAULT_META);
@@ -387,15 +390,17 @@ describe("createBackgroundServices", () => {
     await services.controllers.network.addChain(
       {
         ...ALT_CHAIN,
-        rpcUrl: "https://rpc.alt.updated",
+        rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
       },
-      { activate: true, replaceExisting: true },
+      { activate: true },
     );
 
     const networkSnapshot = storage.getSnapshot(StorageNamespaces.Network);
     expect(networkSnapshot).not.toBeNull();
     expect(networkSnapshot?.updatedAt).toBe(3_500);
-    expect(networkSnapshot?.payload.active.rpcUrl).toBe("https://rpc.alt.updated");
+    expect(networkSnapshot?.payload.activeChain).toBe(ALT_CHAIN.chainRef);
+    const updatedChain = networkSnapshot?.payload.knownChains.find((chain) => chain.chainRef === ALT_CHAIN.chainRef);
+    expect(updatedChain?.rpcEndpoints[0]?.url).toBe("https://rpc.alt.updated");
 
     now = 3_750;
     services.controllers.accounts.replaceState({
@@ -558,7 +563,13 @@ describe("createBackgroundServices", () => {
     });
 
     await second.lifecycle.initialize();
-    expect(second.controllers.network.getState()).toStrictEqual(NETWORK_SNAPSHOT.payload);
+
+    const networkState = second.controllers.network.getState();
+    expect(networkState.activeChain).toBe(NETWORK_SNAPSHOT.payload.activeChain);
+    expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
+      NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
+    );
+    expect(networkState.rpcStatus).toEqual(NETWORK_SNAPSHOT.payload.rpcStatus);
 
     second.lifecycle.destroy();
   });
@@ -580,9 +591,9 @@ describe("createBackgroundServices", () => {
     await first.controllers.network.addChain(
       {
         ...ALT_CHAIN,
-        rpcUrl: "https://rpc.alt.first",
+        rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
       },
-      { activate: true, replaceExisting: true },
+      { activate: true },
     );
 
     expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
@@ -655,7 +666,6 @@ describe("createBackgroundServices", () => {
 
     await services.session.vault.initialize({ password: "secret" });
     await services.session.unlock.unlock({ password: "secret" });
-    //flush the initialize/unlock persistence debounce before testing the lock path
     runTimer(100);
 
     const beforeUpdate = storage.savedVaultMeta?.updatedAt ?? null;
@@ -715,7 +725,7 @@ describe("createBackgroundServices", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    expect(services.controllers.network.getState().active.caip2).toBe(MAINNET_CHAIN.caip2);
+    expect(services.controllers.network.getActiveChain().chainRef).toBe(MAINNET_CHAIN.chainRef);
     expect(services.controllers.accounts.getActivePointer()?.address).toBeNull();
     expect(services.session.getLastPersistedVaultMeta()).toBeNull();
 

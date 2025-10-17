@@ -1,4 +1,5 @@
-import type { Caip2ChainId, PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
+import type { Caip2ChainId } from "../chains/ids.js";
+import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type { HandlerControllers, MethodDefinition, Namespace, RpcRequest } from "./handlers/types.js";
 
@@ -20,8 +21,8 @@ const DEFINITIONS_BY_NAMESPACE: Record<Namespace, Record<string, MethodDefinitio
 };
 
 const resolveNamespace = (controllers: HandlerControllers): Namespace => {
-  const active = controllers.network.getState().active;
-  const [namespace] = active.caip2.split(":");
+  const activeChain = controllers.network.getActiveChain();
+  const [namespace] = activeChain.chainRef.split(":");
   return namespace ?? "eip155";
 };
 

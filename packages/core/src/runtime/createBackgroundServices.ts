@@ -1,5 +1,8 @@
 import { JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
+import { DEFAULT_CHAIN_METADATA } from "../chains/chains.seed.js";
+import type { ChainMetadata } from "../chains/metadata.js";
+import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { InMemoryMultiNamespaceAccountsController } from "../controllers/account/MultiNamespaceAccountsController.js";
 import type {
   AccountController,
@@ -14,6 +17,12 @@ import type {
   ApprovalMessengerTopics,
   ApprovalState,
 } from "../controllers/approval/types.js";
+import { InMemoryChainRegistryController } from "../controllers/chainRegistry/ChainRegistryController.js";
+import type {
+  ChainRegistryController,
+  ChainRegistryMessenger,
+  ChainRegistryMessengerTopics,
+} from "../controllers/chainRegistry/types.js";
 import { InMemoryNetworkController } from "../controllers/network/NetworkController.js";
 import type {
   NetworkController,
@@ -46,15 +55,6 @@ import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
-import { InMemoryChainRegistryController } from "../controllers/chainRegistry/ChainRegistryController.js";
-import type {
-  ChainRegistryController,
-  ChainRegistryMessenger,
-  ChainRegistryMessengerTopics,
-} from "../controllers/chainRegistry/types.js";
-import type { ChainRegistryPort } from "../chains/registryPort.js";
-import type { ChainMetadata } from "../chains/metadata.js";
-import { DEFAULT_CHAIN_METADATA } from "../chains/chains.seed.js";
 
 type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &

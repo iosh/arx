@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { PermissionScopes } from "../controllers/index.js";
 import type {
   ChainRegistryEntity,
@@ -22,8 +23,7 @@ import {
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import { createBackgroundServices, type CreateBackgroundServicesOptions } from "./createBackgroundServices.js";
-import type { ChainRegistryPort } from "../chains/registryPort.js";
+import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
 const MAINNET_CHAIN = {
   caip2: "eip155:1",

@@ -1,6 +1,6 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainRegistryEntity } from "../../storage/index.js";
-import type { Caip2ChainId } from "../network/types.js";
 
 export type ChainRegistryState = {
   chains: ChainRegistryEntity[];

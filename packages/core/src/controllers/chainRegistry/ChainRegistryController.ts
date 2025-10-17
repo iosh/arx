@@ -1,10 +1,10 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
 import {
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
   ChainRegistryEntitySchema,
 } from "../../storage/index.js";
-import type { Caip2ChainId } from "../network/types.js";
 import type {
   ChainRegistryController,
   ChainRegistryMessenger,

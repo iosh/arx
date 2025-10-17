@@ -1,5 +1,5 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
-import type { Caip2ChainId } from "../network/types.js";
 
 export type AccountAddress<T extends string = string> = T;
 

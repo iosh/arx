@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../controllers/index.js";
+import type { Caip2ChainId } from "./ids.js";
 
 const CAIP2_NAMESPACE_PATTERN = /^[a-z0-9]{3,8}$/;
 const CAIP2_REFERENCE_PATTERN = /^[a-zA-Z0-9-]{1,32}$/;

@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../controllers/index.js";
+import type { Caip2ChainId } from "./ids.js";
 
 export type NormalizeAddressParams = {
   chainRef: Caip2ChainId;

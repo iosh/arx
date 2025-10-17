@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Caip2ChainId, NativeCurrency } from "../controllers/index.js";
 import { type ParsedCaip2, parseCaip2 } from "./caip.js";
+import type { Caip2ChainId } from "./ids.js";
 
 export type ChainFeature = string;
 
@@ -22,6 +22,12 @@ export interface RpcEndpoint {
   type?: "public" | "authenticated" | "private" | undefined;
   weight?: number | undefined;
   headers?: Record<string, string> | undefined;
+}
+
+export interface NativeCurrency {
+  name: string;
+  symbol: string;
+  decimals: number;
 }
 
 export interface ChainMetadata {

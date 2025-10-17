@@ -1,5 +1,5 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry, parseCaip2 } from "../../chains/index.js";
-import type { Caip2ChainId } from "../network/types.js";
 import type {
   AccountAddress,
   AccountMessenger,

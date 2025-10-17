@@ -1,6 +1,6 @@
-import type { Caip2ChainId } from "../controllers/index.js";
 import { parseCaip2 } from "./caip.js";
 import { eip155Descriptor } from "./eip155/descriptor.js";
+import type { Caip2ChainId } from "./ids.js";
 import type { ChainDescriptor, FormatAddressParams, NormalizeAddressParams, NormalizedAddressResult } from "./types.js";
 export class ChainModuleRegistry {
   #descriptors = new Map<string, ChainDescriptor>();

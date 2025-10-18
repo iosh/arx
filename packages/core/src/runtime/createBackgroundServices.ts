@@ -1,6 +1,7 @@
 import { JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import { DEFAULT_CHAIN_METADATA } from "../chains/chains.seed.js";
+import type { Caip2ChainId } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { InMemoryMultiNamespaceAccountsController } from "../controllers/account/MultiNamespaceAccountsController.js";
@@ -65,25 +66,27 @@ type MessengerTopics = AccountMessengerTopics &
   UnlockMessengerTopics &
   ChainRegistryMessengerTopics;
 
-const DEFAULT_CHAIN: ChainMetadata = {
-  chainRef: "eip155:1",
-  namespace: "eip155",
-  chainId: "0x1",
-  displayName: "Ethereum Mainnet",
-  nativeCurrency: {
-    name: "Ether",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  rpcEndpoints: [{ url: "https://eth.llamarpc.com", type: "public" }],
-};
+const DEFAULT_CHAIN_SEED = DEFAULT_CHAIN_METADATA[0];
+if (!DEFAULT_CHAIN_SEED) {
+  throw new Error("DEFAULT_CHAIN_METADATA must include at least one chain definition");
+}
+const DEFAULT_CHAIN: ChainMetadata = DEFAULT_CHAIN_SEED;
 const DEFAULT_RPC_STATUS: NetworkRpcStatus = { endpointIndex: 0 };
+
+const cloneRpcStatus = (status: NetworkRpcStatus): NetworkRpcStatus => {
+  if (status.lastError === undefined) {
+    return { endpointIndex: status.endpointIndex };
+  }
+  return { endpointIndex: status.endpointIndex, lastError: status.lastError };
+};
+
+const createDefaultRpcStatus = (): NetworkRpcStatus => cloneRpcStatus(DEFAULT_RPC_STATUS);
 
 const DEFAULT_NETWORK_STATE: NetworkState = {
   activeChain: DEFAULT_CHAIN.chainRef,
   knownChains: [DEFAULT_CHAIN],
   rpcStatus: {
-    [DEFAULT_CHAIN.chainRef]: DEFAULT_RPC_STATUS,
+    [DEFAULT_CHAIN.chainRef]: createDefaultRpcStatus(),
   },
 };
 
@@ -305,6 +308,65 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           logger: storageLogger,
         });
 
+  let isHydrating = false;
+  let pendingNetworkRegistrySync = false;
+
+  const readRegistryChains = (): ChainMetadata[] => chainRegistryController.getChains().map((entry) => entry.metadata);
+
+  const selectActiveChainRef = (currentState: NetworkState, registryChains: ChainMetadata[]): Caip2ChainId => {
+    if (registryChains.length === 0) {
+      return currentState.activeChain;
+    }
+
+    const available = new Set(registryChains.map((chain) => chain.chainRef));
+    if (available.has(currentState.activeChain)) {
+      return currentState.activeChain;
+    }
+
+    if (available.has(DEFAULT_CHAIN.chainRef)) {
+      return DEFAULT_CHAIN.chainRef;
+    }
+
+    return registryChains[0]!.chainRef;
+  };
+
+  const synchronizeNetworkFromRegistry = () => {
+    const registryChains = readRegistryChains();
+    if (registryChains.length === 0) {
+      pendingNetworkRegistrySync = false;
+      return;
+    }
+
+    const currentState = networkController.getState();
+    const nextActive = selectActiveChainRef(currentState, registryChains);
+    const nextRpcStatus: Record<Caip2ChainId, NetworkRpcStatus> = {};
+
+    for (const chain of registryChains) {
+      const previousStatus = currentState.rpcStatus[chain.chainRef];
+      nextRpcStatus[chain.chainRef] = previousStatus ? cloneRpcStatus(previousStatus) : createDefaultRpcStatus();
+    }
+
+    networkController.replaceState({
+      activeChain: nextActive,
+      knownChains: registryChains,
+      rpcStatus: nextRpcStatus,
+    });
+
+    pendingNetworkRegistrySync = false;
+  };
+
+  const requestNetworkRegistrySync = () => {
+    if (isHydrating) {
+      pendingNetworkRegistrySync = true;
+      return;
+    }
+    synchronizeNetworkFromRegistry();
+  };
+
+  const unsubscribeRegistry = chainRegistryController.onStateChanged(() => {
+    requestNetworkRegistrySync();
+  });
+
   const resolveVault = (): VaultService => {
     const candidate = sessionOptions?.vault;
     if (!candidate) {
@@ -326,7 +388,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   let vaultInitializedAt: number | null = null;
   let lastPersistedVaultMeta: VaultMetaSnapshot | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
-  let isHydrating = false;
   let destroyed = false;
   let storageSyncAttached = false;
   let sessionListenersAttached = false;
@@ -620,17 +681,22 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       await chainRegistryController.whenReady();
 
       if (!storagePort || !hydrationEnabled) {
+        synchronizeNetworkFromRegistry();
         initialized = true;
         return;
       }
 
       isHydrating = true;
+      pendingNetworkRegistrySync = true;
       try {
         await hydrateControllers();
         await hydrateVaultMeta();
         initialized = true;
       } finally {
         isHydrating = false;
+        if (pendingNetworkRegistrySync) {
+          synchronizeNetworkFromRegistry();
+        }
       }
     })();
 
@@ -666,6 +732,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     destroyed = true;
     cleanupVaultPersistTimer();
     detachSessionListeners();
+    try {
+      unsubscribeRegistry();
+    } catch (error) {
+      storageLogger("lifecycle: failed to remove chain registry listener", error);
+    }
 
     if (storageSyncAttached) {
       storageSync?.detach();

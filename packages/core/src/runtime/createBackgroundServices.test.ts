@@ -245,19 +245,27 @@ class MemoryChainRegistryPort implements ChainRegistryPort {
   }
 }
 
-const createServices = (options: CreateBackgroundServicesOptions = {}) => {
+type TestServicesOptions = Omit<CreateBackgroundServicesOptions, "chainRegistry"> & {
+  chainRegistry?: Omit<NonNullable<CreateBackgroundServicesOptions["chainRegistry"]>, "port"> & {
+    port?: ChainRegistryPort;
+  };
+};
+
+const createServices = (options: TestServicesOptions = {}) => {
   const chainRegistryOptions = options.chainRegistry;
   if (chainRegistryOptions?.port) {
-    return createBackgroundServices(options);
+    return createBackgroundServices(options as CreateBackgroundServicesOptions);
   }
 
-  return createBackgroundServices({
+  const adapted: CreateBackgroundServicesOptions = {
     ...options,
     chainRegistry: {
       ...chainRegistryOptions,
       port: new MemoryChainRegistryPort(),
     },
-  });
+  };
+
+  return createBackgroundServices(adapted);
 };
 
 class FakeVault implements VaultService {
@@ -354,6 +362,7 @@ describe("createBackgroundServices", () => {
     const services = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
 
     await services.lifecycle.initialize();
@@ -381,19 +390,18 @@ describe("createBackgroundServices", () => {
     const services = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN] },
     });
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
     now = 3_500;
-    await services.controllers.network.addChain(
-      {
-        ...ALT_CHAIN,
-        rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
-      },
-      { activate: true },
-    );
+    await services.controllers.chainRegistry.upsertChain({
+      ...ALT_CHAIN,
+      rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
+    });
+    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
 
     const networkSnapshot = storage.getSnapshot(StorageNamespaces.Network);
     expect(networkSnapshot).not.toBeNull();
@@ -539,6 +547,7 @@ describe("createBackgroundServices", () => {
     const first = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
     await first.lifecycle.initialize();
     first.lifecycle.start();
@@ -560,6 +569,7 @@ describe("createBackgroundServices", () => {
     const second = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
 
     await second.lifecycle.initialize();
@@ -588,13 +598,11 @@ describe("createBackgroundServices", () => {
     await first.lifecycle.initialize();
     first.lifecycle.start();
 
-    await first.controllers.network.addChain(
-      {
-        ...ALT_CHAIN,
-        rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
-      },
-      { activate: true },
-    );
+    await first.controllers.chainRegistry.upsertChain({
+      ...ALT_CHAIN,
+      rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
+    });
+    await first.controllers.network.switchChain(ALT_CHAIN.chainRef);
 
     expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
 
@@ -604,6 +612,7 @@ describe("createBackgroundServices", () => {
     const second = createServices({
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN] },
     });
 
     await second.lifecycle.initialize();

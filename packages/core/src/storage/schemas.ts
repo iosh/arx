@@ -47,17 +47,65 @@ const nativeCurrencySchema = z.strictObject({
   symbol: nonEmptyStringSchema,
   decimals: z.number().int().min(0),
 });
+const httpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
+    error: "URL must use http or https scheme",
+  });
 
-const rpcStatusSchema = z.strictObject({
-  endpointIndex: z.number().int().min(0),
-  lastError: z.string().optional(),
+const rpcEndpointInfoSchema = z.strictObject({
+  index: z.number().int().min(0),
+  url: httpUrlSchema,
+  type: z.enum(["public", "authenticated", "private"]).optional(),
+  weight: z.number().positive().optional(),
+  headers: z.record(nonEmptyStringSchema, z.string()).optional(),
 });
+
+const rpcErrorSnapshotSchema = z.strictObject({
+  message: nonEmptyStringSchema,
+  code: z.union([z.number(), z.string()]).optional(),
+  data: z.unknown().optional(),
+  capturedAt: epochMillisecondsSchema,
+});
+
+const rpcEndpointHealthSchema = z.strictObject({
+  index: z.number().int().min(0),
+  successCount: z.number().int().min(0),
+  failureCount: z.number().int().min(0),
+  consecutiveFailures: z.number().int().min(0),
+  lastError: rpcErrorSnapshotSchema.optional(),
+  lastFailureAt: epochMillisecondsSchema.optional(),
+  cooldownUntil: epochMillisecondsSchema.optional(),
+});
+
+const rpcStrategySchema = z.strictObject({
+  id: nonEmptyStringSchema,
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+const rpcEndpointStateSchema = z
+  .strictObject({
+    activeIndex: z.number().int().min(0),
+    endpoints: z.array(rpcEndpointInfoSchema).min(1),
+    health: z.array(rpcEndpointHealthSchema),
+    strategy: rpcStrategySchema,
+    lastUpdatedAt: epochMillisecondsSchema,
+  })
+  .refine((value) => value.health.length === value.endpoints.length, {
+    error: "Health list must match endpoint list",
+    path: ["health"],
+  })
+  .refine((value) => value.activeIndex < value.endpoints.length, {
+    error: "activeIndex must reference a declared endpoint",
+    path: ["activeIndex"],
+  });
 
 const networkStateSchema = z
   .strictObject({
     activeChain: caip2ChainIdSchema,
     knownChains: z.array(chainMetadataSchema).min(1),
-    rpcStatus: z.record(caip2ChainIdSchema, rpcStatusSchema).default({}),
+    rpc: z.record(caip2ChainIdSchema, rpcEndpointStateSchema),
   })
   .refine((value) => value.knownChains.some((chain) => chain.chainRef === value.activeChain), {
     error: "Active chain must appear in knownChains",
@@ -72,7 +120,11 @@ const networkStateSchema = z
       error: "Duplicate CAIP-2 identifiers are not allowed",
       path: ["knownChains"],
     },
-  );
+  )
+  .refine((value) => value.knownChains.every((chain) => value.rpc[chain.chainRef] !== undefined), {
+    error: "RPC state must be provided for each known chain",
+    path: ["rpc"],
+  });
 const PERMISSION_SCOPE_VALUES = [
   PermissionScopes.Basic,
   PermissionScopes.Accounts,
@@ -322,5 +374,9 @@ export {
   transactionMetaSchema as TransactionMetaSchema,
   transactionRequestSchema as TransactionRequestSchema,
   transactionStateSchema as TransactionStateSchema,
-  rpcStatusSchema as RpcStatusSchema,
+  rpcEndpointInfoSchema as RpcEndpointInfoSchema,
+  rpcEndpointHealthSchema as RpcEndpointHealthSchema,
+  rpcEndpointStateSchema as RpcEndpointStateSchema,
+  rpcStrategySchema as RpcStrategySchema,
+  rpcErrorSnapshotSchema as RpcErrorSnapshotSchema,
 };

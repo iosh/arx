@@ -1,6 +1,6 @@
 import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { ApprovalState } from "../../controllers/approval/types.js";
-import type { NetworkRpcStatus, NetworkState, PermissionsState } from "../../controllers/index.js";
+import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
 import {
@@ -35,6 +35,31 @@ export const createStorageSync = ({
   now = Date.now,
   logger = console.warn,
 }: RegisterStorageSyncOptions) => {
+  const cloneRpcEndpointState = (state: RpcEndpointState): RpcEndpointState => ({
+    activeIndex: state.activeIndex,
+    endpoints: state.endpoints.map((endpoint) => ({
+      index: endpoint.index,
+      url: endpoint.url,
+      type: endpoint.type,
+      weight: endpoint.weight,
+      headers: endpoint.headers ? { ...endpoint.headers } : undefined,
+    })),
+    health: state.health.map((entry) => ({
+      index: entry.index,
+      successCount: entry.successCount,
+      failureCount: entry.failureCount,
+      consecutiveFailures: entry.consecutiveFailures,
+      lastError: entry.lastError ? { ...entry.lastError } : undefined,
+      lastFailureAt: entry.lastFailureAt,
+      cooldownUntil: entry.cooldownUntil,
+    })),
+    strategy: {
+      id: state.strategy.id,
+      options: state.strategy.options ? { ...state.strategy.options } : undefined,
+    },
+    lastUpdatedAt: state.lastUpdatedAt,
+  });
+
   const subscriptions: Array<() => void> = [];
 
   const attach = () => {
@@ -56,14 +81,11 @@ export const createStorageSync = ({
             tags: chain.tags ? [...chain.tags] : undefined,
             extensions: chain.extensions ? { ...chain.extensions } : undefined,
           })),
-          rpcStatus: Object.fromEntries(
-            Object.entries(state.rpcStatus).map(([chainRef, status]) => {
-              const clone: NetworkRpcStatus = { endpointIndex: status.endpointIndex };
-              if (status.lastError !== undefined) {
-                clone.lastError = status.lastError;
-              }
-              return [chainRef, clone];
-            }),
+          rpc: Object.fromEntries(
+            Object.entries(state.rpc).map(([chainRef, endpointState]) => [
+              chainRef,
+              cloneRpcEndpointState(endpointState),
+            ]),
           ),
         },
       };

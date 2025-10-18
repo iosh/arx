@@ -3,276 +3,185 @@ import type { ChainIcon, ChainMetadata, ExplorerLink, RpcEndpoint } from "../../
 import type {
   NetworkController,
   NetworkMessenger,
-  NetworkRpcStatus,
-  NetworkRpcStatusUpdate,
   NetworkState,
+  RpcEndpointChange,
+  RpcEndpointHealth,
+  RpcEndpointInfo,
+  RpcEndpointState,
+  RpcEventLogger,
+  RpcLogEvent,
+  RpcOutcomeReport,
+  RpcStrategyConfig,
 } from "./types.js";
 
 const NETWORK_STATE_TOPIC = "network:stateChanged";
 const NETWORK_CHAIN_TOPIC = "network:chainChanged";
-const NETWORK_RPC_STATUS_TOPIC = "network:rpcStatusChanged";
+const NETWORK_RPC_ENDPOINT_TOPIC = "network:rpcEndpointChanged";
+const NETWORK_RPC_HEALTH_TOPIC = "network:rpcHealthChanged";
 
-export type NetworkControllerOptions = {
+const DEFAULT_STRATEGY: RpcStrategyConfig = { id: "round-robin" };
+
+const defaultLogger: RpcEventLogger = () => {};
+
+type NetworkControllerOptions = {
   messenger: NetworkMessenger;
   initialState: NetworkState;
-  defaultRpcStatus?: NetworkRpcStatus;
+  defaultStrategy?: RpcStrategyConfig;
+  now?: () => number;
+  logger?: RpcEventLogger;
+  defaultCooldownMs?: number;
+};
+
+type ChainRuntime = {
+  metadata: ChainMetadata;
+  strategy: RpcStrategyConfig;
+  endpoints: RpcEndpoint[];
+  health: RpcEndpointHealth[];
+  activeIndex: number;
+  lastUpdatedAt: number;
+};
+
+const cloneHeaders = (headers?: Record<string, string>) => {
+  if (!headers) {
+    return undefined;
+  }
+  return Object.fromEntries(Object.entries(headers));
 };
 
 const cloneRpcEndpoint = (endpoint: RpcEndpoint): RpcEndpoint => {
   const clone: RpcEndpoint = { url: endpoint.url };
-  if (endpoint.type !== undefined) clone.type = endpoint.type;
+  if (endpoint.type) clone.type = endpoint.type;
   if (endpoint.weight !== undefined) clone.weight = endpoint.weight;
-  if (endpoint.headers !== undefined) {
-    const headers: Record<string, string> = {};
-    for (const [key, value] of Object.entries(endpoint.headers)) {
-      headers[key] = value;
-    }
-    clone.headers = headers;
-  }
+  if (endpoint.headers) clone.headers = cloneHeaders(endpoint.headers);
   return clone;
 };
 
 const cloneExplorerLink = (link: ExplorerLink): ExplorerLink => {
   const clone: ExplorerLink = { type: link.type, url: link.url };
-  if (link.title !== undefined) clone.title = link.title;
+  if (link.title) clone.title = link.title;
   return clone;
 };
 
-const cloneIcon = (icon: ChainIcon): ChainIcon => {
-  const clone: ChainIcon = { url: icon.url };
-  if (icon.width !== undefined) clone.width = icon.width;
-  if (icon.height !== undefined) clone.height = icon.height;
-  if (icon.format !== undefined) clone.format = icon.format;
-  return clone;
-};
-
-const makeExtensionsClone = (extensions?: Record<string, unknown>) => {
-  if (!extensions) return undefined;
-  const entries = Object.entries(extensions).sort(([a], [b]) => a.localeCompare(b));
-  if (entries.length === 0) return undefined;
-  return Object.fromEntries(entries);
-};
-
-const cloneMetadata = (metadata: ChainMetadata): ChainMetadata => {
-  const clone: ChainMetadata = {
-    chainRef: metadata.chainRef,
-    namespace: metadata.namespace,
-    displayName: metadata.displayName,
-    nativeCurrency: {
-      name: metadata.nativeCurrency.name,
-      symbol: metadata.nativeCurrency.symbol,
-      decimals: metadata.nativeCurrency.decimals,
-    },
-    rpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
+const cloneIcon = (icon: ChainIcon | undefined) => {
+  if (!icon) return undefined;
+  return {
+    url: icon.url,
+    width: icon.width,
+    height: icon.height,
+    format: icon.format,
   };
-
-  if (metadata.chainId !== undefined) clone.chainId = metadata.chainId;
-  if (metadata.shortName !== undefined) clone.shortName = metadata.shortName;
-  if (metadata.description !== undefined) clone.description = metadata.description;
-  if (metadata.blockExplorers) clone.blockExplorers = metadata.blockExplorers.map(cloneExplorerLink);
-  if (metadata.icon) clone.icon = cloneIcon(metadata.icon);
-  if (metadata.features) clone.features = [...metadata.features];
-  if (metadata.tags) clone.tags = [...metadata.tags];
-  const extensions = makeExtensionsClone(metadata.extensions);
-  if (extensions) clone.extensions = extensions;
-
-  return clone;
 };
 
-const cloneRpcStatus = (status: NetworkRpcStatus): NetworkRpcStatus => {
-  if (status.lastError === undefined) {
-    return { endpointIndex: status.endpointIndex };
-  }
-  return { endpointIndex: status.endpointIndex, lastError: status.lastError };
-};
-
-const serializeRecord = (record?: Record<string, unknown>): string => {
-  if (!record) return "";
-  const entries = Object.entries(record).sort(([a], [b]) => a.localeCompare(b));
-  return JSON.stringify(entries);
-};
-
-const isSameStringRecord = (prev?: Record<string, string>, next?: Record<string, string>) => {
-  return (
-    serializeRecord(prev as Record<string, unknown> | undefined) ===
-    serializeRecord(next as Record<string, unknown> | undefined)
-  );
-};
-
-const compareOptionalArray = <T>(prev?: readonly T[], next?: readonly T[]) => {
-  if (!prev && !next) return true;
-  if (!prev || !next) return false;
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i += 1) {
-    if (prev[i] !== next[i]) return false;
-  }
-  return true;
-};
-
-const compareExplorers = (prev?: readonly ExplorerLink[], next?: readonly ExplorerLink[]) => {
-  if (!prev && !next) return true;
-  if (!prev || !next) return false;
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i += 1) {
-    const prevExplorer = prev[i]!;
-    const nextExplorer = next[i]!;
-    if (prevExplorer.type !== nextExplorer.type) return false;
-    if (prevExplorer.url !== nextExplorer.url) return false;
-    if (prevExplorer.title !== nextExplorer.title) return false;
-  }
-  return true;
-};
-
-const compareIcon = (prev?: ChainIcon, next?: ChainIcon) => {
-  if (!prev && !next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.url === next.url && prev.width === next.width && prev.height === next.height && prev.format === next.format
-  );
-};
-
-const compareExtensions = (prev?: Record<string, unknown>, next?: Record<string, unknown>) => {
-  return serializeRecord(prev) === serializeRecord(next);
-};
-
-const isSameMetadata = (prev?: ChainMetadata, next?: ChainMetadata) => {
-  if (!prev || !next) return false;
-  if (prev === next) return true;
-
-  if (
-    prev.chainRef !== next.chainRef ||
-    prev.namespace !== next.namespace ||
-    prev.chainId !== next.chainId ||
-    prev.displayName !== next.displayName ||
-    prev.shortName !== next.shortName ||
-    prev.description !== next.description
-  ) {
-    return false;
-  }
-
-  if (
-    prev.nativeCurrency.name !== next.nativeCurrency.name ||
-    prev.nativeCurrency.symbol !== next.nativeCurrency.symbol ||
-    prev.nativeCurrency.decimals !== next.nativeCurrency.decimals
-  ) {
-    return false;
-  }
-
-  if (prev.rpcEndpoints.length !== next.rpcEndpoints.length) return false;
-  for (let i = 0; i < prev.rpcEndpoints.length; i += 1) {
-    const prevEndpoint = prev.rpcEndpoints[i]!;
-    const nextEndpoint = next.rpcEndpoints[i]!;
-    if (prevEndpoint.url !== nextEndpoint.url) return false;
-    if (prevEndpoint.type !== nextEndpoint.type) return false;
-    if (prevEndpoint.weight !== nextEndpoint.weight) return false;
-    if (!isSameStringRecord(prevEndpoint.headers, nextEndpoint.headers)) return false;
-  }
-
-  if (!compareExplorers(prev.blockExplorers, next.blockExplorers)) return false;
-  if (!compareIcon(prev.icon, next.icon)) return false;
-  if (!compareOptionalArray(prev.features, next.features)) return false;
-  if (!compareOptionalArray(prev.tags, next.tags)) return false;
-  if (!compareExtensions(prev.extensions, next.extensions)) return false;
-
-  return true;
-};
+const cloneMetadata = (metadata: ChainMetadata): ChainMetadata => ({
+  chainRef: metadata.chainRef,
+  namespace: metadata.namespace,
+  chainId: metadata.chainId,
+  displayName: metadata.displayName,
+  shortName: metadata.shortName,
+  description: metadata.description,
+  nativeCurrency: {
+    name: metadata.nativeCurrency.name,
+    symbol: metadata.nativeCurrency.symbol,
+    decimals: metadata.nativeCurrency.decimals,
+  },
+  rpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
+  blockExplorers: metadata.blockExplorers?.map(cloneExplorerLink),
+  icon: cloneIcon(metadata.icon),
+  features: metadata.features ? [...metadata.features] : undefined,
+  tags: metadata.tags ? [...metadata.tags] : undefined,
+  extensions: metadata.extensions ? { ...metadata.extensions } : undefined,
+});
 
 const sortChains = (chains: ChainMetadata[]) => {
   return [...chains].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
 };
 
-const isSameMetadataList = (prev: ChainMetadata[], next: ChainMetadata[]) => {
-  if (prev.length !== next.length) return false;
-  const sortedPrev = sortChains(prev);
-  const sortedNext = sortChains(next);
+const cloneHealth = (health: RpcEndpointHealth[]): RpcEndpointHealth[] =>
+  health.map((entry) => ({
+    index: entry.index,
+    successCount: entry.successCount,
+    failureCount: entry.failureCount,
+    consecutiveFailures: entry.consecutiveFailures,
+    lastError: entry.lastError ? { ...entry.lastError } : undefined,
+    lastFailureAt: entry.lastFailureAt,
+    cooldownUntil: entry.cooldownUntil,
+  }));
 
-  for (let i = 0; i < sortedPrev.length; i += 1) {
-    if (!isSameMetadata(sortedPrev[i], sortedNext[i])) return false;
-  }
+const buildEndpointInfoList = (endpoints: RpcEndpoint[]): RpcEndpointInfo[] =>
+  endpoints.map((endpoint, index) => ({
+    index,
+    url: endpoint.url,
+    type: endpoint.type,
+    weight: endpoint.weight,
+    headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
+  }));
 
-  return true;
-};
-
-const isSameRpcStatus = (prev?: NetworkRpcStatus, next?: NetworkRpcStatus) => {
-  if (!prev || !next) return false;
-  return prev.endpointIndex === next.endpointIndex && prev.lastError === next.lastError;
-};
-
-const isSameRpcStatusRecord = (
-  prev: Record<Caip2ChainId, NetworkRpcStatus>,
-  next: Record<Caip2ChainId, NetworkRpcStatus>,
-) => {
-  const prevKeys = Object.keys(prev).sort();
-  const nextKeys = Object.keys(next).sort();
-  if (prevKeys.length !== nextKeys.length) return false;
-  for (let i = 0; i < prevKeys.length; i += 1) {
-    if (prevKeys[i] !== nextKeys[i]) return false;
-    const key = prevKeys[i]!;
-    if (!isSameRpcStatus(prev[key], next[key])) return false;
-  }
-  return true;
-};
-
-const isSameRpcStatusUpdate = (prev?: NetworkRpcStatusUpdate, next?: NetworkRpcStatusUpdate) => {
-  if (!prev || !next) return false;
-  if (prev.chainRef !== next.chainRef) return false;
-  return isSameRpcStatus(prev.status, next.status);
-};
-
-const isSameNetworkState = (prev?: NetworkState, next?: NetworkState) => {
-  if (!prev || !next) return false;
-  if (prev.activeChain !== next.activeChain) return false;
-  if (!isSameMetadataList(prev.knownChains, next.knownChains)) return false;
-  if (!isSameRpcStatusRecord(prev.rpcStatus, next.rpcStatus)) return false;
-  return true;
-};
-
-const buildStateSnapshot = (
-  activeChain: Caip2ChainId,
-  chains: Map<Caip2ChainId, ChainMetadata>,
-  rpcStatus: Map<Caip2ChainId, NetworkRpcStatus>,
-): NetworkState => {
-  const knownChains = sortChains(Array.from(chains.values(), (metadata) => cloneMetadata(metadata)));
-  const statusEntries = Array.from(
-    rpcStatus.entries(),
-    ([chainRef, status]) => [chainRef, cloneRpcStatus(status)] as const,
-  ).sort((a, b) => a[0].localeCompare(b[0]));
-  return {
-    activeChain,
-    knownChains,
-    rpcStatus: Object.fromEntries(statusEntries),
-  };
+const normalizeStrategy = (strategy?: RpcStrategyConfig): RpcStrategyConfig => {
+  if (!strategy) return { ...DEFAULT_STRATEGY };
+  return { id: strategy.id, options: strategy.options ? { ...strategy.options } : undefined };
 };
 
 export class InMemoryNetworkController implements NetworkController {
   #messenger: NetworkMessenger;
+  #chains = new Map<Caip2ChainId, ChainRuntime>();
   #activeChain: Caip2ChainId;
-  #chains = new Map<Caip2ChainId, ChainMetadata>();
-  #rpcStatus = new Map<Caip2ChainId, NetworkRpcStatus>();
-  #defaultRpcStatus: NetworkRpcStatus;
+  #defaultStrategy: RpcStrategyConfig;
+  #now: () => number;
+  #logger: RpcEventLogger;
+  #defaultCooldownMs: number;
 
-  constructor({ messenger, initialState, defaultRpcStatus }: NetworkControllerOptions) {
+  constructor({
+    messenger,
+    initialState,
+    defaultStrategy,
+    now = Date.now,
+    logger = defaultLogger,
+    defaultCooldownMs = 5_000,
+  }: NetworkControllerOptions) {
     this.#messenger = messenger;
-    this.#defaultRpcStatus = defaultRpcStatus ? cloneRpcStatus(defaultRpcStatus) : { endpointIndex: 0 };
+    this.#defaultStrategy = normalizeStrategy(defaultStrategy);
+    this.#now = now;
+    this.#logger = logger;
+    this.#defaultCooldownMs = defaultCooldownMs;
     this.#activeChain = initialState.activeChain;
+
     this.#applyState(initialState);
     this.#publishState(true);
-    for (const [chainRef, status] of this.#rpcStatus.entries()) {
-      this.#publishRpcStatus(chainRef, status, true);
-    }
   }
 
   getState(): NetworkState {
-    return buildStateSnapshot(this.#activeChain, this.#chains, this.#rpcStatus);
+    return this.#buildStateSnapshot();
   }
 
   getActiveChain(): ChainMetadata {
-    return cloneMetadata(this.#requireChain(this.#activeChain));
+    return cloneMetadata(this.#requireRuntime(this.#activeChain).metadata);
   }
 
   getChain(chainRef: Caip2ChainId): ChainMetadata | null {
-    const chain = this.#chains.get(chainRef);
-    return chain ? cloneMetadata(chain) : null;
+    const runtime = this.#chains.get(chainRef);
+    return runtime ? cloneMetadata(runtime.metadata) : null;
+  }
+
+  getEndpointState(chainRef: Caip2ChainId): RpcEndpointState | null {
+    const runtime = this.#chains.get(chainRef);
+    if (!runtime) return null;
+    return this.#buildEndpointState(chainRef, runtime);
+  }
+
+  getActiveEndpoint(chainRef?: Caip2ChainId): RpcEndpointInfo {
+    const runtime = this.#requireRuntime(chainRef ?? this.#activeChain);
+    const index = runtime.activeIndex;
+    const endpoint = runtime.endpoints[index];
+    if (!endpoint) {
+      throw new Error(`Active endpoint index ${index} is out of bounds for ${runtime.metadata.chainRef}`);
+    }
+    return {
+      index,
+      url: endpoint.url,
+      type: endpoint.type,
+      weight: endpoint.weight,
+      headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
+    };
   }
 
   onStateChanged(handler: (state: NetworkState) => void): () => void {
@@ -283,118 +192,434 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_CHAIN_TOPIC, handler);
   }
 
-  onRpcStatusChanged(handler: (update: NetworkRpcStatusUpdate) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_RPC_STATUS_TOPIC, handler);
+  onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void {
+    return this.#messenger.subscribe(NETWORK_RPC_ENDPOINT_TOPIC, handler);
+  }
+
+  onRpcHealthChanged(handler: (update: { chainRef: Caip2ChainId; state: RpcEndpointState }) => void): () => void {
+    return this.#messenger.subscribe(NETWORK_RPC_HEALTH_TOPIC, handler);
   }
 
   async switchChain(target: Caip2ChainId): Promise<ChainMetadata> {
     if (this.#activeChain === target) {
       return this.getActiveChain();
     }
-    const chain = this.#chains.get(target);
-    if (!chain) {
+    const runtime = this.#chains.get(target);
+    if (!runtime) {
       throw new Error(`Unknown chain: ${target}`);
     }
     this.#activeChain = target;
     this.#publishState();
-    return cloneMetadata(chain);
+    return cloneMetadata(runtime.metadata);
   }
 
-  async addChain(chain: ChainMetadata, options?: { activate?: boolean }): Promise<ChainMetadata> {
-    const incoming = cloneMetadata(chain);
+  async addChain(
+    metadata: ChainMetadata,
+    options?: { activate?: boolean; strategy?: RpcStrategyConfig },
+  ): Promise<ChainMetadata> {
+    const incoming = cloneMetadata(metadata);
     const existing = this.#chains.get(incoming.chainRef);
-    const metadataChanged = !existing || !isSameMetadata(existing, incoming);
+    const strategy = normalizeStrategy(options?.strategy ?? existing?.strategy ?? this.#defaultStrategy);
+    const runtime = this.#createRuntime(incoming, strategy, existing);
+    this.#chains.set(incoming.chainRef, runtime);
 
-    this.#chains.set(incoming.chainRef, incoming);
-
-    if (!this.#rpcStatus.has(incoming.chainRef)) {
-      this.#rpcStatus.set(incoming.chainRef, this.#createDefaultRpcStatus());
-    }
-
-    const shouldActivate = options?.activate ?? this.#activeChain === incoming.chainRef;
-    const activeChanged = shouldActivate && this.#activeChain !== incoming.chainRef;
-
-    if (activeChanged) {
+    if (options?.activate || this.#chains.size === 1) {
       this.#activeChain = incoming.chainRef;
     }
 
-    if (metadataChanged || activeChanged) {
-      this.#publishState();
-    }
-
-    return cloneMetadata(incoming);
+    this.#publishState();
+    return cloneMetadata(runtime.metadata);
   }
 
-  updateRpcStatus(chainRef: Caip2ChainId, status: NetworkRpcStatus): void {
+  async removeChain(chainRef: Caip2ChainId): Promise<void> {
     if (!this.#chains.has(chainRef)) {
-      throw new Error(`Cannot update RPC status for unknown chain: ${chainRef}`);
+      return;
     }
-    const previous = this.#rpcStatus.get(chainRef);
-    const incoming = cloneRpcStatus(status);
+    this.#chains.delete(chainRef);
+    if (this.#chains.size === 0) {
+      throw new Error("NetworkController requires at least one registered chain");
+    }
+    if (this.#activeChain === chainRef) {
+      const [first] = this.#chains.keys();
+      this.#activeChain = first ?? Array.from(this.#chains.keys())[0]!;
+    }
+    this.#publishState();
+  }
 
-    if (previous && isSameRpcStatus(previous, incoming)) {
+  reportRpcOutcome(chainRef: Caip2ChainId, outcome: RpcOutcomeReport): void {
+    const runtime = this.#requireRuntime(chainRef);
+    if (runtime.endpoints.length === 0) {
+      throw new Error(`Cannot report RPC outcome for chain ${chainRef} without endpoints`);
+    }
+
+    const now = this.#now();
+    const targetIndex = this.#resolveEndpointIndex(runtime, outcome.endpointIndex);
+    runtime.activeIndex = targetIndex;
+    const health = runtime.health[targetIndex]!;
+
+    let endpointChanged = false;
+    const previousEndpoint = this.#buildEndpointInfo(chainRef, runtime, targetIndex);
+
+    if (outcome.success) {
+      const previousConsecutiveFailures = health.consecutiveFailures;
+      const cumulativeFailures = health.failureCount;
+      const lastError = health.lastError ? { ...health.lastError } : undefined;
+      const lastFailureAt = health.lastFailureAt;
+
+      health.successCount += 1;
+      health.consecutiveFailures = 0;
+      health.lastError = undefined;
+      health.lastFailureAt = undefined;
+      health.cooldownUntil = undefined;
+      runtime.lastUpdatedAt = now;
+      this.#publishState();
+      this.#publishRpcHealth(chainRef, runtime);
+      if (cumulativeFailures > 0) {
+        const recoveryMs = typeof lastFailureAt === "number" ? Math.max(0, now - lastFailureAt) : undefined;
+        const recoveryEvent: RpcLogEvent = {
+          level: "info",
+          event: "rpcRecovery",
+          chainRef,
+          endpoint: previousEndpoint,
+          ...(previousConsecutiveFailures > 0 ? { consecutiveFailures: previousConsecutiveFailures } : {}),
+          failureCount: cumulativeFailures,
+          ...(typeof recoveryMs === "number" ? { recoveryMs } : {}),
+          ...(lastError
+            ? {
+                error: {
+                  message: lastError.message,
+                  code: lastError.code,
+                  data: lastError.data,
+                },
+              }
+            : {}),
+        };
+        this.#logger(recoveryEvent);
+      }
       return;
     }
 
-    this.#rpcStatus.set(chainRef, incoming);
-    this.#publishRpcStatus(chainRef, incoming);
+    health.failureCount += 1;
+    health.consecutiveFailures += 1;
+    health.lastError = {
+      message: outcome.error.message,
+      code: outcome.error.code,
+      data: outcome.error.data,
+      capturedAt: now,
+    };
+    health.lastFailureAt = now;
+    const cooldown = outcome.cooldownMs ?? this.#defaultCooldownMs;
+    if (cooldown > 0) {
+      health.cooldownUntil = now + cooldown;
+    }
+
+    const nextIndex = this.#selectNextEndpoint(runtime, now, targetIndex);
+    if (nextIndex !== runtime.activeIndex) {
+      runtime.activeIndex = nextIndex;
+      endpointChanged = true;
+    }
+    runtime.lastUpdatedAt = now;
+
+    const nextEndpoint = this.#buildEndpointInfo(chainRef, runtime, runtime.activeIndex);
+
+    this.#logger({
+      level: endpointChanged ? "warn" : "info",
+      event: "rpcFailure",
+      chainRef,
+      endpoint: previousEndpoint,
+      nextEndpoint,
+      consecutiveFailures: health.consecutiveFailures,
+      error: {
+        message: outcome.error.message,
+        code: outcome.error.code,
+        data: outcome.error.data,
+      },
+    });
+
+    this.#publishState();
+    this.#publishRpcHealth(chainRef, runtime);
+    if (endpointChanged) {
+      this.#publishEndpointChange(chainRef, previousEndpoint, nextEndpoint);
+    }
+  }
+
+  setStrategy(chainRef: Caip2ChainId, strategy: RpcStrategyConfig): void {
+    const runtime = this.#requireRuntime(chainRef);
+    runtime.strategy = normalizeStrategy(strategy);
+    runtime.lastUpdatedAt = this.#now();
+    this.#logger({
+      level: "info",
+      event: "strategyChanged",
+      chainRef,
+      strategy: runtime.strategy,
+    });
+    this.#publishState();
+  }
+
+  async syncChain(metadata: ChainMetadata): Promise<void> {
+    const runtime = this.#requireRuntime(metadata.chainRef);
+    const updated = cloneMetadata(metadata);
+    const currentEndpoints = runtime.endpoints.map((endpoint) => endpoint.url);
+    const nextEndpoints = updated.rpcEndpoints.map((endpoint) => endpoint.url);
+    const endpointsChanged =
+      currentEndpoints.length !== nextEndpoints.length ||
+      currentEndpoints.some((url, index) => url !== nextEndpoints[index]);
+
+    runtime.metadata = updated;
+    if (endpointsChanged) {
+      runtime.endpoints = updated.rpcEndpoints.map(cloneRpcEndpoint);
+      runtime.health = this.#initialiseHealth(runtime.endpoints.length);
+      runtime.activeIndex = Math.min(runtime.activeIndex, runtime.endpoints.length - 1);
+      runtime.lastUpdatedAt = this.#now();
+      this.#logger({
+        level: "info",
+        event: "endpointsUpdated",
+        chainRef: metadata.chainRef,
+        strategy: runtime.strategy,
+      });
+    }
     this.#publishState();
   }
 
   replaceState(state: NetworkState): void {
+    this.#activeChain = state.activeChain;
     this.#applyState(state);
     this.#publishState();
-    for (const [chainRef, status] of this.#rpcStatus.entries()) {
-      this.#publishRpcStatus(chainRef, status);
-    }
   }
 
   #applyState(state: NetworkState) {
-    const sortedChains = sortChains(state.knownChains.map(cloneMetadata));
-    const chainMap = new Map<Caip2ChainId, ChainMetadata>();
-    for (const metadata of sortedChains) {
-      chainMap.set(metadata.chainRef, metadata);
+    if (!state.knownChains.some((chain) => chain.chainRef === state.activeChain)) {
+      throw new Error(`Active chain ${state.activeChain} must be present in knownChains`);
     }
 
-    if (!chainMap.has(state.activeChain)) {
-      throw new Error(`Active chain ${state.activeChain} must be included in knownChains`);
-    }
-
-    const statusMap = new Map<Caip2ChainId, NetworkRpcStatus>();
-    for (const chainRef of chainMap.keys()) {
-      const status = state.rpcStatus[chainRef];
-      statusMap.set(chainRef, status ? cloneRpcStatus(status) : this.#createDefaultRpcStatus());
+    const chainMap = new Map<Caip2ChainId, ChainRuntime>();
+    for (const metadata of sortChains(state.knownChains.map(cloneMetadata))) {
+      const snapshot = state.rpc[metadata.chainRef];
+      const strategy = normalizeStrategy(snapshot?.strategy ?? this.#defaultStrategy);
+      const runtime = this.#createRuntimeFromSnapshot(metadata, strategy, snapshot);
+      chainMap.set(metadata.chainRef, runtime);
     }
 
     this.#chains = chainMap;
-    this.#rpcStatus = statusMap;
     this.#activeChain = state.activeChain;
   }
 
-  #createDefaultRpcStatus(): NetworkRpcStatus {
-    return cloneRpcStatus(this.#defaultRpcStatus);
+  #createRuntime(metadata: ChainMetadata, strategy: RpcStrategyConfig, previous?: ChainRuntime): ChainRuntime {
+    const endpoints = metadata.rpcEndpoints.map(cloneRpcEndpoint);
+    if (endpoints.length === 0) {
+      throw new Error(`Chain ${metadata.chainRef} must expose at least one RPC endpoint`);
+    }
+
+    let activeIndex = previous?.activeIndex ?? 0;
+    if (activeIndex >= endpoints.length) {
+      activeIndex = 0;
+    }
+
+    const health =
+      previous && previous.health.length === endpoints.length
+        ? cloneHealth(previous.health)
+        : this.#initialiseHealth(endpoints.length);
+
+    return {
+      metadata,
+      strategy: normalizeStrategy(strategy),
+      endpoints,
+      health,
+      activeIndex,
+      lastUpdatedAt: this.#now(),
+    };
+  }
+
+  #createRuntimeFromSnapshot(
+    metadata: ChainMetadata,
+    strategy: RpcStrategyConfig,
+    snapshot?: RpcEndpointState,
+  ): ChainRuntime {
+    const fromMetadata = metadata.rpcEndpoints.map(cloneRpcEndpoint);
+    if (!snapshot) {
+      return {
+        metadata,
+        strategy,
+        endpoints: fromMetadata,
+        health: this.#initialiseHealth(fromMetadata.length),
+        activeIndex: 0,
+        lastUpdatedAt: this.#now(),
+      };
+    }
+
+    if (snapshot.endpoints.length !== fromMetadata.length) {
+      return {
+        metadata,
+        strategy,
+        endpoints: fromMetadata,
+        health: this.#initialiseHealth(fromMetadata.length),
+        activeIndex: Math.min(snapshot.activeIndex, Math.max(0, fromMetadata.length - 1)),
+        lastUpdatedAt: this.#now(),
+      };
+    }
+
+    const health =
+      snapshot.health.length === fromMetadata.length
+        ? cloneHealth(snapshot.health)
+        : this.#initialiseHealth(fromMetadata.length);
+
+    return {
+      metadata,
+      strategy,
+      endpoints: fromMetadata,
+      health,
+      activeIndex: Math.min(snapshot.activeIndex, Math.max(0, fromMetadata.length - 1)),
+      lastUpdatedAt: snapshot.lastUpdatedAt ?? this.#now(),
+    };
+  }
+
+  #initialiseHealth(count: number): RpcEndpointHealth[] {
+    if (count === 0) {
+      throw new Error("RPC endpoints list cannot be empty");
+    }
+    const health: RpcEndpointHealth[] = [];
+    for (let index = 0; index < count; index += 1) {
+      health.push({
+        index,
+        successCount: 0,
+        failureCount: 0,
+        consecutiveFailures: 0,
+      });
+    }
+    return health;
+  }
+
+  #resolveEndpointIndex(runtime: ChainRuntime, provided?: number): number {
+    if (provided === undefined) {
+      return runtime.activeIndex;
+    }
+    if (provided < 0 || provided >= runtime.endpoints.length) {
+      return runtime.activeIndex;
+    }
+    return provided;
+  }
+
+  #selectNextEndpoint(runtime: ChainRuntime, now: number, failedIndex: number): number {
+    const total = runtime.endpoints.length;
+    if (total === 1) {
+      return 0;
+    }
+    const strategyId = runtime.strategy.id ?? "round-robin";
+    if (strategyId !== "round-robin") {
+      // Placeholder for future strategy expansion.
+    }
+
+    let candidate = (failedIndex + 1) % total;
+    for (let attempts = 0; attempts < total; attempts += 1) {
+      const health = runtime.health[candidate]!;
+      if (!health.cooldownUntil || health.cooldownUntil <= now) {
+        return candidate;
+      }
+      candidate = (candidate + 1) % total;
+    }
+    const failedHealth = runtime.health[failedIndex]!;
+    if (!failedHealth.cooldownUntil || failedHealth.cooldownUntil <= now) {
+      return failedIndex;
+    }
+    const earliest = runtime.health.reduce<{ index: number; cooldownUntil: number } | null>((best, entry) => {
+      if (!entry.cooldownUntil) return best;
+      if (!best || entry.cooldownUntil < best.cooldownUntil) {
+        return { index: entry.index, cooldownUntil: entry.cooldownUntil };
+      }
+      return best;
+    }, null);
+    return earliest ? earliest.index : failedIndex;
+  }
+
+  #buildStateSnapshot(): NetworkState {
+    const knownChains = sortChains(Array.from(this.#chains.values(), (runtime) => cloneMetadata(runtime.metadata)));
+    const rpcEntries = Array.from(this.#chains.entries()).map(
+      ([chainRef, runtime]) => [chainRef, this.#buildEndpointState(chainRef, runtime)] as const,
+    );
+    rpcEntries.sort((a, b) => a[0].localeCompare(b[0]));
+    return {
+      activeChain: this.#activeChain,
+      knownChains,
+      rpc: Object.fromEntries(rpcEntries),
+    };
+  }
+
+  #buildEndpointState(chainRef: Caip2ChainId, runtime: ChainRuntime): RpcEndpointState {
+    return {
+      activeIndex: runtime.activeIndex,
+      endpoints: buildEndpointInfoList(runtime.endpoints),
+      health: cloneHealth(runtime.health),
+      strategy: normalizeStrategy(runtime.strategy),
+      lastUpdatedAt: runtime.lastUpdatedAt,
+    };
+  }
+
+  #buildEndpointInfo(chainRef: Caip2ChainId, runtime: ChainRuntime, index: number): RpcEndpointInfo {
+    const endpoint = runtime.endpoints[index];
+    if (!endpoint) {
+      throw new Error(`Endpoint index ${index} is out of bounds for ${chainRef}`);
+    }
+    return {
+      index,
+      url: endpoint.url,
+      type: endpoint.type,
+      weight: endpoint.weight,
+      headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
+    };
   }
 
   #publishState(force = false) {
-    const state = buildStateSnapshot(this.#activeChain, this.#chains, this.#rpcStatus);
-    this.#messenger.publish(NETWORK_STATE_TOPIC, state, { compare: isSameNetworkState, force });
+    const snapshot = this.#buildStateSnapshot();
+    this.#messenger.publish(NETWORK_STATE_TOPIC, snapshot, {
+      force,
+      compare: (prev?: NetworkState, next?: NetworkState) => {
+        if (!prev || !next) return false;
+        if (prev.activeChain !== next.activeChain) return false;
+        if (prev.knownChains.length !== next.knownChains.length) return false;
+        for (let i = 0; i < prev.knownChains.length; i += 1) {
+          if (prev.knownChains[i]?.chainRef !== next.knownChains[i]?.chainRef) return false;
+        }
+        const prevKeys = Object.keys(prev.rpc);
+        const nextKeys = Object.keys(next.rpc);
+        if (prevKeys.length !== nextKeys.length) return false;
+        for (let i = 0; i < prevKeys.length; i += 1) {
+          if (prevKeys[i] !== nextKeys[i]) return false;
+          const prevState = prev.rpc[prevKeys[i]!]!;
+          const nextState = next.rpc[nextKeys[i]!]!;
+          if (prevState.activeIndex !== nextState.activeIndex) return false;
+          if (prevState.lastUpdatedAt !== nextState.lastUpdatedAt) return false;
+        }
+        return true;
+      },
+    });
 
-    const activeChain = this.#chains.get(this.#activeChain);
-    if (activeChain) {
-      this.#messenger.publish(NETWORK_CHAIN_TOPIC, cloneMetadata(activeChain), { compare: isSameMetadata, force });
-    }
+    const activeRuntime = this.#requireRuntime(this.#activeChain);
+    this.#messenger.publish(NETWORK_CHAIN_TOPIC, cloneMetadata(activeRuntime.metadata), {
+      force,
+      compare: (prev?: ChainMetadata, next?: ChainMetadata) => prev?.chainRef === next?.chainRef,
+    });
   }
 
-  #publishRpcStatus(chainRef: Caip2ChainId, status: NetworkRpcStatus, force = false) {
-    const update: NetworkRpcStatusUpdate = { chainRef, status: cloneRpcStatus(status) };
-    this.#messenger.publish(NETWORK_RPC_STATUS_TOPIC, update, { compare: isSameRpcStatusUpdate, force });
+  #publishEndpointChange(chainRef: Caip2ChainId, previous: RpcEndpointInfo, next: RpcEndpointInfo) {
+    this.#messenger.publish(NETWORK_RPC_ENDPOINT_TOPIC, { chainRef, previous, next }, { force: true });
   }
 
-  #requireChain(chainRef: Caip2ChainId): ChainMetadata {
-    const chain = this.#chains.get(chainRef);
-    if (!chain) {
+  #publishRpcHealth(chainRef: Caip2ChainId, runtime: ChainRuntime) {
+    this.#messenger.publish(
+      NETWORK_RPC_HEALTH_TOPIC,
+      { chainRef, state: this.#buildEndpointState(chainRef, runtime) },
+      { force: true },
+    );
+  }
+
+  #requireRuntime(chainRef: Caip2ChainId): ChainRuntime {
+    const runtime = this.#chains.get(chainRef);
+    if (!runtime) {
       throw new Error(`Unknown chain: ${chainRef}`);
     }
-    return chain;
+    if (runtime.endpoints.length === 0) {
+      throw new Error(`Chain ${chainRef} has no registered RPC endpoints`);
+    }
+    return runtime;
   }
 }

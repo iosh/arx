@@ -50,9 +50,21 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
   payload: {
     activeChain: ALT_CHAIN.chainRef,
     knownChains: [ALT_CHAIN, MAINNET_CHAIN],
-    rpcStatus: {
-      [ALT_CHAIN.chainRef]: { endpointIndex: 0 },
-      [MAINNET_CHAIN.chainRef]: { endpointIndex: 0 },
+    rpc: {
+      [ALT_CHAIN.chainRef]: {
+        activeIndex: 0,
+        endpoints: [{ index: 0, url: ALT_CHAIN.rpcEndpoints[0]!.url, type: "public" as const }],
+        health: [{ index: 0, successCount: 4, failureCount: 0, consecutiveFailures: 0 }],
+        strategy: { id: "round-robin" },
+        lastUpdatedAt: 900,
+      },
+      [MAINNET_CHAIN.chainRef]: {
+        activeIndex: 0,
+        endpoints: [{ index: 0, url: MAINNET_CHAIN.rpcEndpoints[0]!.url, type: "public" as const }],
+        health: [{ index: 0, successCount: 2, failureCount: 1, consecutiveFailures: 0 }],
+        strategy: { id: "round-robin" },
+        lastUpdatedAt: 850,
+      },
     },
   },
 };
@@ -135,6 +147,8 @@ const VAULT_META: VaultMetaSnapshot = {
     initializedAt: 500,
   },
 };
+
+const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 class MemoryStoragePort implements StoragePort {
   private readonly snapshots = new Map<StorageNamespace, StorageSnapshotMap[StorageNamespace]>();
@@ -372,7 +386,7 @@ describe("createBackgroundServices", () => {
     expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
       NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
     );
-    expect(networkState.rpcStatus).toEqual(NETWORK_SNAPSHOT.payload.rpcStatus);
+    expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
     expect(services.controllers.accounts.getActivePointer()?.address).toBe(ACCOUNTS_SNAPSHOT.payload.active?.address);
 
@@ -402,6 +416,7 @@ describe("createBackgroundServices", () => {
       rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
     });
     await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
+    await flushMicrotasks();
 
     const networkSnapshot = storage.getSnapshot(StorageNamespaces.Network);
     expect(networkSnapshot).not.toBeNull();
@@ -579,7 +594,7 @@ describe("createBackgroundServices", () => {
     expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
       NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
     );
-    expect(networkState.rpcStatus).toEqual(NETWORK_SNAPSHOT.payload.rpcStatus);
+    expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
     second.lifecycle.destroy();
   });
@@ -603,6 +618,7 @@ describe("createBackgroundServices", () => {
       rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
     });
     await first.controllers.network.switchChain(ALT_CHAIN.chainRef);
+    await flushMicrotasks();
 
     expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
 

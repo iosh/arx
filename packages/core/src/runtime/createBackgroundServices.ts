@@ -29,8 +29,10 @@ import type {
   NetworkController,
   NetworkMessenger,
   NetworkMessengerTopic,
-  NetworkRpcStatus,
   NetworkState,
+  RpcEndpointState,
+  RpcEventLogger,
+  RpcStrategyConfig,
 } from "../controllers/network/types.js";
 import { InMemoryPermissionController } from "../controllers/permission/PermissionController.js";
 import type {
@@ -71,22 +73,49 @@ if (!DEFAULT_CHAIN_SEED) {
   throw new Error("DEFAULT_CHAIN_METADATA must include at least one chain definition");
 }
 const DEFAULT_CHAIN: ChainMetadata = DEFAULT_CHAIN_SEED;
-const DEFAULT_RPC_STATUS: NetworkRpcStatus = { endpointIndex: 0 };
+const DEFAULT_STRATEGY: RpcStrategyConfig = { id: "round-robin" };
 
-const cloneRpcStatus = (status: NetworkRpcStatus): NetworkRpcStatus => {
-  if (status.lastError === undefined) {
-    return { endpointIndex: status.endpointIndex };
-  }
-  return { endpointIndex: status.endpointIndex, lastError: status.lastError };
+const cloneHeaders = (headers?: Record<string, string>) => {
+  if (!headers) return undefined;
+  return Object.fromEntries(Object.entries(headers));
 };
 
-const createDefaultRpcStatus = (): NetworkRpcStatus => cloneRpcStatus(DEFAULT_RPC_STATUS);
+const buildDefaultEndpointState = (metadata: ChainMetadata, strategy?: RpcStrategyConfig): RpcEndpointState => {
+  const endpoints = metadata.rpcEndpoints.map((endpoint, index) => ({
+    index,
+    url: endpoint.url,
+    type: endpoint.type,
+    weight: endpoint.weight,
+    headers: cloneHeaders(endpoint.headers),
+  }));
+
+  if (endpoints.length === 0) {
+    throw new Error(`Chain ${metadata.chainRef} must declare at least one RPC endpoint`);
+  }
+
+  const health = endpoints.map((endpoint) => ({
+    index: endpoint.index,
+    successCount: 0,
+    failureCount: 0,
+    consecutiveFailures: 0,
+  }));
+
+  return {
+    activeIndex: 0,
+    endpoints,
+    health,
+    strategy: strategy
+      ? { id: strategy.id, options: strategy.options ? { ...strategy.options } : undefined }
+      : { ...DEFAULT_STRATEGY },
+    lastUpdatedAt: 0,
+  };
+};
 
 const DEFAULT_NETWORK_STATE: NetworkState = {
   activeChain: DEFAULT_CHAIN.chainRef,
   knownChains: [DEFAULT_CHAIN],
-  rpcStatus: {
-    [DEFAULT_CHAIN.chainRef]: createDefaultRpcStatus(),
+  rpc: {
+    [DEFAULT_CHAIN.chainRef]: buildDefaultEndpointState(DEFAULT_CHAIN),
   },
 };
 
@@ -133,6 +162,10 @@ export type CreateBackgroundServicesOptions = {
   };
   network?: {
     initialState?: NetworkState;
+    defaultStrategy?: RpcStrategyConfig;
+    defaultCooldownMs?: number;
+    now?: () => number;
+    logger?: RpcEventLogger;
   };
   accounts?: {
     initialState?: MultiNamespaceAccountsState;
@@ -193,7 +226,10 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const networkController = new InMemoryNetworkController({
     messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
-    defaultRpcStatus: DEFAULT_RPC_STATUS,
+    defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
+    ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
+    ...(networkOptions?.now ? { now: networkOptions.now } : {}),
+    ...(networkOptions?.logger ? { logger: networkOptions.logger } : {}),
   });
 
   const resolveNamespace = () => {
@@ -330,7 +366,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     return registryChains[0]!.chainRef;
   };
 
-  const synchronizeNetworkFromRegistry = () => {
+  const synchronizeNetworkFromRegistry = async () => {
     const registryChains = readRegistryChains();
     if (registryChains.length === 0) {
       pendingNetworkRegistrySync = false;
@@ -338,19 +374,26 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     const currentState = networkController.getState();
-    const nextActive = selectActiveChainRef(currentState, registryChains);
-    const nextRpcStatus: Record<Caip2ChainId, NetworkRpcStatus> = {};
+    const existingRefs = new Set(currentState.knownChains.map((chain) => chain.chainRef));
+    const registryRefs = new Set(registryChains.map((chain) => chain.chainRef));
 
     for (const chain of registryChains) {
-      const previousStatus = currentState.rpcStatus[chain.chainRef];
-      nextRpcStatus[chain.chainRef] = previousStatus ? cloneRpcStatus(previousStatus) : createDefaultRpcStatus();
+      if (existingRefs.has(chain.chainRef)) {
+        await networkController.syncChain(chain);
+      } else {
+        await networkController.addChain(chain);
+      }
     }
 
-    networkController.replaceState({
-      activeChain: nextActive,
-      knownChains: registryChains,
-      rpcStatus: nextRpcStatus,
-    });
+    for (const chainRef of existingRefs) {
+      if (!registryRefs.has(chainRef)) {
+        await networkController.removeChain(chainRef);
+      }
+    }
+
+    const latestState = networkController.getState();
+    const nextActive = selectActiveChainRef(latestState, registryChains);
+    await networkController.switchChain(nextActive);
 
     pendingNetworkRegistrySync = false;
   };
@@ -360,7 +403,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       pendingNetworkRegistrySync = true;
       return;
     }
-    synchronizeNetworkFromRegistry();
+    void synchronizeNetworkFromRegistry();
   };
 
   const unsubscribeRegistry = chainRegistryController.onStateChanged(() => {
@@ -681,7 +724,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       await chainRegistryController.whenReady();
 
       if (!storagePort || !hydrationEnabled) {
-        synchronizeNetworkFromRegistry();
+        await synchronizeNetworkFromRegistry();
         initialized = true;
         return;
       }
@@ -695,7 +738,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       } finally {
         isHydrating = false;
         if (pendingNetworkRegistrySync) {
-          synchronizeNetworkFromRegistry();
+          await synchronizeNetworkFromRegistry();
         }
       }
     })();

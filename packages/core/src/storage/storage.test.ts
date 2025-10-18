@@ -54,9 +54,31 @@ describe("storage schemas", () => {
       payload: {
         activeChain: mainnet.chainRef,
         knownChains: [mainnet, goerli],
-        rpcStatus: {
-          [mainnet.chainRef]: { endpointIndex: 0 },
-          [goerli.chainRef]: { endpointIndex: 1, lastError: "unreachable" },
+        rpc: {
+          [mainnet.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: mainnet.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [{ index: 0, successCount: 5, failureCount: 0, consecutiveFailures: 0 }],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP - 500,
+          },
+          [goerli.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [
+              {
+                index: 0,
+                successCount: 1,
+                failureCount: 3,
+                consecutiveFailures: 1,
+                lastError: { message: "unreachable", capturedAt: TIMESTAMP - 250 },
+                lastFailureAt: TIMESTAMP - 250,
+                cooldownUntil: TIMESTAMP + 5_000,
+              },
+            ],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP,
+          },
         },
       },
     };
@@ -79,8 +101,14 @@ describe("storage schemas", () => {
       payload: {
         activeChain: "eip155:1",
         knownChains: [goerli],
-        rpcStatus: {
-          [goerli.chainRef]: { endpointIndex: 0 },
+        rpc: {
+          [goerli.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [{ index: 0, successCount: 0, failureCount: 0, consecutiveFailures: 0 }],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP,
+          },
         },
       },
     };
@@ -248,9 +276,30 @@ describe("storage schemas", () => {
       payload: {
         activeChain: mainnet.chainRef,
         knownChains: [mainnet, goerli],
-        rpcStatus: {
-          [mainnet.chainRef]: { endpointIndex: 0 },
-          [goerli.chainRef]: { endpointIndex: 1, lastError: "unreachable" },
+        rpc: {
+          [mainnet.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: mainnet.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [{ index: 0, successCount: 3, failureCount: 0, consecutiveFailures: 0 }],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP - 100,
+          },
+          [goerli.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [
+              {
+                index: 0,
+                successCount: 0,
+                failureCount: 2,
+                consecutiveFailures: 2,
+                lastError: { message: "unreachable", capturedAt: TIMESTAMP - 50 },
+                lastFailureAt: TIMESTAMP - 50,
+              },
+            ],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP,
+          },
         },
       },
     };
@@ -273,8 +322,14 @@ describe("storage schemas", () => {
       payload: {
         activeChain: "eip155:1",
         knownChains: [goerli],
-        rpcStatus: {
-          [goerli.chainRef]: { endpointIndex: 0 },
+        rpc: {
+          [goerli.chainRef]: {
+            activeIndex: 0,
+            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
+            health: [{ index: 0, successCount: 0, failureCount: 0, consecutiveFailures: 0 }],
+            strategy: { id: "round-robin" },
+            lastUpdatedAt: TIMESTAMP,
+          },
         },
       },
     };

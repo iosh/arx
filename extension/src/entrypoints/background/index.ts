@@ -217,12 +217,15 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     );
 
     unsubscribeControllerEvents.push(
-      controllers.network.onChainChanged((chain) => {
+      controllers.network.onChainChanged(() => {
+        // Rebuild the snapshot so meta stays consistent with accounts and lock state.
+        const snapshot = getControllerSnapshot();
         broadcastEvent("chainChanged", [
           {
-            chainId: chain.chainId,
-            caip2: chain.chainRef,
-            isUnlocked: session.unlock.isUnlocked(),
+            chainId: snapshot.chain.chainId,
+            caip2: snapshot.chain.caip2,
+            isUnlocked: snapshot.isUnlocked,
+            meta: snapshot.meta,
           },
         ]);
       }),
@@ -324,6 +327,7 @@ const getControllerSnapshot = () => {
   if (!context) throw new Error("Background context is not initialized");
   const { controllers, session } = context;
   const activeChain = controllers.network.getActiveChain();
+  const networkState = controllers.network.getState();
   const active = controllers.accounts.getActivePointer();
   const isUnlocked = session.unlock.isUnlocked();
   const chainRef = active?.chainRef ?? activeChain.chainRef;
@@ -333,6 +337,11 @@ const getControllerSnapshot = () => {
     chain: { chainId: activeChain.chainId, caip2: activeChain.chainRef },
     accounts,
     isUnlocked,
+    meta: {
+      activeChain: activeChain.chainRef,
+      activeNamespace: activeChain.namespace,
+      supportedChains: networkState.knownChains.map((chain) => chain.chainRef),
+    },
   };
 };
 const broadcastEvent = (event: string, params: unknown[]) => {
@@ -448,6 +457,7 @@ const handleConnect = (port: browser.Runtime.Port) => {
         caip2: current.chain.caip2,
         accounts: current.accounts,
         isUnlocked: current.isUnlocked,
+        meta: current.meta,
       },
     });
   };

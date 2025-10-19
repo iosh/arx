@@ -4,6 +4,7 @@ import type {
   EIP1193ProviderRpcError,
   RequestArguments,
   Transport,
+  TransportMeta,
   TransportRequest,
   TransportResponse,
   TransportState,
@@ -11,8 +12,20 @@ import type {
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 
-type ConnectPayload = { chainId: string; caip2?: string; accounts: string[]; isUnlocked?: boolean };
-type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean };
+type ConnectPayload = {
+  chainId: string;
+  caip2?: string;
+  accounts: string[];
+  isUnlocked?: boolean;
+  meta?: TransportMeta | null;
+};
+type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null };
+
+const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
+  activeChain: meta.activeChain,
+  activeNamespace: meta.activeNamespace,
+  supportedChains: [...meta.supportedChains],
+});
 
 export class InpageTransport extends EventEmitter implements Transport {
   #connected = false;
@@ -20,6 +33,7 @@ export class InpageTransport extends EventEmitter implements Transport {
   #caip2: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
+  #meta: TransportMeta | null = null;
   #timeoutMs = 120_000;
   #pendingRequests = new Map<
     string,
@@ -49,6 +63,7 @@ export class InpageTransport extends EventEmitter implements Transport {
       caip2: this.#caip2,
       accounts: [...this.#accounts],
       isUnlocked: this.#isUnlocked,
+      meta: this.#meta ? cloneTransportMeta(this.#meta) : null,
     };
   }
 
@@ -70,7 +85,8 @@ export class InpageTransport extends EventEmitter implements Transport {
   }
 
   #getProviderErrors() {
-    return getProviderErrors(this.#caip2 ?? undefined);
+    const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
+    return getProviderErrors(namespace);
   }
 
   #setConnection(payload: ConnectPayload) {
@@ -82,6 +98,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
     this.#isUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
+    this.#meta = payload.meta ? cloneTransportMeta(payload.meta) : null;
 
     this.#resolveHandshake();
     this.emit("connect", {
@@ -89,6 +106,7 @@ export class InpageTransport extends EventEmitter implements Transport {
       ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
       accounts,
       ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
+      ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
     });
   }
 
@@ -110,11 +128,15 @@ export class InpageTransport extends EventEmitter implements Transport {
     if (typeof update.isUnlocked === "boolean") {
       this.#isUnlocked = update.isUnlocked;
     }
+    if (update.meta !== undefined) {
+      this.#meta = update.meta ? cloneTransportMeta(update.meta) : null;
+    }
 
     this.emit("chainChanged", {
       chainId: this.#chainId,
       ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
       ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
+      ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
     });
   }
 
@@ -128,6 +150,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#chainId = null;
     this.#accounts = [];
     this.#isUnlocked = null;
+    this.#meta = null;
 
     this.#rejectHandshake(providerErrors.disconnected());
     const error = providerErrors.disconnected();

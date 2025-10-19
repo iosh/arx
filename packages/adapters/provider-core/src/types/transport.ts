@@ -15,12 +15,19 @@ export type TransportSuccess = JsonRpcSuccess;
 export type TransportError = JsonRpcError;
 export type TransportResponse = JsonRpcResponse;
 
+export type TransportMeta = {
+  activeChain: string;
+  activeNamespace: string;
+  supportedChains: string[];
+};
+
 export type TransportState = {
   connected: boolean;
   chainId: string | null;
   caip2: string | null;
   accounts: string[];
   isUnlocked: boolean | null;
+  meta: TransportMeta | null;
 };
 
 export interface Transport {

@@ -2,7 +2,7 @@ import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
-import type { Transport } from "./types/transport.js";
+import type { Transport, TransportMeta } from "./types/transport.js";
 
 const PROVIDER_INFO = {
   uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",
@@ -24,6 +24,12 @@ const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof val
 
 const DEFAULT_NAMESPACE = "eip155";
 
+const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
+  activeChain: meta.activeChain,
+  activeNamespace: meta.activeNamespace,
+  supportedChains: [...meta.supportedChains],
+});
+
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #namespace = DEFAULT_NAMESPACE;
   readonly isArx = true;
@@ -33,6 +39,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #caip2: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
+  #meta: TransportMeta | null = null;
 
   #initializedResolve?: (() => void) | undefined;
   #initializedReject?: ((reason?: unknown) => void) | undefined;
@@ -86,7 +93,9 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #syncWithTransportState() {
     const state = this.#transport.getConnectionState();
 
-    this.#updateNamespace(state.caip2 ?? null);
+    this.#updateMeta(state.meta);
+    const resolvedCaip2 = this.#resolveEffectiveCaip2(state.caip2);
+    this.#updateNamespace(resolvedCaip2);
 
     if (typeof state.chainId === "string") {
       this.#updateChain(state.chainId);
@@ -117,6 +126,19 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
     this.#caip2 = null;
     this.#namespace = DEFAULT_NAMESPACE;
+  }
+
+  #updateMeta(meta: TransportMeta | null | undefined) {
+    // undefined means "no change"; null clears the cached meta snapshot.
+    if (meta === undefined) return;
+    this.#meta = meta ? cloneTransportMeta(meta) : null;
+  }
+
+  #resolveEffectiveCaip2(candidate: unknown): string | null {
+    if (typeof candidate === "string" && candidate.length > 0) {
+      return candidate;
+    }
+    return this.#meta?.activeChain ?? null;
   }
 
   #markInitialized() {
@@ -150,9 +172,12 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       caip2: string | null;
       accounts: string[];
       isUnlocked: boolean;
+      meta: TransportMeta | null;
     }>;
 
-    this.#updateNamespace(data.caip2 ?? null);
+    this.#updateMeta(data.meta ?? null);
+    const resolvedCaip2 = this.#resolveEffectiveCaip2(data.caip2);
+    this.#updateNamespace(resolvedCaip2);
 
     if (typeof data.chainId === "string") {
       this.#updateChain(data.chainId);
@@ -179,16 +204,19 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #handleTransportChainChanged = (payload: unknown) => {
     if (!payload || typeof payload !== "object") return;
 
-    const { chainId, caip2, isUnlocked } = payload as Partial<{
+    const { chainId, caip2, isUnlocked, meta } = payload as Partial<{
       chainId: unknown;
       caip2: unknown;
       isUnlocked: unknown;
+      meta: unknown;
     }>;
 
     if (typeof chainId !== "string") return;
 
     this.#updateChain(chainId);
-    this.#updateNamespace(typeof caip2 === "string" || caip2 === null ? (caip2 as string | null) : undefined);
+    this.#updateMeta((meta ?? undefined) as TransportMeta | null | undefined);
+    const resolvedCaip2 = this.#resolveEffectiveCaip2(caip2);
+    this.#updateNamespace(resolvedCaip2);
 
     if (typeof isUnlocked === "boolean") {
       this.#isUnlocked = isUnlocked;
@@ -220,6 +248,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#updateAccounts([]);
     this.#updateNamespace(null);
     this.#isUnlocked = null;
+    this.#updateMeta(null);
 
     this.emit("disconnect", disconnectError);
   };

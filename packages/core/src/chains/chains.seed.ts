@@ -156,6 +156,7 @@ export const EIP155_TESTNETS = [
 export const CONFLUX_NETWORKS = [
   {
     chainRef: "conflux:mainnet",
+    chainId: "0x405",
     namespace: "conflux",
     displayName: "Conflux Core Space",
     shortName: "cfx",
@@ -180,6 +181,7 @@ export const CONFLUX_NETWORKS = [
   {
     chainRef: "conflux:testnet",
     namespace: "conflux",
+    chainId: "0x1",
     displayName: "Conflux Core Testnet",
     shortName: "cfxtest",
     description: "Conflux Core Space public test network",

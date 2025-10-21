@@ -1,4 +1,5 @@
 import type { JsonRpcParams } from "@metamask/utils";
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
@@ -22,10 +23,17 @@ export type RpcRequest = {
   params?: JsonRpcParams;
 };
 
+export type RpcInvocationContext = {
+  chainRef?: Caip2ChainId | null;
+  namespace?: Namespace | null;
+  meta?: unknown;
+};
+
 export type MethodHandler = (context: {
   origin: string;
   request: RpcRequest;
   controllers: HandlerControllers;
+  rpcContext?: RpcInvocationContext;
 }) => Promise<unknown> | unknown;
 
 export type MethodDefinition = {

@@ -61,8 +61,12 @@ export class InMemoryPermissionController implements PermissionController {
     return cloneState(this.#state);
   }
 
-  async ensurePermission(origin: string, method: string): Promise<void> {
-    const scope = this.#scopeResolver(method);
+  async ensurePermission(
+    origin: string,
+    method: string,
+    context?: Parameters<PermissionScopeResolver>[1],
+  ): Promise<void> {
+    const scope = this.#scopeResolver(method, context);
     if (!scope) {
       return;
     }

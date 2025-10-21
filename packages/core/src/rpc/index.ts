@@ -1,54 +1,169 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
-import type { HandlerControllers, MethodDefinition, Namespace, RpcRequest } from "./handlers/types.js";
+import type {
+  HandlerControllers,
+  MethodDefinition,
+  Namespace,
+  RpcInvocationContext,
+  RpcRequest,
+} from "./handlers/types.js";
+
+type NamespaceDefinitions = Record<string, MethodDefinition>;
+
+const DEFAULT_NAMESPACE: Namespace = EIP155_NAMESPACE;
+
+const namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
+const namespacePrefixes = new Map<string, Namespace>();
+
+const cloneDefinitions = (definitions: NamespaceDefinitions): NamespaceDefinitions => ({ ...definitions });
+
+const getDefinitionsForNamespace = (namespace: Namespace): NamespaceDefinitions | undefined => {
+  return namespaceDefinitions.get(namespace);
+};
+
+const recordPrefixesForNamespace = (namespace: Namespace, prefixes?: string[] | undefined) => {
+  if (!prefixes || prefixes.length === 0) {
+    return;
+  }
+
+  // Remove existing prefixes pointing to this namespace to avoid stale entries.
+  for (const [prefix, currentNamespace] of namespacePrefixes) {
+    if (currentNamespace === namespace) {
+      namespacePrefixes.delete(prefix);
+    }
+  }
+
+  for (const prefix of prefixes) {
+    if (!prefix || namespacePrefixes.has(prefix)) {
+      if (namespacePrefixes.has(prefix)) {
+        console.warn(
+          `[rpc] method prefix "${prefix}" already registered for namespace "${namespacePrefixes.get(prefix)}", skipping duplicate entry for "${namespace}"`,
+        );
+      }
+      continue;
+    }
+    namespacePrefixes.set(prefix, namespace);
+  }
+};
+
+/**
+ * Registers method definitions for a namespace and (optionally) associates method
+ * prefixes for fast namespace inference.
+ *
+ * - When `replace` is true (default) the namespace definitions are replaced.
+ * - When `replace` is false the provided definitions are merged with existing ones.
+ * - Method prefixes are matched in declaration order; the first match wins.
+ *   Prefixes should therefore be unique to avoid ambiguity.
+ */
+export const registerNamespaceDefinitions = (
+  namespace: Namespace,
+  definitions: NamespaceDefinitions,
+  options?: { replace?: boolean; methodPrefixes?: string[] },
+): void => {
+  const existing = namespaceDefinitions.get(namespace);
+  const shouldReplace = options?.replace ?? true;
+  const next = shouldReplace || !existing ? cloneDefinitions(definitions) : { ...existing, ...definitions };
+  namespaceDefinitions.set(namespace, next);
+  recordPrefixesForNamespace(namespace, options?.methodPrefixes);
+};
+
+export const unregisterNamespaceDefinitions = (namespace: Namespace): void => {
+  namespaceDefinitions.delete(namespace);
+
+  for (const [prefix, currentNamespace] of namespacePrefixes) {
+    if (currentNamespace === namespace) {
+      namespacePrefixes.delete(prefix);
+    }
+  }
+};
+
+export const getRegisteredNamespaces = (): Namespace[] => [...namespaceDefinitions.keys()];
+
+const resolveNamespaceFromChainRef = (chainRef: string | null | undefined): Namespace | null => {
+  if (!chainRef) {
+    return null;
+  }
+  const [namespace] = chainRef.split(":");
+  return namespace ? (namespace as Namespace) : null;
+};
+
+const resolveNamespaceFromMethod = (method: string): Namespace | null => {
+  for (const [prefix, namespace] of namespacePrefixes) {
+    if (method.startsWith(prefix)) {
+      return namespace;
+    }
+  }
+  return null;
+};
+
+const selectNamespace = (
+  controllers: HandlerControllers,
+  method: string,
+  context?: RpcInvocationContext,
+): Namespace => {
+  if (context?.namespace && namespaceDefinitions.has(context.namespace)) {
+    return context.namespace;
+  }
+
+  const fromChain = resolveNamespaceFromChainRef(context?.chainRef ?? null);
+  if (fromChain && namespaceDefinitions.has(fromChain)) {
+    return fromChain;
+  }
+
+  const fromMethod = resolveNamespaceFromMethod(method);
+  if (fromMethod && namespaceDefinitions.has(fromMethod)) {
+    return fromMethod;
+  }
+
+  const activeChain = controllers.network.getActiveChain();
+  const [activeNamespace] = activeChain.chainRef.split(":");
+  if (activeNamespace && namespaceDefinitions.has(activeNamespace)) {
+    return activeNamespace as Namespace;
+  }
+
+  return DEFAULT_NAMESPACE;
+};
 
 export const createMethodDefinitionResolver = (controllers: HandlerControllers) => {
-  return (method: string) => {
-    const namespace = resolveNamespace(controllers);
-    return DEFINITIONS_BY_NAMESPACE[namespace]?.[method];
+  return (method: string, context?: RpcInvocationContext) => {
+    const namespace = selectNamespace(controllers, method, context);
+    return getDefinitionsForNamespace(namespace)?.[method];
   };
 };
 
-export type MethodHandler = (context: {
-  origin: string;
-  request: RpcRequest;
-  controllers: HandlerControllers;
-}) => Promise<unknown> | unknown;
-
-const DEFINITIONS_BY_NAMESPACE: Record<Namespace, Record<string, MethodDefinition>> = {
-  [EIP155_NAMESPACE]: buildEip155Definitions(),
-};
-
-const resolveNamespace = (controllers: HandlerControllers): Namespace => {
-  const activeChain = controllers.network.getActiveChain();
-  const [namespace] = activeChain.chainRef.split(":");
-  return namespace ?? "eip155";
-};
+export const createNamespaceResolver =
+  (controllers: HandlerControllers) =>
+  (context?: RpcInvocationContext): Namespace => {
+    return selectNamespace(controllers, "rpc_method_unused", context);
+  };
 
 export const createPermissionScopeResolver = (
-  namespaceResolver: () => Namespace,
+  namespaceResolver: (context?: RpcInvocationContext) => Namespace,
   overrides?: Partial<Record<string, PermissionScope | null>>,
 ): PermissionScopeResolver => {
-  return (method) => {
+  return (method, context) => {
     if (overrides && Object.hasOwn(overrides, method)) {
       const value = overrides[method];
       return value === null ? undefined : value;
     }
-    const namespace = namespaceResolver();
-    return DEFINITIONS_BY_NAMESPACE[namespace]?.[method]?.scope;
+    const namespace = namespaceResolver(context);
+    return getDefinitionsForNamespace(namespace)?.[method]?.scope;
   };
 };
 
 export const createMethodExecutor =
   (controllers: HandlerControllers) =>
-  async ({ origin, request }: { origin: string; request: RpcRequest }) => {
-    const namespace = resolveNamespace(controllers);
-    const definition = DEFINITIONS_BY_NAMESPACE[namespace]?.[request.method];
+  async ({ origin, request, context }: { origin: string; request: RpcRequest; context?: RpcInvocationContext }) => {
+    const namespace = selectNamespace(controllers, request.method, context);
+    const definition = getDefinitionsForNamespace(namespace)?.[request.method];
     if (!definition) {
       throw new Error(`Method "${request.method}" not implemented for namespace "${namespace}"`);
     }
-    return definition.handler({ origin, request, controllers });
+    const handlerArgs =
+      context === undefined ? { origin, request, controllers } : { origin, request, controllers, rpcContext: context };
+
+    return definition.handler(handlerArgs);
   };
 
 export type DomainChainService = {
@@ -64,3 +179,10 @@ export const createDomainChainService = (): DomainChainService => ({
     throw new Error("Not implemented yet");
   },
 });
+
+registerNamespaceDefinitions(EIP155_NAMESPACE, buildEip155Definitions(), {
+  replace: true,
+  methodPrefixes: ["eth_", "personal_", "wallet_", "net_"],
+});
+
+export type { RpcInvocationContext };

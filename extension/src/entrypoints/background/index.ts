@@ -4,6 +4,7 @@ import {
   createBackgroundServices,
   createMethodDefinitionResolver,
   createMethodExecutor,
+  createNamespaceResolver,
   createPermissionScopeResolver,
   getProviderErrors,
   getRpcErrors,
@@ -11,9 +12,10 @@ import {
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
+  type RpcInvocationContext,
   type UnlockReason,
 } from "@arx/core";
-import type { JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
+import type { JsonRpcId, JsonRpcVersion2, TransportMeta, TransportResponse } from "@arx/provider-core/types";
 import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
@@ -38,15 +40,77 @@ type BackgroundContext = {
 let context: BackgroundContext | null = null;
 let contextPromise: Promise<BackgroundContext> | null = null;
 
+type PortContext = {
+  origin: string;
+  meta: TransportMeta | null;
+  caip2: string | null;
+  chainId: string | null;
+  namespace: string;
+};
+
 const connections = new Set<browser.Runtime.Port>();
-const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: string; jsonrpc: JsonRpcVersion2 }>>();
+const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: JsonRpcId; jsonrpc: JsonRpcVersion2 }>>();
+const portContexts = new Map<browser.Runtime.Port, PortContext>();
 const unsubscribeControllerEvents: Array<() => void> = [];
 
 let currentExecuteMethod: ReturnType<typeof createMethodExecutor> | null = null;
-let currentResolveProviderErrors: (() => ReturnType<typeof getProviderErrors>) | null = null;
-let currentResolveRpcErrors: (() => ReturnType<typeof getRpcErrors>) | null = null;
+let currentResolveProviderErrors: ((context?: RpcInvocationContext) => ReturnType<typeof getProviderErrors>) | null =
+  null;
+let currentResolveRpcErrors: ((context?: RpcInvocationContext) => ReturnType<typeof getRpcErrors>) | null = null;
 
 const FALLBACK_NAMESPACE = "eip155";
+
+type ArxRpcContext = {
+  origin: string;
+  arx?: (RpcInvocationContext & { meta: TransportMeta | null }) | undefined;
+};
+
+type ControllerSnapshot = {
+  chain: { chainId: string; caip2: string };
+  accounts: string[];
+  isUnlocked: boolean;
+  meta: {
+    activeChain: string;
+    activeNamespace: string;
+    supportedChains: string[];
+  };
+};
+
+const resolveNamespace = (caip2: string | null, metaNamespace?: string): string => {
+  if (metaNamespace) {
+    if (metaNamespace !== FALLBACK_NAMESPACE) {
+      console.warn("[background] Unsupported namespace from transport meta; falling back", metaNamespace);
+    }
+    return metaNamespace;
+  }
+  if (caip2) {
+    const [namespace] = caip2.split(":");
+    if (namespace && namespace.length > 0) return namespace;
+  }
+  return FALLBACK_NAMESPACE;
+};
+
+const syncPortContext = (port: browser.Runtime.Port, snapshot: ControllerSnapshot) => {
+  const existing = portContexts.get(port);
+  const resolvedOrigin = resolveOrigin(port);
+  const origin = existing?.origin && existing.origin !== "unknown://" ? existing.origin : resolvedOrigin;
+  const caip2 = snapshot.meta?.activeChain ?? snapshot.chain.caip2 ?? null;
+  const namespace = resolveNamespace(caip2, snapshot.meta?.activeNamespace);
+
+  portContexts.set(port, {
+    origin,
+    meta: snapshot.meta ?? null,
+    caip2,
+    chainId: snapshot.chain.chainId ?? null,
+    namespace,
+  });
+};
+
+const syncAllPortContexts = (snapshot: ControllerSnapshot) => {
+  for (const port of connections) {
+    syncPortContext(port, snapshot);
+  }
+};
 
 const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Runtime.MessageSender) => {
   if (sender.id !== browser.runtime.id) {
@@ -118,12 +182,12 @@ const ensureContext = async (): Promise<BackgroundContext> => {
   }
 
   contextPromise = (async () => {
-    let namespaceResolver = () => FALLBACK_NAMESPACE;
+    let namespaceResolver: (ctx?: RpcInvocationContext) => string = () => FALLBACK_NAMESPACE;
     const storage = getExtensionStorage();
 
     const services = createBackgroundServices({
       permissions: {
-        scopeResolver: createPermissionScopeResolver(() => namespaceResolver()),
+        scopeResolver: createPermissionScopeResolver(namespaceResolver),
       },
       storage: { port: storage },
     });
@@ -139,11 +203,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    namespaceResolver = () => {
-      const active = controllers.network.getState().activeChain;
-      const [namespace] = active.split(":");
-      return namespace || FALLBACK_NAMESPACE;
-    };
+    namespaceResolver = createNamespaceResolver(controllers);
 
     unsubscribeControllerEvents.push(
       session.unlock.onUnlocked((payload) => {
@@ -170,17 +230,54 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     }
 
     const executeMethod = createMethodExecutor(controllers);
-    const getNamespace = () => controllers.network.getState().activeChain;
-    const resolveProviderErrors = () => getProviderErrors(getNamespace());
-    const resolveRpcErrors = () => getRpcErrors(getNamespace());
+    const resolveProviderErrors = (rpcContext?: RpcInvocationContext) =>
+      getProviderErrors(namespaceResolver(rpcContext));
+    const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => getRpcErrors(namespaceResolver(rpcContext));
     const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
+
+    const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
+      if (!chainRef) {
+        return null;
+      }
+      const typed = chainRef;
+      const networkChain = controllers.network.getChain(typed);
+      if (networkChain?.providerPolicies?.locked) {
+        return networkChain.providerPolicies.locked;
+      }
+      const registryEntity = controllers.chainRegistry.getChain(typed);
+      return registryEntity?.metadata.providerPolicies?.locked ?? null;
+    };
+
+    const resolveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
+      const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
+      const policies = readLockedPoliciesForChain(chainRef);
+      if (!policies) {
+        return undefined;
+      }
+
+      const pick = (key: string) => (Object.hasOwn(policies, key) ? policies[key] : undefined);
+      const selected = pick(method);
+      const fallback = selected === undefined ? pick("*") : undefined;
+      const value = selected ?? fallback;
+
+      if (value === undefined || value === null) {
+        return undefined;
+      }
+
+      return {
+        allow: value.allow,
+        response: value.response,
+        hasResponse: Object.hasOwn(value, "response"),
+      } as const;
+    };
 
     engine.push(
       createAsyncMiddleware(async (req, res, next) => {
+        const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
         try {
           await next();
         } catch (middlewareError) {
-          res.error = toJsonRpcError(middlewareError, req.method);
+          res.error = toJsonRpcError(middlewareError, req.method, rpcContext ?? undefined);
         }
       }),
     );
@@ -189,13 +286,15 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         isUnlocked: () => session.unlock.isUnlocked(),
         isInternalOrigin,
         resolveMethodDefinition,
+        resolveLockedPolicy,
         resolveProviderErrors,
       }),
     );
 
     engine.push(
       createAsyncMiddleware(async (req, _res, next) => {
-        const definition = resolveMethodDefinition(req.method);
+        const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+        const definition = resolveMethodDefinition(req.method, rpcContext ?? undefined);
         if (!definition?.approvalRequired) {
           return next();
         }
@@ -208,9 +307,11 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     engine.push(
       createAsyncMiddleware(async (req, res) => {
         const origin = (req as { origin?: string }).origin ?? "unknown://";
+        const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
         const result = await executeMethod({
           origin,
           request: { method: req.method, params: req.params as JsonRpcParams },
+          context: rpcContext ?? undefined,
         });
         res.result = result as Json;
       }),
@@ -220,6 +321,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       controllers.network.onChainChanged(() => {
         // Rebuild the snapshot so meta stays consistent with accounts and lock state.
         const snapshot = getControllerSnapshot();
+        syncAllPortContexts(snapshot);
         broadcastEvent("chainChanged", [
           {
             chainId: snapshot.chain.chainId,
@@ -258,17 +360,17 @@ const getActiveControllers = () => {
   }
   return context.controllers;
 };
-const getActiveProviderErrors = () => {
+const getActiveProviderErrors = (rpcContext?: RpcInvocationContext) => {
   if (!context || !currentResolveProviderErrors) {
     throw new Error("Background context is not initialized");
   }
-  return currentResolveProviderErrors();
+  return currentResolveProviderErrors(rpcContext);
 };
-const getActiveRpcErrors = () => {
+const getActiveRpcErrors = (rpcContext?: RpcInvocationContext) => {
   if (!context || !currentResolveRpcErrors) {
     throw new Error("Background context is not initialized");
   }
-  return currentResolveRpcErrors();
+  return currentResolveRpcErrors(rpcContext);
 };
 
 const isInternalOrigin = (origin: string) => origin === extensionOrigin;
@@ -290,7 +392,18 @@ const clearPendingForPort = (port: browser.Runtime.Port) => {
 const rejectPendingWithDisconnect = (port: browser.Runtime.Port) => {
   const bucket = pendingRequests.get(port);
   if (!bucket) return;
-  const error = getActiveProviderErrors().disconnected().serialize();
+  const portContext = portContexts.get(port);
+  const error = getActiveProviderErrors(
+    portContext
+      ? {
+          namespace: portContext.namespace,
+          chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
+          meta: portContext.meta,
+        }
+      : undefined,
+  )
+    .disconnected()
+    .serialize();
 
   for (const [messageId, { rpcId, jsonrpc }] of bucket) {
     replyRequest(port, messageId, {
@@ -323,7 +436,7 @@ const replyRequest = (port: browser.Runtime.Port, id: string, payload: Transport
     payload,
   });
 };
-const getControllerSnapshot = () => {
+const getControllerSnapshot = (): ControllerSnapshot => {
   if (!context) throw new Error("Background context is not initialized");
   const { controllers, session } = context;
   const activeChain = controllers.network.getActiveChain();
@@ -369,7 +482,7 @@ const resolveOrigin = (port: browser.Runtime.Port) => {
   return "unknown://";
 };
 
-const toJsonRpcError = (error: unknown, method: string): JsonRpcError => {
+const toJsonRpcError = (error: unknown, method: string, rpcContext?: RpcInvocationContext): JsonRpcError => {
   if (
     error &&
     typeof error === "object" &&
@@ -391,7 +504,7 @@ const toJsonRpcError = (error: unknown, method: string): JsonRpcError => {
     };
   }
 
-  return getActiveRpcErrors()
+  return getActiveRpcErrors(rpcContext)
     .internal({
       message: `Unexpected error while handling ${method}`,
       data: { method },
@@ -405,14 +518,30 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
   const pendingBucket = getPendingBucket(port);
   pendingBucket.set(envelope.id, { rpcId, jsonrpc });
 
-  const origin = resolveOrigin(port);
+  const portContext = portContexts.get(port);
+  const origin = portContext?.origin ?? resolveOrigin(port);
+  const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? null;
+  const rpcContext = portContext
+    ? {
+        namespace: portContext.namespace,
+        chainRef: effectiveChainRef ?? portContext.caip2 ?? null,
+        meta: portContext.meta,
+      }
+    : undefined;
 
-  const request: JsonRpcRequest<JsonRpcParams> & { origin: string } = {
+  const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
     id: envelope.payload.id,
     jsonrpc: envelope.payload.jsonrpc,
     method: envelope.payload.method,
     params: envelope.payload.params as JsonRpcParams,
     origin,
+    ...(portContext && {
+      arx: {
+        chainRef: effectiveChainRef,
+        namespace: portContext.namespace,
+        meta: portContext.meta,
+      },
+    }),
   };
 
   try {
@@ -431,7 +560,7 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
     replyRequest(port, envelope.id, {
       id: rpcId,
       jsonrpc,
-      error: toJsonRpcError(error, method),
+      error: toJsonRpcError(error, method, rpcContext),
     });
   } finally {
     pendingBucket.delete(envelope.id);
@@ -443,17 +572,27 @@ const handleConnect = (port: browser.Runtime.Port) => {
   if (port.name !== CHANNEL) return;
 
   connections.add(port);
+  if (!portContexts.has(port)) {
+    portContexts.set(port, {
+      origin: resolveOrigin(port),
+      meta: null,
+      caip2: null,
+      chainId: null,
+      namespace: FALLBACK_NAMESPACE,
+    });
+  }
 
   const handleHandshake = async () => {
     await ensureContext();
 
     const current = getControllerSnapshot();
+    syncPortContext(port, current);
 
     postEnvelope(port, {
       channel: CHANNEL,
       type: "handshake_ack",
       payload: {
-        chainId: current.chain.chainId,
+        chainId: current.chain.chainId ?? "0x0",
         caip2: current.chain.caip2,
         accounts: current.accounts,
         isUnlocked: current.isUnlocked,
@@ -483,6 +622,7 @@ const handleConnect = (port: browser.Runtime.Port) => {
     rejectPendingWithDisconnect(port);
     emitEventToPort(port, "disconnect", []);
     connections.delete(port);
+    portContexts.delete(port);
     port.onMessage.removeListener(handleMessage);
     port.onDisconnect.removeListener(handleDisconnect);
   };
@@ -514,6 +654,7 @@ export default defineBackground(() => {
       }
       connections.clear();
       pendingRequests.clear();
+      portContexts.clear();
 
       context?.services.lifecycle.destroy();
       context = null;

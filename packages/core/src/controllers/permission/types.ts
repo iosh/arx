@@ -1,4 +1,5 @@
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 
 export const PermissionScopes = {
   Basic: "wallet_basic",
@@ -25,7 +26,7 @@ export type PermissionMessengerTopics = {
 
 export type PermissionMessenger = ControllerMessenger<PermissionMessengerTopics>;
 
-export type PermissionScopeResolver = (method: string) => PermissionScope | undefined;
+export type PermissionScopeResolver = (method: string, context?: RpcInvocationContext) => PermissionScope | undefined;
 
 export type PermissionControllerOptions = {
   messenger: PermissionMessenger;
@@ -35,7 +36,7 @@ export type PermissionControllerOptions = {
 
 export type PermissionController = {
   getState(): PermissionsState;
-  ensurePermission(origin: string, method: string): Promise<void>;
+  ensurePermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   grant(origin: string, scope: PermissionScope): Promise<void>;
   clear(origin: string): Promise<void>;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;

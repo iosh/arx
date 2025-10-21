@@ -220,8 +220,8 @@ class ProviderHost {
     }
 
     const hostWindow = window as Window;
-    const hasOwnProperty = Object.hasOwn(hostWindow, WINDOW_ETH_PROP);
-    if (!hasOwnProperty) {
+    const hasProvider = Object.hasOwn(hostWindow, WINDOW_ETH_PROP);
+    if (!hasProvider) {
       Object.defineProperty(hostWindow, WINDOW_ETH_PROP, {
         configurable: true,
         enumerable: false,

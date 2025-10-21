@@ -1,4 +1,12 @@
-import { createAsyncMiddleware, type Json } from "@arx/core";
+import { createAsyncMiddleware, type Json, type RpcInvocationContext } from "@arx/core";
+
+/**
+ * Lock policy priority (highest to lowest):
+ * 1. Chain providerPolicies.locked entry for the exact method
+ * 2. Chain providerPolicies.locked wildcard "*" entry
+ * 3. Method definition's own `locked` configuration
+ * 4. Default: reject while the session stays locked
+ */
 
 type LockedDefinition =
   | {
@@ -13,8 +21,12 @@ type LockedDefinition =
 type LockedGuardDeps = {
   isUnlocked(): boolean;
   isInternalOrigin(origin: string): boolean;
-  resolveMethodDefinition(method: string): LockedDefinition;
-  resolveProviderErrors(): {
+  resolveMethodDefinition(method: string, context?: RpcInvocationContext): LockedDefinition;
+  resolveLockedPolicy(
+    method: string,
+    context?: RpcInvocationContext,
+  ): { allow?: boolean; response?: unknown; hasResponse?: boolean } | undefined;
+  resolveProviderErrors(context?: RpcInvocationContext): {
     unauthorized(args: { message: string; data: { origin: string; method: string } }): unknown;
   };
 };
@@ -31,6 +43,7 @@ export const createLockedGuardMiddleware = ({
   isUnlocked,
   isInternalOrigin,
   resolveMethodDefinition,
+  resolveLockedPolicy,
   resolveProviderErrors,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
@@ -40,10 +53,11 @@ export const createLockedGuardMiddleware = ({
       return next();
     }
 
-    const definition = resolveMethodDefinition(req.method);
+    const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+    const definition = resolveMethodDefinition(req.method, rpcContext);
 
     if (!definition) {
-      throw resolveProviderErrors().unauthorized({
+      throw resolveProviderErrors(rpcContext).unauthorized({
         message: `Request ${req.method} is blocked until the active namespace declares it`,
         data: { origin, method: req.method },
       });
@@ -53,17 +67,19 @@ export const createLockedGuardMiddleware = ({
       return next();
     }
 
-    const locked = definition.locked ?? {};
-    if (locked.allow) {
+    const resolvedPolicy = resolveLockedPolicy(req.method, rpcContext);
+    const locked = resolvedPolicy ?? definition.locked ?? {};
+
+    if (resolvedPolicy?.allow ?? locked.allow) {
       return next();
     }
 
-    if (Object.hasOwn(locked, "response")) {
-      res.result = locked.response as Json;
+    if (resolvedPolicy?.hasResponse || Object.hasOwn(locked, "response")) {
+      res.result = (resolvedPolicy?.response ?? locked.response) as Json;
       return;
     }
 
-    throw resolveProviderErrors().unauthorized({
+    throw resolveProviderErrors(rpcContext).unauthorized({
       message: `Request ${req.method} requires an unlocked session`,
       data: { origin, method: req.method },
     });

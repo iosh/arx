@@ -53,7 +53,8 @@ import type { UnlockController, UnlockControllerOptions, UnlockMessengerTopics }
 import { InMemoryUnlockController } from "../controllers/unlock/UnlockController.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
-import { createPermissionScopeResolver } from "../rpc/index.js";
+import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
+import { createNamespaceResolver, createPermissionScopeResolver, type RpcInvocationContext } from "../rpc/index.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
@@ -232,13 +233,10 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     ...(networkOptions?.logger ? { logger: networkOptions.logger } : {}),
   });
 
-  const resolveNamespace = () => {
-    const active = networkController.getActiveChain();
-    const [namespace] = active.chainRef.split(":");
-    return namespace ?? EIP155_NAMESPACE;
-  };
+  let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
 
-  const permissionScopeResolver = permissionOptions?.scopeResolver ?? createPermissionScopeResolver(resolveNamespace);
+  const permissionScopeResolver =
+    permissionOptions?.scopeResolver ?? createPermissionScopeResolver((ctx) => namespaceResolverFn(ctx));
 
   const accountController = new InMemoryMultiNamespaceAccountsController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
@@ -256,7 +254,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const permissionController = new InMemoryPermissionController({
     messenger: castMessenger<PermissionMessengerTopics>(messenger) as PermissionMessenger,
     initialState: permissionOptions?.initialState ?? DEFAULT_PERMISSIONS_STATE,
-    scopeResolver: permissionOptions?.scopeResolver ?? (() => undefined),
+    scopeResolver: permissionScopeResolver,
   });
 
   const transactionController = new InMemoryTransactionController({
@@ -281,10 +279,13 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     throw new Error("createBackgroundServices requires chainRegistry.port");
   }
 
+  const seedSource = chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA;
+  const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
+
   const chainRegistryController = new InMemoryChainRegistryController({
     messenger: castMessenger<ChainRegistryMessengerTopics>(messenger) as ChainRegistryMessenger,
     port: chainRegistryOptions.port,
-    seed: chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA,
+    seed: registrySeed,
     ...(chainRegistryOptions.now ? { now: chainRegistryOptions.now } : {}),
     ...(chainRegistryOptions.logger ? { logger: chainRegistryOptions.logger } : {}),
     ...(chainRegistryOptions.schemaVersion !== undefined ? { schemaVersion: chainRegistryOptions.schemaVersion } : {}),
@@ -314,6 +315,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionController,
     chainRegistry: chainRegistryController,
   };
+
+  namespaceResolverFn = createNamespaceResolver(controllers);
 
   const storagePort = storageOptions?.port;
   const storageNow = storageOptions?.now ?? Date.now;
@@ -801,7 +804,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
       persistVaultMeta: () => persistVaultMetaImmediate(),
     } satisfies BackgroundSessionServices,
-    getActiveNamespace: resolveNamespace,
+    getActiveNamespace: namespaceResolverFn,
     lifecycle: {
       initialize,
       start,

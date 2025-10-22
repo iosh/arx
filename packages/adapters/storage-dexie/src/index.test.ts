@@ -20,22 +20,26 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
   version: NETWORK_SNAPSHOT_VERSION,
   updatedAt: Date.now(),
   payload: {
-    active: {
-      name: "Ethereum",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      caip2: "eip155:1",
-      chainId: "0x1",
-      rpcUrl: "https://rpc.example",
-    },
+    activeChain: "eip155:1",
     knownChains: [
       {
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
+        namespace: "eip155",
         chainId: "0x1",
-        rpcUrl: "https://rpc.example",
-        name: "Ethereum",
+        displayName: "Ethereum",
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcEndpoints: [{ url: "https://rpc.example", type: "public" as const }],
       },
     ],
+    rpc: {
+      "eip155:1": {
+        activeIndex: 0,
+        endpoints: [{ index: 0, url: "https://rpc.example", type: "public" as const }],
+        health: [{ index: 0, successCount: 0, failureCount: 0, consecutiveFailures: 0 }],
+        strategy: { id: "round-robin" },
+        lastUpdatedAt: Date.now(),
+      },
+    },
   },
 };
 

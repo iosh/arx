@@ -77,7 +77,7 @@ const httpUrlSchema = z.url().refine((value) => value.startsWith("http://") || v
   message: "URL must use the http or https protocol",
 });
 
-const hexQuantitySchema = z.string().regex(/^0x[0-9a-fA-F]+$/, {
+const hexQuantitySchema = z.string({ error: "EIP-155 metadata must include a hex chainId" }).regex(/^0x[0-9a-fA-F]+$/, {
   message: "Expected a 0x-prefixed hexadecimal string",
 });
 

@@ -396,6 +396,41 @@ describe("createBackgroundServices", () => {
     services.lifecycle.destroy();
   });
 
+  it("aligns the active account pointer with network chain changes", async () => {
+    const services = createServices({
+      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
+    });
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    await services.controllers.network.addChain(ALT_CHAIN);
+
+    const address = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    await services.controllers.accounts.addAccount({
+      chainRef: MAINNET_CHAIN.chainRef,
+      address,
+      makePrimary: true,
+    });
+    await services.controllers.accounts.switchActive({ chainRef: MAINNET_CHAIN.chainRef, address });
+
+    expect(services.controllers.accounts.getActivePointer()).toMatchObject({
+      chainRef: MAINNET_CHAIN.chainRef,
+      address,
+    });
+
+    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
+    await flushMicrotasks();
+
+    expect(services.controllers.accounts.getActivePointer()).toMatchObject({
+      chainRef: ALT_CHAIN.chainRef,
+      address,
+      namespace: "eip155",
+    });
+
+    services.lifecycle.destroy();
+  });
+
   it("persists controller snapshots when state changes", async () => {
     let now = 3_000;
     const clock = () => now;

@@ -318,6 +318,31 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   namespaceResolverFn = createNamespaceResolver(controllers);
 
+  const syncAccountsPointer = async (chain: ChainMetadata) => {
+    const pointer = accountController.getActivePointer();
+    const available = accountController.getAccounts({ chainRef: chain.chainRef });
+    const preferred =
+      pointer?.namespace === chain.namespace && pointer.address && available.includes(pointer.address)
+        ? pointer.address
+        : null;
+
+    try {
+      await accountController.switchActive({ chainRef: chain.chainRef, address: preferred ?? null });
+    } catch (error) {
+      console.warn(
+        "[createBackgroundServices] failed to align accounts pointer with active chain",
+        chain.chainRef,
+        error,
+      );
+    }
+  };
+
+  const unsubscribePointerSync = networkController.onChainChanged((chain) => {
+    void syncAccountsPointer(chain);
+  });
+
+  void syncAccountsPointer(networkController.getActiveChain());
+
   const storagePort = storageOptions?.port;
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
@@ -782,6 +807,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       unsubscribeRegistry();
     } catch (error) {
       storageLogger("lifecycle: failed to remove chain registry listener", error);
+    }
+    try {
+      unsubscribePointerSync();
+    } catch (error) {
+      console.warn("[createBackgroundServices] failed to remove network pointer sync listener", error);
     }
 
     if (storageSyncAttached) {

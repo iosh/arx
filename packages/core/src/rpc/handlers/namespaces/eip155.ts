@@ -1,3 +1,4 @@
+import { parseCaip2 } from "../../../chains/index.js";
 import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
 import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
@@ -72,13 +73,61 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   }
 
   const payload = first as Record<string, unknown>;
-  const chainId = typeof payload.chainId === "string" ? payload.chainId : undefined;
-  const caip2 = typeof payload.caip2 === "string" ? payload.caip2 : undefined;
+  const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
+  const rawCaip2 = typeof payload.caip2 === "string" ? payload.caip2.trim() : undefined;
+
+  if (!rawChainId && !rawCaip2) {
+    throw rpcErrors.invalidParams({
+      message: "wallet_switchEthereumChain requires a chainId or caip2 value",
+      data: { params },
+    });
+  }
+
+  const normalizedChainId = rawChainId?.toLowerCase();
+  if (normalizedChainId && !/^0x[0-9a-f]+$/i.test(normalizedChainId)) {
+    throw rpcErrors.invalidParams({
+      message: "wallet_switchEthereumChain received an invalid hex chainId",
+      data: { chainId: rawChainId },
+    });
+  }
+
+  let normalizedCaip2: string | undefined;
+  if (rawCaip2) {
+    try {
+      const parsed = parseCaip2(rawCaip2);
+      if (parsed.namespace !== "eip155") {
+        throw providerErrors.custom({
+          code: 4902,
+          message: "Requested chain is not compatible with wallet_switchEthereumChain",
+          data: { caip2: rawCaip2 },
+        });
+      }
+      if (normalizedChainId) {
+        const decimal = BigInt(normalizedChainId).toString(10);
+        if (decimal !== parsed.reference) {
+          throw rpcErrors.invalidParams({
+            message: "wallet_switchEthereumChain chainId does not match caip2 reference",
+            data: { chainId: rawChainId, caip2: rawCaip2 },
+          });
+        }
+      }
+      normalizedCaip2 = `${parsed.namespace}:${parsed.reference}`;
+    } catch (error) {
+      if (isRpcError(error)) throw error;
+      throw rpcErrors.invalidParams({
+        message: "wallet_switchEthereumChain received an invalid caip2 identifier",
+        data: { caip2: rawCaip2 },
+      });
+    }
+  }
 
   const state = controllers.network.getState();
   const target = state.knownChains.find((item) => {
-    if (caip2 && item.chainRef === caip2) return true;
-    if (chainId && item.chainId && item.chainId.toLowerCase() === chainId.toLowerCase()) return true;
+    if (normalizedCaip2 && item.chainRef === normalizedCaip2) return true;
+    if (normalizedChainId) {
+      const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
+      if (candidateChainId && candidateChainId === normalizedChainId) return true;
+    }
     return false;
   });
 
@@ -86,7 +135,24 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
     throw providerErrors.custom({
       code: 4902,
       message: "Requested chain is not registered with ARX",
-      data: { chainId },
+      data: { chainId: rawChainId, caip2: rawCaip2 },
+    });
+  }
+
+  if (target.namespace !== "eip155") {
+    throw providerErrors.custom({
+      code: 4902,
+      message: "Requested chain is not compatible with wallet_switchEthereumChain",
+      data: { chainRef: target.chainRef },
+    });
+  }
+
+  const supportsFeature = target.features?.includes("wallet_switchEthereumChain") ?? false;
+  if (!supportsFeature) {
+    throw providerErrors.custom({
+      code: 4902,
+      message: "Requested chain does not support wallet_switchEthereumChain",
+      data: { chainRef: target.chainRef },
     });
   }
 
@@ -98,7 +164,7 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
       throw providerErrors.custom({
         code: 4902,
         message: error.message,
-        data: { chainId },
+        data: { chainId: rawChainId ?? target.chainId, caip2: normalizedCaip2 ?? target.chainRef },
       });
     }
     throw error;

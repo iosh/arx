@@ -5,6 +5,7 @@ export const ApprovalTypes = {
   SignMessage: "wallet_signMessage",
   SignTypedData: "wallet_signTypedData",
   SendTransaction: "wallet_sendTransaction",
+  AddChain: "wallet_addEthereumChain",
 } as const;
 
 export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];

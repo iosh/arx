@@ -58,6 +58,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#transport.on("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.on("chainChanged", this.#handleTransportChainChanged);
     this.#transport.on("unlockStateChanged", this.#handleUnlockStateChanged);
+    this.#transport.on("metaChanged", this.#handleMetaChanged);
 
     this.#syncWithTransportState();
   }
@@ -81,6 +82,11 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   isConnected = () => {
     return this.#transport.isConnected();
+  };
+
+  #handleMetaChanged = (payload: unknown) => {
+    if (payload === undefined) return;
+    this.#updateMeta((payload ?? undefined) as TransportMeta | null | undefined);
   };
 
   #createInitializationPromise() {
@@ -358,6 +364,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     this.#transport.removeListener("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.removeListener("chainChanged", this.#handleTransportChainChanged);
     this.#transport.removeListener("unlockStateChanged", this.#handleUnlockStateChanged);
+    this.#transport.removeListener("metaChanged", this.#handleMetaChanged);
     this.removeAllListeners();
   }
 }

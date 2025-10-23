@@ -218,6 +218,14 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       }),
     );
 
+    unsubscribeControllerEvents.push(
+      controllers.network.onStateChanged(() => {
+        const snapshot = getControllerSnapshot();
+        syncAllPortContexts(snapshot);
+        broadcastEvent("metaChanged", [snapshot.meta]);
+      }),
+    );
+
     const lastMeta = services.session.getLastPersistedVaultMeta();
     const persistedUnlockState = lastMeta?.payload.unlockState;
     if (persistedUnlockState) {

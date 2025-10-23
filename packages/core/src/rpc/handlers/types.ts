@@ -2,6 +2,7 @@ import type { JsonRpcParams } from "@metamask/utils";
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
+import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type {
   PermissionController,
@@ -16,6 +17,7 @@ export type HandlerControllers = {
   approvals: ApprovalController;
   permissions: PermissionController;
   transactions: TransactionController;
+  chainRegistry: ChainRegistryController;
 };
 
 export type RpcRequest = {

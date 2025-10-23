@@ -1,4 +1,4 @@
-import { parseCaip2 } from "../../../chains/index.js";
+import { parseCaip2, type ChainMetadata } from "../../../chains/index.js";
 import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
 import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
@@ -12,7 +12,8 @@ import {
   resolveSigningInputs,
   toParamsArray,
 } from "./utils.js";
-
+import { createEip155MetadataFromEip3085 } from "../../../chains/index.js";
+import { ZodError } from "zod";
 const handleEthChainId: MethodHandler = ({ controllers }) => {
   return controllers.network.getActiveChain().chainId;
 };
@@ -171,6 +172,82 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   }
 };
 
+const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, controllers }) => {
+  const rpcErrors = resolveRpcErrors(controllers);
+  const providerErrors = resolveProviderErrors(controllers);
+  const paramsArray = toParamsArray(request.params);
+  const [raw] = paramsArray;
+
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw rpcErrors.invalidParams({
+      message: "wallet_addEthereumChain expects a single object parameter",
+      data: { params: request.params },
+    });
+  }
+
+  let metadata: ChainMetadata;
+  try {
+    metadata = createEip155MetadataFromEip3085(raw);
+  } catch (error) {
+    const message =
+      error instanceof ZodError
+        ? "wallet_addEthereumChain received invalid chain parameters"
+        : error instanceof Error
+          ? error.message
+          : "Invalid chain parameters";
+
+    throw rpcErrors.invalidParams({
+      message,
+      data: { params: request.params },
+    });
+  }
+
+  if (metadata.namespace !== "eip155") {
+    throw providerErrors.custom({
+      code: 4902,
+      message: "Requested chain is not compatible with wallet_addEthereumChain",
+      data: { chainRef: metadata.chainRef },
+    });
+  }
+
+  const existing = controllers.chainRegistry.getChain(metadata.chainRef);
+  if (existing && existing.namespace !== "eip155") {
+    throw providerErrors.custom({
+      code: 4902,
+      message: "Requested chain conflicts with an existing non-EVM chain",
+      data: { chainRef: metadata.chainRef },
+    });
+  }
+  const isUpdate = Boolean(existing);
+
+  const task = {
+    id: createTaskId("wallet_addEthereumChain"),
+    type: ApprovalTypes.AddChain,
+    origin,
+    payload: {
+      metadata,
+      isUpdate,
+    },
+  } as const;
+
+  try {
+    await controllers.approvals.requestApproval(task, async () => {
+      await controllers.chainRegistry.upsertChain(metadata);
+      return metadata.chainRef;
+    });
+  } catch (error) {
+    if (isRpcError(error)) {
+      throw error;
+    }
+    throw providerErrors.userRejectedRequest({
+      message: "User rejected chain addition",
+      data: { origin },
+    });
+  }
+
+  return null;
+};
+
 const handlePersonalSign: MethodHandler = async ({ origin, request, controllers }) => {
   const paramsArray = toParamsArray(request.params);
 
@@ -319,5 +396,10 @@ export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
     scope: PermissionScopes.Transaction,
     approvalRequired: true,
     handler: handleEthSendTransaction,
+  },
+  wallet_addEthereumChain: {
+    scope: PermissionScopes.Basic,
+    approvalRequired: true,
+    handler: handleWalletAddEthereumChain,
   },
 });

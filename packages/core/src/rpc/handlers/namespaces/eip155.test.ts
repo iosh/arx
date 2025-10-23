@@ -15,6 +15,17 @@ const ALT_CHAIN = {
   features: ["eip155", "wallet_switchEthereumChain"],
 };
 
+const ADD_CHAIN_PARAMS = {
+  chainId: "0x2105",
+  chainName: "Base Mainnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: ["https://mainnet.base.org"],
+  blockExplorerUrls: ["https://basescan.org"],
+};
+const ADDED_CHAIN_REF = "eip155:8453";
+
+const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const createServices = () =>
   createBackgroundServices({
     chainRegistry: {
@@ -319,6 +330,224 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
         message: "eth_sendTransaction requires at least one transaction parameter",
       });
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("adds a new chain via wallet_addEthereumChain", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [ADD_CHAIN_PARAMS] as JsonRpcParams,
+          },
+        }),
+      ).resolves.toBeNull();
+
+      await flushAsync();
+
+      const registryEntry = services.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
+
+      const networkChain = services.controllers.network.getChain(ADDED_CHAIN_REF);
+      expect(networkChain?.displayName).toBe("Base Mainnet");
+      expect(networkChain?.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("returns invalid params when wallet_addEthereumChain payload is malformed", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: "0x1",
+                chainName: "Invalid",
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                rpcUrls: [],
+              },
+            ] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: -32602,
+      });
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("maps approval rejection to 4001 for wallet_addEthereumChain", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
+    services.controllers.approvals.requestApproval = (async () => {
+      throw new Error("user denied");
+    }) as typeof services.controllers.approvals.requestApproval;
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [ADD_CHAIN_PARAMS] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: 4001,
+      });
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("rejects invalid chainId format", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                ...ADD_CHAIN_PARAMS,
+                chainId: "123",
+              },
+            ] as unknown as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("rejects invalid rpcUrls", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                ...ADD_CHAIN_PARAMS,
+                rpcUrls: ["ftp://invalid.com"],
+              },
+            ] as unknown as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("updates existing chain when re-adding", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [ADD_CHAIN_PARAMS] as unknown as JsonRpcParams,
+          },
+        }),
+      ).resolves.toBeNull();
+      await flushAsync();
+
+      const updatedParams = {
+        ...ADD_CHAIN_PARAMS,
+        rpcUrls: ["https://new-rpc.example"],
+      };
+
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [updatedParams] as unknown as JsonRpcParams,
+          },
+        }),
+      ).resolves.toBeNull();
+      await flushAsync();
+
+      const registryEntry = services.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
+
+      const networkChain = services.controllers.network.getChain(ADDED_CHAIN_REF);
+      expect(networkChain?.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("rejects negative decimals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                ...ADD_CHAIN_PARAMS,
+                nativeCurrency: { name: "Ether", symbol: "ETH", decimals: -1 },
+              },
+            ] as unknown as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
     } finally {
       services.lifecycle.destroy();
     }

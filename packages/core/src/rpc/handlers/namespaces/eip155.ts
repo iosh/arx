@@ -1,10 +1,13 @@
-import { parseCaip2, type ChainMetadata } from "../../../chains/index.js";
+import { ZodError } from "zod";
+import { type ChainMetadata, createEip155MetadataFromEip3085, parseCaip2 } from "../../../chains/index.js";
 import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
 import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
+import type { NamespaceAdapter } from "./adapter.js";
 import {
   buildEip155TransactionRequest,
   createTaskId,
+  EIP155_NAMESPACE,
   isRpcError,
   normaliseTypedData,
   resolveProviderErrors,
@@ -12,8 +15,7 @@ import {
   resolveSigningInputs,
   toParamsArray,
 } from "./utils.js";
-import { createEip155MetadataFromEip3085 } from "../../../chains/index.js";
-import { ZodError } from "zod";
+
 const handleEthChainId: MethodHandler = ({ controllers }) => {
   return controllers.network.getActiveChain().chainId;
 };
@@ -362,7 +364,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
   }
 };
 
-export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
+const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   eth_chainId: {
     handler: handleEthChainId,
   },
@@ -402,4 +404,10 @@ export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
     approvalRequired: true,
     handler: handleWalletAddEthereumChain,
   },
+});
+
+export const createEip155Adapter = (): NamespaceAdapter => ({
+  namespace: EIP155_NAMESPACE,
+  methodPrefixes: ["eth_", "personal_", "wallet_", "net_"],
+  definitions: buildEip155Definitions(),
 });

@@ -1,6 +1,7 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
-import { buildEip155Definitions, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
+import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
+import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type {
   HandlerControllers,
   MethodDefinition,
@@ -11,10 +12,27 @@ import type {
 
 type NamespaceDefinitions = Record<string, MethodDefinition>;
 
-const DEFAULT_NAMESPACE: Namespace = EIP155_NAMESPACE;
+export const DEFAULT_NAMESPACE: Namespace = EIP155_NAMESPACE;
 
 const namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
 const namespacePrefixes = new Map<string, Namespace>();
+
+const namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
+
+export const registerNamespaceAdapter = (adapter: NamespaceAdapter, options?: { replace?: boolean }): void => {
+  registerNamespaceDefinitions(adapter.namespace, adapter.definitions, {
+    replace: options?.replace ?? true,
+    methodPrefixes: adapter.methodPrefixes ?? [],
+  });
+  namespaceAdapters.set(adapter.namespace, adapter);
+};
+
+export const unregisterNamespaceAdapter = (namespace: Namespace): void => {
+  namespaceAdapters.delete(namespace);
+  unregisterNamespaceDefinitions(namespace);
+};
+
+export const getRegisteredNamespaceAdapters = (): NamespaceAdapter[] => [...namespaceAdapters.values()];
 
 const cloneDefinitions = (definitions: NamespaceDefinitions): NamespaceDefinitions => ({ ...definitions });
 
@@ -180,9 +198,7 @@ export const createDomainChainService = (): DomainChainService => ({
   },
 });
 
-registerNamespaceDefinitions(EIP155_NAMESPACE, buildEip155Definitions(), {
-  replace: true,
-  methodPrefixes: ["eth_", "personal_", "wallet_", "net_"],
-});
+const EIP155_ADAPTER = createEip155Adapter();
+registerNamespaceAdapter(EIP155_ADAPTER);
 
 export type { RpcInvocationContext };

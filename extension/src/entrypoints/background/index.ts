@@ -6,7 +6,9 @@ import {
   createMethodExecutor,
   createNamespaceResolver,
   createPermissionScopeResolver,
+  DEFAULT_NAMESPACE,
   getProviderErrors,
+  getRegisteredNamespaceAdapters,
   getRpcErrors,
   type Json,
   type JsonRpcError,
@@ -58,8 +60,6 @@ let currentResolveProviderErrors: ((context?: RpcInvocationContext) => ReturnTyp
   null;
 let currentResolveRpcErrors: ((context?: RpcInvocationContext) => ReturnType<typeof getRpcErrors>) | null = null;
 
-const FALLBACK_NAMESPACE = "eip155";
-
 type ArxRpcContext = {
   origin: string;
   arx?: (RpcInvocationContext & { meta: TransportMeta | null }) | undefined;
@@ -76,18 +76,30 @@ type ControllerSnapshot = {
   };
 };
 
+const isNamespaceRegistered = (namespace: string | null | undefined) => {
+  if (!namespace || namespace.length === 0) {
+    return false;
+  }
+  return getRegisteredNamespaceAdapters().some((adapter) => adapter.namespace === namespace);
+};
+
 const resolveNamespace = (caip2: string | null, metaNamespace?: string): string => {
   if (metaNamespace) {
-    if (metaNamespace !== FALLBACK_NAMESPACE) {
-      console.warn("[background] Unsupported namespace from transport meta; falling back", metaNamespace);
+    if (isNamespaceRegistered(metaNamespace)) {
+      return metaNamespace;
     }
-    return metaNamespace;
+    console.warn(
+      `[background] Namespace "${metaNamespace}" has no registered adapter; falling back to ${DEFAULT_NAMESPACE}`,
+    );
+    return DEFAULT_NAMESPACE;
   }
   if (caip2) {
     const [namespace] = caip2.split(":");
-    if (namespace && namespace.length > 0) return namespace;
+    if (namespace && isNamespaceRegistered(namespace)) {
+      return namespace;
+    }
   }
-  return FALLBACK_NAMESPACE;
+  return DEFAULT_NAMESPACE;
 };
 
 const syncPortContext = (port: browser.Runtime.Port, snapshot: ControllerSnapshot) => {
@@ -182,7 +194,8 @@ const ensureContext = async (): Promise<BackgroundContext> => {
   }
 
   contextPromise = (async () => {
-    let namespaceResolver: (ctx?: RpcInvocationContext) => string = () => FALLBACK_NAMESPACE;
+    let resolveNamespaceRef: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
+    const namespaceResolver = (ctx?: RpcInvocationContext) => resolveNamespaceRef(ctx);
     const storage = getExtensionStorage();
 
     const services = createBackgroundServices({
@@ -203,7 +216,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    namespaceResolver = createNamespaceResolver(controllers);
+    resolveNamespaceRef = createNamespaceResolver(controllers);
 
     unsubscribeControllerEvents.push(
       session.unlock.onUnlocked((payload) => {
@@ -586,7 +599,7 @@ const handleConnect = (port: browser.Runtime.Port) => {
       meta: null,
       caip2: null,
       chainId: null,
-      namespace: FALLBACK_NAMESPACE,
+      namespace: DEFAULT_NAMESPACE,
     });
   }
 

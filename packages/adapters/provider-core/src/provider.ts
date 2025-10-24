@@ -1,4 +1,4 @@
-import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
+import { DEFAULT_NAMESPACE, type JsonRpcParams, type JsonRpcRequest, type JsonRpcVersion2 } from "@arx/core";
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
@@ -21,8 +21,6 @@ type LegacyCallback = (error: EIP1193ProviderRpcError | null, response: LegacyRe
 type LegacyPayload = Partial<Pick<JsonRpcRequest<JsonRpcParams>, "id" | "jsonrpc">> &
   Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">;
 const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
-
-const DEFAULT_NAMESPACE = "eip155";
 
 const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   activeChain: meta.activeChain,

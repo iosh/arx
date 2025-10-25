@@ -47,8 +47,14 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
         chainRef: activeChain.chainRef,
       });
       if (result.length > 0) {
-        await controllers.permissions.grant(origin, PermissionScopes.Basic);
-        await controllers.permissions.grant(origin, PermissionScopes.Accounts);
+        await controllers.permissions.grant(origin, PermissionScopes.Basic, {
+          namespace: "eip155",
+          chainRef: activeChain.chainRef,
+        });
+        await controllers.permissions.grant(origin, PermissionScopes.Accounts, {
+          namespace: "eip155",
+          chainRef: activeChain.chainRef,
+        });
       }
       return result;
     });

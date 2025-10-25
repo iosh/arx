@@ -174,9 +174,17 @@ const accountsStateSchema = z
   );
 
 const permissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
+const chainNamespaceSchema = z.string().min(1);
+
+const namespacePermissionStateSchema = z.strictObject({
+  scopes: z.array(permissionScopeSchema),
+  chains: z.array(caip2ChainIdSchema),
+});
+
+const originPermissionStateSchema = z.record(chainNamespaceSchema, namespacePermissionStateSchema);
 
 const permissionsStateSchema = z.strictObject({
-  origins: z.record(originStringSchema, z.array(permissionScopeSchema)),
+  origins: z.record(originStringSchema, originPermissionStateSchema),
 });
 
 const approvalStateSchema = z.strictObject({

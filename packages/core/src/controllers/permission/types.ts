@@ -1,5 +1,7 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
+import type { ChainNamespace } from "../account/types.js";
 
 export const PermissionScopes = {
   Basic: "wallet_basic",
@@ -10,13 +12,25 @@ export const PermissionScopes = {
 
 export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionScopes];
 
+export type NamespacePermissionState = {
+  scopes: PermissionScope[];
+  chains: Caip2ChainId[];
+};
+
+export type OriginPermissionState = Record<ChainNamespace, NamespacePermissionState>;
+
 export type OriginPermissions = {
   origin: string;
-  scopes: PermissionScope[];
+  namespaces: OriginPermissionState;
 };
 
 export type PermissionsState = {
-  origins: Record<string, PermissionScope[]>;
+  origins: Record<string, OriginPermissionState>;
+};
+
+export type GrantPermissionOptions = {
+  namespace?: ChainNamespace | null;
+  chainRef?: Caip2ChainId | null;
 };
 
 export type PermissionMessengerTopics = {
@@ -37,7 +51,7 @@ export type PermissionControllerOptions = {
 export type PermissionController = {
   getState(): PermissionsState;
   ensurePermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
-  grant(origin: string, scope: PermissionScope): Promise<void>;
+  grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;
   clear(origin: string): Promise<void>;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void;

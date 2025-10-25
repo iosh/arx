@@ -167,7 +167,12 @@ describe("storage schemas", () => {
       updatedAt: TIMESTAMP,
       payload: {
         origins: {
-          "https://dapp.example": [PermissionScopes.Basic],
+          "https://dapp.example": {
+            eip155: {
+              scopes: [PermissionScopes.Basic],
+              chains: ["eip155:1"],
+            },
+          },
         },
       },
     };
@@ -178,7 +183,12 @@ describe("storage schemas", () => {
       ...snapshot,
       payload: {
         origins: {
-          "not-a-valid-origin": [PermissionScopes.Basic],
+          "not-a-valid-origin": {
+            eip155: {
+              scopes: [PermissionScopes.Basic],
+              chains: [],
+            },
+          },
         },
       },
     };

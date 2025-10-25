@@ -60,6 +60,23 @@ export const createStorageSync = ({
     lastUpdatedAt: state.lastUpdatedAt,
   });
 
+  const clonePermissionsState = (state: PermissionsState): PermissionsState => ({
+    origins: Object.fromEntries(
+      Object.entries(state.origins).map(([origin, originState]) => [
+        origin,
+        Object.fromEntries(
+          Object.entries(originState).map(([namespace, namespaceState]) => [
+            namespace,
+            {
+              scopes: [...namespaceState.scopes],
+              chains: [...namespaceState.chains],
+            },
+          ]),
+        ),
+      ]),
+    ),
+  });
+
   const subscriptions: Array<() => void> = [];
 
   const attach = () => {
@@ -129,14 +146,13 @@ export const createStorageSync = ({
       const envelope: PermissionsSnapshot = {
         version: PERMISSIONS_SNAPSHOT_VERSION,
         updatedAt: now(),
-        payload: {
-          origins: Object.fromEntries(Object.entries(state.origins).map(([origin, scopes]) => [origin, [...scopes]])),
-        },
+        payload: clonePermissionsState(state),
       };
       void storagePort.saveSnapshot(StorageNamespaces.Permissions, envelope).catch((error) => {
         logger("[persistence] failed to persist permissions snapshot", error);
       });
     });
+
     subscriptions.push(permissionsUnsub);
 
     const approvalsUnsub = controllers.approvals.onStateChanged((state) => {

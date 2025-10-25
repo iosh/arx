@@ -85,7 +85,12 @@ const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
   updatedAt: 1_000,
   payload: {
     origins: {
-      "https://dapp.example": [PermissionScopes.Basic, PermissionScopes.Accounts],
+      "https://dapp.example": {
+        eip155: {
+          scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
+          chains: ["eip155:1"],
+        },
+      },
     },
   },
 };

@@ -1,4 +1,6 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { ChainNamespace } from "../account/types.js";
 
 export const ApprovalTypes = {
   RequestAccounts: "wallet_requestAccounts",
@@ -14,11 +16,15 @@ export type ApprovalTask<T> = {
   id: string;
   type: ApprovalType;
   origin: string;
+  namespace?: ChainNamespace | undefined;
+  chainRef?: Caip2ChainId | undefined;
   payload: T;
 };
 
 export type ApprovalResult<T> = {
   id: string;
+  namespace?: ChainNamespace | undefined;
+  chainRef?: Caip2ChainId | undefined;
   value: T;
 };
 

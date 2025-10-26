@@ -34,11 +34,13 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
     id: createTaskId("eth_requestAccounts"),
     type: ApprovalTypes.RequestAccounts,
     origin,
+    namespace: "eip155",
+    chainRef: activeChain.chainRef,
     payload: {
       caip2: activeChain.chainRef,
       suggestedAccounts: [...suggested],
     },
-  } as const;
+  };
 
   try {
     const approved = await controllers.approvals.requestApproval(task, async () => {
@@ -232,11 +234,13 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
     id: createTaskId("wallet_addEthereumChain"),
     type: ApprovalTypes.AddChain,
     origin,
+    namespace: metadata.namespace,
+    chainRef: metadata.chainRef,
     payload: {
       metadata,
       isUpdate,
     },
-  } as const;
+  };
 
   try {
     await controllers.approvals.requestApproval(task, async () => {
@@ -284,17 +288,19 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
       data: { params: request.params },
     });
   }
-
+  const activeChain = controllers.network.getActiveChain();
   const task = {
     id: createTaskId("personal_sign"),
     type: ApprovalTypes.SignMessage,
     origin,
+    namespace: "eip155",
+    chainRef: activeChain.chainRef,
     payload: {
-      caip2: controllers.network.getActiveChain().chainRef,
+      caip2: activeChain.chainRef,
       from: address,
       message,
     },
-  } as const;
+  };
 
   try {
     return await controllers.approvals.requestApproval(task);
@@ -320,17 +326,19 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   }
 
   const { address, typedData } = normaliseTypedData(paramsArray, rpcErrors);
-
+  const activeChain = controllers.network.getActiveChain();
   const task = {
     id: createTaskId("eth_signTypedData_v4"),
     type: ApprovalTypes.SignTypedData,
     origin,
+    namespace: "eip155",
+    chainRef: activeChain.chainRef,
     payload: {
-      caip2: controllers.network.getActiveChain().chainRef,
+      caip2: activeChain.chainRef,
       from: address,
       typedData,
     },
-  } as const;
+  };
 
   try {
     return await controllers.approvals.requestApproval(task);

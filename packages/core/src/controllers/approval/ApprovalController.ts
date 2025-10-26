@@ -28,11 +28,15 @@ const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
   id: task.id,
   type: task.type,
   origin: task.origin,
+  namespace: task.namespace,
+  chainRef: task.chainRef,
   payload: task.payload,
 });
 
 const cloneResult = <T>(result: ApprovalResult<T>): ApprovalResult<T> => ({
   id: result.id,
+  namespace: result.namespace,
+  chainRef: result.chainRef,
   value: result.value,
 });
 
@@ -76,7 +80,12 @@ export class InMemoryApprovalController implements ApprovalController {
     try {
       const value = await handler(activeTask);
       this.#finalize(activeTask.id);
-      this.#publishFinish({ id: activeTask.id, value });
+      this.#publishFinish({
+        id: activeTask.id,
+        namespace: activeTask.namespace,
+        chainRef: activeTask.chainRef,
+        value,
+      });
       return value;
     } catch (error) {
       this.#finalize(activeTask.id);

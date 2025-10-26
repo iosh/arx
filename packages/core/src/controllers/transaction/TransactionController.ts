@@ -216,11 +216,14 @@ export class InMemoryTransactionController implements TransactionController {
     this.#state = cloneState(state);
     this.#publishState();
   }
+
   #createApprovalTask(meta: TransactionMeta): TransactionApprovalTask {
     return {
       id: meta.id,
       type: ApprovalTypes.SendTransaction,
       origin: meta.origin,
+      namespace: meta.request.namespace,
+      chainRef: meta.caip2,
       payload: {
         caip2: meta.caip2,
         origin: meta.origin,

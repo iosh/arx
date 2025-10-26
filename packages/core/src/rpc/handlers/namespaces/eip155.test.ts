@@ -553,3 +553,204 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 });
+
+describe("eip155 handlers - approval metadata", () => {
+  it("includes namespace metadata for eth_requestAccounts approvals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+    const activeChain = services.controllers.network.getActiveChain();
+
+    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = services.controllers.approvals.requestApproval;
+    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+      capturedTask = task;
+      return originalRequestApproval.call(
+        services.controllers.approvals,
+        task as Parameters<typeof originalRequestApproval>[0],
+        strategy as Parameters<typeof originalRequestApproval>[1],
+      );
+    }) as typeof services.controllers.approvals.requestApproval;
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([]);
+
+      expect(capturedTask?.namespace).toBe("eip155");
+      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("includes namespace metadata for personal_sign approvals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+    const activeChain = services.controllers.network.getActiveChain();
+
+    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = services.controllers.approvals.requestApproval;
+    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+      capturedTask = task;
+      return originalRequestApproval.call(
+        services.controllers.approvals,
+        task as Parameters<typeof originalRequestApproval>[0],
+        strategy as Parameters<typeof originalRequestApproval>[1],
+      );
+    }) as typeof services.controllers.approvals.requestApproval;
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "personal_sign",
+            params: ["0xdeadbeef", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4001 });
+
+      expect(capturedTask?.namespace).toBe("eip155");
+      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("includes namespace metadata for eth_signTypedData_v4 approvals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+    const activeChain = services.controllers.network.getActiveChain();
+
+    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = services.controllers.approvals.requestApproval;
+    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+      capturedTask = task;
+      return originalRequestApproval.call(
+        services.controllers.approvals,
+        task as Parameters<typeof originalRequestApproval>[0],
+        strategy as Parameters<typeof originalRequestApproval>[1],
+      );
+    }) as typeof services.controllers.approvals.requestApproval;
+
+    const typedData = {
+      domain: { name: "ARX", version: "1" },
+      message: { contents: "Hello" },
+      primaryType: "Example",
+      types: {
+        EIP712Domain: [{ name: "name", type: "string" }],
+        Example: [{ name: "contents", type: "string" }],
+      },
+    };
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_signTypedData_v4",
+            params: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", JSON.stringify(typedData)] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4001 });
+
+      expect(capturedTask?.namespace).toBe("eip155");
+      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("includes chain metadata for wallet_addEthereumChain approvals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+
+    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = services.controllers.approvals.requestApproval;
+    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+      capturedTask = task;
+      return originalRequestApproval.call(
+        services.controllers.approvals,
+        task as Parameters<typeof originalRequestApproval>[0],
+        strategy as Parameters<typeof originalRequestApproval>[1],
+      );
+    }) as typeof services.controllers.approvals.requestApproval;
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_addEthereumChain", params: [ADD_CHAIN_PARAMS] as JsonRpcParams },
+        }),
+      ).resolves.toBeNull();
+
+      expect(capturedTask?.namespace).toBe("eip155");
+      expect(capturedTask?.chainRef).toBe(ADDED_CHAIN_REF);
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("includes namespace metadata for eth_sendTransaction approvals", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createMethodExecutor(services.controllers);
+    const activeChain = services.controllers.network.getActiveChain();
+
+    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = services.controllers.approvals.requestApproval;
+    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+      capturedTask = task;
+      return originalRequestApproval.call(
+        services.controllers.approvals,
+        task as Parameters<typeof originalRequestApproval>[0],
+        strategy as Parameters<typeof originalRequestApproval>[1],
+      );
+    }) as typeof services.controllers.approvals.requestApproval;
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                value: "0x0",
+                data: "0x",
+              },
+            ] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4001 });
+
+      expect(capturedTask?.namespace).toBe("eip155");
+      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+    } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+});

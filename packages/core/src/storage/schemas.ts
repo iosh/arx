@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { chainMetadataSchema } from "../chains/metadata.js";
+import { ApprovalTypes } from "../controllers/index.js";
 import { PermissionScopes } from "../controllers/permission/types.js";
 
 const CAIP2_CHAIN_ID_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
@@ -125,11 +126,20 @@ const networkStateSchema = z
     error: "RPC state must be provided for each known chain",
     path: ["rpc"],
   });
+
 const PERMISSION_SCOPE_VALUES = [
   PermissionScopes.Basic,
   PermissionScopes.Accounts,
   PermissionScopes.Sign,
   PermissionScopes.Transaction,
+] as const;
+
+const APPROVAL_TYPE_VALUES = [
+  ApprovalTypes.RequestAccounts,
+  ApprovalTypes.SignMessage,
+  ApprovalTypes.SignTypedData,
+  ApprovalTypes.SendTransaction,
+  ApprovalTypes.AddChain,
 ] as const;
 
 const namespaceAccountsStateSchema = z
@@ -187,8 +197,16 @@ const permissionsStateSchema = z.strictObject({
   origins: z.record(originStringSchema, originPermissionStateSchema),
 });
 
+const approvalQueueItemSchema = z.strictObject({
+  id: nonEmptyStringSchema,
+  type: z.enum(APPROVAL_TYPE_VALUES),
+  origin: originStringSchema,
+  namespace: chainNamespaceSchema.optional(),
+  chainRef: caip2ChainIdSchema.optional(),
+});
+
 const approvalStateSchema = z.strictObject({
-  pending: z.array(nonEmptyStringSchema),
+  pending: z.array(approvalQueueItemSchema),
 });
 
 const hexQuantitySchema = z.string().regex(HEX_QUANTITY_REGEX, {

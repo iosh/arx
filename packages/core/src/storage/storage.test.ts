@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PermissionScopes } from "../controllers/index.js";
+import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
   AccountsSnapshotSchema,
+  APPROVALS_SNAPSHOT_VERSION,
+  ApprovalsSnapshotSchema,
   NETWORK_SNAPSHOT_VERSION,
   NetworkSnapshotSchema,
   PERMISSIONS_SNAPSHOT_VERSION,
@@ -347,5 +349,25 @@ describe("storage schemas", () => {
     const result = NetworkSnapshotSchema.safeParse(snapshot);
     expect(result.success).toBe(false);
     expect(result?.error?.issues[0]?.path).toEqual(["payload", "knownChains"]);
+  });
+
+  it("accepts an approvals snapshot with queue metadata", () => {
+    const snapshot = {
+      version: APPROVALS_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        pending: [
+          {
+            id: "approval-1",
+            type: ApprovalTypes.RequestAccounts,
+            origin: "https://dapp.example",
+            namespace: "eip155",
+            chainRef: "eip155:1",
+          },
+        ],
+      },
+    };
+
+    expect(ApprovalsSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
   });
 });

@@ -10,6 +10,14 @@ export const ApprovalTypes = {
   AddChain: "wallet_addEthereumChain",
 } as const;
 
+export type ApprovalQueueItem = {
+  id: string;
+  type: ApprovalType;
+  origin: string;
+  namespace?: ChainNamespace | undefined;
+  chainRef?: Caip2ChainId | undefined;
+};
+
 export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
 
 export type ApprovalTask<T> = {
@@ -29,7 +37,7 @@ export type ApprovalResult<T> = {
 };
 
 export type ApprovalState = {
-  pending: string[];
+  pending: ApprovalQueueItem[];
 };
 
 export type ApprovalMessengerTopics = {

@@ -1,5 +1,5 @@
 import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
-import type { ApprovalState } from "../../controllers/approval/types.js";
+import type { ApprovalQueueItem, ApprovalState } from "../../controllers/approval/types.js";
 import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
@@ -13,6 +13,14 @@ import {
   TRANSACTIONS_SNAPSHOT_VERSION,
   type TransactionsSnapshot,
 } from "../../storage/index.js";
+
+const cloneApprovalQueueItem = (item: ApprovalQueueItem): ApprovalQueueItem => ({
+  id: item.id,
+  type: item.type,
+  origin: item.origin,
+  ...(item.namespace ? { namespace: item.namespace } : {}),
+  ...(item.chainRef ? { chainRef: item.chainRef } : {}),
+});
 
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
@@ -160,7 +168,7 @@ export const createStorageSync = ({
         version: APPROVALS_SNAPSHOT_VERSION,
         updatedAt: now(),
         payload: {
-          pending: [...state.pending],
+          pending: state.pending.map((item) => cloneApprovalQueueItem(item)),
         },
       };
 

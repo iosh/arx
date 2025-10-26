@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
-import { PermissionScopes } from "../controllers/index.js";
+import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
 import type {
   ChainRegistryEntity,
   StorageNamespace,
@@ -99,10 +99,17 @@ const APPROVALS_SNAPSHOT: ApprovalsSnapshot = {
   version: APPROVALS_SNAPSHOT_VERSION,
   updatedAt: 1_000,
   payload: {
-    pending: ["approval-1"],
+    pending: [
+      {
+        id: "approval-1",
+        type: ApprovalTypes.RequestAccounts,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+      },
+    ],
   },
 };
-
 const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
   version: TRANSACTIONS_SNAPSHOT_VERSION,
   updatedAt: 1_000,

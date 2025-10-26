@@ -13,17 +13,39 @@ const APPROVAL_REQUEST_TOPIC = "approval:requested";
 const APPROVAL_FINISH_TOPIC = "approval:finished";
 
 const cloneState = (state: ApprovalState): ApprovalState => ({
-  pending: [...state.pending],
+  pending: state.pending.map((item) => ({
+    id: item.id,
+    type: item.type,
+    origin: item.origin,
+    namespace: item.namespace,
+    chainRef: item.chainRef,
+  })),
 });
 
 const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
   if (!prev || !next) return false;
-
   if (prev.pending.length !== next.pending.length) return false;
 
-  return prev.pending.every((id, index) => id === next.pending[index]);
-};
+  for (let index = 0; index < prev.pending.length; index += 1) {
+    const current = prev.pending[index];
+    const other = next.pending[index];
+    if (!other || !current) {
+      return false;
+    }
+    const matches =
+      current.id === other.id &&
+      current.type === other.type &&
+      current.origin === other.origin &&
+      current.namespace === other.namespace &&
+      current.chainRef === other.chainRef;
 
+    if (!matches) {
+      return false;
+    }
+  }
+
+  return true;
+};
 const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
   id: task.id,
   type: task.type,
@@ -72,7 +94,7 @@ export class InMemoryApprovalController implements ApprovalController {
     strategy?: ApprovalStrategy<TInput, TResult>,
   ): Promise<TResult> {
     const activeTask = cloneTask(task);
-    this.#enqueue(activeTask.id);
+    this.#enqueue(activeTask);
     this.#publishRequest(activeTask);
 
     const handler = strategy ?? (this.#defaultStrategy as ApprovalStrategy<TInput, TResult>);
@@ -92,7 +114,6 @@ export class InMemoryApprovalController implements ApprovalController {
       throw error;
     }
   }
-
   onStateChanged(handler: (state: ApprovalState) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_STATE_TOPIC, handler);
   }
@@ -110,24 +131,33 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#publishState();
   }
 
-  #enqueue(id: string) {
-    if (this.#state.pending.includes(id)) {
+  #enqueue(task: ApprovalTask<unknown>) {
+    if (this.#state.pending.some((item) => item.id === task.id)) {
       return;
     }
 
     this.#state = {
-      pending: [...this.#state.pending, id],
+      pending: [
+        ...this.#state.pending,
+        {
+          id: task.id,
+          type: task.type,
+          origin: task.origin,
+          namespace: task.namespace,
+          chainRef: task.chainRef,
+        },
+      ],
     };
 
     this.#publishState();
   }
 
   #finalize(id: string) {
-    if (!this.#state.pending.includes(id)) {
+    if (!this.#state.pending.some((item) => item.id === id)) {
       return;
     }
     this.#state = {
-      pending: this.#state.pending.filter((item) => item !== id),
+      pending: this.#state.pending.filter((item) => item.id !== id),
     };
     this.#publishState();
   }

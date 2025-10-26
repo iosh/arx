@@ -1,6 +1,9 @@
 import "fake-indexeddb/auto";
 
+import { ApprovalTypes } from "@arx/core";
 import {
+  APPROVALS_SNAPSHOT_VERSION,
+  type ApprovalsSnapshot,
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
   DOMAIN_SCHEMA_VERSION,
@@ -40,6 +43,22 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
         lastUpdatedAt: Date.now(),
       },
     },
+  },
+};
+
+const APPROVALS_SNAPSHOT: ApprovalsSnapshot = {
+  version: APPROVALS_SNAPSHOT_VERSION,
+  updatedAt: Date.now(),
+  payload: {
+    pending: [
+      {
+        id: "approval-1",
+        type: ApprovalTypes.RequestAccounts,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+      },
+    ],
   },
 };
 
@@ -139,6 +158,15 @@ describe("DexieStoragePort", () => {
     await raw.close();
 
     expect(await storage.loadVaultMeta()).toBeNull();
+  });
+
+  it("persists and loads approvals snapshot with metadata", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+
+    await storage.saveSnapshot(StorageNamespaces.Approvals, APPROVALS_SNAPSHOT);
+    const loaded = await storage.loadSnapshot(StorageNamespaces.Approvals);
+
+    expect(loaded).toEqual(APPROVALS_SNAPSHOT);
   });
 });
 

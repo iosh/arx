@@ -16,6 +16,135 @@ import type {
 const STATE_TOPIC = "chainRegistry:stateChanged";
 const UPDATE_TOPIC = "chainRegistry:updated";
 
+const isSameRecord = <T>(
+  previous: Record<string, T> | undefined,
+  next: Record<string, T> | undefined,
+  comparator: (a: T, b: T) => boolean = (a, b) => a === b,
+) => {
+  if (!previous && !next) return true;
+  if (!previous || !next) return false;
+  const prevKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+  if (prevKeys.length !== nextKeys.length) return false;
+  return prevKeys.every((key) => Object.hasOwn(next, key) && comparator(previous[key]!, next[key]!));
+};
+
+const isSameHeaders = (previous: Record<string, string> | undefined, next: Record<string, string> | undefined) => {
+  return isSameRecord(previous, next);
+};
+
+const isSameStringArray = (previous: readonly string[] | undefined, next: readonly string[] | undefined) => {
+  if (!previous && !next) return true;
+  if (!previous || !next) return false;
+  if (previous.length !== next.length) return false;
+  return previous.every((value, index) => value === next[index]);
+};
+
+const isSameRpcEndpoint = (
+  previous: ChainMetadata["rpcEndpoints"][number],
+  next: ChainMetadata["rpcEndpoints"][number],
+) => {
+  return (
+    previous.url === next.url &&
+    previous.type === next.type &&
+    previous.weight === next.weight &&
+    isSameHeaders(previous.headers, next.headers)
+  );
+};
+
+const isSameExplorerLink = (
+  previous: NonNullable<ChainMetadata["blockExplorers"]>[number],
+  next: NonNullable<ChainMetadata["blockExplorers"]>[number],
+) => {
+  return previous.type === next.type && previous.url === next.url && previous.title === next.title;
+};
+
+const isSameNativeCurrency = (previous: ChainMetadata["nativeCurrency"], next: ChainMetadata["nativeCurrency"]) => {
+  return previous.name === next.name && previous.symbol === next.symbol && previous.decimals === next.decimals;
+};
+
+const isSameIcon = (previous: ChainMetadata["icon"], next: ChainMetadata["icon"]) => {
+  if (!previous && !next) return true;
+  if (!previous || !next) return false;
+  return (
+    previous.url === next.url &&
+    previous.width === next.width &&
+    previous.height === next.height &&
+    previous.format === next.format
+  );
+};
+
+const isSameExtensions = (previous: ChainMetadata["extensions"], next: ChainMetadata["extensions"]) => {
+  return isSameRecord(previous, next);
+};
+
+const isSameMetadata = (previous: ChainMetadata, next: ChainMetadata) => {
+  if (
+    previous.chainRef !== next.chainRef ||
+    previous.namespace !== next.namespace ||
+    previous.chainId !== next.chainId ||
+    previous.displayName !== next.displayName ||
+    previous.shortName !== next.shortName ||
+    previous.description !== next.description
+  ) {
+    return false;
+  }
+
+  if (!isSameNativeCurrency(previous.nativeCurrency, next.nativeCurrency)) {
+    return false;
+  }
+
+  if (previous.rpcEndpoints.length !== next.rpcEndpoints.length) {
+    return false;
+  }
+
+  for (let i = 0; i < previous.rpcEndpoints.length; i += 1) {
+    if (!isSameRpcEndpoint(previous.rpcEndpoints[i]!, next.rpcEndpoints[i]!)) {
+      return false;
+    }
+  }
+
+  const prevExplorers = previous.blockExplorers;
+  const nextExplorers = next.blockExplorers;
+  if (!prevExplorers && nextExplorers) return false;
+  if (prevExplorers && !nextExplorers) return false;
+  if (prevExplorers && nextExplorers) {
+    if (prevExplorers.length !== nextExplorers.length) return false;
+    for (let i = 0; i < prevExplorers.length; i += 1) {
+      if (!isSameExplorerLink(prevExplorers[i]!, nextExplorers[i]!)) {
+        return false;
+      }
+    }
+  }
+
+  if (!isSameIcon(previous.icon, next.icon)) {
+    return false;
+  }
+
+  if (!isSameStringArray(previous.features, next.features)) {
+    return false;
+  }
+
+  if (!isSameStringArray(previous.tags, next.tags)) {
+    return false;
+  }
+
+  return isSameExtensions(previous.extensions, next.extensions);
+};
+
+const isSameEntity = (previous: ChainRegistryEntity, next: ChainRegistryEntity) => {
+  if (
+    previous.chainRef !== next.chainRef ||
+    previous.namespace !== next.namespace ||
+    previous.schemaVersion !== next.schemaVersion ||
+    previous.updatedAt !== next.updatedAt
+  ) {
+    return false;
+  }
+
+  return isSameMetadata(previous.metadata, next.metadata);
+};
+
 const cloneEntity = (entity: ChainRegistryEntity): ChainRegistryEntity => ({
   chainRef: entity.chainRef,
   namespace: entity.namespace,
@@ -230,12 +359,7 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
           if (!prevChain || !nextChain) {
             return false;
           }
-          if (
-            prevChain.chainRef !== nextChain.chainRef ||
-            prevChain.namespace !== nextChain.namespace ||
-            prevChain.schemaVersion !== nextChain.schemaVersion ||
-            prevChain.updatedAt !== nextChain.updatedAt
-          ) {
+          if (!isSameEntity(prevChain, nextChain)) {
             return false;
           }
         }

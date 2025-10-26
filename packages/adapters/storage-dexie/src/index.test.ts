@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { ApprovalTypes } from "@arx/core";
+import { ApprovalTypes, PermissionScopes } from "@arx/core";
 import {
   APPROVALS_SNAPSHOT_VERSION,
   type ApprovalsSnapshot,
@@ -9,6 +9,7 @@ import {
   DOMAIN_SCHEMA_VERSION,
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
+  PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
   VAULT_META_SNAPSHOT_VERSION,
   type VaultMetaSnapshot,
@@ -167,6 +168,61 @@ describe("DexieStoragePort", () => {
     const loaded = await storage.loadSnapshot(StorageNamespaces.Approvals);
 
     expect(loaded).toEqual(APPROVALS_SNAPSHOT);
+  });
+
+  it("drops legacy permissions snapshots missing chain metadata", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+
+    const raw = await openTestDexie();
+    await raw.table("permissions").put({
+      namespace: StorageNamespaces.Permissions,
+      envelope: {
+        version: PERMISSIONS_SNAPSHOT_VERSION,
+        updatedAt: Date.now(),
+        payload: {
+          origins: {
+            "https://dapp.example": {
+              eip155: {
+                scopes: [PermissionScopes.Basic],
+                // chains omitted on purpose
+              },
+            },
+          },
+        },
+      },
+    });
+    await raw.close();
+
+    expect(await storage.loadSnapshot(StorageNamespaces.Permissions)).toBeNull();
+  });
+
+  it("drops permissions snapshots when a namespace lacks chain metadata", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+
+    const raw = await openTestDexie();
+    await raw.table("permissions").put({
+      namespace: StorageNamespaces.Permissions,
+      envelope: {
+        version: PERMISSIONS_SNAPSHOT_VERSION,
+        updatedAt: Date.now(),
+        payload: {
+          origins: {
+            "https://dapp.example": {
+              eip155: {
+                scopes: [PermissionScopes.Basic],
+                chains: ["eip155:1"],
+              },
+              conflux: {
+                scopes: [PermissionScopes.Sign],
+              },
+            },
+          },
+        },
+      },
+    });
+    await raw.close();
+
+    expect(await storage.loadSnapshot(StorageNamespaces.Permissions)).toBeNull();
   });
 });
 

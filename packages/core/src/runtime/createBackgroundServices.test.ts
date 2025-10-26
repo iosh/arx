@@ -90,6 +90,10 @@ const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
           scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
           chains: ["eip155:1"],
         },
+        conflux: {
+          scopes: [PermissionScopes.Sign],
+          chains: ["conflux:cfx"],
+        },
       },
     },
   },
@@ -393,6 +397,11 @@ describe("createBackgroundServices", () => {
 
     await services.lifecycle.initialize();
 
+    const permissionState = services.controllers.permissions.getState();
+    expect(permissionState.origins["https://dapp.example"]?.eip155?.chains).toEqual(["eip155:1"]);
+    expect(permissionState.origins["https://dapp.example"]?.conflux?.chains).toEqual(["conflux:cfx"]);
+    expect(permissionState.origins["https://dapp.example"]?.conflux?.scopes).toEqual([PermissionScopes.Sign]);
+
     const networkState = services.controllers.network.getState();
     expect(networkState.activeChain).toBe(NETWORK_SNAPSHOT.payload.activeChain);
     expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
@@ -485,6 +494,23 @@ describe("createBackgroundServices", () => {
     expect(accountsSnapshot?.updatedAt).toBe(3_750);
     expect(accountsSnapshot?.payload.namespaces.eip155?.all).toEqual(["0x123"]);
     expect(accountsSnapshot?.payload.active?.address).toBe("0x123");
+
+    now = 3_820;
+    await services.controllers.permissions.grant("https://dapp.example", PermissionScopes.Basic, {
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    await services.controllers.permissions.grant("https://dapp.example", PermissionScopes.Sign, {
+      namespace: "conflux",
+      chainRef: "conflux:cfx",
+    });
+
+    const permissionsSnapshot = storage.getSnapshot(StorageNamespaces.Permissions);
+    expect(permissionsSnapshot).not.toBeNull();
+    expect(permissionsSnapshot?.updatedAt).toBe(3_820);
+    expect(permissionsSnapshot?.payload.origins["https://dapp.example"]?.eip155?.chains).toEqual([
+      MAINNET_CHAIN.chainRef,
+    ]);
+    expect(permissionsSnapshot?.payload.origins["https://dapp.example"]?.conflux?.chains).toEqual(["conflux:cfx"]);
 
     now = 3_900;
     const pendingTx = {

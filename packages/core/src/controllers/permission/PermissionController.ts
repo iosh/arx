@@ -69,28 +69,33 @@ const isSameState = (prev?: PermissionsState, next?: PermissionsState) => {
   });
 };
 
-const resolveNamespaceFromContext = (context?: Parameters<PermissionScopeResolver>[1]): ChainNamespace => {
-  if (context?.namespace) return context.namespace as ChainNamespace;
-  if (context?.chainRef) {
-    const [namespace] = context.chainRef.split(":");
-    if (namespace) return namespace as ChainNamespace;
-  }
-  return DEFAULT_PERMISSION_NAMESPACE;
+type ParsedChainRef = {
+  namespace: ChainNamespace;
+  value: string;
 };
 
-const resolveNamespaceFromOptions = (options?: GrantPermissionOptions): ChainNamespace => {
-  if (options?.namespace) return options.namespace;
-  if (options?.chainRef) {
-    const [namespace] = options.chainRef.split(":");
-    if (namespace) return namespace as ChainNamespace;
-  }
-  return DEFAULT_PERMISSION_NAMESPACE;
+const parseChainRef = (chainRef: string | null | undefined): ParsedChainRef | null => {
+  if (!chainRef || typeof chainRef !== "string") return null;
+  const [namespace, reference] = chainRef.split(":");
+  if (!namespace || !reference) return null;
+  return {
+    namespace: namespace as ChainNamespace,
+    value: `${namespace}:${reference}`,
+  };
 };
-const resolveScopes = (state: PermissionsState, origin: string, namespace: ChainNamespace): PermissionScope[] => {
-  const originState = state.origins[origin];
-  if (!originState) return [];
-  const namespaceState = originState[namespace];
-  return namespaceState ? [...namespaceState.scopes] : [];
+
+const resolveNamespaceFromContext = (context?: Parameters<PermissionScopeResolver>[1]): ChainNamespace => {
+  if (context?.namespace) return context.namespace as ChainNamespace;
+  const parsed = parseChainRef(context?.chainRef ?? null);
+  return parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
+};
+
+const resolveNamespaceState = (
+  state: PermissionsState,
+  origin: string,
+  namespace: ChainNamespace,
+): NamespacePermissionState | undefined => {
+  return state.origins[origin]?.[namespace];
 };
 
 export class InMemoryPermissionController implements PermissionController {
@@ -118,30 +123,44 @@ export class InMemoryPermissionController implements PermissionController {
     if (!scope) return;
 
     const namespace = resolveNamespaceFromContext(context);
-    const scopes = resolveScopes(this.#state, origin, namespace);
+    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    const scopes = namespaceState?.scopes ?? [];
+
     if (!scopes.includes(scope)) {
       throw new Error(`Origin "${origin}" lacks scope "${scope}" for namespace "${namespace}"`);
+    }
+
+    const parsedChain = parseChainRef(context?.chainRef ?? null);
+    const permittedChains = namespaceState?.chains ?? [];
+    if (parsedChain && !permittedChains.includes(parsedChain.value)) {
+      throw new Error(
+        `Origin "${origin}" lacks chain permission for "${parsedChain.value}" in namespace "${namespace}"`,
+      );
     }
   }
 
   async grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void> {
-    const namespace = resolveNamespaceFromOptions(options);
-    const chainRef = options?.chainRef ?? null;
+    const parsedChain = parseChainRef(options?.chainRef ?? null);
+    const namespace = options?.namespace ?? parsedChain?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
+    const normalizedChainRef = parsedChain?.value ?? null;
 
     const currentOrigin = this.#state.origins[origin] ?? {};
     const currentNamespace = currentOrigin[namespace] ?? { scopes: [], chains: [] };
 
     const hasScope = currentNamespace.scopes.includes(scope);
-    const hasChain = chainRef ? currentNamespace.chains.includes(chainRef) : false;
+    const hasChain = normalizedChainRef ? currentNamespace.chains.includes(normalizedChainRef) : false;
 
-    if (hasScope && (!chainRef || hasChain)) {
+    if (hasScope && (!normalizedChainRef || hasChain)) {
       return;
     }
 
-    const nextNamespace: NamespacePermissionState = {
-      scopes: hasScope ? [...currentNamespace.scopes] : [...currentNamespace.scopes, scope],
-      chains: chainRef && !hasChain ? [...currentNamespace.chains, chainRef] : [...currentNamespace.chains],
-    };
+    const nextNamespace = cloneNamespaceState(currentNamespace);
+    if (!hasScope) {
+      nextNamespace.scopes.push(scope);
+    }
+    if (normalizedChainRef && !hasChain) {
+      nextNamespace.chains.push(normalizedChainRef);
+    }
 
     const nextOrigin: OriginPermissionState = {
       ...currentOrigin,

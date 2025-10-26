@@ -370,4 +370,101 @@ describe("storage schemas", () => {
 
     expect(ApprovalsSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
   });
+
+  it("accepts permissions snapshots with multiple namespaces", () => {
+    const snapshot = {
+      version: PERMISSIONS_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        origins: {
+          "https://dapp.example": {
+            eip155: {
+              scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
+              chains: ["eip155:1", "eip155:137"],
+            },
+            conflux: {
+              scopes: [PermissionScopes.Sign],
+              chains: ["conflux:cfx"],
+            },
+          },
+        },
+      },
+    };
+
+    expect(PermissionsSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
+  });
+
+  it("rejects legacy permissions snapshots missing chains array", () => {
+    const legacy = {
+      version: PERMISSIONS_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        origins: {
+          "https://dapp.example": {
+            eip155: {
+              scopes: [PermissionScopes.Basic],
+              // chains omitted
+            },
+          },
+        },
+      },
+    };
+
+    const result = PermissionsSnapshotSchema.safeParse(legacy);
+    expect(result.success).toBe(false);
+    expect(result?.error?.issues[0]?.path).toEqual(["payload", "origins", "https://dapp.example", "eip155", "chains"]);
+  });
+
+  it("rejects permissions snapshots where only some namespaces declare chains", () => {
+    const mixed = {
+      version: PERMISSIONS_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        origins: {
+          "https://dapp.example": {
+            eip155: {
+              scopes: [PermissionScopes.Basic],
+              chains: ["eip155:1"],
+            },
+            conflux: {
+              scopes: [PermissionScopes.Sign],
+              // chains omitted on purpose
+            },
+          },
+        },
+      },
+    };
+
+    const result = PermissionsSnapshotSchema.safeParse(mixed);
+    expect(result.success).toBe(false);
+    expect(result?.error?.issues[0]?.path).toEqual(["payload", "origins", "https://dapp.example", "conflux", "chains"]);
+  });
+
+  it("rejects permissions snapshots with invalid chain references", () => {
+    const invalid = {
+      version: PERMISSIONS_SNAPSHOT_VERSION,
+      updatedAt: TIMESTAMP,
+      payload: {
+        origins: {
+          "https://dapp.example": {
+            eip155: {
+              scopes: [PermissionScopes.Basic],
+              chains: ["not-a-chain"],
+            },
+          },
+        },
+      },
+    };
+
+    const result = PermissionsSnapshotSchema.safeParse(invalid);
+    expect(result.success).toBe(false);
+    expect(result?.error?.issues[0]?.path).toEqual([
+      "payload",
+      "origins",
+      "https://dapp.example",
+      "eip155",
+      "chains",
+      0,
+    ]);
+  });
 });

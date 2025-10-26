@@ -145,6 +145,17 @@ describe("InMemoryPermissionController", () => {
     });
   });
 
+  it("rejects grants when namespace and chainRef disagree", async () => {
+    const { controller } = createController();
+
+    await expect(
+      controller.grant(ORIGIN, PermissionScopes.Basic, {
+        namespace: "conflux",
+        chainRef: "eip155:1",
+      }),
+    ).rejects.toThrow(/chainRef "eip155:1" belongs to namespace "eip155"/);
+  });
+
   describe("unauthorized chain blocking", () => {
     it("blocks when the origin has no permissions", async () => {
       const scopeResolver: PermissionScopeResolver = vi.fn(() => PermissionScopes.Basic);

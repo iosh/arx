@@ -144,6 +144,12 @@ export class InMemoryPermissionController implements PermissionController {
     const namespace = options?.namespace ?? parsedChain?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
     const normalizedChainRef = parsedChain?.value ?? null;
 
+    if (options?.namespace && parsedChain && parsedChain.namespace !== options.namespace) {
+      throw new Error(
+        `Grant namespace mismatch: chainRef "${parsedChain.value}" belongs to namespace "${parsedChain.namespace}" but "${options.namespace}" was provided`,
+      );
+    }
+
     const currentOrigin = this.#state.origins[origin] ?? {};
     const currentNamespace = currentOrigin[namespace] ?? { scopes: [], chains: [] };
 

@@ -51,6 +51,7 @@ import type {
 } from "../controllers/transaction/types.js";
 import type { UnlockController, UnlockControllerOptions, UnlockMessengerTopics } from "../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../controllers/unlock/UnlockController.js";
+import { EthereumHdKeyring } from "../keyring/index.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
@@ -59,6 +60,7 @@ import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapsh
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
+import { KeyringService } from "./keyring/KeyringService.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
 
 type MessengerTopics = AccountMessengerTopics &
@@ -543,6 +545,21 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   }
 
   const unlock = unlockFactory(unlockOptions);
+
+  const keyringService = new KeyringService({
+    vault: vaultProxy,
+    unlock,
+    accounts: accountController,
+    namespaces: {
+      [EIP155_NAMESPACE]: {
+        createKeyring: () => new EthereumHdKeyring(),
+      },
+    },
+    logger: storageLogger,
+  });
+
+  keyringService.attach();
+
   const sessionSubscriptions: Array<() => void> = [];
 
   const cleanupVaultPersistTimer = () => {
@@ -801,6 +818,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     destroyed = true;
+    keyringService.detach();
     cleanupVaultPersistTimer();
     detachSessionListeners();
     try {
@@ -840,6 +858,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       start,
       destroy,
     },
+    keyring: keyringService,
   };
 };
 

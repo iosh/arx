@@ -26,6 +26,8 @@ import {
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
+const TEST_MNEMONIC = "test test test test test test test test test test test junk";
+
 const MAINNET_CHAIN: ChainMetadata = {
   chainRef: "eip155:1",
   namespace: "eip155",
@@ -835,5 +837,46 @@ describe("createBackgroundServices", () => {
     expect(storage.savedVaultMeta).not.toBeNull();
 
     services.lifecycle.destroy();
+  });
+
+  it("derives and removes accounts through accountsRuntime bridge", async () => {
+    const services = createServices();
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    try {
+      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+
+      const chain = services.controllers.network.getActiveChain();
+      const { account, namespaceState } = await services.accountsRuntime.deriveAccount({
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        makePrimary: true,
+        switchActive: true,
+      });
+
+      await flushMicrotasks();
+
+      expect(namespaceState.all).toContain(account.address);
+      expect(services.controllers.accounts.getActivePointer()).toMatchObject({
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        address: account.address,
+      });
+
+      await services.accountsRuntime.removeAccount({
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        address: account.address,
+      });
+
+      await flushMicrotasks();
+
+      const afterRemoval = services.controllers.accounts.getState().namespaces[chain.namespace];
+      expect(afterRemoval?.all ?? []).not.toContain(account.address);
+    } finally {
+      services.lifecycle.destroy();
+    }
   });
 });

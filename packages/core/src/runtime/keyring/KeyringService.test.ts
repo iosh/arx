@@ -7,6 +7,7 @@ import { KeyringService } from "./KeyringService.js";
 
 const MNEMONIC = "test walk nut penalty hip pave soap entry language right filter choice";
 const EIP155_NAMESPACE = "eip155";
+const PRIVATE_KEY = "0xc83c5a4a2353021a9bf912a7cf8f053fde951355514868f3e75e085cad7490a1";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -195,5 +196,73 @@ describe("KeyringService", () => {
     service.removeNamespace(EIP155_NAMESPACE);
     expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(false);
     expect(accounts.getState().namespaces[EIP155_NAMESPACE]).toBeUndefined();
+  });
+
+  it("emits envelope updates when deriving and removing accounts", async () => {
+    const envelope = createEnvelope(1);
+    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+
+    const service = new KeyringService({
+      vault,
+      unlock,
+      accounts,
+      namespaces: {
+        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
+      },
+    });
+
+    service.attach();
+    await flushAsync();
+
+    const events: Array<Uint8Array | null> = [];
+    const unsubscribe = service.onEnvelopeUpdated((payload) => {
+      events.push(payload ? new Uint8Array(payload) : null);
+    });
+
+    const derived = service.deriveNextAccount(EIP155_NAMESPACE);
+    expect(events.length).toBeGreaterThan(0);
+
+    const namespaceAfterDerive = accounts.getState().namespaces[EIP155_NAMESPACE];
+    expect(namespaceAfterDerive?.all).toContain(derived.address);
+
+    const previousLength = namespaceAfterDerive?.all.length ?? 0;
+    service.removeAccount(EIP155_NAMESPACE, derived.address);
+
+    const namespaceAfterRemove = accounts.getState().namespaces[EIP155_NAMESPACE];
+    expect(namespaceAfterRemove?.all).not.toContain(derived.address);
+    expect(namespaceAfterRemove?.all.length).toBe(previousLength - 1);
+    expect(events.length).toBeGreaterThan(1);
+
+    unsubscribe();
+  });
+
+  it("imports raw private key accounts and syncs namespace state", async () => {
+    const envelope = createEnvelope(0);
+    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+
+    const service = new KeyringService({
+      vault,
+      unlock,
+      accounts,
+      namespaces: {
+        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
+      },
+    });
+
+    service.attach();
+    await flushAsync();
+
+    const imported = service.importAccount(EIP155_NAMESPACE, PRIVATE_KEY);
+    expect(imported.source).toBe("imported");
+
+    const namespaceState = accounts.getState().namespaces[EIP155_NAMESPACE];
+    expect(namespaceState?.all).toContain(imported.address);
+
+    const recorded = service.getAccounts(EIP155_NAMESPACE).map((account) => account.address);
+    expect(recorded).toContain(imported.address);
   });
 });

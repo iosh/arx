@@ -64,6 +64,8 @@ type KeyringServiceOptions = {
   logger?: (message: string, error?: unknown) => void;
 };
 
+type EnvelopeListener = (payload: Uint8Array | null) => void;
+
 // Drop imported accounts because hydrate() can only rebuild derived entries.
 const toStorableSnapshot = (
   snapshot: HierarchicalDeterministicKeyringSnapshot<KeyringAccount>,
@@ -110,6 +112,7 @@ export class KeyringService {
   #envelope: KeyringEnvelope | null = null;
   #namespaces = new Map<string, NamespaceRuntime>();
   #subscriptions: Array<() => void> = [];
+  #envelopeListeners = new Set<EnvelopeListener>();
   #initializing = false;
 
   constructor(options: KeyringServiceOptions) {
@@ -139,6 +142,13 @@ export class KeyringService {
     this.#clearNamespaces();
   }
 
+  onEnvelopeUpdated(handler: EnvelopeListener): () => void {
+    this.#envelopeListeners.add(handler);
+    return () => {
+      this.#envelopeListeners.delete(handler);
+    };
+  }
+
   getEnvelope(): Uint8Array | null {
     if (!this.#envelope) {
       return null;
@@ -159,6 +169,29 @@ export class KeyringService {
     const account = runtime.keyring.deriveNextAccount();
     this.#refreshNamespaceState(namespace, runtime);
     return { ...account };
+  }
+
+  importAccount(namespace: string, privateKey: string | Uint8Array): KeyringAccount {
+    const runtime = this.#getNamespaceRuntime(namespace);
+    const account = runtime.keyring.importAccount(privateKey);
+    this.#refreshNamespaceState(namespace, runtime);
+    return { ...account };
+  }
+
+  removeAccount(namespace: string, address: string): void {
+    const runtime = this.#getNamespaceRuntime(namespace);
+    runtime.keyring.removeAccount(address);
+    this.#refreshNamespaceState(namespace, runtime);
+  }
+
+  hasAccount(namespace: string, address: string): boolean {
+    const runtime = this.#namespaces.get(namespace);
+    return runtime ? runtime.keyring.hasAccount(address) : false;
+  }
+
+  exportPrivateKey(namespace: string, address: string): Uint8Array {
+    const runtime = this.#getNamespaceRuntime(namespace);
+    return runtime.keyring.exportPrivateKey(address);
   }
 
   // Overwrites any existing namespace runtime with the provided mnemonic.
@@ -197,7 +230,7 @@ export class KeyringService {
     this.#namespaces.set(namespace, runtime);
     this.#setNamespaceEnvelope(namespace, envelope);
     this.#syncAccountsState();
-
+    this.#notifyEnvelopeUpdated();
     return accounts;
   }
 
@@ -212,6 +245,7 @@ export class KeyringService {
       this.#namespaces.delete(namespace);
     }
     this.#removeNamespaceEnvelope(namespace);
+    this.#notifyEnvelopeUpdated();
     this.#syncAccountsState();
   }
 
@@ -238,6 +272,7 @@ export class KeyringService {
         this.#options.logger?.("keyring: vault refused exportKey()", error);
         this.#clearNamespaces();
         this.#envelope = null;
+        this.#notifyEnvelopeUpdated();
         return;
       }
 
@@ -245,6 +280,7 @@ export class KeyringService {
       this.#envelope = decoded;
       this.#initializeNamespaces(decoded);
       this.#syncAccountsState();
+      this.#notifyEnvelopeUpdated();
     } finally {
       this.#initializing = false;
     }
@@ -322,6 +358,7 @@ export class KeyringService {
     runtime.envelope = nextEnvelope;
     this.#setNamespaceEnvelope(namespace, nextEnvelope);
     this.#syncAccountsState();
+    this.#notifyEnvelopeUpdated();
   }
 
   #syncAccountsState() {
@@ -386,6 +423,19 @@ export class KeyringService {
   #handleLocked(_payload: UnlockLockedPayload): void {
     this.#clearNamespaces();
     this.#envelope = null;
+
+    this.#notifyEnvelopeUpdated();
+  }
+
+  #notifyEnvelopeUpdated(): void {
+    const encoded = this.getEnvelope();
+    for (const listener of this.#envelopeListeners) {
+      try {
+        listener(encoded ? new Uint8Array(encoded) : null);
+      } catch (error) {
+        this.#options.logger?.("keyring: envelope listener threw", error);
+      }
+    }
   }
 
   #clearNamespaces(): void {

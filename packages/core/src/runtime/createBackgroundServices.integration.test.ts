@@ -32,6 +32,8 @@ import {
   createBackgroundServices,
 } from "./createBackgroundServices.js";
 
+const TEST_MNEMONIC = "test test test test test test test test test test test junk";
+
 type RpcTimers = {
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
@@ -414,12 +416,15 @@ describe("createBackgroundServices (integration)", () => {
     const context = await setupBackground({ chainSeed: [mainChain] });
     const { services, storagePort } = context;
     try {
-      const accountAddress = "0xaabbccddeeff00112233445566778899aabbccdd";
-      await services.controllers.accounts.addAccount({
+      services.keyring.setNamespaceFromMnemonic(mainChain.namespace, { mnemonic: TEST_MNEMONIC });
+
+      const { account } = await services.accountsRuntime.deriveAccount({
+        namespace: mainChain.namespace,
         chainRef: mainChain.chainRef,
-        address: accountAddress,
         makePrimary: true,
+        switchActive: true,
       });
+      const accountAddress = account.address;
 
       const pointerBefore = services.controllers.accounts.getActivePointer();
       expect(pointerBefore).toEqual({

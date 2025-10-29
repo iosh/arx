@@ -60,6 +60,7 @@ import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapsh
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
+import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
 import { KeyringService } from "./keyring/KeyringService.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
 
@@ -560,7 +561,25 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   keyringService.attach();
 
+  const accountsBridge = new AccountsKeyringBridge({
+    keyring: keyringService,
+    accounts: {
+      addAccount: (params) => accountController.addAccount(params),
+      removeAccount: (params) => accountController.removeAccount(params),
+      switchActive: (params) => accountController.switchActive(params),
+      getState: () => accountController.getState(),
+      getActivePointer: () => accountController.getActivePointer(),
+    },
+    logger: storageLogger,
+  });
+
   const sessionSubscriptions: Array<() => void> = [];
+
+  sessionSubscriptions.push(
+    keyringService.onEnvelopeUpdated(() => {
+      scheduleVaultMetaPersist();
+    }),
+  );
 
   const cleanupVaultPersistTimer = () => {
     if (persistTimer !== null) {
@@ -650,6 +669,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     sessionListenersAttached = false;
+
     sessionSubscriptions.splice(0).forEach((unsubscribe) => {
       try {
         unsubscribe();
@@ -859,6 +879,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       destroy,
     },
     keyring: keyringService,
+    accountsRuntime: accountsBridge,
   };
 };
 

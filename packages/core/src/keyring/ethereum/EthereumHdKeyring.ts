@@ -99,6 +99,29 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     return entry ? { ...entry.account } : undefined;
   }
 
+  hasAccount(address: string): boolean {
+    const canonical = this.#normalizeAddress(address);
+    return this.#accounts.has(canonical);
+  }
+
+  removeAccount(address: string): void {
+    const canonical = this.#normalizeAddress(address);
+    const entry = this.#accounts.get(canonical);
+    if (!entry) {
+      throw keyringErrors.accountNotFound();
+    }
+
+    this.#accounts.delete(canonical);
+    this.#order = this.#order.filter((value) => value !== canonical);
+
+    const index = entry.account.derivationIndex;
+    if (index != null) {
+      this.#derivedIndices.delete(index);
+    }
+
+    zeroize(entry.secret);
+  }
+
   exportPrivateKey(address: string): Uint8Array {
     const canonical = this.#normalizeAddress(address);
     const entry = this.#accounts.get(canonical);

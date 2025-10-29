@@ -23,6 +23,7 @@ const ADD_CHAIN_PARAMS = {
   blockExplorerUrls: ["https://basescan.org"],
 };
 const ADDED_CHAIN_REF = "eip155:8453";
+const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 
 const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -80,13 +81,15 @@ describe("eip155 handlers - core error paths", () => {
 
     await services.controllers.network.addChain(ALT_CHAIN);
 
-    const activeAddress = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    await services.controllers.accounts.addAccount({
+    services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+
+    const { account } = await services.accountsRuntime.deriveAccount({
+      namespace: "eip155",
       chainRef: mainnet.chainRef,
-      address: activeAddress,
       makePrimary: true,
+      switchActive: true,
     });
-    await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: activeAddress });
+    const activeAddress = account.address;
 
     try {
       await expect(

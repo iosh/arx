@@ -21,6 +21,8 @@ export interface HierarchicalDeterministicKeyring<TAccount extends KeyringAccoun
   importAccount(privateKey: string | Uint8Array): TAccount;
   getAccounts(): readonly TAccount[];
   getAccount(address: string): TAccount | undefined;
+  hasAccount(address: string): boolean;
+  removeAccount(address: string): void;
   exportPrivateKey(address: string): Uint8Array;
   toSnapshot(): HierarchicalDeterministicKeyringSnapshot<TAccount>;
   hydrate(snapshot: HierarchicalDeterministicKeyringSnapshot<TAccount>): void;

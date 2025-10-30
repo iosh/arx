@@ -58,6 +58,7 @@ import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, createPermissionScopeResolver, type RpcInvocationContext } from "../rpc/index.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
+import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
 import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
@@ -186,6 +187,7 @@ export type CreateBackgroundServicesOptions = {
     autoApprove?: boolean;
     autoRejectMessage?: string;
     initialState?: TransactionState;
+    registry?: TransactionAdapterRegistry;
   };
   engine?: {
     middlewares?: JsonRpcMiddleware<JsonRpcParams, Json>[];
@@ -271,6 +273,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     approvals: {
       requestApproval: (...args) => approvalController.requestApproval(...args),
     },
+    registry: transactionOptions?.registry ?? new TransactionAdapterRegistry(),
     ...(transactionOptions?.autoApprove !== undefined ? { autoApprove: transactionOptions.autoApprove } : {}),
     ...(transactionOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: transactionOptions.autoRejectMessage }

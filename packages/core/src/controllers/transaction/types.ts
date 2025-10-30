@@ -1,9 +1,40 @@
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalTask } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
-export type TransactionStatus = "pending" | "approved" | "submitted" | "failed";
+export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
+
+export type TransactionWarning = {
+  code: string;
+  message: string;
+  data?: unknown;
+};
+
+export type TransactionIssue = TransactionWarning;
+
+export type TransactionError = {
+  name: string;
+  message: string;
+  code?: number;
+  data?: unknown;
+};
+
+export type TransactionReceipt = Record<string, unknown>;
+
+export type TransactionDraftPreview = {
+  summary: Record<string, unknown>;
+  issues: TransactionIssue[];
+  warnings: TransactionWarning[];
+};
+
+export type TransactionStatusChange = {
+  id: string;
+  previousStatus: TransactionStatus;
+  nextStatus: TransactionStatus;
+  meta: TransactionMeta;
+};
 
 export type Eip155TransactionPayload = {
   from?: AccountAddress;
@@ -29,11 +60,18 @@ export type TransactionRequest<TNamespace extends string = keyof TransactionPayl
 
 export type TransactionMeta = {
   id: string;
+  namespace: string;
   caip2: Caip2ChainId;
   origin: string;
   from: AccountAddress | null;
   request: TransactionRequest;
   status: TransactionStatus;
+  hash: string | null;
+  receipt: TransactionReceipt | null;
+  error: TransactionError | null;
+  userRejected: boolean;
+  warnings: TransactionWarning[];
+  issues: TransactionIssue[];
   createdAt: number;
   updatedAt: number;
 };
@@ -46,7 +84,7 @@ export type TransactionState = {
 export type TransactionMessengerTopics = {
   "transaction:stateChanged": TransactionState;
   "transaction:queued": TransactionMeta;
-  "transaction:updated": TransactionMeta;
+  "transaction:statusChanged": TransactionStatusChange;
 };
 
 export type TransactionMessenger = ControllerMessenger<TransactionMessengerTopics>;
@@ -55,6 +93,9 @@ export type TransactionApprovalTaskPayload = {
   caip2: Caip2ChainId;
   origin: string;
   request: TransactionRequest;
+  draft?: TransactionDraftPreview | null;
+  warnings?: TransactionWarning[];
+  issues?: TransactionIssue[];
 };
 
 export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayload>;
@@ -64,6 +105,7 @@ export type TransactionControllerOptions = {
   network: Pick<NetworkController, "getActiveChain">;
   accounts: Pick<AccountController, "getActivePointer">;
   approvals: Pick<ApprovalController, "requestApproval">;
+  registry: TransactionAdapterRegistry;
   idGenerator?: () => string;
   now?: () => number;
   autoApprove?: boolean;
@@ -73,11 +115,15 @@ export type TransactionControllerOptions = {
 
 export type TransactionController = {
   getState(): TransactionState;
+  getMeta(id: string): TransactionMeta | undefined;
   submitTransaction(origin: string, request: TransactionRequest): Promise<TransactionMeta>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;
-  rejectTransaction(id: string, reason?: Error): Promise<void>;
+  rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
+  processTransaction(id: string): Promise<void>;
+  resumePending(): Promise<void>;
+  replaceState(state: TransactionState): void;
+  hydrate(state: TransactionState): void;
   onStateChanged(handler: (state: TransactionState) => void): () => void;
   onQueued(handler: (meta: TransactionMeta) => void): () => void;
-  onUpdated(handler: (meta: TransactionMeta) => void): () => void;
-  replaceState(state: TransactionState): void;
+  onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
 };

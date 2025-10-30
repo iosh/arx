@@ -5,7 +5,7 @@ import { EthereumHdKeyring } from "../../keyring/index.js";
 import type { VaultService } from "../../vault/types.js";
 import { KeyringService } from "./KeyringService.js";
 
-const MNEMONIC = "test walk nut penalty hip pave soap entry language right filter choice";
+const MNEMONIC = "test test test test test test test test test test test junk";
 const EIP155_NAMESPACE = "eip155";
 const PRIVATE_KEY = "0xc83c5a4a2353021a9bf912a7cf8f053fde951355514868f3e75e085cad7490a1";
 
@@ -33,7 +33,7 @@ const createEnvelope = (accountCount: number) => {
 
 class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnlocked"> {
   constructor(
-    private readonly envelopeBytes: Uint8Array,
+    private envelopeBytes: Uint8Array,
     private unlocked = true,
   ) {}
 
@@ -47,6 +47,14 @@ class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnl
 
   isUnlocked(): boolean {
     return this.unlocked;
+  }
+
+  setUnlocked(next: boolean) {
+    this.unlocked = next;
+  }
+
+  setEnvelope(bytes: Uint8Array) {
+    this.envelopeBytes = new Uint8Array(bytes);
   }
 }
 
@@ -264,5 +272,56 @@ describe("KeyringService", () => {
 
     const recorded = service.getAccounts(EIP155_NAMESPACE).map((account) => account.address);
     expect(recorded).toContain(imported.address);
+  });
+
+  it("clears namespaces on lock and rehydrates on subsequent unlock", async () => {
+    const initialEnvelope = createEnvelope(2);
+    const vault = new FakeVault(textEncoder.encode(JSON.stringify(initialEnvelope)));
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+
+    const service = new KeyringService({
+      vault,
+      unlock,
+      accounts,
+      namespaces: {
+        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
+      },
+    });
+
+    const events: Array<Uint8Array | null> = [];
+    service.onEnvelopeUpdated((payload) => {
+      events.push(payload ? new Uint8Array(payload) : null);
+    });
+
+    service.attach();
+    await flushAsync();
+
+    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(2);
+
+    vault.setUnlocked(false);
+    unlock.emitLocked({ at: Date.now(), reason: "manual" });
+    await flushAsync();
+
+    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(false);
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]).toBeUndefined();
+    expect(service.getEnvelope()).toBeNull();
+    expect(events.at(-1)).toBeNull();
+
+    const updatedEnvelope = createEnvelope(3);
+    vault.setEnvelope(textEncoder.encode(JSON.stringify(updatedEnvelope)));
+    vault.setUnlocked(true);
+    unlock.emitUnlocked({ at: Date.now() });
+    await flushAsync();
+
+    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
+    const namespaceState = accounts.getState().namespaces[EIP155_NAMESPACE];
+    expect(namespaceState?.all).toHaveLength(3);
+
+    const lastEvent = events.at(-1);
+    expect(lastEvent).not.toBeNull();
+    const decoded = JSON.parse(textDecoder.decode(lastEvent!));
+    expect(decoded.namespaces[EIP155_NAMESPACE]?.snapshot?.accounts).toHaveLength(3);
   });
 });

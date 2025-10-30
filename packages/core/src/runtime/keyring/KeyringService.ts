@@ -424,6 +424,7 @@ export class KeyringService {
     this.#clearNamespaces();
     this.#envelope = null;
 
+    this.#syncAccountsState();
     this.#notifyEnvelopeUpdated();
   }
 

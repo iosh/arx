@@ -4,6 +4,14 @@ import { EthereumHdKeyring } from "./EthereumHdKeyring.js";
 const MNEMONIC = "test test test test test test test test test test test junk";
 const KNOWN_ADDRESSES = ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"];
 
+const MORE_KNOWN_ADDRESSES = [
+  "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+  "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+  "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+  "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+] as const;
+
 const toHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
 describe("EthereumHdKeyring", () => {
@@ -97,5 +105,21 @@ describe("EthereumHdKeyring", () => {
       "Requested account is not managed by this keyring",
     );
     expect(() => keyring.deriveNextAccount()).toThrowError("Keyring has not been initialized");
+  });
+
+  it("derives expected address vector for the first five indices", () => {
+    const derived: string[] = [];
+
+    for (let index = 0; index < MORE_KNOWN_ADDRESSES.length; index += 1) {
+      const account = keyring.deriveNextAccount();
+      derived.push(account.address);
+
+      expect(account.derivationIndex).toBe(index);
+      expect(account.derivationPath).toBe(`m/44'/60'/0'/0/${index}`);
+      expect(account.source).toBe("derived");
+    }
+
+    expect(derived).toEqual(MORE_KNOWN_ADDRESSES);
+    expect(keyring.toSnapshot().nextDerivationIndex).toBe(MORE_KNOWN_ADDRESSES.length);
   });
 });

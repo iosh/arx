@@ -68,7 +68,7 @@ const cloneMeta = (meta: TransactionMetaInput): TransactionMeta => ({
   warnings: cloneWarnings(meta.warnings),
   issues: cloneWarnings(meta.issues),
   error: cloneError(meta.error),
-  receipt: cloneReceipt(meta.receipt),
+  receipt: cloneReceipt(meta.receipt) as TransactionReceipt,
 });
 
 export const cloneTransactionState = (state: TransactionStateInput): TransactionState => ({

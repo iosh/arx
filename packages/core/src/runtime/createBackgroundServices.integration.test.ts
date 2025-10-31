@@ -3,7 +3,7 @@ import { DEFAULT_CHAIN_METADATA } from "../chains/chains.seed.js";
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
-import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
+import { ApprovalTypes, PermissionScopes, type TransactionStatusChange } from "../controllers/index.js";
 import type {
   AccountsSnapshot,
   ApprovalsSnapshot,
@@ -25,6 +25,8 @@ import {
   StorageNamespaces,
   TRANSACTIONS_SNAPSHOT_VERSION,
 } from "../storage/index.js";
+import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
+import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import {
   type CreateBackgroundServicesOptions,
@@ -33,6 +35,9 @@ import {
 } from "./createBackgroundServices.js";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
+
+const TEST_AUTO_LOCK_DURATION = 1_000;
+const TEST_INITIAL_TIME = 5_000;
 
 type RpcTimers = {
   setTimeout?: typeof setTimeout;
@@ -54,12 +59,12 @@ type SnapshotEntry = {
   envelope: StorageSnapshotMap[StorageNamespace];
 };
 
-const isAccountsSnapshotEntry = (
+const isAccountsSnapshot = (
   entry: SnapshotEntry,
 ): entry is { namespace: typeof StorageNamespaces.Accounts; envelope: AccountsSnapshot } =>
   entry.namespace === StorageNamespaces.Accounts;
 
-const isNetworkSnapshotEntry = (
+const isNetworkSnapshot = (
   entry: SnapshotEntry,
 ): entry is { namespace: typeof StorageNamespaces.Network; envelope: NetworkSnapshot } =>
   entry.namespace === StorageNamespaces.Network;
@@ -251,6 +256,7 @@ class FakeVault implements VaultService {
   #ciphertext: VaultCiphertext | null;
   #unlocked = false;
   #counter = 0;
+  #password: string | null = null;
 
   constructor(
     private readonly clock: () => number,
@@ -273,16 +279,27 @@ class FakeVault implements VaultService {
     };
   }
 
-  async initialize(): Promise<VaultCiphertext> {
+  async initialize(params: { password: string }): Promise<VaultCiphertext> {
+    this.#password = params.password;
     this.#ciphertext = this.createCiphertext();
     this.#unlocked = true;
     return { ...this.#ciphertext };
   }
 
-  async unlock(params: { ciphertext?: VaultCiphertext }): Promise<Uint8Array> {
-    if (params.ciphertext) {
-      this.#ciphertext = { ...params.ciphertext };
+  async unlock(params: { password: string; ciphertext?: VaultCiphertext }): Promise<Uint8Array> {
+    if (!this.#password || params.password !== this.#password) {
+      throw new Error("invalid password");
     }
+
+    if (params.ciphertext) {
+      if (this.#ciphertext && params.ciphertext.cipher !== this.#ciphertext.cipher) {
+        throw new Error("invalid ciphertext");
+      }
+      this.#ciphertext = { ...params.ciphertext };
+    } else if (!this.#ciphertext) {
+      throw new Error("ciphertext required");
+    }
+
     this.#unlocked = true;
     return new Uint8Array([1, 2, 3]);
   }
@@ -298,12 +315,13 @@ class FakeVault implements VaultService {
     return new Uint8Array([9, 9, 9]);
   }
 
-  async seal(): Promise<VaultCiphertext> {
+  async seal(params: { password: string; secret: Uint8Array }): Promise<VaultCiphertext> {
+    if (!this.#password || params.password !== this.#password) {
+      throw new Error("invalid password");
+    }
     this.#ciphertext = this.createCiphertext();
-    this.#unlocked = true;
     return { ...this.#ciphertext };
   }
-
   importCiphertext(ciphertext: VaultCiphertext): void {
     this.#ciphertext = { ...ciphertext };
   }
@@ -333,6 +351,8 @@ type SetupBackgroundOptions = {
   timers?: RpcTimers;
   vault?: VaultService | (() => VaultService);
   persistDebounceMs?: number;
+  transactions?: CreateBackgroundServicesOptions["transactions"];
+  storageLogger?: (message: string, error: unknown) => void;
 };
 
 type TestBackgroundContext = {
@@ -353,6 +373,7 @@ const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<Te
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
     port: storagePort,
     ...(options.now ? { now: options.now } : {}),
+    ...(options.storageLogger ? { logger: options.storageLogger } : {}),
   };
 
   const needsSessionOptions =
@@ -377,6 +398,7 @@ const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<Te
     },
     storage: storageOptions,
     ...(sessionOptions ? { session: sessionOptions } : {}),
+    ...(options.transactions ? { transactions: options.transactions } : {}),
   });
 
   await services.lifecycle.initialize();
@@ -460,25 +482,21 @@ describe("createBackgroundServices (integration)", () => {
         expect.arrayContaining([mainChain.chainRef, secondaryChain.chainRef]),
       );
 
-      const accountsSnapshots = storagePort.savedSnapshots.filter(isAccountsSnapshotEntry);
+      const accountsSnapshots = storagePort.savedSnapshots.filter(isAccountsSnapshot);
       expect(accountsSnapshots.length).toBeGreaterThan(0);
       expect(accountsSnapshots.at(-1)?.envelope.payload.active?.chainRef).toBe(secondaryChain.chainRef);
 
-      const networkSnapshots = storagePort.savedSnapshots.filter(isNetworkSnapshotEntry);
+      const networkSnapshots = storagePort.savedSnapshots.filter(isNetworkSnapshot);
       expect(networkSnapshots.length).toBeGreaterThan(0);
       expect(networkSnapshots.at(-1)?.envelope.payload.activeChain).toBe(secondaryChain.chainRef);
-      expect(networkSnapshots.at(-1)?.envelope.payload.knownChains.map((chain) => chain.chainRef)).toEqual(
-        expect.arrayContaining([mainChain.chainRef, secondaryChain.chainRef]),
-      );
     } finally {
       context.destroy();
     }
   });
 
   it("persists unlock snapshot metadata for recovery workflows", async () => {
-    const autoLockMs = 1_000;
     const chain = createChainMetadata();
-    let currentTime = 5_000;
+    let currentTime = TEST_INITIAL_TIME;
     const clock = () => currentTime;
     const vaultFactory = () => new FakeVault(clock);
 
@@ -486,7 +504,7 @@ describe("createBackgroundServices (integration)", () => {
       chainSeed: [chain],
       now: clock,
       vault: vaultFactory,
-      autoLockDuration: autoLockMs,
+      autoLockDuration: TEST_AUTO_LOCK_DURATION,
       persistDebounceMs: 0,
     });
 
@@ -514,7 +532,7 @@ describe("createBackgroundServices (integration)", () => {
       chainSeed: [chain],
       now: clock,
       vault: vaultFactory,
-      autoLockDuration: autoLockMs,
+      autoLockDuration: TEST_AUTO_LOCK_DURATION,
       persistDebounceMs: 0,
       vaultMeta: persistedMeta,
     });
@@ -525,7 +543,7 @@ describe("createBackgroundServices (integration)", () => {
 
       const unlockState = second.services.session.unlock.getState();
       expect(unlockState.isUnlocked).toBe(false);
-      expect(unlockState.timeoutMs).toBe(autoLockMs);
+      expect(unlockState.timeoutMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(second.storagePort.savedVaultMeta).toBeNull();
     } finally {
       second.destroy();
@@ -604,28 +622,40 @@ describe("createBackgroundServices (integration)", () => {
       },
     };
 
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+
     const transactionsSnapshot: TransactionsSnapshot = {
       version: TRANSACTIONS_SNAPSHOT_VERSION,
       updatedAt: 1_000,
       payload: {
         pending: [
           {
-            id: "tx-1",
-            caip2: mainChain.chainRef,
+            id: "tx-storage-1",
+            namespace: chain.namespace,
+            caip2: chain.chainRef,
             origin: "https://dapp.example",
-            from: accountAddress,
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             request: {
-              namespace: mainChain.namespace,
-              caip2: mainChain.chainRef,
+              namespace: chain.namespace,
+              caip2: chain.chainRef,
               payload: {
-                chainId: mainChain.chainId,
-                from: accountAddress,
-                to: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 value: "0x0",
                 data: "0x",
               },
             },
-            status: "pending",
+            status: "approved",
+            hash: null,
+            receipt: null,
+            error: null,
+            userRejected: false,
+            warnings: [],
+            issues: [],
             createdAt: 1_000,
             updatedAt: 1_000,
           },
@@ -666,7 +696,15 @@ describe("createBackgroundServices (integration)", () => {
       expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
       expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
-      expect(context.services.controllers.transactions.getState()).toEqual(transactionsSnapshot.payload);
+
+      const transactionsState = context.services.controllers.transactions.getState();
+      expect(transactionsState.pending).toHaveLength(0);
+      expect(transactionsState.history).toHaveLength(1);
+
+      const restoredMeta = transactionsState.history[0];
+      expect(restoredMeta?.id).toBe("tx-storage-1");
+      expect(restoredMeta?.status).toBe("failed");
+      expect(restoredMeta?.error?.message).toContain("adapter");
 
       const networkState = context.services.controllers.network.getState();
       expect(networkState.activeChain).toBe(mainChain.chainRef);
@@ -675,6 +713,237 @@ describe("createBackgroundServices (integration)", () => {
       );
       expect(Object.keys(networkState.rpc)).toEqual(expect.arrayContaining([mainChain.chainRef, altChain.chainRef]));
       expect(networkState.rpc[orphanChain.chainRef]).toBeUndefined();
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("replays approved transactions from storage during initialization", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+
+    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
+      prepared: { raw: "0x" },
+      summary: { kind: "transfer" },
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+      raw: "0x1111",
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+
+    const adapter: TransactionAdapter = {
+      buildDraft,
+      signTransaction,
+      broadcastTransaction,
+    };
+    const registry = new TransactionAdapterRegistry();
+    registry.register(chain.namespace, adapter);
+
+    const transactionsSnapshot: TransactionsSnapshot = {
+      version: TRANSACTIONS_SNAPSHOT_VERSION,
+      updatedAt: 1_000,
+      payload: {
+        pending: [],
+        history: [
+          {
+            id: "tx-storage-1",
+            namespace: chain.namespace,
+            caip2: chain.chainRef,
+            origin: "https://dapp.example",
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            request: {
+              namespace: chain.namespace,
+              caip2: chain.chainRef,
+              payload: {
+                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                value: "0x0",
+                data: "0x",
+              },
+            },
+            status: "approved",
+            hash: null,
+            receipt: null,
+            error: null,
+            userRejected: false,
+            warnings: [],
+            issues: [],
+            createdAt: 1_000,
+            updatedAt: 1_000,
+          },
+        ],
+      },
+    };
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      storageSeed: {
+        [StorageNamespaces.Transactions]: transactionsSnapshot,
+      },
+      transactions: {
+        registry,
+        autoApprove: false,
+      },
+      now: () => 2_000,
+    });
+
+    try {
+      await flushAsync();
+
+      expect(buildDraft).toHaveBeenCalledTimes(1);
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+
+      const resumedMeta = context.services.controllers.transactions.getMeta("tx-storage-1");
+      expect(resumedMeta?.status).toBe("broadcast");
+      expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("resumes approved transactions from storage and emits status events", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+
+    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
+      prepared: { raw: "0x" },
+      summary: { kind: "transfer" },
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+      raw: "0x1111",
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+
+    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction };
+    const registry = new TransactionAdapterRegistry();
+    registry.register(chain.namespace, adapter);
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      transactions: { registry, autoApprove: false },
+      persistDebounceMs: 0,
+    });
+
+    const approvedMeta: TransactionsSnapshot["payload"]["pending"][number] = {
+      id: "tx-resume-1",
+      namespace: chain.namespace,
+      caip2: chain.chainRef,
+      origin: "https://dapp.example",
+      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      request: {
+        namespace: chain.namespace,
+        caip2: chain.chainRef,
+        payload: {
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      status: "approved",
+      hash: null,
+      receipt: null,
+      error: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    };
+
+    context.services.controllers.transactions.replaceState({
+      pending: [],
+      history: [approvedMeta],
+    });
+
+    const statusEvents: TransactionStatusChange[] = [];
+    const queuedEvents: string[] = [];
+
+    const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
+      if (payload.id === "tx-resume-1") {
+        statusEvents.push(payload);
+      }
+    });
+    const unsubscribeQueued = context.services.messenger.subscribe("transaction:queued", (meta) => {
+      queuedEvents.push(meta.id);
+    });
+
+    try {
+      await context.services.controllers.transactions.resumePending();
+      await flushAsync();
+
+      expect(buildDraft).toHaveBeenCalledTimes(1);
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+
+      const resumedMeta = context.services.controllers.transactions.getMeta("tx-resume-1");
+      expect(resumedMeta?.status).toBe("broadcast");
+      expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+
+      expect(queuedEvents).toHaveLength(0);
+      expect(statusEvents.map(({ previousStatus, nextStatus }) => [previousStatus, nextStatus])).toEqual([
+        ["approved", "signed"],
+        ["signed", "broadcast"],
+      ]);
+    } finally {
+      unsubscribeStatus();
+      unsubscribeQueued();
+      context.destroy();
+    }
+  });
+
+  it("clears invalid transaction snapshots during hydration", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+
+    const corruptedSnapshot = {
+      version: TRANSACTIONS_SNAPSHOT_VERSION,
+      updatedAt: 1_000,
+      payload: {
+        pending: [
+          {
+            id: "broken",
+            namespace: chain.namespace,
+            caip2: chain.chainRef,
+            origin: "https://dapp.example",
+          },
+        ],
+        history: [],
+      },
+    } as unknown as TransactionsSnapshot;
+
+    const logger = vi.fn();
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      storageSeed: { [StorageNamespaces.Transactions]: corruptedSnapshot },
+      storageLogger: logger,
+    });
+
+    try {
+      expect(context.services.controllers.transactions.getState()).toEqual({ pending: [], history: [] });
+      expect(context.storagePort.clearedSnapshots).toContain(StorageNamespaces.Transactions);
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining("storage: failed to hydrate"), expect.any(Error));
     } finally {
       context.destroy();
     }

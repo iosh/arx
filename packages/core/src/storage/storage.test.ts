@@ -202,6 +202,7 @@ describe("storage schemas", () => {
   it("validates transaction snapshots", () => {
     const transaction = {
       id: "tx-1",
+      namespace: "eip155",
       caip2: "eip155:1",
       origin: "https://dapp.example",
       from: "0xabc",
@@ -217,6 +218,12 @@ describe("storage schemas", () => {
         },
       },
       status: "pending" as const,
+      hash: null,
+      receipt: null,
+      error: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
       createdAt: TIMESTAMP,
       updatedAt: TIMESTAMP,
     };

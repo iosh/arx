@@ -59,6 +59,7 @@ import { createNamespaceResolver, createPermissionScopeResolver, type RpcInvocat
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
+import { cloneTransactionState } from "../transactions/storage/state.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { createVaultService } from "../vault/vaultService.js";
 import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
@@ -721,9 +722,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     await hydrateSnapshot(StorageNamespaces.Approvals, (payload) => {
       controllers.approvals.replaceState(payload);
     });
+
     await hydrateSnapshot(StorageNamespaces.Transactions, (payload) => {
-      controllers.transactions.replaceState(payload as unknown as TransactionState);
+      controllers.transactions.replaceState(cloneTransactionState(payload));
     });
+    await controllers.transactions.resumePending();
   };
 
   const hydrateVaultMeta = async () => {

@@ -17,7 +17,7 @@ export type TransactionIssue = TransactionWarning;
 export type TransactionError = {
   name: string;
   message: string;
-  code?: number;
+  code?: number | undefined;
   data?: unknown;
 };
 
@@ -54,7 +54,7 @@ export type TransactionPayloadMap = {
 
 export type TransactionRequest<TNamespace extends string = keyof TransactionPayloadMap | string> = {
   namespace: TNamespace;
-  caip2?: Caip2ChainId;
+  caip2?: Caip2ChainId | undefined;
   payload: TNamespace extends keyof TransactionPayloadMap ? TransactionPayloadMap[TNamespace] : Record<string, unknown>;
 };
 

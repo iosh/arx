@@ -251,23 +251,57 @@ const genericTransactionRequestSchema = z
 
 const transactionRequestSchema = z.union([eip155TransactionRequestSchema, genericTransactionRequestSchema]);
 
-const transactionStatusSchema = z.enum(["pending", "approved", "submitted", "failed"]);
+const transactionWarningSchema = z.strictObject({
+  code: nonEmptyStringSchema,
+  message: z.string(),
+  data: z.unknown().optional(),
+});
 
+const transactionErrorSchema = z.strictObject({
+  name: nonEmptyStringSchema,
+  message: z.string(),
+  code: z.number().int().optional(),
+  data: z.unknown().optional(),
+});
+
+const transactionReceiptSchema = z.record(z.string(), z.unknown());
+
+const transactionStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "signed",
+  "broadcast",
+  "confirmed",
+  "failed",
+  "replaced",
+]);
 const transactionMetaSchema = z.strictObject({
   id: nonEmptyStringSchema,
+  namespace: nonEmptyStringSchema,
   caip2: caip2ChainIdSchema,
-  origin: nonEmptyStringSchema,
+  origin: originStringSchema,
   from: accountAddressSchema.nullable(),
   request: transactionRequestSchema,
   status: transactionStatusSchema,
+  hash: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/, { message: "Transaction hash must be 0x-prefixed 32-byte hex" })
+    .nullable(),
+  receipt: transactionReceiptSchema.nullable(),
+  error: transactionErrorSchema.nullable(),
+  userRejected: z.boolean(),
+  warnings: z.array(transactionWarningSchema),
+  issues: z.array(transactionWarningSchema),
   createdAt: epochMillisecondsSchema,
   updatedAt: epochMillisecondsSchema,
 });
 
-const transactionStateSchema = z.strictObject({
+const transactionStatePayloadSchema = z.strictObject({
   pending: z.array(transactionMetaSchema),
   history: z.array(transactionMetaSchema),
 });
+
+const transactionStateSchema = transactionStatePayloadSchema;
 
 const createSnapshotSchema = <TPayload extends ZodType, TVersion extends number>(config: {
   version: TVersion;
@@ -405,4 +439,7 @@ export {
   rpcEndpointStateSchema as RpcEndpointStateSchema,
   rpcStrategySchema as RpcStrategySchema,
   rpcErrorSnapshotSchema as RpcErrorSnapshotSchema,
+  transactionWarningSchema as TransactionWarningSchema,
+  transactionErrorSchema as TransactionErrorSchema,
+  transactionReceiptSchema as TransactionReceiptSchema,
 };

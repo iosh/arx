@@ -13,6 +13,7 @@ import {
   TRANSACTIONS_SNAPSHOT_VERSION,
   type TransactionsSnapshot,
 } from "../../storage/index.js";
+import { serializeTransactionState } from "../../transactions/storage/state.js";
 
 const cloneApprovalQueueItem = (item: ApprovalQueueItem): ApprovalQueueItem => ({
   id: item.id,
@@ -180,14 +181,7 @@ export const createStorageSync = ({
     subscriptions.push(approvalsUnsub);
 
     const transactionsUnsub = controllers.transactions.onStateChanged((state) => {
-      const envelope: TransactionsSnapshot = {
-        version: TRANSACTIONS_SNAPSHOT_VERSION,
-        updatedAt: now(),
-        payload: {
-          pending: state.pending,
-          history: state.history,
-        },
-      };
+      const envelope = serializeTransactionState(state, now());
 
       void storagePort.saveSnapshot(StorageNamespaces.Transactions, envelope).catch((error) => {
         logger("[persistence] failed to persist transactions snapshot", error);

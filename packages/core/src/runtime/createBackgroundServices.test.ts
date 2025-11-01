@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
-import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
+import { ApprovalTypes, PermissionScopes, type TransactionMeta } from "../controllers/index.js";
+import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
 import type {
   ChainRegistryEntity,
   StorageNamespace,
@@ -123,6 +124,7 @@ const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
     pending: [
       {
         id: "tx-1",
+        namespace: "eip155",
         caip2: "eip155:1",
         origin: "https://dapp.example",
         from: "0xabc",
@@ -138,6 +140,12 @@ const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
           },
         },
         status: "pending",
+        hash: null,
+        receipt: null,
+        error: null,
+        userRejected: false,
+        warnings: [],
+        issues: [],
         createdAt: 1_000,
         updatedAt: 1_000,
       },
@@ -517,24 +525,31 @@ describe("createBackgroundServices", () => {
     now = 3_900;
     const pendingTx = {
       id: "tx-test-1",
+      namespace: "eip155",
       caip2: "eip155:1",
       origin: "https://dapp.example",
-      from: "0x123",
+      from: "0x1111111111111111111111111111111111111111",
       request: {
         namespace: "eip155",
         caip2: "eip155:1",
         payload: {
           chainId: "0x1",
-          from: "0x123",
-          to: "0x456",
+          from: "0x1111111111111111111111111111111111111111",
+          to: "0x2222222222222222222222222222222222222222",
           value: "0x0",
           data: "0x",
         },
       },
-      status: "pending" as const,
+      status: "pending",
+      hash: null,
+      receipt: null,
+      error: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
       createdAt: now,
       updatedAt: now,
-    };
+    } satisfies TransactionMeta;
     services.controllers.transactions.replaceState({
       pending: [pendingTx],
       history: [],
@@ -878,5 +893,21 @@ describe("createBackgroundServices", () => {
     } finally {
       services.lifecycle.destroy();
     }
+  });
+
+  it("exposes rpc client registry with default eip155 client", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ result: "0x1" }), { status: 200 }));
+    const services = createServices({
+      rpcClients: { options: { fetch } },
+      chainRegistry: { seed: [MAINNET_CHAIN] },
+    });
+
+    await services.lifecycle.initialize();
+
+    const client = services.rpcClients.getClient<Eip155RpcCapabilities>("eip155", MAINNET_CHAIN.chainRef);
+    await expect(client.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    services.lifecycle.destroy();
   });
 });

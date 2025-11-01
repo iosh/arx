@@ -53,9 +53,11 @@ import type { UnlockController, UnlockControllerOptions, UnlockMessengerTopics }
 import { InMemoryUnlockController } from "../controllers/unlock/UnlockController.js";
 import { EthereumHdKeyring } from "../keyring/index.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
+import { createEip155RpcClientFactory } from "../rpc/clients/eip155/eip155.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, createPermissionScopeResolver, type RpcInvocationContext } from "../rpc/index.js";
+import { type RpcClientFactory, RpcClientRegistry, type RpcClientRegistryOptions } from "../rpc/RpcClientRegistry.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
@@ -207,6 +209,10 @@ export type CreateBackgroundServicesOptions = {
     logger?: (message: string, error?: unknown) => void;
     schemaVersion?: number;
   };
+  rpcClients?: {
+    options?: Partial<Omit<RpcClientRegistryOptions, "network">>;
+    factories?: Array<{ namespace: string; factory: RpcClientFactory }>;
+  };
 };
 
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
@@ -224,6 +230,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     storage: storageOptions,
     session: sessionOptions,
     chainRegistry: chainRegistryOptions,
+    rpcClients: rpcClientOptions,
   } = options ?? {};
 
   const messenger = new ControllerMessenger<MessengerTopics>(
@@ -284,6 +291,22 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   if (!chainRegistryOptions?.port) {
     throw new Error("createBackgroundServices requires chainRegistry.port");
+  }
+
+  const rpcClientRegistry = new RpcClientRegistry({
+    ...(rpcClientOptions?.options ?? {}),
+    network: {
+      getActiveEndpoint: (chainRef) => networkController.getActiveEndpoint(chainRef),
+      reportRpcOutcome: (chainRef, outcome) => networkController.reportRpcOutcome(chainRef, outcome),
+      onRpcEndpointChanged: (handler) => networkController.onRpcEndpointChanged(handler),
+      onChainChanged: (handler) => networkController.onChainChanged(handler),
+    },
+  });
+
+  rpcClientRegistry.registerFactory("eip155", createEip155RpcClientFactory());
+
+  for (const entry of rpcClientOptions?.factories ?? []) {
+    rpcClientRegistry.registerFactory(entry.namespace, entry.factory);
   }
 
   const seedSource = chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA;
@@ -863,6 +886,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       storageSyncAttached = false;
     }
 
+    rpcClientRegistry.destroy();
     engine.destroy();
     messenger.clear();
   };
@@ -878,6 +902,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
       persistVaultMeta: () => persistVaultMetaImmediate(),
     } satisfies BackgroundSessionServices,
+    rpcClients: rpcClientRegistry,
     getActiveNamespace: namespaceResolverFn,
     lifecycle: {
       initialize,

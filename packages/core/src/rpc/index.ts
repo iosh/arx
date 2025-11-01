@@ -10,6 +10,21 @@ import type {
   RpcRequest,
 } from "./handlers/types.js";
 
+export type {
+  Eip155FeeData,
+  Eip155RpcCapabilities,
+  Eip155RpcClient,
+} from "./clients/eip155/eip155.js";
+export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
+export {
+  type RpcClient,
+  type RpcClientFactory,
+  RpcClientRegistry,
+  type RpcClientRegistryOptions,
+  type RpcTransport,
+  type RpcTransportRequest,
+} from "./RpcClientRegistry.js";
+
 type NamespaceDefinitions = Record<string, MethodDefinition>;
 
 export const DEFAULT_NAMESPACE: Namespace = EIP155_NAMESPACE;

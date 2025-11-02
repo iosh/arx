@@ -37,6 +37,7 @@ export type TransactionStatusChange = {
 };
 
 export type Eip155TransactionPayload = {
+  chainId?: `0x${string}`;
   from?: AccountAddress;
   to?: AccountAddress | null;
   value?: `0x${string}`;

@@ -106,6 +106,29 @@ describe("createEip155DraftBuilder", () => {
     expect(draft.summary.expectedChainId).toBe("0x1");
   });
 
+  it("records mismatch detail when payload from differs from active account", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    ctx.request.payload.from = BASE_TO;
+    ctx.meta.request = ctx.request;
+
+    const draft = await builder(ctx);
+    const mismatch = draft.issues.find((item) => item.code === "transaction.draft.from_mismatch");
+
+    expect(mismatch?.data).toEqual({
+      payloadFrom: BASE_TO,
+      activeFrom: BASE_FROM,
+    });
+  });
+
   it("fills nonce, gas, and EIP-1559 fees from RPC responses", async () => {
     const rpc = createRpcMock();
     rpc.getTransactionCount.mockResolvedValue("0xa");
@@ -143,6 +166,80 @@ describe("createEip155DraftBuilder", () => {
     });
   });
 
+  it("captures estimate input arguments for gas estimation", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0xa");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({
+      maxFeePerGas: "0x59682f00",
+      maxPriorityFeePerGas: "0x3b9aca00",
+    });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    const draft = await builder(ctx);
+
+    expect(draft.summary.estimateInput).toEqual({
+      from: "0x1111111111111111111111111111111111111111",
+      to: "0x2222222222222222222222222222222222222222",
+      value: "0xde0b6b3a7640000",
+      data: "0x",
+      nonce: "0xa",
+    });
+  });
+
+  it("records invalid_hex when RPC fee data is malformed", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({
+      maxFeePerGas: "123",
+      maxPriorityFeePerGas: "0xGG",
+    });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const draft = await builder(createContext());
+
+    const issueCodes = draft.issues.map((item) => item.code);
+    expect(issueCodes).toContain("transaction.draft.invalid_hex");
+    expect(draft.summary.feeMode).toBe("unknown");
+    expect(draft.summary.fee).toBeUndefined();
+  });
+
+  it("passes derived nonce to gas estimation when fetched from RPC", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0xb");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({
+      maxFeePerGas: "0x59682f00",
+      maxPriorityFeePerGas: "0x3b9aca00",
+    });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "nonce");
+    Reflect.deleteProperty(ctx.request.payload, "gas");
+
+    const draft = await builder(ctx);
+
+    expect(rpc.getTransactionCount).toHaveBeenCalledWith("0x1111111111111111111111111111111111111111", "pending");
+    expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect.objectContaining({
+        nonce: "0xb",
+      }),
+    ]);
+    expect(draft.summary.nonce).toBe("0xb");
+  });
+
   it("records issues when RPC estimation fails", async () => {
     const rpc = createRpcMock();
     rpc.getTransactionCount.mockRejectedValue(new Error("nonce error"));
@@ -164,6 +261,55 @@ describe("createEip155DraftBuilder", () => {
       ]),
     );
     expect(draft.summary.rpcAvailable).toBe(true);
+  });
+
+  it("attaches rpc error metadata when nonce fetch fails", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockRejectedValue(new Error("RPC nonce failure"));
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "nonce");
+
+    const draft = await builder(ctx);
+    const nonceIssue = draft.issues.find((item) => item.code === "transaction.draft.nonce_failed");
+
+    expect(nonceIssue).toBeTruthy();
+    expect(nonceIssue?.data).toMatchObject({
+      method: "eth_getTransactionCount",
+      error: "RPC nonce failure",
+    });
+  });
+
+  it("records estimate input even when gas estimation throws", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x5");
+    rpc.estimateGas.mockRejectedValue(new Error("boom"));
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gas");
+
+    const draft = await builder(ctx);
+    const gasIssue = draft.issues.find((item) => item.code === "transaction.draft.gas_estimation_failed");
+
+    expect(gasIssue?.data).toMatchObject({
+      method: "eth_estimateGas",
+      error: "boom",
+    });
+    expect(draft.summary.estimateInput).toMatchObject({
+      from: BASE_FROM,
+      to: BASE_TO,
+    });
   });
 
   it("flags rpc_unavailable when client factory throws", async () => {
@@ -199,6 +345,105 @@ describe("createEip155DraftBuilder", () => {
     expect(rpc.getFeeData).not.toHaveBeenCalled();
   });
 
+  it("forwards gasPrice to RPC gas estimation when provided", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x2");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gas");
+    ctx.request.payload.gasPrice = "0x2540be400"; // 10 gwei
+
+    await builder(ctx);
+
+    expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect.objectContaining({
+        from: "0x1111111111111111111111111111111111111111",
+        to: "0x2222222222222222222222222222222222222222",
+        gasPrice: "0x2540be400",
+      }),
+    ]);
+  });
+
+  it("forwards eip1559 fees to RPC gas estimation when provided", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x3");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({
+      maxFeePerGas: "0x59682f00",
+      maxPriorityFeePerGas: "0x3b9aca00",
+    });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gas");
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    ctx.request.payload.maxFeePerGas = "0x59682f00";
+    ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
+
+    await builder(ctx);
+
+    expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect.objectContaining({
+        from: "0x1111111111111111111111111111111111111111",
+        to: "0x2222222222222222222222222222222222222222",
+        maxFeePerGas: "0x59682f00",
+        maxPriorityFeePerGas: "0x3b9aca00",
+      }),
+    ]);
+  });
+
+  it("normalizes provided hex fields to lowercase", async () => {
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => createRpcMock().client),
+    });
+
+    const ctx = createContext();
+    ctx.request.payload.value = "0xDE0B6B3A7640000";
+    ctx.request.payload.gas = "0x5208";
+    ctx.request.payload.gasPrice = "0x3B9ACA00";
+    ctx.request.payload.nonce = "0xA";
+
+    const draft = await builder(ctx);
+
+    expect(draft.prepared.value).toBe("0xde0b6b3a7640000");
+    expect(draft.prepared.gas).toBe("0x5208");
+    expect(draft.prepared.gasPrice).toBe("0x3b9aca00");
+    expect(draft.prepared.nonce).toBe("0xa");
+    expect(draft.summary.valueHex).toBe("0xde0b6b3a7640000");
+    expect(draft.summary.valueWei).toBe("1000000000000000000");
+  });
+
+  it("summarizes eip1559 fee fields provided in payload", async () => {
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => createRpcMock().client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    ctx.request.payload.maxFeePerGas = "0x59682F00";
+    ctx.request.payload.maxPriorityFeePerGas = "0x3B9ACA00";
+
+    const draft = await builder(ctx);
+
+    expect(draft.summary.feeMode).toBe("eip1559");
+    expect(draft.summary.fee).toEqual({
+      mode: "eip1559",
+      maxFeePerGas: "0x59682f00",
+      maxPriorityFeePerGas: "0x3b9aca00",
+    });
+    expect(draft.prepared.maxFeePerGas).toBe("0x59682f00");
+    expect(draft.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
+  });
+
   it("detects fee conflict when mixing gasPrice with EIP-1559 fields", async () => {
     const rpc = createRpcMock();
 
@@ -212,6 +457,27 @@ describe("createEip155DraftBuilder", () => {
 
     const draft = await builder(ctx);
 
+    expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.fee_conflict");
+  });
+
+  it("keeps feeMode unknown when fee fields conflict", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    ctx.request.payload.gasPrice = "0x3b9aca00";
+    ctx.request.payload.maxFeePerGas = "0x59682f00";
+    ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
+
+    const draft = await builder(ctx);
+
+    expect(draft.summary.feeMode).toBe("unknown");
+    expect(draft.summary.fee).toBeUndefined();
     expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.fee_conflict");
   });
 
@@ -232,6 +498,30 @@ describe("createEip155DraftBuilder", () => {
 
     expect(draft.prepared.to).toBeNull();
     expect(draft.summary.to).toBeNull();
+  });
+
+  it("omits to field in callParams when deploying contracts", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x35000");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    ctx.request.payload.to = null;
+    ctx.request.payload.data = "0x60006000";
+
+    const draft = await builder(ctx);
+
+    expect(draft.summary.callParams).toMatchObject({
+      from: "0x1111111111111111111111111111111111111111",
+      data: "0x60006000",
+      value: "0xde0b6b3a7640000",
+    });
+    expect(draft.summary.callParams).not.toHaveProperty("to");
   });
 
   it("skips nonce/gas RPC calls when values already provided", async () => {
@@ -271,6 +561,28 @@ describe("createEip155DraftBuilder", () => {
     expect(draft.summary.maxCostWei).toBe(expected);
   });
 
+  it("leaves maxCost fields undefined when gas data cannot be derived", async () => {
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => {
+        throw new Error("rpc offline");
+      }),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gas");
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "value");
+
+    const draft = await builder(ctx);
+
+    expect(draft.summary.maxCostWei).toBeUndefined();
+    expect(draft.summary.maxCostHex).toBeUndefined();
+    expect(draft.summary.rpcAvailable).toBe(false);
+    expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.rpc_unavailable");
+  });
+
   it("reports issue when from is missing", async () => {
     const builder = createEip155DraftBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
@@ -287,6 +599,61 @@ describe("createEip155DraftBuilder", () => {
     const draft = await builder(ctx);
 
     expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.from_missing");
+  });
+
+  it("does not run RPC lookups when from address is unavailable", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const request = createRequest();
+    Reflect.deleteProperty(request.payload, "from");
+
+    const ctx = createContext({
+      from: null,
+      request,
+      meta: createMeta(request),
+    });
+    ctx.meta.from = null;
+
+    const draft = await builder(ctx);
+
+    expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.from_missing");
+    expect(rpc.getTransactionCount).not.toHaveBeenCalled();
+    expect(rpc.estimateGas).toHaveBeenCalledWith([
+      {
+        to: "0x2222222222222222222222222222222222222222",
+        value: "0xde0b6b3a7640000",
+        data: "0x",
+      },
+    ]);
+    expect(draft.summary.callParams).not.toHaveProperty("from");
+  });
+
+  it("normalizes payload data field to lowercase hex", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    ctx.request.payload.data = "0xABCD";
+
+    const draft = await builder(ctx);
+
+    expect(draft.prepared.data).toBe("0xabcd");
+    expect(draft.summary.data).toBe("0xabcd");
+    expect(draft.summary.callParams).toMatchObject({
+      data: "0xabcd",
+    });
   });
 
   it("reports issue when to address is invalid", async () => {
@@ -394,6 +761,35 @@ describe("createEip155DraftBuilder", () => {
     expect(draft.summary.expectedChainId).toBe("0x1");
   });
 
+  it("omits expectedChainId when chain reference is non-numeric", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+      now: () => 123_456,
+    });
+
+    const request = createRequest();
+    request.caip2 = "eip155:mainnet";
+    request.payload.chainId = "0x1";
+
+    const ctx = createContext({
+      chainRef: "eip155:mainnet",
+      request,
+      meta: createMeta(request),
+    });
+
+    const draft = await builder(ctx);
+
+    expect(draft.summary.namespace).toBe("eip155");
+    expect(draft.summary.chainRef).toBe("eip155:mainnet");
+    expect(draft.summary.expectedChainId).toBeUndefined();
+    expect(draft.summary.generatedAt).toBe(123_456);
+  });
+
   it("flags zero gas estimate from RPC", async () => {
     const rpc = createRpcMock();
     rpc.getTransactionCount.mockResolvedValue("0x1");
@@ -428,6 +824,8 @@ describe("createEip155DraftBuilder", () => {
 
     expect(draft.warnings.map((item) => item.code)).toContain("transaction.draft.gas_suspicious");
     expect(draft.summary.gas).toBe("0x5f5e100");
+    const warning = draft.warnings.find((item) => item.code === "transaction.draft.gas_suspicious");
+    expect(warning?.data).toEqual({ estimate: "0x5f5e100" });
   });
 
   it("reports invalid hex when RPC nonce response is malformed", async () => {
@@ -500,6 +898,56 @@ describe("createEip155DraftBuilder", () => {
     expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.fee_estimation_empty");
   });
 
+  it("includes rpc metadata on fee_estimation_empty issue", async () => {
+    const rpc = createRpcMock();
+    rpc.getFeeData.mockResolvedValue({});
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
+
+    const draft = await builder(ctx);
+    const issue = draft.issues.find((item) => item.code === "transaction.draft.fee_estimation_empty");
+
+    expect(issue?.data).toEqual({
+      method: "eth_getBlockByNumber | eth_gasPrice",
+    });
+    expect(draft.summary.feeMode).toBe("unknown");
+  });
+
+  it("attaches rpc error details when fee estimation fails", async () => {
+    const rpc = createRpcMock();
+    rpc.getFeeData.mockRejectedValue(new Error("fee rpc down"));
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const ctx = createContext();
+    Reflect.deleteProperty(ctx.request.payload, "gasPrice");
+    Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
+    Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
+
+    const draft = await builder(ctx);
+    const issue = draft.issues.find((item) => item.code === "transaction.draft.fee_estimation_failed");
+
+    expect(issue?.data).toMatchObject({
+      method: "eth_feeHistory | eth_gasPrice",
+      error: "fee rpc down",
+    });
+    expect(draft.summary.fee).toBeUndefined();
+    expect(draft.summary.feeMode).toBe("unknown");
+  });
+
   it("falls back to legacy fee data when RPC only returns gasPrice", async () => {
     const rpc = createRpcMock();
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
@@ -543,5 +991,34 @@ describe("createEip155DraftBuilder", () => {
 
     expect(draft.summary.maxCostWei).toBe(expectedWei);
     expect(draft.summary.maxCostHex).toBe(expectedHex);
+  });
+
+  it("fills from using active account when payload omits it", async () => {
+    const rpc = createRpcMock();
+    rpc.getTransactionCount.mockResolvedValue("0x1");
+    rpc.estimateGas.mockResolvedValue("0x5208");
+    rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+
+    const builder = createEip155DraftBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
+    });
+
+    const request = createRequest();
+    Reflect.deleteProperty(request.payload, "from");
+
+    const activeFrom = "0x52908400098527886E0F7030069857D2E4169EE7" as const;
+    const ctx = createContext({
+      from: activeFrom,
+      request,
+      meta: createMeta(request),
+    });
+    ctx.meta.from = activeFrom;
+
+    const draft = await builder(ctx);
+
+    expect(draft.issues).toHaveLength(0);
+    expect(draft.prepared.from).toBe("0x52908400098527886e0f7030069857d2e4169ee7");
+    expect(draft.summary.from).toBe("0x52908400098527886E0F7030069857D2E4169EE7");
+    expect(rpc.getTransactionCount).toHaveBeenCalledWith("0x52908400098527886e0f7030069857d2e4169ee7", "pending");
   });
 });

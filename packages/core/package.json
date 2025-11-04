@@ -18,10 +18,11 @@
     "@metamask/json-rpc-engine": "10.0.3",
     "@metamask/rpc-errors": "7.0.3",
     "@metamask/utils": "11.8.0",
+    "@noble/curves": "2.0.1",
     "@noble/hashes": "2.0.1",
-    "@noble/secp256k1": "3.0.0",
     "@scure/bip32": "2.0.1",
     "@scure/bip39": "2.0.1",
+    "ox": "0.9.14",
     "zod": "4.1.11"
   },
   "devDependencies": {

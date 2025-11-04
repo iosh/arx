@@ -1,6 +1,6 @@
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { getPublicKey } from "@noble/secp256k1";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
@@ -227,7 +227,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   #addressFromSecret(secret: Uint8Array): string {
-    const publicKey = getPublicKey(secret, false);
+    const publicKey = secp256k1.getPublicKey(secret, false);
     const hash = keccak_256(publicKey.subarray(1));
     const addressBytes = hash.slice(hash.length - 20);
     return `0x${bytesToHex(addressBytes)}`;

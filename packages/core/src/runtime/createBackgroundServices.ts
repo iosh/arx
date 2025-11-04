@@ -60,6 +60,8 @@ import { createNamespaceResolver, createPermissionScopeResolver, type RpcInvocat
 import { type RpcClientFactory, RpcClientRegistry, type RpcClientRegistryOptions } from "../rpc/RpcClientRegistry.js";
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
+import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
+import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import { cloneTransactionState } from "../transactions/storage/state.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
@@ -270,6 +272,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     scopeResolver: permissionScopeResolver,
   });
 
+  const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
+
   const transactionController = new InMemoryTransactionController({
     messenger: castMessenger<TransactionMessengerTopics>(messenger) as TransactionMessenger,
     network: {
@@ -281,7 +285,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     approvals: {
       requestApproval: (...args) => approvalController.requestApproval(...args),
     },
-    registry: transactionOptions?.registry ?? new TransactionAdapterRegistry(),
+
+    registry: transactionRegistry,
     ...(transactionOptions?.autoApprove !== undefined ? { autoApprove: transactionOptions.autoApprove } : {}),
     ...(transactionOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: transactionOptions.autoRejectMessage }
@@ -330,14 +335,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     });
   }
 
-  const controllers: {
-    network: NetworkController;
-    accounts: AccountController;
-    approvals: ApprovalController;
-    permissions: PermissionController;
-    transactions: TransactionController;
-    chainRegistry: ChainRegistryController;
-  } = {
+  const controllersBase = {
     network: networkController,
     accounts: accountController,
     approvals: approvalController,
@@ -345,8 +343,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionController,
     chainRegistry: chainRegistryController,
   };
-
-  namespaceResolverFn = createNamespaceResolver(controllers);
 
   const syncAccountsPointer = async (chain: ChainMetadata) => {
     const pointer = accountController.getActivePointer();
@@ -588,6 +584,22 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   keyringService.attach();
 
+  const eip155Signer = createEip155Signer({ keyring: keyringService });
+
+  if (!transactionRegistry.get(EIP155_NAMESPACE)) {
+    const adapter = createEip155TransactionAdapter({
+      signer: eip155Signer,
+      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
+    });
+    transactionRegistry.register(EIP155_NAMESPACE, adapter);
+  }
+
+  const controllers = {
+    ...controllersBase,
+    signers: { eip155: eip155Signer },
+  };
+
+  namespaceResolverFn = createNamespaceResolver(controllers);
   const accountsBridge = new AccountsKeyringBridge({
     keyring: keyringService,
     accounts: {

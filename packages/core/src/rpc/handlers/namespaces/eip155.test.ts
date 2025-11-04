@@ -1,5 +1,5 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
 import { createMethodExecutor } from "../../index.js";
 
@@ -620,7 +620,7 @@ describe("eip155 handlers - approval metadata", () => {
             params: ["0xdeadbeef", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4001 });
+      ).rejects.toMatchObject({ code: 4100 });
 
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
@@ -668,7 +668,7 @@ describe("eip155 handlers - approval metadata", () => {
             params: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", JSON.stringify(typedData)] as JsonRpcParams,
           },
         }),
-      ).rejects.toMatchObject({ code: 4001 });
+      ).rejects.toMatchObject({ code: 4100 });
 
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
@@ -753,6 +753,112 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("signs personal_sign requests when the account is unlocked", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const approvalSpy = vi
+      .spyOn(services.controllers.approvals, "requestApproval")
+      .mockImplementation(async (task, strategy) => {
+        if (!strategy) {
+          throw new Error("strategy is required for signing tests");
+        }
+        return strategy(task);
+      });
+
+    try {
+      const mainnet = services.controllers.network.getActiveChain();
+      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+
+      const { account } = await services.accountsRuntime.deriveAccount({
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        makePrimary: true,
+        switchActive: true,
+      });
+
+      const execute = createMethodExecutor(services.controllers);
+      const message = "0xdeadbeef";
+
+      const signature = (await execute({
+        origin: ORIGIN,
+        request: {
+          method: "personal_sign",
+          params: [message, account.address] as JsonRpcParams,
+        },
+      })) as string;
+
+      expect(signature).toMatch(/^0x[0-9a-f]+$/i);
+      expect(signature.length).toBe(132); // 65 bytes hex
+      await expect(
+        services.controllers.signers.eip155.signPersonalMessage({ address: account.address, message }),
+      ).resolves.toBe(signature);
+    } finally {
+      approvalSpy.mockRestore();
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("signs eth_signTypedData_v4 requests with the eip155 signer", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const approvalSpy = vi
+      .spyOn(services.controllers.approvals, "requestApproval")
+      .mockImplementation(async (task, strategy) => {
+        if (!strategy) {
+          throw new Error("strategy is required for signing tests");
+        }
+        return strategy(task);
+      });
+
+    try {
+      const mainnet = services.controllers.network.getActiveChain();
+      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+
+      const { account } = await services.accountsRuntime.deriveAccount({
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        makePrimary: true,
+        switchActive: true,
+      });
+
+      const execute = createMethodExecutor(services.controllers);
+      const payload = {
+        domain: { name: "ARX", version: "1" },
+        message: { contents: "hello" },
+        primaryType: "Example",
+        types: {
+          EIP712Domain: [
+            { name: "name", type: "string" },
+            { name: "version", type: "string" },
+          ],
+          Example: [{ name: "contents", type: "string" }],
+        },
+      };
+      const typedData = JSON.stringify(payload);
+
+      const signature = (await execute({
+        origin: ORIGIN,
+        request: {
+          method: "eth_signTypedData_v4",
+          params: [account.address, typedData] as JsonRpcParams,
+        },
+      })) as string;
+
+      expect(signature).toMatch(/^0x[0-9a-f]+$/i);
+      expect(signature.length).toBe(132);
+      await expect(
+        services.controllers.signers.eip155.signTypedData({ address: account.address, typedData }),
+      ).resolves.toBe(signature);
+    } finally {
+      approvalSpy.mockRestore();
       services.lifecycle.destroy();
     }
   });

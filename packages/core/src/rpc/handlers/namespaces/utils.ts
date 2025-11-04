@@ -42,8 +42,19 @@ export const resolveSigningInputs = (params: readonly unknown[]) => {
 };
 
 export const normaliseTypedData = (params: readonly unknown[], rpcErrors: ReturnType<typeof resolveRpcErrors>) => {
-  const address = params.find((value): value is string => typeof value === "string" && HEX_ADDRESS_PATTERN.test(value));
-  const payload = params.find((value) => typeof value === "object" || typeof value === "string");
+  let address: string | undefined;
+  let payload: unknown;
+
+  for (const value of params) {
+    if (!address && typeof value === "string" && HEX_ADDRESS_PATTERN.test(value)) {
+      address = value;
+      continue;
+    }
+
+    if (payload === undefined) {
+      payload = value;
+    }
+  }
 
   if (!address || payload === undefined) {
     throw rpcErrors.invalidParams({

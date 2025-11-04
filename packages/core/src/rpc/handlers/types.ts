@@ -10,6 +10,7 @@ import type {
   PermissionScopeResolver,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 
 export type HandlerControllers = {
   network: NetworkController;
@@ -18,6 +19,9 @@ export type HandlerControllers = {
   permissions: PermissionController;
   transactions: TransactionController;
   chainRegistry: ChainRegistryController;
+  signers: {
+    eip155: Eip155Signer;
+  };
 };
 
 export type RpcRequest = {

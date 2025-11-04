@@ -303,7 +303,9 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   };
 
   try {
-    return await controllers.approvals.requestApproval(task);
+    return await controllers.approvals.requestApproval(task, async () => {
+      return controllers.signers.eip155.signPersonalMessage({ address, message });
+    });
   } catch (error) {
     if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
@@ -341,7 +343,9 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    return await controllers.approvals.requestApproval(task);
+    return await controllers.approvals.requestApproval(task, async () => {
+      return controllers.signers.eip155.signTypedData({ address, typedData });
+    });
   } catch (error) {
     if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({

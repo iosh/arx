@@ -39,6 +39,12 @@ const REQUEST: TransactionRequest<"eip155"> = {
   },
 };
 
+const USER_REJECTION_ERROR = { code: 4001, message: "User rejected" } as const;
+type AdapterMocks = {
+  buildDraft: ReturnType<typeof vi.fn<TransactionAdapter["buildDraft"]>>;
+  signTransaction: ReturnType<typeof vi.fn<TransactionAdapter["signTransaction"]>>;
+  broadcastTransaction: ReturnType<typeof vi.fn<TransactionAdapter["broadcastTransaction"]>>;
+};
 const flushMicrotasks = async () => {
   await Promise.resolve();
   await Promise.resolve();
@@ -47,16 +53,14 @@ const flushMicrotasks = async () => {
 type HarnessOptions = {
   autoApprove?: boolean;
   initialState?: TransactionState;
+  adapterOverrides?: Partial<AdapterMocks>;
+  approvalRejects?: boolean;
 };
 
 type TestHarness = {
   controller: InMemoryTransactionController;
   messenger: TransactionMessenger;
-  adapter: TransactionAdapter & {
-    buildDraft: ReturnType<typeof vi.fn<TransactionAdapter["buildDraft"]>>;
-    signTransaction: ReturnType<typeof vi.fn<TransactionAdapter["signTransaction"]>>;
-    broadcastTransaction: ReturnType<typeof vi.fn<TransactionAdapter["broadcastTransaction"]>>;
-  };
+  adapter: TransactionAdapter & AdapterMocks;
   events: {
     queued: TransactionMeta[];
     status: Array<{ previous: string; next: string }>;
@@ -65,6 +69,7 @@ type TestHarness = {
 };
 
 const createTestHarness = (options?: HarnessOptions): TestHarness => {
+  const opts = options ?? {};
   let clock = 1_000;
   const now = () => {
     clock += 1;
@@ -75,25 +80,34 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
   const registry = new TransactionAdapterRegistry();
 
   const adapter: TestHarness["adapter"] = {
-    buildDraft: vi.fn(async (_context) => {
-      const draft: TransactionDraft = {
-        prepared: { raw: "0x" },
-        summary: { kind: "transfer" },
-        warnings: [],
-        issues: [],
-      };
-      return draft;
-    }),
-    signTransaction: vi.fn(async (_context, _draft) => ({
+    buildDraft: vi.fn<TransactionAdapter["buildDraft"]>(async (_context) => ({
+      prepared: { raw: "0x" },
+      summary: { kind: "transfer" },
+      warnings: [],
+      issues: [],
+    })),
+    signTransaction: vi.fn<TransactionAdapter["signTransaction"]>(async (_context, _draft) => ({
       raw: "0x1111",
       hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     })),
-    broadcastTransaction: vi.fn(async (_context, signed) => ({
+    broadcastTransaction: vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_context, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     })),
   };
 
+  if (opts.adapterOverrides?.buildDraft) {
+    adapter.buildDraft = opts.adapterOverrides.buildDraft;
+  }
+  if (opts.adapterOverrides?.signTransaction) {
+    adapter.signTransaction = opts.adapterOverrides.signTransaction;
+  }
+  if (opts.adapterOverrides?.broadcastTransaction) {
+    adapter.broadcastTransaction = opts.adapterOverrides.broadcastTransaction;
+  }
+
   registry.register("eip155", adapter);
+
+  let createdController: InMemoryTransactionController | null = null;
 
   const networkStub: Pick<NetworkController, "getActiveChain"> = {
     getActiveChain: () => CHAIN,
@@ -105,6 +119,13 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
     requestApproval: vi.fn(async (task, strategy) => {
       if (!strategy) {
         throw new Error("strategy is required for approvals");
+      }
+      if (opts.approvalRejects) {
+        if (createdController) {
+          const rejection = Object.assign(new Error(USER_REJECTION_ERROR.message), USER_REJECTION_ERROR);
+          await createdController.rejectTransaction(task.id, rejection);
+        }
+        throw USER_REJECTION_ERROR;
       }
       return strategy(task);
     }),
@@ -124,9 +145,10 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
     registry,
     idGenerator: () => "tx-1",
     now,
-    autoApprove: options?.autoApprove ?? true,
-    ...(options?.initialState ? { initialState: options.initialState } : {}),
+    autoApprove: opts.autoApprove ?? true,
+    ...(opts.initialState ? { initialState: opts.initialState } : {}),
   });
+  createdController = controller;
 
   messenger.subscribe("transaction:queued", (meta) => {
     events.queued.push(meta);
@@ -140,7 +162,6 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
 
   return { controller, messenger: messenger as TransactionMessenger, adapter, events };
 };
-
 describe("InMemoryTransactionController", () => {
   let harness: TestHarness;
 
@@ -299,5 +320,90 @@ describe("InMemoryTransactionController", () => {
       snapshot.history.some((meta) => meta.id === "tx-1" && meta.status === "broadcast"),
     );
     expect(broadcastObserved).toBe(true);
+  });
+
+  it("marks transaction as user rejected when approval rejects with 4001", async () => {
+    harness = createTestHarness({ autoApprove: false, approvalRejects: true });
+
+    await expect(harness.controller.submitTransaction(ORIGIN, REQUEST)).rejects.toMatchObject(USER_REJECTION_ERROR);
+
+    const finalState = harness.controller.getState();
+    expect(finalState.pending).toHaveLength(0);
+    expect(finalState.history).toHaveLength(1);
+
+    const rejectedMeta = finalState.history[0];
+    expect(rejectedMeta?.status).toBe("failed");
+    expect(rejectedMeta?.userRejected).toBe(true);
+    expect(rejectedMeta?.error).toMatchObject(USER_REJECTION_ERROR);
+
+    expect(harness.events.queued).toHaveLength(1);
+    expect(harness.events.status).toEqual([{ previous: "pending", next: "failed" }]);
+  });
+
+  it("records signing errors and stops processing", async () => {
+    const signFailure = vi.fn(async () => {
+      throw new Error("signing failed");
+    });
+
+    harness = createTestHarness({
+      adapterOverrides: { signTransaction: signFailure },
+    });
+
+    const result = await harness.controller.submitTransaction(ORIGIN, REQUEST);
+    expect(result.status).toBe("approved");
+
+    await flushMicrotasks();
+
+    const finalState = harness.controller.getState();
+    expect(finalState.pending).toHaveLength(0);
+    expect(finalState.history).toHaveLength(1);
+
+    const failedMeta = finalState.history[0];
+    expect(failedMeta?.status).toBe("failed");
+    expect(failedMeta?.error?.message).toBe("signing failed");
+    expect(failedMeta?.hash).toBeNull();
+    expect(failedMeta?.userRejected).toBe(false);
+
+    expect(harness.adapter.buildDraft).toHaveBeenCalledTimes(1);
+    expect(signFailure).toHaveBeenCalledTimes(1);
+    expect(harness.events.status).toEqual([
+      { previous: "pending", next: "approved" },
+      { previous: "approved", next: "failed" },
+    ]);
+  });
+
+  it("captures broadcast errors and preserves state", async () => {
+    const broadcastError = Object.assign(new Error("insufficient funds"), { code: -32000 });
+    const failingBroadcast = vi.fn(async () => {
+      throw broadcastError;
+    });
+    harness = createTestHarness({
+      adapterOverrides: { broadcastTransaction: failingBroadcast },
+    });
+
+    const result = await harness.controller.submitTransaction(ORIGIN, REQUEST);
+    expect(result.status).toBe("approved");
+
+    await flushMicrotasks();
+
+    const finalState = harness.controller.getState();
+    expect(finalState.pending).toHaveLength(0);
+    expect(finalState.history).toHaveLength(1);
+
+    const failedMeta = finalState.history[0];
+    expect(failedMeta?.status).toBe("failed");
+    expect(failedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+    expect(failedMeta?.error).toMatchObject({ code: -32000, message: "insufficient funds" });
+    expect(failedMeta?.userRejected).toBe(false);
+
+    expect(harness.adapter.buildDraft).toHaveBeenCalledTimes(1);
+    expect(harness.adapter.signTransaction).toHaveBeenCalledTimes(1);
+    expect(failingBroadcast).toHaveBeenCalledTimes(1);
+
+    expect(harness.events.status).toEqual([
+      { previous: "pending", next: "approved" },
+      { previous: "approved", next: "signed" },
+      { previous: "signed", next: "failed" },
+    ]);
   });
 });

@@ -61,6 +61,7 @@ import { type RpcClientFactory, RpcClientRegistry, type RpcClientRegistryOptions
 import type { StorageNamespace, StoragePort, StorageSnapshotMap, VaultMetaSnapshot } from "../storage/index.js";
 import { StorageNamespaces, VAULT_META_SNAPSHOT_VERSION } from "../storage/index.js";
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
+import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
 import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import { cloneTransactionState } from "../transactions/storage/state.js";
@@ -587,10 +588,16 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const eip155Signer = createEip155Signer({ keyring: keyringService });
 
   if (!transactionRegistry.get(EIP155_NAMESPACE)) {
-    const adapter = createEip155TransactionAdapter({
-      signer: eip155Signer,
+    const broadcaster = createEip155Broadcaster({
       rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
     });
+
+    const adapter = createEip155TransactionAdapter({
+      signer: eip155Signer,
+      broadcaster,
+      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
+    });
+
     transactionRegistry.register(EIP155_NAMESPACE, adapter);
   }
 

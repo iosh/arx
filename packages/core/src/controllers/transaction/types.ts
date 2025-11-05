@@ -1,6 +1,7 @@
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalTask } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
@@ -112,6 +113,7 @@ export type TransactionControllerOptions = {
   autoApprove?: boolean;
   autoRejectMessage?: string;
   initialState?: TransactionState;
+  tracker?: ReceiptTracker;
 };
 
 export type TransactionController = {

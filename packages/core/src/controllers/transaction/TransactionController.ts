@@ -1,5 +1,11 @@
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { TransactionAdapterContext, TransactionDraft } from "../../transactions/adapters/types.js";
+import type {
+  ReceiptResolution,
+  ReplacementResolution,
+  TransactionAdapterContext,
+  TransactionDraft,
+} from "../../transactions/adapters/types.js";
+import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import { type ApprovalController, type ApprovalStrategy, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
@@ -87,7 +93,7 @@ export class InMemoryTransactionController implements TransactionController {
   #processing: Set<string>;
   #scheduled: boolean;
   #drafts: Map<string, TransactionDraft>;
-
+  #tracker: ReceiptTracker;
   constructor({
     messenger,
     network,
@@ -99,6 +105,7 @@ export class InMemoryTransactionController implements TransactionController {
     autoApprove = false,
     autoRejectMessage = DEFAULT_REJECTION_MESSAGE,
     initialState,
+    tracker,
   }: TransactionControllerOptions) {
     this.#messenger = messenger;
     this.#network = network;
@@ -114,6 +121,24 @@ export class InMemoryTransactionController implements TransactionController {
     this.#processing = new Set();
     this.#scheduled = false;
     this.#drafts = new Map();
+
+    const trackerDeps = {
+      getAdapter: (namespace: string) => this.#registry.get(namespace),
+      onReceipt: async (id: string, resolution: ReceiptResolution) => {
+        await this.#applyReceiptResolution(id, resolution);
+      },
+      onReplacement: async (id: string, resolution: ReplacementResolution) => {
+        await this.#applyReplacementResolution(id, resolution);
+      },
+      onTimeout: async (id: string) => {
+        await this.#handleTrackerTimeout(id);
+      },
+      onError: async (id: string, error: unknown) => {
+        await this.#handleTrackerError(id, error);
+      },
+    };
+
+    this.#tracker = tracker ?? createReceiptTracker(trackerDeps);
     this.#publishState();
   }
 
@@ -314,6 +339,7 @@ export class InMemoryTransactionController implements TransactionController {
 
       this.#state = { pending: nextPending, history: nextHistory };
       this.#publishState();
+      this.#tracker.stop(updated.id);
       this.#publishStatusChange(current, updated);
       return;
     }
@@ -336,6 +362,7 @@ export class InMemoryTransactionController implements TransactionController {
     nextHistory[historyIndex] = next;
 
     this.#state = { pending: [...this.#state.pending], history: nextHistory };
+    this.#tracker.stop(next.id);
     this.#publishState();
     this.#publishStatusChange(current, next);
 
@@ -361,6 +388,13 @@ export class InMemoryTransactionController implements TransactionController {
     );
     for (const meta of resolvable) {
       this.#enqueue(meta.id);
+    }
+
+    const broadcastable = this.#state.history.filter(
+      (entry) => entry.status === "broadcast" && typeof entry.hash === "string",
+    );
+    for (const meta of broadcastable) {
+      this.#tracker.resume(meta.id, this.#buildContext(meta), meta.hash as string);
     }
   }
 
@@ -492,6 +526,7 @@ export class InMemoryTransactionController implements TransactionController {
       const next = { ...cloneMeta(current), ...updates, updatedAt: updates.updatedAt ?? now };
       this.#state.pending[inPending] = next;
       this.#publishState();
+      this.#handleTrackerTransition(current, next);
       this.#publishStatusChange(current, next);
       return;
     }
@@ -501,6 +536,7 @@ export class InMemoryTransactionController implements TransactionController {
       const next = { ...cloneMeta(current), ...updates, updatedAt: updates.updatedAt ?? now };
       this.#state.history[inHistory] = next;
       this.#publishState();
+      this.#handleTrackerTransition(current, next);
       this.#publishStatusChange(current, next);
     }
   }
@@ -568,5 +604,100 @@ export class InMemoryTransactionController implements TransactionController {
       message: `No transaction adapter registered for namespace ${namespace}`,
       data: { namespace },
     };
+  }
+
+  async #applyReceiptResolution(id: string, resolution: ReceiptResolution): Promise<void> {
+    const meta = this.getMeta(id);
+    if (!meta || meta.status !== "broadcast") return;
+
+    if (resolution.status === "success") {
+      this.#updateMeta(id, {
+        status: "confirmed",
+        receipt: resolution.receipt,
+        error: null,
+        userRejected: false,
+      });
+      return;
+    }
+
+    this.#updateMeta(id, {
+      status: "failed",
+      receipt: resolution.receipt,
+      error: {
+        name: "TransactionExecutionFailed",
+        message: "Transaction execution failed.",
+        data: resolution.receipt,
+      },
+      userRejected: false,
+    });
+  }
+
+  async #applyReplacementResolution(id: string, resolution: ReplacementResolution): Promise<void> {
+    const meta = this.getMeta(id);
+    if (!meta || meta.status !== "broadcast") return;
+
+    const error: TransactionError = {
+      name: "TransactionReplacedError",
+      message: "Transaction was replaced by another transaction with the same nonce.",
+      data: { replacementHash: resolution.hash },
+    };
+
+    this.#updateMeta(id, {
+      status: "replaced",
+      hash: resolution.hash ?? meta.hash,
+      error,
+      userRejected: false,
+    });
+  }
+
+  async #handleTrackerTimeout(id: string): Promise<void> {
+    const meta = this.getMeta(id);
+    if (!meta || meta.status !== "broadcast") return;
+
+    this.#updateMeta(id, {
+      status: "failed",
+      error: {
+        name: "TransactionReceiptTimeoutError",
+        message: "Timed out waiting for transaction receipt.",
+      },
+      userRejected: false,
+    });
+  }
+
+  async #handleTrackerError(id: string, error: unknown): Promise<void> {
+    const meta = this.getMeta(id);
+    if (!meta || meta.status !== "broadcast") return;
+
+    const message = error instanceof Error ? error.message : String(error);
+    this.#updateMeta(id, {
+      status: "failed",
+      error: {
+        name: "ReceiptTrackingError",
+        message,
+        data: error instanceof Error ? { name: error.name } : undefined,
+      },
+      userRejected: false,
+    });
+  }
+
+  #handleTrackerTransition(previous: TransactionMeta, next: TransactionMeta) {
+    if (next.status === "broadcast" && typeof next.hash === "string") {
+      const context = this.#buildContext(next);
+      if (this.#tracker.isTracking(next.id)) {
+        this.#tracker.resume(next.id, context, next.hash);
+      } else {
+        this.#tracker.start(next.id, context, next.hash);
+      }
+      return;
+    }
+
+    if (previous.status === "broadcast" && next.status !== "broadcast") {
+      this.#tracker.stop(next.id);
+      return;
+    }
+
+    if (next.status === "confirmed" || next.status === "failed" || next.status === "replaced") {
+      this.#tracker.stop(next.id);
+    }
   }
 }

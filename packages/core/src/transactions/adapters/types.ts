@@ -29,10 +29,18 @@ export type TransactionAdapterContext = {
   meta: TransactionMeta;
 };
 
+export type ReceiptResolution =
+  | { status: "success"; receipt: TransactionReceipt }
+  | { status: "failed"; receipt: TransactionReceipt };
+
+export type ReplacementResolution = {
+  hash: string | null;
+  status: "replaced";
+};
 export type TransactionAdapter = {
   buildDraft(context: TransactionAdapterContext): Promise<TransactionDraft>;
   signTransaction(context: TransactionAdapterContext, draft: TransactionDraft): Promise<SignedTransactionPayload>;
   broadcastTransaction(context: TransactionAdapterContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
-  fetchReceipt?(context: TransactionAdapterContext, hash: string): Promise<TransactionReceipt | null>;
-  detectReplacement?(context: TransactionAdapterContext): Promise<{ hash: string; status: "replaced" } | null>;
+  fetchReceipt?(context: TransactionAdapterContext, hash: string): Promise<ReceiptResolution | null>;
+  detectReplacement?(context: TransactionAdapterContext): Promise<ReplacementResolution | null>;
 };

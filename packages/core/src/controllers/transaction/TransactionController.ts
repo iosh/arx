@@ -10,6 +10,8 @@ import type { AccountAddress, AccountController } from "../account/types.js";
 import { type ApprovalController, type ApprovalStrategy, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import type {
+  TransactionApprovalChainMetadata,
+  TransactionApprovalDecodedPayload,
   TransactionApprovalTask,
   TransactionApprovalTaskPayload,
   TransactionController,
@@ -79,7 +81,7 @@ const isSameState = (prev?: TransactionState, next?: TransactionState) => {
 
 export class InMemoryTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
-  #network: Pick<NetworkController, "getActiveChain">;
+  #network: Pick<NetworkController, "getActiveChain" | "getChain">;
   #accounts: Pick<AccountController, "getActivePointer">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #generateId: () => string;
@@ -220,7 +222,8 @@ export class InMemoryTransactionController implements TransactionController {
     });
 
     const latestMeta = this.getMeta(meta.id) ?? meta;
-    const task = this.#createApprovalTask(latestMeta, draftPreview);
+    const activeDraft = this.#drafts.get(meta.id) ?? null;
+    const task = this.#createApprovalTask(latestMeta, activeDraft, draftPreview);
 
     const strategy: ApprovalStrategy<TransactionApprovalTaskPayload, TransactionMeta> = async () => {
       if (this.#autoApprove) {
@@ -407,9 +410,13 @@ export class InMemoryTransactionController implements TransactionController {
     this.hydrate(state);
   }
 
-  #createApprovalTask(meta: TransactionMeta, draft: TransactionDraftPreview | null): TransactionApprovalTask {
-    const warningsSource = draft?.warnings ?? meta.warnings;
-    const issuesSource = draft?.issues ?? meta.issues;
+  #createApprovalTask(
+    meta: TransactionMeta,
+    draft: TransactionDraft | null,
+    preview: TransactionDraftPreview | null,
+  ): TransactionApprovalTask {
+    const warningsSource = preview?.warnings ?? meta.warnings;
+    const issuesSource = preview?.issues ?? meta.issues;
 
     return {
       id: meta.id,
@@ -420,8 +427,12 @@ export class InMemoryTransactionController implements TransactionController {
       payload: {
         caip2: meta.caip2,
         origin: meta.origin,
+        chain: this.#buildChainMetadata(meta),
+        from: meta.from,
         request: cloneRequest(meta.request),
-        draft: draft ? this.#cloneDraftPreview(draft) : null,
+        draft: preview ? this.#cloneDraftPreview(preview) : null,
+        prepared: draft ? this.#clonePrepared(draft.prepared) : null,
+        decoded: this.#buildDecodedPayload(meta),
         warnings: this.#cloneWarnings(warningsSource),
         issues: this.#cloneIssues(issuesSource),
       },
@@ -699,5 +710,37 @@ export class InMemoryTransactionController implements TransactionController {
     if (next.status === "confirmed" || next.status === "failed" || next.status === "replaced") {
       this.#tracker.stop(next.id);
     }
+  }
+
+  #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {
+    const explicit = this.#network.getChain(meta.caip2);
+    const active = this.#network.getActiveChain();
+    const resolved = explicit ?? (active.chainRef === meta.caip2 ? active : null);
+    if (!resolved) return null;
+
+    const chainId = resolved.chainId.startsWith("0x") ? (resolved.chainId as `0x${string}`) : null;
+
+    return {
+      chainRef: resolved.chainRef,
+      namespace: resolved.namespace,
+      name: resolved.displayName,
+      shortName: resolved.shortName ?? null,
+      chainId,
+      nativeCurrency: resolved.nativeCurrency
+        ? { symbol: resolved.nativeCurrency.symbol, decimals: resolved.nativeCurrency.decimals }
+        : null,
+    };
+  }
+
+  #clonePrepared(prepared: Record<string, unknown>): Record<string, unknown> {
+    return { ...prepared };
+  }
+
+  #buildDecodedPayload(meta: TransactionMeta): TransactionApprovalDecodedPayload | null {
+    const payload = meta.request.payload;
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+    return { ...(payload as Record<string, unknown>) };
   }
 }

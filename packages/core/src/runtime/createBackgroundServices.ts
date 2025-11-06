@@ -279,6 +279,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     messenger: castMessenger<TransactionMessengerTopics>(messenger) as TransactionMessenger,
     network: {
       getActiveChain: () => networkController.getActiveChain(),
+      getChain: (chainRef) => networkController.getChain(chainRef),
     },
     accounts: {
       getActivePointer: () => accountController.getActivePointer(),
@@ -932,5 +933,3 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     accountsRuntime: accountsBridge,
   };
 };
-
-export type CreateBackgroundServicesResult = ReturnType<typeof createBackgroundServices>;

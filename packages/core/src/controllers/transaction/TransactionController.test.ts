@@ -5,10 +5,11 @@ import { TransactionAdapterRegistry } from "../../transactions/adapters/registry
 import type { TransactionAdapter, TransactionDraft } from "../../transactions/adapters/types.js";
 import { cloneTransactionState } from "../../transactions/storage/state.js";
 import type { AccountController } from "../account/types.js";
-import type { ApprovalController } from "../approval/types.js";
+import type { ApprovalController, ApprovalStrategy, ApprovalTask } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import { InMemoryTransactionController } from "./TransactionController.js";
 import type {
+  TransactionApprovalTaskPayload,
   TransactionMessenger,
   TransactionMessengerTopics,
   TransactionMeta,
@@ -61,6 +62,8 @@ type TestHarness = {
   controller: InMemoryTransactionController;
   messenger: TransactionMessenger;
   adapter: TransactionAdapter & AdapterMocks;
+  approvals: Pick<ApprovalController, "requestApproval">;
+  capturedApprovalTasks: ApprovalTask<unknown>[];
   events: {
     queued: TransactionMeta[];
     status: Array<{ previous: string; next: string }>;
@@ -109,28 +112,39 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
 
   let createdController: InMemoryTransactionController | null = null;
 
-  const networkStub: Pick<NetworkController, "getActiveChain"> = {
+  const networkStub: Pick<NetworkController, "getActiveChain" | "getChain"> = {
     getActiveChain: () => CHAIN,
+    getChain: (chainRef) => (chainRef === CHAIN.chainRef ? CHAIN : null),
   };
   const accountsStub: Pick<AccountController, "getActivePointer"> = {
     getActivePointer: () => ({ namespace: "eip155", chainRef: CHAIN.chainRef, address: ACCOUNT }),
   };
-  const approvalsStub: Pick<ApprovalController, "requestApproval"> = {
-    requestApproval: vi.fn(async (task, strategy) => {
-      if (!strategy) {
-        throw new Error("strategy is required for approvals");
+  const capturedApprovalTasks: ApprovalTask<unknown>[] = [];
+
+  const requestApprovalMock: ApprovalController["requestApproval"] = async <TInput, TResult>(
+    task: ApprovalTask<TInput>,
+    strategy?: ApprovalStrategy<TInput, TResult>,
+  ): Promise<TResult> => {
+    capturedApprovalTasks.push(task as ApprovalTask<unknown>);
+    if (!strategy) {
+      throw new Error("strategy is required for approvals");
+    }
+    if (opts.approvalRejects) {
+      if (createdController) {
+        const rejection = Object.assign(new Error(USER_REJECTION_ERROR.message), USER_REJECTION_ERROR);
+        await createdController.rejectTransaction(task.id, rejection);
       }
-      if (opts.approvalRejects) {
-        if (createdController) {
-          const rejection = Object.assign(new Error(USER_REJECTION_ERROR.message), USER_REJECTION_ERROR);
-          await createdController.rejectTransaction(task.id, rejection);
-        }
-        throw USER_REJECTION_ERROR;
-      }
-      return strategy(task);
-    }),
+      throw USER_REJECTION_ERROR as unknown as TResult;
+    }
+    return strategy(task);
   };
 
+  const approvalsStub: Pick<ApprovalController, "requestApproval"> & {
+    mock: typeof requestApprovalMock;
+  } = {
+    requestApproval: requestApprovalMock,
+    mock: requestApprovalMock,
+  };
   const events = {
     queued: [] as TransactionMeta[],
     status: [] as Array<{ previous: string; next: string }>,
@@ -160,7 +174,14 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
     events.states.push(cloneTransactionState(state));
   });
 
-  return { controller, messenger: messenger as TransactionMessenger, adapter, events };
+  return {
+    controller,
+    messenger: messenger as TransactionMessenger,
+    adapter,
+    approvals: approvalsStub,
+    capturedApprovalTasks,
+    events,
+  };
 };
 describe("InMemoryTransactionController", () => {
   let harness: TestHarness;
@@ -171,6 +192,14 @@ describe("InMemoryTransactionController", () => {
 
   it("emits queue and status events while processing an approved transaction", async () => {
     const result = await harness.controller.submitTransaction(ORIGIN, REQUEST);
+    const approvalTask = harness.capturedApprovalTasks.at(-1) as
+      | ApprovalTask<TransactionApprovalTaskPayload>
+      | undefined;
+    expect(approvalTask?.payload.chain?.chainRef).toBe(CHAIN.chainRef);
+    expect(approvalTask?.payload.from).toBe(ACCOUNT);
+    expect(approvalTask?.payload.prepared).toEqual({ raw: "0x" });
+    expect(approvalTask?.payload.warnings).toEqual([]);
+    expect(approvalTask?.payload.issues).toEqual([]);
     expect(result.status).toBe("approved");
 
     await flushMicrotasks();

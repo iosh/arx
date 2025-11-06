@@ -1,6 +1,8 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
+import { PermissionScopes } from "../../../controllers/index.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
+import { TransactionAdapterRegistry } from "../../../transactions/adapters/registry.js";
 import { createMethodExecutor } from "../../index.js";
 
 const ORIGIN = "https://dapp.example";
@@ -27,23 +29,28 @@ const TEST_MNEMONIC = "test test test test test test test test test test test ju
 
 const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-const createServices = () =>
-  createBackgroundServices({
+const createChainRegistryPort = () => ({
+  async get() {
+    return null;
+  },
+  async getAll() {
+    return [];
+  },
+  async put() {},
+  async putMany() {},
+  async delete() {},
+  async clear() {},
+});
+const createServices = (overrides?: Parameters<typeof createBackgroundServices>[0]) => {
+  const { chainRegistry, ...rest } = overrides ?? {};
+  return createBackgroundServices({
     chainRegistry: {
-      port: {
-        async get() {
-          return null;
-        },
-        async getAll() {
-          return [];
-        },
-        async put() {},
-        async putMany() {},
-        async delete() {},
-        async clear() {},
-      },
+      port: createChainRegistryPort(),
+      ...(chainRegistry ?? {}),
     },
+    ...rest,
   });
+};
 // TODO: add eth_requestAccounts rejection test once approval  -> account flow is implemented
 
 describe("eip155 handlers - core error paths", () => {
@@ -713,7 +720,20 @@ describe("eip155 handlers - approval metadata", () => {
   });
 
   it("includes namespace metadata for eth_sendTransaction approvals", async () => {
-    const services = createServices();
+    const registry = new TransactionAdapterRegistry();
+    registry.register("eip155", {
+      buildDraft: vi.fn(async () => ({
+        prepared: {},
+        summary: {},
+        warnings: [],
+        issues: [],
+      })),
+      signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
+      broadcastTransaction: vi.fn(async () => ({ hash: "0x1111" })),
+    });
+    const services = createServices({
+      transactions: { registry },
+    });
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
@@ -753,6 +773,92 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       services.controllers.approvals.requestApproval = originalRequestApproval;
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("returns a submission summary when eth_sendTransaction auto-approves", async () => {
+    const rpcMocks = {
+      estimateGas: vi.fn(async () => "0x5208"),
+      getTransactionCount: vi.fn(async () => "0x1"),
+      getFeeData: vi.fn(async () => ({
+        maxFeePerGas: "0x59682f00",
+        maxPriorityFeePerGas: "0x3b9aca00",
+      })),
+      sendRawTransaction: vi.fn(async () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+      getTransactionReceipt: vi.fn(async () => null),
+    };
+    const rpcFactory = vi.fn(() => ({
+      request: vi.fn(),
+      estimateGas: rpcMocks.estimateGas,
+      getTransactionCount: rpcMocks.getTransactionCount,
+      getFeeData: rpcMocks.getFeeData,
+      sendRawTransaction: rpcMocks.sendRawTransaction,
+      getTransactionReceipt: rpcMocks.getTransactionReceipt,
+    }));
+
+    const services = createServices({
+      transactions: { autoApprove: true },
+      rpcClients: {
+        factories: [{ namespace: "eip155", factory: rpcFactory }],
+      },
+    });
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    try {
+      const execute = createMethodExecutor(services.controllers);
+      const mainnet = services.controllers.network.getActiveChain();
+
+      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+      const { account } = await services.accountsRuntime.deriveAccount({
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        makePrimary: true,
+        switchActive: true,
+      });
+
+      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+      });
+      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Transaction, {
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+      });
+
+      const txHash = (await execute({
+        origin: ORIGIN,
+        request: {
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: account.address,
+              to: account.address,
+              value: "0x0",
+              data: "0x",
+            },
+          ] as JsonRpcParams,
+        },
+      })) as string;
+
+      expect(txHash).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+      const { history } = services.controllers.transactions.getState();
+      expect(history).toHaveLength(1);
+
+      const stored = history[0]!;
+      expect(stored.id).toEqual(expect.any(String));
+      expect(stored.status).toBe("broadcast");
+      expect(stored.hash).toBe(txHash);
+      expect(stored.namespace).toBe("eip155");
+      expect(stored.caip2).toBe(mainnet.chainRef);
+      expect(stored.from).toBe(account.address);
+      expect(stored.warnings).toEqual([expect.objectContaining({ code: "transaction.draft.chain_id_missing" })]);
+      expect(stored.issues).toEqual([]);
+      expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
+    } finally {
       services.lifecycle.destroy();
     }
   });

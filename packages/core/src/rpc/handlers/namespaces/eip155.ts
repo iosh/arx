@@ -1,6 +1,11 @@
 import { ZodError } from "zod";
 import { type ChainMetadata, createEip155MetadataFromEip3085, parseCaip2 } from "../../../chains/index.js";
-import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
+import {
+  ApprovalTypes,
+  PermissionScopes,
+  type TransactionController,
+  type TransactionMeta,
+} from "../../../controllers/index.js";
 import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
 import type { NamespaceAdapter } from "./adapter.js";
@@ -15,6 +20,59 @@ import {
   resolveSigningInputs,
   toParamsArray,
 } from "./utils.js";
+
+type RpcLikeError = Error & { code: number; data?: unknown };
+
+class TransactionResolutionError extends Error {
+  readonly meta: TransactionMeta;
+
+  constructor(meta: TransactionMeta) {
+    super(meta.error?.message ?? "Transaction failed");
+    this.name = "TransactionResolutionError";
+    this.meta = meta;
+  }
+}
+
+const RESOLVED_STATUSES = new Set<TransactionMeta["status"]>(["broadcast", "confirmed"]);
+const FAILED_STATUSES = new Set<TransactionMeta["status"]>(["failed", "replaced"]);
+
+const isResolved = (meta: TransactionMeta) => RESOLVED_STATUSES.has(meta.status) && typeof meta.hash === "string";
+const isFailed = (meta: TransactionMeta) => FAILED_STATUSES.has(meta.status);
+
+const waitForTransactionBroadcast = async (
+  controller: Pick<TransactionController, "getMeta" | "onStatusChanged">,
+  id: string,
+): Promise<TransactionMeta> => {
+  const initial = controller.getMeta(id);
+  if (!initial) {
+    throw new Error(`Transaction ${id} not found after submission`);
+  }
+  if (isResolved(initial)) {
+    return initial;
+  }
+  if (isFailed(initial)) {
+    throw new TransactionResolutionError(initial);
+  }
+
+  return new Promise<TransactionMeta>((resolve, reject) => {
+    const unsubscribe = controller.onStatusChanged(({ id: changeId, meta }) => {
+      if (changeId !== id) {
+        return;
+      }
+
+      if (isResolved(meta)) {
+        unsubscribe();
+        resolve(meta);
+        return;
+      }
+
+      if (isFailed(meta)) {
+        unsubscribe();
+        reject(new TransactionResolutionError(meta));
+      }
+    });
+  });
+};
 
 const handleEthChainId: MethodHandler = ({ controllers }) => {
   return controllers.network.getActiveChain().chainId;
@@ -372,9 +430,44 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
 
   try {
     const meta = await controllers.transactions.submitTransaction(origin, txRequest);
-    return meta.id;
+    const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
+
+    if (typeof broadcastMeta.hash !== "string") {
+      throw new TransactionResolutionError(broadcastMeta);
+    }
+
+    return broadcastMeta.hash;
   } catch (error) {
-    if (isRpcError(error)) throw error;
+    if (isRpcError(error)) {
+      throw error;
+    }
+
+    if (error instanceof TransactionResolutionError) {
+      const { meta } = error;
+
+      if (meta.userRejected) {
+        throw providerErrors.userRejectedRequest({
+          message: "User rejected transaction",
+          data: { origin, id: meta.id },
+        });
+      }
+
+      const failure = meta.error;
+      if (failure && typeof failure.code === "number") {
+        const rpcLikeError = new Error(failure.message ?? "Transaction failed") as RpcLikeError;
+        rpcLikeError.code = failure.code;
+        if (failure.data !== undefined) {
+          rpcLikeError.data = failure.data;
+        }
+        throw rpcLikeError;
+      }
+
+      throw rpcErrors.internal({
+        message: failure?.message ?? "Transaction failed to broadcast",
+        data: { origin, id: meta.id, error: failure ?? undefined },
+      });
+    }
+
     throw providerErrors.userRejectedRequest({
       message: "User rejected transaction",
       data: { origin },

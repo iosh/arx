@@ -28,11 +28,7 @@ import {
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import {
-  type CreateBackgroundServicesOptions,
-  type CreateBackgroundServicesResult,
-  createBackgroundServices,
-} from "./createBackgroundServices.js";
+import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 
@@ -45,6 +41,8 @@ type RpcTimers = {
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
 };
+
+type CreateBackgroundServicesResult = ReturnType<typeof createBackgroundServices>;
 
 type StorageSeed = Partial<Record<StorageNamespace, StorageSnapshotMap[StorageNamespace]>>;
 

@@ -1,3 +1,4 @@
+import type { Hex } from "ox/Hex";
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
@@ -29,6 +30,17 @@ export type TransactionDraftPreview = {
   issues: TransactionIssue[];
   warnings: TransactionWarning[];
 };
+export type TransactionApprovalChainMetadata = {
+  chainRef: Caip2ChainId;
+  namespace: string;
+  name: string;
+  shortName?: string | null;
+  chainId?: Hex | null;
+  nativeCurrency?: {
+    symbol: string;
+    decimals: number;
+  } | null;
+};
 
 export type TransactionStatusChange = {
   id: string;
@@ -38,17 +50,19 @@ export type TransactionStatusChange = {
 };
 
 export type Eip155TransactionPayload = {
-  chainId?: `0x${string}`;
+  chainId?: Hex;
   from?: AccountAddress;
   to?: AccountAddress | null;
-  value?: `0x${string}`;
-  data?: `0x${string}`;
-  gas?: `0x${string}`;
-  gasPrice?: `0x${string}`;
-  maxFeePerGas?: `0x${string}`;
-  maxPriorityFeePerGas?: `0x${string}`;
-  nonce?: `0x${string}`;
+  value?: Hex;
+  data?: Hex;
+  gas?: Hex;
+  gasPrice?: Hex;
+  maxFeePerGas?: Hex;
+  maxPriorityFeePerGas?: Hex;
+  nonce?: Hex;
 };
+
+export type TransactionApprovalDecodedPayload = Record<string, unknown>;
 
 export type TransactionPayloadMap = {
   eip155: Eip155TransactionPayload;
@@ -94,17 +108,21 @@ export type TransactionMessenger = ControllerMessenger<TransactionMessengerTopic
 export type TransactionApprovalTaskPayload = {
   caip2: Caip2ChainId;
   origin: string;
+  chain?: TransactionApprovalChainMetadata | null;
+  from: AccountAddress | null;
   request: TransactionRequest;
   draft?: TransactionDraftPreview | null;
-  warnings?: TransactionWarning[];
-  issues?: TransactionIssue[];
+  prepared?: Record<string, unknown> | null;
+  decoded?: TransactionApprovalDecodedPayload | null;
+  warnings: TransactionWarning[];
+  issues: TransactionIssue[];
 };
 
 export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayload>;
 
 export type TransactionControllerOptions = {
   messenger: TransactionMessenger;
-  network: Pick<NetworkController, "getActiveChain">;
+  network: Pick<NetworkController, "getActiveChain" | "getChain">;
   accounts: Pick<AccountController, "getActivePointer">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;

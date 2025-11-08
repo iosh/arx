@@ -3,7 +3,6 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import type { RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
 import { createEip155RpcClientFactory, type Eip155RpcCapabilities } from "./clients/eip155/eip155.js";
 import {
-  type RpcClient,
   type RpcClientFactory,
   RpcClientRegistry,
   type RpcClientRegistryOptions,

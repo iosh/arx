@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { TransactionAdapter, TransactionDraft } from "../../transactions/adapters/types.js";
+import type { TransactionAdapter } from "../../transactions/adapters/types.js";
 import { cloneTransactionState } from "../../transactions/storage/state.js";
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalStrategy, ApprovalTask } from "../approval/types.js";

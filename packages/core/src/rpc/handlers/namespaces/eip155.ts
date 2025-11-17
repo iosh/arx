@@ -322,8 +322,8 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   const paramsArray = toParamsArray(request.params);
 
   const rpcErrors = resolveRpcErrors(controllers);
-
   const providerErrors = resolveProviderErrors(controllers);
+
   if (paramsArray.length < 2) {
     throw rpcErrors.invalidParams({
       message: "personal_sign requires message and account parameters",
@@ -346,7 +346,9 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
       data: { params: request.params },
     });
   }
+
   const activeChain = controllers.network.getActiveChain();
+
   const task = {
     id: createTaskId("personal_sign"),
     type: ApprovalTypes.SignMessage,
@@ -361,11 +363,21 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   };
 
   try {
-    return await controllers.approvals.requestApproval(task, async () => {
+    const signature = await controllers.approvals.requestApproval(task, async () => {
       return controllers.signers.eip155.signPersonalMessage({ address, message });
     });
+
+    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+    });
+
+    return signature;
   } catch (error) {
-    if (isRpcError(error)) throw error;
+    if (isRpcError(error)) {
+      throw error;
+    }
+
     throw providerErrors.userRejectedRequest({
       message: "User rejected message signing",
       data: { origin },
@@ -387,6 +399,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
 
   const { address, typedData } = normaliseTypedData(paramsArray, rpcErrors);
   const activeChain = controllers.network.getActiveChain();
+
   const task = {
     id: createTaskId("eth_signTypedData_v4"),
     type: ApprovalTypes.SignTypedData,
@@ -401,11 +414,21 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    return await controllers.approvals.requestApproval(task, async () => {
+    const signature = await controllers.approvals.requestApproval(task, async () => {
       return controllers.signers.eip155.signTypedData({ address, typedData });
     });
+
+    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+    });
+
+    return signature;
   } catch (error) {
-    if (isRpcError(error)) throw error;
+    if (isRpcError(error)) {
+      throw error;
+    }
+
     throw providerErrors.userRejectedRequest({
       message: "User rejected typed data signing",
       data: { origin },
@@ -436,6 +459,11 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
       throw new TransactionResolutionError(broadcastMeta);
     }
 
+    await controllers.permissions.grant(origin, PermissionScopes.Transaction, {
+      namespace: broadcastMeta.namespace,
+      chainRef: broadcastMeta.caip2,
+    });
+
     return broadcastMeta.hash;
   } catch (error) {
     if (isRpcError(error)) {
@@ -443,16 +471,16 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
     }
 
     if (error instanceof TransactionResolutionError) {
-      const { meta } = error;
+      const { meta: failedMeta } = error;
 
-      if (meta.userRejected) {
+      if (failedMeta.userRejected) {
         throw providerErrors.userRejectedRequest({
           message: "User rejected transaction",
-          data: { origin, id: meta.id },
+          data: { origin, id: failedMeta.id },
         });
       }
 
-      const failure = meta.error;
+      const failure = failedMeta.error;
       if (failure && typeof failure.code === "number") {
         const rpcLikeError = new Error(failure.message ?? "Transaction failed") as RpcLikeError;
         rpcLikeError.code = failure.code;
@@ -464,7 +492,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
 
       throw rpcErrors.internal({
         message: failure?.message ?? "Transaction failed to broadcast",
-        data: { origin, id: meta.id, error: failure ?? undefined },
+        data: { origin, id: failedMeta.id, error: failure ?? undefined },
       });
     }
 

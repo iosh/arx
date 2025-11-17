@@ -819,14 +819,15 @@ describe("eip155 handlers - approval metadata", () => {
         switchActive: true,
       });
 
+      // Grant basic scope only; transaction scope should be added after a successful send.
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
       });
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Transaction, {
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-      });
+
+      const beforePermissions = services.controllers.permissions.getState();
+      const beforeNamespace = beforePermissions.origins[ORIGIN]?.eip155;
+      expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Transaction);
 
       const txHash = (await execute({
         origin: ORIGIN,
@@ -858,6 +859,11 @@ describe("eip155 handlers - approval metadata", () => {
       expect(stored.warnings).toEqual([expect.objectContaining({ code: "transaction.draft.chain_id_missing" })]);
       expect(stored.issues).toEqual([]);
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
+
+      const afterPermissions = services.controllers.permissions.getState();
+      const afterNamespace = afterPermissions.origins[ORIGIN]?.eip155;
+      expect(afterNamespace?.scopes ?? []).toContain(PermissionScopes.Transaction);
+      expect(afterNamespace?.chains ?? []).toContain(mainnet.chainRef);
     } finally {
       services.lifecycle.destroy();
     }
@@ -935,6 +941,11 @@ describe("eip155 handlers - approval metadata", () => {
         switchActive: true,
       });
 
+      // Ensure Sign scope is not present before the first typed data signature.
+      const beforeState = services.controllers.permissions.getState();
+      const beforeNamespace = beforeState.origins[ORIGIN]?.eip155;
+      expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Sign);
+
       const execute = createMethodExecutor(services.controllers);
       const payload = {
         domain: { name: "ARX", version: "1" },
@@ -963,6 +974,11 @@ describe("eip155 handlers - approval metadata", () => {
       await expect(
         services.controllers.signers.eip155.signTypedData({ address: account.address, typedData }),
       ).resolves.toBe(signature);
+
+      const afterState = services.controllers.permissions.getState();
+      const afterNamespace = afterState.origins[ORIGIN]?.eip155;
+      expect(afterNamespace?.scopes ?? []).toContain(PermissionScopes.Sign);
+      expect(afterNamespace?.chains ?? []).toContain(mainnet.chainRef);
     } finally {
       approvalSpy.mockRestore();
       services.lifecycle.destroy();

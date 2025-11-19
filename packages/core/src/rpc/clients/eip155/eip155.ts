@@ -1,6 +1,27 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import type { RpcClient, RpcClientFactory, RpcTransportRequest } from "../../RpcClientRegistry.js";
-
+import type { RpcClient, RpcClientFactory, RpcTransport, RpcTransportRequest } from "../../RpcClientRegistry.js";
+import * as Hex from "ox/Hex";
+import type { Hex as OxHex } from "ox/Hex";
+import type {
+  Address,
+  BlockTag,
+  Client,
+  EIP1193RequestFn,
+  EstimateGasParameters,
+  GetTransactionCountParameters,
+  GetTransactionReceiptParameters,
+  Hash,
+  Transport,
+} from "viem";
+import { createClient, createTransport, TransactionReceiptNotFoundError } from "viem";
+import {
+  estimateGas as viemEstimateGas,
+  estimateFeesPerGas as viemEstimateFeesPerGas,
+  getGasPrice as viemGetGasPrice,
+  getTransactionCount as viemGetTransactionCount,
+  getTransactionReceipt as viemGetTransactionReceipt,
+  sendRawTransaction as viemSendRawTransaction,
+} from "viem/actions";
 export type Eip155FeeData = {
   gasPrice?: string;
   maxPriorityFeePerGas?: string;
@@ -20,23 +41,85 @@ export type Eip155RpcClient = RpcClient<Eip155RpcCapabilities>;
 
 const HEX_PATTERN = /^0x[0-9a-fA-F]+$/;
 
-const addHex = (lhs: string, rhs: string): string => {
-  if (!HEX_PATTERN.test(lhs) || !HEX_PATTERN.test(rhs)) {
-    throw new Error("Invalid hex input for fee calculation");
-  }
-  const result = BigInt(lhs) + BigInt(rhs);
-  return `0x${result.toString(16)}`;
+type Eip155ViemClient = Client<Transport, undefined, undefined>;
+
+/**
+ * Create a minimal viem client backed by our RpcTransport.
+ * It forwards requests to the given transport and respects per-call timeout.
+ */
+const createViemClient = (transport: RpcTransport, timeoutMs?: number): Eip155ViemClient => {
+  const request = (async ({ method, params }: { method: string; params?: unknown }, _options?: unknown) => {
+    const payload: RpcTransportRequest = { method };
+    if (params !== undefined) {
+      payload.params = params as JsonRpcParams;
+    }
+    if (timeoutMs !== undefined) {
+      payload.timeoutMs = timeoutMs;
+    }
+    return transport(payload);
+  }) as EIP1193RequestFn;
+
+  const viemTransport: Transport = () =>
+    createTransport({
+      key: "arx-eip155",
+      name: "arx-eip155",
+      type: "arx-eip155",
+      request,
+      // RpcTransport already implements retries, so disable viem-level retry.
+      retryCount: 0,
+    });
+
+  return createClient({ transport: viemTransport });
 };
 
-const buildRequest = <T>(method: string, params?: JsonRpcParams, timeoutMs?: number): RpcTransportRequest<T> => {
-  const payload: RpcTransportRequest<T> = { method };
-  if (params !== undefined) {
-    payload.params = params;
+const toBigIntQuantity = (value: unknown): bigint | undefined => {
+  if (typeof value !== "string" || !HEX_PATTERN.test(value)) {
+    return undefined;
   }
-  if (timeoutMs !== undefined) {
-    payload.timeoutMs = timeoutMs;
+  try {
+    return Hex.toBigInt(value as OxHex);
+  } catch {
+    return undefined;
   }
-  return payload;
+};
+
+const normalizeBlockSelector = (blockTag?: string): { blockTag?: BlockTag; blockNumber?: bigint } => {
+  if (!blockTag) {
+    return {};
+  }
+
+  // Common tags used by EVM nodes.
+  if (
+    blockTag === "latest" ||
+    blockTag === "earliest" ||
+    blockTag === "pending" ||
+    blockTag === "safe" ||
+    blockTag === "finalized"
+  ) {
+    return { blockTag: blockTag as BlockTag };
+  }
+
+  // Hex block number (e.g. "0x10")
+  if (HEX_PATTERN.test(blockTag)) {
+    try {
+      return { blockNumber: Hex.toBigInt(blockTag as OxHex) };
+    } catch {
+      return {};
+    }
+  }
+
+  // Unknown format -> let fallback path handle it.
+  return {};
+};
+
+const toNonceNumber = (value: unknown): number | undefined => {
+  const quantity = toBigIntQuantity(value);
+  if (quantity === undefined) return undefined;
+  const numeric = Number(quantity);
+  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+    return undefined;
+  }
+  return numeric;
 };
 
 export const createEip155RpcClientFactory = (): RpcClientFactory<Eip155RpcCapabilities> => {
@@ -45,62 +128,136 @@ export const createEip155RpcClientFactory = (): RpcClientFactory<Eip155RpcCapabi
 
     return {
       request: call,
-      estimateGas(params, overrides) {
-        return call(buildRequest("eth_estimateGas", params, overrides?.timeoutMs));
+      async estimateGas(params, overrides) {
+        const timeoutMs = overrides?.timeoutMs;
+
+        const [rawTx] = params as [Record<string, unknown>, ...unknown[]];
+        const client = createViemClient(transport, timeoutMs);
+
+        const estimateParams: EstimateGasParameters = {
+          // We disable viem's internal prepareTransactionRequest pipeline
+          // to avoid extra RPC calls (gas/fees/nonce are already handled upstream).
+          prepare: false,
+        } as EstimateGasParameters;
+
+        if (typeof rawTx.from === "string") {
+          estimateParams.account = rawTx.from as Address;
+        }
+        if (typeof rawTx.to === "string") {
+          estimateParams.to = rawTx.to as Address;
+        }
+        if (typeof rawTx.data === "string") {
+          estimateParams.data = rawTx.data as OxHex;
+        }
+
+        const gas = toBigIntQuantity(rawTx.gas);
+        if (gas !== undefined) estimateParams.gas = gas;
+
+        const value = toBigIntQuantity(rawTx.value);
+        if (value !== undefined) estimateParams.value = value;
+
+        const gasPrice = toBigIntQuantity(rawTx.gasPrice);
+        if (gasPrice !== undefined) estimateParams.gasPrice = gasPrice;
+
+        const maxFeePerGas = toBigIntQuantity(rawTx.maxFeePerGas);
+        if (maxFeePerGas !== undefined) estimateParams.maxFeePerGas = maxFeePerGas;
+
+        const maxPriorityFeePerGas = toBigIntQuantity(rawTx.maxPriorityFeePerGas);
+        if (maxPriorityFeePerGas !== undefined) {
+          estimateParams.maxPriorityFeePerGas = maxPriorityFeePerGas;
+        }
+
+        const nonce = toNonceNumber(rawTx.nonce);
+        if (nonce !== undefined) estimateParams.nonce = nonce;
+
+        const gasBigInt = await viemEstimateGas(client as Client, estimateParams as EstimateGasParameters);
+        return Hex.fromNumber(gasBigInt);
       },
-      getTransactionCount(address, blockTag = "pending", overrides) {
-        return call(
-          buildRequest("eth_getTransactionCount", [address, blockTag] as JsonRpcParams, overrides?.timeoutMs),
-        );
+
+      async getTransactionCount(address, blockTag = "pending", overrides) {
+        const timeoutMs = overrides?.timeoutMs;
+        const client = createViemClient(transport, timeoutMs);
+
+        const selector = normalizeBlockSelector(blockTag);
+
+        const params: GetTransactionCountParameters = {
+          address: address as Address,
+          ...(selector.blockNumber !== undefined
+            ? { blockNumber: selector.blockNumber }
+            : { blockTag: selector.blockTag ?? ("latest" as BlockTag) }),
+        };
+
+        const count = await viemGetTransactionCount(client as Client, params as GetTransactionCountParameters);
+        return Hex.fromNumber(count);
       },
       async getFeeData(overrides) {
-        const timeout = overrides?.timeoutMs;
+        const timeoutMs = overrides?.timeoutMs;
+        const client = createViemClient(transport, timeoutMs);
 
-        const gasPricePromise = call<string>(buildRequest("eth_gasPrice", undefined, timeout));
-        const priorityPromise = call<string>(buildRequest("eth_maxPriorityFeePerGas", undefined, timeout)).catch(
-          () => undefined,
-        );
-        const latestBlockPromise = call<Record<string, unknown>>(
-          buildRequest("eth_getBlockByNumber", ["latest", false], timeout),
-        ).catch(() => undefined);
+        try {
+          // Ask viem for best-effort fee suggestion (EIP-1559 or legacy).
+          const fees = await viemEstimateFeesPerGas(
+            client as Client,
+            {} as Parameters<typeof viemEstimateFeesPerGas>[1],
+          );
 
-        const [gasPriceResult, priorityResult, latestBlock] = await Promise.all([
-          gasPricePromise.catch(() => undefined),
-          priorityPromise,
-          latestBlockPromise,
-        ]);
+          const feeData: Eip155FeeData = {};
 
-        const baseFee =
-          latestBlock && typeof latestBlock.baseFeePerGas === "string"
-            ? (latestBlock.baseFeePerGas as string)
-            : undefined;
-
-        if (!gasPriceResult && !priorityResult && !baseFee) {
-          throw new Error("Failed to retrieve fee data from RPC");
-        }
-
-        let maxFeePerGas: string | undefined;
-        if (baseFee && priorityResult) {
-          try {
-            maxFeePerGas = addHex(baseFee, priorityResult);
-          } catch {
-            maxFeePerGas = undefined;
+          // EIP-1559 path: viem returns maxFeePerGas and maxPriorityFeePerGas
+          if (
+            "maxFeePerGas" in fees &&
+            "maxPriorityFeePerGas" in fees &&
+            fees.maxFeePerGas !== undefined &&
+            fees.maxPriorityFeePerGas !== undefined
+          ) {
+            feeData.maxFeePerGas = Hex.fromNumber(fees.maxFeePerGas);
+            feeData.maxPriorityFeePerGas = Hex.fromNumber(fees.maxPriorityFeePerGas);
           }
+
+          // Legacy path: viem returns gasPrice
+          if ("gasPrice" in fees && fees.gasPrice !== undefined) {
+            feeData.gasPrice = Hex.fromNumber(fees.gasPrice);
+          }
+
+          // If nothing was set, fall back to getGasPrice
+          if (Object.keys(feeData).length === 0) {
+            const gasPrice = await viemGetGasPrice(client as Client);
+            feeData.gasPrice = Hex.fromNumber(gasPrice);
+          }
+
+          return feeData;
+        } catch {
+          // Fallback: only gasPrice when fee estimation is not available.
+          const gasPrice = await viemGetGasPrice(client as Client);
+          return { gasPrice: Hex.fromNumber(gasPrice) };
         }
-
-        const feeData: Eip155FeeData = {};
-        if (gasPriceResult) feeData.gasPrice = gasPriceResult;
-        if (priorityResult) feeData.maxPriorityFeePerGas = priorityResult;
-        if (maxFeePerGas) feeData.maxFeePerGas = maxFeePerGas;
-        if (baseFee) feeData.baseFee = baseFee;
-
-        return feeData;
       },
-      getTransactionReceipt(hash, overrides) {
-        return call(buildRequest("eth_getTransactionReceipt", [hash] as JsonRpcParams, overrides?.timeoutMs));
+      async getTransactionReceipt(hash, overrides) {
+        const timeoutMs = overrides?.timeoutMs;
+        const client = createViemClient(transport, timeoutMs);
+
+        try {
+          const receipt = await viemGetTransactionReceipt(
+            client as Client,
+            { hash: hash as Hash } as GetTransactionReceiptParameters,
+          );
+          // viem formats the receipt into a typed object; we expose it as a generic record.
+          return receipt as unknown as Record<string, unknown>;
+        } catch (error) {
+          if (error instanceof TransactionReceiptNotFoundError) {
+            // Align with JSON-RPC: "no receipt yet" -> null.
+            return null;
+          }
+          throw error;
+        }
       },
-      sendRawTransaction(raw, overrides) {
-        return call(buildRequest("eth_sendRawTransaction", [raw] as JsonRpcParams, overrides?.timeoutMs));
+      async sendRawTransaction(raw, overrides) {
+        const timeoutMs = overrides?.timeoutMs;
+        const client = createViemClient(transport, timeoutMs);
+
+        const hash = await viemSendRawTransaction(client as Client, { serializedTransaction: raw as OxHex });
+
+        return hash;
       },
     };
   };

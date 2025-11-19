@@ -1,3 +1,4 @@
+import * as Hex from "ox/Hex";
 import { getRpcErrors } from "../../../errors/index.js";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionAdapterContext } from "../types.js";
@@ -7,9 +8,9 @@ type ReceiptDeps = {
 };
 
 type RawReceipt = {
-  status?: string;
+  status?: unknown;
   transactionHash?: string;
-  blockNumber?: string;
+  blockNumber?: unknown;
   [key: string]: unknown;
 };
 
@@ -17,6 +18,9 @@ const SUCCESS_STATUS = "0x1";
 const HEX_PATTERN = /^0x[0-9a-fA-F]+$/;
 
 const cloneValue = (value: unknown): unknown => {
+  if (typeof value === "bigint") {
+    return Hex.fromNumber(value);
+  }
   if (Array.isArray(value)) {
     return value.map((entry) => cloneValue(entry));
   }
@@ -33,12 +37,41 @@ const cloneReceipt = (receipt: RawReceipt): Record<string, unknown> => {
 };
 
 const resolveStatus = (receipt: RawReceipt): "success" | "failed" => {
-  if (typeof receipt.status === "string") {
-    return receipt.status.toLowerCase() === SUCCESS_STATUS ? "success" : "failed";
+  const status = receipt.status;
+
+  if (typeof status === "string") {
+    const normalized = status.toLowerCase();
+
+    // viem formatted receipt
+    if (normalized === "success") {
+      return "success";
+    }
+    if (normalized === "reverted") {
+      return "failed";
+    }
+
+    // raw JSON-RPC: 0x1 / 0x0 / ...
+    if (normalized === SUCCESS_STATUS) {
+      return "success";
+    }
+    if (HEX_PATTERN.test(normalized)) {
+      // any other hex status (e.g. 0x0) is treated as failure
+      return "failed";
+    }
   }
-  if (receipt.blockNumber && typeof receipt.blockNumber === "string") {
+
+  const blockNumber = receipt.blockNumber;
+
+  // JSON-RPC: blockNumber is hex string when included in a block
+  if (typeof blockNumber === "string" && HEX_PATTERN.test(blockNumber)) {
     return "success";
   }
+
+  // viem: blockNumber is bigint or number when included
+  if (typeof blockNumber === "bigint" || typeof blockNumber === "number") {
+    return "success";
+  }
+
   return "failed";
 };
 

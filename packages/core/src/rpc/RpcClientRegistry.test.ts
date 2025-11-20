@@ -10,7 +10,7 @@ import {
 } from "./RpcClientRegistry.js";
 
 const createNetworkStub = () => {
-  let currentEndpoint: RpcEndpointInfo = { index: 0, url: "https://rpc.initial" };
+  let currentEndpoint: RpcEndpointInfo = { index: 0, url: "https://rpc.initial", headers: undefined };
   const outcomes: Array<{ chainRef: string; outcome: RpcOutcomeReport }> = [];
   const endpointListeners = new Set<
     (change: { chainRef: string; previous: RpcEndpointInfo; next: RpcEndpointInfo }) => void
@@ -59,9 +59,9 @@ const createNetworkStub = () => {
   return {
     stub,
     outcomes,
-    setEndpoint(chainRef: string, url: string) {
+    setEndpoint(chainRef: string, url: string, headers?: Record<string, string>) {
       const previous = currentEndpoint;
-      currentEndpoint = { ...currentEndpoint, url };
+      currentEndpoint = { ...currentEndpoint, url, headers };
       emitEndpointChanged(chainRef, previous, currentEndpoint);
       emitChainChanged(chainRef, url);
     },
@@ -69,6 +69,29 @@ const createNetworkStub = () => {
 };
 
 describe("RpcClientRegistry", () => {
+  it("merges endpoint headers into transport requests", async () => {
+    const network = createNetworkStub();
+    const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
+      return new Response(JSON.stringify({ result: "0x1" }), { status: 200 });
+    });
+    const registry = new RpcClientRegistry({ network: network.stub, fetch });
+    registry.registerFactory("eip155", createEip155RpcClientFactory());
+
+    network.setEndpoint("eip155:1", "https://rpc.with-headers", { Authorization: "Bearer token" });
+    const client = registry.getClient<Eip155RpcCapabilities>("eip155", "eip155:1");
+
+    await expect(client.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+
+    const lastCall = fetch.mock.calls.at(-1);
+    if (!lastCall) {
+      throw new Error("fetch was not called");
+    }
+    const [_, init] = lastCall;
+    expect(init?.headers).toMatchObject({
+      "Content-Type": "application/json",
+      Authorization: "Bearer token",
+    });
+  });
   it("caches clients per namespace/chain and invalidates on network updates", () => {
     const network = createNetworkStub();
     const fetch = vi.fn(async () => new Response(JSON.stringify({ result: null }), { status: 200 }));

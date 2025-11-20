@@ -1,7 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import type { RpcClient, RpcClientFactory, RpcTransport, RpcTransportRequest } from "../../RpcClientRegistry.js";
-import * as Hex from "ox/Hex";
 import type { Hex as OxHex } from "ox/Hex";
+import * as Hex from "ox/Hex";
 import type {
   Address,
   BlockTag,
@@ -15,13 +14,14 @@ import type {
 } from "viem";
 import { createClient, createTransport, TransactionReceiptNotFoundError } from "viem";
 import {
-  estimateGas as viemEstimateGas,
   estimateFeesPerGas as viemEstimateFeesPerGas,
+  estimateGas as viemEstimateGas,
   getGasPrice as viemGetGasPrice,
   getTransactionCount as viemGetTransactionCount,
   getTransactionReceipt as viemGetTransactionReceipt,
   sendRawTransaction as viemSendRawTransaction,
 } from "viem/actions";
+import type { RpcClient, RpcClientFactory, RpcTransport, RpcTransportRequest } from "../../RpcClientRegistry.js";
 export type Eip155FeeData = {
   gasPrice?: string;
   maxPriorityFeePerGas?: string;

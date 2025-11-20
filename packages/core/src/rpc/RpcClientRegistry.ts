@@ -221,10 +221,15 @@ const createJsonRpcTransport = (
           payload.params = request.params;
         }
 
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(endpoint.headers ?? {}),
+        };
+
         const response = await fetchFn(endpoint.url, {
           method: "POST",
           body: JSON.stringify(payload),
-          headers: { "Content-Type": "application/json" },
+          headers,
           signal: controller.signal,
         });
 

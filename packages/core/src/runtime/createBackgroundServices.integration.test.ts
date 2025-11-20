@@ -636,7 +636,8 @@ describe("createBackgroundServices (integration)", () => {
       version: TRANSACTIONS_SNAPSHOT_VERSION,
       updatedAt: 1_000,
       payload: {
-        pending: [
+        pending: [],
+        history: [
           {
             id: "tx-storage-1",
             namespace: chain.namespace,
@@ -664,7 +665,6 @@ describe("createBackgroundServices (integration)", () => {
             updatedAt: 1_000,
           },
         ],
-        history: [],
       },
     };
 
@@ -679,6 +679,7 @@ describe("createBackgroundServices (integration)", () => {
       },
       now: () => 42_000,
     });
+    await flushAsync();
 
     try {
       const initialNetwork = context.services.controllers.network.getState();
@@ -700,6 +701,18 @@ describe("createBackgroundServices (integration)", () => {
       expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
       expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
+
+      // Wait for transaction processing to complete (should transition from approved to failed)
+      await vi.waitFor(
+        () => {
+          const meta = context.services.controllers.transactions.getMeta("tx-storage-1");
+          expect(meta?.status).toBe("failed");
+        },
+        {
+          timeout: 1000,
+          interval: 10,
+        },
+      );
 
       const transactionsState = context.services.controllers.transactions.getState();
       expect(transactionsState.pending).toHaveLength(0);

@@ -4,6 +4,8 @@ import type { MultiNamespaceAccountsState } from "../../controllers/account/type
 import type { NetworkState, RpcEndpointState, RpcStrategyConfig } from "../../controllers/network/types.js";
 import type { PermissionsState } from "../../controllers/permission/types.js";
 
+export const UNKNOWN_ORIGIN = "unknown://";
+
 const DEFAULT_CHAIN_SEED = DEFAULT_CHAIN_METADATA[0];
 if (!DEFAULT_CHAIN_SEED) {
   throw new Error("DEFAULT_CHAIN_METADATA must include at least one chain definition");

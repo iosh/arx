@@ -50,6 +50,12 @@ export type MethodDefinition = {
     response?: unknown;
   };
   handler: MethodHandler;
+  /**
+   * Whether this method is a "bootstrap" method that can run before permissions are granted.
+   * Examples: eth_requestAccounts, wallet_requestPermissions
+   * Default: false (requires permission if scope is present)
+   */
+  isBootstrap?: boolean;
 };
 
 export type Namespace = string;

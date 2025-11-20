@@ -516,6 +516,7 @@ const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
     scope: PermissionScopes.Accounts,
     approvalRequired: true,
     handler: handleEthRequestAccounts,
+    isBootstrap: true,
   },
 
   wallet_switchEthereumChain: {

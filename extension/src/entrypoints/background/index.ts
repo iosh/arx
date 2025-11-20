@@ -5,6 +5,7 @@ import {
   createMethodDefinitionResolver,
   createMethodExecutor,
   createNamespaceResolver,
+  createPermissionGuardMiddleware,
   createPermissionScopeResolver,
   DEFAULT_NAMESPACE,
   getProviderErrors,
@@ -198,9 +199,10 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     const namespaceResolver = (ctx?: RpcInvocationContext) => resolveNamespaceRef(ctx);
     const storage = getExtensionStorage();
 
+    const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
     const services = createBackgroundServices({
       permissions: {
-        scopeResolver: createPermissionScopeResolver(namespaceResolver),
+        scopeResolver: permissionScopeResolver,
       },
       storage: { port: storage },
     });
@@ -308,6 +310,16 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         isInternalOrigin,
         resolveMethodDefinition,
         resolveLockedPolicy,
+        resolveProviderErrors,
+      }),
+    );
+
+    engine.push(
+      createPermissionGuardMiddleware({
+        ensurePermission: (origin, method, context) =>
+          controllers.permissions.ensurePermission(origin, method, context),
+        isInternalOrigin,
+        resolveMethodDefinition,
         resolveProviderErrors,
       }),
     );

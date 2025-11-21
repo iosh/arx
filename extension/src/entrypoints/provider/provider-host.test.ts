@@ -1,0 +1,209 @@
+import { InpageTransport } from "@arx/provider-extension/inpage";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
+import { ProviderHost } from "./providerHost";
+import { CHANNEL } from "@arx/provider-extension/constants";
+
+describe("ProviderHost EIP-6963", () => {
+  let dom: JSDOM;
+
+  beforeEach(() => {
+    dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://dapp.test" });
+    (global as any).window = dom.window as unknown as Window;
+    (global as any).document = dom.window.document;
+    // Ensure CustomEvent is from JSDOM window
+    (global as any).CustomEvent = dom.window.CustomEvent;
+    (global as any).MessageEvent = dom.window.MessageEvent;
+  });
+  it("announces provider on requestProvider", async () => {
+    const transport = new InpageTransport();
+    const host = new ProviderHost(transport);
+    const listener = vi.fn();
+    window.addEventListener("eip6963:announceProvider", listener);
+
+    // Mock content script behavior: listen for handshake and respond with handshake_ack
+    const messageHandler = (event: MessageEvent) => {
+      const data = event.data;
+
+      // When receiving handshake request, reply with handshake_ack
+      if (data?.channel === CHANNEL && data?.type === "handshake") {
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            data: {
+              channel: CHANNEL,
+              type: "handshake_ack",
+              payload: {
+                chainId: "0x1",
+                caip2: "eip155:1",
+                accounts: [],
+                isUnlocked: true,
+                meta: {
+                  activeChain: "eip155:1",
+                  activeNamespace: "eip155",
+                  supportedChains: ["eip155:1"],
+                },
+              },
+            },
+            source: dom.window as unknown as Window,
+          }),
+        );
+      }
+    };
+
+    dom.window.addEventListener("message", messageHandler);
+
+    await host.start();
+
+    // Clear the announcement from start(), we only want to test the response to requestProvider
+    listener.mockClear();
+
+    window.dispatchEvent(new CustomEvent("eip6963:requestProvider"));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const detail = listener.mock.calls[0]?.[0].detail;
+    expect(detail?.provider).toBeDefined();
+    expect(detail?.info?.name).toBe("ARX Wallet");
+
+
+    dom.window.removeEventListener("message", messageHandler);
+  });
+
+  it("handles multiple requestProvider calls idempotently", async () => {
+    const transport = new InpageTransport();
+    const host = new ProviderHost(transport);
+    const listener = vi.fn();
+    window.addEventListener("eip6963:announceProvider", listener);
+
+    // Mock content script behavior
+    const messageHandler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.channel === CHANNEL && data?.type === "handshake") {
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            data: {
+              channel: CHANNEL,
+              type: "handshake_ack",
+              payload: {
+                chainId: "0x1",
+                caip2: "eip155:1",
+                accounts: [],
+                isUnlocked: true,
+                meta: {
+                  activeChain: "eip155:1",
+                  activeNamespace: "eip155",
+                  supportedChains: ["eip155:1"],
+                },
+              },
+            },
+            source: dom.window as unknown as Window,
+          }),
+        );
+      }
+    };
+
+    dom.window.addEventListener("message", messageHandler);
+    await host.start();
+
+    const firstProvider = (window as any).ethereum;
+    listener.mockClear();
+
+    // Trigger requestProvider multiple times
+    window.dispatchEvent(new CustomEvent("eip6963:requestProvider"));
+    window.dispatchEvent(new CustomEvent("eip6963:requestProvider"));
+    window.dispatchEvent(new CustomEvent("eip6963:requestProvider"));
+
+    // Should announce 3 times but provider instance stays the same
+    expect(listener).toHaveBeenCalledTimes(3);
+    const secondProvider = (window as any).ethereum;
+    expect(secondProvider).toBe(firstProvider);
+
+    dom.window.removeEventListener("message", messageHandler);
+  });
+
+  it("reconnects and syncs providers after disconnect", async () => {
+    const transport = new InpageTransport();
+    const host = new ProviderHost(transport);
+
+    // Initial connection
+    const messageHandler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.channel === CHANNEL && data?.type === "handshake") {
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            data: {
+              channel: CHANNEL,
+              type: "handshake_ack",
+              payload: {
+                chainId: "0x1",
+                caip2: "eip155:1",
+                accounts: ["0xabc"],
+                isUnlocked: true,
+                meta: {
+                  activeChain: "eip155:1",
+                  activeNamespace: "eip155",
+                  supportedChains: ["eip155:1"],
+                },
+              },
+            },
+            source: dom.window as unknown as Window,
+          }),
+        );
+      }
+    };
+
+    dom.window.addEventListener("message", messageHandler);
+    await host.start();
+
+    const provider = (window as any).ethereum;
+    expect(provider).toBeDefined();
+
+    // Simulate disconnect
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent("message", {
+        data: {
+          channel: CHANNEL,
+          type: "event",
+          payload: { event: "disconnect", params: [] },
+        },
+        source: dom.window as unknown as Window,
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Simulate reconnect with different accounts
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent("message", {
+        data: {
+          channel: CHANNEL,
+          type: "event",
+          payload: {
+            event: "connect",
+            params: [
+              {
+                chainId: "0x1",
+                caip2: "eip155:1",
+                accounts: ["0xdef"],
+                isUnlocked: true,
+                meta: {
+                  activeChain: "eip155:1",
+                  activeNamespace: "eip155",
+                  supportedChains: ["eip155:1"],
+                },
+              },
+            ],
+          },
+        },
+        source: dom.window as unknown as Window,
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Provider instance should remain the same
+    const providerAfterReconnect = (window as any).ethereum;
+    expect(providerAfterReconnect).toBe(provider);
+
+    dom.window.removeEventListener("message", messageHandler);
+  });
+});

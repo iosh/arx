@@ -19,7 +19,9 @@
     "@arx/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/jsdom": "27.0.0",
     "typescript": "catalog:",
-    "@types/webextension-polyfill": "catalog:"
+    "@types/webextension-polyfill": "catalog:",
+    "jsdom": "27.2.0"
   }
 }

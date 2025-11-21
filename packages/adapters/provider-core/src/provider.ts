@@ -28,6 +28,8 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   supportedChains: [...meta.supportedChains],
 });
 
+const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
+
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #namespace = DEFAULT_NAMESPACE;
   readonly isArx = true;
@@ -294,6 +296,16 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
         message: "Invalid request params",
         data: { args },
       });
+    }
+
+    if (!this.#initialized && READONLY_EARLY.has(method)) {
+      if (method === "eth_chainId") {
+        if (this.#chainId) return this.#chainId;
+        throw providerErrors.disconnected();
+      }
+      if (method === "eth_accounts") {
+        return [];
+      }
     }
 
     if (!this.#initialized) {

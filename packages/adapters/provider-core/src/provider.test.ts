@@ -381,39 +381,19 @@ describe("EthereumProvider transport meta integration", () => {
     }
   });
 
-  it("waits for initialization before forwarding requests", async () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      connected: false,
-      chainId: null,
-      caip2: null,
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const handler = vi.fn(async () => "0x1");
+  it("waits for initialization before forwarding non-readonly requests", async () => {
+    const initial = { ...INITIAL_STATE, connected: false, chainId: null, caip2: null };
+    const { transport, provider } = createProvider(initial);
+    const handler = vi.fn(async () => "ok");
     transport.setRequestHandler(handler);
 
-    const requestPromise = provider.request({ method: "eth_chainId" });
+    const p = provider.request({ method: "eth_blockNumber" });
     expect(handler).not.toHaveBeenCalled();
 
-    transport.updateState({
-      connected: true,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      meta: buildMeta(),
-      isUnlocked: true,
-      accounts: ["0x1111111111111111111111111111111111111111"],
-    });
+    transport.updateState({ connected: true, chainId: "0x1", caip2: "eip155:1", meta: buildMeta() });
+    transport.emit("connect", { chainId: "0x1", caip2: "eip155:1", accounts: [], isUnlocked: true, meta: buildMeta() });
 
-    transport.emit("connect", {
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: ["0x1111111111111111111111111111111111111111"],
-      isUnlocked: true,
-      meta: buildMeta(),
-    });
-
-    await expect(requestPromise).resolves.toBe("0x1");
+    await expect(p).resolves.toBe("ok");
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
@@ -489,5 +469,35 @@ describe("EthereumProvider transport meta integration", () => {
     transport.emit("accountsChanged", ["cfx:aaejuaaaaaaaaaaaaaaaaaaaaaaaaaaaaj4dpcs07"]);
     expect(provider.selectedAddress).toBe("cfx:aaejuaaaaaaaaaaaaaaaaaaaaaaaaaaaaj4dpcs07");
     expect(accountsChanged).toHaveBeenCalledTimes(1);
+  });
+
+it("returns cached chainId without init; accounts stay empty before init", async () => {
+  const initial: TransportState = {
+    connected: false,
+    chainId: "0x1",
+    caip2: null,
+    accounts: ["0xabc"],
+      isUnlocked: null,
+      meta: buildMeta(),
+  };
+  const { provider } = createProvider(initial);
+
+  await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+  await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+});
+
+  it("eth_chainId throws 4900 when not connected and no cache; eth_accounts returns []", async () => {
+    const initial: TransportState = {
+      connected: false,
+      chainId: null,
+      caip2: null,
+      accounts: [],
+      isUnlocked: null,
+      meta: null,
+    };
+    const { provider } = createProvider(initial);
+
+    await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({ code: 4900 });
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
   });
 });

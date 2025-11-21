@@ -471,20 +471,20 @@ describe("EthereumProvider transport meta integration", () => {
     expect(accountsChanged).toHaveBeenCalledTimes(1);
   });
 
-it("returns cached chainId without init; accounts stay empty before init", async () => {
-  const initial: TransportState = {
-    connected: false,
-    chainId: "0x1",
-    caip2: null,
-    accounts: ["0xabc"],
+  it("returns cached chainId without init; accounts stay empty before init", async () => {
+    const initial: TransportState = {
+      connected: false,
+      chainId: "0x1",
+      caip2: null,
+      accounts: ["0xabc"],
       isUnlocked: null,
       meta: buildMeta(),
-  };
-  const { provider } = createProvider(initial);
+    };
+    const { provider } = createProvider(initial);
 
-  await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
-  await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
-});
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+  });
 
   it("eth_chainId throws 4900 when not connected and no cache; eth_accounts returns []", async () => {
     const initial: TransportState = {

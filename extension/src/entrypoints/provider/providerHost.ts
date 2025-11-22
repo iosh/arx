@@ -1,7 +1,8 @@
 import { EthereumProvider } from "@arx/provider-core/provider";
 
 import type { RequestArguments, TransportMeta, TransportState } from "@arx/provider-core/types";
-import { InpageTransport } from "@arx/provider-extension/inpage";
+import type { InpageTransport } from "@arx/provider-extension/inpage";
+
 const EIP155_NAMESPACE = "eip155" as const;
 const PROTECTED_METHODS = new Set<PropertyKey>([
   "request",

@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
-import { InpageTransport } from "./inpage.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { CHANNEL } from "./constants.js";
+import { InpageTransport } from "./inpage.js";
 
 describe("InpageTransport handshake/disconnect", () => {
   let dom: JSDOM;

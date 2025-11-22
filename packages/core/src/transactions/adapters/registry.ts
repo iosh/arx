@@ -7,7 +7,11 @@ export class TransactionAdapterRegistry {
     this.#adapters = new Map(initial ?? []);
   }
 
-  register(namespace: string, adapter: TransactionAdapter): void {
+  register(namespace: string, adapter: TransactionAdapter, options?: { replace?: boolean }): void {
+    const replace = options?.replace ?? false;
+    if (!replace && this.#adapters.has(namespace)) {
+      throw new Error(`Adapter for namespace "${namespace}" already registered`);
+    }
     this.#adapters.set(namespace, adapter);
   }
 

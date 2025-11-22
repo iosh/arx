@@ -3,6 +3,7 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { ApprovalTypes, PermissionScopes, type TransactionMeta } from "../controllers/index.js";
 import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
+import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type {
   ChainRegistryEntity,
   StorageNamespace,
@@ -24,6 +25,8 @@ import {
   type TransactionsSnapshot,
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
+import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
+import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
@@ -307,6 +310,12 @@ const createServices = (options: TestServicesOptions = {}) => {
 
   return createBackgroundServices(adapted);
 };
+
+const makeAdapter = (tag: string): TransactionAdapter => ({
+  buildDraft: async () => ({ prepared: { tag }, summary: {}, warnings: [], issues: [] }),
+  signTransaction: async () => ({ raw: "0x", hash: `0x${tag}` }),
+  broadcastTransaction: async () => ({ hash: `0x${tag}` }),
+});
 
 class FakeVault implements VaultService {
   #ciphertext: VaultCiphertext | null;
@@ -893,6 +902,33 @@ describe("createBackgroundServices", () => {
     } finally {
       services.lifecycle.destroy();
     }
+  });
+
+  it("keeps provided registry entries and adds default eip155 when missing", async () => {
+    const registry = new TransactionAdapterRegistry();
+    const confluxAdapter = makeAdapter("cfx");
+    registry.register("conflux", confluxAdapter);
+
+    const services = createServices({ transactions: { registry } });
+
+    await services.lifecycle.initialize();
+    expect(registry.get("conflux")).toBe(confluxAdapter);
+    expect(registry.get(EIP155_NAMESPACE)).toBeDefined();
+
+    services.lifecycle.destroy();
+  });
+
+  it("does not override a provided eip155 adapter", async () => {
+    const registry = new TransactionAdapterRegistry();
+    const customEip155 = makeAdapter("custom");
+    registry.register(EIP155_NAMESPACE, customEip155);
+
+    const services = createServices({ transactions: { registry } });
+
+    await services.lifecycle.initialize();
+    expect(registry.get(EIP155_NAMESPACE)).toBe(customEip155);
+
+    services.lifecycle.destroy();
   });
 
   it("exposes rpc client registry with default eip155 client", async () => {

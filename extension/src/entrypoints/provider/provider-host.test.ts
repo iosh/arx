@@ -1,8 +1,8 @@
-import { InpageTransport } from "@arx/provider-extension/inpage";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { JSDOM } from "jsdom";
-import { ProviderHost } from "./providerHost";
 import { CHANNEL } from "@arx/provider-extension/constants";
+import { InpageTransport } from "@arx/provider-extension/inpage";
+import { JSDOM } from "jsdom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderHost } from "./providerHost";
 
 describe("ProviderHost EIP-6963", () => {
   let dom: JSDOM;
@@ -63,7 +63,6 @@ describe("ProviderHost EIP-6963", () => {
     const detail = listener.mock.calls[0]?.[0].detail;
     expect(detail?.provider).toBeDefined();
     expect(detail?.info?.name).toBe("ARX Wallet");
-
 
     dom.window.removeEventListener("message", messageHandler);
   });

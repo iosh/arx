@@ -18,23 +18,26 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "react": "19.1.1",
-    "react-dom": "19.1.1",
-    "webextension-polyfill": "catalog:",
+    "@arx/core": "workspace:*",
     "@arx/provider-core": "workspace:*",
     "@arx/provider-extension": "workspace:*",
-    "@arx/core": "workspace:*",
     "@arx/storage-dexie": "workspace:*",
-    "events": "3.3.0"
+    "@tamagui/config": "1.138.0",
+    "events": "3.3.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "react-native-web": "^0.21.2",
+    "tamagui": "1.138.0",
+    "webextension-polyfill": "catalog:"
   },
   "devDependencies": {
+    "@types/jsdom": "27.0.0",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
-    "@types/jsdom": "27.0.0",
+    "@types/webextension-polyfill": "catalog:",
     "@wxt-dev/module-react": "1.1.5",
-    "typescript": "5.9.2",
-    "wxt": "0.20.10",
     "jsdom": "27.2.0",
-    "@types/webextension-polyfill": "catalog:"
+    "typescript": "5.9.2",
+    "wxt": "0.20.11"
   }
 }

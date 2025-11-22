@@ -23,7 +23,7 @@ import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
-import { getExtensionStorage } from "@/platform/storage";
+import { getExtensionChainRegistry, getExtensionStorage } from "@/platform/storage";
 import { createLockedGuardMiddleware } from "./lockedMiddleware";
 import { restoreUnlockState } from "./unlockRecovery";
 
@@ -198,6 +198,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     let resolveNamespaceRef: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
     const namespaceResolver = (ctx?: RpcInvocationContext) => resolveNamespaceRef(ctx);
     const storage = getExtensionStorage();
+    const chainRegistry = getExtensionChainRegistry();
 
     const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
     const services = createBackgroundServices({
@@ -205,6 +206,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         scopeResolver: permissionScopeResolver,
       },
       storage: { port: storage },
+      chainRegistry: { port: chainRegistry },
     });
     const { controllers, engine, messenger, session } = services;
 

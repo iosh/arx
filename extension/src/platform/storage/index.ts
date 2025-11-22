@@ -1,7 +1,9 @@
+import type { ChainRegistryPort } from "@arx/core/chains";
 import type { StoragePort } from "@arx/core/storage";
-import { createDexieStorage } from "@arx/storage-dexie";
+import { createDexieChainRegistryPort, createDexieStorage } from "@arx/storage-dexie";
 
 let storageInstance: StoragePort | null = null;
+let chainRegistryInstance: ChainRegistryPort | null = null;
 
 export const getExtensionStorage = (): StoragePort => {
   if (storageInstance) {
@@ -9,4 +11,12 @@ export const getExtensionStorage = (): StoragePort => {
   }
   storageInstance = createDexieStorage({ databaseName: "arx-extension" });
   return storageInstance;
+};
+
+export const getExtensionChainRegistry = (): ChainRegistryPort => {
+  if (chainRegistryInstance) {
+    return chainRegistryInstance;
+  }
+  chainRegistryInstance = createDexieChainRegistryPort({ databaseName: "arx-extension" });
+  return chainRegistryInstance;
 };

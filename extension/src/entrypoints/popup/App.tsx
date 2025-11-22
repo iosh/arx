@@ -1,23 +1,55 @@
 import { useState } from "react";
-
-import "./App.css";
+import { Button, Card, H2, Input, Paragraph, Theme, XStack, YStack } from "tamagui";
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
 
   return (
-    <>
-      <div></div>
-      <h1>WXT + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>count is {count}</button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">Click on the WXT and React logos to learn more</p>
-    </>
+    <Theme name={theme}>
+      <YStack padding="$4" gap="$3" backgroundColor="$background" minHeight="100vh">
+        <XStack justifyContent="space-between" alignItems="center">
+          {/* Theme toggle button */}
+          <Button size="$3" chromeless onPress={toggleTheme}>
+            {theme === "light" ? "🌙" : "☀️"}
+          </Button>
+        </XStack>
+
+        {/* Card component test */}
+        <Card elevate bordered padding="$3">
+          <YStack gap="$2">
+            <Paragraph fontWeight="600">Account</Paragraph>
+            <Paragraph color="$colorHover" fontSize="$3">
+              0x1234...5678
+            </Paragraph>
+          </YStack>
+        </Card>
+
+        {/* Input component test */}
+        <Input placeholder="Enter password" secureTextEntry />
+
+        {/* Button variants test */}
+        <YStack gap="$2">
+          <Button>Primary Button</Button>
+          <Button variant="outlined">Outlined Button</Button>
+          <Button chromeless>Chromeless Button</Button>
+        </YStack>
+
+        {/* Horizontal layout with colored buttons */}
+        <XStack gap="$2" justifyContent="center">
+          <Button> Confirm</Button>
+          <Button>Reject</Button>
+        </XStack>
+
+        {/* Display current theme */}
+        <Paragraph textAlign="center" color="$colorHover">
+          Current theme: {theme}
+        </Paragraph>
+      </YStack>
+    </Theme>
   );
 }
-
 export default App;

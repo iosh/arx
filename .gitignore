@@ -145,3 +145,6 @@ dist
 
 .turbo
 .tamagui
+
+# TanStack Router generated files
+**/routeTree.gen.ts

@@ -1,3 +1,5 @@
+export type { HandlerControllers } from "./rpc/handlers/types.js";
+
 export { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 export type {
   Json,

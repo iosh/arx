@@ -442,4 +442,11 @@ export {
   transactionWarningSchema as TransactionWarningSchema,
   transactionErrorSchema as TransactionErrorSchema,
   transactionReceiptSchema as TransactionReceiptSchema,
+  accountAddressSchema,
+  caip2ChainIdSchema,
+  epochMillisecondsSchema,
+  hexDataSchema,
+  hexQuantitySchema,
+  nonEmptyStringSchema,
+  originStringSchema,
 };

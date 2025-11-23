@@ -10,9 +10,7 @@ type HomeScreenProps = {
 export const HomeScreen = ({ snapshot, onLock }: HomeScreenProps) => {
   useIdleTimer(snapshot.session.isUnlocked);
 
-  const timeLeft = snapshot.session.nextAutoLockAt
-    ? Math.max(snapshot.session.nextAutoLockAt - Date.now(), 0)
-    : null;
+  const timeLeft = snapshot.session.nextAutoLockAt ? Math.max(snapshot.session.nextAutoLockAt - Date.now(), 0) : null;
 
   return (
     <YStack flex={1} padding="$4" gap="$4" justifyContent="space-between">
@@ -39,9 +37,7 @@ export const HomeScreen = ({ snapshot, onLock }: HomeScreenProps) => {
 
       <YStack gap="$2">
         {timeLeft !== null ? (
-          <Paragraph color="$colorMuted">
-            Auto lock in {Math.ceil(timeLeft / 1000)}s
-          </Paragraph>
+          <Paragraph color="$colorMuted">Auto lock in {Math.ceil(timeLeft / 1000)}s</Paragraph>
         ) : null}
         <Button onPress={() => void onLock()}>Lock Wallet</Button>
       </YStack>

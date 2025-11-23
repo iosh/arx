@@ -1,12 +1,12 @@
+import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { RouterProvider, createHashHistory, createRouter } from '@tanstack/react-router';
 import { TamaguiProvider } from "tamagui";
 import config from "../../tamagui.config.ts";
 import "./style.css";
 
 // Import the generated route tree
-import { routeTree } from '../../routeTree.gen';
+import { routeTree } from "../../routeTree.gen";
 
 // Create hash history for browser extension compatibility
 const hashHistory = createHashHistory();
@@ -15,11 +15,11 @@ const hashHistory = createHashHistory();
 const router = createRouter({
   routeTree,
   history: hashHistory,
-  defaultPreload: 'intent', // Preload routes on hover/focus for better UX
+  defaultPreload: "intent", // Preload routes on hover/focus for better UX
 });
 
 // Register router for type safety
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }

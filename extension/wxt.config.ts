@@ -1,6 +1,6 @@
-import { defineConfig } from "wxt";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "wxt";
 export default defineConfig({
   manifestVersion: 3,
   modules: ["@wxt-dev/module-react"],

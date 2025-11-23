@@ -1,4 +1,4 @@
-import { Button as TamaguiButton, Spinner, type ButtonProps as TamaguiButtonProps } from "tamagui";
+import { Spinner, Button as TamaguiButton, type ButtonProps as TamaguiButtonProps } from "tamagui";
 
 // Extended button props with loading state
 export interface ButtonProps extends TamaguiButtonProps {
@@ -56,23 +56,12 @@ export function Button({
       displayIconAfter = spinner;
     } else if (spinnerPosition === "replace") {
       // When replace, show only spinner without text
-      return (
-        <TamaguiButton
-          disabled={isDisabled}
-          icon={spinner}
-          {...props}
-        />
-      );
+      return <TamaguiButton disabled={isDisabled} icon={spinner} {...props} />;
     }
   }
 
   return (
-    <TamaguiButton
-      disabled={isDisabled}
-      icon={displayIcon}
-      iconAfter={displayIconAfter}
-      {...props}
-    >
+    <TamaguiButton disabled={isDisabled} icon={displayIcon} iconAfter={displayIconAfter} {...props}>
       {displayContent}
     </TamaguiButton>
   );

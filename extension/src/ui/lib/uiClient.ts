@@ -1,5 +1,5 @@
-import browser from "webextension-polyfill";
 import type { UiSnapshot } from "@arx/core/ui";
+import browser from "webextension-polyfill";
 import { UI_CHANNEL } from "@/entrypoints/background/uiBridge";
 
 type UiRequestPayload =

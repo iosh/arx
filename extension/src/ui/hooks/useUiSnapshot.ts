@@ -1,6 +1,6 @@
-import { useCallback } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UiSnapshot } from "@arx/core/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { uiClient } from "../lib/uiClient";
 import { useUiPort } from "./useUiPort";
 
@@ -27,10 +27,7 @@ export const useUiSnapshot = () => {
 
   useUiPort(handleSnapshot);
 
-  const invalidate = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
-    [queryClient],
-  );
+  const invalidate = useCallback(() => void queryClient.invalidateQueries({ queryKey: QUERY_KEY }), [queryClient]);
 
   const unlockMutation = useMutation({
     mutationFn: (password: string) => uiClient.unlock(password),

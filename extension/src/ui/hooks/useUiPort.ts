@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import type { UiSnapshot } from "@arx/core/ui";
+import { useEffect } from "react";
 import { uiClient } from "../lib/uiClient";
 
 export const useUiPort = (onEvent: (snapshot: UiSnapshot) => void) => {

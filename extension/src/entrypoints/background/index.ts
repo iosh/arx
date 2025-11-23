@@ -25,8 +25,8 @@ import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionChainRegistry, getExtensionStorage } from "@/platform/storage";
 import { createLockedGuardMiddleware } from "./lockedMiddleware";
-import { restoreUnlockState } from "./unlockRecovery";
 import { createUiBridge, UI_CHANNEL } from "./uiBridge";
+import { restoreUnlockState } from "./unlockRecovery";
 
 type SessionMessage =
   | { type: "session:getStatus" }

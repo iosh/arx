@@ -1,7 +1,7 @@
-import browser from "webextension-polyfill";
 import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, UnlockReason } from "@arx/core";
 import { ApprovalTypes } from "@arx/core";
-import { UiSnapshotSchema, type UiSnapshot } from "@arx/core/ui";
+import { type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
+import type browser from "webextension-polyfill";
 
 export const UI_CHANNEL = "arx:ui" as const;
 

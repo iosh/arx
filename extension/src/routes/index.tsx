@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Spinner, YStack } from "tamagui";
-import { InitScreen } from "@/ui/screens/InitScreen";
-import { UnlockScreen } from "@/ui/screens/UnlockScreen";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
+import { InitScreen } from "@/ui/screens/InitScreen";
+import { UnlockScreen } from "@/ui/screens/UnlockScreen";
 
 // Define the home page route (/)
 export const Route = createFileRoute("/")({

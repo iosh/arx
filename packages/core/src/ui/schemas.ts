@@ -85,8 +85,14 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const NetworkListSchema = z.object({
+  active: z.string().min(1),
+  known: z.array(ChainSnapshotSchema),
+});
+
 export const UiSnapshotSchema = z.object({
   chain: ChainSnapshotSchema,
+  networks: NetworkListSchema,
   accounts: AccountsSnapshotSchema,
   session: SessionSnapshotSchema,
   approvals: z.array(ApprovalSummarySchema),
@@ -100,3 +106,4 @@ export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;
+export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;

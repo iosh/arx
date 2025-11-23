@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Form, H2, Input, Paragraph, YStack } from "tamagui";
 import { Button } from "../components";
-import { getErrorMessage } from "../lib/errorUtils";
+import { getUnlockErrorMessage } from "../lib/errorUtils";
 
 type UnlockScreenProps = {
   onSubmit: (password: string) => Promise<unknown>;
@@ -21,7 +21,7 @@ export const UnlockScreen = ({ onSubmit }: UnlockScreenProps) => {
     try {
       await onSubmit(pwd);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getUnlockErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

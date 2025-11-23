@@ -173,6 +173,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
 
   const buildSnapshot = (): UiSnapshot => {
     const chain = controllers.network.getActiveChain();
+    const networkState = controllers.network.getState();
     const activePointer = controllers.accounts.getActivePointer();
     const resolvedChain = activePointer?.chainRef ?? chain.chainRef;
     const accountList = session.unlock.isUnlocked()
@@ -187,6 +188,17 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
         displayName: chain.displayName,
         shortName: chain.shortName ?? null,
         icon: chain.icon?.url ?? null,
+      },
+      networks: {
+        active: networkState.activeChain,
+        known: networkState.knownChains.map((metadata) => ({
+          chainRef: metadata.chainRef,
+          chainId: metadata.chainId,
+          namespace: metadata.namespace,
+          displayName: metadata.displayName,
+          shortName: metadata.shortName ?? null,
+          icon: metadata.icon?.url ?? null,
+        })),
       },
       accounts: {
         list: accountList,

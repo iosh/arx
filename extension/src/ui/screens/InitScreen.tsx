@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Form, H2, Input, Paragraph, YStack } from "tamagui";
 import { Button } from "../components";
-import { getErrorMessage } from "../lib/errorUtils";
+import { getInitErrorMessage } from "../lib/errorUtils";
 
 type InitScreenProps = {
   onSubmit: (password: string) => Promise<unknown>;
@@ -36,7 +36,7 @@ export const InitScreen = ({ onSubmit }: InitScreenProps) => {
     try {
       await onSubmit(pwd);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getInitErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

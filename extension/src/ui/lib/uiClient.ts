@@ -1,3 +1,4 @@
+import type { UnlockReason } from "@arx/core";
 import type { UiSnapshot } from "@arx/core/ui";
 import browser from "webextension-polyfill";
 import { UI_CHANNEL } from "@/entrypoints/background/uiBridge";
@@ -6,9 +7,9 @@ type UiRequestPayload =
   | { type: "ui:getSnapshot" }
   | { type: "ui:vaultInit"; payload: { password: string } }
   | { type: "ui:unlock"; payload: { password: string } }
-  | { type: "ui:lock" }
+  | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
   | { type: "ui:resetAutoLockTimer" }
-  | { type: "ui:switchAccount"; payload: { chainRef: string; address: string | null } }
+  | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }
   | { type: "ui:switchChain"; payload: { chainRef: string } };
 
 type PortEnvelope =

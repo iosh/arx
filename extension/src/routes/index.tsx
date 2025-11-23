@@ -1,27 +1,21 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Spinner, YStack } from "tamagui";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { ROUTES } from "@/ui/lib/routes";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 import { InitScreen } from "@/ui/screens/InitScreen";
 import { UnlockScreen } from "@/ui/screens/UnlockScreen";
 
-// Define the home page route (/)
 export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
 function HomePage() {
+  const router = useRouter();
   const { snapshot, isLoading, vaultInit, unlock, lock } = useUiSnapshot();
-  const logPlaceholder = (label: string) => () => console.info(`[HomePage] ${label} flow not implemented yet`);
-  const navigateAccounts = logPlaceholder("accounts");
-  const navigateNetworks = logPlaceholder("networks");
-  const navigateApprovals = logPlaceholder("approvals");
+
   if (isLoading || !snapshot) {
-    return (
-      <YStack flex={1} alignItems="center" justifyContent="center">
-        <Spinner size="large" />
-      </YStack>
-    );
+    return <LoadingScreen />;
   }
 
   if (!snapshot.vault.initialized) {
@@ -36,9 +30,9 @@ function HomePage() {
     <HomeScreen
       snapshot={snapshot}
       onLock={lock}
-      onNavigateAccounts={navigateAccounts}
-      onNavigateNetworks={navigateNetworks}
-      onNavigateApprovals={navigateApprovals}
+      onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
+      onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
+      onNavigateApprovals={() => console.info("[HomePage] approvals flow coming soon")}
     />
   );
 }

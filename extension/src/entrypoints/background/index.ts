@@ -26,6 +26,7 @@ import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionChainRegistry, getExtensionStorage } from "@/platform/storage";
 import { createLockedGuardMiddleware } from "./lockedMiddleware";
 import { restoreUnlockState } from "./unlockRecovery";
+import { createUiBridge, UI_CHANNEL } from "./uiBridge";
 
 type SessionMessage =
   | { type: "session:getStatus" }
@@ -42,7 +43,7 @@ type BackgroundContext = {
 
 let context: BackgroundContext | null = null;
 let contextPromise: Promise<BackgroundContext> | null = null;
-
+let uiBridge: ReturnType<typeof createUiBridge> | null = null;
 type PortContext = {
   origin: string;
   meta: TransportMeta | null;
@@ -166,9 +167,8 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
       await persistVaultMeta();
       return { ciphertext };
     }
-
     default:
-      throw new Error("Unknown session message");
+      throw new Error(`Unknown runtime message: ${message}`);
   }
 };
 
@@ -377,6 +377,13 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     currentExecuteMethod = executeMethod;
     currentResolveProviderErrors = resolveProviderErrors;
     currentResolveRpcErrors = resolveRpcErrors;
+
+    uiBridge = createUiBridge({
+      controllers,
+      session,
+      persistVaultMeta,
+    });
+    uiBridge.attachListeners();
 
     return context;
   })();
@@ -604,6 +611,10 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
 };
 
 const handleConnect = (port: browser.Runtime.Port) => {
+  if (port.name === UI_CHANNEL) {
+    void ensureContext().then(() => uiBridge?.attachPort(port));
+    return;
+  }
   if (port.name !== CHANNEL) return;
 
   connections.add(port);
@@ -691,6 +702,8 @@ export default defineBackground(() => {
       pendingRequests.clear();
       portContexts.clear();
 
+      uiBridge?.teardown();
+      uiBridge = null;
       context?.services.lifecycle.destroy();
       context = null;
       currentExecuteMethod = null;

@@ -12,7 +12,8 @@
     "./messenger": "./src/messenger/index.ts",
     "./errors": "./src/errors/index.ts",
     "./storage": "./src/storage/index.ts",
-    "./chains": "./src/chains/index.ts"
+    "./chains": "./src/chains/index.ts",
+    "./ui": "./src/ui/index.ts"
   },
   "dependencies": {
     "@metamask/json-rpc-engine": "10.0.3",

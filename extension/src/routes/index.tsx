@@ -12,7 +12,10 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const { snapshot, isLoading, vaultInit, unlock, lock } = useUiSnapshot();
-
+  const logPlaceholder = (label: string) => () => console.info(`[HomePage] ${label} flow not implemented yet`);
+  const navigateAccounts = logPlaceholder("accounts");
+  const navigateNetworks = logPlaceholder("networks");
+  const navigateApprovals = logPlaceholder("approvals");
   if (isLoading || !snapshot) {
     return (
       <YStack flex={1} alignItems="center" justifyContent="center">
@@ -29,5 +32,13 @@ function HomePage() {
     return <UnlockScreen onSubmit={unlock} />;
   }
 
-  return <HomeScreen snapshot={snapshot} onLock={lock} />;
+  return (
+    <HomeScreen
+      snapshot={snapshot}
+      onLock={lock}
+      onNavigateAccounts={navigateAccounts}
+      onNavigateNetworks={navigateNetworks}
+      onNavigateApprovals={navigateApprovals}
+    />
+  );
 }

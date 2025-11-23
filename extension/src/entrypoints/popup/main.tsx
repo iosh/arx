@@ -1,14 +1,34 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { RouterProvider, createHashHistory, createRouter } from '@tanstack/react-router';
 import { TamaguiProvider } from "tamagui";
 import config from "../../tamagui.config.ts";
-import App from "./App.tsx";
 import "./style.css";
+
+// Import the generated route tree
+import { routeTree } from '../../routeTree.gen';
+
+// Create hash history for browser extension compatibility
+const hashHistory = createHashHistory();
+
+// Create router instance with hash history
+const router = createRouter({
+  routeTree,
+  history: hashHistory,
+  defaultPreload: 'intent', // Preload routes on hover/focus for better UX
+});
+
+// Register router for type safety
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router;
+  }
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <TamaguiProvider config={config} defaultTheme="light">
-      <App />
+      <RouterProvider router={router} />
     </TamaguiProvider>
   </React.StrictMode>,
 );

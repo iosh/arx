@@ -46,8 +46,10 @@ export class InMemoryUnlockController implements UnlockController {
     this.#messenger = options.messenger;
     this.#vault = options.vault;
     this.#now = options.now ?? (() => Date.now());
-    this.#setTimeout = options.timers?.setTimeout ?? setTimeout;
-    this.#clearTimeout = options.timers?.clearTimeout ?? clearTimeout;
+    // Bind native timer functions to globalThis to preserve correct `this` context
+    // Without binding, calling `setTimeout` directly causes "Illegal invocation"
+    this.#setTimeout = options.timers?.setTimeout ?? globalThis.setTimeout.bind(globalThis);
+    this.#clearTimeout = options.timers?.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
 
     const initialTimeout = assertPositiveNumber(options.autoLockDuration ?? DEFAULT_AUTO_LOCK_MS, "Auto-lock duration");
     const unlocked = this.#vault.isUnlocked();

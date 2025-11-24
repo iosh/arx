@@ -46,7 +46,7 @@ export const InitScreen = ({ onSubmit }: InitScreenProps) => {
     <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
       <YStack gap="$2">
         <H2>Create Password</H2>
-        <Paragraph color="$colorMuted">
+        <Paragraph color="$color10">
           Choose a strong password. It will be required every time you unlock the wallet.
         </Paragraph>
       </YStack>
@@ -55,7 +55,7 @@ export const InitScreen = ({ onSubmit }: InitScreenProps) => {
         <Paragraph>Password</Paragraph>
         <Input secureTextEntry placeholder="Enter password" value={password} onChangeText={setPassword} autoFocus />
         {password.length > 0 ? (
-          <Paragraph color={strength.valid ? "$colorMuted" : "$red10"} fontSize="$2">
+          <Paragraph color={strength.valid ? "$color10" : "$red10"} fontSize="$2">
             {strength.message}
           </Paragraph>
         ) : null}

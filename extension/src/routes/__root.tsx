@@ -1,5 +1,6 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { createContext, useContext, useState } from "react";
 import { Theme, YStack } from "tamagui";
 
@@ -11,7 +12,6 @@ interface ThemeContextType {
 
 // Create React Context for theme
 const ThemeContext = createContext<ThemeContextType | null>(null);
-const queryClient = new QueryClient();
 
 // Custom hook to use theme context
 export function useTheme() {
@@ -22,13 +22,19 @@ export function useTheme() {
   return context;
 }
 
+// Router context type for route guards
+export interface RouterContext {
+  queryClient: QueryClient;
+}
+
 // Root layout component that wraps all routes
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
 });
 
 function RootLayout() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>

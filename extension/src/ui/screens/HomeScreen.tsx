@@ -2,6 +2,8 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { Button, Card, H2, Paragraph, XStack, YStack } from "tamagui";
 import { useIdleTimer } from "../hooks/useIdleTimer";
 
+const MS_PER_SECOND = 1000;
+
 type HomeScreenProps = {
   snapshot: UiSnapshot;
   onLock: () => Promise<unknown>;
@@ -21,7 +23,8 @@ export const HomeScreen = ({
 
   const { chain, accounts, session, approvals } = snapshot;
   const timeLeft = session.nextAutoLockAt ? Math.max(session.nextAutoLockAt - Date.now(), 0) : null;
-  const autoLockLabel = timeLeft !== null ? `${Math.ceil(timeLeft / 1000)}s until auto lock` : "Auto lock paused";
+  const autoLockLabel =
+    timeLeft !== null ? `${Math.ceil(timeLeft / MS_PER_SECOND)}s until auto lock` : "Auto lock paused";
   const hasApprovals = approvals.length > 0;
   const activeAccountLabel = accounts.active ?? "No active account";
 
@@ -30,11 +33,11 @@ export const HomeScreen = ({
       <YStack gap="$3">
         <Card padded bordered>
           <YStack gap="$1">
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               Current Chain
             </Paragraph>
             <H2>{chain.displayName}</H2>
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               {chain.chainRef}
             </Paragraph>
           </YStack>
@@ -45,13 +48,13 @@ export const HomeScreen = ({
 
         <Card padded bordered>
           <YStack gap="$1">
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               Active Account
             </Paragraph>
             <Paragraph fontSize="$5" fontWeight="600" fontFamily="$mono">
               {activeAccountLabel}
             </Paragraph>
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               {accounts.list.length > 0
                 ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""} available`
                 : "No accounts available"}
@@ -64,10 +67,10 @@ export const HomeScreen = ({
 
         <Card padded bordered borderColor={hasApprovals ? "$orange7" : "$borderColor"}>
           <YStack gap="$1">
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               Approvals
             </Paragraph>
-            <Paragraph color={hasApprovals ? "$orange10" : "$colorMuted"} fontWeight="600">
+            <Paragraph color={hasApprovals ? "$orange10" : "$color10"} fontWeight="600">
               {hasApprovals
                 ? `${approvals.length} pending approval${approvals.length > 1 ? "s" : ""}`
                 : "No pending approvals"}
@@ -82,7 +85,7 @@ export const HomeScreen = ({
       <YStack gap="$2" paddingBottom="$2">
         <Card padded bordered backgroundColor="$backgroundFocus">
           <XStack alignItems="center" justifyContent="space-between">
-            <Paragraph color="$colorMuted" fontSize="$2">
+            <Paragraph color="$color10" fontSize="$2">
               Session
             </Paragraph>
             <Paragraph color="$colorFocus">{autoLockLabel}</Paragraph>

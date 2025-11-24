@@ -31,7 +31,7 @@ export const UnlockScreen = ({ onSubmit }: UnlockScreenProps) => {
     <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
       <YStack gap="$2">
         <H2>Unlock Wallet</H2>
-        <Paragraph color="$colorMuted">Enter your password to access accounts.</Paragraph>
+        <Paragraph color="$color10">Enter your password to access accounts.</Paragraph>
       </YStack>
 
       <Input secureTextEntry placeholder="Password" value={password} onChangeText={setPassword} autoFocus />

@@ -4,13 +4,14 @@ import { useCallback } from "react";
 import { uiClient } from "../lib/uiClient";
 import { useUiPort } from "./useUiPort";
 
-const QUERY_KEY = ["uiSnapshot"] as const;
+// Export query key for route guards to reuse
+export const UI_SNAPSHOT_QUERY_KEY = ["uiSnapshot"] as const;
 
 export const useUiSnapshot = () => {
   const queryClient = useQueryClient();
 
   const snapshotQuery = useQuery<UiSnapshot>({
-    queryKey: QUERY_KEY,
+    queryKey: UI_SNAPSHOT_QUERY_KEY,
     queryFn: () => uiClient.getSnapshot(),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
@@ -20,14 +21,17 @@ export const useUiSnapshot = () => {
   // Stable callback reference to avoid effect re-execution
   const handleSnapshot = useCallback(
     (snapshot: UiSnapshot) => {
-      queryClient.setQueryData(QUERY_KEY, snapshot);
+      queryClient.setQueryData(UI_SNAPSHOT_QUERY_KEY, snapshot);
     },
     [queryClient],
   );
 
   useUiPort(handleSnapshot);
 
-  const invalidate = useCallback(() => void queryClient.invalidateQueries({ queryKey: QUERY_KEY }), [queryClient]);
+  const invalidate = useCallback(
+    () => void queryClient.invalidateQueries({ queryKey: UI_SNAPSHOT_QUERY_KEY }),
+    [queryClient],
+  );
 
   const unlockMutation = useMutation({
     mutationFn: (password: string) => uiClient.unlock(password),

@@ -3,6 +3,13 @@ export type WalletError = Error & {
   data?: unknown;
 };
 
+/**
+ * Type guard to check if error is a WalletError
+ */
+export const isWalletError = (error: unknown): error is WalletError => {
+  return error instanceof Error && typeof (error as WalletError).code === "number";
+};
+
 export const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     const walletError = error as WalletError;
@@ -25,7 +32,7 @@ export const getErrorMessage = (error: unknown): string => {
 };
 
 export const isUserRejection = (error: unknown): boolean => {
-  return Boolean((error as WalletError)?.code === 4001);
+  return isWalletError(error) && error.code === 4001;
 };
 
 const normalizeMessage = (value: unknown) => {

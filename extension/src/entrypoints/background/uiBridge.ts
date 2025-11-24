@@ -48,121 +48,170 @@ const normalizeError = (error: unknown): { message: string; code?: number; data?
   return { message: String(error ?? "Unknown error") };
 };
 
-const toUiWarning = (value: unknown): UiWarning => {
+// Generic diagnostic converter for warnings and issues
+type DiagnosticEntry<T extends string> = {
+  code: string;
+  message: string;
+  level?: T;
+  details?: Record<string, unknown>;
+};
+
+const toDiagnostic = <T extends string>(
+  value: unknown,
+  levelKey: "level" | "severity",
+  validLevels: readonly T[],
+  defaultCode: string,
+  defaultMessage: string,
+): DiagnosticEntry<T> => {
   if (value && typeof value === "object") {
     const entry = value as {
       code?: string;
       message?: string;
       level?: string;
-      details?: Record<string, unknown>;
-      data?: unknown;
-    };
-    return {
-      code: entry.code ?? "UNKNOWN_WARNING",
-      message: entry.message ?? "Unknown warning",
-      level: entry.level === "info" || entry.level === "warning" || entry.level === "error" ? entry.level : undefined,
-      details:
-        entry.details ??
-        (entry.data && typeof entry.data === "object" ? (entry.data as Record<string, unknown>) : undefined),
-    };
-  }
-  return { code: "UNKNOWN_WARNING", message: String(value ?? "Unknown warning") };
-};
-
-const toUiIssue = (value: unknown): UiIssue => {
-  if (value && typeof value === "object") {
-    const entry = value as {
-      code?: string;
-      message?: string;
       severity?: string;
       details?: Record<string, unknown>;
       data?: unknown;
     };
+
+    const levelValue = levelKey === "level" ? entry.level : entry.severity;
+    const validLevel = validLevels.includes(levelValue as T) ? (levelValue as T) : undefined;
+
     return {
-      code: entry.code ?? "UNKNOWN_ISSUE",
-      message: entry.message ?? "Unknown issue",
-      severity:
-        entry.severity === "low" || entry.severity === "medium" || entry.severity === "high"
-          ? entry.severity
-          : undefined,
+      code: entry.code ?? defaultCode,
+      message: entry.message ?? defaultMessage,
+      [levelKey]: validLevel,
       details:
         entry.details ??
         (entry.data && typeof entry.data === "object" ? (entry.data as Record<string, unknown>) : undefined),
-    };
+    } as DiagnosticEntry<T>;
   }
-  return { code: "UNKNOWN_ISSUE", message: String(value ?? "Unknown issue") };
+
+  return {
+    code: defaultCode,
+    message: String(value ?? defaultMessage),
+  } as DiagnosticEntry<T>;
+};
+
+const toUiWarning = (value: unknown): UiWarning => {
+  return toDiagnostic(
+    value,
+    "level",
+    ["info", "warning", "error"] as const,
+    "UNKNOWN_WARNING",
+    "Unknown warning",
+  ) as UiWarning;
+};
+
+const toUiIssue = (value: unknown): UiIssue => {
+  return toDiagnostic(
+    value,
+    "severity",
+    ["low", "medium", "high"] as const,
+    "UNKNOWN_ISSUE",
+    "Unknown issue",
+  ) as UiIssue;
+};
+
+// Payload type definitions for approval tasks
+type RequestAccountsPayload = { suggestedAccounts?: string[] };
+type SignMessagePayload = { from?: string; message?: string };
+type SignTypedDataPayload = { from?: string; typedData?: string | unknown };
+type SendTransactionPayload = {
+  from?: string;
+  request?: { payload?: Record<string, unknown> };
+  warnings?: unknown[];
+  issues?: unknown[];
+  draft?: { summary?: Record<string, unknown> };
 };
 
 export const createUiBridge = ({ controllers, session, persistVaultMeta, now = Date.now }: BridgeDeps) => {
   const ports = new Set<browser.Runtime.Port>();
+  const portCleanups = new Map<browser.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
   const pendingTasks = new Map<string, ApprovalTask<unknown>>();
 
+  const sendToPortSafely = (port: browser.Runtime.Port, envelope: PortEnvelope): boolean => {
+    try {
+      port.postMessage(envelope);
+      return true;
+    } catch (error) {
+      console.warn("[uiBridge] drop stale UI port", error);
+      ports.delete(port);
+      const cleanup = portCleanups.get(port);
+      cleanup?.();
+      return false;
+    }
+  };
+
+  // Helper to extract typed payload
+  const extractPayload = <T>(payload: unknown): T => payload as T;
+
   const toApprovalSummary = (task: ApprovalTask<unknown>): UiSnapshot["approvals"][number] => {
+    const activeChain = controllers.network.getActiveChain();
     const base = {
       id: task.id,
       origin: task.origin,
-      namespace: task.namespace ?? controllers.network.getActiveChain().namespace,
-      chainRef: task.chainRef ?? controllers.network.getActiveChain().chainRef,
+      namespace: task.namespace ?? activeChain.namespace,
+      chainRef: task.chainRef ?? activeChain.chainRef,
       createdAt: now(),
     };
 
     switch (task.type) {
-      case ApprovalTypes.RequestAccounts:
+      case ApprovalTypes.RequestAccounts: {
+        const payload = extractPayload<RequestAccountsPayload>(task.payload);
         return {
           ...base,
           type: "requestAccounts",
           payload: {
-            suggestedAccounts: Array.isArray((task.payload as { suggestedAccounts?: string[] })?.suggestedAccounts)
-              ? ((task.payload as { suggestedAccounts?: string[] }).suggestedAccounts ?? [])
-              : [],
+            suggestedAccounts: Array.isArray(payload.suggestedAccounts) ? payload.suggestedAccounts : [],
           },
         };
-      case ApprovalTypes.SignMessage:
+      }
+      case ApprovalTypes.SignMessage: {
+        const payload = extractPayload<SignMessagePayload>(task.payload);
         return {
           ...base,
           type: "signMessage",
           payload: {
-            from: String((task.payload as { from?: string })?.from ?? ""),
-            message: String((task.payload as { message?: string })?.message ?? ""),
+            from: String(payload.from ?? ""),
+            message: String(payload.message ?? ""),
           },
         };
-      case ApprovalTypes.SignTypedData:
+      }
+      case ApprovalTypes.SignTypedData: {
+        const payload = extractPayload<SignTypedDataPayload>(task.payload);
         return {
           ...base,
           type: "signTypedData",
           payload: {
-            from: String((task.payload as { from?: string })?.from ?? ""),
+            from: String(payload.from ?? ""),
             typedData:
-              typeof (task.payload as { typedData?: string })?.typedData === "string"
-                ? (task.payload as { typedData?: string }).typedData!
-                : JSON.stringify((task.payload as { typedData?: unknown })?.typedData ?? {}),
+              typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData ?? {}),
           },
         };
+      }
       case ApprovalTypes.SendTransaction: {
-        const txPayload = (task.payload as { request?: { payload?: Record<string, unknown> } })?.request?.payload ?? {};
-        const rawWarnings = (task.payload as { warnings?: unknown[] })?.warnings ?? [];
-        const rawIssues = (task.payload as { issues?: unknown[] })?.issues ?? [];
+        const payload = extractPayload<SendTransactionPayload>(task.payload);
+        const txPayload = payload.request?.payload ?? {};
+
         return {
           ...base,
           type: "sendTransaction",
           payload: {
-            from: String((task.payload as { from?: string })?.from ?? ""),
+            from: String(payload.from ?? ""),
             to: typeof txPayload.to === "string" || txPayload.to === null ? (txPayload.to as string | null) : null,
-            value: typeof txPayload.value === "string" ? (txPayload.value as string) : undefined,
-            data: typeof txPayload.data === "string" ? (txPayload.data as string) : undefined,
-            gas: typeof txPayload.gas === "string" ? (txPayload.gas as string) : undefined,
+            value: typeof txPayload.value === "string" ? txPayload.value : undefined,
+            data: typeof txPayload.data === "string" ? txPayload.data : undefined,
+            gas: typeof txPayload.gas === "string" ? txPayload.gas : undefined,
             fee: {
-              gasPrice: typeof txPayload.gasPrice === "string" ? (txPayload.gasPrice as string) : undefined,
-              maxFeePerGas: typeof txPayload.maxFeePerGas === "string" ? (txPayload.maxFeePerGas as string) : undefined,
+              gasPrice: typeof txPayload.gasPrice === "string" ? txPayload.gasPrice : undefined,
+              maxFeePerGas: typeof txPayload.maxFeePerGas === "string" ? txPayload.maxFeePerGas : undefined,
               maxPriorityFeePerGas:
-                typeof txPayload.maxPriorityFeePerGas === "string"
-                  ? (txPayload.maxPriorityFeePerGas as string)
-                  : undefined,
+                typeof txPayload.maxPriorityFeePerGas === "string" ? txPayload.maxPriorityFeePerGas : undefined,
             },
-            summary: (task.payload as { draft?: { summary?: Record<string, unknown> } })?.draft?.summary,
-            warnings: rawWarnings.map(toUiWarning),
-            issues: rawIssues.map(toUiIssue),
+            summary: payload.draft?.summary,
+            warnings: (payload.warnings ?? []).map(toUiWarning),
+            issues: (payload.issues ?? []).map(toUiIssue),
           },
         };
       }
@@ -227,9 +276,10 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
       console.warn("[uiBridge] failed to build snapshot", error);
       return;
     }
-    for (const port of ports) {
+
+    for (const port of Array.from(ports)) {
       const envelope: PortEnvelope = { type: "ui:event", event: "ui:stateChanged", payload: snapshot };
-      port.postMessage(envelope);
+      sendToPortSafely(port, envelope);
     }
   };
 
@@ -289,27 +339,31 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
       }
       try {
         const result = await handleMessage(envelope.payload);
-        const response: PortEnvelope = { type: "ui:response", requestId: envelope.requestId, result };
-        port.postMessage(response);
+        sendToPortSafely(port, { type: "ui:response", requestId: envelope.requestId, result });
       } catch (error) {
-        const failure: PortEnvelope = {
+        sendToPortSafely(port, {
           type: "ui:error",
           requestId: envelope.requestId,
           error: normalizeError(error),
-        };
-        port.postMessage(failure);
+        });
       }
     };
 
-    const onDisconnect = () => {
+    const cleanup = () => {
       ports.delete(port);
       port.onMessage.removeListener(onMessage);
       port.onDisconnect.removeListener(onDisconnect);
+      portCleanups.delete(port);
+    };
+
+    const onDisconnect = () => {
+      cleanup();
     };
 
     port.onMessage.addListener(onMessage);
     port.onDisconnect.addListener(onDisconnect);
-    port.postMessage({ type: "ui:event", event: "ui:stateChanged", payload: buildSnapshot() } satisfies PortEnvelope);
+    portCleanups.set(port, cleanup);
+    sendToPortSafely(port, { type: "ui:event", event: "ui:stateChanged", payload: buildSnapshot() });
   };
 
   const attachListeners = () => {
@@ -337,7 +391,11 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
         console.warn("[uiBridge] failed to remove listener", error);
       }
     });
+    for (const cleanup of portCleanups.values()) {
+      cleanup();
+    }
     ports.clear();
+    portCleanups.clear();
     pendingTasks.clear();
   };
 

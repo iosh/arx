@@ -48,23 +48,36 @@ export type ApprovalMessengerTopics = {
 
 export type ApprovalMessenger = ControllerMessenger<ApprovalMessengerTopics>;
 
-export type ApprovalStrategy<TInput, TResult> = (task: ApprovalTask<TInput>) => Promise<TResult>;
-
 export type ApprovalControllerOptions = {
   messenger: ApprovalMessenger;
-  defaultStrategy?: ApprovalStrategy<unknown, unknown>;
   autoRejectMessage?: string;
   initialState?: ApprovalState;
 };
 
+export type ApprovalExecutor<TResult> = () => Promise<TResult>;
+
+/**
+ * Internal structure for tracking pending approvals with their resolvers.
+ */
+export type PendingApproval<TInput = unknown> = {
+  task: ApprovalTask<TInput>;
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+};
+
 export type ApprovalController = {
   getState(): ApprovalState;
-  requestApproval<TInput, TResult>(
-    task: ApprovalTask<TInput>,
-    strategy?: ApprovalStrategy<TInput, TResult>,
-  ): Promise<TResult>;
+  requestApproval<TInput>(task: ApprovalTask<TInput>): Promise<unknown>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onRequest(handler: (task: ApprovalTask<unknown>) => void): () => void;
   onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void;
   replaceState(state: ApprovalState): void;
+
+  has(id: string): boolean;
+
+  get(id: string): ApprovalTask<unknown> | undefined;
+
+  resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult>;
+
+  reject(id: string, reason?: Error): void;
 };

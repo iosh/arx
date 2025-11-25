@@ -1,11 +1,12 @@
 import type {
   ApprovalController,
   ApprovalControllerOptions,
+  ApprovalExecutor,
   ApprovalMessenger,
   ApprovalResult,
   ApprovalState,
-  ApprovalStrategy,
   ApprovalTask,
+  PendingApproval,
 } from "./types.js";
 
 const APPROVAL_STATE_TOPIC = "approval:stateChanged";
@@ -65,22 +66,14 @@ const cloneResult = <T>(result: ApprovalResult<T>): ApprovalResult<T> => ({
 export class InMemoryApprovalController implements ApprovalController {
   #messenger: ApprovalMessenger;
   #state: ApprovalState;
-  #defaultStrategy: ApprovalStrategy<unknown, unknown>;
   #autoRejectMessage: string;
+  #pending: Map<string, PendingApproval<unknown>>;
 
-  constructor({ messenger, defaultStrategy, autoRejectMessage, initialState }: ApprovalControllerOptions) {
+  constructor({ messenger, autoRejectMessage, initialState }: ApprovalControllerOptions) {
     this.#messenger = messenger;
     this.#state = cloneState(initialState ?? { pending: [] });
-
+    this.#pending = new Map();
     this.#autoRejectMessage = autoRejectMessage ?? "Approval rejected by stub";
-    this.#defaultStrategy =
-      defaultStrategy ??
-      (async () => {
-        const error = Object.assign(new Error(this.#autoRejectMessage), {
-          name: "ApprovalRejectedError",
-        });
-        throw error;
-      });
 
     this.#publishState();
   }
@@ -89,31 +82,20 @@ export class InMemoryApprovalController implements ApprovalController {
     return cloneState(this.#state);
   }
 
-  async requestApproval<TInput, TResult>(
-    task: ApprovalTask<TInput>,
-    strategy?: ApprovalStrategy<TInput, TResult>,
-  ): Promise<TResult> {
+  async requestApproval<TInput>(task: ApprovalTask<TInput>): Promise<unknown> {
     const activeTask = cloneTask(task);
     this.#enqueue(activeTask);
     this.#publishRequest(activeTask);
 
-    const handler = strategy ?? (this.#defaultStrategy as ApprovalStrategy<TInput, TResult>);
-
-    try {
-      const value = await handler(activeTask);
-      this.#finalize(activeTask.id);
-      this.#publishFinish({
-        id: activeTask.id,
-        namespace: activeTask.namespace,
-        chainRef: activeTask.chainRef,
-        value,
+    return new Promise((resolve, reject) => {
+      this.#pending.set(activeTask.id, {
+        task: activeTask,
+        resolve,
+        reject,
       });
-      return value;
-    } catch (error) {
-      this.#finalize(activeTask.id);
-      throw error;
-    }
+    });
   }
+
   onStateChanged(handler: (state: ApprovalState) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_STATE_TOPIC, handler);
   }
@@ -129,6 +111,50 @@ export class InMemoryApprovalController implements ApprovalController {
   replaceState(state: ApprovalState): void {
     this.#state = cloneState(state);
     this.#publishState();
+  }
+
+  has(id: string): boolean {
+    return this.#pending.has(id);
+  }
+
+  get(id: string): ApprovalTask<unknown> | undefined {
+    return this.#pending.get(id)?.task;
+  }
+
+  async resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult> {
+    const entry = this.#pending.get(id);
+    if (!entry) {
+      throw new Error(`Approval ${id} not found`);
+    }
+
+    try {
+      const value = await executor();
+      this.#pending.delete(id);
+      this.#finalize(id);
+      this.#publishFinish({
+        id,
+        namespace: entry.task.namespace,
+        chainRef: entry.task.chainRef,
+        value,
+      });
+      entry.resolve(value);
+      return value;
+    } catch (error) {
+      this.#pending.delete(id);
+      this.#finalize(id);
+      entry.reject(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  reject(id: string, reason?: Error): void {
+    const entry = this.#pending.get(id);
+    if (!entry) return;
+
+    const error = reason ?? new Error(this.#autoRejectMessage);
+    this.#pending.delete(id);
+    this.#finalize(id);
+    entry.reject(error);
   }
 
   #enqueue(task: ApprovalTask<unknown>) {

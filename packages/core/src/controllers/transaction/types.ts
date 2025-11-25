@@ -128,8 +128,6 @@ export type TransactionControllerOptions = {
   registry: TransactionAdapterRegistry;
   idGenerator?: () => string;
   now?: () => number;
-  autoApprove?: boolean;
-  autoRejectMessage?: string;
   initialState?: TransactionState;
   tracker?: ReceiptTracker;
 };

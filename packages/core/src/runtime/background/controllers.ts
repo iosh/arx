@@ -151,10 +151,6 @@ export const initControllers = ({
 
   const approvalController = new InMemoryApprovalController({
     messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
-    ...(approvalOptions?.autoRejectMessage !== undefined
-      ? { autoRejectMessage: approvalOptions.autoRejectMessage }
-      : {}),
-    ...(approvalOptions?.initialState !== undefined ? { initialState: approvalOptions.initialState } : {}),
   });
 
   const permissionController = new InMemoryPermissionController({
@@ -178,10 +174,7 @@ export const initControllers = ({
       requestApproval: (...args) => approvalController.requestApproval(...args),
     },
     registry: transactionRegistry,
-    ...(transactionOptions?.autoApprove !== undefined ? { autoApprove: transactionOptions.autoApprove } : {}),
-    ...(transactionOptions?.autoRejectMessage !== undefined
-      ? { autoRejectMessage: transactionOptions.autoRejectMessage }
-      : {}),
+
     ...(transactionOptions?.initialState !== undefined ? { initialState: transactionOptions.initialState } : {}),
   });
 

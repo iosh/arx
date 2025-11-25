@@ -101,24 +101,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
   };
 
   try {
-    const approved = await controllers.approvals.requestApproval(task, async () => {
-      const result = await controllers.accounts.requestAccounts({
-        origin,
-        chainRef: activeChain.chainRef,
-      });
-      if (result.length > 0) {
-        await controllers.permissions.grant(origin, PermissionScopes.Basic, {
-          namespace: "eip155",
-          chainRef: activeChain.chainRef,
-        });
-        await controllers.permissions.grant(origin, PermissionScopes.Accounts, {
-          namespace: "eip155",
-          chainRef: activeChain.chainRef,
-        });
-      }
-      return result;
-    });
-    return approved;
+    return await controllers.approvals.requestApproval(task);
   } catch (error) {
     if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
@@ -301,14 +284,9 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   };
 
   try {
-    await controllers.approvals.requestApproval(task, async () => {
-      await controllers.chainRegistry.upsertChain(metadata);
-      return metadata.chainRef;
-    });
+    await controllers.approvals.requestApproval(task);
   } catch (error) {
-    if (isRpcError(error)) {
-      throw error;
-    }
+    if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
       message: "User rejected chain addition",
       data: { origin },
@@ -320,7 +298,6 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
 
 const handlePersonalSign: MethodHandler = async ({ origin, request, controllers }) => {
   const paramsArray = toParamsArray(request.params);
-
   const rpcErrors = resolveRpcErrors(controllers);
   const providerErrors = resolveProviderErrors(controllers);
 
@@ -363,21 +340,9 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task, async () => {
-      return controllers.signers.eip155.signPersonalMessage({ address, message });
-    });
-
-    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
-      namespace: "eip155",
-      chainRef: activeChain.chainRef,
-    });
-
-    return signature;
+    return await controllers.approvals.requestApproval(task);
   } catch (error) {
-    if (isRpcError(error)) {
-      throw error;
-    }
-
+    if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
       message: "User rejected message signing",
       data: { origin },
@@ -414,21 +379,9 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task, async () => {
-      return controllers.signers.eip155.signTypedData({ address, typedData });
-    });
-
-    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
-      namespace: "eip155",
-      chainRef: activeChain.chainRef,
-    });
-
-    return signature;
+    return await controllers.approvals.requestApproval(task);
   } catch (error) {
-    if (isRpcError(error)) {
-      throw error;
-    }
-
+    if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
       message: "User rejected typed data signing",
       data: { origin },

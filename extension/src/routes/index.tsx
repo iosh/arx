@@ -32,7 +32,7 @@ function HomePage() {
       onLock={lock}
       onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
       onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
-      onNavigateApprovals={() => console.info("[HomePage] approvals flow coming soon")}
+      onNavigateApprovals={() => router.navigate({ to: ROUTES.APPROVALS })}
     />
   );
 }

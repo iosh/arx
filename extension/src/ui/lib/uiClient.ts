@@ -10,7 +10,9 @@ type UiRequestPayload =
   | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
   | { type: "ui:resetAutoLockTimer" }
   | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }
-  | { type: "ui:switchChain"; payload: { chainRef: string } };
+  | { type: "ui:switchChain"; payload: { chainRef: string } }
+  | { type: "ui:approve"; payload: { id: string } }
+  | { type: "ui:reject"; payload: { id: string; reason?: string } };
 
 type PortEnvelope =
   | { type: "ui:request"; requestId: string; payload: UiRequestPayload }
@@ -167,6 +169,14 @@ class UiClient {
       type: "ui:switchChain",
       payload: { chainRef },
     });
+  };
+
+  approveApproval = (id: string) => {
+    return this.request<{ id: string }>({ type: "ui:approve", payload: { id } });
+  };
+
+  rejectApproval = (id: string, reason?: string) => {
+    return this.request<{ id: string }>({ type: "ui:reject", payload: { id, reason } });
   };
 }
 

@@ -63,6 +63,16 @@ export const useUiSnapshot = () => {
     onSuccess: invalidate,
   });
 
+  const approveApprovalMutation = useMutation({
+    mutationFn: (id: string) => uiClient.approveApproval(id),
+    onSuccess: invalidate,
+  });
+
+  const rejectApprovalMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => uiClient.rejectApproval(id, reason),
+    onSuccess: invalidate,
+  });
+
   return {
     snapshot: snapshotQuery.data,
     isLoading: snapshotQuery.isLoading,
@@ -73,5 +83,7 @@ export const useUiSnapshot = () => {
     resetAutoLockTimer: resetAutoLockMutation.mutate,
     switchAccount: switchAccountMutation.mutateAsync,
     switchChain: switchChainMutation.mutateAsync,
+    approveApproval: approveApprovalMutation.mutateAsync,
+    rejectApproval: rejectApprovalMutation.mutateAsync,
   };
 };

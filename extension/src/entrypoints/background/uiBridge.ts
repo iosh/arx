@@ -1,5 +1,5 @@
 import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, UnlockReason } from "@arx/core";
-import { ApprovalTypes } from "@arx/core";
+import { ApprovalTypes, PermissionScopes } from "@arx/core";
 import { type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import type browser from "webextension-polyfill";
 
@@ -12,7 +12,9 @@ export type UiMessage =
   | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
   | { type: "ui:resetAutoLockTimer" }
   | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }
-  | { type: "ui:switchChain"; payload: { chainRef: string } };
+  | { type: "ui:switchChain"; payload: { chainRef: string } }
+  | { type: "ui:approve"; payload: { id: string } }
+  | { type: "ui:reject"; payload: { id: string; reason?: string } };
 
 type UiWarning = {
   code: string;
@@ -128,7 +130,6 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
   const ports = new Set<browser.Runtime.Port>();
   const portCleanups = new Map<browser.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
-  const pendingTasks = new Map<string, ApprovalTask<unknown>>();
 
   const sendToPortSafely = (port: browser.Runtime.Port, envelope: PortEnvelope): boolean => {
     try {
@@ -229,6 +230,14 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
       ? controllers.accounts.getAccounts({ chainRef: resolvedChain })
       : [];
 
+    const approvalState = controllers.approvals.getState();
+    const approvalSummaries = approvalState.pending
+      .map((item) => {
+        const task = controllers.approvals.get(item.id);
+        return task ? toApprovalSummary(task) : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
     const snapshot: UiSnapshot = {
       chain: {
         chainRef: chain.chainRef,
@@ -258,7 +267,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
         autoLockDurationMs: session.unlock.getState().timeoutMs,
         nextAutoLockAt: session.unlock.getState().nextAutoLockAt,
       },
-      approvals: Array.from(pendingTasks.values()).map(toApprovalSummary),
+      approvals: approvalSummaries,
       permissions: controllers.permissions.getState(),
       vault: {
         initialized: session.vault.getStatus().hasCiphertext,
@@ -324,6 +333,99 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
         broadcast();
         return buildSnapshot().chain;
       }
+      case "ui:approve": {
+        const task = controllers.approvals.get(message.payload.id);
+        if (!task) throw new Error("Approval not found");
+
+        switch (task.type) {
+          case ApprovalTypes.SendTransaction: {
+            const result = await controllers.approvals.resolve(task.id, async () => {
+              const approved = await controllers.transactions.approveTransaction(task.id);
+              if (!approved) throw new Error("Transaction not found");
+              await controllers.transactions.processTransaction(task.id);
+              return approved;
+            });
+            broadcast();
+            return { id: task.id, result };
+          }
+          case ApprovalTypes.RequestAccounts: {
+            const result = await controllers.approvals.resolve(task.id, async () => {
+              const accounts = await controllers.accounts.requestAccounts({
+                origin: task.origin,
+                chainRef: task.chainRef ?? controllers.network.getActiveChain().chainRef,
+              });
+              if (accounts.length > 0) {
+                await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
+                  namespace: task.namespace ?? "eip155",
+                  chainRef: task.chainRef,
+                });
+                await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
+                  namespace: task.namespace ?? "eip155",
+                  chainRef: task.chainRef,
+                });
+              }
+              return accounts;
+            });
+            broadcast();
+            return { id: task.id, result };
+          }
+          case ApprovalTypes.SignMessage: {
+            const payload = task.payload as { from: string; message: string };
+            const result = await controllers.approvals.resolve(task.id, async () => {
+              const signature = await controllers.signers.eip155.signPersonalMessage({
+                address: payload.from,
+                message: payload.message,
+              });
+              await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+                namespace: task.namespace ?? "eip155",
+                chainRef: task.chainRef,
+              });
+              return signature;
+            });
+            broadcast();
+            return { id: task.id, result };
+          }
+          case ApprovalTypes.SignTypedData: {
+            const payload = task.payload as { from: string; typedData: unknown };
+            const result = await controllers.approvals.resolve(task.id, async () => {
+              const typedDataStr =
+                typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
+              const signature = await controllers.signers.eip155.signTypedData({
+                address: payload.from,
+                typedData: typedDataStr,
+              });
+              await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+                namespace: task.namespace ?? "eip155",
+                chainRef: task.chainRef,
+              });
+              return signature;
+            });
+            broadcast();
+            return { id: task.id, result };
+          }
+          case ApprovalTypes.AddChain: {
+            const payload = task.payload as { metadata: unknown };
+            const result = await controllers.approvals.resolve(task.id, async () => {
+              await controllers.chainRegistry.upsertChain(
+                payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0],
+              );
+              return null;
+            });
+            broadcast();
+            return { id: task.id, result };
+          }
+          default:
+            throw new Error(`Unsupported approval type: ${task.type}`);
+        }
+      }
+      case "ui:reject": {
+        const task = controllers.approvals.get(message.payload.id);
+        if (!task) throw new Error("Approval not found");
+
+        controllers.approvals.reject(task.id, new Error(message.payload.reason ?? "User rejected"));
+        broadcast();
+        return { id: task.id };
+      }
       default:
         return undefined;
     }
@@ -370,14 +472,6 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
     listeners.push(
       controllers.accounts.onStateChanged(() => broadcast()),
       controllers.network.onStateChanged(() => broadcast()),
-      controllers.approvals.onRequest((task: ApprovalTask<unknown>) => {
-        pendingTasks.set(task.id, task);
-        broadcast();
-      }),
-      controllers.approvals.onFinish((result: { id: string }) => {
-        pendingTasks.delete(result.id);
-        broadcast();
-      }),
       controllers.approvals.onStateChanged(() => broadcast()),
       session.unlock.onStateChanged(() => broadcast()),
     );
@@ -396,7 +490,6 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
     }
     ports.clear();
     portCleanups.clear();
-    pendingTasks.clear();
   };
 
   return {

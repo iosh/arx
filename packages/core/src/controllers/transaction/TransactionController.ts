@@ -7,7 +7,7 @@ import type {
 } from "../../transactions/adapters/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
-import { type ApprovalController, type ApprovalStrategy, ApprovalTypes } from "../approval/types.js";
+import { type ApprovalController, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import type {
   TransactionApprovalChainMetadata,
@@ -86,8 +86,6 @@ export class InMemoryTransactionController implements TransactionController {
   #approvals: Pick<ApprovalController, "requestApproval">;
   #generateId: () => string;
   #now: () => number;
-  #autoApprove: boolean;
-  #autoRejectMessage: string;
   #state: TransactionState;
 
   #registry: TransactionAdapterRegistry;
@@ -104,8 +102,6 @@ export class InMemoryTransactionController implements TransactionController {
     registry,
     idGenerator,
     now,
-    autoApprove = false,
-    autoRejectMessage = DEFAULT_REJECTION_MESSAGE,
     initialState,
     tracker,
   }: TransactionControllerOptions) {
@@ -116,8 +112,6 @@ export class InMemoryTransactionController implements TransactionController {
     this.#registry = registry;
     this.#generateId = idGenerator ?? defaultIdGenerator;
     this.#now = now ?? Date.now;
-    this.#autoApprove = autoApprove;
-    this.#autoRejectMessage = autoRejectMessage;
     this.#state = cloneState(initialState ?? { pending: [], history: [] });
     this.#queue = [];
     this.#processing = new Set();
@@ -225,23 +219,7 @@ export class InMemoryTransactionController implements TransactionController {
     const activeDraft = this.#drafts.get(meta.id) ?? null;
     const task = this.#createApprovalTask(latestMeta, activeDraft, draftPreview);
 
-    const strategy: ApprovalStrategy<TransactionApprovalTaskPayload, TransactionMeta> = async () => {
-      if (this.#autoApprove) {
-        const approved = await this.approveTransaction(id);
-        if (!approved) {
-          throw new Error(`Transaction ${id} could not be approved`);
-        }
-        return approved;
-      }
-
-      await this.rejectTransaction(id, new Error(this.#autoRejectMessage));
-      const rejection = Object.assign(new Error(this.#autoRejectMessage), {
-        name: "TransactionRejectedError",
-      });
-      throw rejection;
-    };
-
-    return this.#approvals.requestApproval(task, strategy);
+    return this.#approvals.requestApproval(task) as Promise<TransactionMeta>;
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {

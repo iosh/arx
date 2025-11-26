@@ -343,7 +343,15 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   };
 
   try {
-    return await controllers.approvals.requestApproval(task);
+    const signature = await controllers.approvals.requestApproval(task);
+
+    // Grant Sign permission after successful signature
+    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+    });
+
+    return signature;
   } catch (error) {
     if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({
@@ -383,7 +391,15 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    return await controllers.approvals.requestApproval(task);
+    const signature = await controllers.approvals.requestApproval(task);
+
+    // Grant Sign permission after successful signature
+    await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+    });
+
+    return signature;
   } catch (error) {
     if (isRpcError(error)) throw error;
     throw providerErrors.userRejectedRequest({

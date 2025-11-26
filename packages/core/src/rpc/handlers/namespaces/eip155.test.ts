@@ -1,6 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { PermissionScopes } from "../../../controllers/index.js";
+import type { ChainMetadata } from "../../../chains/metadata.js";
+import { ApprovalTypes, PermissionScopes } from "../../../controllers/index.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
 import { TransactionAdapterRegistry } from "../../../transactions/adapters/registry.js";
 import { createMethodExecutor } from "../../index.js";
@@ -352,6 +353,16 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createMethodExecutor(services.controllers);
 
+    const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
+    services.controllers.approvals.requestApproval = (async (task) => {
+      // Add the chain when approval is requested
+      if (task.type === ApprovalTypes.AddChain) {
+        const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
+        await services.controllers.chainRegistry.upsertChain(payload.metadata);
+      }
+      return null;
+    }) as typeof services.controllers.approvals.requestApproval;
+
     try {
       await expect(
         execute({
@@ -372,6 +383,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(networkChain?.displayName).toBe("Base Mainnet");
       expect(networkChain?.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
     } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
       services.lifecycle.destroy();
     }
   });
@@ -498,6 +510,16 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createMethodExecutor(services.controllers);
 
+    const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
+    services.controllers.approvals.requestApproval = (async (task) => {
+      // Add/update the chain when approval is requested
+      if (task.type === ApprovalTypes.AddChain) {
+        const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
+        await services.controllers.chainRegistry.upsertChain(payload.metadata);
+      }
+      return null;
+    }) as typeof services.controllers.approvals.requestApproval;
+
     try {
       await expect(
         execute({
@@ -532,6 +554,7 @@ describe("eip155 handlers - core error paths", () => {
       const networkChain = services.controllers.network.getChain(ADDED_CHAIN_REF);
       expect(networkChain?.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
+      services.controllers.approvals.requestApproval = originalRequestApproval;
       services.lifecycle.destroy();
     }
   });
@@ -575,13 +598,11 @@ describe("eip155 handlers - approval metadata", () => {
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+    services.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
-      return originalRequestApproval.call(
-        services.controllers.approvals,
-        task as Parameters<typeof originalRequestApproval>[0],
-        strategy as Parameters<typeof originalRequestApproval>[1],
-      );
+      // Return empty array directly instead of calling original method
+      // This test only needs to verify the approval task metadata, not actually approve
+      return [];
     }) as typeof services.controllers.approvals.requestApproval;
 
     try {
@@ -610,13 +631,13 @@ describe("eip155 handlers - approval metadata", () => {
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+    services.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
-      return originalRequestApproval.call(
-        services.controllers.approvals,
-        task as Parameters<typeof originalRequestApproval>[0],
-        strategy as Parameters<typeof originalRequestApproval>[1],
-      );
+      // Reject with 4100 (unauthorized) since keyring is not unlocked
+      // This test only needs to verify the approval task metadata
+      throw Object.assign(new Error("The requested method and/or account has not been authorized by the user."), {
+        code: 4100,
+      });
     }) as typeof services.controllers.approvals.requestApproval;
     try {
       await expect(
@@ -647,13 +668,13 @@ describe("eip155 handlers - approval metadata", () => {
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+    services.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
-      return originalRequestApproval.call(
-        services.controllers.approvals,
-        task as Parameters<typeof originalRequestApproval>[0],
-        strategy as Parameters<typeof originalRequestApproval>[1],
-      );
+      // Reject with 4100 (unauthorized) since keyring is not unlocked
+      // This test only needs to verify the approval task metadata
+      throw Object.assign(new Error("The requested method and/or account has not been authorized by the user."), {
+        code: 4100,
+      });
     }) as typeof services.controllers.approvals.requestApproval;
 
     const typedData = {
@@ -694,13 +715,11 @@ describe("eip155 handlers - approval metadata", () => {
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+    services.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
-      return originalRequestApproval.call(
-        services.controllers.approvals,
-        task as Parameters<typeof originalRequestApproval>[0],
-        strategy as Parameters<typeof originalRequestApproval>[1],
-      );
+      // Return null directly to approve adding the chain
+      // This test only needs to verify the approval task metadata
+      return null;
     }) as typeof services.controllers.approvals.requestApproval;
 
     try {
@@ -742,13 +761,11 @@ describe("eip155 handlers - approval metadata", () => {
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task, strategy) => {
+    services.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
-      return originalRequestApproval.call(
-        services.controllers.approvals,
-        task as Parameters<typeof originalRequestApproval>[0],
-        strategy as Parameters<typeof originalRequestApproval>[1],
-      );
+      // Reject with 4001 (user rejected)
+      // This test only needs to verify the approval task metadata
+      throw Object.assign(new Error("User rejected the request."), { code: 4001 });
     }) as typeof services.controllers.approvals.requestApproval;
 
     try {
@@ -798,7 +815,7 @@ describe("eip155 handlers - approval metadata", () => {
     }));
 
     const services = createServices({
-      transactions: { autoApprove: true },
+      transactions: { registry: new TransactionAdapterRegistry() },
       rpcClients: {
         factories: [{ namespace: "eip155", factory: rpcFactory }],
       },
@@ -806,6 +823,18 @@ describe("eip155 handlers - approval metadata", () => {
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
+
+    // Setup auto-approval for transactions
+    const unsubscribe = services.controllers.approvals.onRequest(async (task) => {
+      try {
+        if (task.type === "wallet_sendTransaction") {
+          const result = await services.controllers.transactions.approveTransaction(task.id);
+          await services.controllers.approvals.resolve(task.id, async () => result);
+        }
+      } catch (error) {
+        // Ignore errors if approval was already resolved
+      }
+    });
 
     try {
       const execute = createMethodExecutor(services.controllers);
@@ -865,6 +894,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(afterNamespace?.scopes ?? []).toContain(PermissionScopes.Transaction);
       expect(afterNamespace?.chains ?? []).toContain(mainnet.chainRef);
     } finally {
+      unsubscribe();
       services.lifecycle.destroy();
     }
   });
@@ -874,14 +904,14 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const approvalSpy = vi
-      .spyOn(services.controllers.approvals, "requestApproval")
-      .mockImplementation(async (task, strategy) => {
-        if (!strategy) {
-          throw new Error("strategy is required for signing tests");
-        }
-        return strategy(task);
+    const approvalSpy = vi.spyOn(services.controllers.approvals, "requestApproval").mockImplementation(async (task) => {
+      // Simulate UI auto-approving and calling the actual signing
+      const payload = task.payload as { from: string; message: string };
+      return await services.controllers.signers.eip155.signPersonalMessage({
+        address: payload.from,
+        message: payload.message,
       });
+    });
 
     try {
       const mainnet = services.controllers.network.getActiveChain();
@@ -921,14 +951,14 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const approvalSpy = vi
-      .spyOn(services.controllers.approvals, "requestApproval")
-      .mockImplementation(async (task, strategy) => {
-        if (!strategy) {
-          throw new Error("strategy is required for signing tests");
-        }
-        return strategy(task);
+    const approvalSpy = vi.spyOn(services.controllers.approvals, "requestApproval").mockImplementation(async (task) => {
+      // Simulate UI auto-approving and calling the actual signing
+      const payload = task.payload as { from: string; typedData: string };
+      return await services.controllers.signers.eip155.signTypedData({
+        address: payload.from,
+        typedData: payload.typedData,
       });
+    });
 
     try {
       const mainnet = services.controllers.network.getActiveChain();

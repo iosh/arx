@@ -31,6 +31,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: (origin) => origin === ORIGIN,
       resolveMethodDefinition: () => undefined,
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -52,6 +53,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => true,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => undefined,
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -75,6 +77,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       resolveMethodDefinition,
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -86,7 +89,7 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
     expect(end).toHaveBeenCalledWith(helpers.error);
-    expect(resolveMethodDefinition).toHaveBeenCalledWith("eth_unknown");
+    expect(resolveMethodDefinition).toHaveBeenCalledWith("eth_unknown", undefined);
     expect(helpers.resolveProviderErrors).toHaveBeenCalledTimes(1);
     expect(helpers.unauthorized).toHaveBeenCalledWith({
       message: "Request eth_unknown is blocked until the active namespace declares it",
@@ -101,6 +104,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({}),
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -122,6 +126,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -143,6 +148,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -165,6 +171,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts" }),
+      resolveLockedPolicy: () => undefined,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 

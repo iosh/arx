@@ -58,6 +58,7 @@ const APPROVALS_SNAPSHOT: ApprovalsSnapshot = {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
+        createdAt: Date.now(),
       },
     ],
   },

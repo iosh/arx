@@ -364,6 +364,7 @@ type TestBackgroundContext = {
   storagePort: MemoryStoragePort;
   chainRegistryPort: MemoryChainRegistryPort;
   destroy: () => void;
+  enableAutoApproval: () => () => void; // Returns unsubscribe function
 };
 
 const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
@@ -408,10 +409,31 @@ const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<Te
   await services.lifecycle.initialize();
   services.lifecycle.start();
 
+  // Helper function to enable auto-approval for testing
+  const enableAutoApproval = () => {
+    const unsubscribe = services.controllers.approvals.onRequest(async (task) => {
+      // Automatically resolve approval requests
+      try {
+        if (task.type === "wallet_sendTransaction") {
+          // For transactions, approve via transaction controller
+          const result = await services.controllers.transactions.approveTransaction(task.id);
+          await services.controllers.approvals.resolve(task.id, async () => result);
+        } else {
+          // For other types, resolve with empty result
+          await services.controllers.approvals.resolve(task.id, async () => ({}));
+        }
+      } catch (error) {
+        // Ignore errors if approval was already resolved
+      }
+    });
+    return unsubscribe;
+  };
+
   return {
     services,
     storagePort,
     chainRegistryPort,
+    enableAutoApproval,
     destroy: () => {
       services.lifecycle.destroy();
     },
@@ -958,9 +980,10 @@ describe("createBackgroundServices (integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry, autoApprove: true },
+      transactions: { registry },
       persistDebounceMs: 0,
     });
+    const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
     const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
       statusEvents.push(payload);
@@ -1011,6 +1034,8 @@ describe("createBackgroundServices (integration)", () => {
       const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
       expect(latest?.status).toBe("confirmed");
     } finally {
+      unsubscribeAutoApproval();
+      unsubscribeStatus();
       context.destroy();
     }
   });
@@ -1043,10 +1068,11 @@ describe("createBackgroundServices (integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry, autoApprove: true },
+      transactions: { registry },
       persistDebounceMs: 0,
     });
 
+    const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
     const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
       statusEvents.push(payload);
@@ -1110,6 +1136,7 @@ describe("createBackgroundServices (integration)", () => {
         ]);
       });
     } finally {
+      unsubscribeAutoApproval();
       unsubscribeStatus();
       context.destroy();
     }
@@ -1154,10 +1181,11 @@ describe("createBackgroundServices (integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry, autoApprove: true },
+      transactions: { registry },
       persistDebounceMs: 0,
     });
 
+    const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
         namespace: chain.namespace,
@@ -1192,6 +1220,7 @@ describe("createBackgroundServices (integration)", () => {
       expect(latest?.status).toBe("replaced");
       expect(latest?.hash).toBe(replacementHash);
     } finally {
+      unsubscribeAutoApproval();
       context.destroy();
     }
   });
@@ -1224,9 +1253,10 @@ describe("createBackgroundServices (integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry, autoApprove: true },
+      transactions: { registry },
       persistDebounceMs: 0,
     });
+    const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
@@ -1259,6 +1289,7 @@ describe("createBackgroundServices (integration)", () => {
       expect(latest?.status).toBe("failed");
       expect(latest?.error?.name).toBe("TransactionReceiptTimeoutError");
     } finally {
+      unsubscribeAutoApproval();
       context.destroy();
     }
   });
@@ -1295,9 +1326,10 @@ describe("createBackgroundServices (integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry, autoApprove: true },
+      transactions: { registry },
       persistDebounceMs: 0,
     });
+    const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
@@ -1332,6 +1364,7 @@ describe("createBackgroundServices (integration)", () => {
       expect(latest?.status).toBe("failed");
       expect(latest?.error?.name).toBe("TransactionExecutionFailed");
     } finally {
+      unsubscribeAutoApproval();
       context.destroy();
     }
   });

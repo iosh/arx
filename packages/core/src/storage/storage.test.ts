@@ -370,6 +370,7 @@ describe("storage schemas", () => {
             origin: "https://dapp.example",
             namespace: "eip155",
             chainRef: "eip155:1",
+            createdAt: TIMESTAMP,
           },
         ],
       },

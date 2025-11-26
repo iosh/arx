@@ -5,7 +5,7 @@ import { TransactionAdapterRegistry } from "../../transactions/adapters/registry
 import type { TransactionAdapter } from "../../transactions/adapters/types.js";
 import { cloneTransactionState } from "../../transactions/storage/state.js";
 import type { AccountController } from "../account/types.js";
-import type { ApprovalController, ApprovalStrategy, ApprovalTask } from "../approval/types.js";
+import type { ApprovalController, ApprovalTask } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import { InMemoryTransactionController } from "./TransactionController.js";
 import type {
@@ -52,10 +52,10 @@ const flushMicrotasks = async () => {
 };
 
 type HarnessOptions = {
-  autoApprove?: boolean;
   initialState?: TransactionState;
   adapterOverrides?: Partial<AdapterMocks>;
   approvalRejects?: boolean;
+  simulateApproval?: boolean; // If true, automatically approve in mock; default false
 };
 
 type TestHarness = {
@@ -121,22 +121,43 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
   };
   const capturedApprovalTasks: ApprovalTask<unknown>[] = [];
 
-  const requestApprovalMock: ApprovalController["requestApproval"] = async <TInput, TResult>(
+  const requestApprovalMock: ApprovalController["requestApproval"] = async <TInput>(
     task: ApprovalTask<TInput>,
-    strategy?: ApprovalStrategy<TInput, TResult>,
-  ): Promise<TResult> => {
+  ): Promise<unknown> => {
     capturedApprovalTasks.push(task as ApprovalTask<unknown>);
-    if (!strategy) {
-      throw new Error("strategy is required for approvals");
-    }
-    if (opts.approvalRejects) {
-      if (createdController) {
-        const rejection = Object.assign(new Error(USER_REJECTION_ERROR.message), USER_REJECTION_ERROR);
-        await createdController.rejectTransaction(task.id, rejection);
-      }
-      throw USER_REJECTION_ERROR as unknown as TResult;
-    }
-    return strategy(task);
+
+    // Simulate UI approval flow
+    return new Promise((resolve, reject) => {
+      // Defer execution to allow synchronous submitTransaction to complete first
+      setTimeout(async () => {
+        if (opts.approvalRejects) {
+          if (createdController) {
+            const rejection = Object.assign(new Error(USER_REJECTION_ERROR.message), USER_REJECTION_ERROR);
+            await createdController.rejectTransaction(task.id, rejection);
+          }
+          reject(USER_REJECTION_ERROR);
+          return;
+        }
+
+        // Simulate approval: if enabled, call approveTransaction
+        if (opts.simulateApproval && createdController) {
+          try {
+            const approvedMeta = await createdController.approveTransaction(task.id);
+            resolve(approvedMeta);
+          } catch (error) {
+            reject(error);
+          }
+          return;
+        }
+
+        // Default: throw rejection (no auto-approval)
+        if (createdController) {
+          const rejection = new Error("Transaction rejected by stub");
+          await createdController.rejectTransaction(task.id, rejection);
+        }
+        reject(new Error("Transaction rejected by stub"));
+      }, 0);
+    });
   };
 
   const approvalsStub: Pick<ApprovalController, "requestApproval"> & {
@@ -159,7 +180,6 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
     registry,
     idGenerator: () => "tx-1",
     now,
-    autoApprove: opts.autoApprove ?? true,
     ...(opts.initialState ? { initialState: opts.initialState } : {}),
   });
   createdController = controller;
@@ -187,7 +207,7 @@ describe("InMemoryTransactionController", () => {
   let harness: TestHarness;
 
   beforeEach(() => {
-    harness = createTestHarness();
+    harness = createTestHarness({ simulateApproval: true });
   });
 
   it("emits queue and status events while processing an approved transaction", async () => {
@@ -253,7 +273,7 @@ describe("InMemoryTransactionController", () => {
     };
 
     harness = createTestHarness({
-      autoApprove: false,
+      simulateApproval: true,
       initialState: { pending: [], history: [approvedMeta] },
     });
 
@@ -281,7 +301,7 @@ describe("InMemoryTransactionController", () => {
   });
 
   it("persists failure state when auto approval is disabled", async () => {
-    harness = createTestHarness({ autoApprove: false });
+    harness = createTestHarness({ simulateApproval: false });
 
     await expect(harness.controller.submitTransaction(ORIGIN, REQUEST)).rejects.toThrow("Transaction rejected by stub");
 
@@ -327,7 +347,7 @@ describe("InMemoryTransactionController", () => {
     };
 
     harness = createTestHarness({
-      autoApprove: false,
+      simulateApproval: true,
       initialState: { pending: [], history: [signedMeta] },
     });
 
@@ -352,7 +372,7 @@ describe("InMemoryTransactionController", () => {
   });
 
   it("marks transaction as user rejected when approval rejects with 4001", async () => {
-    harness = createTestHarness({ autoApprove: false, approvalRejects: true });
+    harness = createTestHarness({ simulateApproval: false, approvalRejects: true });
 
     await expect(harness.controller.submitTransaction(ORIGIN, REQUEST)).rejects.toMatchObject(USER_REJECTION_ERROR);
 
@@ -375,6 +395,7 @@ describe("InMemoryTransactionController", () => {
     });
 
     harness = createTestHarness({
+      simulateApproval: true,
       adapterOverrides: { signTransaction: signFailure },
     });
 
@@ -407,6 +428,7 @@ describe("InMemoryTransactionController", () => {
       throw broadcastError;
     });
     harness = createTestHarness({
+      simulateApproval: true,
       adapterOverrides: { broadcastTransaction: failingBroadcast },
     });
 

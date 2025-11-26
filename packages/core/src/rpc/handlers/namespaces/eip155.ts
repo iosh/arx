@@ -94,6 +94,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
     origin,
     namespace: "eip155",
     chainRef: activeChain.chainRef,
+    createdAt: Date.now(),
     payload: {
       caip2: activeChain.chainRef,
       suggestedAccounts: [...suggested],
@@ -277,6 +278,7 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
     origin,
     namespace: metadata.namespace,
     chainRef: metadata.chainRef,
+    createdAt: Date.now(),
     payload: {
       metadata,
       isUpdate,
@@ -332,6 +334,7 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
     origin,
     namespace: "eip155",
     chainRef: activeChain.chainRef,
+    createdAt: Date.now(),
     payload: {
       caip2: activeChain.chainRef,
       from: address,
@@ -371,6 +374,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
     origin,
     namespace: "eip155",
     chainRef: activeChain.chainRef,
+    createdAt: Date.now(),
     payload: {
       caip2: activeChain.chainRef,
       from: address,

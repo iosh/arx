@@ -1,3 +1,5 @@
+export type { UiError, UiMessage, UiPortEnvelope } from "./messages.js";
+export { UI_CHANNEL } from "./messages.js";
 export type {
   AccountsSnapshot,
   ApprovalSummary,
@@ -7,7 +9,6 @@ export type {
   UiSnapshot,
   VaultSnapshot,
 } from "./schemas.js";
-
 export {
   AccountsSnapshotSchema,
   ApprovalSummarySchema,

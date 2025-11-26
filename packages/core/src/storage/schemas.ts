@@ -203,6 +203,7 @@ const approvalQueueItemSchema = z.strictObject({
   origin: originStringSchema,
   namespace: chainNamespaceSchema.optional(),
   chainRef: caip2ChainIdSchema.optional(),
+  createdAt: epochMillisecondsSchema,
 });
 
 const approvalStateSchema = z.strictObject({

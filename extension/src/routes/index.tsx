@@ -33,6 +33,7 @@ function HomePage() {
       onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
       onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
       onNavigateApprovals={() => router.navigate({ to: ROUTES.APPROVALS })}
+      onNavigateSettings={() => router.navigate({ to: ROUTES.SETTINGS })}
     />
   );
 }

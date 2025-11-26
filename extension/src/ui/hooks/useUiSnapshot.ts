@@ -73,6 +73,24 @@ export const useUiSnapshot = () => {
     onSuccess: invalidate,
   });
 
+  const setAutoLockDurationMutation = useMutation({
+    mutationFn: (durationMs: number) => uiClient.setAutoLockDuration(durationMs),
+    onSuccess: (data) => {
+      queryClient.setQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY, (prev) =>
+        prev
+          ? {
+              ...prev,
+              session: {
+                ...prev.session,
+                autoLockDurationMs: data.autoLockDurationMs,
+                nextAutoLockAt: data.nextAutoLockAt,
+              },
+            }
+          : prev,
+      );
+    },
+  });
+
   return {
     snapshot: snapshotQuery.data,
     isLoading: snapshotQuery.isLoading,
@@ -85,5 +103,6 @@ export const useUiSnapshot = () => {
     switchChain: switchChainMutation.mutateAsync,
     approveApproval: approveApprovalMutation.mutateAsync,
     rejectApproval: rejectApprovalMutation.mutateAsync,
+    setAutoLockDuration: setAutoLockDurationMutation.mutateAsync,
   };
 };

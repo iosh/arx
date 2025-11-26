@@ -402,6 +402,7 @@ export class InMemoryTransactionController implements TransactionController {
       origin: meta.origin,
       namespace: meta.request.namespace,
       chainRef: meta.caip2,
+      createdAt: meta.createdAt,
       payload: {
         caip2: meta.caip2,
         origin: meta.origin,

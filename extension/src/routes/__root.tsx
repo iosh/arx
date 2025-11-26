@@ -3,6 +3,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { createContext, useContext, useState } from "react";
 import { Theme, YStack } from "tamagui";
+import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
+import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 
 // Define context type for type safety
 interface ThemeContextType {
@@ -33,19 +35,27 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootLayout() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const { queryClient } = Route.useRouteContext();
-
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeContext.Provider value={{ theme, setTheme }}>
-        <Theme name={theme}>
-          <YStack backgroundColor="$background" minHeight="100vh" data-theme={theme}>
-            {/* Outlet renders the matched child route */}
-            <Outlet />
-          </YStack>
-        </Theme>
-      </ThemeContext.Provider>
+      <RootInner />
     </QueryClientProvider>
+  );
+}
+
+function RootInner() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { snapshot } = useUiSnapshot();
+  const enabled = snapshot?.session.isUnlocked ?? false;
+  useIdleTimer(enabled);
+
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      <Theme name={theme}>
+        <YStack backgroundColor="$background" minHeight="100vh" data-theme={theme}>
+          <Outlet />
+        </YStack>
+      </Theme>
+    </ThemeContext.Provider>
   );
 }

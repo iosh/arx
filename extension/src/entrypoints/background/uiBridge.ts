@@ -1,20 +1,12 @@
-import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, UnlockReason } from "@arx/core";
+import type { ApprovalTask, BackgroundSessionServices, HandlerControllers } from "@arx/core";
 import { ApprovalTypes, PermissionScopes } from "@arx/core";
-import { type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
+import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import type browser from "webextension-polyfill";
 
-export const UI_CHANNEL = "arx:ui" as const;
+export { UI_CHANNEL } from "@arx/core/ui";
 
-export type UiMessage =
-  | { type: "ui:getSnapshot" }
-  | { type: "ui:vaultInit"; payload: { password: string } }
-  | { type: "ui:unlock"; payload: { password: string } }
-  | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
-  | { type: "ui:resetAutoLockTimer" }
-  | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }
-  | { type: "ui:switchChain"; payload: { chainRef: string } }
-  | { type: "ui:approve"; payload: { id: string } }
-  | { type: "ui:reject"; payload: { id: string; reason?: string } };
+const MIN_AUTO_LOCK_MS = 60_000;
+const MAX_AUTO_LOCK_MS = 60 * 60_000;
 
 type UiWarning = {
   code: string;
@@ -34,13 +26,7 @@ type BridgeDeps = {
   controllers: HandlerControllers;
   session: BackgroundSessionServices;
   persistVaultMeta: () => Promise<void>;
-  now?: () => number;
 };
-
-type PortEnvelope =
-  | { type: "ui:event"; event: "ui:stateChanged"; payload: UiSnapshot }
-  | { type: "ui:response"; requestId: string; result: unknown }
-  | { type: "ui:error"; requestId: string; error: { message: string; code?: number; data?: unknown } };
 
 const normalizeError = (error: unknown): { message: string; code?: number; data?: unknown } => {
   if (error && typeof error === "object" && "message" in error) {
@@ -126,12 +112,12 @@ type SendTransactionPayload = {
   draft?: { summary?: Record<string, unknown> };
 };
 
-export const createUiBridge = ({ controllers, session, persistVaultMeta, now = Date.now }: BridgeDeps) => {
+export const createUiBridge = ({ controllers, session, persistVaultMeta }: BridgeDeps) => {
   const ports = new Set<browser.Runtime.Port>();
   const portCleanups = new Map<browser.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
 
-  const sendToPortSafely = (port: browser.Runtime.Port, envelope: PortEnvelope): boolean => {
+  const sendToPortSafely = (port: browser.Runtime.Port, envelope: UiPortEnvelope): boolean => {
     try {
       port.postMessage(envelope);
       return true;
@@ -154,7 +140,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
       origin: task.origin,
       namespace: task.namespace ?? activeChain.namespace,
       chainRef: task.chainRef ?? activeChain.chainRef,
-      createdAt: now(),
+      createdAt: task.createdAt,
     };
 
     switch (task.type) {
@@ -287,7 +273,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
     }
 
     for (const port of Array.from(ports)) {
-      const envelope: PortEnvelope = { type: "ui:event", event: "ui:stateChanged", payload: snapshot };
+      const envelope: UiPortEnvelope = { type: "ui:event", event: "ui:stateChanged", payload: snapshot };
       sendToPortSafely(port, envelope);
     }
   };
@@ -425,6 +411,22 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, now = D
         controllers.approvals.reject(task.id, new Error(message.payload.reason ?? "User rejected"));
         broadcast();
         return { id: task.id };
+      }
+      case "ui:setAutoLockDuration": {
+        const value = message.payload.durationMs;
+        if (!Number.isFinite(value)) {
+          throw new Error("Auto-lock duration must be a number");
+        }
+        const rounded = Math.round(value);
+        if (rounded < MIN_AUTO_LOCK_MS || rounded > MAX_AUTO_LOCK_MS) {
+          throw new Error("Auto-lock duration must be between 1 and 60 minutes");
+        }
+        session.unlock.setAutoLockDuration(rounded);
+        session.unlock.scheduleAutoLock(rounded);
+        await persistVaultMeta();
+        broadcast();
+        const state = session.unlock.getState();
+        return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
       }
       default:
         return undefined;

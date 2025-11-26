@@ -1,24 +1,5 @@
-import type { UnlockReason } from "@arx/core";
-import type { UiSnapshot } from "@arx/core/ui";
+import { UI_CHANNEL, type UiMessage, type UiPortEnvelope, type UiSnapshot } from "@arx/core/ui";
 import browser from "webextension-polyfill";
-import { UI_CHANNEL } from "@/entrypoints/background/uiBridge";
-
-type UiRequestPayload =
-  | { type: "ui:getSnapshot" }
-  | { type: "ui:vaultInit"; payload: { password: string } }
-  | { type: "ui:unlock"; payload: { password: string } }
-  | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
-  | { type: "ui:resetAutoLockTimer" }
-  | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }
-  | { type: "ui:switchChain"; payload: { chainRef: string } }
-  | { type: "ui:approve"; payload: { id: string } }
-  | { type: "ui:reject"; payload: { id: string; reason?: string } };
-
-type PortEnvelope =
-  | { type: "ui:request"; requestId: string; payload: UiRequestPayload }
-  | { type: "ui:response"; requestId: string; result: unknown }
-  | { type: "ui:error"; requestId: string; error: { message: string; code?: number; data?: unknown } }
-  | { type: "ui:event"; event: "ui:stateChanged"; payload: UiSnapshot };
 
 type PendingRequest<T = unknown> = {
   resolve: (value: T) => void;
@@ -32,7 +13,6 @@ class UiClient {
   #port: browser.Runtime.Port | null = null;
   #pending = new Map<string, PendingRequest<unknown>>();
   #listeners = new Set<(snapshot: UiSnapshot) => void>();
-  #requestCounter = 0;
 
   // Use arrow functions to ensure `this` binding is stable
   connect = () => {
@@ -44,7 +24,7 @@ class UiClient {
     this.#port = port;
 
     port.onMessage.addListener((message: unknown) => {
-      const envelope = message as PortEnvelope;
+      const envelope = message as UiPortEnvelope;
       if (!envelope || typeof envelope !== "object") {
         return;
       }
@@ -99,9 +79,9 @@ class UiClient {
     };
   };
 
-  request = async <T = unknown>(payload: UiRequestPayload): Promise<T> => {
+  request = async <T = unknown>(payload: UiMessage): Promise<T> => {
     const port = this.connect();
-    const requestId = `ui-${Date.now()}-${++this.#requestCounter}`;
+    const requestId = crypto.randomUUID();
 
     return new Promise<T>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -113,7 +93,7 @@ class UiClient {
 
       this.#pending.set(requestId, { resolve: resolve as (v: unknown) => void, reject, timeout });
 
-      const envelope: PortEnvelope = { type: "ui:request", requestId, payload };
+      const envelope: UiPortEnvelope = { type: "ui:request", requestId, payload };
       port.postMessage(envelope);
     });
   };
@@ -177,6 +157,13 @@ class UiClient {
 
   rejectApproval = (id: string, reason?: string) => {
     return this.request<{ id: string }>({ type: "ui:reject", payload: { id, reason } });
+  };
+
+  setAutoLockDuration = (durationMs: number) => {
+    return this.request<{ autoLockDurationMs: number; nextAutoLockAt: number | null }>({
+      type: "ui:setAutoLockDuration",
+      payload: { durationMs },
+    });
   };
 }
 

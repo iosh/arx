@@ -16,6 +16,7 @@ export type ApprovalQueueItem = {
   origin: string;
   namespace?: ChainNamespace | undefined;
   chainRef?: Caip2ChainId | undefined;
+  createdAt: number;
 };
 
 export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
@@ -27,6 +28,7 @@ export type ApprovalTask<T> = {
   namespace?: ChainNamespace | undefined;
   chainRef?: Caip2ChainId | undefined;
   payload: T;
+  createdAt: number;
 };
 
 export type ApprovalResult<T> = {

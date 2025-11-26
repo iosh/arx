@@ -1,6 +1,5 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { Button, Card, H2, Paragraph, XStack, YStack } from "tamagui";
-import { useIdleTimer } from "../hooks/useIdleTimer";
 
 const MS_PER_SECOND = 1000;
 
@@ -10,6 +9,7 @@ type HomeScreenProps = {
   onNavigateAccounts: () => void;
   onNavigateNetworks: () => void;
   onNavigateApprovals: () => void;
+  onNavigateSettings: () => void;
 };
 
 export const HomeScreen = ({
@@ -18,9 +18,8 @@ export const HomeScreen = ({
   onNavigateAccounts,
   onNavigateNetworks,
   onNavigateApprovals,
+  onNavigateSettings,
 }: HomeScreenProps) => {
-  useIdleTimer(snapshot.session.isUnlocked);
-
   const { chain, accounts, session, approvals } = snapshot;
   const timeLeft = session.nextAutoLockAt ? Math.max(session.nextAutoLockAt - Date.now(), 0) : null;
   const autoLockLabel =
@@ -91,6 +90,10 @@ export const HomeScreen = ({
             <Paragraph color="$colorFocus">{autoLockLabel}</Paragraph>
           </XStack>
         </Card>
+
+        <Button size="$3" marginTop="$2" onPress={onNavigateSettings}>
+          Settings / Auto-lock
+        </Button>
 
         <Button onPress={() => void onLock()}>Lock Wallet</Button>
       </YStack>

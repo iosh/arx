@@ -35,8 +35,8 @@ const resolveSnapshot = async (context: RouterContext): Promise<UiSnapshot | und
  */
 export const requireUnlocked = async ({ context }: { context: RouterContext }) => {
   const snapshot = await resolveSnapshot(context);
-  if (!snapshot) return;
-  if (!snapshot.session.isUnlocked) {
+  // If snapshot fetch failed or wallet is locked, redirect to home
+  if (!snapshot || !snapshot.session.isUnlocked) {
     throw redirect({ to: ROUTES.HOME });
   }
 };
@@ -46,8 +46,8 @@ export const requireUnlocked = async ({ context }: { context: RouterContext }) =
  */
 export const requireInitialized = async ({ context }: { context: RouterContext }) => {
   const snapshot = await resolveSnapshot(context);
-  if (!snapshot) return;
-  if (!snapshot.vault.initialized) {
+  // If snapshot fetch failed or vault not initialized, redirect to home
+  if (!snapshot || !snapshot.vault.initialized) {
     throw redirect({ to: ROUTES.HOME });
   }
 };

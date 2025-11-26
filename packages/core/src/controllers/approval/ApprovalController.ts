@@ -20,6 +20,7 @@ const cloneState = (state: ApprovalState): ApprovalState => ({
     origin: item.origin,
     namespace: item.namespace,
     chainRef: item.chainRef,
+    createdAt: item.createdAt,
   })),
 });
 
@@ -38,7 +39,8 @@ const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
       current.type === other.type &&
       current.origin === other.origin &&
       current.namespace === other.namespace &&
-      current.chainRef === other.chainRef;
+      current.chainRef === other.chainRef &&
+      current.createdAt === other.createdAt;
 
     if (!matches) {
       return false;
@@ -54,6 +56,7 @@ const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
   namespace: task.namespace,
   chainRef: task.chainRef,
   payload: task.payload,
+  createdAt: task.createdAt,
 });
 
 const cloneResult = <T>(result: ApprovalResult<T>): ApprovalResult<T> => ({
@@ -171,6 +174,7 @@ export class InMemoryApprovalController implements ApprovalController {
           origin: task.origin,
           namespace: task.namespace,
           chainRef: task.chainRef,
+          createdAt: task.createdAt,
         },
       ],
     };

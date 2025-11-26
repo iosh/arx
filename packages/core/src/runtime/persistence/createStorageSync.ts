@@ -10,8 +10,6 @@ import {
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
-  TRANSACTIONS_SNAPSHOT_VERSION,
-  type TransactionsSnapshot,
 } from "../../storage/index.js";
 import { serializeTransactionState } from "../../transactions/storage/state.js";
 
@@ -21,6 +19,7 @@ const cloneApprovalQueueItem = (item: ApprovalQueueItem): ApprovalQueueItem => (
   origin: item.origin,
   ...(item.namespace ? { namespace: item.namespace } : {}),
   ...(item.chainRef ? { chainRef: item.chainRef } : {}),
+  createdAt: item.createdAt,
 });
 
 type ControllersForSync = {

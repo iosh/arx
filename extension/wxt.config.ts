@@ -1,5 +1,4 @@
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "wxt";
 export default defineConfig({
   manifestVersion: 3,
@@ -26,7 +25,7 @@ export default defineConfig({
           routesDirectory: "./src/routes",
           generatedRouteTree: "./src/routeTree.gen.ts",
         }),
-        enforce: "pre", // 关键：强制在 pre 阶段执行
+        enforce: "pre", // force to run before other plugins
       } as any,
     ],
   }),

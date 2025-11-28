@@ -1,8 +1,10 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
 import {
+  type AccountMeta,
   type ChainRegistryEntity,
   ChainRegistryEntitySchema,
   DOMAIN_SCHEMA_VERSION,
+  type KeyringMeta,
   type StorageNamespace,
   StorageNamespaces,
   type StoragePort,
@@ -50,6 +52,9 @@ const getOrCreateDatabase = (dbName: string): ArxStorageDatabase => {
   return db;
 };
 
+type KeyringMetaRow = KeyringMeta;
+type AccountMetaRow = AccountMeta;
+
 class ArxStorageDatabase extends Dexie {
   chains!: Table<SnapshotEntity, StorageNamespace>;
   accounts!: Table<SnapshotEntity, StorageNamespace>;
@@ -58,6 +63,8 @@ class ArxStorageDatabase extends Dexie {
   transactions!: Table<SnapshotEntity, StorageNamespace>;
   vaultMeta!: Table<VaultMetaEntity, string>;
   chainRegistry!: Table<ChainRegistryRow, string>;
+  keyringMetas!: Table<KeyringMetaRow, string>;
+  accountMetas!: Table<AccountMetaRow, string>;
 
   constructor(name: string) {
     super(name);
@@ -70,6 +77,8 @@ class ArxStorageDatabase extends Dexie {
         transactions: "&namespace",
         vaultMeta: "&id",
         chainRegistry: "&chainRef",
+        keyringMetas: "&id, type, createdAt",
+        accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
       })
       .upgrade((transaction) => {
         return runMigrations({ db: this, transaction });

@@ -9,15 +9,6 @@ catalogs:
     '@types/webextension-polyfill':
       specifier: 0.12.3
       version: 0.12.3
-    eventemitter3:
-      specifier: 5.0.1
-      version: 5.0.1
-    typescript:
-      specifier: 5.9.2
-      version: 5.9.2
-    vitest:
-      specifier: 3.2.4
-      version: 3.2.4
     webextension-polyfill:
       specifier: 0.12.0
       version: 0.12.0
@@ -62,9 +53,6 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.136.5
         version: 1.136.5(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@vitejs/plugin-react':
-        specifier: ^5.1.1
-        version: 5.1.1(vite@7.1.11(@types/node@24.3.1)(jiti@2.5.1)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.1))
       events:
         specifier: 3.3.0
         version: 3.3.0

@@ -2,16 +2,20 @@ import "fake-indexeddb/auto";
 
 import { ApprovalTypes, PermissionScopes } from "@arx/core";
 import {
+  AccountMetaSchema,
   APPROVALS_SNAPSHOT_VERSION,
   type ApprovalsSnapshot,
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
   DOMAIN_SCHEMA_VERSION,
+  KEYRING_VAULT_ENTRY_VERSION,
+  KeyringMetaSchema,
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
   VAULT_META_SNAPSHOT_VERSION,
+  VaultKeyringPayloadSchema,
   type VaultMetaSnapshot,
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
@@ -294,5 +298,56 @@ describe("DexieChainRegistryPort", () => {
 
     expect(await port.get("eip155:1")).toBeNull();
     expect(await port.getAll()).toEqual([]);
+  });
+
+  describe("keyring storage schemas", () => {
+    const TS = 1_706_000_000_000;
+
+    it("accepts keyring/account meta and vault payload", () => {
+      const keyringMeta = {
+        id: "11111111-2222-4333-8444-555555555555",
+        type: "hd" as const,
+        createdAt: TS,
+        backedUp: false,
+        derivedCount: 1,
+      };
+      const accountMeta = {
+        address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+        keyringId: keyringMeta.id,
+        derivationIndex: 0,
+        createdAt: TS,
+      };
+      const payload = {
+        keyrings: [
+          {
+            keyringId: keyringMeta.id,
+            type: "hd" as const,
+            createdAt: TS,
+            version: KEYRING_VAULT_ENTRY_VERSION,
+            payload: { mnemonic: Array(12).fill("test"), passphrase: "pass" },
+          },
+          {
+            keyringId: "66666666-7777-8888-9999-000000000000",
+            type: "private-key" as const,
+            createdAt: TS,
+            version: KEYRING_VAULT_ENTRY_VERSION,
+            payload: { privateKey: `0x${"a".repeat(64)}` },
+          },
+        ],
+      };
+
+      expect(KeyringMetaSchema.parse(keyringMeta)).toStrictEqual(keyringMeta);
+      expect(AccountMetaSchema.parse(accountMeta)).toStrictEqual(accountMeta);
+      expect(VaultKeyringPayloadSchema.parse(payload)).toStrictEqual(payload);
+    });
+
+    it("rejects non-canonical addresses", () => {
+      const invalid = {
+        address: "0xABCDEFabcdefabcdefabcdefabcdefabcdefabcd",
+        keyringId: "11111111-2222-3333-4444-555555555555",
+        createdAt: TS,
+      };
+      expect(AccountMetaSchema.safeParse(invalid).success).toBe(false);
+    });
   });
 });

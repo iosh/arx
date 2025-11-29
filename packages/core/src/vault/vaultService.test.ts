@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VaultCiphertext } from "./types.js";
+import { randomBytes } from "./utils.js";
 import { createVaultService, VAULT_VERSION } from "./vaultService.js";
 
 const PASSWORD = "correct horse battery staple";
@@ -186,5 +187,22 @@ describe("vaultService", () => {
         ciphertext: { ...ciphertext, salt: Buffer.from(tamperedSalt).toString("base64") },
       }),
     ).rejects.toMatchObject({ code: "ARX_VAULT_INVALID_PASSWORD" });
+  });
+
+  it("throws when reseal is called while locked", async () => {
+    const vault = createVaultService();
+    await expect(vault.reseal({ secret: new Uint8Array([1]) })).rejects.toThrowError(/locked/i);
+  });
+
+  it("reseals with current derived key without password", async () => {
+    const vault = createVaultService();
+    const ciphertext = await vault.initialize({ password: PASSWORD });
+    await vault.unlock({ password: PASSWORD, ciphertext });
+    const nextSecret = randomBytes(32);
+
+    const updated = await vault.reseal({ secret: nextSecret });
+    expect(updated.cipher).not.toEqual(ciphertext.cipher);
+    const exported = vault.exportKey();
+    expect(exported).toEqual(nextSecret);
   });
 });

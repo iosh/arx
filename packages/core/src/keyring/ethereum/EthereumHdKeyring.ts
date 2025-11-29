@@ -144,11 +144,9 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     this.#clearAccounts();
 
     for (const account of snapshot.accounts) {
-      if (account.source === "imported") {
+      // Only derived accounts can be hydrated because secrets come from mnemonic
+      if (account.source !== "derived" || account.derivationIndex == null) {
         throw keyringErrors.secretUnavailable();
-      }
-      if (account.derivationIndex == null) {
-        throw keyringErrors.indexOutOfRange();
       }
       const derived = this.#deriveAndStore(account.derivationIndex);
       if (derived.account.address !== this.#normalizeAddress(account.address)) {

@@ -208,6 +208,30 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
       return cloneCiphertext(ciphertext);
     },
 
+    async reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext> {
+      if (!derivedKey || !salt || iterationCount === null) {
+        throw vaultErrors.locked();
+      }
+
+      const nextSecret = copyBytes(params.secret);
+      const { cipher, iv } = await aesGcmEncrypt(derivedKey, nextSecret, resolved.ivBytes);
+
+      if (secret) {
+        zeroize(secret);
+      }
+      secret = nextSecret;
+      ciphertext = {
+        version: VAULT_VERSION,
+        algorithm: VAULT_ALGORITHM,
+        salt: toBase64(salt),
+        iterations: iterationCount,
+        iv: toBase64(iv),
+        cipher: toBase64(cipher),
+        createdAt: Date.now(),
+      };
+
+      return cloneCiphertext(ciphertext);
+    },
     importCiphertext(value: VaultCiphertext): void {
       const parsed = parseCiphertext(value);
       clearSession();

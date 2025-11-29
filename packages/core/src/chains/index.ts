@@ -1,3 +1,4 @@
+export * from "./address.js";
 export * from "./caip.js";
 export * from "./chains.seed.js";
 export { createEip155AddressModule } from "./eip155/address.js";

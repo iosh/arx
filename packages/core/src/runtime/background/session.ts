@@ -1,10 +1,11 @@
+import { normalizeEvmAddress } from "../../chains/address.js";
 import type {
   UnlockController,
   UnlockControllerOptions,
   UnlockMessengerTopics,
 } from "../../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
-import { EthereumHdKeyring } from "../../keyring/index.js";
+import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
@@ -203,6 +204,12 @@ export const initSessionLayer = ({
       }
       return ciphertext;
     },
+    async reseal(params) {
+      const ciphertext = await baseVault.reseal(params);
+      updateInitializedAtFromCiphertext(ciphertext);
+      scheduleVaultMetaPersist();
+      return ciphertext;
+    },
     importCiphertext(value) {
       baseVault.importCiphertext(value);
       updateInitializedAtFromCiphertext(value);
@@ -240,15 +247,34 @@ export const initSessionLayer = ({
     vault: vaultProxy,
     unlock,
     accounts: controllers.accounts,
-    namespaces: {
-      [EIP155_NAMESPACE]: {
-        createKeyring: () => new EthereumHdKeyring(),
+    namespaces: [
+      {
+        namespace: EIP155_NAMESPACE,
+        normalizeAddress: normalizeEvmAddress,
+        factories: {
+          hd: () => new EthereumHdKeyring(),
+          "private-key": () => new PrivateKeyKeyring(),
+        },
       },
-    },
+    ],
     logger: storageLogger,
   });
 
   keyringService.attach();
+
+  sessionSubscriptions.push(
+    keyringService.onEnvelopeUpdated(async (payload) => {
+      if (!payload) {
+        return;
+      }
+      try {
+        await vaultProxy.reseal({ secret: payload });
+        scheduleVaultMetaPersist();
+      } catch (error) {
+        storageLogger("session: failed to reseal keyring envelope", error);
+      }
+    }),
+  );
 
   sessionSubscriptions.push(
     keyringService.onEnvelopeUpdated(() => {

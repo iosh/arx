@@ -43,6 +43,7 @@ export interface VaultService {
   lock(): void;
   exportKey(): Uint8Array;
   seal(params: SealVaultParams): Promise<VaultCiphertext>;
+  reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext>; // uses current derived key, unlocked only
   importCiphertext(ciphertext: VaultCiphertext): void;
   getCiphertext(): VaultCiphertext | null;
   getStatus(): VaultStatus;

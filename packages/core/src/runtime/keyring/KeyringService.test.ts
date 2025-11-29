@@ -1,34 +1,45 @@
 import { describe, expect, it } from "vitest";
+import { normalizeEvmAddress } from "../../chains/index.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
-import { EthereumHdKeyring } from "../../keyring/index.js";
+import { keyringErrors } from "../../errors/keyring.js";
+import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import type { VaultService } from "../../vault/types.js";
 import { KeyringService } from "./KeyringService.js";
 
 const MNEMONIC = "test test test test test test test test test test test junk";
 const EIP155_NAMESPACE = "eip155";
 const PRIVATE_KEY = "0xc83c5a4a2353021a9bf912a7cf8f053fde951355514868f3e75e085cad7490a1";
+const ENVELOPE_VERSION = 1;
 
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
-const createEnvelope = (accountCount: number) => {
+const buildHdEnvelope = (accountCount: number, keyringId = "10000000-0000-4000-8000-000000000001") => {
   const keyring = new EthereumHdKeyring();
   keyring.loadFromMnemonic(MNEMONIC);
-  for (let index = 0; index < accountCount; index += 1) {
+  for (let i = 0; i < accountCount; i += 1) {
     keyring.deriveNextAccount();
   }
   const snapshot = keyring.toSnapshot();
-  return {
-    version: 1,
-    namespaces: {
-      [EIP155_NAMESPACE]: {
-        type: "hierarchical" as const,
-        mnemonic: MNEMONIC,
-        snapshot,
+  return encoder.encode(
+    JSON.stringify({
+      version: ENVELOPE_VERSION, // 1
+      namespaces: {
+        [EIP155_NAMESPACE]: {
+          keyrings: [
+            {
+              id: keyringId,
+              kind: "hd",
+              createdAt: Date.now(),
+              secret: { type: "hd", mnemonic: MNEMONIC },
+              snapshot,
+            },
+          ],
+        },
       },
-    },
-  };
+    }),
+  );
 };
 
 class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnlocked"> {
@@ -36,23 +47,18 @@ class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnl
     private envelopeBytes: Uint8Array,
     private unlocked = true,
   ) {}
-
   exportKey(): Uint8Array {
     return new Uint8Array(this.envelopeBytes);
   }
-
   getStatus() {
     return { isUnlocked: this.unlocked, hasCiphertext: true };
   }
-
   isUnlocked(): boolean {
     return this.unlocked;
   }
-
   setUnlocked(next: boolean) {
     this.unlocked = next;
   }
-
   setEnvelope(bytes: Uint8Array) {
     this.envelopeBytes = new Uint8Array(bytes);
   }
@@ -61,48 +67,33 @@ class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnl
 class FakeUnlock implements Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked"> {
   #unlockedHandlers = new Set<(payload: UnlockUnlockedPayload) => void>();
   #lockedHandlers = new Set<(payload: UnlockLockedPayload) => void>();
-
   constructor(private unlocked = true) {}
-
   isUnlocked(): boolean {
     return this.unlocked;
   }
-
   onUnlocked(handler: (payload: UnlockUnlockedPayload) => void): () => void {
     this.#unlockedHandlers.add(handler);
     return () => this.#unlockedHandlers.delete(handler);
   }
-
   onLocked(handler: (payload: UnlockLockedPayload) => void): () => void {
     this.#lockedHandlers.add(handler);
     return () => this.#lockedHandlers.delete(handler);
   }
-
   emitUnlocked(payload: UnlockUnlockedPayload) {
     this.unlocked = true;
-    for (const handler of this.#unlockedHandlers) {
-      handler(payload);
-    }
+    for (const handler of this.#unlockedHandlers) handler(payload);
   }
-
   emitLocked(payload: UnlockLockedPayload) {
     this.unlocked = false;
-    for (const handler of this.#lockedHandlers) {
-      handler(payload);
-    }
+    for (const handler of this.#lockedHandlers) handler(payload);
   }
 }
 
 class MemoryAccountsController implements Pick<AccountController, "getState" | "replaceState"> {
-  #state: MultiNamespaceAccountsState = {
-    namespaces: {},
-    active: null,
-  };
-
+  #state: MultiNamespaceAccountsState = { namespaces: {}, active: null };
   getState(): MultiNamespaceAccountsState {
     return structuredClone(this.#state);
   }
-
   replaceState(next: MultiNamespaceAccountsState): void {
     this.#state = structuredClone(next);
   }
@@ -113,10 +104,20 @@ const flushAsync = async () => {
   await Promise.resolve();
 };
 
+const baseNamespaces = [
+  {
+    namespace: EIP155_NAMESPACE,
+    normalizeAddress: normalizeEvmAddress,
+    factories: {
+      hd: () => new EthereumHdKeyring(),
+      "private-key": () => new PrivateKeyKeyring(),
+    },
+  },
+] as const;
+
 describe("KeyringService", () => {
-  it("hydrates namespace from vault envelope on attach", async () => {
-    const envelope = createEnvelope(2);
-    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+  it("hydrates hd keyring from vault envelope on attach", async () => {
+    const vault = new FakeVault(buildHdEnvelope(2));
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
 
@@ -124,204 +125,121 @@ describe("KeyringService", () => {
       vault,
       unlock,
       accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
+      namespaces: [...baseNamespaces],
+      logger: (message, error) => {
+        console.log("[KeyringService]", message, error);
       },
     });
+    await service.attach();
 
-    service.attach();
-    await flushAsync();
-
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
+    const keyrings = service.listKeyrings(EIP155_NAMESPACE);
+    expect(keyrings).toHaveLength(1);
+    expect(keyrings[0]!.kind).toBe("hd");
     expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(2);
   });
 
-  it("derives next account and updates accounts state", async () => {
-    const envelope = createEnvelope(1);
-    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+  it("derives next account and updates envelope/state", async () => {
+    const vault = new FakeVault(buildHdEnvelope(1));
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    await service.attach();
 
-    service.attach();
-    await flushAsync();
+    const hd = service.listKeyrings(EIP155_NAMESPACE).find((k) => k.kind === "hd");
+    expect(hd).toBeDefined();
 
-    const derived = service.deriveNextAccount(EIP155_NAMESPACE);
+    const derived = service.deriveNextAccount(EIP155_NAMESPACE, hd!.id);
     expect(derived.address).toMatch(/^0x[0-9a-f]{40}$/);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(derived.address);
+
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(normalizeEvmAddress(derived.address));
+
+    const envelopeBytes = service.getEnvelope();
+    expect(envelopeBytes).not.toBeNull();
+    const parsed = JSON.parse(decoder.decode(envelopeBytes!));
+    const snapshot = parsed.namespaces[EIP155_NAMESPACE].keyrings.find((k: { id: string }) => k.id === hd!.id).snapshot;
+    expect(snapshot.accounts.length).toBeGreaterThanOrEqual(2);
+    expect(snapshot.nextDerivationIndex).toBeGreaterThanOrEqual(2);
   });
 
-  it("sets namespace from mnemonic and exposes accounts when vault is locked", () => {
-    const vault = new FakeVault(textEncoder.encode(""), false);
+  it("creates hd keyring when vault is locked", () => {
+    const vault = new FakeVault(encoder.encode(""), false);
     const unlock = new FakeUnlock(false);
     const accounts = new MemoryAccountsController();
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    const { keyringId, accounts: derived } = service.createHdKeyring(EIP155_NAMESPACE, { mnemonic: MNEMONIC });
 
-    const accountsAfterImport = service.setNamespaceFromMnemonic(EIP155_NAMESPACE, { mnemonic: MNEMONIC });
-    expect(accountsAfterImport).not.toHaveLength(0);
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(accountsAfterImport.length);
+    expect(keyringId).toBeDefined();
+    expect(derived.length).toBeGreaterThan(0);
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all.length).toBe(derived.length);
 
-    const storedEnvelope = service.getEnvelope();
-    expect(storedEnvelope).not.toBeNull();
-    const decoded = JSON.parse(textDecoder.decode(storedEnvelope!));
-    expect(decoded.namespaces[EIP155_NAMESPACE]).toBeDefined();
+    const envelope = service.getEnvelope();
+    expect(envelope).not.toBeNull();
+    const decoded = JSON.parse(decoder.decode(envelope!));
+    expect(decoded.version).toBe(ENVELOPE_VERSION);
+    expect(decoded.namespaces[EIP155_NAMESPACE]?.keyrings).toBeDefined();
   });
 
-  it("removes namespace and clears accounts state", () => {
-    const vault = new FakeVault(textEncoder.encode(""), false);
-    const unlock = new FakeUnlock(false);
-    const accounts = new MemoryAccountsController();
-
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
-
-    service.setNamespaceFromMnemonic(EIP155_NAMESPACE, { mnemonic: MNEMONIC });
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
-
-    service.removeNamespace(EIP155_NAMESPACE);
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(false);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]).toBeUndefined();
-  });
-
-  it("emits envelope updates when deriving and removing accounts", async () => {
-    const envelope = createEnvelope(1);
-    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+  it("imports private-key keyring, prevents duplicates, and syncs state", async () => {
+    const vault = new FakeVault(encoder.encode(""), true);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    await service.attach();
 
-    service.attach();
-    await flushAsync();
+    const { keyringId, account } = service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY });
+    expect(keyringId).toBeDefined();
+    const keyrings = service.listKeyrings(EIP155_NAMESPACE).filter((k) => k.kind === "private-key");
+    expect(keyrings).toHaveLength(1);
 
-    const events: Array<Uint8Array | null> = [];
-    const unsubscribe = service.onEnvelopeUpdated((payload) => {
-      events.push(payload ? new Uint8Array(payload) : null);
-    });
+    const nsState = accounts.getState().namespaces[EIP155_NAMESPACE];
+    expect(nsState?.all).toContain(normalizeEvmAddress(account.address));
 
-    const derived = service.deriveNextAccount(EIP155_NAMESPACE);
-    expect(events.length).toBeGreaterThan(0);
-
-    const namespaceAfterDerive = accounts.getState().namespaces[EIP155_NAMESPACE];
-    expect(namespaceAfterDerive?.all).toContain(derived.address);
-
-    const previousLength = namespaceAfterDerive?.all.length ?? 0;
-    service.removeAccount(EIP155_NAMESPACE, derived.address);
-
-    const namespaceAfterRemove = accounts.getState().namespaces[EIP155_NAMESPACE];
-    expect(namespaceAfterRemove?.all).not.toContain(derived.address);
-    expect(namespaceAfterRemove?.all.length).toBe(previousLength - 1);
-    expect(events.length).toBeGreaterThan(1);
-
-    unsubscribe();
+    expect(() => service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY })).toThrowError(
+      keyringErrors.duplicateAccount().message,
+    );
   });
 
-  it("imports raw private key accounts and syncs namespace state", async () => {
-    const envelope = createEnvelope(0);
-    const vault = new FakeVault(textEncoder.encode(JSON.stringify(envelope)));
+  it("removes private-key keyring when its account is removed", () => {
+    const vault = new FakeVault(encoder.encode(""), true);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    const { keyringId, account } = service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY });
 
-    service.attach();
-    await flushAsync();
-
-    const imported = service.importAccount(EIP155_NAMESPACE, PRIVATE_KEY);
-    expect(imported.source).toBe("imported");
-
-    const namespaceState = accounts.getState().namespaces[EIP155_NAMESPACE];
-    expect(namespaceState?.all).toContain(imported.address);
-
-    const recorded = service.getAccounts(EIP155_NAMESPACE).map((account) => account.address);
-    expect(recorded).toContain(imported.address);
+    service.removeAccount(EIP155_NAMESPACE, keyringId, account.address);
+    const keyrings = service.listKeyrings(EIP155_NAMESPACE).filter((k) => k.kind === "private-key");
+    expect(keyrings).toHaveLength(0);
   });
 
-  it("clears namespaces on lock and rehydrates on subsequent unlock", async () => {
-    const initialEnvelope = createEnvelope(2);
-    const vault = new FakeVault(textEncoder.encode(JSON.stringify(initialEnvelope)));
+  it("clears on lock and rehydrates on unlock", async () => {
+    const vault = new FakeVault(buildHdEnvelope(2));
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: {
-        [EIP155_NAMESPACE]: { createKeyring: () => new EthereumHdKeyring() },
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    await service.attach();
 
-    const events: Array<Uint8Array | null> = [];
-    service.onEnvelopeUpdated((payload) => {
-      events.push(payload ? new Uint8Array(payload) : null);
-    });
-
-    service.attach();
-    await flushAsync();
-
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(2);
+    expect(service.listKeyrings(EIP155_NAMESPACE)).toHaveLength(1);
 
     vault.setUnlocked(false);
     unlock.emitLocked({ at: Date.now(), reason: "manual" });
     await flushAsync();
 
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(false);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]).toBeUndefined();
+    expect(service.listKeyrings(EIP155_NAMESPACE)).toHaveLength(0);
     expect(service.getEnvelope()).toBeNull();
-    expect(events.at(-1)).toBeNull();
 
-    const updatedEnvelope = createEnvelope(3);
-    vault.setEnvelope(textEncoder.encode(JSON.stringify(updatedEnvelope)));
+    const nextEnvelope = buildHdEnvelope(3, "20000000-0000-4000-8000-000000000002");
+    vault.setEnvelope(nextEnvelope);
     vault.setUnlocked(true);
     unlock.emitUnlocked({ at: Date.now() });
     await flushAsync();
 
-    expect(service.hasNamespace(EIP155_NAMESPACE)).toBe(true);
-    const namespaceState = accounts.getState().namespaces[EIP155_NAMESPACE];
-    expect(namespaceState?.all).toHaveLength(3);
-
-    const lastEvent = events.at(-1);
-    expect(lastEvent).not.toBeNull();
-    const decoded = JSON.parse(textDecoder.decode(lastEvent!));
-    expect(decoded.namespaces[EIP155_NAMESPACE]?.snapshot?.accounts).toHaveLength(3);
+    const keyrings = service.listKeyrings(EIP155_NAMESPACE);
+    expect(keyrings).toHaveLength(1);
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(3);
   });
 });

@@ -39,11 +39,12 @@ const PrivateKeyVaultPayloadSchema = z.strictObject({
 export const KEYRING_VAULT_ENTRY_VERSION = 1;
 
 export const VaultKeyringEntrySchema = z.strictObject({
-  keyringId: z.string().uuid(),
+  keyringId: z.uuid(),
   type: KeyringTypeSchema,
   createdAt: epochMillisecondsSchema,
   version: z.literal(KEYRING_VAULT_ENTRY_VERSION),
   payload: z.union([HdVaultPayloadSchema, PrivateKeyVaultPayloadSchema]),
+  namespace: z.string().optional(),
 });
 export type VaultKeyringEntry = z.infer<typeof VaultKeyringEntrySchema>;
 

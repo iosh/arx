@@ -18,7 +18,7 @@ const providerErrors = getProviderErrors("eip155");
 const textEncoder = new TextEncoder();
 
 type SignerDeps = {
-  keyring: Pick<KeyringService, "exportPrivateKey" | "hasAccount">;
+  keyring: Pick<KeyringService, "hasAccount" | "exportPrivateKeyForSigning">;
 };
 
 export type Eip155Signer = {
@@ -240,7 +240,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     const chainId = deriveChainId(context, draft.prepared);
     const envelope = buildEnvelope(draft.prepared, chainId);
 
-    const secret = deps.keyring.exportPrivateKey("eip155", from);
+    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", from);
     try {
       if (envelope.type === "eip1559") {
         const payload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
@@ -272,7 +272,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     const messageHex = normalisePersonalMessage(message);
     const payload = PersonalMessage.getSignPayload(messageHex);
 
-    const secret = deps.keyring.exportPrivateKey("eip155", address);
+    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", address);
     try {
       const signature = parseSignature(payload, secret);
       return composeSignatureHex(signature);
@@ -288,7 +288,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     const encoded = TypedData.encode(definition);
     const digest = Hash.keccak256(encoded);
 
-    const secret = deps.keyring.exportPrivateKey("eip155", address);
+    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", address);
     try {
       const signature = parseSignature(digest, secret);
       return composeSignatureHex(signature);

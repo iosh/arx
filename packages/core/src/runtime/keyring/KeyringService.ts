@@ -1,163 +1,69 @@
-import { z } from "zod";
+import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
+import { wordlist } from "@scure/bip39/wordlists/english.js";
 import type {
   AccountController,
-  ActivePointer,
   MultiNamespaceAccountsState,
   NamespaceAccountsState,
 } from "../../controllers/account/types.js";
 import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../errors/keyring.js";
+import { vaultErrors } from "../../errors/vault.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import { getAddressKey } from "../../keyring/namespace.js";
-import type {
-  HierarchicalDeterministicKeyring,
-  HierarchicalDeterministicKeyringSnapshot,
-  KeyringAccount,
-  KeyringSnapshot,
-  SimpleKeyring,
-  SimpleKeyringSnapshot,
-} from "../../keyring/types.js";
+import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
+import type { AccountMeta, KeyringMeta, VaultKeyringEntry } from "../../storage/keyringSchemas.js";
+import { KEYRING_VAULT_ENTRY_VERSION, VaultKeyringPayloadSchema } from "../../storage/keyringSchemas.js";
+import type { KeyringStorePort } from "../../storage/keyringStore.js";
 import type { VaultService } from "../../vault/types.js";
 import { zeroize } from "../../vault/utils.js";
 
-const KEYRING_ENVELOPE_VERSION = 1;
-
-const KeyringAccountSchema = z.strictObject({
-  address: z.string().min(1),
-  derivationPath: z.string().nullable(),
-  derivationIndex: z.number().int().nullable(),
-  source: z.union([z.literal("derived"), z.literal("imported")]),
-});
-
-const HierarchicalSnapshotSchema = z.strictObject({
-  type: z.literal("hierarchical"),
-  accounts: z.array(KeyringAccountSchema),
-  nextDerivationIndex: z.number().int().min(0),
-});
-
-const SimpleSnapshotSchema = z.strictObject({
-  type: z.literal("simple"),
-  account: KeyringAccountSchema.nullable(),
-});
-
-const KeyringSnapshotSchema = z.union([HierarchicalSnapshotSchema, SimpleSnapshotSchema]);
-
-const HdSecretSchema = z.strictObject({
-  type: z.literal("hd"),
-  mnemonic: z.string().min(1),
-  passphrase: z.string().optional(),
-});
-
-const PrivateKeySecretSchema = z.strictObject({
-  type: z.literal("private-key"),
-  privateKey: z.string().min(1),
-});
-
-const KeyringSecretSchema = z.discriminatedUnion("type", [HdSecretSchema, PrivateKeySecretSchema]);
-
-const KeyringInstanceSchema = z.strictObject({
-  id: z.string().uuid(),
-  kind: z.enum(["hd", "private-key"]),
-  createdAt: z.number(),
-  secret: KeyringSecretSchema,
-  snapshot: KeyringSnapshotSchema.optional(),
-});
-
-const NamespaceEnvelopeSchema = z.strictObject({
-  keyrings: z.array(KeyringInstanceSchema),
-});
-
-const KeyringEnvelopeSchema = z.strictObject({
-  version: z.literal(KEYRING_ENVELOPE_VERSION),
-  namespaces: z.record(z.string(), NamespaceEnvelopeSchema),
-});
-
-type KeyringInstanceEnvelope = z.infer<typeof KeyringInstanceSchema>;
-type NamespaceEnvelope = z.infer<typeof NamespaceEnvelopeSchema>;
-type KeyringEnvelope = z.infer<typeof KeyringEnvelopeSchema>;
-
-type RuntimeKeyring = {
-  id: string;
-  kind: KeyringKind;
-  instance: HierarchicalDeterministicKeyring | SimpleKeyring;
-};
-
-type NamespaceRuntime = {
-  config: NamespaceConfig;
-  keyrings: Map<string, RuntimeKeyring>;
-  envelope: NamespaceEnvelope;
-};
-
 type KeyringServiceOptions = {
-  vault: Pick<VaultService, "exportKey" | "getStatus" | "isUnlocked">;
+  vault: Pick<VaultService, "exportKey" | "isUnlocked" | "verifyPassword">;
   unlock: Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked">;
   accounts: Pick<AccountController, "getState" | "replaceState">;
+  keyringStore: KeyringStorePort;
   namespaces: NamespaceConfig[];
   logger?: (message: string, error?: unknown) => void;
 };
 
-type EnvelopeListener = (payload: Uint8Array | null) => void;
+type RuntimeKeyring = {
+  id: string;
+  kind: KeyringKind;
+  namespace: string;
+  instance: HierarchicalDeterministicKeyring | SimpleKeyring;
+};
+
+type Payload = { keyrings: VaultKeyringEntry[] };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const createEmptyEnvelope = (): KeyringEnvelope => ({
-  version: KEYRING_ENVELOPE_VERSION,
-  namespaces: {},
-});
-
-const decodeEnvelope = (
-  secret: Uint8Array,
-  logger?: (message: string, error?: unknown) => void,
-): KeyringEnvelope | null => {
-  if (secret.length === 0) {
-    return null;
-  }
+const encodePayload = (payload: Payload): Uint8Array => encoder.encode(JSON.stringify(payload));
+const decodePayload = (bytes: Uint8Array | null, logger?: (m: string, e?: unknown) => void): Payload => {
+  if (!bytes || bytes.length === 0) return { keyrings: [] };
   try {
-    const decoded = decoder.decode(secret);
-    const trimmed = decoded.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-    const parsed = JSON.parse(trimmed) as unknown;
-    return KeyringEnvelopeSchema.parse(parsed);
+    const parsed = JSON.parse(decoder.decode(bytes)) as unknown;
+    return VaultKeyringPayloadSchema.parse(parsed);
   } catch (error) {
-    logger?.("keyring: failed to decode envelope", error);
-    return null;
+    logger?.("keyring: failed to decode vault payload", error);
+    return { keyrings: [] };
   } finally {
-    zeroize(secret);
+    if (bytes) zeroize(bytes);
   }
-};
-
-const encodeEnvelope = (envelope: KeyringEnvelope): Uint8Array => {
-  const payload = JSON.stringify(envelope);
-  return encoder.encode(payload);
-};
-
-const normalizeSnapshot = (snapshot: KeyringSnapshot): KeyringSnapshot => {
-  if (snapshot.type === "hierarchical") {
-    return {
-      type: "hierarchical",
-      accounts: snapshot.accounts.filter((account) => account.source === "derived").map((account) => ({ ...account })),
-      nextDerivationIndex: snapshot.nextDerivationIndex,
-    };
-  }
-  return {
-    type: "simple",
-    account: snapshot.account ? { ...snapshot.account } : null,
-  };
 };
 
 export class KeyringService {
   #options: KeyringServiceOptions;
   #namespacesConfig: Map<string, NamespaceConfig>;
-  #namespaces = new Map<string, NamespaceRuntime>();
+  #keyrings = new Map<string, RuntimeKeyring>();
+  #keyringMetas = new Map<string, KeyringMeta>();
+  #accountMetas = new Map<string, AccountMeta>();
+  #payload: Payload = { keyrings: [] };
   #subscriptions: Array<() => void> = [];
-  #envelopeListeners = new Set<EnvelopeListener>();
-  #envelope: KeyringEnvelope | null = null;
+  #payloadListeners = new Set<(payload: Uint8Array | null) => void>();
+  #addressIndex = new Map<string, { namespace: string; keyringId: string }>();
   #initializing = false;
-  // dedupe index: namespace+normalizedAddress -> owner
-  #addressIndex = new Map<string, { namespace: string; keyringId: string; address: string; kind: KeyringKind }>();
+  #hydrationPromise: Promise<void> | null = null;
 
   constructor(options: KeyringServiceOptions) {
     this.#options = options;
@@ -165,13 +71,11 @@ export class KeyringService {
   }
 
   async attach() {
-    if (this.#subscriptions.length > 0) {
-      return;
-    }
+    if (this.#subscriptions.length > 0) return;
     this.#subscriptions.push(this.#options.unlock.onUnlocked((payload) => this.#handleUnlocked(payload)));
     this.#subscriptions.push(this.#options.unlock.onLocked((payload) => this.#handleLocked(payload)));
     if (this.#options.unlock.isUnlocked()) {
-      await this.#hydrateFromVault();
+      await this.#hydrate();
     }
   }
 
@@ -184,57 +88,212 @@ export class KeyringService {
       }
     });
     this.#subscriptions = [];
-    this.#clearNamespaces();
+    this.#clearRuntime();
   }
 
-  onEnvelopeUpdated(handler: EnvelopeListener): () => void {
-    this.#envelopeListeners.add(handler);
-    return () => {
-      this.#envelopeListeners.delete(handler);
-    };
-  }
-
-  getEnvelope(): Uint8Array | null {
-    if (!this.#envelope) {
-      return null;
-    }
-    return encodeEnvelope(this.#envelope);
+  onPayloadUpdated(handler: (payload: Uint8Array | null) => void): () => void {
+    this.#payloadListeners.add(handler);
+    return () => this.#payloadListeners.delete(handler);
   }
 
   getNamespaces(): NamespaceConfig[] {
     return Array.from(this.#namespacesConfig.values());
   }
 
-  getAccounts(namespace: string): KeyringAccount[] {
-    const runtime = this.#namespaces.get(namespace);
-    if (!runtime) return [];
-    const accounts: KeyringAccount[] = [];
-    for (const { instance } of runtime.keyrings.values()) {
-      accounts.push(...instance.getAccounts().map((a) => ({ ...a })));
-    }
-    return accounts;
+  getKeyrings(): KeyringMeta[] {
+    return Array.from(this.#keyringMetas.values()).map((m) => ({ ...m }));
   }
 
-  listKeyrings(
-    namespace?: string,
-  ): Array<{ namespace: string; id: string; kind: KeyringKind; accounts: KeyringAccount[] }> {
-    const entries: Array<{ namespace: string; id: string; kind: KeyringKind; accounts: KeyringAccount[] }> = [];
-    const sources = namespace
-      ? ([[namespace, this.#namespaces.get(namespace)]] as Array<[string, NamespaceRuntime | undefined]>)
-      : Array.from(this.#namespaces.entries());
+  getAccounts(includeHidden = false): AccountMeta[] {
+    return Array.from(this.#accountMetas.values())
+      .filter((a) => includeHidden || !a.hidden)
+      .map((a) => ({ ...a }));
+  }
 
-    for (const [ns, runtime] of sources) {
-      if (!runtime) continue;
-      for (const keyring of runtime.keyrings.values()) {
-        entries.push({
-          namespace: ns,
-          id: keyring.id,
-          kind: keyring.kind,
-          accounts: keyring.instance.getAccounts().map((a) => ({ ...a })),
-        });
-      }
+  generateMnemonic(wordCount: 12 | 24 = 12): string {
+    return BIP39Generate(wordlist, wordCount);
+  }
+
+  async confirmNewMnemonic(mnemonic: string, opts?: { alias?: string; skipBackup?: boolean; namespace?: string }) {
+    await this.#waitForHydration();
+    return this.#importMnemonic(mnemonic, { ...opts, fresh: true });
+  }
+
+  async importMnemonic(mnemonic: string, opts?: { alias?: string; namespace?: string }) {
+    await this.#waitForHydration();
+    return this.#importMnemonic(mnemonic, { ...opts, fresh: false });
+  }
+
+  async importPrivateKey(privateKey: string | Uint8Array, opts?: { alias?: string; namespace?: string }) {
+    await this.#waitForHydration();
+    this.#assertUnlocked();
+    const namespace = opts?.namespace ?? this.#defaultNamespace();
+    const config = this.#getConfig(namespace);
+    const factory = config.factories["private-key"];
+    if (!factory) throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
+
+    const keyring = factory();
+    keyring.loadFromPrivateKey(privateKey);
+    const [account] = keyring.getAccounts();
+    if (!account) throw keyringErrors.secretUnavailable();
+
+    const canonical = config.normalizeAddress(account.address);
+    this.#assertNoDuplicate(namespace, canonical);
+
+    const now = Date.now();
+    const keyringId = crypto.randomUUID();
+    const meta: KeyringMeta = { id: keyringId, type: "private-key", createdAt: now, alias: opts?.alias };
+    const accountMeta: AccountMeta = {
+      address: canonical,
+      keyringId,
+      derivationIndex: undefined,
+      alias: opts?.alias,
+      createdAt: now,
+    };
+
+    await this.#persistNewKeyring({
+      keyringId,
+      kind: "private-key",
+      namespace,
+      instance: keyring,
+      vaultEntry: {
+        keyringId,
+        type: "private-key",
+        createdAt: now,
+        version: KEYRING_VAULT_ENTRY_VERSION,
+        namespace,
+        payload: { privateKey: typeof privateKey === "string" ? privateKey : Buffer.from(privateKey).toString("hex") },
+      },
+      meta,
+      accounts: [accountMeta],
+    });
+
+    return { keyringId, account: { ...account, address: canonical } };
+  }
+
+  async deriveAccount(keyringId: string) {
+    await this.#waitForHydration();
+    this.#assertUnlocked();
+    const runtime = this.#keyrings.get(keyringId);
+    if (!runtime) throw new Error(`Keyring "${keyringId}" not found`);
+    if (runtime.kind !== "hd") throw keyringErrors.indexOutOfRange();
+    const meta = this.#keyringMetas.get(keyringId);
+    if (!meta) throw new Error(`Keyring meta missing for ${keyringId}`);
+
+    const instance = runtime.instance as HierarchicalDeterministicKeyring;
+    const index = meta.derivedCount ?? 0;
+    const derived = instance.deriveAccount(index);
+    const canonical = this.#normalize(runtime.namespace, derived.address);
+
+    this.#assertNoDuplicate(runtime.namespace, canonical);
+
+    const now = Date.now();
+    const accountMeta: AccountMeta = {
+      address: canonical,
+      keyringId,
+      derivationIndex: index,
+      createdAt: now,
+    };
+
+    this.#accountMetas.set(canonical, accountMeta);
+    this.#keyringMetas.set(keyringId, { ...meta, derivedCount: index + 1 });
+    this.#indexAccounts();
+
+    await this.#options.keyringStore.putAccountMetas(this.getAccounts(true));
+    await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
+
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
+    return { ...derived, address: canonical };
+  }
+
+  async hideHdAccount(address: string): Promise<void> {
+    await this.#toggleHidden(address, true);
+  }
+
+  async unhideHdAccount(address: string): Promise<void> {
+    await this.#toggleHidden(address, false);
+  }
+
+  async removePrivateKeyKeyring(keyringId: string): Promise<void> {
+    await this.#waitForHydration();
+    const runtime = this.#keyrings.get(keyringId);
+    if (!runtime) return;
+    if (runtime.kind !== "private-key") throw keyringErrors.indexOutOfRange();
+
+    this.#keyrings.delete(keyringId);
+    this.#keyringMetas.delete(keyringId);
+    for (const [addr, meta] of Array.from(this.#accountMetas.entries())) {
+      if (meta.keyringId === keyringId) this.#accountMetas.delete(addr);
     }
-    return entries;
+
+    this.#payload.keyrings = this.#payload.keyrings.filter((entry) => entry.keyringId !== keyringId);
+    this.#indexAccounts();
+    await this.#options.keyringStore.deleteKeyringMeta(keyringId);
+    await this.#options.keyringStore.deleteAccountsByKeyring(keyringId);
+
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
+  }
+
+  renameKeyring(keyringId: string, alias: string): Promise<void> {
+    const meta = this.#keyringMetas.get(keyringId);
+    if (!meta) return Promise.resolve();
+    this.#keyringMetas.set(keyringId, { ...meta, alias });
+    return this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
+  }
+
+  renameAccount(address: string, alias: string): Promise<void> {
+    const canonical = this.#normalize(this.#defaultNamespace(), address);
+    const meta = this.#accountMetas.get(canonical);
+    if (!meta) return Promise.resolve();
+    this.#accountMetas.set(canonical, { ...meta, alias });
+    return this.#options.keyringStore.putAccountMetas(this.getAccounts(true));
+  }
+
+  markBackedUp(keyringId: string): Promise<void> {
+    const meta = this.#keyringMetas.get(keyringId);
+    if (!meta) return Promise.resolve();
+    this.#keyringMetas.set(keyringId, { ...meta, backedUp: true });
+    return this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
+  }
+
+  hasNamespace(namespace: string): boolean {
+    return this.#namespacesConfig.has(namespace);
+  }
+
+  async removeAccount(namespace: string, address: string): Promise<void> {
+    await this.#waitForHydration();
+    const canonical = this.#normalize(namespace, address);
+    const meta = this.#accountMetas.get(canonical);
+    if (!meta) throw keyringErrors.accountNotFound();
+    const runtime = this.#keyrings.get(meta.keyringId);
+
+    if (runtime) {
+      runtime.instance.removeAccount(address);
+    } else {
+      this.#options.logger?.(`keyring: runtime missing for keyring "${meta.keyringId}", deleting metadata only`);
+    }
+
+    this.#accountMetas.delete(canonical);
+
+    const isSingleAccountKeyring =
+      runtime?.kind === "private-key" || (!runtime && this.#keyringMetas.get(meta.keyringId)?.type === "private-key");
+
+    if (isSingleAccountKeyring) {
+      // Single-account keyring: remove entire keyring
+      this.#keyrings.delete(meta.keyringId);
+      this.#keyringMetas.delete(meta.keyringId);
+      this.#payload.keyrings = this.#payload.keyrings.filter((entry) => entry.keyringId !== meta.keyringId);
+      await this.#options.keyringStore.deleteKeyringMeta(meta.keyringId);
+    } else {
+      // HD keyring: only delete the specific account
+      await this.#options.keyringStore.deleteAccount(canonical);
+    }
+
+    this.#indexAccounts();
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
   }
 
   hasAccount(namespace: string, address: string): boolean {
@@ -242,290 +301,381 @@ export class KeyringService {
     return this.#addressIndex.has(key);
   }
 
-  exportPrivateKey(namespace: string, keyringId: string, address: string): Uint8Array {
-    const runtime = this.#getRuntimeKeyring(namespace, keyringId);
-    return runtime.instance.exportPrivateKey(address);
+  async exportPrivateKey(namespace: string, address: string, password: string): Promise<Uint8Array> {
+    await this.#waitForHydration();
+    await this.#verifyPassword(password);
+    return this.#exportPrivateKeyUnsafe(namespace, address);
   }
 
-  createHdKeyring(
-    namespace: string,
-    params: { mnemonic: string; passphrase?: string },
-  ): { keyringId: string; accounts: KeyringAccount[] } {
-    const config = this.#getConfig(namespace);
-    const id = crypto.randomUUID();
-    const keyring = config.factories.hd?.();
-    if (!keyring) {
-      throw new Error(`Namespace "${namespace}" does not support hd keyring`);
-    }
-
-    keyring.loadFromMnemonic(params.mnemonic, params.passphrase ? { passphrase: params.passphrase } : undefined);
-    if (keyring.getAccounts().length === 0) {
-      keyring.deriveNextAccount();
-    }
-
-    const runtime = this.#ensureNamespaceRuntime(namespace);
-    this.#registerKeyring(
-      namespace,
-      runtime,
-      {
-        id,
-        kind: "hd",
-        createdAt: Date.now(),
-        secret: {
-          type: "hd",
-          mnemonic: params.mnemonic,
-          ...(params.passphrase ? { passphrase: params.passphrase } : {}),
-        },
-        snapshot: normalizeSnapshot(keyring.toSnapshot()),
-      },
-      keyring,
-    );
-
-    const accounts = keyring.getAccounts().map((a) => ({ ...a }));
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-    return { keyringId: id, accounts };
+  async exportPrivateKeyForSigning(namespace: string, address: string): Promise<Uint8Array> {
+    return this.#exportPrivateKeyUnsafe(namespace, address);
   }
 
-  importPrivateKey(
-    namespace: string,
-    params: { privateKey: string | Uint8Array },
-  ): { keyringId: string; account: KeyringAccount } {
-    const config = this.#getConfig(namespace);
-    const keyring = config.factories["private-key"]?.();
-    if (!keyring) {
-      throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
-    }
-
-    keyring.loadFromPrivateKey(params.privateKey);
-    const [account] = keyring.getAccounts();
-    if (!account) {
-      throw keyringErrors.secretUnavailable();
-    }
-
-    this.#assertNoDuplicate(namespace, account.address);
-
-    const runtime = this.#ensureNamespaceRuntime(namespace);
-    const id = crypto.randomUUID();
-    this.#registerKeyring(
-      namespace,
-      runtime,
-      {
-        id,
-        kind: "private-key",
-        createdAt: Date.now(),
-        secret: {
-          type: "private-key",
-          privateKey:
-            typeof params.privateKey === "string" ? params.privateKey : Buffer.from(params.privateKey).toString("hex"),
-        },
-        snapshot: normalizeSnapshot(keyring.toSnapshot()),
-      },
-      keyring,
-    );
-
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-    return { keyringId: id, account: { ...account } };
+  async exportMnemonic(keyringId: string, password: string): Promise<string> {
+    await this.#waitForHydration();
+    await this.#verifyPassword(password);
+    const entry = this.#payload.keyrings.find((k) => k.keyringId === keyringId && k.type === "hd");
+    if (!entry) throw keyringErrors.accountNotFound();
+    const payload = entry.payload as { mnemonic: string[]; passphrase?: string };
+    return payload.mnemonic.join(" ");
   }
 
-  deriveNextAccount(namespace: string, keyringId: string): KeyringAccount {
-    const runtime = this.#getRuntimeKeyring(namespace, keyringId);
-    if (runtime.kind !== "hd") {
-      throw keyringErrors.indexOutOfRange();
-    }
-    const derived = (runtime.instance as HierarchicalDeterministicKeyring).deriveNextAccount();
-    this.#assertNoDuplicate(namespace, derived.address);
-
-    this.#updateKeyringSnapshot(namespace, keyringId, runtime);
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-    return { ...derived };
+  getAccountsByKeyring(keyringId: string, includeHidden = false): AccountMeta[] {
+    return this.getAccounts(includeHidden).filter((a) => a.keyringId === keyringId);
   }
 
-  removeAccount(namespace: string, keyringId: string, address: string): void {
-    const runtime = this.#getRuntimeKeyring(namespace, keyringId);
-    runtime.instance.removeAccount(address);
-    this.#removeFromIndex(namespace, address);
+  async onLock(): Promise<void> {
+    this.#handleLocked({ at: Date.now(), reason: "manual" });
+  }
 
-    if (runtime.kind === "private-key") {
-      if (runtime.instance.getAccounts().length === 0) {
-        this.#removeKeyring(namespace, keyringId);
-      } else {
-        this.#updateKeyringSnapshot(namespace, keyringId, runtime);
+  // ----- private helpers -----
+
+  async #waitForHydration(): Promise<void> {
+    const hydration = this.#hydrationPromise;
+    if (!this.#initializing || !hydration) return;
+
+    const timeoutMs = 10_000;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        hydration,
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error("Hydration timeout")), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
+    await this.#waitForHydration();
+    const canonical = this.#normalize(namespace, address);
+    const key = this.#toKey(namespace, canonical);
+    const indexed = this.#addressIndex.get(key);
+    if (!indexed) throw keyringErrors.accountNotFound();
+    const runtime = this.#getRuntimeKeyring(namespace, indexed.keyringId);
+    return runtime.instance.exportPrivateKey(canonical);
+  }
+
+  async #verifyPassword(password: string) {
+    try {
+      await this.#options.vault.verifyPassword(password);
+    } catch (error) {
+      if ((error as { code?: string }).code === "ARX_VAULT_INVALID_PASSWORD") {
+        throw vaultErrors.invalidPassword();
       }
-    } else {
-      this.#updateKeyringSnapshot(namespace, keyringId, runtime);
+      throw error;
+    }
+  }
+
+  async #importMnemonic(
+    mnemonic: string,
+    opts: { alias?: string; skipBackup?: boolean; namespace?: string; fresh: boolean },
+  ) {
+    this.#assertUnlocked();
+    const normalized = mnemonic.trim().replace(/\s+/g, " ");
+    if (!validateMnemonic(normalized, wordlist)) {
+      throw keyringErrors.invalidMnemonic();
     }
 
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-  }
+    const namespace = opts.namespace ?? this.#defaultNamespace();
 
-  importAccount(namespace: string, keyringId: string, privateKey: string | Uint8Array): KeyringAccount {
-    const runtime = this.#getRuntimeKeyring(namespace, keyringId);
-    if (runtime.kind !== "hd") {
-      throw keyringErrors.indexOutOfRange();
+    const existingHd = this.#payload.keyrings.find(
+      (entry) =>
+        entry.type === "hd" &&
+        (entry.namespace ?? this.#defaultNamespace()) === namespace &&
+        Array.isArray((entry.payload as { mnemonic?: unknown[] }).mnemonic) &&
+        (entry.payload as { mnemonic: string[] }).mnemonic.join(" ") === normalized,
+    );
+
+    if (existingHd) {
+      const firstAccount = this.getAccounts(true).find(
+        (a) => a.keyringId === existingHd.keyringId && (a.derivationIndex ?? 0) === 0,
+      );
+      return { keyringId: existingHd.keyringId, address: firstAccount?.address };
     }
 
-    const account = (runtime.instance as HierarchicalDeterministicKeyring).importAccount(privateKey);
-    this.#assertNoDuplicate(namespace, account.address);
-    this.#updateKeyringSnapshot(namespace, keyringId, runtime);
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-    return { ...account };
-  }
-
-  hasNamespace(namespace: string): boolean {
-    return this.#namespacesConfig.has(namespace);
-  }
-
-  #getConfig(namespace: string): NamespaceConfig {
-    const config = this.#namespacesConfig.get(namespace);
-    if (!config) {
-      throw new Error(`Namespace "${namespace}" is not supported`);
-    }
-    return config;
-  }
-
-  #toKey(namespace: string, address: string): string {
+    const words = normalized.split(" ");
     const config = this.#getConfig(namespace);
-    return getAddressKey(namespace, address, config.normalizeAddress);
-  }
 
-  #ensureNamespaceRuntime(namespace: string): NamespaceRuntime {
-    const existing = this.#namespaces.get(namespace);
-    if (existing) return existing;
+    const factory = config.factories.hd;
+    if (!factory) throw new Error(`Namespace "${namespace}" does not support hd keyring`);
 
-    const config = this.#getConfig(namespace);
-    const envelope = this.#ensureNamespaceEnvelope(namespace);
-    const runtime: NamespaceRuntime = { config, keyrings: new Map(), envelope };
-    this.#namespaces.set(namespace, runtime);
-    return runtime;
-  }
+    const keyring = factory();
+    keyring.loadFromMnemonic(normalized);
+    const first = keyring.deriveNextAccount();
+    const canonical = config.normalizeAddress(first.address);
+    this.#assertNoDuplicate(namespace, canonical);
 
-  #ensureNamespaceEnvelope(namespace: string): NamespaceEnvelope {
-    const current = this.#ensureEnvelope();
-    if (!current.namespaces[namespace]) {
-      current.namespaces[namespace] = { keyrings: [] };
-    }
-    return current.namespaces[namespace]!;
-  }
-
-  #ensureEnvelope(): KeyringEnvelope {
-    if (!this.#envelope) {
-      this.#envelope = createEmptyEnvelope();
-    }
-    return this.#envelope;
-  }
-
-  #getRuntimeKeyring(namespace: string, keyringId: string): RuntimeKeyring {
-    const runtime = this.#namespaces.get(namespace);
-    if (!runtime) {
-      throw new Error(`Namespace "${namespace}" is not initialized`);
-    }
-    const keyring = runtime.keyrings.get(keyringId);
-    if (!keyring) {
-      throw new Error(`Keyring "${keyringId}" is not initialized`);
-    }
-    return keyring;
-  }
-
-  #registerKeyring(
-    namespace: string,
-    runtime: NamespaceRuntime,
-    envelopeEntry: KeyringInstanceEnvelope,
-    instance: HierarchicalDeterministicKeyring | SimpleKeyring,
-  ): void {
-    const sanitizedSnapshot = envelopeEntry.snapshot ? normalizeSnapshot(envelopeEntry.snapshot) : undefined;
-    const sanitizedEntry: KeyringInstanceEnvelope = {
-      ...envelopeEntry,
-      snapshot: sanitizedSnapshot,
+    const now = Date.now();
+    const keyringId = crypto.randomUUID();
+    const meta: KeyringMeta = {
+      id: keyringId,
+      type: "hd",
+      createdAt: now,
+      alias: opts.alias,
+      backedUp: opts.skipBackup ? false : true,
+      derivedCount: 1,
+    };
+    const accountMeta: AccountMeta = {
+      address: canonical,
+      keyringId,
+      derivationIndex: 0,
+      alias: opts.alias,
+      createdAt: now,
     };
 
-    runtime.keyrings.set(envelopeEntry.id, {
-      id: envelopeEntry.id,
-      kind: envelopeEntry.kind,
-      instance,
+    await this.#persistNewKeyring({
+      keyringId,
+      kind: "hd",
+      namespace,
+      instance: keyring,
+      vaultEntry: {
+        keyringId,
+        type: "hd",
+        createdAt: now,
+        version: KEYRING_VAULT_ENTRY_VERSION,
+        namespace,
+        payload: { mnemonic: words, passphrase: undefined },
+      },
+      meta,
+      accounts: [accountMeta],
     });
 
-    runtime.envelope.keyrings = runtime.envelope.keyrings.filter((item) => item.id !== envelopeEntry.id);
-    runtime.envelope.keyrings.push(sanitizedEntry);
-    this.#indexAccounts(namespace, envelopeEntry.id, envelopeEntry.kind, instance, runtime.config.normalizeAddress);
+    return { keyringId, address: canonical };
   }
 
-  #removeKeyring(namespace: string, keyringId: string): void {
-    const runtime = this.#namespaces.get(namespace);
-    if (!runtime) return;
-
-    runtime.keyrings.delete(keyringId);
-    runtime.envelope.keyrings = runtime.envelope.keyrings.filter((item) => item.id !== keyringId);
-    this.#rebuildIndex();
-  }
-
-  #updateKeyringSnapshot(namespace: string, keyringId: string, runtime: RuntimeKeyring): void {
-    const nsRuntime = this.#namespaces.get(namespace);
-    if (!nsRuntime) return;
-
-    const snapshot = normalizeSnapshot(runtime.instance.toSnapshot() as KeyringSnapshot);
-    const existing = nsRuntime.envelope.keyrings.find((entry) => entry.id === keyringId);
-    if (existing) {
-      existing.snapshot = snapshot;
-    } else {
-      nsRuntime.envelope.keyrings.push({
-        id: keyringId,
-        kind: runtime.kind,
-        createdAt: Date.now(),
-        secret:
-          runtime.kind === "hd"
-            ? { type: "hd", mnemonic: "", passphrase: undefined }
-            : { type: "private-key", privateKey: "" },
-        snapshot,
-      });
+  async #persistNewKeyring(params: {
+    keyringId: string;
+    kind: KeyringKind;
+    namespace: string;
+    instance: HierarchicalDeterministicKeyring | SimpleKeyring;
+    vaultEntry: VaultKeyringEntry;
+    meta: KeyringMeta;
+    accounts: AccountMeta[];
+  }) {
+    this.#keyrings.set(params.keyringId, {
+      id: params.keyringId,
+      kind: params.kind,
+      namespace: params.namespace,
+      instance: params.instance,
+    });
+    this.#payload.keyrings = [
+      ...this.#payload.keyrings.filter((k) => k.keyringId !== params.keyringId),
+      params.vaultEntry,
+    ];
+    this.#keyringMetas.set(params.keyringId, params.meta);
+    for (const acct of params.accounts) {
+      this.#accountMetas.set(acct.address, acct);
     }
-    this.#rebuildIndex();
+    this.#indexAccounts();
+
+    await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
+    await this.#options.keyringStore.putAccountMetas(this.getAccounts(true));
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
   }
 
-  #indexAccounts(
-    namespace: string,
-    keyringId: string,
-    kind: KeyringKind,
-    instance: HierarchicalDeterministicKeyring | SimpleKeyring,
-    normalize: (value: string) => string,
-  ) {
-    for (const account of instance.getAccounts()) {
-      const key = `${namespace}:${normalize(account.address)}`;
-      if (this.#addressIndex.has(key)) {
-        throw keyringErrors.duplicateAccount();
+  async #hydrate() {
+    if (this.#initializing) return;
+    this.#initializing = true;
+
+    let resolveHydration!: () => void;
+    this.#hydrationPromise = new Promise<void>((resolve) => {
+      resolveHydration = resolve;
+    });
+
+    try {
+      if (!this.#options.vault.isUnlocked()) {
+        this.#clearRuntime();
+        return;
       }
-      this.#addressIndex.set(key, { namespace, keyringId, address: normalize(account.address), kind });
-    }
-  }
+      const [metas, accounts] = await Promise.all([
+        this.#options.keyringStore.getKeyringMetas(),
+        this.#options.keyringStore.getAccountMetas(),
+      ]);
 
-  #removeFromIndex(namespace: string, address: string) {
-    const key = this.#toKey(namespace, address);
-    this.#addressIndex.delete(key);
-  }
+      this.#keyringMetas = new Map(metas.map((m) => [m.id, m]));
+      this.#accountMetas = new Map(accounts.map((a) => [a.address, a]));
 
-  #rebuildIndex() {
-    this.#addressIndex.clear();
-    for (const [namespace, runtime] of this.#namespaces.entries()) {
-      const normalize = runtime.config.normalizeAddress;
-      for (const item of runtime.keyrings.values()) {
-        for (const account of item.instance.getAccounts()) {
-          const key = `${namespace}:${normalize(account.address)}`;
-          if (this.#addressIndex.has(key)) {
-            throw keyringErrors.duplicateAccount();
+      const payload = decodePayload(this.#options.vault.exportKey(), this.#options.logger);
+      this.#payload = payload;
+      this.#keyrings.clear();
+
+      const isHdPayload = (value: unknown): value is { mnemonic: string[]; passphrase?: string } =>
+        !!value && typeof value === "object" && Array.isArray((value as { mnemonic?: unknown }).mnemonic);
+
+      const isPrivateKeyPayload = (value: unknown): value is { privateKey: string } =>
+        !!value && typeof value === "object" && typeof (value as { privateKey?: unknown }).privateKey === "string";
+      for (const entry of payload.keyrings) {
+        const namespace = entry.namespace ?? this.#defaultNamespace();
+        const config = this.#getConfig(namespace);
+        const factory =
+          entry.type === "hd"
+            ? config.factories.hd
+            : entry.type === "private-key"
+              ? config.factories["private-key"]
+              : undefined;
+        if (!factory) continue;
+
+        try {
+          const instance = factory();
+          if (entry.type === "hd") {
+            if (!isHdPayload(entry.payload)) throw keyringErrors.secretUnavailable();
+            const hd = instance as HierarchicalDeterministicKeyring;
+            const payload = entry.payload;
+            hd.loadFromMnemonic(
+              payload.mnemonic.join(" "),
+              payload.passphrase ? { passphrase: payload.passphrase } : undefined,
+            );
+
+            const accs = accounts.filter((a) => a.keyringId === entry.keyringId);
+            const derived = accs
+              .filter((a) => a.derivationIndex !== undefined)
+              .sort((a, b) => (a.derivationIndex ?? 0) - (b.derivationIndex ?? 0));
+
+            for (const meta of derived) {
+              const derivedAccount = hd.deriveAccount(meta.derivationIndex ?? 0);
+              if (config.normalizeAddress(derivedAccount.address) !== meta.address) {
+                throw keyringErrors.secretUnavailable();
+              }
+            }
+          } else {
+            if (!isPrivateKeyPayload(entry.payload)) throw keyringErrors.secretUnavailable();
+            const simple = instance as SimpleKeyring;
+            const payload = entry.payload;
+            simple.loadFromPrivateKey(payload.privateKey);
           }
-          this.#addressIndex.set(key, {
-            namespace,
-            keyringId: item.id,
-            address: normalize(account.address),
-            kind: item.kind,
-          });
+
+          this.#keyrings.set(entry.keyringId, { id: entry.keyringId, kind: entry.type, namespace, instance });
+        } catch (error) {
+          this.#options.logger?.(`keyring: failed to hydrate keyring ${entry.keyringId}`, error);
         }
       }
+
+      await this.#reconcileDerivedCounts();
+      this.#indexAccounts(false);
+      this.#syncAccountsState();
+      this.#notifyPayloadUpdated();
+    } finally {
+      this.#initializing = false;
+      resolveHydration();
+      this.#hydrationPromise = null;
     }
+  }
+  #handleUnlocked(_payload: UnlockUnlockedPayload): void {
+    void this.#hydrate().catch((error) => this.#options.logger?.("keyring: hydrate failed", error));
+  }
+
+  #handleLocked(_payload: UnlockLockedPayload): void {
+    this.#clearRuntime();
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
+  }
+
+  #clearRuntime() {
+    for (const runtime of this.#keyrings.values()) {
+      try {
+        runtime.instance.clear();
+      } catch (error) {
+        this.#options.logger?.("keyring: failed to clear runtime keyring", error);
+      }
+    }
+    this.#keyrings.clear();
+    this.#keyringMetas.clear();
+    this.#accountMetas.clear();
+    this.#addressIndex.clear();
+    this.#payload = { keyrings: [] };
+  }
+
+  #notifyPayloadUpdated() {
+    const encoded = encodePayload(this.#payload);
+    for (const listener of this.#payloadListeners) {
+      try {
+        listener(encoded.length > 0 ? new Uint8Array(encoded) : null);
+      } catch (error) {
+        this.#options.logger?.("keyring: payload listener threw", error);
+      }
+    }
+  }
+
+  #indexAccounts(strict = true) {
+    this.#addressIndex.clear();
+    for (const runtime of this.#keyrings.values()) {
+      const normalize = this.#getConfig(runtime.namespace).normalizeAddress;
+      const accounts = this.getAccounts(true).filter((a) => a.keyringId === runtime.id);
+      for (const account of accounts) {
+        const key = getAddressKey(runtime.namespace, account.address, normalize);
+        if (this.#addressIndex.has(key)) {
+          if (strict) {
+            throw keyringErrors.duplicateAccount();
+          } else {
+            this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${key}`);
+            continue;
+          }
+        }
+        this.#addressIndex.set(key, { namespace: runtime.namespace, keyringId: runtime.id });
+      }
+    }
+  }
+
+  #syncAccountsState() {
+    const current = this.#options.accounts.getState();
+    const ns = this.#defaultNamespace();
+    const visible = this.getAccounts(false).map((a) => a.address);
+    const previous = current.namespaces[ns] ?? { all: [], primary: null };
+    const primary = previous.primary && visible.includes(previous.primary) ? previous.primary : (visible[0] ?? null);
+    const namespaces: Record<string, NamespaceAccountsState<string>> = {
+      ...current.namespaces,
+      [ns]: { all: visible, primary },
+    };
+    const active =
+      current.active &&
+      current.active.namespace === ns &&
+      current.active.address &&
+      visible.includes(current.active.address)
+        ? current.active
+        : primary
+          ? { namespace: ns, chainRef: current.active?.chainRef ?? ns + ":1", address: primary }
+          : null;
+
+    const nextState: MultiNamespaceAccountsState<string> = { namespaces, active };
+    this.#options.accounts.replaceState(nextState);
+  }
+  // Ensures hd keyring meta.derivedCount reflects (max derivationIndex + 1) of stored accounts.
+  // Prevents index reuse after partial rollback or manual edits.
+  async #reconcileDerivedCounts() {
+    let patched = false;
+    for (const [keyringId, meta] of this.#keyringMetas) {
+      if (meta.type !== "hd") continue;
+      const accounts = this.getAccounts(true).filter((a) => a.keyringId === keyringId);
+      const maxIndex = Math.max(-1, ...accounts.map((a) => a.derivationIndex ?? -1));
+      const expected = maxIndex + 1;
+      if (meta.derivedCount === undefined || meta.derivedCount < expected) {
+        this.#options.logger?.(`keyring: derivedCount mismatch, fixing ${meta.derivedCount ?? "unset"} -> ${expected}`);
+        this.#keyringMetas.set(keyringId, { ...meta, derivedCount: expected });
+        patched = true;
+      }
+    }
+    if (patched) {
+      await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
+    }
+  }
+
+  async #toggleHidden(address: string, hidden: boolean) {
+    await this.#waitForHydration();
+    this.#assertUnlocked();
+    const canonical = this.#normalize(this.#defaultNamespace(), address);
+    const meta = this.#accountMetas.get(canonical);
+    if (!meta) throw keyringErrors.accountNotFound();
+    this.#accountMetas.set(canonical, { ...meta, hidden });
+    await this.#options.keyringStore.putAccountMetas(this.getAccounts(true));
+    this.#syncAccountsState();
+  }
+
+  #normalize(namespace: string, address: string): string {
+    return this.#getConfig(namespace).normalizeAddress(address);
   }
 
   #assertNoDuplicate(namespace: string, address: string) {
@@ -535,201 +685,33 @@ export class KeyringService {
     }
   }
 
-  async #hydrateFromVault(): Promise<void> {
-    if (this.#initializing) {
-      return;
-    }
-    this.#initializing = true;
-    try {
-      if (!this.#options.vault.isUnlocked()) {
-        this.#clearNamespaces();
-        this.#envelope = null;
-        return;
-      }
-
-      let exported: Uint8Array;
-      try {
-        exported = this.#options.vault.exportKey();
-      } catch (error) {
-        this.#options.logger?.("keyring: vault refused exportKey()", error);
-        this.#clearNamespaces();
-        this.#envelope = null;
-        this.#notifyEnvelopeUpdated();
-        return;
-      }
-
-      const decoded = decodeEnvelope(exported, this.#options.logger) ?? createEmptyEnvelope();
-      this.#envelope = decoded;
-      this.#initializeNamespaces(decoded);
-      this.#syncAccountsState();
-      this.#notifyEnvelopeUpdated();
-    } finally {
-      this.#initializing = false;
+  #assertUnlocked() {
+    if (!this.#options.vault.isUnlocked()) {
+      throw keyringErrors.secretUnavailable();
     }
   }
 
-  #initializeNamespaces(envelope: KeyringEnvelope): void {
-    this.#clearNamespaces();
-    for (const [namespace, payload] of Object.entries(envelope.namespaces)) {
-      const config = this.#namespacesConfig.get(namespace);
-      if (!config) {
-        this.#options.logger?.(`keyring: skipped unsupported namespace "${namespace}"`, undefined);
-        continue;
-      }
-
-      // Ensure namespace envelope exists in this.#envelope
-      if (!this.#envelope!.namespaces[namespace]) {
-        this.#envelope!.namespaces[namespace] = { keyrings: [] };
-      }
-      const namespaceEnvelope = this.#envelope!.namespaces[namespace]!;
-
-      const runtime: NamespaceRuntime = { config, keyrings: new Map(), envelope: namespaceEnvelope };
-      for (const entry of payload.keyrings) {
-        const factory =
-          entry.kind === "hd"
-            ? config.factories.hd
-            : entry.kind === "private-key"
-              ? config.factories["private-key"]
-              : undefined;
-        if (!factory) {
-          this.#options.logger?.(`keyring: no factory for kind "${entry.kind}" in namespace "${namespace}"`, undefined);
-          continue;
-        }
-        try {
-          const instance = factory();
-          if (entry.secret.type === "hd") {
-            (instance as HierarchicalDeterministicKeyring).loadFromMnemonic(
-              entry.secret.mnemonic,
-              entry.secret.passphrase ? { passphrase: entry.secret.passphrase } : undefined,
-            );
-          } else {
-            (instance as SimpleKeyring).loadFromPrivateKey(entry.secret.privateKey);
-          }
-
-          if (entry.snapshot) {
-            const snapshot = normalizeSnapshot(entry.snapshot);
-            if (snapshot.type === "hierarchical") {
-              (instance as HierarchicalDeterministicKeyring).hydrate(
-                snapshot as HierarchicalDeterministicKeyringSnapshot,
-              );
-            } else {
-              (instance as SimpleKeyring).hydrate(snapshot as SimpleKeyringSnapshot);
-            }
-          }
-          runtime.keyrings.set(entry.id, { id: entry.id, kind: entry.kind, instance });
-
-          // Only push if not already exists
-          const existingIndex = namespaceEnvelope.keyrings.findIndex((k) => k.id === entry.id);
-          if (existingIndex === -1) {
-            namespaceEnvelope.keyrings.push({
-              ...entry,
-              snapshot: entry.snapshot ? normalizeSnapshot(entry.snapshot) : undefined,
-            });
-          }
-        } catch (error) {
-          this.#options.logger?.(`keyring: failed to initialize keyring "${entry.id}"`, error);
-        }
-      }
-      this.#namespaces.set(namespace, runtime);
-    }
-    this.#rebuildIndex();
+  #toKey(namespace: string, address: string): string {
+    return getAddressKey(namespace, address, this.#getConfig(namespace).normalizeAddress);
   }
 
-  #buildNamespacesState(current: MultiNamespaceAccountsState<string>): Record<string, NamespaceAccountsState<string>> {
-    const result: Record<string, NamespaceAccountsState<string>> = {};
-
-    for (const [namespace, runtime] of this.#namespaces.entries()) {
-      const normalize = runtime.config.normalizeAddress;
-      const canonicalAccounts = Array.from(runtime.keyrings.values()).flatMap((kr) =>
-        kr.instance.getAccounts().map((account) => normalize(account.address)),
-      );
-      const previous = current.namespaces[namespace] ?? { all: [], primary: null };
-      const primary = this.#resolvePrimaryAddress(canonicalAccounts, previous.primary);
-      result[namespace] = { all: canonicalAccounts, primary };
+  #getRuntimeKeyring(namespace: string, keyringId: string): RuntimeKeyring {
+    const runtime = this.#keyrings.get(keyringId);
+    if (!runtime || runtime.namespace !== namespace) {
+      throw new Error(`Keyring "${keyringId}" is not initialized`);
     }
-
-    return result;
+    return runtime;
   }
 
-  #resolvePrimaryAddress(accounts: string[], currentPrimary: string | null): string | null {
-    if (currentPrimary && accounts.includes(currentPrimary)) {
-      return currentPrimary;
-    }
-    return accounts[0] ?? null;
+  #getConfig(namespace: string): NamespaceConfig {
+    const config = this.#namespacesConfig.get(namespace);
+    if (!config) throw new Error(`Namespace "${namespace}" is not supported`);
+    return config;
   }
 
-  #resolveActivePointer(
-    current: MultiNamespaceAccountsState<string>,
-    nextNamespaces: Record<string, NamespaceAccountsState<string>>,
-  ): ActivePointer<string> | null {
-    if (!current.active) {
-      return null;
-    }
-
-    if (!nextNamespaces[current.active.namespace]) {
-      return null;
-    }
-
-    const primary = nextNamespaces[current.active.namespace]?.primary;
-    if (!primary) {
-      return null;
-    }
-
-    const accounts = nextNamespaces[current.active.namespace]?.all ?? [];
-    if (accounts.includes(current.active.address ?? "")) {
-      return { ...current.active };
-    }
-
-    return { ...current.active, address: primary };
-  }
-
-  #syncAccountsState() {
-    const current = this.#options.accounts.getState();
-    const nextNamespaces = this.#buildNamespacesState(current);
-    const nextActive = this.#resolveActivePointer(current, nextNamespaces);
-
-    this.#options.accounts.replaceState({
-      namespaces: nextNamespaces,
-      active: nextActive,
-    });
-  }
-
-  #handleUnlocked(_payload: UnlockUnlockedPayload): void {
-    void this.#hydrateFromVault().catch((error) => {
-      this.#options.logger?.("keyring: failed to hydrate after unlock", error);
-    });
-  }
-
-  #handleLocked(_payload: UnlockLockedPayload): void {
-    this.#clearNamespaces();
-    this.#envelope = null;
-    this.#addressIndex.clear();
-    this.#syncAccountsState();
-    this.#notifyEnvelopeUpdated();
-  }
-
-  #notifyEnvelopeUpdated(): void {
-    const encoded = this.getEnvelope();
-    for (const listener of this.#envelopeListeners) {
-      try {
-        listener(encoded ? new Uint8Array(encoded) : null);
-      } catch (error) {
-        this.#options.logger?.("keyring: envelope listener threw", error);
-      }
-    }
-  }
-
-  #clearNamespaces(): void {
-    for (const runtime of this.#namespaces.values()) {
-      for (const keyring of runtime.keyrings.values()) {
-        try {
-          keyring.instance.clear();
-        } catch (error) {
-          this.#options.logger?.("keyring: failed to clear runtime keyring", error);
-        }
-      }
-    }
-    this.#namespaces.clear();
-    this.#addressIndex.clear();
+  #defaultNamespace(): string {
+    const [first] = this.#namespacesConfig.keys();
+    if (!first) throw new Error("No keyring namespace configured");
+    return first;
   }
 }

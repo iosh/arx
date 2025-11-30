@@ -18,6 +18,7 @@ type BridgeOptions = {
 type DeriveAccountOptions = {
   namespace: string;
   chainRef: Caip2ChainId;
+  keyringId?: string;
   makePrimary?: boolean;
   switchActive?: boolean;
 };
@@ -55,7 +56,8 @@ export class AccountsKeyringBridge {
   }
   async deriveAccount(options: DeriveAccountOptions): Promise<BridgeAccountResult> {
     this.#assertNamespace(options.namespace, options.chainRef);
-    const account = this.#keyring.deriveNextAccount(options.namespace);
+    const keyringId = options.keyringId ?? this.#pickDefaultHdKeyringId();
+    const account = await this.#keyring.deriveAccount(keyringId);
 
     let namespaceState: NamespaceAccountsState<string> | null = null;
 
@@ -76,8 +78,9 @@ export class AccountsKeyringBridge {
 
   async importAccount(options: ImportAccountOptions): Promise<BridgeAccountResult> {
     this.#assertNamespace(options.namespace, options.chainRef);
-    const account = this.#keyring.importAccount(options.namespace, options.privateKey);
-
+    const { keyringId, account } = await this.#keyring.importPrivateKey(options.privateKey, {
+      namespace: options.namespace,
+    });
     let namespaceState: NamespaceAccountsState<string> | null = null;
 
     try {
@@ -108,7 +111,7 @@ export class AccountsKeyringBridge {
     });
 
     try {
-      this.#keyring.removeAccount(options.namespace, options.address);
+      await this.#keyring.removeAccount(options.namespace, options.address);
     } catch (error) {
       this.#logger?.("bridge: failed to remove account from keyring", error);
       await this.#restoreAccountAfterKeyringFailure(options, previousNamespace, previousPointer);
@@ -168,7 +171,7 @@ export class AccountsKeyringBridge {
       }
     }
     try {
-      this.#keyring.removeAccount(options.namespace, address);
+      await this.#keyring.removeAccount(options.namespace, address);
     } catch (error) {
       this.#logger?.("bridge: failed to rollback keyring state", error);
     }
@@ -196,5 +199,11 @@ export class AccountsKeyringBridge {
     } catch (error) {
       this.#logger?.("bridge: failed to restore controller state after keyring removal failure", error);
     }
+  }
+
+  #pickDefaultHdKeyringId(): string {
+    const meta = this.#keyring.getKeyrings().find((m) => m.type === "hd");
+    if (!meta) throw new Error("No HD keyring available");
+    return meta.id;
   }
 }

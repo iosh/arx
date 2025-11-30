@@ -20,7 +20,7 @@ import {
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDexieChainRegistryPort, createDexieStorage } from "./index.js";
+import { createDexieChainRegistryPort, createDexieKeyringStore, createDexieStorage } from "./index.js";
 
 const DB_NAME = "arx-storage-test";
 
@@ -78,6 +78,8 @@ const openTestDexie = async () => {
     transactions: "&namespace",
     vaultMeta: "&id",
     chainRegistry: "&chainRef",
+    keyringMetas: "&id, type, createdAt",
+    accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
   });
   await raw.open();
   return raw;
@@ -348,6 +350,62 @@ describe("DexieChainRegistryPort", () => {
         createdAt: TS,
       };
       expect(AccountMetaSchema.safeParse(invalid).success).toBe(false);
+    });
+  });
+
+  describe("DexieKeyringStorePort", () => {
+    const TS = 1_706_000_000_123;
+    const keyringMeta = {
+      id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      type: "hd" as const,
+      createdAt: TS,
+      derivedCount: 2,
+      backedUp: false,
+    };
+    const accountMeta = {
+      address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      keyringId: keyringMeta.id,
+      derivationIndex: 1,
+      createdAt: TS,
+    };
+
+    it("stores and loads keyring/account metas", async () => {
+      const store = createDexieKeyringStore({ databaseName: DB_NAME });
+
+      await store.putKeyringMetas([keyringMeta]);
+      await store.putAccountMetas([accountMeta]);
+
+      expect(await store.getKeyringMetas()).toEqual([keyringMeta]);
+      expect(await store.getAccountMetas()).toEqual([accountMeta]);
+    });
+
+    it("drops invalid rows on read", async () => {
+      const store = createDexieKeyringStore({ databaseName: DB_NAME });
+      const raw = await openTestDexie();
+
+      await raw.table("keyringMetas").put({ ...keyringMeta, id: "bad-id" });
+      await raw.table("accountMetas").put({
+        ...accountMeta,
+        address: "0xABCDEFabcdefabcdefabcdefabcdefabcdefabcd",
+      });
+      await raw.close();
+
+      expect(await store.getKeyringMetas()).toEqual([]);
+      expect(await store.getAccountMetas()).toEqual([]);
+    });
+
+    it("deletes accounts when keyring is deleted", async () => {
+      const store = createDexieKeyringStore({ databaseName: DB_NAME });
+      await store.putKeyringMetas([keyringMeta]);
+      await store.putAccountMetas([
+        accountMeta,
+        { ...accountMeta, address: "0xffffffffffffffffffffffffffffffffffffffff", derivationIndex: 2 },
+      ]);
+
+      await store.deleteKeyringMeta(keyringMeta.id);
+
+      expect(await store.getKeyringMetas()).toEqual([]);
+      expect(await store.getAccountMetas()).toEqual([]);
     });
   });
 });

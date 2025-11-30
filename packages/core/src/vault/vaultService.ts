@@ -240,6 +240,29 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
       iterationCount = parsed.iterations;
     },
 
+    async verifyPassword(password: string): Promise<void> {
+      const sealed = ciphertext;
+      if (!sealed) throw vaultErrors.notInitialized();
+
+      const saltBytes = fromBase64(sealed.salt);
+      const iterations = sealed.iterations;
+      const cipherBytes = fromBase64(sealed.cipher);
+      const ivBytes = fromBase64(sealed.iv);
+      let keyMaterial: Uint8Array | null = null;
+      try {
+        const passwordKey = await importPasswordKey(password);
+        keyMaterial = await deriveKeyMaterial(passwordKey, saltBytes, iterations);
+        await aesGcmDecrypt(keyMaterial, cipherBytes, ivBytes);
+      } catch (error) {
+        const maybeVaultError = error as { code?: string };
+        if (maybeVaultError?.code === "ARX_VAULT_INVALID_CIPHERTEXT") {
+          throw vaultErrors.invalidPassword();
+        }
+        throw error;
+      } finally {
+        if (keyMaterial) zeroize(keyMaterial);
+      }
+    },
     getCiphertext(): VaultCiphertext | null {
       return ciphertext ? cloneCiphertext(ciphertext) : null;
     },

@@ -84,16 +84,20 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
     const execute = createMethodExecutor(services.controllers);
     const mainnet = services.controllers.network.getActiveChain();
 
     await services.controllers.network.addChain(ALT_CHAIN);
 
-    services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+    const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
     const { account } = await services.accountsRuntime.deriveAccount({
       namespace: "eip155",
       chainRef: mainnet.chainRef,
+      keyringId,
       makePrimary: true,
       switchActive: true,
     });
@@ -824,6 +828,9 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
     // Setup auto-approval for transactions
     const unsubscribe = services.controllers.approvals.onRequest(async (task) => {
       try {
@@ -840,10 +847,11 @@ describe("eip155 handlers - approval metadata", () => {
       const execute = createMethodExecutor(services.controllers);
       const mainnet = services.controllers.network.getActiveChain();
 
-      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
       const { account } = await services.accountsRuntime.deriveAccount({
         namespace: "eip155",
         chainRef: mainnet.chainRef,
+        keyringId,
         makePrimary: true,
         switchActive: true,
       });
@@ -904,6 +912,9 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
     const approvalSpy = vi.spyOn(services.controllers.approvals, "requestApproval").mockImplementation(async (task) => {
       // Simulate UI auto-approving and calling the actual signing
       const payload = task.payload as { from: string; message: string };
@@ -915,11 +926,12 @@ describe("eip155 handlers - approval metadata", () => {
 
     try {
       const mainnet = services.controllers.network.getActiveChain();
-      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const { account } = await services.accountsRuntime.deriveAccount({
         namespace: "eip155",
         chainRef: mainnet.chainRef,
+        keyringId,
         makePrimary: true,
         switchActive: true,
       });
@@ -951,6 +963,9 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
     const approvalSpy = vi.spyOn(services.controllers.approvals, "requestApproval").mockImplementation(async (task) => {
       // Simulate UI auto-approving and calling the actual signing
       const payload = task.payload as { from: string; typedData: string };
@@ -962,11 +977,12 @@ describe("eip155 handlers - approval metadata", () => {
 
     try {
       const mainnet = services.controllers.network.getActiveChain();
-      services.keyring.setNamespaceFromMnemonic("eip155", { mnemonic: TEST_MNEMONIC });
+      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const { account } = await services.accountsRuntime.deriveAccount({
         namespace: "eip155",
         chainRef: mainnet.chainRef,
+        keyringId,
         makePrimary: true,
         switchActive: true,
       });

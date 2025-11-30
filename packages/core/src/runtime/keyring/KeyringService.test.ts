@@ -3,7 +3,10 @@ import { normalizeEvmAddress } from "../../chains/index.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../errors/keyring.js";
+import { vaultErrors } from "../../errors/vault.js";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
+import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
+import type { KeyringStorePort } from "../../storage/keyringStore.js";
 import type { VaultService } from "../../vault/types.js";
 import { KeyringService } from "./KeyringService.js";
 
@@ -15,40 +18,14 @@ const ENVELOPE_VERSION = 1;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const buildHdEnvelope = (accountCount: number, keyringId = "10000000-0000-4000-8000-000000000001") => {
-  const keyring = new EthereumHdKeyring();
-  keyring.loadFromMnemonic(MNEMONIC);
-  for (let i = 0; i < accountCount; i += 1) {
-    keyring.deriveNextAccount();
-  }
-  const snapshot = keyring.toSnapshot();
-  return encoder.encode(
-    JSON.stringify({
-      version: ENVELOPE_VERSION, // 1
-      namespaces: {
-        [EIP155_NAMESPACE]: {
-          keyrings: [
-            {
-              id: keyringId,
-              kind: "hd",
-              createdAt: Date.now(),
-              secret: { type: "hd", mnemonic: MNEMONIC },
-              snapshot,
-            },
-          ],
-        },
-      },
-    }),
-  );
-};
-
 class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnlocked"> {
   constructor(
-    private envelopeBytes: Uint8Array,
+    private payloadBytes: Uint8Array,
     private unlocked = true,
+    private password = "test",
   ) {}
   exportKey(): Uint8Array {
-    return new Uint8Array(this.envelopeBytes);
+    return new Uint8Array(this.payloadBytes);
   }
   getStatus() {
     return { isUnlocked: this.unlocked, hasCiphertext: true };
@@ -59,8 +36,13 @@ class FakeVault implements Pick<VaultService, "exportKey" | "getStatus" | "isUnl
   setUnlocked(next: boolean) {
     this.unlocked = next;
   }
-  setEnvelope(bytes: Uint8Array) {
-    this.envelopeBytes = new Uint8Array(bytes);
+  setPayload(bytes: Uint8Array) {
+    this.payloadBytes = new Uint8Array(bytes);
+  }
+  async verifyPassword(password: string) {
+    if (password !== this.password) {
+      throw vaultErrors.invalidPassword();
+    }
   }
 }
 
@@ -115,131 +97,248 @@ const baseNamespaces = [
   },
 ] as const;
 
+const createInMemoryKeyringStore = () => {
+  let keyrings: KeyringMeta[] = [];
+  let accounts: AccountMeta[] = [];
+  return {
+    async getKeyringMetas() {
+      return [...keyrings];
+    },
+    async getAccountMetas() {
+      return [...accounts];
+    },
+    async putKeyringMetas(metas: KeyringMeta[]) {
+      keyrings = metas.map((m) => ({ ...m }));
+    },
+    async putAccountMetas(metas: AccountMeta[]) {
+      accounts = metas.map((m) => ({ ...m }));
+    },
+    async deleteKeyringMeta(id: string) {
+      keyrings = keyrings.filter((k) => k.id !== id);
+      accounts = accounts.filter((a) => a.keyringId !== id);
+    },
+    async deleteAccount(address: string) {
+      accounts = accounts.filter((a) => a.address !== address);
+    },
+    async deleteAccountsByKeyring(keyringId: string) {
+      accounts = accounts.filter((a) => a.keyringId !== keyringId);
+    },
+  } as KeyringStorePort;
+};
+
+const buildHdPayload = (accountCount: number, keyringId = "10000000-0000-4000-8000-000000000001") => {
+  const keyring = new EthereumHdKeyring();
+  keyring.loadFromMnemonic(MNEMONIC);
+  for (let i = 0; i < accountCount; i += 1) keyring.deriveNextAccount();
+  return {
+    payloadBytes: encoder.encode(
+      JSON.stringify({
+        keyrings: [
+          {
+            keyringId,
+            type: "hd",
+            createdAt: Date.now(),
+            version: 1,
+            namespace: EIP155_NAMESPACE,
+            payload: { mnemonic: MNEMONIC.split(" "), passphrase: undefined },
+          },
+        ],
+      }),
+    ),
+    metas: {
+      keyring: { id: keyringId, type: "hd" as const, createdAt: Date.now(), derivedCount: accountCount },
+      accounts: keyring.getAccounts().map((acc, idx) => ({
+        address: normalizeEvmAddress(acc.address),
+        keyringId,
+        derivationIndex: idx,
+        createdAt: Date.now(),
+      })),
+    },
+  };
+};
+
 describe("KeyringService", () => {
-  it("hydrates hd keyring from vault envelope on attach", async () => {
-    const vault = new FakeVault(buildHdEnvelope(2));
+  it("hydrates hd keyring from vault payload", async () => {
+    const { payloadBytes, metas } = buildHdPayload(2);
+    const vault = new FakeVault(payloadBytes);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts);
 
-    const service = new KeyringService({
-      vault,
-      unlock,
-      accounts,
-      namespaces: [...baseNamespaces],
-      logger: (message, error) => {
-        console.log("[KeyringService]", message, error);
-      },
-    });
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
     await service.attach();
 
-    const keyrings = service.listKeyrings(EIP155_NAMESPACE);
-    expect(keyrings).toHaveLength(1);
-    expect(keyrings[0]!.kind).toBe("hd");
+    expect(service.getKeyrings()).toHaveLength(1);
     expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(2);
   });
 
   it("derives next account and updates envelope/state", async () => {
-    const vault = new FakeVault(buildHdEnvelope(1));
+    const { payloadBytes, metas } = buildHdPayload(1);
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts);
+    const vault = new FakeVault(payloadBytes);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
-
-    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
     await service.attach();
 
-    const hd = service.listKeyrings(EIP155_NAMESPACE).find((k) => k.kind === "hd");
-    expect(hd).toBeDefined();
-
-    const derived = service.deriveNextAccount(EIP155_NAMESPACE, hd!.id);
-    expect(derived.address).toMatch(/^0x[0-9a-f]{40}$/);
-
+    const hdMeta = service.getKeyrings().find((k) => k.type === "hd")!;
+    const derived = await service.deriveAccount(hdMeta.id);
     expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(normalizeEvmAddress(derived.address));
-
-    const envelopeBytes = service.getEnvelope();
-    expect(envelopeBytes).not.toBeNull();
-    const parsed = JSON.parse(decoder.decode(envelopeBytes!));
-    const snapshot = parsed.namespaces[EIP155_NAMESPACE].keyrings.find((k: { id: string }) => k.id === hd!.id).snapshot;
-    expect(snapshot.accounts.length).toBeGreaterThanOrEqual(2);
-    expect(snapshot.nextDerivationIndex).toBeGreaterThanOrEqual(2);
   });
 
-  it("creates hd keyring when vault is locked", () => {
-    const vault = new FakeVault(encoder.encode(""), false);
-    const unlock = new FakeUnlock(false);
+  it("creates hd keyring when unlocked", async () => {
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true); // unlocked
+    const unlock = new FakeUnlock(true); // isUnlocked = true
     const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
 
-    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
-    const { keyringId, accounts: derived } = service.createHdKeyring(EIP155_NAMESPACE, { mnemonic: MNEMONIC });
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
 
+    const { keyringId, address } = await service.confirmNewMnemonic(MNEMONIC);
     expect(keyringId).toBeDefined();
-    expect(derived.length).toBeGreaterThan(0);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all.length).toBe(derived.length);
-
-    const envelope = service.getEnvelope();
-    expect(envelope).not.toBeNull();
-    const decoded = JSON.parse(decoder.decode(envelope!));
-    expect(decoded.version).toBe(ENVELOPE_VERSION);
-    expect(decoded.namespaces[EIP155_NAMESPACE]?.keyrings).toBeDefined();
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(address);
   });
 
   it("imports private-key keyring, prevents duplicates, and syncs state", async () => {
-    const vault = new FakeVault(encoder.encode(""), true);
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
-
-    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
     await service.attach();
 
-    const { keyringId, account } = service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY });
-    expect(keyringId).toBeDefined();
-    const keyrings = service.listKeyrings(EIP155_NAMESPACE).filter((k) => k.kind === "private-key");
-    expect(keyrings).toHaveLength(1);
-
-    const nsState = accounts.getState().namespaces[EIP155_NAMESPACE];
-    expect(nsState?.all).toContain(normalizeEvmAddress(account.address));
-
-    expect(() => service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY })).toThrowError(
+    const { keyringId, account } = await service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE });
+    expect(service.getKeyrings().filter((k) => k.type === "private-key")).toHaveLength(1);
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(normalizeEvmAddress(account.address));
+    await expect(() => service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE })).rejects.toThrowError(
       keyringErrors.duplicateAccount().message,
     );
   });
 
-  it("removes private-key keyring when its account is removed", () => {
+  it("removes private-key keyring when its account is removed", async () => {
     const vault = new FakeVault(encoder.encode(""), true);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
-
-    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
-    const { keyringId, account } = service.importPrivateKey(EIP155_NAMESPACE, { privateKey: PRIVATE_KEY });
-
-    service.removeAccount(EIP155_NAMESPACE, keyringId, account.address);
-    const keyrings = service.listKeyrings(EIP155_NAMESPACE).filter((k) => k.kind === "private-key");
-    expect(keyrings).toHaveLength(0);
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    const { keyringId, account } = await service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE });
+    await service.removePrivateKeyKeyring(keyringId);
+    expect(service.getKeyrings().filter((k) => k.type === "private-key")).toHaveLength(0);
   });
 
   it("clears on lock and rehydrates on unlock", async () => {
-    const vault = new FakeVault(buildHdEnvelope(2));
+    const { payloadBytes, metas } = buildHdPayload(2);
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts);
+    const vault = new FakeVault(payloadBytes, true);
     const unlock = new FakeUnlock(true);
     const accounts = new MemoryAccountsController();
-
-    const service = new KeyringService({ vault, unlock, accounts, namespaces: [...baseNamespaces] });
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
     await service.attach();
 
-    expect(service.listKeyrings(EIP155_NAMESPACE)).toHaveLength(1);
-
-    vault.setUnlocked(false);
     unlock.emitLocked({ at: Date.now(), reason: "manual" });
+
     await flushAsync();
+    expect(service.getKeyrings()).toHaveLength(0);
 
-    expect(service.listKeyrings(EIP155_NAMESPACE)).toHaveLength(0);
-    expect(service.getEnvelope()).toBeNull();
-
-    const nextEnvelope = buildHdEnvelope(3, "20000000-0000-4000-8000-000000000002");
-    vault.setEnvelope(nextEnvelope);
+    const next = buildHdPayload(3, "2000-...");
+    await keyringStore.putKeyringMetas([next.metas.keyring]);
+    await keyringStore.putAccountMetas(next.metas.accounts);
+    vault.setPayload(next.payloadBytes);
     vault.setUnlocked(true);
     unlock.emitUnlocked({ at: Date.now() });
     await flushAsync();
-
-    const keyrings = service.listKeyrings(EIP155_NAMESPACE);
-    expect(keyrings).toHaveLength(1);
+    expect(service.getKeyrings()).toHaveLength(1);
     expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toHaveLength(3);
+  });
+
+  it("exports mnemonic with password and rejects invalid password", async () => {
+    const { payloadBytes, metas } = buildHdPayload(1);
+    const vault = new FakeVault(payloadBytes, true, "secret");
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts);
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    await service.attach();
+    await flushAsync();
+    const hdMeta = service.getKeyrings().find((k) => k.type === "hd")!;
+    await expect(service.exportMnemonic(hdMeta.id, "secret")).resolves.toBe(MNEMONIC);
+    await expect(service.exportMnemonic(hdMeta.id, "wrong")).rejects.toThrowError(
+      vaultErrors.invalidPassword().message,
+    );
+  });
+
+  it("exports private key with password and rejects invalid password", async () => {
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true, "secret");
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    await service.attach();
+    await flushAsync();
+    const { account } = await service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE });
+    await expect(service.exportPrivateKey(EIP155_NAMESPACE, account.address, "secret")).resolves.toBeInstanceOf(
+      Uint8Array,
+    );
+    await expect(service.exportPrivateKey(EIP155_NAMESPACE, account.address, "wrong")).rejects.toThrowError(
+      vaultErrors.invalidPassword().message,
+    );
+  });
+
+  it("respects skipBackup flag and markBackedUp updates meta", async () => {
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true);
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+
+    const { keyringId } = await service.confirmNewMnemonic(MNEMONIC, { skipBackup: true });
+    expect(service.getKeyrings().find((k) => k.id === keyringId)?.backedUp).toBe(false);
+
+    await service.markBackedUp(keyringId);
+    expect(service.getKeyrings().find((k) => k.id === keyringId)?.backedUp).toBe(true);
+  });
+
+  it("renames keyring and account, hides/unhides account", async () => {
+    const { payloadBytes, metas } = buildHdPayload(1);
+    const vault = new FakeVault(payloadBytes, true);
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts);
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    await service.attach();
+
+    const hdMeta = service.getKeyrings().find((k) => k.type === "hd")!;
+    const firstAccount = service.getAccounts(true)[0]!;
+    await service.renameKeyring(hdMeta.id, "main");
+    await service.renameAccount(firstAccount.address, "acct1");
+    expect(service.getKeyrings().find((k) => k.id === hdMeta.id)?.alias).toBe("main");
+    expect(service.getAccounts(true).find((a) => a.address === firstAccount.address)?.alias).toBe("acct1");
+
+    await service.hideHdAccount(firstAccount.address);
+    expect(service.getAccounts(false).find((a) => a.address === firstAccount.address)).toBeUndefined();
+    await service.unhideHdAccount(firstAccount.address);
+    expect(service.getAccounts(false).find((a) => a.address === firstAccount.address)).toBeDefined();
+  });
+
+  it("imports 24-word mnemonic", async () => {
+    const MNEMONIC_24 =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true);
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    const { keyringId } = await service.confirmNewMnemonic(MNEMONIC_24);
+    expect(service.getKeyrings().find((k) => k.id === keyringId)).toBeDefined();
   });
 });

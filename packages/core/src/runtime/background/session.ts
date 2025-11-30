@@ -7,7 +7,7 @@ import type {
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
-import type { StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
+import type { KeyringStorePort, StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { createVaultService } from "../../vault/vaultService.js";
@@ -42,6 +42,7 @@ type SessionLayerParams = {
   messenger: BackgroundMessenger;
   controllers: ControllersBase;
   storagePort?: StoragePort;
+  keyringStore: KeyringStorePort;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
   hydrationEnabled: boolean;
@@ -66,6 +67,7 @@ export const initSessionLayer = ({
   messenger,
   controllers,
   storagePort,
+  keyringStore,
   storageLogger,
   storageNow,
   hydrationEnabled,
@@ -204,6 +206,9 @@ export const initSessionLayer = ({
       }
       return ciphertext;
     },
+    async verifyPassword(password) {
+      await baseVault.verifyPassword(password);
+    },
     async reseal(params) {
       const ciphertext = await baseVault.reseal(params);
       updateInitializedAtFromCiphertext(ciphertext);
@@ -247,6 +252,7 @@ export const initSessionLayer = ({
     vault: vaultProxy,
     unlock,
     accounts: controllers.accounts,
+    keyringStore,
     namespaces: [
       {
         namespace: EIP155_NAMESPACE,
@@ -263,21 +269,19 @@ export const initSessionLayer = ({
   keyringService.attach();
 
   sessionSubscriptions.push(
-    keyringService.onEnvelopeUpdated(async (payload) => {
-      if (!payload) {
-        return;
-      }
+    keyringService.onPayloadUpdated(async (payload) => {
+      if (!payload) return;
       try {
         await vaultProxy.reseal({ secret: payload });
         scheduleVaultMetaPersist();
       } catch (error) {
-        storageLogger("session: failed to reseal keyring envelope", error);
+        storageLogger("session: failed to reseal keyring payload", error);
       }
     }),
   );
 
   sessionSubscriptions.push(
-    keyringService.onEnvelopeUpdated(() => {
+    keyringService.onPayloadUpdated(() => {
       scheduleVaultMetaPersist();
     }),
   );

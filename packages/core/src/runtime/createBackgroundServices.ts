@@ -4,7 +4,14 @@ import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMess
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
-import type { StorageNamespace, StoragePort, StorageSnapshotMap } from "../storage/index.js";
+import type {
+  AccountMeta,
+  KeyringMeta,
+  KeyringStorePort,
+  StorageNamespace,
+  StoragePort,
+  StorageSnapshotMap,
+} from "../storage/index.js";
 import { StorageNamespaces } from "../storage/index.js";
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
@@ -31,6 +38,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
     port: StoragePort;
     now?: () => number;
     hydrate?: boolean;
+    keyringStore: KeyringStorePort;
     logger?: (message: string, error?: unknown) => void;
   };
   session?: SessionOptions;
@@ -40,6 +48,34 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
 
+const createInMemoryKeyringStore = (): KeyringStorePort => {
+  let keyrings: KeyringMeta[] = [];
+  let accounts: AccountMeta[] = [];
+  return {
+    async getKeyringMetas() {
+      return [...keyrings];
+    },
+    async getAccountMetas() {
+      return [...accounts];
+    },
+    async putKeyringMetas(metas) {
+      keyrings = metas.map((m) => ({ ...m }));
+    },
+    async putAccountMetas(metas) {
+      accounts = metas.map((m) => ({ ...m }));
+    },
+    async deleteKeyringMeta(id) {
+      keyrings = keyrings.filter((k) => k.id !== id);
+      accounts = accounts.filter((a) => a.keyringId !== id);
+    },
+    async deleteAccount(address) {
+      accounts = accounts.filter((a) => a.address !== address);
+    },
+    async deleteAccountsByKeyring(keyringId) {
+      accounts = accounts.filter((a) => a.keyringId !== keyringId);
+    },
+  };
+};
 export const createBackgroundServices = (options?: CreateBackgroundServicesOptions) => {
   const {
     messenger: messengerOptions,
@@ -58,6 +94,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
+  const keyringStore = storageOptions?.keyringStore ?? createInMemoryKeyringStore();
 
   if (!chainRegistryOptions?.port) {
     throw new Error("createBackgroundServices requires chainRegistry.port");
@@ -106,6 +143,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const sessionLayer = initSessionLayer({
     messenger,
     controllers: controllersBase,
+    keyringStore,
     storageLogger,
     storageNow,
     hydrationEnabled,

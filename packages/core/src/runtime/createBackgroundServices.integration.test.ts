@@ -25,6 +25,8 @@ import {
   StorageNamespaces,
   TRANSACTIONS_SNAPSHOT_VERSION,
 } from "../storage/index.js";
+import type { AccountMeta, KeyringMeta } from "../storage/keyringSchemas.js";
+import type { KeyringStorePort } from "../storage/keyringStore.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
@@ -36,6 +38,35 @@ const TEST_AUTO_LOCK_DURATION = 1_000;
 const TEST_INITIAL_TIME = 5_000;
 const TEST_RECEIPT_POLL_INTERVAL = 3_000;
 const TEST_RECEIPT_MAX_DELAY = 30_000;
+
+const createInMemoryKeyringStore = (): KeyringStorePort => {
+  let keyrings: KeyringMeta[] = [];
+  let accounts: AccountMeta[] = [];
+  return {
+    async getKeyringMetas() {
+      return [...keyrings];
+    },
+    async getAccountMetas() {
+      return [...accounts];
+    },
+    async putKeyringMetas(metas) {
+      keyrings = metas.map((m) => ({ ...m }));
+    },
+    async putAccountMetas(metas) {
+      accounts = metas.map((m) => ({ ...m }));
+    },
+    async deleteKeyringMeta(id) {
+      keyrings = keyrings.filter((k) => k.id !== id);
+      accounts = accounts.filter((a) => a.keyringId !== id);
+    },
+    async deleteAccount(address) {
+      accounts = accounts.filter((a) => a.address !== address);
+    },
+    async deleteAccountsByKeyring(keyringId) {
+      accounts = accounts.filter((a) => a.keyringId !== keyringId);
+    },
+  };
+};
 
 type RpcTimers = {
   setTimeout?: typeof setTimeout;
@@ -261,6 +292,7 @@ class FakeVault implements VaultService {
   #unlocked = false;
   #counter = 0;
   #password: string | null = null;
+  #secret: Uint8Array | null = null;
 
   constructor(
     private readonly clock: () => number,
@@ -287,6 +319,7 @@ class FakeVault implements VaultService {
     this.#password = params.password;
     this.#ciphertext = this.createCiphertext();
     this.#unlocked = true;
+    this.#secret = new Uint8Array([1, 2, 3]);
     return { ...this.#ciphertext };
   }
 
@@ -305,7 +338,10 @@ class FakeVault implements VaultService {
     }
 
     this.#unlocked = true;
-    return new Uint8Array([1, 2, 3]);
+    if (!this.#secret) {
+      this.#secret = new Uint8Array([1, 2, 3]);
+    }
+    return new Uint8Array(this.#secret);
   }
 
   lock(): void {
@@ -313,10 +349,10 @@ class FakeVault implements VaultService {
   }
 
   exportKey(): Uint8Array {
-    if (!this.#unlocked) {
+    if (!this.#unlocked || !this.#secret) {
       throw new Error("vault locked");
     }
-    return new Uint8Array([9, 9, 9]);
+    return new Uint8Array(this.#secret);
   }
 
   async seal(params: { password: string; secret: Uint8Array }): Promise<VaultCiphertext> {
@@ -324,8 +360,22 @@ class FakeVault implements VaultService {
       throw new Error("invalid password");
     }
     this.#ciphertext = this.createCiphertext();
+    this.#secret = new Uint8Array(params.secret);
     return { ...this.#ciphertext };
   }
+
+  verifyPassword(password: string): Promise<void> {
+    if (!this.#password || password !== this.#password) {
+      throw new Error("invalid password");
+    }
+    return Promise.resolve();
+  }
+  async reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext> {
+    this.#ciphertext = this.createCiphertext();
+    this.#secret = new Uint8Array(params.secret);
+    return { ...this.#ciphertext };
+  }
+
   importCiphertext(ciphertext: VaultCiphertext): void {
     this.#ciphertext = { ...ciphertext };
   }
@@ -377,6 +427,7 @@ const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<Te
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
     port: storagePort,
+    keyringStore: createInMemoryKeyringStore(),
     ...(options.now ? { now: options.now } : {}),
     ...(options.storageLogger ? { logger: options.storageLogger } : {}),
   };
@@ -464,11 +515,15 @@ describe("createBackgroundServices (integration)", () => {
     const context = await setupBackground({ chainSeed: [mainChain] });
     const { services, storagePort } = context;
     try {
-      services.keyring.setNamespaceFromMnemonic(mainChain.namespace, { mnemonic: TEST_MNEMONIC });
+      await services.session.vault.initialize({ password: "test" });
+      await services.session.unlock.unlock({ password: "test" });
+
+      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const { account } = await services.accountsRuntime.deriveAccount({
         namespace: mainChain.namespace,
         chainRef: mainChain.chainRef,
+        keyringId,
         makePrimary: true,
         switchActive: true,
       });
@@ -643,6 +698,7 @@ describe("createBackgroundServices (integration)", () => {
             origin: "https://dapp.example",
             namespace: mainChain.namespace,
             chainRef: mainChain.chainRef,
+            createdAt: 1_000,
           },
         ],
       },

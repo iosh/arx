@@ -367,6 +367,7 @@ describe("DexieChainRegistryPort", () => {
       keyringId: keyringMeta.id,
       derivationIndex: 1,
       createdAt: TS,
+      namespace: "eip155",
     };
 
     it("stores and loads keyring/account metas", async () => {

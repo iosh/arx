@@ -84,6 +84,23 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
     }),
   }),
 ]);
+export const UiKeyringMetaSchema = z.object({
+  id: z.uuid(),
+  type: z.enum(["hd", "private-key"]),
+  createdAt: z.number().int(),
+  alias: z.string().optional(),
+  backedUp: z.boolean().optional(),
+  derivedCount: z.number().int().nonnegative().optional(),
+});
+
+export const UiAccountMetaSchema = z.object({
+  address: z.string(),
+  keyringId: z.uuid(),
+  derivationIndex: z.number().int().nonnegative().optional(),
+  alias: z.string().optional(),
+  createdAt: z.number().int(),
+  hidden: z.boolean().optional(),
+});
 
 export const NetworkListSchema = z.object({
   active: z.string().min(1),
@@ -107,3 +124,5 @@ export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;
 export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
+export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
+export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;

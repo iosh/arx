@@ -149,6 +149,7 @@ export class KeyringService {
       derivationIndex: undefined,
       alias: opts?.alias,
       createdAt: now,
+      namespace,
     };
 
     await this.#persistNewKeyring({
@@ -193,6 +194,7 @@ export class KeyringService {
       keyringId,
       derivationIndex: index,
       createdAt: now,
+      namespace: runtime.namespace,
     };
 
     this.#accountMetas.set(canonical, accountMeta);
@@ -243,8 +245,9 @@ export class KeyringService {
     return this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
   }
 
-  renameAccount(address: string, alias: string): Promise<void> {
-    const canonical = this.#normalize(this.#defaultNamespace(), address);
+  async renameAccount(address: string, alias: string): Promise<void> {
+    const ref = await this.getAccountRef(address);
+    const canonical = this.#normalize(ref.namespace, address);
     const meta = this.#accountMetas.get(canonical);
     if (!meta) return Promise.resolve();
     this.#accountMetas.set(canonical, { ...meta, alias });
@@ -324,6 +327,20 @@ export class KeyringService {
     return this.getAccounts(includeHidden).filter((a) => a.keyringId === keyringId);
   }
 
+  async getAccountRef(address: string): Promise<{ namespace: string; keyringId: string }> {
+    await this.#waitForHydration();
+    for (const [namespace, config] of this.#namespacesConfig) {
+      const key = getAddressKey(namespace, address, config.normalizeAddress);
+      const ref = this.#addressIndex.get(key);
+      if (ref) return { namespace, keyringId: ref.keyringId };
+    }
+    throw keyringErrors.accountNotFound();
+  }
+  async exportPrivateKeyByAddress(address: string, password: string): Promise<Uint8Array> {
+    const ref = await this.getAccountRef(address);
+    return this.exportPrivateKey(ref.namespace, address, password);
+  }
+
   async onLock(): Promise<void> {
     this.#handleLocked({ at: Date.now(), reason: "manual" });
   }
@@ -390,10 +407,7 @@ export class KeyringService {
     );
 
     if (existingHd) {
-      const firstAccount = this.getAccounts(true).find(
-        (a) => a.keyringId === existingHd.keyringId && (a.derivationIndex ?? 0) === 0,
-      );
-      return { keyringId: existingHd.keyringId, address: firstAccount?.address };
+      throw keyringErrors.duplicateAccount();
     }
 
     const words = normalized.split(" ");
@@ -424,6 +438,7 @@ export class KeyringService {
       derivationIndex: 0,
       alias: opts.alias,
       createdAt: now,
+      namespace,
     };
 
     await this.#persistNewKeyring({
@@ -666,7 +681,8 @@ export class KeyringService {
   async #toggleHidden(address: string, hidden: boolean) {
     await this.#waitForHydration();
     this.#assertUnlocked();
-    const canonical = this.#normalize(this.#defaultNamespace(), address);
+    const ref = await this.getAccountRef(address);
+    const canonical = this.#normalize(ref.namespace, address);
     const meta = this.#accountMetas.get(canonical);
     if (!meta) throw keyringErrors.accountNotFound();
     this.#accountMetas.set(canonical, { ...meta, hidden });

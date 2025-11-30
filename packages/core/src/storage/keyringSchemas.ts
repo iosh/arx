@@ -18,11 +18,12 @@ export type KeyringMeta = z.infer<typeof KeyringMetaSchema>;
 
 export const AccountMetaSchema = z.strictObject({
   address: z.string().regex(/^0x[a-f0-9]{40}$/), // canonical lower-case EVM address
-  keyringId: z.string().uuid(),
+  keyringId: z.uuid(),
   derivationIndex: z.number().int().min(0).optional(), // hd only
   alias: z.string().optional(),
   createdAt: epochMillisecondsSchema,
   hidden: z.boolean().optional(), // hd soft-hide
+  namespace: z.string(),
 });
 export type AccountMeta = z.infer<typeof AccountMetaSchema>;
 

@@ -1,5 +1,5 @@
-import type { ApprovalTask, BackgroundSessionServices, HandlerControllers } from "@arx/core";
-import { ApprovalTypes, PermissionScopes } from "@arx/core";
+import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, KeyringService } from "@arx/core";
+import { ApprovalTypes, getProviderErrors, PermissionScopes } from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import type browser from "webextension-polyfill";
 
@@ -26,6 +26,7 @@ type BridgeDeps = {
   controllers: HandlerControllers;
   session: BackgroundSessionServices;
   persistVaultMeta: () => Promise<void>;
+  keyring: KeyringService;
 };
 
 const normalizeError = (error: unknown): { message: string; code?: number; data?: unknown } => {
@@ -34,6 +35,39 @@ const normalizeError = (error: unknown): { message: string; code?: number; data?
     return { message: err.message ?? "Unknown error", code: err.code, data: err.data };
   }
   return { message: String(error ?? "Unknown error") };
+};
+
+const providerErrors = getProviderErrors();
+
+const assertUnlocked = (session: BackgroundSessionServices) => {
+  if (!session.unlock.isUnlocked()) {
+    throw providerErrors.unauthorized({ message: "Wallet is locked" });
+  }
+};
+
+const normalizeUiError = (error: unknown) => {
+  const base = normalizeError(error);
+  const code = (error as { code?: unknown })?.code;
+
+  if (typeof base.code === "number") return base;
+
+  switch (code) {
+    case "ARX_VAULT_LOCKED":
+    case "ARX_VAULT_INVALID_PASSWORD":
+    case "ARX_KEYRING_SECRET_UNAVAILABLE":
+      return { message: base.message, code: 4100 };
+    case "ARX_KEYRING_INVALID_MNEMONIC":
+    case "ARX_KEYRING_INVALID_PRIVATE_KEY":
+    case "ARX_KEYRING_INVALID_ADDRESS":
+    case "ARX_KEYRING_INDEX_OUT_OF_RANGE":
+      return { message: base.message, code: 32602 };
+    case "ARX_KEYRING_DUPLICATE_ACCOUNT":
+      return { message: base.message, code: 4001, data: { reason: "resourceExists" } };
+    case "ARX_KEYRING_ACCOUNT_NOT_FOUND":
+      return { message: base.message, code: 32602 };
+    default:
+      return { message: base.message, code: 4200 };
+  }
 };
 
 // Generic diagnostic converter for warnings and issues
@@ -112,7 +146,7 @@ type SendTransactionPayload = {
   draft?: { summary?: Record<string, unknown> };
 };
 
-export const createUiBridge = ({ controllers, session, persistVaultMeta }: BridgeDeps) => {
+export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring }: BridgeDeps) => {
   const ports = new Set<browser.Runtime.Port>();
   const portCleanups = new Map<browser.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
@@ -400,6 +434,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta }: Bridg
             broadcast();
             return { id: task.id, result };
           }
+
           default:
             throw new Error(`Unsupported approval type: ${task.type}`);
         }
@@ -428,6 +463,100 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta }: Bridg
         const state = session.unlock.getState();
         return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
       }
+
+      case "ui:generateMnemonic": {
+        assertUnlocked(session);
+        const mnemonic = keyring.generateMnemonic(message.payload?.wordCount ?? 12);
+        return { words: mnemonic.split(" ") };
+      }
+      case "ui:confirmNewMnemonic": {
+        assertUnlocked(session);
+        const result = await keyring.confirmNewMnemonic(message.payload.words.join(" "), {
+          alias: message.payload.alias,
+          skipBackup: message.payload.skipBackup,
+          namespace: message.payload.namespace,
+        });
+        broadcast();
+        return result;
+      }
+      case "ui:importMnemonic": {
+        assertUnlocked(session);
+        const result = await keyring.importMnemonic(message.payload.words.join(" "), {
+          alias: message.payload.alias,
+          namespace: message.payload.namespace,
+        });
+        broadcast();
+        return result;
+      }
+      case "ui:importPrivateKey": {
+        assertUnlocked(session);
+        const result = await keyring.importPrivateKey(message.payload.privateKey, {
+          alias: message.payload.alias,
+          namespace: message.payload.namespace,
+        });
+        broadcast();
+        return result;
+      }
+      case "ui:deriveAccount": {
+        assertUnlocked(session);
+        const result = await keyring.deriveAccount(message.payload.keyringId);
+        broadcast();
+        return result;
+      }
+      case "ui:getKeyrings": {
+        assertUnlocked(session);
+        return keyring.getKeyrings();
+      }
+      case "ui:getAccountsByKeyring": {
+        assertUnlocked(session);
+        return keyring.getAccountsByKeyring(message.payload.keyringId, message.payload.includeHidden ?? false);
+      }
+      case "ui:renameKeyring": {
+        assertUnlocked(session);
+        await keyring.renameKeyring(message.payload.keyringId, message.payload.alias);
+        broadcast();
+        return null;
+      }
+      case "ui:renameAccount": {
+        assertUnlocked(session);
+        await keyring.renameAccount(message.payload.address, message.payload.alias);
+        broadcast();
+        return null;
+      }
+      case "ui:markBackedUp": {
+        assertUnlocked(session);
+        await keyring.markBackedUp(message.payload.keyringId);
+        broadcast();
+        return null;
+      }
+      case "ui:hideHdAccount": {
+        assertUnlocked(session);
+        await keyring.hideHdAccount(message.payload.address);
+        broadcast();
+        return null;
+      }
+      case "ui:unhideHdAccount": {
+        assertUnlocked(session);
+        await keyring.unhideHdAccount(message.payload.address);
+        broadcast();
+        return null;
+      }
+      case "ui:removePrivateKeyKeyring": {
+        assertUnlocked(session);
+        await keyring.removePrivateKeyKeyring(message.payload.keyringId);
+        broadcast();
+        return null;
+      }
+      case "ui:exportMnemonic": {
+        assertUnlocked(session);
+        const mnemonic = await keyring.exportMnemonic(message.payload.keyringId, message.payload.password);
+        return { words: mnemonic.split(" ") };
+      }
+      case "ui:exportPrivateKey": {
+        assertUnlocked(session);
+        const secret = await keyring.exportPrivateKeyByAddress(message.payload.address, message.payload.password);
+        return { privateKey: Buffer.from(secret).toString("hex") };
+      }
       default:
         return undefined;
     }
@@ -448,7 +577,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta }: Bridg
         sendToPortSafely(port, {
           type: "ui:error",
           requestId: envelope.requestId,
-          error: normalizeError(error),
+          error: normalizeUiError(error),
         });
       }
     };

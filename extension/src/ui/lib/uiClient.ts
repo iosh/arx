@@ -1,4 +1,11 @@
-import { UI_CHANNEL, type UiMessage, type UiPortEnvelope, type UiSnapshot } from "@arx/core/ui";
+import {
+  UI_CHANNEL,
+  type UiAccountMeta,
+  type UiKeyringMeta,
+  type UiMessage,
+  type UiPortEnvelope,
+  type UiSnapshot,
+} from "@arx/core/ui";
 import browser from "webextension-polyfill";
 
 type PendingRequest<T = unknown> = {
@@ -165,6 +172,71 @@ class UiClient {
       payload: { durationMs },
     });
   };
+
+  generateMnemonic = (wordCount?: 12 | 24) => {
+    return this.request<{ words: string[] }>({
+      type: "ui:generateMnemonic",
+      payload: wordCount ? { wordCount } : {},
+    });
+  };
+
+  confirmNewMnemonic = (params: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string }) => {
+    return this.request<{ keyringId: string; address?: string | null }>({
+      type: "ui:confirmNewMnemonic",
+      payload: params,
+    });
+  };
+
+  importMnemonic = (params: { words: string[]; alias?: string; namespace?: string }) => {
+    return this.request<{ keyringId: string; address?: string | null }>({
+      type: "ui:importMnemonic",
+      payload: params,
+    });
+  };
+
+  importPrivateKey = (params: { privateKey: string; alias?: string; namespace?: string }) => {
+    return this.request<{ keyringId: string; account: { address: string; derivationIndex?: number | null } }>({
+      type: "ui:importPrivateKey",
+      payload: params,
+    });
+  };
+
+  deriveAccount = (keyringId: string) => {
+    return this.request<{ address: string; derivationPath?: string | null; derivationIndex?: number | null }>({
+      type: "ui:deriveAccount",
+      payload: { keyringId },
+    });
+  };
+
+  getKeyrings = () => this.request<UiKeyringMeta[]>({ type: "ui:getKeyrings" });
+
+  getAccountsByKeyring = (params: { keyringId: string; includeHidden?: boolean }) => {
+    return this.request<UiAccountMeta[]>({
+      type: "ui:getAccountsByKeyring",
+      payload: { keyringId: params.keyringId, includeHidden: params.includeHidden ?? false },
+    });
+  };
+
+  renameKeyring = (params: { keyringId: string; alias: string }) =>
+    this.request<void>({ type: "ui:renameKeyring", payload: params });
+
+  renameAccount = (params: { address: string; alias: string }) =>
+    this.request<void>({ type: "ui:renameAccount", payload: params });
+
+  markBackedUp = (keyringId: string) => this.request<void>({ type: "ui:markBackedUp", payload: { keyringId } });
+
+  hideHdAccount = (address: string) => this.request<void>({ type: "ui:hideHdAccount", payload: { address } });
+
+  unhideHdAccount = (address: string) => this.request<void>({ type: "ui:unhideHdAccount", payload: { address } });
+
+  removePrivateKeyKeyring = (keyringId: string) =>
+    this.request<void>({ type: "ui:removePrivateKeyKeyring", payload: { keyringId } });
+
+  exportMnemonic = (params: { keyringId: string; password: string }) =>
+    this.request<{ words: string[] }>({ type: "ui:exportMnemonic", payload: params });
+
+  exportPrivateKey = (params: { address: string; password: string }) =>
+    this.request<{ privateKey: string }>({ type: "ui:exportPrivateKey", payload: params });
 }
 
 export const uiClient = new UiClient();

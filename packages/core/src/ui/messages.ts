@@ -19,7 +19,25 @@ export type UiMessage =
   | { type: "ui:switchChain"; payload: { chainRef: string } }
   | { type: "ui:approve"; payload: { id: string } }
   | { type: "ui:reject"; payload: { id: string; reason?: string } }
-  | { type: "ui:setAutoLockDuration"; payload: { durationMs: number } };
+  | { type: "ui:setAutoLockDuration"; payload: { durationMs: number } }
+  | { type: "ui:generateMnemonic"; payload?: { wordCount?: 12 | 24 } }
+  | {
+      type: "ui:confirmNewMnemonic";
+      payload: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string };
+    }
+  | { type: "ui:importMnemonic"; payload: { words: string[]; alias?: string; namespace?: string } }
+  | { type: "ui:importPrivateKey"; payload: { privateKey: string; alias?: string; namespace?: string } }
+  | { type: "ui:deriveAccount"; payload: { keyringId: string } }
+  | { type: "ui:getKeyrings" }
+  | { type: "ui:getAccountsByKeyring"; payload: { keyringId: string; includeHidden?: boolean } }
+  | { type: "ui:renameKeyring"; payload: { keyringId: string; alias: string } }
+  | { type: "ui:renameAccount"; payload: { address: string; alias: string } }
+  | { type: "ui:markBackedUp"; payload: { keyringId: string } }
+  | { type: "ui:hideHdAccount"; payload: { address: string } }
+  | { type: "ui:unhideHdAccount"; payload: { address: string } }
+  | { type: "ui:removePrivateKeyKeyring"; payload: { keyringId: string } }
+  | { type: "ui:exportMnemonic"; payload: { keyringId: string; password: string } }
+  | { type: "ui:exportPrivateKey"; payload: { address: string; password: string } };
 
 /**
  * Error structure for UI responses

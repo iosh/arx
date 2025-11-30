@@ -152,6 +152,7 @@ const buildHdPayload = (accountCount: number, keyringId = "10000000-0000-4000-80
         keyringId,
         derivationIndex: idx,
         createdAt: Date.now(),
+        namespace: EIP155_NAMESPACE,
       })),
     },
   };
@@ -340,5 +341,38 @@ describe("KeyringService", () => {
     const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
     const { keyringId } = await service.confirmNewMnemonic(MNEMONIC_24);
     expect(service.getKeyrings().find((k) => k.id === keyringId)).toBeDefined();
+  });
+
+  it("returns account namespace via getAccountRef", async () => {
+    const { payloadBytes, metas } = buildHdPayload(1);
+    const vault = new FakeVault(payloadBytes);
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    await keyringStore.putKeyringMetas([metas.keyring]);
+    await keyringStore.putAccountMetas(metas.accounts.map((a) => ({ ...a, namespace: EIP155_NAMESPACE })));
+
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    await service.attach();
+
+    const ref = await service.getAccountRef(metas.accounts[0]!.address);
+    expect(ref.namespace).toBe(EIP155_NAMESPACE);
+    expect(ref.keyringId).toBe(metas.keyring.id);
+  });
+
+  it("exports private key by address with password verification", async () => {
+    const vault = new FakeVault(encoder.encode(JSON.stringify({ keyrings: [] })), true, "pwd");
+    const unlock = new FakeUnlock(true);
+    const accounts = new MemoryAccountsController();
+    const keyringStore = createInMemoryKeyringStore();
+    const service = new KeyringService({ vault, unlock, accounts, keyringStore, namespaces: [...baseNamespaces] });
+    await service.attach();
+
+    const { account } = await service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE });
+    const exported = await service.exportPrivateKeyByAddress(account.address, "pwd");
+    expect(exported).toBeInstanceOf(Uint8Array);
+    await expect(service.exportPrivateKeyByAddress(account.address, "wrong")).rejects.toThrowError(
+      vaultErrors.invalidPassword(),
+    );
   });
 });

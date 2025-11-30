@@ -6,6 +6,8 @@ export type {
   ChainSnapshot,
   NetworkListSnapshot,
   SessionSnapshot,
+  UiAccountMetaSchema,
+  UiKeyringMetaSchema,
   UiSnapshot,
   VaultSnapshot,
 } from "./schemas.js";
@@ -15,6 +17,8 @@ export {
   ChainSnapshotSchema,
   NetworkListSchema,
   SessionSnapshotSchema,
+  type UiAccountMeta,
+  type UiKeyringMeta,
   UiSnapshotSchema,
   VaultSnapshotSchema,
 } from "./schemas.js";

@@ -76,7 +76,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#handshakeReject = undefined;
   }
 
-  #rejectHandshake(error: unknown) {
+  #rejectHandshake(error?: unknown) {
     if (!this.#handshakePromise) return;
     this.#handshakeReject?.(error);
     this.#handshakePromise = null;
@@ -89,7 +89,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     return getProviderErrors(namespace);
   }
 
-  #setConnection(payload: ConnectPayload) {
+  #setConnection(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
     const accounts = Array.isArray(payload.accounts)
       ? payload.accounts.filter((item): item is string => typeof item === "string")
       : [];
@@ -101,15 +101,16 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#meta = payload.meta ? cloneTransportMeta(payload.meta) : null;
 
     this.#resolveHandshake();
-    this.emit("connect", {
-      chainId: payload.chainId,
-      ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
-      accounts,
-      ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
-      ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
-    });
+    if (options?.emitConnect ?? true) {
+      this.emit("connect", {
+        chainId: payload.chainId,
+        ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
+        accounts,
+        ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
+        ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
+      });
+    }
   }
-
   #setAccounts(accounts: string[]) {
     const next = accounts.filter((item): item is string => typeof item === "string");
     this.#accounts = next;
@@ -140,11 +141,16 @@ export class InpageTransport extends EventEmitter implements Transport {
     });
   }
 
-  #handleDisconnect = () => {
-    if (!this.#connected) {
+  #handleDisconnect = (reason?: unknown) => {
+    if (!this.#connected && !this.#handshakePromise) {
       return;
     }
     const providerErrors = this.#getProviderErrors();
+    const error =
+      reason && typeof reason === "object" && "code" in (reason as Record<string, unknown>)
+        ? (reason as EIP1193ProviderRpcError)
+        : providerErrors.disconnected();
+
     this.#connected = false;
     this.#caip2 = null;
     this.#chainId = null;
@@ -152,9 +158,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#isUnlocked = null;
     this.#meta = null;
 
-    this.#rejectHandshake(providerErrors.disconnected());
-    const error = providerErrors.disconnected();
-
+    this.#rejectHandshake(error);
     for (const [id, { reject }] of this.#pendingRequests) {
       reject(error);
       this.#pendingRequests.delete(id);
@@ -216,8 +220,11 @@ export class InpageTransport extends EventEmitter implements Transport {
 
     switch (data.type) {
       case "handshake_ack": {
-        if (!this.#connected) {
-          this.#setConnection(data.payload);
+        const shouldUpdate = this.#shouldRefreshConnection(data.payload);
+        if (shouldUpdate) {
+          this.#setConnection(data.payload, { emitConnect: true });
+        } else {
+          this.#resolveHandshake();
         }
         break;
       }
@@ -271,7 +278,7 @@ export class InpageTransport extends EventEmitter implements Transport {
             break;
           }
           case "disconnect":
-            this.#handleDisconnect();
+            this.#handleDisconnect(params[0]);
             break;
 
           default:
@@ -291,6 +298,34 @@ export class InpageTransport extends EventEmitter implements Transport {
         break;
     }
   };
+
+  #shouldRefreshConnection(payload: ConnectPayload) {
+    const payloadAccounts = Array.isArray(payload.accounts)
+      ? payload.accounts.filter((item): item is string => typeof item === "string")
+      : [];
+    const payloadUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
+    const sameAccounts =
+      this.#accounts.length === payloadAccounts.length &&
+      this.#accounts.every((value, index) => value === payloadAccounts[index]);
+    const payloadMeta = payload.meta ? cloneTransportMeta(payload.meta) : null;
+    const sameMeta =
+      (this.#meta === null && payloadMeta === null) ||
+      (this.#meta &&
+        payloadMeta &&
+        this.#meta.activeChain === payloadMeta.activeChain &&
+        this.#meta.activeNamespace === payloadMeta.activeNamespace &&
+        this.#meta.supportedChains.length === payloadMeta.supportedChains.length &&
+        this.#meta.supportedChains.every((value, index) => value === payloadMeta.supportedChains[index]));
+
+    return (
+      !this.#connected ||
+      this.#chainId !== payload.chainId ||
+      (this.#caip2 ?? null) !== (payload.caip2 ?? null) ||
+      !sameAccounts ||
+      (this.#isUnlocked ?? null) !== payloadUnlocked ||
+      !sameMeta
+    );
+  }
 
   isConnected(): boolean {
     return this.#connected;

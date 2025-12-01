@@ -23,7 +23,7 @@ import { CHANNEL } from "@arx/provider-extension/constants";
 import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
-import { getExtensionChainRegistry, getExtensionStorage } from "@/platform/storage";
+import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
 import { createLockedGuardMiddleware } from "./lockedMiddleware";
 import { createUiBridge, UI_CHANNEL } from "./uiBridge";
 import { restoreUnlockState } from "./unlockRecovery";
@@ -108,6 +108,8 @@ const syncPortContext = (port: browser.Runtime.Port, snapshot: ControllerSnapsho
   const existing = portContexts.get(port);
   const resolvedOrigin = resolveOrigin(port);
   const origin = existing?.origin && existing.origin !== "unknown://" ? existing.origin : resolvedOrigin;
+
+  // meta.activeChain and chain.caip2 come from the same source; meta is checked first for future per-port overrides;
   const caip2 = snapshot.meta?.activeChain ?? snapshot.chain.caip2 ?? null;
   const namespace = resolveNamespace(caip2, snapshot.meta?.activeNamespace);
 
@@ -199,20 +201,21 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     const namespaceResolver = (ctx?: RpcInvocationContext) => resolveNamespaceRef(ctx);
     const storage = getExtensionStorage();
     const chainRegistry = getExtensionChainRegistry();
-
+    const keyringStore = getExtensionKeyringStore();
     const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
     const services = createBackgroundServices({
       permissions: {
         scopeResolver: permissionScopeResolver,
       },
-      storage: { port: storage },
+      storage: { port: storage, keyringStore },
       chainRegistry: { port: chainRegistry },
     });
-    const { controllers, engine, messenger, session } = services;
+    const { controllers, engine, messenger, session, keyring } = services;
 
     const publishAccountsState = () => {
       const activePointer = controllers.accounts.getActivePointer();
-      const chainRef = activePointer?.chainRef ?? controllers.network.getState().activeChain;
+      const fallbackChainRef = controllers.network.getActiveChain().chainRef;
+      const chainRef = activePointer?.chainRef ?? fallbackChainRef;
       const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef }) : [];
       broadcastEvent("accountsChanged", [accounts]);
     };
@@ -226,12 +229,15 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       session.unlock.onUnlocked((payload) => {
         broadcastEvent("session:unlocked", [payload]);
         publishAccountsState();
+        const snapshot = getControllerSnapshot();
+        broadcastHandshakeAck(snapshot);
       }),
     );
     unsubscribeControllerEvents.push(
       session.unlock.onLocked((payload) => {
         broadcastEvent("session:locked", [payload]);
         publishAccountsState();
+        broadcastDisconnect();
       }),
     );
 
@@ -382,6 +388,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       controllers,
       session,
       persistVaultMeta,
+      keyring,
     });
     uiBridge.attachListeners();
 
@@ -431,21 +438,23 @@ const clearPendingForPort = (port: browser.Runtime.Port) => {
   pendingRequests.delete(port);
 };
 
-const rejectPendingWithDisconnect = (port: browser.Runtime.Port) => {
+const rejectPendingWithDisconnect = (port: browser.Runtime.Port, overrideError?: JsonRpcError) => {
   const bucket = pendingRequests.get(port);
   if (!bucket) return;
   const portContext = portContexts.get(port);
-  const error = getActiveProviderErrors(
-    portContext
-      ? {
-          namespace: portContext.namespace,
-          chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
-          meta: portContext.meta,
-        }
-      : undefined,
-  )
-    .disconnected()
-    .serialize();
+  const error =
+    overrideError ??
+    getActiveProviderErrors(
+      portContext
+        ? {
+            namespace: portContext.namespace,
+            chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
+            meta: portContext.meta,
+          }
+        : undefined,
+    )
+      .disconnected()
+      .serialize();
 
   for (const [messageId, { rpcId, jsonrpc }] of bucket) {
     replyRequest(port, messageId, {
@@ -630,21 +639,8 @@ const handleConnect = (port: browser.Runtime.Port) => {
 
   const handleHandshake = async () => {
     await ensureContext();
-
     const current = getControllerSnapshot();
-    syncPortContext(port, current);
-
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "handshake_ack",
-      payload: {
-        chainId: current.chain.chainId ?? "0x0",
-        caip2: current.chain.caip2,
-        accounts: current.accounts,
-        isUnlocked: current.isUnlocked,
-        meta: current.meta,
-      },
-    });
+    sendHandshakeAck(port, current);
   };
 
   const handleMessage = (message: unknown) => {
@@ -680,6 +676,48 @@ const handleConnect = (port: browser.Runtime.Port) => {
 
 const runtimeMessageProxy = (message: unknown, sender: browser.Runtime.MessageSender) => {
   return handleRuntimeMessage(message as SessionMessage, sender);
+};
+
+const getProviderErrorsForPort = (port: browser.Runtime.Port) => {
+  const portContext = portContexts.get(port);
+  return getActiveProviderErrors(
+    portContext
+      ? {
+          namespace: portContext.namespace,
+          chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
+          meta: portContext.meta,
+        }
+      : undefined,
+  );
+};
+
+const sendHandshakeAck = (port: browser.Runtime.Port, snapshot: ControllerSnapshot) => {
+  syncPortContext(port, snapshot);
+  postEnvelope(port, {
+    channel: CHANNEL,
+    type: "handshake_ack",
+    payload: {
+      chainId: snapshot.chain.chainId ?? "0x0",
+      caip2: snapshot.chain.caip2,
+      accounts: snapshot.accounts,
+      isUnlocked: snapshot.isUnlocked,
+      meta: snapshot.meta,
+    },
+  });
+};
+
+const broadcastHandshakeAck = (snapshot: ControllerSnapshot) => {
+  for (const port of connections) {
+    sendHandshakeAck(port, snapshot);
+  }
+};
+
+const broadcastDisconnect = () => {
+  for (const port of connections) {
+    const error = getProviderErrorsForPort(port).disconnected().serialize();
+    rejectPendingWithDisconnect(port, error);
+    emitEventToPort(port, "disconnect", [error]);
+  }
 };
 
 export default defineBackground(() => {

@@ -318,6 +318,7 @@ describe("DexieChainRegistryPort", () => {
         keyringId: keyringMeta.id,
         derivationIndex: 0,
         createdAt: TS,
+        namespace: "eip155",
       };
       const payload = {
         keyrings: [

@@ -1,6 +1,7 @@
 import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, KeyringService } from "@arx/core";
-import { ApprovalTypes, getProviderErrors, PermissionScopes } from "@arx/core";
+import { ApprovalTypes, getProviderErrors, PermissionScopes, zeroize } from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
+import * as Hex from "ox/Hex";
 import type browser from "webextension-polyfill";
 
 export { UI_CHANNEL } from "@arx/core/ui";
@@ -43,6 +44,24 @@ const assertUnlocked = (session: BackgroundSessionServices) => {
   if (!session.unlock.isUnlocked()) {
     throw providerErrors.unauthorized({ message: "Wallet is locked" });
   }
+};
+
+const verifyExportPassword = async (session: BackgroundSessionServices, password: string): Promise<void> => {
+  // Fresh password check prevents stale unlock sessions from exporting secrets.
+  await session.vault.verifyPassword(password);
+};
+
+const withSensitiveBytes = <T>(secret: Uint8Array, transform: (bytes: Uint8Array) => T): T => {
+  try {
+    return transform(secret);
+  } finally {
+    zeroize(secret);
+  }
+};
+
+const toPlainHex = (bytes: Uint8Array): string => {
+  const out = Hex.from(bytes);
+  return out.startsWith("0x") ? out.slice(2) : out;
 };
 
 const normalizeUiError = (error: unknown) => {
@@ -549,13 +568,18 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
       }
       case "ui:exportMnemonic": {
         assertUnlocked(session);
-        const mnemonic = await keyring.exportMnemonic(message.payload.keyringId, message.payload.password);
+        await verifyExportPassword(session, message.payload.password);
+        let mnemonic = await keyring.exportMnemonic(message.payload.keyringId, message.payload.password);
+        // Clear mnemonic from memory
+        mnemonic = "";
         return { words: mnemonic.split(" ") };
       }
       case "ui:exportPrivateKey": {
         assertUnlocked(session);
+        await verifyExportPassword(session, message.payload.password);
         const secret = await keyring.exportPrivateKeyByAddress(message.payload.address, message.payload.password);
-        return { privateKey: Buffer.from(secret).toString("hex") };
+        const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
+        return { privateKey };
       }
       default:
         return undefined;

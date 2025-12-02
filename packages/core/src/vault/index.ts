@@ -7,7 +7,5 @@ export type {
   VaultService,
   VaultStatus,
 } from "./types.js";
-export {
-  createVaultService,
-  VAULT_VERSION,
-} from "./vaultService.js";
+export { zeroize } from "./utils.js";
+export { createVaultService, VAULT_VERSION } from "./vaultService.js";

@@ -31,7 +31,8 @@
     "react-dom": "19.1.1",
     "react-native-web": "^0.21.2",
     "tamagui": "1.138.0",
-    "webextension-polyfill": "catalog:"
+    "webextension-polyfill": "catalog:",
+    "ox": "0.9.14"
   },
   "devDependencies": {
     "@tanstack/router-cli": "^1.136.6",

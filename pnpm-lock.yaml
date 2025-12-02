@@ -9,6 +9,15 @@ catalogs:
     '@types/webextension-polyfill':
       specifier: 0.12.3
       version: 0.12.3
+    eventemitter3:
+      specifier: 5.0.1
+      version: 5.0.1
+    typescript:
+      specifier: 5.9.2
+      version: 5.9.2
+    vitest:
+      specifier: 3.2.4
+      version: 3.2.4
     webextension-polyfill:
       specifier: 0.12.0
       version: 0.12.0
@@ -56,6 +65,9 @@ importers:
       events:
         specifier: 3.3.0
         version: 3.3.0
+      ox:
+        specifier: 0.9.14
+        version: 0.9.14(typescript@5.9.2)(zod@4.1.11)
       react:
         specifier: 19.1.1
         version: 19.1.1

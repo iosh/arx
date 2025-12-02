@@ -10,6 +10,7 @@ import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { KeyringStorePort, StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
+import { zeroize } from "../../vault/utils.js";
 import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import type { ControllersBase } from "./controllers.js";
@@ -276,6 +277,8 @@ export const initSessionLayer = ({
         scheduleVaultMetaPersist();
       } catch (error) {
         storageLogger("session: failed to reseal keyring payload", error);
+      } finally {
+        zeroize(payload);
       }
     }),
   );

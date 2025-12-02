@@ -9,7 +9,7 @@ import { KeyringService } from "@arx/core";
 import { keyringErrors, vaultErrors } from "@arx/core/errors";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUiBridge } from "./uiBridge";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -302,7 +302,7 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
     vault: {
       exportKey: () => vault.exportKey(),
       isUnlocked: () => vault.isUnlocked(),
-      verifyPassword: (pwd) => vault.verifyPassword(pwd),
+      verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
     unlock,
     accounts: {
@@ -328,7 +328,11 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
 
   const session = {
     unlock,
-    vault: { getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext: true }) },
+    vault: {
+      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext: true }),
+
+      verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
+    },
   } as unknown as BackgroundSessionServices;
 
   const bridge = createUiBridge({
@@ -359,6 +363,7 @@ const expectResponse = (msg: any, requestId: string) => {
 
 describe("uiBridge", () => {
   let bridge: ReturnType<typeof buildBridge>["bridge"];
+  let keyring: ReturnType<typeof buildBridge>["keyring"];
   let vault: FakeVault;
   let unlock: FakeUnlock;
   let port: FakePort;
@@ -366,6 +371,7 @@ describe("uiBridge", () => {
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
     bridge = ctx.bridge;
+    keyring = ctx.keyring;
     vault = ctx.vault;
     unlock = ctx.unlock;
     port = createPort();
@@ -452,5 +458,52 @@ describe("uiBridge", () => {
     } as UiMessage);
     const pkResult = expectResponse(exportPk.envelope, exportPk.requestId) as { privateKey: string };
     expect(pkResult.privateKey.length).toBe(64);
+  });
+
+  it("requires valid password before exporting mnemonic", async () => {
+    const words = TEST_MNEMONIC.split(" ");
+    const createRes = await send({
+      type: "ui:confirmNewMnemonic",
+      payload: { words, alias: "main" },
+    } as UiMessage);
+    const { keyringId } = expectResponse(createRes.envelope, createRes.requestId) as {
+      keyringId: string;
+      address: string;
+    };
+
+    const spy = vi.spyOn(keyring, "exportMnemonic");
+    const exportAttempt = await send({
+      type: "ui:exportMnemonic",
+      payload: { keyringId, password: "wrong-password" },
+    } as UiMessage);
+
+    expectError(exportAttempt.envelope, 4100);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("zeroizes private key buffers after export", async () => {
+    const words = TEST_MNEMONIC.split(" ");
+    const createRes = await send({
+      type: "ui:confirmNewMnemonic",
+      payload: { words, alias: "main" },
+    } as UiMessage);
+    const createResult = expectResponse(createRes.envelope, createRes.requestId) as {
+      keyringId: string;
+      address: string;
+    };
+
+    const secret = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    const spy = vi.spyOn(keyring, "exportPrivateKeyByAddress").mockResolvedValue(secret);
+
+    const exportPk = await send({
+      type: "ui:exportPrivateKey",
+      payload: { address: createResult.address, password: PASSWORD },
+    } as UiMessage);
+    const pkResult = expectResponse(exportPk.envelope, exportPk.requestId) as { privateKey: string };
+
+    expect(pkResult.privateKey).toBe("deadbeef");
+    expect(Array.from(secret).every((byte) => byte === 0)).toBe(true);
+    spy.mockRestore();
   });
 });

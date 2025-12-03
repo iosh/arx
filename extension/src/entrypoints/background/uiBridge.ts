@@ -277,6 +277,14 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 
+    const keyringWarnings = keyring
+      .getKeyrings()
+      .filter((meta) => meta.type === "hd" && !meta.backedUp)
+      .map((meta) => ({
+        keyringId: meta.id,
+        alias: meta.alias ?? null,
+      }));
+
     const snapshot: UiSnapshot = {
       chain: {
         chainRef: chain.chainRef,
@@ -310,6 +318,9 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
       permissions: controllers.permissions.getState(),
       vault: {
         initialized: session.vault.getStatus().hasCiphertext,
+      },
+      warnings: {
+        hdKeyringsNeedingBackup: keyringWarnings,
       },
     };
 

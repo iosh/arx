@@ -1,10 +1,14 @@
 import type { UiSnapshot } from "@arx/core/ui";
-import { Button, Card, H2, Paragraph, XStack, YStack } from "tamagui";
+import { Card, H2, Paragraph, XStack, YStack } from "tamagui";
+import { Button } from "../components";
 
 const MS_PER_SECOND = 1000;
 
 type HomeScreenProps = {
   snapshot: UiSnapshot;
+  backupWarnings: Array<{ keyringId: string; alias: string | null }>;
+  onMarkBackedUp: (keyringId: string) => Promise<void>;
+  markingKeyringId: string | null;
   onLock: () => Promise<unknown>;
   onNavigateAccounts: () => void;
   onNavigateNetworks: () => void;
@@ -15,10 +19,13 @@ type HomeScreenProps = {
 export const HomeScreen = ({
   snapshot,
   onLock,
+  onMarkBackedUp,
   onNavigateAccounts,
   onNavigateNetworks,
   onNavigateApprovals,
   onNavigateSettings,
+  backupWarnings,
+  markingKeyringId,
 }: HomeScreenProps) => {
   const { chain, accounts, session, approvals } = snapshot;
   const timeLeft = session.nextAutoLockAt ? Math.max(session.nextAutoLockAt - Date.now(), 0) : null;
@@ -29,6 +36,24 @@ export const HomeScreen = ({
 
   return (
     <YStack flex={1} padding="$4" gap="$4" backgroundColor="$backgroundStrong">
+      {backupWarnings.length > 0 && (
+        <Card padded bordered backgroundColor="$yellow2" gap="$2">
+          <Paragraph fontWeight="600">Backup required</Paragraph>
+          {backupWarnings.map((warning) => (
+            <XStack key={warning.keyringId} alignItems="center" justifyContent="space-between" gap="$2">
+              <Paragraph fontSize="$3">{warning.alias ?? "HD keyring"} needs backup</Paragraph>
+              <Button
+                size="$2"
+                onPress={() => onMarkBackedUp(warning.keyringId)}
+                loading={markingKeyringId === warning.keyringId}
+              >
+                Mark backed up
+              </Button>
+            </XStack>
+          ))}
+        </Card>
+      )}
+
       <YStack gap="$3">
         <Card padded bordered>
           <YStack gap="$1">

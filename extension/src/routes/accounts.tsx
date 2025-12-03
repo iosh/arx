@@ -1,5 +1,6 @@
+import type { UiKeyringMeta } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, Paragraph, Separator, XStack, YStack } from "tamagui";
 import { Button, LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
@@ -14,9 +15,16 @@ export const Route = createFileRoute("/accounts")({
 
 function AccountSwitchPage() {
   const router = useRouter();
-  const { snapshot, isLoading, switchAccount } = useUiSnapshot();
+  const { snapshot, isLoading, switchAccount, markBackedUp } = useUiSnapshot();
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const backupWarnings = useMemo(
+    () => snapshot?.warnings.hdKeyringsNeedingBackup ?? [],
+    [snapshot?.warnings.hdKeyringsNeedingBackup],
+  );
 
   if (isLoading || !snapshot) {
     return <LoadingScreen />;
@@ -36,9 +44,43 @@ function AccountSwitchPage() {
       setPendingAddress(null);
     }
   };
+  const handleMarkBackedUp = async (keyringId: string) => {
+    setMarkingId(keyringId);
+    setBackupError(null);
+    try {
+      await markBackedUp(keyringId);
+    } catch (error) {
+      setBackupError(getErrorMessage(error));
+    } finally {
+      setMarkingId((current) => (current === keyringId ? null : current));
+    }
+  };
 
   return (
     <YStack flex={1} gap="$3" padding="$4">
+      {backupWarnings.length > 0 && (
+        <Card padded bordered backgroundColor="$yellow2" gap="$2">
+          <Paragraph fontWeight="600">Backup reminders</Paragraph>
+          {backupWarnings.map((warning) => (
+            <XStack key={warning.keyringId} alignItems="center" justifyContent="space-between" gap="$2">
+              <Paragraph>{warning.alias ?? "HD keyring"} needs backup</Paragraph>
+              <Button
+                size="$2"
+                loading={markingId === warning.keyringId}
+                onPress={() => void handleMarkBackedUp(warning.keyringId)}
+              >
+                Mark backed up
+              </Button>
+            </XStack>
+          ))}
+          {backupError ? (
+            <Paragraph color="$red10" fontSize="$2">
+              {backupError}
+            </Paragraph>
+          ) : null}
+        </Card>
+      )}
+
       <Button onPress={() => router.navigate({ to: ROUTES.HOME })}>Back</Button>
 
       <Card padded bordered gap="$2">

@@ -106,6 +106,10 @@ export const NetworkListSchema = z.object({
   active: z.string().min(1),
   known: z.array(ChainSnapshotSchema),
 });
+const HdBackupWarningSchema = z.object({
+  keyringId: z.string().uuid(),
+  alias: z.string().nullable(),
+});
 
 export const UiSnapshotSchema = z.object({
   chain: ChainSnapshotSchema,
@@ -115,6 +119,9 @@ export const UiSnapshotSchema = z.object({
   approvals: z.array(ApprovalSummarySchema),
   permissions: z.unknown().optional(), // TODO update schema
   vault: VaultSnapshotSchema,
+  warnings: z.object({
+    hdKeyringsNeedingBackup: z.array(HdBackupWarningSchema),
+  }),
 });
 
 export type ChainSnapshot = z.infer<typeof ChainSnapshotSchema>;
@@ -123,6 +130,7 @@ export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;
+export type HdBackupWarning = z.infer<typeof HdBackupWarningSchema>;
 export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;

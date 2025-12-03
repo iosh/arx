@@ -22,6 +22,8 @@ const resolveSnapshot = async (context: RouterContext): Promise<UiSnapshot | und
   }
 };
 
+const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.list.length ?? 0) > 0;
+
 /**
  * Route guard: Requires wallet to be unlocked
  *
@@ -48,6 +50,33 @@ export const requireInitialized = async ({ context }: { context: RouterContext }
   const snapshot = await resolveSnapshot(context);
   // If snapshot fetch failed or vault not initialized, redirect to home
   if (!snapshot || !snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+};
+
+export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveSnapshot(context);
+  if (!snapshot || snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+};
+
+export const requireSetupUnlocked = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveSnapshot(context);
+  if (!snapshot) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+  if (!snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.WELCOME });
+  }
+  if (!snapshot.session.isUnlocked || hasAccounts(snapshot)) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+};
+
+export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveSnapshot(context);
+  if (!snapshot || !hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.HOME });
   }
 };

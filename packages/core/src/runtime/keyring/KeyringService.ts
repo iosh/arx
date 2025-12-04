@@ -111,7 +111,8 @@ export class KeyringService {
   }
 
   generateMnemonic(wordCount: 12 | 24 = 12): string {
-    return BIP39Generate(wordlist, wordCount);
+    const strength = wordCount === 24 ? 256 : 128;
+    return BIP39Generate(wordlist, strength);
   }
 
   async confirmNewMnemonic(mnemonic: string, opts?: { alias?: string; skipBackup?: boolean; namespace?: string }) {

@@ -484,6 +484,7 @@ const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
     scope: PermissionScopes.Accounts,
     locked: lockedResponse([]),
     handler: handleEthAccounts,
+    isBootstrap: true,
   },
   eth_requestAccounts: {
     scope: PermissionScopes.Accounts,

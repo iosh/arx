@@ -520,8 +520,83 @@ const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   },
 });
 
+/**
+ * EIP-155 passthrough matrix.
+ *
+ * - allowedMethods: read-only RPCs forwarded to the RPC node.
+ * - allowWhenLocked: read-only RPCs still available when the vault is locked.
+ *   Filter APIs excluded from allowWhenLocked due to session state because they manipulate node-side cursors.
+ */
+const EIP155_PASSTHROUGH_CONFIG: Required<NamespaceAdapter["passthrough"]> = {
+  allowedMethods: [
+    "eth_blockNumber",
+    "eth_syncing",
+    "eth_getBlockByNumber",
+    "eth_getBlockByHash",
+    "eth_getBlockTransactionCountByHash",
+    "eth_getBlockTransactionCountByNumber",
+    "eth_getUncleCountByBlockHash",
+    "eth_getUncleCountByBlockNumber",
+    "eth_protocolVersion",
+    "eth_getBalance",
+    "eth_getTransactionCount",
+    "eth_getCode",
+    "eth_getStorageAt",
+    "eth_call",
+    "eth_estimateGas",
+    "eth_getTransactionByHash",
+    "eth_getTransactionByBlockHashAndIndex",
+    "eth_getTransactionByBlockNumberAndIndex",
+    "eth_getTransactionReceipt",
+    "eth_getLogs",
+    "eth_feeHistory",
+    "eth_gasPrice",
+    "eth_maxPriorityFeePerGas",
+    "net_version",
+    "net_listening",
+    "net_peerCount",
+    "web3_clientVersion",
+    "eth_newFilter",
+    "eth_newBlockFilter",
+    "eth_newPendingTransactionFilter",
+    "eth_uninstallFilter",
+    "eth_getFilterChanges",
+    "eth_getFilterLogs",
+  ] as const,
+  allowWhenLocked: [
+    "eth_blockNumber",
+    "eth_syncing",
+    "eth_getBlockByNumber",
+    "eth_getBlockByHash",
+    "eth_getBlockTransactionCountByHash",
+    "eth_getBlockTransactionCountByNumber",
+    "eth_getUncleCountByBlockHash",
+    "eth_getUncleCountByBlockNumber",
+    "eth_protocolVersion",
+    "eth_getBalance",
+    "eth_getTransactionCount",
+    "eth_getCode",
+    "eth_getStorageAt",
+    "eth_call",
+    "eth_estimateGas",
+    "eth_getTransactionByHash",
+    "eth_getTransactionByBlockHashAndIndex",
+    "eth_getTransactionByBlockNumberAndIndex",
+    "eth_getTransactionReceipt",
+    "eth_getLogs",
+    "eth_feeHistory",
+    "eth_gasPrice",
+    "eth_maxPriorityFeePerGas",
+    "net_version",
+    "net_listening",
+    "net_peerCount",
+    "web3_clientVersion",
+  ] as const,
+};
+
 export const createEip155Adapter = (): NamespaceAdapter => ({
   namespace: EIP155_NAMESPACE,
-  methodPrefixes: ["eth_", "personal_", "wallet_", "net_"],
+  methodPrefixes: ["eth_", "personal_", "wallet_", "net_", "web3_"],
   definitions: buildEip155Definitions(),
+  passthrough: EIP155_PASSTHROUGH_CONFIG,
 });

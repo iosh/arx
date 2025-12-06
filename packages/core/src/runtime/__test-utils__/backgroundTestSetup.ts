@@ -325,7 +325,9 @@ export class FakeVault implements VaultService {
     this.#password = params.password;
     this.#ciphertext = this.createCiphertext();
     this.#unlocked = true;
-    this.#secret = new Uint8Array([1, 2, 3]);
+    // Initialize with empty keyrings payload that KeyringService expects
+    const encoder = new TextEncoder();
+    this.#secret = encoder.encode(JSON.stringify({ keyrings: [] }));
     return { ...this.#ciphertext };
   }
 
@@ -345,7 +347,9 @@ export class FakeVault implements VaultService {
 
     this.#unlocked = true;
     if (!this.#secret) {
-      this.#secret = new Uint8Array([1, 2, 3]);
+      // Initialize with empty keyrings payload that KeyringService expects
+      const encoder = new TextEncoder();
+      this.#secret = encoder.encode(JSON.stringify({ keyrings: [] }));
     }
     return new Uint8Array(this.#secret);
   }

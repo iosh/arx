@@ -15,6 +15,7 @@ import {
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
+  namespaceFromContext,
   type RpcInvocationContext,
   type UnlockReason,
 } from "@arx/core";
@@ -261,9 +262,20 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     }
 
     const executeMethod = createMethodExecutor(controllers);
-    const resolveProviderErrors = (rpcContext?: RpcInvocationContext) =>
-      getProviderErrors(namespaceResolver(rpcContext));
-    const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => getRpcErrors(namespaceResolver(rpcContext));
+    const resolveProviderErrors = (rpcContext?: RpcInvocationContext) => {
+      if (rpcContext?.errors?.provider) {
+        return rpcContext.errors.provider;
+      }
+      const namespace = namespaceFromContext(rpcContext) ?? namespaceResolver(rpcContext);
+      return getProviderErrors(namespace);
+    };
+    const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => {
+      if (rpcContext?.errors?.rpc) {
+        return rpcContext.errors.rpc;
+      }
+      const namespace = namespaceFromContext(rpcContext) ?? namespaceResolver(rpcContext);
+      return getRpcErrors(namespace);
+    };
     const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
 
     const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
@@ -442,19 +454,9 @@ const rejectPendingWithDisconnect = (port: browser.Runtime.Port, overrideError?:
   const bucket = pendingRequests.get(port);
   if (!bucket) return;
   const portContext = portContexts.get(port);
-  const error =
-    overrideError ??
-    getActiveProviderErrors(
-      portContext
-        ? {
-            namespace: portContext.namespace,
-            chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
-            meta: portContext.meta,
-          }
-        : undefined,
-    )
-      .disconnected()
-      .serialize();
+  const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+  const providerErrors = rpcContext?.errors?.provider ?? getActiveProviderErrors(rpcContext);
+  const error = overrideError ?? providerErrors.disconnected().serialize();
 
   for (const [messageId, { rpcId, jsonrpc }] of bucket) {
     replyRequest(port, messageId, {
@@ -563,6 +565,22 @@ const toJsonRpcError = (error: unknown, method: string, rpcContext?: RpcInvocati
     .serialize();
 };
 
+const buildRpcContext = (portContext: PortContext | undefined, chainRef: string | null) => {
+  if (!portContext) return undefined;
+  const namespace = portContext.namespace;
+  const providerErrors = getProviderErrors(namespace);
+  const rpcErrors = getRpcErrors(namespace);
+  return {
+    namespace,
+    chainRef: chainRef ?? portContext.caip2 ?? null,
+    meta: portContext.meta,
+    errors: {
+      provider: providerErrors,
+      rpc: rpcErrors,
+    },
+  } satisfies RpcInvocationContext;
+};
+
 const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
   const { engine } = await ensureContext();
   const { id: rpcId, jsonrpc, method } = envelope.payload;
@@ -572,13 +590,7 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
   const portContext = portContexts.get(port);
   const origin = portContext?.origin ?? resolveOrigin(port);
   const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? null;
-  const rpcContext = portContext
-    ? {
-        namespace: portContext.namespace,
-        chainRef: effectiveChainRef ?? portContext.caip2 ?? null,
-        meta: portContext.meta,
-      }
-    : undefined;
+  const rpcContext = buildRpcContext(portContext, effectiveChainRef);
 
   const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
     id: envelope.payload.id,
@@ -586,11 +598,12 @@ const handleRpcRequest = async (port: browser.Runtime.Port, envelope: Extract<En
     method: envelope.payload.method,
     params: envelope.payload.params as JsonRpcParams,
     origin,
-    ...(portContext && {
+    ...(rpcContext && {
       arx: {
-        chainRef: effectiveChainRef,
-        namespace: portContext.namespace,
-        meta: portContext.meta,
+        chainRef: rpcContext.chainRef,
+        namespace: rpcContext.namespace,
+        meta: rpcContext.meta,
+        errors: rpcContext.errors,
       },
     }),
   };
@@ -680,15 +693,11 @@ const runtimeMessageProxy = (message: unknown, sender: browser.Runtime.MessageSe
 
 const getProviderErrorsForPort = (port: browser.Runtime.Port) => {
   const portContext = portContexts.get(port);
-  return getActiveProviderErrors(
-    portContext
-      ? {
-          namespace: portContext.namespace,
-          chainRef: portContext.meta?.activeChain ?? portContext.caip2 ?? null,
-          meta: portContext.meta,
-        }
-      : undefined,
-  );
+  const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+  if (rpcContext?.errors?.provider) {
+    return rpcContext.errors.provider;
+  }
+  return getActiveProviderErrors(rpcContext);
 };
 
 const sendHandshakeAck = (port: browser.Runtime.Port, snapshot: ControllerSnapshot) => {

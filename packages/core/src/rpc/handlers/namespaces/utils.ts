@@ -1,7 +1,7 @@
 import type { Caip2ChainId } from "../../../chains/ids.js";
 import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
 import { getProviderErrors, getRpcErrors } from "../../../errors/index.js";
-import type { HandlerControllers } from "../types.js";
+import type { HandlerControllers, Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";
 
@@ -14,18 +14,40 @@ export const createTaskId = (prefix: string) => {
 export const isRpcError = (value: unknown): value is { code: number } =>
   Boolean(value && typeof value === "object" && "code" in (value as Record<string, unknown>));
 
-const resolveNamespace = (controllers: HandlerControllers) => {
+/**
+ * Extract namespace from RPC invocation context.
+ * Priority: explicit namespace → chainRef prefix → undefined
+ */
+export const namespaceFromContext = (context?: RpcInvocationContext | null): Namespace | undefined => {
+  if (!context) return undefined;
+  if (context.namespace) return context.namespace;
+  if (context.chainRef) {
+    const [candidate] = context.chainRef.split(":");
+    return candidate as Namespace | undefined;
+  }
+  return undefined;
+};
+
+const resolveNamespace = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
+  const resolved = namespaceFromContext(context);
+  if (resolved) return resolved;
   const active = controllers.network.getActiveChain().chainRef;
   const [namespace] = active.split(":");
-  return namespace ?? EIP155_NAMESPACE;
+  return (namespace ?? EIP155_NAMESPACE) as Namespace;
 };
 
-export const resolveProviderErrors = (controllers: HandlerControllers) => {
-  return getProviderErrors(resolveNamespace(controllers));
+export const resolveProviderErrors = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
+  if (context?.errors?.provider) {
+    return context.errors.provider;
+  }
+  return getProviderErrors(resolveNamespace(controllers, context));
 };
 
-export const resolveRpcErrors = (controllers: HandlerControllers) => {
-  return getRpcErrors(resolveNamespace(controllers));
+export const resolveRpcErrors = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
+  if (context?.errors?.rpc) {
+    return context.errors.rpc;
+  }
+  return getRpcErrors(resolveNamespace(controllers, context));
 };
 
 export const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;

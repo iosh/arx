@@ -10,6 +10,7 @@ import type {
   PermissionScopeResolver,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { ChainErrorFactory } from "../../errors/factories.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 
 export type HandlerControllers = {
@@ -33,6 +34,7 @@ export type RpcInvocationContext = {
   chainRef?: Caip2ChainId | null;
   namespace?: Namespace | null;
   meta?: unknown;
+  errors?: ChainErrorFactory;
 };
 
 export type MethodHandler = (context: {

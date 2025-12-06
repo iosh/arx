@@ -6,6 +6,7 @@ import {
   type TransactionController,
   type TransactionMeta,
 } from "../../../controllers/index.js";
+import { evmProviderErrors, evmRpcErrors } from "../../../errors/index.js";
 import { lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
 import type { NamespaceAdapter } from "./adapter.js";
@@ -83,8 +84,8 @@ const handleEthAccounts: MethodHandler = ({ controllers }) => {
   return controllers.accounts.getAccounts({ chainRef: active.chainRef });
 };
 
-const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) => {
-  const providerErrors = resolveProviderErrors(controllers);
+const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rpcContext }) => {
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const activeChain = controllers.network.getActiveChain();
   const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });
 
@@ -112,9 +113,9 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers }) 
   }
 };
 
-const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, controllers }) => {
-  const rpcErrors = resolveRpcErrors(controllers);
-  const providerErrors = resolveProviderErrors(controllers);
+const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, controllers, rpcContext }) => {
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const params = request.params;
   const [first] = Array.isArray(params) ? params : params ? [params] : [];
 
@@ -224,9 +225,9 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   }
 };
 
-const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, controllers }) => {
-  const rpcErrors = resolveRpcErrors(controllers);
-  const providerErrors = resolveProviderErrors(controllers);
+const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
   const [raw] = paramsArray;
 
@@ -298,10 +299,10 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   return null;
 };
 
-const handlePersonalSign: MethodHandler = async ({ origin, request, controllers }) => {
+const handlePersonalSign: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
   const paramsArray = toParamsArray(request.params);
-  const rpcErrors = resolveRpcErrors(controllers);
-  const providerErrors = resolveProviderErrors(controllers);
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
 
   if (paramsArray.length < 2) {
     throw rpcErrors.invalidParams({
@@ -361,9 +362,9 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers 
   }
 };
 
-const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, controllers }) => {
-  const rpcErrors = resolveRpcErrors(controllers);
-  const providerErrors = resolveProviderErrors(controllers);
+const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
 
   if (paramsArray.length < 2) {
@@ -409,9 +410,9 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   }
 };
 
-const handleEthSendTransaction: MethodHandler = async ({ origin, request, controllers }) => {
-  const rpcErrors = resolveRpcErrors(controllers);
-  const providerErrors = resolveProviderErrors(controllers);
+const handleEthSendTransaction: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
 
   if (paramsArray.length === 0) {
@@ -599,4 +600,8 @@ export const createEip155Adapter = (): NamespaceAdapter => ({
   methodPrefixes: ["eth_", "personal_", "wallet_", "net_", "web3_"],
   definitions: buildEip155Definitions(),
   passthrough: EIP155_PASSTHROUGH_CONFIG,
+  errors: {
+    rpc: evmRpcErrors,
+    provider: evmProviderErrors,
+  },
 });

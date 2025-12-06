@@ -581,9 +581,11 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         assertUnlocked(session);
         await verifyExportPassword(session, message.payload.password);
         let mnemonic = await keyring.exportMnemonic(message.payload.keyringId, message.payload.password);
+        // Split before clearing from memory
+        const words = mnemonic.split(" ");
         // Clear mnemonic from memory
         mnemonic = "";
-        return { words: mnemonic.split(" ") };
+        return { words };
       }
       case "ui:exportPrivateKey": {
         assertUnlocked(session);

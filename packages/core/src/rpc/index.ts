@@ -1,5 +1,6 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
+import { registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type {
@@ -16,6 +17,7 @@ export type {
   Eip155RpcClient,
 } from "./clients/eip155/eip155.js";
 export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
+export { namespaceFromContext } from "./handlers/namespaces/utils.js";
 export {
   type RpcClient,
   type RpcClientFactory,
@@ -39,12 +41,23 @@ export const registerNamespaceAdapter = (adapter: NamespaceAdapter, options?: { 
     replace: options?.replace ?? true,
     methodPrefixes: adapter.methodPrefixes ?? [],
   });
+  const previous = namespaceAdapters.get(adapter.namespace);
   namespaceAdapters.set(adapter.namespace, adapter);
+
+  if (adapter.errors) {
+    registerChainErrorFactory(adapter.namespace, adapter.errors);
+  } else if (previous?.errors && (options?.replace ?? true)) {
+    unregisterChainErrorFactory(adapter.namespace);
+  }
 };
 
 export const unregisterNamespaceAdapter = (namespace: Namespace): void => {
+  const existing = namespaceAdapters.get(namespace);
   namespaceAdapters.delete(namespace);
   unregisterNamespaceDefinitions(namespace);
+  if (existing?.errors) {
+    unregisterChainErrorFactory(namespace);
+  }
 };
 
 export const getRegisteredNamespaceAdapters = (): NamespaceAdapter[] => [...namespaceAdapters.values()];

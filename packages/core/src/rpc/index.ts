@@ -1,6 +1,6 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
-import { registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
+import { getRpcErrors, registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type {
@@ -10,6 +10,7 @@ import type {
   RpcInvocationContext,
   RpcRequest,
 } from "./handlers/types.js";
+import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
 
 export type {
   Eip155FeeData,
@@ -35,6 +36,10 @@ const namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
 const namespacePrefixes = new Map<string, Namespace>();
 
 const namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
+
+type MethodExecutorDependencies = {
+  rpcClientRegistry: RpcClientRegistry;
+};
 
 export const registerNamespaceAdapter = (adapter: NamespaceAdapter, options?: { replace?: boolean }): void => {
   registerNamespaceDefinitions(adapter.namespace, adapter.definitions, {
@@ -199,17 +204,62 @@ export const createPermissionScopeResolver = (
 };
 
 export const createMethodExecutor =
-  (controllers: HandlerControllers) =>
+  (controllers: HandlerControllers, deps: MethodExecutorDependencies) =>
   async ({ origin, request, context }: { origin: string; request: RpcRequest; context?: RpcInvocationContext }) => {
     const namespace = selectNamespace(controllers, request.method, context);
     const definition = getDefinitionsForNamespace(namespace)?.[request.method];
-    if (!definition) {
-      throw new Error(`Method "${request.method}" not implemented for namespace "${namespace}"`);
+    if (definition) {
+      const handlerArgs =
+        context === undefined
+          ? { origin, request, controllers }
+          : { origin, request, controllers, rpcContext: context };
+      return definition.handler(handlerArgs);
     }
-    const handlerArgs =
-      context === undefined ? { origin, request, controllers } : { origin, request, controllers, rpcContext: context };
 
-    return definition.handler(handlerArgs);
+    const adapter = namespaceAdapters.get(namespace);
+    const rpcErrors = context?.errors?.rpc ?? adapter?.errors?.rpc ?? getRpcErrors(namespace);
+    const passthrough = adapter?.passthrough;
+    if (!passthrough || !passthrough.allowedMethods.includes(request.method)) {
+      throw rpcErrors.methodNotFound({
+        message: `Method "${request.method}" is not implemented`,
+        data: { namespace, method: request.method },
+      });
+    }
+
+    const chainRef = context?.chainRef ?? controllers.network.getActiveChain().chainRef;
+    const [chainNamespace] = chainRef.split(":");
+    if (chainNamespace && chainNamespace !== namespace) {
+      throw rpcErrors.invalidRequest({
+        message: `Namespace mismatch for "${request.method}"`,
+        data: { namespace, chainRef },
+      });
+    }
+
+    try {
+      const client = deps.rpcClientRegistry.getClient(namespace, chainRef);
+      const rpcPayload: RpcTransportRequest = { method: request.method };
+      if (request.params !== undefined) {
+        rpcPayload.params = request.params;
+      }
+      return await client.request(rpcPayload);
+    } catch (error) {
+      // If it's already a properly formatted RPC error from the node
+      if (error && typeof error === "object" && "code" in error) {
+        const rpcError = error as { code: number; message?: string; data?: unknown };
+        // Sanitize error.data to remove internal fields like stack, path
+        if (rpcError.data && typeof rpcError.data === "object") {
+          const sanitized = { ...rpcError.data } as Record<string, unknown>;
+          delete sanitized.stack;
+          delete sanitized.path;
+          throw { ...rpcError, data: sanitized };
+        }
+        throw error;
+      }
+      throw rpcErrors.internal({
+        message: `Failed to execute "${request.method}"`,
+        data: { namespace, chainRef },
+      });
+    }
   };
 
 export type DomainChainService = {

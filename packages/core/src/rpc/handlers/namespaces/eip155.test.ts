@@ -52,6 +52,8 @@ const createServices = (overrides?: Parameters<typeof createBackgroundServices>[
     ...rest,
   });
 };
+const createExecutor = (services: ReturnType<typeof createServices>) =>
+  createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
 // TODO: add eth_requestAccounts rejection test once approval  -> account flow is implemented
 
 describe("eip155 handlers - core error paths", () => {
@@ -60,7 +62,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     try {
       await expect(
         execute({
@@ -87,7 +89,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.session.vault.initialize({ password: "test" });
     await services.session.unlock.unlock({ password: "test" });
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     const mainnet = services.controllers.network.getActiveChain();
 
     await services.controllers.network.addChain(ALT_CHAIN);
@@ -130,7 +132,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     await services.controllers.network.addChain(ALT_CHAIN);
 
     try {
@@ -155,7 +157,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     await services.controllers.network.addChain(ALT_CHAIN);
 
     try {
@@ -180,7 +182,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       // Test both forms: non-hex string and invalid hex characters
@@ -213,7 +215,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     await services.controllers.network.addChain({
       ...ALT_CHAIN,
       chainRef: "eip155:8453",
@@ -244,7 +246,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -268,7 +270,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -304,7 +306,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     await services.controllers.network.addChain(ALT_CHAIN);
 
     const changes: string[] = [];
@@ -333,7 +335,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -355,7 +357,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
     services.controllers.approvals.requestApproval = (async (task) => {
@@ -397,7 +399,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -428,7 +430,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
     services.controllers.approvals.requestApproval = (async () => {
@@ -458,7 +460,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -485,7 +487,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -512,7 +514,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     const originalRequestApproval = services.controllers.approvals.requestApproval.bind(services.controllers.approvals);
     services.controllers.approvals.requestApproval = (async (task) => {
@@ -568,7 +570,7 @@ describe("eip155 handlers - core error paths", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     try {
       await expect(
@@ -597,7 +599,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     const activeChain = services.controllers.network.getActiveChain();
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
@@ -630,7 +632,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     const activeChain = services.controllers.network.getActiveChain();
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
@@ -667,7 +669,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     const activeChain = services.controllers.network.getActiveChain();
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
@@ -715,7 +717,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = services.controllers.approvals.requestApproval;
@@ -760,7 +762,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    const execute = createMethodExecutor(services.controllers);
+    const execute = createExecutor(services);
     const activeChain = services.controllers.network.getActiveChain();
 
     let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
@@ -844,7 +846,7 @@ describe("eip155 handlers - approval metadata", () => {
     });
 
     try {
-      const execute = createMethodExecutor(services.controllers);
+      const execute = createExecutor(services);
       const mainnet = services.controllers.network.getActiveChain();
 
       const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
@@ -936,7 +938,7 @@ describe("eip155 handlers - approval metadata", () => {
         switchActive: true,
       });
 
-      const execute = createMethodExecutor(services.controllers);
+      const execute = createExecutor(services);
       const message = "0xdeadbeef";
 
       const signature = (await execute({
@@ -992,7 +994,7 @@ describe("eip155 handlers - approval metadata", () => {
       const beforeNamespace = beforeState.origins[ORIGIN]?.eip155;
       expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Sign);
 
-      const execute = createMethodExecutor(services.controllers);
+      const execute = createExecutor(services);
       const payload = {
         domain: { name: "ARX", version: "1" },
         message: { contents: "hello" },

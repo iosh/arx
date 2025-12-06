@@ -261,23 +261,16 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       });
     }
 
-    const executeMethod = createMethodExecutor(controllers);
+    const executeMethod = createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
     const resolveProviderErrors = (rpcContext?: RpcInvocationContext) => {
-      if (rpcContext?.errors?.provider) {
-        return rpcContext.errors.provider;
-      }
-      const namespace = namespaceFromContext(rpcContext) ?? namespaceResolver(rpcContext);
+      const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
       return getProviderErrors(namespace);
     };
     const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => {
-      if (rpcContext?.errors?.rpc) {
-        return rpcContext.errors.rpc;
-      }
-      const namespace = namespaceFromContext(rpcContext) ?? namespaceResolver(rpcContext);
+      const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
       return getRpcErrors(namespace);
     };
     const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
-
     const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
       if (!chainRef) {
         return null;

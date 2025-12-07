@@ -1,56 +1,23 @@
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
-import type {
-  AccountController,
-  MultiNamespaceAccountsState,
-  NamespaceAccountsState,
-} from "../../controllers/account/types.js";
-import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../errors/keyring.js";
 import { vaultErrors } from "../../errors/vault.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import { getAddressKey } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
-import type { AccountMeta, KeyringMeta, VaultKeyringEntry } from "../../storage/keyringSchemas.js";
-import { KEYRING_VAULT_ENTRY_VERSION, VaultKeyringPayloadSchema } from "../../storage/keyringSchemas.js";
-import type { KeyringStorePort } from "../../storage/keyringStore.js";
-import type { VaultService } from "../../vault/types.js";
-import { zeroize } from "../../vault/utils.js";
-
-type KeyringServiceOptions = {
-  vault: Pick<VaultService, "exportKey" | "isUnlocked" | "verifyPassword">;
-  unlock: Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked">;
-  accounts: Pick<AccountController, "getState" | "replaceState">;
-  keyringStore: KeyringStorePort;
-  namespaces: NamespaceConfig[];
-  logger?: (message: string, error?: unknown) => void;
-};
-
-type RuntimeKeyring = {
-  id: string;
-  kind: KeyringKind;
-  namespace: string;
-  instance: HierarchicalDeterministicKeyring | SimpleKeyring;
-};
-
-type Payload = { keyrings: VaultKeyringEntry[] };
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-const encodePayload = (payload: Payload): Uint8Array => encoder.encode(JSON.stringify(payload));
-const decodePayload = (bytes: Uint8Array | null, logger?: (m: string, e?: unknown) => void): Payload => {
-  if (!bytes || bytes.length === 0) return { keyrings: [] };
-  try {
-    const parsed = JSON.parse(decoder.decode(bytes)) as unknown;
-    return VaultKeyringPayloadSchema.parse(parsed);
-  } catch (error) {
-    logger?.("keyring: failed to decode vault payload", error);
-    return { keyrings: [] };
-  } finally {
-    if (bytes) zeroize(bytes);
-  }
-};
+import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
+import { KeyringHydration } from "./KeyringHydration.js";
+import { decodePayload, encodePayload } from "./keyring-utils.js";
+import type {
+  AccountMeta,
+  KeyringMeta,
+  KeyringServiceOptions,
+  MultiNamespaceAccountsState,
+  NamespaceAccountsState,
+  Payload,
+  RuntimeKeyring,
+  VaultKeyringEntry,
+} from "./types.js";
 
 export class KeyringService {
   #options: KeyringServiceOptions;
@@ -59,36 +26,30 @@ export class KeyringService {
   #keyringMetas = new Map<string, KeyringMeta>();
   #accountMetas = new Map<string, AccountMeta>();
   #payload: Payload = { keyrings: [] };
-  #subscriptions: Array<() => void> = [];
   #payloadListeners = new Set<(payload: Uint8Array | null) => void>();
   #addressIndex = new Map<string, { namespace: string; keyringId: string }>();
-  #initializing = false;
-  #hydrationPromise: Promise<void> | null = null;
+  #hydration: KeyringHydration;
 
   constructor(options: KeyringServiceOptions) {
     this.#options = options;
     this.#namespacesConfig = new Map(options.namespaces.map((ns) => [ns.namespace, ns]));
+    this.#hydration = new KeyringHydration(
+      options,
+      {
+        keyrings: this.#keyrings,
+        keyringMetas: this.#keyringMetas,
+        accountMetas: this.#accountMetas,
+      },
+      (payload) => this.#onHydrated(payload),
+    );
   }
 
   async attach() {
-    if (this.#subscriptions.length > 0) return;
-    this.#subscriptions.push(this.#options.unlock.onUnlocked((payload) => this.#handleUnlocked(payload)));
-    this.#subscriptions.push(this.#options.unlock.onLocked((payload) => this.#handleLocked(payload)));
-    if (this.#options.unlock.isUnlocked()) {
-      await this.#hydrate();
-    }
+    await this.#hydration.attach();
   }
 
   detach() {
-    this.#subscriptions.splice(0).forEach((unsubscribe) => {
-      try {
-        unsubscribe();
-      } catch (error) {
-        this.#options.logger?.("keyring: failed to remove unlock subscription", error);
-      }
-    });
-    this.#subscriptions = [];
-    this.#clearRuntime();
+    this.#hydration.detach();
   }
 
   onPayloadUpdated(handler: (payload: Uint8Array | null) => void): () => void {
@@ -343,27 +304,29 @@ export class KeyringService {
   }
 
   async onLock(): Promise<void> {
-    this.#handleLocked({ at: Date.now(), reason: "manual" });
+    this.#hydration.clear();
+    this.#onHydrated(null);
   }
 
   // ----- private helpers -----
 
-  async #waitForHydration(): Promise<void> {
-    const hydration = this.#hydrationPromise;
-    if (!this.#initializing || !hydration) return;
-
-    const timeoutMs = 10_000;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    try {
-      await Promise.race([
-        hydration,
-        new Promise((_, reject) => {
-          timeout = setTimeout(() => reject(new Error("Hydration timeout")), timeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timeout) clearTimeout(timeout);
+  #onHydrated(payload?: Payload | null) {
+    if (payload) {
+      this.#payload = payload;
+    } else if (payload === null) {
+      this.#payload = { keyrings: [] };
+    } else if (this.#options.vault.isUnlocked()) {
+      this.#payload = decodePayload(this.#options.vault.exportKey(), this.#options.logger);
+    } else {
+      this.#payload = { keyrings: [] };
     }
+    this.#indexAccounts(false);
+    this.#syncAccountsState();
+    this.#notifyPayloadUpdated();
+  }
+
+  async #waitForHydration(): Promise<void> {
+    await this.#hydration.waitForHydration();
   }
 
   async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
@@ -493,118 +456,6 @@ export class KeyringService {
     this.#notifyPayloadUpdated();
   }
 
-  async #hydrate() {
-    if (this.#initializing) return;
-    this.#initializing = true;
-
-    let resolveHydration!: () => void;
-    this.#hydrationPromise = new Promise<void>((resolve) => {
-      resolveHydration = resolve;
-    });
-
-    try {
-      if (!this.#options.vault.isUnlocked()) {
-        this.#clearRuntime();
-        return;
-      }
-      const [metas, accounts] = await Promise.all([
-        this.#options.keyringStore.getKeyringMetas(),
-        this.#options.keyringStore.getAccountMetas(),
-      ]);
-
-      this.#keyringMetas = new Map(metas.map((m) => [m.id, m]));
-      this.#accountMetas = new Map(accounts.map((a) => [a.address, a]));
-
-      const payload = decodePayload(this.#options.vault.exportKey(), this.#options.logger);
-      this.#payload = payload;
-      this.#keyrings.clear();
-
-      const isHdPayload = (value: unknown): value is { mnemonic: string[]; passphrase?: string } =>
-        !!value && typeof value === "object" && Array.isArray((value as { mnemonic?: unknown }).mnemonic);
-
-      const isPrivateKeyPayload = (value: unknown): value is { privateKey: string } =>
-        !!value && typeof value === "object" && typeof (value as { privateKey?: unknown }).privateKey === "string";
-      for (const entry of payload.keyrings) {
-        const namespace = entry.namespace ?? this.#defaultNamespace();
-        const config = this.#getConfig(namespace);
-        const factory =
-          entry.type === "hd"
-            ? config.factories.hd
-            : entry.type === "private-key"
-              ? config.factories["private-key"]
-              : undefined;
-        if (!factory) continue;
-
-        try {
-          const instance = factory();
-          if (entry.type === "hd") {
-            if (!isHdPayload(entry.payload)) throw keyringErrors.secretUnavailable();
-            const hd = instance as HierarchicalDeterministicKeyring;
-            const payload = entry.payload;
-            hd.loadFromMnemonic(
-              payload.mnemonic.join(" "),
-              payload.passphrase ? { passphrase: payload.passphrase } : undefined,
-            );
-
-            const accs = accounts.filter((a) => a.keyringId === entry.keyringId);
-            const derived = accs
-              .filter((a) => a.derivationIndex !== undefined)
-              .sort((a, b) => (a.derivationIndex ?? 0) - (b.derivationIndex ?? 0));
-
-            for (const meta of derived) {
-              const derivedAccount = hd.deriveAccount(meta.derivationIndex ?? 0);
-              if (config.normalizeAddress(derivedAccount.address) !== meta.address) {
-                throw keyringErrors.secretUnavailable();
-              }
-            }
-          } else {
-            if (!isPrivateKeyPayload(entry.payload)) throw keyringErrors.secretUnavailable();
-            const simple = instance as SimpleKeyring;
-            const payload = entry.payload;
-            simple.loadFromPrivateKey(payload.privateKey);
-          }
-
-          this.#keyrings.set(entry.keyringId, { id: entry.keyringId, kind: entry.type, namespace, instance });
-        } catch (error) {
-          this.#options.logger?.(`keyring: failed to hydrate keyring ${entry.keyringId}`, error);
-        }
-      }
-
-      await this.#reconcileDerivedCounts();
-      this.#indexAccounts(false);
-      this.#syncAccountsState();
-      this.#notifyPayloadUpdated();
-    } finally {
-      this.#initializing = false;
-      resolveHydration();
-      this.#hydrationPromise = null;
-    }
-  }
-  #handleUnlocked(_payload: UnlockUnlockedPayload): void {
-    void this.#hydrate().catch((error) => this.#options.logger?.("keyring: hydrate failed", error));
-  }
-
-  #handleLocked(_payload: UnlockLockedPayload): void {
-    this.#clearRuntime();
-    this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
-  }
-
-  #clearRuntime() {
-    for (const runtime of this.#keyrings.values()) {
-      try {
-        runtime.instance.clear();
-      } catch (error) {
-        this.#options.logger?.("keyring: failed to clear runtime keyring", error);
-      }
-    }
-    this.#keyrings.clear();
-    this.#keyringMetas.clear();
-    this.#accountMetas.clear();
-    this.#addressIndex.clear();
-    this.#payload = { keyrings: [] };
-  }
-
   #notifyPayloadUpdated() {
     const encoded = encodePayload(this.#payload);
     for (const listener of this.#payloadListeners) {
@@ -658,25 +509,6 @@ export class KeyringService {
 
     const nextState: MultiNamespaceAccountsState<string> = { namespaces, active };
     this.#options.accounts.replaceState(nextState);
-  }
-  // Ensures hd keyring meta.derivedCount reflects (max derivationIndex + 1) of stored accounts.
-  // Prevents index reuse after partial rollback or manual edits.
-  async #reconcileDerivedCounts() {
-    let patched = false;
-    for (const [keyringId, meta] of this.#keyringMetas) {
-      if (meta.type !== "hd") continue;
-      const accounts = this.getAccounts(true).filter((a) => a.keyringId === keyringId);
-      const maxIndex = Math.max(-1, ...accounts.map((a) => a.derivationIndex ?? -1));
-      const expected = maxIndex + 1;
-      if (meta.derivedCount === undefined || meta.derivedCount < expected) {
-        this.#options.logger?.(`keyring: derivedCount mismatch, fixing ${meta.derivedCount ?? "unset"} -> ${expected}`);
-        this.#keyringMetas.set(keyringId, { ...meta, derivedCount: expected });
-        patched = true;
-      }
-    }
-    if (patched) {
-      await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
-    }
   }
 
   async #toggleHidden(address: string, hidden: boolean) {

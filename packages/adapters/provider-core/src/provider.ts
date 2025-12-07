@@ -28,7 +28,15 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   supportedChains: [...meta.supportedChains],
 });
 
+const PROVIDER_STATE_METHODS = new Set(["metamask_getProviderState", "wallet_getProviderState"]);
 const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
+
+type ProviderStateSnapshot = {
+  accounts: string[];
+  chainId: string | null;
+  networkVersion: string | null;
+  isUnlocked: boolean;
+};
 
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #namespace = DEFAULT_NAMESPACE;
@@ -83,6 +91,33 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   isConnected = () => {
     return this.#transport.isConnected();
   };
+
+  /**
+   * Mirrors MetaMask provider snapshot so dapps can bootstrap without extra RPC.
+   */
+  getProviderState = (): ProviderStateSnapshot => ({
+    accounts: [...this.#accounts],
+    chainId: this.#chainId,
+    networkVersion: this.#resolveNetworkVersion(),
+    isUnlocked: this.#isUnlocked ?? false,
+  });
+
+  #resolveNumericReference(candidate: string | null | undefined) {
+    if (typeof candidate !== "string" || candidate.length === 0) return null;
+    const [, reference = candidate] = candidate.split(":");
+    return /^\d+$/.test(reference) ? reference : null;
+  }
+
+  #resolveNetworkVersion(): string | null {
+    if (typeof this.#chainId === "string") {
+      try {
+        return BigInt(this.#chainId).toString(10);
+      } catch {
+        // swallow malformed hex to fall back on CAIP references
+      }
+    }
+    return this.#resolveNumericReference(this.#caip2) ?? this.#resolveNumericReference(this.#meta?.activeChain);
+  }
 
   #handleMetaChanged = (payload: unknown) => {
     if (payload === undefined) return;
@@ -282,7 +317,6 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
         data: { args },
       });
     }
-
     const { method, params } = args;
 
     if (typeof method !== "string" || method.length === 0) {
@@ -296,6 +330,10 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
         message: "Invalid request params",
         data: { args },
       });
+    }
+
+    if (PROVIDER_STATE_METHODS.has(method)) {
+      return this.getProviderState();
     }
 
     if (!this.#initialized && READONLY_EARLY.has(method)) {

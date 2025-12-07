@@ -500,4 +500,33 @@ describe("EthereumProvider transport meta integration", () => {
     await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({ code: 4900 });
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
   });
+  it("returns provider snapshot for metamask_getProviderState without transport roundtrip", async () => {
+    const { transport, provider } = createProvider();
+    transport.emit("accountsChanged", ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
+    transport.emit("chainChanged", { chainId: "0x2", caip2: "eip155:2" });
+
+    await expect(provider.request({ method: "metamask_getProviderState" })).resolves.toEqual({
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      chainId: "0x2",
+      networkVersion: "2",
+      isUnlocked: true,
+    });
+    expect(transport.getRequests()).toHaveLength(0);
+    expect(transport.getRequests()).toHaveLength(0);
+  });
+
+  it("derives networkVersion from CAIP-2 when chainId is null", async () => {
+    const initialState: TransportState = { ...INITIAL_STATE, chainId: null, caip2: "eip155:10" };
+    const { provider } = createProvider(initialState);
+
+    await expect(provider.request({ method: "metamask_getProviderState" })).resolves.toMatchObject({
+      networkVersion: "10",
+    });
+  });
+
+  it("supports wallet_getProviderState alias", async () => {
+    const { provider } = createProvider();
+
+    await expect(provider.request({ method: "wallet_getProviderState" })).resolves.toMatchObject({ chainId: "0x1" });
+  });
 });

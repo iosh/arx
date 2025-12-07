@@ -37,7 +37,8 @@ export const asWindowWithHost = (target: Window): WindowWithArxHost => target as
 
 const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
   const metamaskShim = Object.freeze({
-    isUnlocked: () => Promise.resolve(target.isUnlocked === true),
+    isUnlocked: () => Promise.resolve(target.getProviderState().isUnlocked),
+    getProviderState: () => Promise.resolve(target.getProviderState()),
     requestBatch: (requests: RequestArguments[]) => {
       return Promise.all(requests.map((req) => target.request(req)));
     },
@@ -57,6 +58,8 @@ const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
         case "wallet_requestPermissions":
           return (params?: RequestArguments["params"]) =>
             instance.request({ method: "wallet_requestPermissions", params });
+        case "wallet_getProviderState":
+          return () => instance.request({ method: "metamask_getProviderState" });
         case "_metamask":
           return metamaskShim;
         default:
@@ -70,7 +73,8 @@ const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
         property === "isMetaMask" ||
         property === "_metamask" ||
         property === "wallet_getPermissions" ||
-        property === "wallet_requestPermissions"
+        property === "wallet_requestPermissions" ||
+        property === "wallet_getProviderState"
       ) {
         return true;
       }

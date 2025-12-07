@@ -197,11 +197,57 @@ describe("ProviderHost EIP-6963", () => {
       }),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    // Provider instance should remain the same
     const providerAfterReconnect = (window as any).ethereum;
     expect(providerAfterReconnect).toBe(provider);
+
+    dom.window.removeEventListener("message", messageHandler);
+  });
+
+  it("exposes wallet/metamask provider state helpers", async () => {
+    const transport = new InpageTransport();
+    const host = new ProviderHost(transport);
+    const messageHandler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.channel === CHANNEL && data?.type === "handshake") {
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            data: {
+              channel: CHANNEL,
+              type: "handshake_ack",
+              payload: {
+                chainId: "0x1",
+                caip2: "eip155:1",
+                accounts: ["0xabc"],
+                isUnlocked: true,
+                meta: {
+                  activeChain: "eip155:1",
+                  activeNamespace: "eip155",
+                  supportedChains: ["eip155:1"],
+                },
+              },
+            },
+            source: dom.window as unknown as Window,
+          }),
+        );
+      }
+    };
+
+    dom.window.addEventListener("message", messageHandler);
+    await host.start();
+
+    const provider = (window as any).ethereum;
+    await expect(provider.wallet_getProviderState()).resolves.toMatchObject({
+      accounts: ["0xabc"],
+      chainId: "0x1",
+      isUnlocked: true,
+    });
+
+    const shimState = await provider._metamask.getProviderState();
+    expect(shimState).toMatchObject({
+      accounts: ["0xabc"],
+      chainId: "0x1",
+      isUnlocked: true,
+    });
 
     dom.window.removeEventListener("message", messageHandler);
   });

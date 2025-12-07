@@ -136,6 +136,7 @@ const PERMISSION_SCOPE_VALUES = [
 
 const APPROVAL_TYPE_VALUES = [
   ApprovalTypes.RequestAccounts,
+  ApprovalTypes.RequestPermissions,
   ApprovalTypes.SignMessage,
   ApprovalTypes.SignTypedData,
   ApprovalTypes.SendTransaction,

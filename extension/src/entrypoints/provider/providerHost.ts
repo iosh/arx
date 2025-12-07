@@ -52,6 +52,11 @@ const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
           return instance.chainId;
         case "isMetaMask":
           return false;
+        case "wallet_getPermissions":
+          return (params?: RequestArguments["params"]) => instance.request({ method: "wallet_getPermissions", params });
+        case "wallet_requestPermissions":
+          return (params?: RequestArguments["params"]) =>
+            instance.request({ method: "wallet_requestPermissions", params });
         case "_metamask":
           return metamaskShim;
         default:
@@ -63,7 +68,9 @@ const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
         property === "selectedAddress" ||
         property === "chainId" ||
         property === "isMetaMask" ||
-        property === "_metamask"
+        property === "_metamask" ||
+        property === "wallet_getPermissions" ||
+        property === "wallet_requestPermissions"
       ) {
         return true;
       }

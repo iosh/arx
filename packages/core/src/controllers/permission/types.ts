@@ -48,11 +48,26 @@ export type PermissionControllerOptions = {
   initialState?: PermissionsState;
 };
 
+export type PermissionRequestDescriptor = {
+  scope: PermissionScope;
+  capability: string;
+  chains: Caip2ChainId[];
+};
+
+export type RequestPermissionsApprovalPayload = {
+  requested: PermissionRequestDescriptor[];
+};
+
+export type PermissionApprovalResult = {
+  granted: PermissionRequestDescriptor[];
+};
+
 export type PermissionController = {
   getState(): PermissionsState;
   ensurePermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;
   clear(origin: string): Promise<void>;
+  getPermissions(origin: string): OriginPermissionState | undefined;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void;
   replaceState(state: PermissionsState): void;

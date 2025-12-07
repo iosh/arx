@@ -264,7 +264,25 @@ function ApprovalPayloadDetail({ approval }: { approval: ApprovalSummary }) {
           )}
         </Card>
       );
-
+    case "requestPermissions":
+      return (
+        <Card padded bordered gap="$2">
+          <Paragraph fontWeight="600">Permission Request</Paragraph>
+          <YStack gap="$2" marginTop="$2">
+            {approval.payload.permissions.map((perm, index) => (
+              <Card key={`${perm.capability}-${index}`} padded bordered>
+                <Paragraph fontWeight="600">{perm.capability}</Paragraph>
+                <Paragraph color="$color10" fontSize="$2">
+                  Scope: {perm.scope}
+                </Paragraph>
+                <Paragraph color="$color10" fontSize="$2">
+                  Chains: {perm.chains.join(", ")}
+                </Paragraph>
+              </Card>
+            ))}
+          </YStack>
+        </Card>
+      );
     default:
       return (
         <Card padded bordered>
@@ -297,6 +315,8 @@ function getTypeLabel(type: ApprovalSummary["type"]): string {
       return "Sign Typed Data";
     case "sendTransaction":
       return "Send Transaction";
+    case "requestPermissions":
+      return "Permission Request";
     default:
       return "Unknown Request";
   }

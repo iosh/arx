@@ -1,4 +1,10 @@
-import type { ApprovalTask, BackgroundSessionServices, HandlerControllers, KeyringService } from "@arx/core";
+import type {
+  ApprovalTask,
+  BackgroundSessionServices,
+  HandlerControllers,
+  KeyringService,
+  RequestPermissionsApprovalPayload,
+} from "@arx/core";
 import { ApprovalTypes, getProviderErrors, PermissionScopes, zeroize } from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import * as Hex from "ox/Hex";
@@ -230,6 +236,20 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
           },
         };
       }
+      case ApprovalTypes.RequestPermissions: {
+        const payload = extractPayload<RequestPermissionsApprovalPayload>(task.payload);
+        return {
+          ...base,
+          type: "requestPermissions",
+          payload: {
+            permissions: payload.requested.map((item) => ({
+              capability: item.capability,
+              scope: item.scope,
+              chains: [...item.chains],
+            })),
+          },
+        };
+      }
       case ApprovalTypes.SendTransaction: {
         const payload = extractPayload<SendTransactionPayload>(task.payload);
         const txPayload = payload.request?.payload ?? {};
@@ -450,6 +470,14 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
               });
               return signature;
             });
+            broadcast();
+            return { id: task.id, result };
+          }
+          case ApprovalTypes.RequestPermissions: {
+            const payload = extractPayload<RequestPermissionsApprovalPayload>(task.payload);
+            const result = await controllers.approvals.resolve(task.id, async () => ({
+              granted: payload.requested,
+            }));
             broadcast();
             return { id: task.id, result };
           }

@@ -202,6 +202,11 @@ export class InMemoryPermissionController implements PermissionController {
     });
   }
 
+  getPermissions(origin: string): OriginPermissionState | undefined {
+    const namespaces = this.#state.origins[origin];
+    return namespaces ? cloneOriginState(namespaces) : undefined;
+  }
+
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void {
     return this.#messenger.subscribe(PERMISSION_STATE_TOPIC, handler);
   }

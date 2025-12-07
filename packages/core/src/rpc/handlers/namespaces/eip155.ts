@@ -1,13 +1,25 @@
+import type { JsonRpcParams } from "@metamask/utils";
 import { ZodError } from "zod";
+import type { Caip2ChainId } from "../../../chains/ids.js";
 import { type ChainMetadata, createEip155MetadataFromEip3085, parseCaip2 } from "../../../chains/index.js";
 import {
+  type ApprovalTask,
   ApprovalTypes,
+  type PermissionApprovalResult,
+  type PermissionRequestDescriptor,
+  type PermissionScope,
   PermissionScopes,
+  type RequestPermissionsApprovalPayload,
   type TransactionController,
   type TransactionMeta,
 } from "../../../controllers/index.js";
 import { evmProviderErrors, evmRpcErrors } from "../../../errors/index.js";
-import { lockedResponse } from "../locked.js";
+import {
+  type BuildWalletPermissionsOptions,
+  buildWalletPermissions,
+  PERMISSION_SCOPE_CAPABILITIES,
+} from "../../permissions.js";
+import { lockedAllow, lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
 import type { NamespaceAdapter } from "./adapter.js";
 import {
@@ -22,6 +34,9 @@ import {
   toParamsArray,
 } from "./utils.js";
 
+const CAPABILITY_TO_SCOPE = new Map(
+  Object.entries(PERMISSION_SCOPE_CAPABILITIES).map(([scope, capability]) => [capability, scope as PermissionScope]),
+);
 type RpcLikeError = Error & { code: number; data?: unknown };
 
 class TransactionResolutionError extends Error {
@@ -298,6 +313,115 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
 
   return null;
 };
+const handleWalletGetPermissions: MethodHandler = ({ origin, controllers }) => {
+  const permissions = controllers.permissions.getPermissions(origin);
+  const getAccounts = (chainRef: string) => controllers.accounts.getAccounts({ chainRef });
+
+  const options: BuildWalletPermissionsOptions = {
+    origin,
+    getAccounts,
+  };
+
+  if (permissions) {
+    options.permissions = permissions;
+  }
+
+  return buildWalletPermissions(options);
+};
+const normalizePermissionRequests = (
+  params: JsonRpcParams | undefined,
+  rpcErrors: ReturnType<typeof resolveRpcErrors>,
+  defaultChain: Caip2ChainId,
+): PermissionRequestDescriptor[] => {
+  const [raw] = toParamsArray(params);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw rpcErrors.invalidParams({
+      message: "wallet_requestPermissions expects a single object parameter",
+      data: { params },
+    });
+  }
+
+  const entries = Object.keys(raw);
+  if (entries.length === 0) {
+    throw rpcErrors.invalidParams({
+      message: "wallet_requestPermissions requires at least one capability",
+      data: { params },
+    });
+  }
+
+  const requests = new Map<string, PermissionRequestDescriptor>();
+  const addCapability = (capability: string) => {
+    const scope = CAPABILITY_TO_SCOPE.get(capability);
+    if (!scope) {
+      throw rpcErrors.invalidParams({
+        message: `wallet_requestPermissions does not support capability "${capability}"`,
+        data: { capability },
+      });
+    }
+    const existing = requests.get(capability);
+    if (existing) {
+      if (!existing.chains.includes(defaultChain)) {
+        existing.chains.push(defaultChain);
+      }
+      return;
+    }
+    requests.set(capability, {
+      scope,
+      capability,
+      chains: [defaultChain],
+    });
+  };
+
+  for (const capability of entries) {
+    addCapability(capability);
+  }
+  addCapability(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
+
+  return [...requests.values()];
+};
+
+const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
+  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
+  const providerErrors = resolveProviderErrors(controllers, rpcContext);
+  const activeChain = controllers.network.getActiveChain();
+
+  const requested = normalizePermissionRequests(request.params, rpcErrors, activeChain.chainRef);
+  const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
+    id: createTaskId("wallet_requestPermissions"),
+    type: ApprovalTypes.RequestPermissions,
+    origin,
+    namespace: activeChain.namespace,
+    chainRef: activeChain.chainRef,
+    createdAt: Date.now(),
+    payload: { requested },
+  };
+
+  try {
+    const result = (await controllers.approvals.requestApproval(task)) as PermissionApprovalResult;
+    const grants = result?.granted ?? [];
+
+    for (const descriptor of grants) {
+      const targetChains = descriptor.chains.length ? descriptor.chains : [activeChain.chainRef];
+      for (const chainRef of targetChains) {
+        await controllers.permissions.grant(origin, descriptor.scope, {
+          namespace: activeChain.namespace,
+          chainRef,
+        });
+      }
+    }
+  } catch (error) {
+    if (isRpcError(error)) throw error;
+    throw providerErrors.userRejectedRequest({
+      message: "User rejected permission request",
+      data: { origin },
+    });
+  }
+
+  const permissions = controllers.permissions.getPermissions(origin);
+  const getAccounts = (chainRef: string) => controllers.accounts.getAccounts({ chainRef });
+  const descriptorInput = permissions ? { origin, permissions, getAccounts } : { origin, getAccounts };
+  return buildWalletPermissions(descriptorInput);
+};
 
 const handlePersonalSign: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
   const paramsArray = toParamsArray(request.params);
@@ -518,6 +642,18 @@ const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
     scope: PermissionScopes.Basic,
     approvalRequired: true,
     handler: handleWalletAddEthereumChain,
+  },
+  wallet_getPermissions: {
+    scope: PermissionScopes.Basic,
+    locked: lockedAllow(),
+    handler: handleWalletGetPermissions,
+    isBootstrap: true,
+  },
+  wallet_requestPermissions: {
+    scope: PermissionScopes.Basic,
+    approvalRequired: true,
+    handler: handleWalletRequestPermissions,
+    isBootstrap: true,
   },
 });
 

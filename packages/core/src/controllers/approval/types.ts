@@ -4,6 +4,7 @@ import type { ChainNamespace } from "../account/types.js";
 
 export const ApprovalTypes = {
   RequestAccounts: "wallet_requestAccounts",
+  RequestPermissions: "wallet_requestPermissions",
   SignMessage: "wallet_signMessage",
   SignTypedData: "wallet_signTypedData",
   SendTransaction: "wallet_sendTransaction",

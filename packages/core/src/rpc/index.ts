@@ -19,6 +19,7 @@ export type {
 } from "./clients/eip155/eip155.js";
 export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
+export * from "./permissions.js";
 export {
   type RpcClient,
   type RpcClientFactory,

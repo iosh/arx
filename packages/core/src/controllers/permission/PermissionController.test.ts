@@ -209,4 +209,23 @@ describe("InMemoryPermissionController", () => {
 
     expect(controller.getState().origins[ORIGIN]).toBeUndefined();
   });
+
+  it("returns cloned origin permissions", async () => {
+    const entry = {
+      eip155: {
+        scopes: [PermissionScopes.Basic],
+        chains: ["eip155:1"],
+      },
+    };
+    const { controller } = createController({
+      initialState: { origins: { [ORIGIN]: entry } },
+    });
+
+    const first = controller.getPermissions(ORIGIN);
+    expect(first).toEqual(entry);
+    expect(first).not.toBe(entry);
+
+    const missing = controller.getPermissions("https://unknown.example");
+    expect(missing).toBeUndefined();
+  });
 });

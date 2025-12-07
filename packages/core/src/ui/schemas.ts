@@ -31,7 +31,6 @@ const approvalPayloadBase = z.object({
   chainRef: z.string(),
   createdAt: z.number().int(),
 });
-
 export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("requestAccounts"),
@@ -83,7 +82,20 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
         .optional(),
     }),
   }),
+  approvalPayloadBase.extend({
+    type: z.literal("requestPermissions"),
+    payload: z.object({
+      permissions: z.array(
+        z.object({
+          capability: z.string(),
+          scope: z.string(),
+          chains: z.array(z.string()),
+        }),
+      ),
+    }),
+  }),
 ]);
+
 export const UiKeyringMetaSchema = z.object({
   id: z.uuid(),
   type: z.enum(["hd", "private-key"]),

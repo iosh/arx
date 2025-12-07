@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../../chains/metadata.js";
-import { ApprovalTypes } from "../../../controllers/index.js";
+import { ApprovalTypes, PermissionScopes, type RequestPermissionsApprovalPayload } from "../../../controllers/index.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
@@ -549,6 +549,116 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
+      services.lifecycle.destroy();
+    }
+  });
+  it("returns empty array for wallet_getPermissions when origin lacks grants", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const execute = createExecutor(services);
+    try {
+      const result = await execute({
+        origin: ORIGIN,
+        request: { method: "wallet_getPermissions", params: [] as JsonRpcParams },
+      });
+
+      expect(result).toEqual([]);
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("returns EIP-2255 descriptors for wallet_getPermissions", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const chain = services.controllers.network.getActiveChain();
+    await services.controllers.accounts.addAccount({
+      chainRef: chain.chainRef,
+      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      makePrimary: true,
+    });
+    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: chain.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Accounts, { chainRef: chain.chainRef });
+
+    const execute = createExecutor(services);
+    try {
+      const result = await execute({
+        origin: ORIGIN,
+        request: { method: "wallet_getPermissions", params: [] as JsonRpcParams },
+      });
+
+      expect(result).toEqual([
+        {
+          invoker: ORIGIN,
+          parentCapability: "wallet_basic",
+          caveats: [{ type: "arx:permittedChains", value: [chain.chainRef] }],
+        },
+        {
+          invoker: ORIGIN,
+          parentCapability: "eth_accounts",
+          caveats: [
+            { type: "arx:permittedChains", value: [chain.chainRef] },
+            { type: "restrictReturnedAccounts", value: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+          ],
+        },
+      ]);
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("grants permissions after wallet_requestPermissions approval", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const chain = services.controllers.network.getActiveChain();
+    await services.controllers.accounts.addAccount({
+      chainRef: chain.chainRef,
+      address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      makePrimary: true,
+    });
+
+    const teardown = setupApprovalResponder(services, async (task) => {
+      if (task.type !== ApprovalTypes.RequestPermissions) return false;
+      const payload = task.payload as RequestPermissionsApprovalPayload;
+      expect(payload.requested).toEqual(
+        expect.arrayContaining([
+          { capability: "wallet_basic", chains: [chain.chainRef], scope: PermissionScopes.Basic },
+          { capability: "eth_accounts", chains: [chain.chainRef], scope: PermissionScopes.Accounts },
+        ]),
+      );
+      await services.controllers.approvals.resolve(task.id, async () => ({
+        granted: payload.requested,
+      }));
+      return true;
+    });
+
+    const execute = createExecutor(services);
+    try {
+      const result = await execute({
+        origin: ORIGIN,
+        request: { method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] as JsonRpcParams },
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ parentCapability: "wallet_basic" }),
+          expect.objectContaining({ parentCapability: "eth_accounts" }),
+        ]),
+      );
+
+      const state = services.controllers.permissions.getPermissions(ORIGIN);
+      expect(state?.eip155?.scopes).toEqual(
+        expect.arrayContaining([PermissionScopes.Basic, PermissionScopes.Accounts]),
+      );
+    } finally {
+      teardown();
       services.lifecycle.destroy();
     }
   });

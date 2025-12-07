@@ -1,3 +1,4 @@
+import type { ChainModuleRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapter } from "../types.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
@@ -7,12 +8,16 @@ import type { Eip155Signer } from "./signer.js";
 
 type AdapterDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
+  chains: ChainModuleRegistry;
   signer: Pick<Eip155Signer, "signTransaction">;
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
 };
 
 export const createEip155TransactionAdapter = (deps: AdapterDeps): TransactionAdapter => {
-  const buildDraft = createEip155DraftBuilder({ rpcClientFactory: deps.rpcClientFactory });
+  const buildDraft = createEip155DraftBuilder({
+    rpcClientFactory: deps.rpcClientFactory,
+    chains: deps.chains,
+  });
   const receiptService = createEip155ReceiptService({ rpcClientFactory: deps.rpcClientFactory });
 
   return {

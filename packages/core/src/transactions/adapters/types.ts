@@ -8,9 +8,9 @@ import type {
   TransactionWarning,
 } from "../../controllers/transaction/types.js";
 
-export type TransactionDraft = {
-  prepared: Record<string, unknown>;
-  summary: Record<string, unknown>;
+export type TransactionDraft<TPrepared = Record<string, unknown>, TSummary = Record<string, unknown>> = {
+  prepared: TPrepared;
+  summary: TSummary;
   warnings: TransactionWarning[];
   issues: TransactionIssue[];
 };

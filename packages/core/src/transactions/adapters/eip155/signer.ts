@@ -12,6 +12,7 @@ import { getProviderErrors, getRpcErrors } from "../../../errors/index.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import { zeroize } from "../../../vault/utils.js";
 import type { SignedTransactionPayload, TransactionAdapterContext, TransactionDraft } from "../types.js";
+import type { Eip155DraftPrepared, Eip155TransactionDraft } from "./types.js";
 
 const rpcErrors = getRpcErrors("eip155");
 const providerErrors = getProviderErrors("eip155");
@@ -43,23 +44,16 @@ const readErrorMessage = (value: unknown) => {
 
 const isHexValue = (value: unknown): value is HexType => typeof value === "string" && value.startsWith("0x");
 
-const requireHex = (value: unknown, label: string): HexType => {
-  if (!isHexValue(value)) {
-    throw rpcErrors.invalidRequest({ message: `Transaction ${label} must be a 0x-prefixed hex string.` });
-  }
-  return value;
-};
-
-const toBigInt = (value: unknown, label: string, required = false): bigint | undefined => {
+const toBigInt = (value: HexType | null | undefined, label: string, required = false): bigint | undefined => {
   if (value == null) {
     if (required) {
       throw rpcErrors.invalidRequest({ message: `Transaction ${label} is required.` });
     }
     return undefined;
   }
-  const hex = requireHex(value, label);
   try {
-    return Hex.toBigInt(hex);
+    Hex.assert(value, { strict: false });
+    return Hex.toBigInt(value);
   } catch {
     throw rpcErrors.invalidRequest({ message: `Transaction ${label} is not a valid hex quantity.` });
   }
@@ -70,8 +64,8 @@ const toBigInt = (value: unknown, label: string, required = false): bigint | und
  * Validates chainId is a positive 53-bit safe integer.
  */
 const deriveChainId = (context: TransactionAdapterContext, prepared: Record<string, unknown>): number => {
-  if (isHexValue(prepared.chainId)) {
-    const numeric = Number(Hex.toBigInt(prepared.chainId));
+  if (prepared.chainId) {
+    const numeric = Number(Hex.toBigInt(prepared.chainId as Hex.Hex));
     if (!Number.isSafeInteger(numeric) || numeric <= 0) {
       throw rpcErrors.invalidRequest({ message: "Transaction chainId must be a positive 53-bit integer." });
     }
@@ -93,7 +87,7 @@ const deriveChainId = (context: TransactionAdapterContext, prepared: Record<stri
 };
 
 const buildEnvelope = (
-  prepared: Record<string, unknown>,
+  prepared: Eip155DraftPrepared,
   chainId: number,
 ):
   | { type: "eip1559"; value: TransactionEnvelopeEip1559.TransactionEnvelopeEip1559 }
@@ -101,8 +95,8 @@ const buildEnvelope = (
   const base = {
     chainId,
     nonce: toBigInt(prepared.nonce, "nonce"),
-    to: isHexValue(prepared.to) ? prepared.to : undefined,
-    data: isHexValue(prepared.data) ? prepared.data : undefined,
+    to: prepared.to ?? undefined,
+    data: prepared.data ?? undefined,
     value: toBigInt(prepared.value, "value"),
     gas: toBigInt(prepared.gas, "gas"),
   };
@@ -211,10 +205,18 @@ const parseTypedDataPayload = (raw: string) => {
   return parsed as TypedData.Definition<Record<string, unknown>, string>;
 };
 
+const assertEip155Draft = (draft: TransactionDraft): draft is Eip155TransactionDraft => {
+  return typeof draft.prepared === "object" && draft.prepared !== null && "callParams" in draft.prepared;
+};
+
 export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
   const signTransaction: Eip155Signer["signTransaction"] = async (context, draft) => {
     if (context.namespace !== "eip155") {
       throw rpcErrors.invalidRequest({ message: `EIP-155 signer cannot handle namespace "${context.namespace}".` });
+    }
+
+    if (!assertEip155Draft(draft)) {
+      throw rpcErrors.invalidRequest({ message: "Signer expected an EIP-155 draft payload." });
     }
 
     const requestFrom = context.meta.from;
@@ -235,8 +237,8 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     }
 
     const from = requestFrom;
-    assertUnlockedAccount(deps.keyring, from);
 
+    assertUnlockedAccount(deps.keyring, from);
     const chainId = deriveChainId(context, draft.prepared);
     const envelope = buildEnvelope(draft.prepared, chainId);
 

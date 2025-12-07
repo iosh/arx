@@ -5,7 +5,7 @@ import {
   setupBackground,
   TEST_AUTO_LOCK_DURATION,
   TEST_INITIAL_TIME,
-} from "./__test-utils__/backgroundTestSetup.js";
+} from "./__fixtures__/backgroundTestSetup.js";
 
 beforeEach(() => {
   vi.useFakeTimers();

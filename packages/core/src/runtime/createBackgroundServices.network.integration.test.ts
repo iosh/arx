@@ -23,7 +23,7 @@ import {
   isNetworkSnapshot,
   setupBackground,
   TEST_MNEMONIC,
-} from "./__test-utils__/backgroundTestSetup.js";
+} from "./__fixtures__/backgroundTestSetup.js";
 
 beforeEach(() => {
   vi.useFakeTimers();

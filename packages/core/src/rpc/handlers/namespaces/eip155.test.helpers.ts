@@ -1,7 +1,7 @@
 import type { Caip2ChainId } from "../../../chains/ids.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 import type { ApprovalTask } from "../../../controllers/index.js";
-import { FakeVault } from "../../../runtime/__test-utils__/backgroundTestSetup.js";
+import { FakeVault } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
 import { createMethodExecutor } from "../../index.js";
 

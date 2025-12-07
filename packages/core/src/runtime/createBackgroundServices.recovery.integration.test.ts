@@ -4,7 +4,7 @@ import type { TransactionsSnapshot } from "../storage/index.js";
 import { StorageNamespaces, TRANSACTIONS_SNAPSHOT_VERSION } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
-import { createChainMetadata, flushAsync, setupBackground } from "./__test-utils__/backgroundTestSetup.js";
+import { createChainMetadata, flushAsync, setupBackground } from "./__fixtures__/backgroundTestSetup.js";
 
 beforeEach(() => {
   vi.useFakeTimers();

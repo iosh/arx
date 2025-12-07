@@ -9,7 +9,7 @@ import {
   setupBackground,
   TEST_RECEIPT_MAX_DELAY,
   TEST_RECEIPT_POLL_INTERVAL,
-} from "./__test-utils__/backgroundTestSetup.js";
+} from "./__fixtures__/backgroundTestSetup.js";
 
 beforeEach(() => {
   vi.useFakeTimers();

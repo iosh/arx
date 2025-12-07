@@ -1,69 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
+import { TEST_TX_HASH } from "./__fixtures__/constants.js";
+import { createReceiptContext } from "./__fixtures__/contexts.js";
+import { createEip155RpcClient } from "./__mocks__/rpc.js";
 import { createEip155ReceiptService } from "./receipt.js";
 
-const HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-const BASE_CONTEXT: TransactionAdapterContext = {
-  namespace: "eip155",
-  chainRef: "eip155:1",
-  origin: "https://dapp.example",
-  from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  request: {
-    namespace: "eip155",
-    caip2: "eip155:1",
-    payload: {
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      nonce: "0x3",
-      value: "0x0",
-      data: "0x",
-    },
-  },
-  meta: {
-    id: "tx-1",
-    namespace: "eip155",
-    caip2: "eip155:1",
-    origin: "https://dapp.example",
-    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    request: {
-      namespace: "eip155",
-      caip2: "eip155:1",
-      payload: {
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        nonce: "0x3",
-        value: "0x0",
-        data: "0x",
-      },
-    },
-    status: "broadcast",
-    hash: HASH,
-    receipt: null,
-    error: null,
-    userRejected: false,
-    warnings: [],
-    issues: [],
-    createdAt: 1_000,
-    updatedAt: 1_000,
-  },
-};
-
-const createClient = (overrides: Partial<Eip155RpcCapabilities>): Eip155RpcCapabilities => {
-  return {
-    estimateGas: vi.fn(async () => "0x0"),
-    getTransactionCount: vi.fn(async () => "0x0"),
-    getFeeData: vi.fn(async () => ({})),
-    getTransactionReceipt: vi.fn(async () => null),
-    sendRawTransaction: vi.fn(async () => "0x0"),
-    ...overrides,
-  };
-};
+const BASE_CONTEXT = createReceiptContext();
 
 describe("createEip155ReceiptService", () => {
   it("throws when receipt hash mismatches", async () => {
-    const client = createClient({
+    const client = createEip155RpcClient({
       getTransactionReceipt: vi.fn(async () => ({
         transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         status: "0x1",
@@ -74,14 +20,14 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    await expect(service.fetchReceipt(BASE_CONTEXT, HASH)).rejects.toMatchObject({
+    await expect(service.fetchReceipt(BASE_CONTEXT, TEST_TX_HASH)).rejects.toMatchObject({
       code: -32603,
       message: expect.stringContaining("mismatched"),
     });
   });
 
   it("resolves status as success when blockNumber exists", async () => {
-    const client = createClient({
+    const client = createEip155RpcClient({
       getTransactionReceipt: vi.fn(async () => ({
         blockNumber: "0x123",
       })),
@@ -91,13 +37,13 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const result = await service.fetchReceipt(BASE_CONTEXT, HASH);
+    const result = await service.fetchReceipt(BASE_CONTEXT, TEST_TX_HASH);
     expect(result?.status).toBe("success");
     expect(result?.receipt).toMatchObject({ blockNumber: "0x123" });
   });
 
   it("detects replacement when nonce is already consumed", async () => {
-    const client = createClient({
+    const client = createEip155RpcClient({
       getTransactionCount: vi.fn(async () => "0x5"),
     });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createDefaultChainModuleRegistry } from "../../../chains/registry.js";
 import type { Eip155TransactionPayload, TransactionMeta } from "../../../controllers/transaction/types.js";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
@@ -6,6 +7,15 @@ import { createEip155DraftBuilder } from "./draftBuilder.js";
 
 const BASE_FROM = "0x1111111111111111111111111111111111111111" as const;
 const BASE_TO = "0x2222222222222222222222222222222222222222" as const;
+
+// Helper to create builder with default chains
+const createBuilder = (overrides: Partial<Parameters<typeof createEip155DraftBuilder>[0]> = {}) => {
+  return createEip155DraftBuilder({
+    chains: createDefaultChainModuleRegistry(),
+    rpcClientFactory: vi.fn(),
+    ...overrides,
+  });
+};
 
 const createRequest = (): TransactionAdapterContext["request"] => ({
   namespace: "eip155",
@@ -69,9 +79,9 @@ const createRpcMock = () => {
 
   return { client, estimateGas, getTransactionCount, getFeeData, getTransactionReceipt, sendRawTransaction };
 };
-describe("createEip155DraftBuilder", () => {
+describe("createBuilder", () => {
   it("rejects requests from non-eip155 namespace", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(),
     });
 
@@ -85,8 +95,8 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
-      rpcClientFactory: vi.fn(() => rpc),
+    const builder = createBuilder({
+      rpcClientFactory: vi.fn(() => rpc.client),
       now: () => 2_000,
     });
 
@@ -112,7 +122,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -138,7 +148,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0x3b9aca00",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc),
       now: () => 5_000,
     });
@@ -175,7 +185,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0x3b9aca00",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -200,7 +210,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0xGG",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -221,7 +231,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0x3b9aca00",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -246,7 +256,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockRejectedValue(new Error("estimate error"));
     rpc.getFeeData.mockRejectedValue(new Error("fee error"));
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc),
     });
 
@@ -269,7 +279,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -292,7 +302,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockRejectedValue(new Error("boom"));
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -313,7 +323,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("flags rpc_unavailable when client factory throws", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => {
         throw new Error("boom");
       }),
@@ -331,7 +341,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -351,7 +361,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -379,7 +389,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0x3b9aca00",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -402,7 +412,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("normalizes provided hex fields to lowercase", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -423,7 +433,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("summarizes eip1559 fee fields provided in payload", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -447,7 +457,7 @@ describe("createEip155DraftBuilder", () => {
   it("detects fee conflict when mixing gasPrice with EIP-1559 fields", async () => {
     const rpc = createRpcMock();
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -465,7 +475,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -486,7 +496,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x30000");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -506,7 +516,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x35000");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -527,7 +537,7 @@ describe("createEip155DraftBuilder", () => {
   it("skips nonce/gas RPC calls when values already provided", async () => {
     const rpc = createRpcMock();
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -548,7 +558,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -562,7 +572,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("leaves maxCost fields undefined when gas data cannot be derived", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => {
         throw new Error("rpc offline");
       }),
@@ -584,7 +594,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("reports issue when from is missing", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -606,7 +616,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -640,7 +650,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -658,7 +668,7 @@ describe("createEip155DraftBuilder", () => {
 
   it("reports issue when to address is invalid", async () => {
     const rpc = createRpcMock();
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -673,7 +683,7 @@ describe("createEip155DraftBuilder", () => {
 
   it("flags invalid hex quantities and data", async () => {
     const rpc = createRpcMock();
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -692,7 +702,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("reports issue when from address is invalid", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -712,7 +722,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -729,7 +739,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("warns when chainId is missing", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -745,7 +755,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("retains normalized chainId when payload matches expected chain", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
       now: () => 42_000,
     });
@@ -767,7 +777,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
       now: () => 123_456,
     });
@@ -795,7 +805,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x0");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -813,7 +823,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5f5e100"); // 100,000,000
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -833,7 +843,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -851,7 +861,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("21000");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -865,7 +875,7 @@ describe("createEip155DraftBuilder", () => {
   });
 
   it("detects incomplete EIP-1559 fee pair", async () => {
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => createRpcMock().client),
     });
 
@@ -884,7 +894,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -904,7 +914,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -928,7 +938,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -954,7 +964,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.getTransactionCount.mockResolvedValue("0x1");
     rpc.estimateGas.mockResolvedValue("0x5208");
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -978,7 +988,7 @@ describe("createEip155DraftBuilder", () => {
       maxPriorityFeePerGas: "0x3b9aca00",
     });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 
@@ -999,7 +1009,7 @@ describe("createEip155DraftBuilder", () => {
     rpc.estimateGas.mockResolvedValue("0x5208");
     rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-    const builder = createEip155DraftBuilder({
+    const builder = createBuilder({
       rpcClientFactory: vi.fn(() => rpc.client),
     });
 

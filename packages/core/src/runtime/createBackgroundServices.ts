@@ -1,5 +1,6 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
+import { createDefaultChainModuleRegistry } from "../chains/registry.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
@@ -164,11 +165,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     });
 
     const adapter = createEip155TransactionAdapter({
+      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
       signer: eip155Signer,
       broadcaster,
-      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
+      chains: createDefaultChainModuleRegistry(),
     });
-
     transactionRegistry.register(EIP155_NAMESPACE, adapter);
   }
 

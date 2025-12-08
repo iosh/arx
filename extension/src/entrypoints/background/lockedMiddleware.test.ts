@@ -9,6 +9,7 @@ const createErrorHelpers = () => {
   const resolveProviderErrors = vi.fn(() => ({ unauthorized }));
   return { error, unauthorized, resolveProviderErrors };
 };
+const defaultPassthroughAllowance = () => ({ isPassthrough: false, allowWhenLocked: false });
 
 const createNextStub = () =>
   vi.fn<(returnHandler?: (runReturnHandlers: (error?: unknown) => void) => void) => Promise<void>>((returnHandler) => {
@@ -32,6 +33,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: (origin) => origin === ORIGIN,
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -54,6 +56,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -78,6 +81,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition,
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -105,6 +109,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({}),
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -127,6 +132,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -149,6 +155,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 
@@ -162,6 +169,54 @@ describe("createLockedGuardMiddleware", () => {
     expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
   });
 
+  it("allows passthrough methods when allowWhenLocked is true", async () => {
+    const next = createNextStub();
+    const helpers = createErrorHelpers();
+
+    const middleware = createLockedGuardMiddleware({
+      isUnlocked: () => false,
+      isInternalOrigin: () => false,
+      resolveMethodDefinition: () => undefined,
+      resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: true }),
+      resolveProviderErrors: helpers.resolveProviderErrors,
+    });
+
+    const req = { method: "eth_blockNumber", origin: ORIGIN } as unknown as Parameters<typeof middleware>[0];
+    const res = {} as Parameters<typeof middleware>[1];
+    const end = vi.fn();
+    await middleware(req, res, next, end);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
+  });
+
+  it("rejects passthrough methods that require unlocked sessions", async () => {
+    const next = createNextStub();
+    const helpers = createErrorHelpers();
+
+    const middleware = createLockedGuardMiddleware({
+      isUnlocked: () => false,
+      isInternalOrigin: () => false,
+      resolveMethodDefinition: () => undefined,
+      resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: false }),
+      resolveProviderErrors: helpers.resolveProviderErrors,
+    });
+
+    const req = { method: "eth_newFilter", origin: ORIGIN } as unknown as Parameters<typeof middleware>[0];
+    const res = {} as Parameters<typeof middleware>[1];
+    const end = vi.fn();
+    await middleware(req, res, next, end);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(end).toHaveBeenCalledWith(helpers.error);
+    expect(helpers.unauthorized).toHaveBeenCalledWith({
+      message: "Request eth_newFilter requires an unlocked session",
+      data: { origin: ORIGIN, method: "eth_newFilter" },
+    });
+  });
+
   it("rejects scoped methods by default", async () => {
     const next = createNextStub();
     const end = vi.fn();
@@ -172,6 +227,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "accounts" }),
       resolveLockedPolicy: () => undefined,
+      resolvePassthroughAllowance: defaultPassthroughAllowance,
       resolveProviderErrors: helpers.resolveProviderErrors,
     });
 

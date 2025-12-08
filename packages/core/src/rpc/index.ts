@@ -184,6 +184,12 @@ export const createMethodDefinitionResolver = (controllers: HandlerControllers) 
   };
 };
 
+export const createMethodNamespaceResolver = (controllers: HandlerControllers) => {
+  return (method: string, context?: RpcInvocationContext): Namespace => {
+    return selectNamespace(controllers, method, context);
+  };
+};
+
 export const createNamespaceResolver =
   (controllers: HandlerControllers) =>
   (context?: RpcInvocationContext): Namespace => {

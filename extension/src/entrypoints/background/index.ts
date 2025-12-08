@@ -4,6 +4,7 @@ import {
   createBackgroundServices,
   createMethodDefinitionResolver,
   createMethodExecutor,
+  createMethodNamespaceResolver,
   createNamespaceResolver,
   createPermissionGuardMiddleware,
   createPermissionScopeResolver,
@@ -271,6 +272,8 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       return getRpcErrors(namespace);
     };
     const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
+
+    const resolveMethodNamespace = createMethodNamespaceResolver(controllers);
     const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
       if (!chainRef) {
         return null;
@@ -307,6 +310,19 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       } as const;
     };
 
+    const resolvePassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
+      const namespace = resolveMethodNamespace(method, rpcContext);
+      const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
+      if (!adapter?.passthrough) {
+        return { isPassthrough: false, allowWhenLocked: false };
+      }
+      const isPassthrough = adapter.passthrough.allowedMethods.includes(method);
+      return {
+        isPassthrough,
+        allowWhenLocked: isPassthrough && (adapter.passthrough.allowWhenLocked?.includes(method) ?? false),
+      };
+    };
+
     engine.push(
       createAsyncMiddleware(async (req, res, next) => {
         const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
@@ -323,6 +339,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         isInternalOrigin,
         resolveMethodDefinition,
         resolveLockedPolicy,
+        resolvePassthroughAllowance,
         resolveProviderErrors,
       }),
     );

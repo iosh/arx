@@ -18,6 +18,10 @@ type LockedDefinition =
     }
   | undefined;
 
+type PassthroughAllowance = {
+  isPassthrough: boolean;
+  allowWhenLocked: boolean;
+};
 type LockedGuardDeps = {
   isUnlocked(): boolean;
   isInternalOrigin(origin: string): boolean;
@@ -26,24 +30,26 @@ type LockedGuardDeps = {
     method: string,
     context?: RpcInvocationContext,
   ): { allow?: boolean; response?: unknown; hasResponse?: boolean } | undefined;
+  resolvePassthroughAllowance(method: string, context?: RpcInvocationContext): PassthroughAllowance;
   resolveProviderErrors(context?: RpcInvocationContext): {
     unauthorized(args: { message: string; data: { origin: string; method: string } }): unknown;
   };
 };
 
 /**
- * guard RPC calls whil the session is locked
- * internal origins or unlocked sessions pass through
- * if a method is not registered throw unsupportedMethod.
- * public methods without scope still run
- * locked.allow lets a method run. locked.response sends a fixed result.
- * everthing else throws unauthorized until the user unlocks.
+ * Guard RPC calls while the session is locked.
+ * Internal origins or unlocked sessions pass through.
+ * If a method is not registered, throw unsupportedMethod.
+ * Public methods without scope still run.
+ * locked.allow lets a method run; locked.response sends a fixed result.
+ * Everything else throws unauthorized until the user unlocks.
  */
 export const createLockedGuardMiddleware = ({
   isUnlocked,
   isInternalOrigin,
   resolveMethodDefinition,
   resolveLockedPolicy,
+  resolvePassthroughAllowance,
   resolveProviderErrors,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
@@ -54,10 +60,22 @@ export const createLockedGuardMiddleware = ({
     }
 
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+    const getProviderErrors = () => resolveProviderErrors(rpcContext);
     const definition = resolveMethodDefinition(req.method, rpcContext);
+    const passthrough = resolvePassthroughAllowance(req.method, rpcContext);
 
     if (!definition) {
-      throw resolveProviderErrors(rpcContext).unauthorized({
+      if (passthrough.isPassthrough) {
+        if (passthrough.allowWhenLocked) {
+          return next();
+        }
+        throw getProviderErrors().unauthorized({
+          message: `Request ${req.method} requires an unlocked session`,
+          data: { origin, method: req.method },
+        });
+      }
+
+      throw getProviderErrors().unauthorized({
         message: `Request ${req.method} is blocked until the active namespace declares it`,
         data: { origin, method: req.method },
       });
@@ -79,7 +97,7 @@ export const createLockedGuardMiddleware = ({
       return;
     }
 
-    throw resolveProviderErrors(rpcContext).unauthorized({
+    throw getProviderErrors().unauthorized({
       message: `Request ${req.method} requires an unlocked session`,
       data: { origin, method: req.method },
     });

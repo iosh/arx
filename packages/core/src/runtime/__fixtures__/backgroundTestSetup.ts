@@ -1,8 +1,18 @@
+import { createAsyncMiddleware, JsonRpcEngine } from "@metamask/json-rpc-engine";
+import type { Json, JsonRpcError, JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import { vi } from "vitest";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
+import { getProviderErrors, getRpcErrors } from "../../errors/index.js";
+import {
+  createMethodDefinitionResolver,
+  createMethodExecutor,
+  createMethodNamespaceResolver,
+  getRegisteredNamespaceAdapters,
+  type RpcInvocationContext,
+} from "../../rpc/index.js";
 import type {
   AccountsSnapshot,
   ApprovalsSnapshot,
@@ -27,6 +37,9 @@ import {
 import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
 import type { KeyringStorePort } from "../../storage/keyringStore.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
+import { UNKNOWN_ORIGIN } from "../background/constants.js";
+import { createLockedGuardMiddleware } from "../background/middlewares/lockedGuard.js";
+import { createPermissionGuardMiddleware } from "../background/middlewares/permissionGuard.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";
 
 // Test constants
@@ -505,5 +518,242 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     destroy: () => {
       services.lifecycle.destroy();
     },
+  };
+};
+
+type RpcCallOptions = {
+  method: string;
+  params?: JsonRpcParams;
+  origin?: string;
+  rpcContext?: Partial<RpcInvocationContext>;
+};
+
+export type RpcHarness = TestBackgroundContext & {
+  engine: JsonRpcEngine;
+  callRpc(options: RpcCallOptions): Promise<unknown>;
+  origins: { internal: string; external: string };
+};
+
+export type RpcHarnessOptions = SetupBackgroundOptions & {
+  internalOrigin?: string;
+  externalOrigin?: string;
+};
+
+export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise<RpcHarness> => {
+  const {
+    internalOrigin = "chrome-extension://arx",
+    externalOrigin = "https://dapp.example",
+    ...setupOptions
+  } = options;
+  const clock = setupOptions.now ?? Date.now;
+  const background = await setupBackground({
+    ...setupOptions,
+    ...(setupOptions.vault === undefined ? { vault: () => new FakeVault(clock) } : {}),
+  });
+  const { services } = background;
+
+  const engine = new JsonRpcEngine();
+
+  const resolveMethodDefinition = createMethodDefinitionResolver(services.controllers);
+  const resolveMethodNamespace = createMethodNamespaceResolver(services.controllers);
+  const executeMethod = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
+  const resolveProviderErrors = (rpcContext?: RpcInvocationContext) => {
+    const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
+    return getProviderErrors(namespace);
+  };
+  const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => {
+    const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
+    return getRpcErrors(namespace);
+  };
+  const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
+    if (!chainRef) {
+      return null;
+    }
+    const networkChain = services.controllers.network.getChain(chainRef);
+    if (networkChain?.providerPolicies?.locked) {
+      return networkChain.providerPolicies.locked;
+    }
+    const registryEntity = services.controllers.chainRegistry.getChain(chainRef);
+    return registryEntity?.metadata.providerPolicies?.locked ?? null;
+  };
+
+  const resolveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
+    const chainRef = rpcContext?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
+    const policies = readLockedPoliciesForChain(chainRef);
+    if (!policies) {
+      return undefined;
+    }
+
+    const pick = (key: string) => (Object.hasOwn(policies, key) ? policies[key] : undefined);
+    const selected = pick(method);
+    const fallback = selected === undefined ? pick("*") : undefined;
+    const value = selected ?? fallback;
+
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const result: { allow?: boolean; response?: unknown; hasResponse?: boolean } = {
+      hasResponse: Object.hasOwn(value, "response"),
+    };
+    if (value.allow !== undefined) {
+      result.allow = value.allow;
+    }
+    if (result.hasResponse) {
+      result.response = value.response;
+    }
+    return result;
+  };
+
+  const resolvePassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
+    const namespace = resolveMethodNamespace(method, rpcContext);
+    const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
+    if (!adapter?.passthrough) {
+      return { isPassthrough: false, allowWhenLocked: false };
+    }
+    const isPassthrough = adapter.passthrough.allowedMethods.includes(method);
+    return {
+      isPassthrough,
+      allowWhenLocked: isPassthrough && (adapter.passthrough.allowWhenLocked?.includes(method) ?? false),
+    };
+  };
+
+  const toJsonRpcError = (error: unknown, method: string, rpcContext?: RpcInvocationContext): JsonRpcError => {
+    if (
+      error &&
+      typeof error === "object" &&
+      "serialize" in error &&
+      typeof (error as { serialize?: unknown }).serialize === "function"
+    ) {
+      return (error as { serialize: () => JsonRpcError }).serialize();
+    }
+
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof (error as { code?: unknown }).code === "number"
+    ) {
+      const rpcError = error as { code: number; message?: string; data?: Json };
+      return {
+        code: rpcError.code,
+        message: rpcError.message ?? "Unknown error",
+        ...(rpcError.data !== undefined &&
+          rpcError.data !== null && {
+            data: rpcError.data,
+          }),
+      };
+    }
+
+    return resolveRpcErrors(rpcContext)
+      .internal({
+        message: `Unexpected error while handling ${method}`,
+        data: { method },
+      })
+      .serialize();
+  };
+
+  const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
+    const chain = services.controllers.network.getActiveChain();
+    const namespace = overrides?.namespace ?? chain.namespace;
+    const chainRef = overrides?.chainRef ?? chain.chainRef;
+    return {
+      namespace,
+      chainRef,
+      ...(overrides?.meta ? { meta: overrides.meta } : {}),
+      errors: {
+        provider: getProviderErrors(namespace),
+        rpc: getRpcErrors(namespace),
+      },
+    };
+  };
+
+  engine.push(
+    createAsyncMiddleware(async (req, res, next) => {
+      const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+      try {
+        await next();
+      } catch (error) {
+        res.error = toJsonRpcError(error, req.method, rpcContext ?? undefined);
+      }
+    }),
+  );
+
+  engine.push(
+    createLockedGuardMiddleware({
+      isUnlocked: () => services.session.unlock.isUnlocked(),
+      isInternalOrigin: (origin) => origin === internalOrigin,
+      resolveMethodDefinition,
+      resolveLockedPolicy,
+      resolvePassthroughAllowance,
+      resolveProviderErrors,
+    }),
+  );
+
+  engine.push(
+    createPermissionGuardMiddleware({
+      ensurePermission: (origin, method, context) =>
+        services.controllers.permissions.ensurePermission(origin, method, context),
+      isInternalOrigin: (origin) => origin === internalOrigin,
+      resolveMethodDefinition,
+      resolveProviderErrors,
+    }),
+  );
+
+  engine.push(
+    createAsyncMiddleware(async (req, res) => {
+      const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
+      const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+      const invocation = {
+        origin,
+        request: { method: req.method, params: req.params as JsonRpcParams },
+        ...(rpcContext ? { context: rpcContext } : {}),
+      };
+      const result = await executeMethod(invocation);
+      res.result = result as Json;
+    }),
+  );
+
+  let nextRequestId = 0;
+  const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {
+    const contextPayload = buildRpcContext(rpcContext);
+    return new Promise<unknown>((resolve, reject) => {
+      engine.handle(
+        {
+          id: `${++nextRequestId}`,
+          jsonrpc: "2.0",
+          method,
+          params,
+          origin,
+          arx: contextPayload,
+        } as JsonRpcRequest,
+        (error, response) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          if (!response) {
+            reject(new Error("Missing JSON-RPC response"));
+            return;
+          }
+          if ("error" in response && response.error) {
+            reject(response.error);
+            return;
+          }
+          if ("result" in response) {
+            resolve(response.result);
+            return;
+          }
+          reject(new Error("Invalid JSON-RPC response payload"));
+        },
+      );
+    });
+  };
+
+  return {
+    ...background,
+    engine,
+    callRpc,
+    origins: { internal: internalOrigin, external: externalOrigin },
   };
 };

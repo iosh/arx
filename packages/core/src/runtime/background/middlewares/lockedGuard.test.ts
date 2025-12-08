@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLockedGuardMiddleware } from "./lockedMiddleware";
+import { createLockedGuardMiddleware } from "./lockedGuard.js";
 
 const ORIGIN = "https://dapp.example";
 

@@ -2,6 +2,7 @@ import {
   type BackgroundSessionServices,
   createAsyncMiddleware,
   createBackgroundServices,
+  createLockedGuardMiddleware,
   createMethodDefinitionResolver,
   createMethodExecutor,
   createMethodNamespaceResolver,
@@ -26,7 +27,6 @@ import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
-import { createLockedGuardMiddleware } from "./lockedMiddleware";
 import { createUiBridge, UI_CHANNEL } from "./uiBridge";
 import { restoreUnlockState } from "./unlockRecovery";
 

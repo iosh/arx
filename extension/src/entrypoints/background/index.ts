@@ -3,6 +3,7 @@ import {
   createAsyncMiddleware,
   createBackgroundServices,
   createLockedGuardMiddleware,
+  createLogger,
   createMethodDefinitionResolver,
   createMethodExecutor,
   createMethodNamespaceResolver,
@@ -10,6 +11,7 @@ import {
   createPermissionGuardMiddleware,
   createPermissionScopeResolver,
   DEFAULT_NAMESPACE,
+  extendLogger,
   getProviderErrors,
   getRegisteredNamespaceAdapters,
   getRpcErrors,
@@ -58,6 +60,10 @@ const connections = new Set<browser.Runtime.Port>();
 const pendingRequests = new Map<browser.Runtime.Port, Map<string, { rpcId: JsonRpcId; jsonrpc: JsonRpcVersion2 }>>();
 const portContexts = new Map<browser.Runtime.Port, PortContext>();
 const unsubscribeControllerEvents: Array<() => void> = [];
+
+const runtimeLog = createLogger("bg:runtime");
+const sessionLog = extendLogger(runtimeLog, "session");
+const portLog = extendLogger(runtimeLog, "port");
 
 let currentExecuteMethod: ReturnType<typeof createMethodExecutor> | null = null;
 let currentResolveProviderErrors: ((context?: RpcInvocationContext) => ReturnType<typeof getProviderErrors>) | null =
@@ -223,6 +229,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
 
     unsubscribeControllerEvents.push(
       session.unlock.onUnlocked((payload) => {
+        sessionLog("event:onUnlocked", { at: payload.at });
         broadcastEvent("session:unlocked", [payload]);
         publishAccountsState();
         const snapshot = getControllerSnapshot();
@@ -231,6 +238,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
     );
     unsubscribeControllerEvents.push(
       session.unlock.onLocked((payload) => {
+        sessionLog("event:onLocked", { reason: payload.reason, at: payload.at });
         broadcastEvent("session:locked", [payload]);
         publishAccountsState();
         broadcastDisconnect();
@@ -643,9 +651,11 @@ const handleConnect = (port: browser.Runtime.Port) => {
   if (port.name !== CHANNEL) return;
 
   connections.add(port);
+  const origin = resolveOrigin(port) || "unknown://";
+  portLog("connect", { origin, portName: port.name, total: connections.size });
   if (!portContexts.has(port)) {
     portContexts.set(port, {
-      origin: resolveOrigin(port),
+      origin,
       meta: null,
       caip2: null,
       chainId: null,
@@ -683,6 +693,8 @@ const handleConnect = (port: browser.Runtime.Port) => {
     portContexts.delete(port);
     port.onMessage.removeListener(handleMessage);
     port.onDisconnect.removeListener(handleDisconnect);
+    const disconnectOrigin = resolveOrigin(port) || "unknown://";
+    portLog("disconnect", { origin: disconnectOrigin, remaining: connections.size });
   };
 
   port.onMessage.addListener(handleMessage);
@@ -729,6 +741,8 @@ const broadcastDisconnect = () => {
     const error = getProviderErrorsForPort(port).disconnected().serialize();
     rejectPendingWithDisconnect(port, error);
     emitEventToPort(port, "disconnect", [error]);
+    const origin = resolveOrigin(port) || "unknown://";
+    portLog("broadcastDisconnect", { origin, errorCode: error.code });
   }
 };
 

@@ -16,4 +16,5 @@ export type { HandlerControllers } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";
 export * from "./runtime/index.js";
 export * from "./storage/index.js";
+export * from "./utils/logger.js";
 export * from "./vault/index.js";

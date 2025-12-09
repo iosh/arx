@@ -1,6 +1,7 @@
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 import { getRpcErrors, registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
+import { createLogger, extendLogger } from "../utils/logger.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type {
@@ -37,6 +38,9 @@ const namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
 const namespacePrefixes = new Map<string, Namespace>();
 
 const namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
+
+const rpcLogger = createLogger("core:rpc");
+const passthroughLogger = extendLogger(rpcLogger, "passthrough");
 
 type MethodExecutorDependencies = {
   rpcClientRegistry: RpcClientRegistry;
@@ -242,14 +246,32 @@ export const createMethodExecutor =
       });
     }
 
+    const logMeta = {
+      namespace,
+      chainRef,
+      method: request.method,
+      origin: origin ?? "unknown://",
+    };
+
     try {
       const client = deps.rpcClientRegistry.getClient(namespace, chainRef);
       const rpcPayload: RpcTransportRequest = { method: request.method };
       if (request.params !== undefined) {
         rpcPayload.params = request.params;
       }
-      return await client.request(rpcPayload);
+      passthroughLogger("request", { ...logMeta, params: request.params ?? [] });
+      const result = await client.request(rpcPayload);
+      passthroughLogger("response", { ...logMeta });
+      return result;
     } catch (error) {
+      const errorSummary =
+        error && typeof error === "object" && "code" in error
+          ? {
+              code: (error as { code?: number | string }).code,
+              message: (error as { message?: string }).message ?? "RPC error",
+            }
+          : { message: (error as Error)?.message ?? String(error) };
+      passthroughLogger("error", { ...logMeta, error: errorSummary });
       // If it's already a properly formatted RPC error from the node
       if (error && typeof error === "object" && "code" in error) {
         const rpcError = error as { code: number; message?: string; data?: unknown };

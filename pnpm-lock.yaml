@@ -195,6 +195,9 @@ importers:
       '@scure/bip39':
         specifier: 2.0.1
         version: 2.0.1
+      debug:
+        specifier: 4.4.3
+        version: 4.4.3
       ox:
         specifier: 0.9.14
         version: 0.9.14(typescript@5.9.2)(zod@4.1.11)
@@ -205,6 +208,9 @@ importers:
         specifier: 4.1.11
         version: 4.1.11
     devDependencies:
+      '@types/debug':
+        specifier: 4.1.12
+        version: 4.1.12
       typescript:
         specifier: 'catalog:'
         version: 5.9.2

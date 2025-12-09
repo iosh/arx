@@ -26,9 +26,11 @@
     "@scure/bip39": "2.0.1",
     "ox": "0.9.14",
     "viem": "2.39.0",
-    "zod": "4.1.11"
+    "zod": "4.1.11",
+    "debug": "4.4.3"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@types/debug": "4.1.12"
   }
 }

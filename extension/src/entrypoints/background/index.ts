@@ -135,14 +135,9 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
     throw new Error("Unauthorized sender");
   }
 
-  await ensureContext();
-  if (!context) {
-    throw new Error("Background context is not initialized");
-  }
-
-  const { session } = context;
+  const background = await ensureContext();
+  const { session } = background;
   const { unlock, vault } = session;
-
   switch (message.type) {
     case "session:getStatus": {
       return {
@@ -150,25 +145,23 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
         vault: vault.getStatus(),
       };
     }
-
     case "session:unlock": {
       const { password } = message.payload;
       await unlock.unlock({ password });
-      await persistVaultMeta();
+      await persistVaultMeta(background);
       return unlock.getState();
     }
 
     case "session:lock": {
       const reason = message.payload?.reason ?? "manual";
       unlock.lock(reason);
-      await persistVaultMeta();
+      await persistVaultMeta(background);
       return unlock.getState();
     }
-
     case "vault:initialize": {
       const { password } = message.payload;
       const ciphertext = await vault.initialize({ password });
-      await persistVaultMeta();
+      await persistVaultMeta(background);
       return { ciphertext };
     }
     default:
@@ -176,14 +169,15 @@ const handleRuntimeMessage = async (message: SessionMessage, sender: browser.Run
   }
 };
 
-const persistVaultMeta = async () => {
-  if (!context) {
+const persistVaultMeta = async (target?: BackgroundContext | null) => {
+  const active = target ?? context;
+  if (!active) {
     console.warn("[background] persistVaultMeta called before context initialized");
     return;
   }
 
   try {
-    await context.session.persistVaultMeta();
+    await active.session.persistVaultMeta();
   } catch (error) {
     console.warn("[background] failed to persist vault meta", error);
   }
@@ -578,15 +572,14 @@ const toJsonRpcError = (error: unknown, method: string, rpcContext?: RpcInvocati
 const buildRpcContext = (portContext: PortContext | undefined, chainRef: string | null) => {
   if (!portContext) return undefined;
   const namespace = portContext.namespace;
-  const providerErrors = getProviderErrors(namespace);
-  const rpcErrors = getRpcErrors(namespace);
+  const resolvedChainRef = chainRef ?? portContext.caip2 ?? null;
+  const baseContext: RpcInvocationContext = { namespace, chainRef: resolvedChainRef };
   return {
-    namespace,
-    chainRef: chainRef ?? portContext.caip2 ?? null,
+    ...baseContext,
     meta: portContext.meta,
     errors: {
-      provider: providerErrors,
-      rpc: rpcErrors,
+      provider: getActiveProviderErrors(baseContext),
+      rpc: getActiveRpcErrors(baseContext),
     },
   } satisfies RpcInvocationContext;
 };

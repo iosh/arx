@@ -119,8 +119,18 @@ export const NetworkListSchema = z.object({
   known: z.array(ChainSnapshotSchema),
 });
 const HdBackupWarningSchema = z.object({
-  keyringId: z.string().uuid(),
+  keyringId: z.uuid(),
   alias: z.string().nullable(),
+});
+
+export const AttentionRequestSchema = z.object({
+  reason: z.literal("unlock_required"),
+  origin: z.string().min(1),
+  method: z.string().min(1),
+  chainRef: z.string().min(1).nullable(),
+  namespace: z.string().min(1).nullable(),
+  requestedAt: z.number().int(),
+  expiresAt: z.number().int(),
 });
 
 export const UiSnapshotSchema = z.object({
@@ -129,6 +139,10 @@ export const UiSnapshotSchema = z.object({
   accounts: AccountsSnapshotSchema,
   session: SessionSnapshotSchema,
   approvals: z.array(ApprovalSummarySchema),
+  attention: z.object({
+    queue: z.array(AttentionRequestSchema),
+    count: z.number().int().nonnegative(),
+  }),
   permissions: z.unknown().optional(), // TODO update schema
   vault: VaultSnapshotSchema,
   warnings: z.object({

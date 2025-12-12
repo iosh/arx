@@ -6,14 +6,15 @@ import type { PermissionMessengerTopics } from "../../controllers/permission/typ
 import type { TransactionMessengerTopics } from "../../controllers/transaction/types.js";
 import type { UnlockMessengerTopics } from "../../controllers/unlock/types.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
-
+import type { AttentionServiceMessengerTopics } from "../../services/attention/types.js";
 export type MessengerTopics = AccountMessengerTopics &
   ApprovalMessengerTopics &
   NetworkMessengerTopic &
   PermissionMessengerTopics &
   TransactionMessengerTopics &
   UnlockMessengerTopics &
-  ChainRegistryMessengerTopics;
+  ChainRegistryMessengerTopics &
+  AttentionServiceMessengerTopics;
 
 export type BackgroundMessenger = ControllerMessenger<MessengerTopics>;
 

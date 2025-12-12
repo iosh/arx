@@ -335,6 +335,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         nextAutoLockAt: session.unlock.getState().nextAutoLockAt,
       },
       approvals: approvalSummaries,
+      attention: { queue: [], count: 0 },
       permissions: controllers.permissions.getState(),
       vault: {
         initialized: session.vault.getStatus().hasCiphertext,

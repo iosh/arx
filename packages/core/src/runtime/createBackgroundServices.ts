@@ -5,6 +5,7 @@ import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMess
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
+import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import type {
   AccountMeta,
   KeyringMeta,
@@ -127,6 +128,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   const storagePort = storageOptions?.port;
   const storageNow = storageOptions?.now ?? Date.now;
+  const attention = createAttentionService({
+    messenger: castMessenger<AttentionServiceMessengerTopics>(messenger),
+    now: storageNow,
+  });
+
   const hydrationEnabled = storageOptions?.hydrate ?? true;
   const storageLogger =
     storageOptions?.logger ??
@@ -438,6 +444,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   return {
     messenger,
+    attention,
     engine,
     controllers,
     session: sessionLayer.session,

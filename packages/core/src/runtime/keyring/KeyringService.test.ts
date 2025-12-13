@@ -247,7 +247,7 @@ describe("KeyringService", () => {
     await flushAsync();
     expect(service.getKeyrings()).toHaveLength(0);
 
-    const next = buildHdPayload(3, "2000-...");
+    const next = buildHdPayload(3, "20000000-0000-4000-8000-000000000002");
     await keyringStore.putKeyringMetas([next.metas.keyring]);
     await keyringStore.putAccountMetas(next.metas.accounts);
     vault.setPayload(next.payloadBytes);

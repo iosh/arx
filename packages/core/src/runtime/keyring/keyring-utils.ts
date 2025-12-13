@@ -16,7 +16,7 @@ export const decodePayload = (bytes: Uint8Array | null, logger?: (m: string, e?:
     return VaultKeyringPayloadSchema.parse(parsed);
   } catch (error) {
     logger?.("keyring: failed to decode vault payload", error);
-    return { keyrings: [] };
+    throw error;
   } finally {
     if (bytes) zeroize(bytes);
   }

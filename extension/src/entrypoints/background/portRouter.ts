@@ -192,23 +192,20 @@ export const createPortRouter = ({
   };
 
   const broadcastHandshakeAck = (snapshot: ControllerSnapshot) => {
-    broadcastSafe(
-      (port) => {
-        syncPortContext(port, snapshot, portContexts, extensionOrigin);
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          type: "handshake_ack",
-          payload: {
-            chainId: snapshot.chain.chainId ?? "0x0",
-            caip2: snapshot.chain.caip2,
-            accounts: snapshot.accounts,
-            isUnlocked: snapshot.isUnlocked,
-            meta: snapshot.meta,
-          },
-        });
-      },
-      "broadcast_handshake_failed",
-    );
+    broadcastSafe((port) => {
+      syncPortContext(port, snapshot, portContexts, extensionOrigin);
+      return postEnvelope(port, {
+        channel: CHANNEL,
+        type: "handshake_ack",
+        payload: {
+          chainId: snapshot.chain.chainId ?? "0x0",
+          caip2: snapshot.chain.caip2,
+          accounts: snapshot.accounts,
+          isUnlocked: snapshot.isUnlocked,
+          meta: snapshot.meta,
+        },
+      });
+    }, "broadcast_handshake_failed");
   };
 
   const getProviderErrorsForPort = (port: Runtime.Port) => {

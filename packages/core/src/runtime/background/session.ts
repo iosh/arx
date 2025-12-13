@@ -13,6 +13,7 @@ import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { zeroize } from "../../vault/utils.js";
 import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
+import { encodePayload } from "../keyring/keyring-utils.js";
 import type { ControllersBase } from "./controllers.js";
 import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
@@ -176,7 +177,12 @@ export const initSessionLayer = ({
 
   const vaultProxy: VaultService = {
     async initialize(params) {
-      const ciphertext = await baseVault.initialize(params);
+      const ciphertext = await baseVault.initialize({
+        ...params,
+        // The vault secret is used to store the keyring payload; seed it with a valid empty payload so
+        // first-time hydration doesn't attempt to JSON.parse random bytes.
+        secret: params.secret ?? encodePayload({ keyrings: [] }),
+      });
       updateInitializedAtFromCiphertext(ciphertext);
       if (!getIsHydrating()) {
         await persistVaultMetaImmediate();
@@ -267,7 +273,7 @@ export const initSessionLayer = ({
     logger: storageLogger,
   });
 
-  keyringService.attach();
+  void keyringService.attach().catch((error) => storageLogger("session: keyring attach failed", error));
 
   sessionSubscriptions.push(
     keyringService.onPayloadUpdated(async (payload) => {

@@ -59,25 +59,81 @@ export const createPortRouter = ({
     pendingRequests.delete(port);
   };
 
-  const postEnvelope = (port: Runtime.Port, envelope: Envelope) => {
-    port.postMessage(envelope);
+  const getPortOrigin = (port: Runtime.Port) => resolveOrigin(port, extensionOrigin) || "unknown://";
+
+  const toErrorDetails = (error: unknown): Record<string, string> => {
+    if (!error) return {};
+    if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
+    return { error: String(error) };
+  };
+
+  const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
+    try {
+      port.disconnect();
+    } catch {
+      // ignore disconnect failure
+    }
+    connections.delete(port);
+    pendingRequests.delete(port);
+    portContexts.delete(port);
+    const origin = getPortOrigin(port);
+    portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
+  };
+
+  const postEnvelope = (port: Runtime.Port, envelope: Envelope): boolean => {
+    try {
+      port.postMessage(envelope);
+      return true;
+    } catch (error) {
+      const origin = getPortOrigin(port);
+      portLog("postMessage failed", { origin, envelopeType: envelope.type, ...toErrorDetails(error) });
+      return false;
+    }
+  };
+
+  const postEnvelopeOrDrop = (port: Runtime.Port, envelope: Envelope, reason: string): boolean => {
+    const ok = postEnvelope(port, envelope);
+    if (!ok) dropStalePort(port, reason);
+    return ok;
+  };
+
+  // Helper: broadcast to all ports and clean up failed ones
+  const broadcastSafe = (fn: (port: Runtime.Port) => boolean, reason: string) => {
+    const stalePorts: Runtime.Port[] = [];
+    // Iterate over a snapshot to avoid mutation affecting iteration.
+    for (const port of [...connections]) {
+      if (!fn(port)) {
+        stalePorts.push(port);
+      }
+    }
+    for (const port of stalePorts) {
+      dropStalePort(port, reason);
+    }
   };
 
   const emitEventToPort = (port: Runtime.Port, event: string, params: unknown[]) => {
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "event",
-      payload: { event, params },
-    });
+    postEnvelopeOrDrop(
+      port,
+      {
+        channel: CHANNEL,
+        type: "event",
+        payload: { event, params },
+      },
+      "emit_event_failed",
+    );
   };
 
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "response",
-      id,
-      payload,
-    });
+    postEnvelopeOrDrop(
+      port,
+      {
+        channel: CHANNEL,
+        type: "response",
+        id,
+        payload,
+      },
+      "send_reply_failed",
+    );
   };
 
   const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
@@ -105,30 +161,54 @@ export const createPortRouter = ({
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
-    for (const port of connections) {
-      emitEventToPort(port, event, params);
-    }
+    broadcastSafe(
+      (port) =>
+        postEnvelope(port, {
+          channel: CHANNEL,
+          type: "event",
+          payload: { event, params },
+        }),
+      "broadcast_event_failed",
+    );
   };
 
   const sendHandshakeAck = (port: Runtime.Port, snapshot: ControllerSnapshot) => {
     syncPortContext(port, snapshot, portContexts, extensionOrigin);
-    postEnvelope(port, {
-      channel: CHANNEL,
-      type: "handshake_ack",
-      payload: {
-        chainId: snapshot.chain.chainId ?? "0x0",
-        caip2: snapshot.chain.caip2,
-        accounts: snapshot.accounts,
-        isUnlocked: snapshot.isUnlocked,
-        meta: snapshot.meta,
+    postEnvelopeOrDrop(
+      port,
+      {
+        channel: CHANNEL,
+        type: "handshake_ack",
+        payload: {
+          chainId: snapshot.chain.chainId ?? "0x0",
+          caip2: snapshot.chain.caip2,
+          accounts: snapshot.accounts,
+          isUnlocked: snapshot.isUnlocked,
+          meta: snapshot.meta,
+        },
       },
-    });
+      "send_handshake_failed",
+    );
   };
 
   const broadcastHandshakeAck = (snapshot: ControllerSnapshot) => {
-    for (const port of connections) {
-      sendHandshakeAck(port, snapshot);
-    }
+    broadcastSafe(
+      (port) => {
+        syncPortContext(port, snapshot, portContexts, extensionOrigin);
+        return postEnvelope(port, {
+          channel: CHANNEL,
+          type: "handshake_ack",
+          payload: {
+            chainId: snapshot.chain.chainId ?? "0x0",
+            caip2: snapshot.chain.caip2,
+            accounts: snapshot.accounts,
+            isUnlocked: snapshot.isUnlocked,
+            meta: snapshot.meta,
+          },
+        });
+      },
+      "broadcast_handshake_failed",
+    );
   };
 
   const getProviderErrorsForPort = (port: Runtime.Port) => {
@@ -146,13 +226,20 @@ export const createPortRouter = ({
   };
 
   const broadcastDisconnect = () => {
-    for (const port of connections) {
+    broadcastSafe((port) => {
       const error = getProviderErrorsForPort(port).disconnected().serialize();
       rejectPendingWithDisconnect(port, error);
-      emitEventToPort(port, "disconnect", [error]);
-      const origin = resolveOrigin(port, extensionOrigin) || "unknown://";
-      portLog("broadcastDisconnect", { origin, errorCode: error.code });
-    }
+      const success = postEnvelope(port, {
+        channel: CHANNEL,
+        type: "event",
+        payload: { event: "disconnect", params: [error] },
+      });
+      if (success) {
+        const origin = getPortOrigin(port);
+        portLog("broadcastDisconnect", { origin, errorCode: error.code });
+      }
+      return success;
+    }, "broadcast_disconnect_failed");
   };
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
@@ -214,7 +301,7 @@ export const createPortRouter = ({
     if (port.name !== CHANNEL) return;
 
     connections.add(port);
-    const origin = resolveOrigin(port, extensionOrigin) || "unknown://";
+    const origin = getPortOrigin(port);
     portLog("connect", { origin, portName: port.name, total: connections.size });
     if (!portContexts.has(port)) {
       portContexts.set(port, {
@@ -250,13 +337,21 @@ export const createPortRouter = ({
     };
 
     const handleDisconnect = () => {
-      rejectPendingWithDisconnect(port);
-      emitEventToPort(port, "disconnect", []);
-      connections.delete(port);
-      portContexts.delete(port);
+      try {
+        rejectPendingWithDisconnect(port);
+      } catch (error) {
+        // Best-effort: cleanup must never throw.
+        const origin = getPortOrigin(port);
+        portLog("disconnect cleanup error", { origin, ...toErrorDetails(error) });
+      } finally {
+        connections.delete(port);
+        pendingRequests.delete(port);
+        portContexts.delete(port);
+      }
+
       port.onMessage.removeListener(handleMessage);
       port.onDisconnect.removeListener(handleDisconnect);
-      const disconnectOrigin = resolveOrigin(port, extensionOrigin) || "unknown://";
+      const disconnectOrigin = getPortOrigin(port);
       portLog("disconnect", { origin: disconnectOrigin, remaining: connections.size });
     };
 

@@ -377,6 +377,8 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
       }
       case "ui:unlock": {
         await session.unlock.unlock({ password: message.payload.password });
+        // Wait for keyring hydration to complete before broadcasting
+        await keyring.waitForReady();
         await persistVaultMeta();
         broadcast();
         return session.unlock.getState();
@@ -672,7 +674,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
       controllers.accounts.onStateChanged(() => broadcast()),
       controllers.network.onStateChanged(() => broadcast()),
       controllers.approvals.onStateChanged(() => broadcast()),
-      session.unlock.onStateChanged(() => broadcast()),
+      session.unlock.onLocked(() => broadcast()),
     );
   };
 

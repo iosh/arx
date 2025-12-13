@@ -329,6 +329,10 @@ export class KeyringService {
     await this.#hydration.waitForHydration();
   }
 
+  async waitForReady(): Promise<void> {
+    await this.#hydration.waitForHydration();
+  }
+
   async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
     await this.#waitForHydration();
     const canonical = this.#normalize(namespace, address);

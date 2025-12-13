@@ -46,8 +46,8 @@ export class InMemoryAttentionService implements AttentionService {
     ]);
     const existing = this.#byKey.get(key);
 
-    // Best practice: no events on dedup hit, and do not extend expiry.
     if (existing && existing.expiresAt > now) {
+      this.#messenger.publish("attention:requested", existing, { force: true });
       return { enqueued: false, request: null, state: this.getSnapshot() };
     }
 

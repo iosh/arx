@@ -687,6 +687,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       resolveLockedPolicy,
       resolvePassthroughAllowance,
       resolveProviderErrors,
+      attentionService: services.attention,
     }),
   );
 

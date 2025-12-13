@@ -29,6 +29,7 @@ import type { Envelope } from "@arx/provider-extension/types";
 import browser from "webextension-polyfill";
 import { defineBackground } from "wxt/utils/define-background";
 import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
+import { createPopupActivator } from "./services/popupActivator";
 import { createUiBridge, UI_CHANNEL } from "./uiBridge";
 import { restoreUnlockState } from "./unlockRecovery";
 
@@ -213,6 +214,8 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       chainRegistry: { port: chainRegistry },
     });
     const { controllers, engine, messenger, session, keyring } = services;
+    const popupActivator = createPopupActivator({ browser });
+    const popupLog = extendLogger(runtimeLog, "popupActivator");
 
     const publishAccountsState = () => {
       const activePointer = controllers.accounts.getActivePointer();
@@ -224,6 +227,43 @@ const ensureContext = async (): Promise<BackgroundContext> => {
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
+
+    unsubscribeControllerEvents.push(
+      messenger.subscribe("attention:requested", (request) => {
+        popupLog("event:attention:requested", {
+          reason: request.reason,
+          origin: request.origin,
+          method: request.method,
+          chainRef: request.chainRef,
+          namespace: request.namespace,
+        });
+
+        void popupActivator
+          .open({
+            reason: request.reason,
+            origin: request.origin,
+            method: request.method,
+            chainRef: request.chainRef,
+            namespace: request.namespace,
+          })
+          .catch((error) => {
+            popupLog("failed to open popup", {
+              error,
+              reason: request.reason,
+              origin: request.origin,
+              method: request.method,
+              chainRef: request.chainRef,
+              namespace: request.namespace,
+            });
+          });
+      }),
+    );
+    unsubscribeControllerEvents.push(
+      messenger.subscribe("attention:stateChanged", (_state) => {
+        // Broadcast updated snapshot via existing ui:stateChanged channel.
+        uiBridge?.broadcast();
+      }),
+    );
 
     resolveNamespaceRef = createNamespaceResolver(controllers);
 
@@ -343,6 +383,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
         resolveLockedPolicy,
         resolvePassthroughAllowance,
         resolveProviderErrors,
+        attentionService: services.attention,
       }),
     );
 
@@ -413,6 +454,7 @@ const ensureContext = async (): Promise<BackgroundContext> => {
       session,
       persistVaultMeta,
       keyring,
+      attention: services.attention,
     });
     uiBridge.attachListeners();
 

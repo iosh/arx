@@ -52,7 +52,7 @@ function HomePage() {
   }
 
   if (!snapshot.session.isUnlocked) {
-    return <UnlockScreen onSubmit={unlock} />;
+    return <UnlockScreen onSubmit={unlock} attention={snapshot.attention} />;
   }
 
   return (

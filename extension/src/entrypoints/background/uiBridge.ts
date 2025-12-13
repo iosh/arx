@@ -1,5 +1,6 @@
 import type {
   ApprovalTask,
+  AttentionService,
   BackgroundSessionServices,
   HandlerControllers,
   KeyringService,
@@ -34,6 +35,7 @@ type BridgeDeps = {
   session: BackgroundSessionServices;
   persistVaultMeta: () => Promise<void>;
   keyring: KeyringService;
+  attention: Pick<AttentionService, "getSnapshot">;
 };
 
 const normalizeError = (error: unknown): { message: string; code?: number; data?: unknown } => {
@@ -171,7 +173,7 @@ type SendTransactionPayload = {
   draft?: { summary?: Record<string, unknown> };
 };
 
-export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring }: BridgeDeps) => {
+export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring, attention }: BridgeDeps) => {
   const ports = new Set<browser.Runtime.Port>();
   const portCleanups = new Map<browser.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
@@ -335,7 +337,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         nextAutoLockAt: session.unlock.getState().nextAutoLockAt,
       },
       approvals: approvalSummaries,
-      attention: { queue: [], count: 0 },
+      attention: attention.getSnapshot(),
       permissions: controllers.permissions.getState(),
       vault: {
         initialized: session.vault.getStatus().hasCiphertext,

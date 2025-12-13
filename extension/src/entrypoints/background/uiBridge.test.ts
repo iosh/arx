@@ -340,6 +340,7 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
     session,
     persistVaultMeta: async () => {},
     keyring,
+    attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
   });
 
   return { bridge, keyring, vault, unlock };

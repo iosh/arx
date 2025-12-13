@@ -1,4 +1,4 @@
-import { createAsyncMiddleware, type Json, type RpcInvocationContext } from "@arx/core";
+import { type AttentionService, createAsyncMiddleware, type Json, type RpcInvocationContext } from "@arx/core";
 
 /**
  * Lock policy priority (highest to lowest):
@@ -34,8 +34,8 @@ type LockedGuardDeps = {
   resolveProviderErrors(context?: RpcInvocationContext): {
     unauthorized(args: { message: string; data: { origin: string; method: string } }): unknown;
   };
+  attentionService: Pick<AttentionService, "requestAttention">;
 };
-
 /**
  * Guard RPC calls while the session is locked.
  * Internal origins or unlocked sessions pass through.
@@ -51,9 +51,24 @@ export const createLockedGuardMiddleware = ({
   resolveLockedPolicy,
   resolvePassthroughAllowance,
   resolveProviderErrors,
+  attentionService,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
     const origin = (req as { origin?: string }).origin ?? "unknown://";
+
+    const requestUnlockAttention = (method: string, rpcContext?: RpcInvocationContext) => {
+      try {
+        attentionService.requestAttention({
+          reason: "unlock_required",
+          origin,
+          method,
+          chainRef: rpcContext?.chainRef ?? null,
+          namespace: rpcContext?.namespace ?? null,
+        });
+      } catch {
+        // Best-effort: never change RPC error behavior if attention fails.
+      }
+    };
 
     if (isInternalOrigin(origin) || isUnlocked()) {
       return next();
@@ -69,6 +84,7 @@ export const createLockedGuardMiddleware = ({
         if (passthrough.allowWhenLocked) {
           return next();
         }
+        requestUnlockAttention(req.method, rpcContext);
         throw getProviderErrors().unauthorized({
           message: `Request ${req.method} requires an unlocked session`,
           data: { origin, method: req.method },
@@ -97,6 +113,7 @@ export const createLockedGuardMiddleware = ({
       return;
     }
 
+    requestUnlockAttention(req.method, rpcContext);
     throw getProviderErrors().unauthorized({
       message: `Request ${req.method} requires an unlocked session`,
       data: { origin, method: req.method },

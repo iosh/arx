@@ -39,18 +39,21 @@ describe("InMemoryAttentionService", () => {
     expect(res.state.count).toBe(res.state.queue.length);
   });
 
-  it("dedups within TTL without publishing any events", () => {
+  it("dedups within TTL without changing state", () => {
     const { service, requested, stateChanged } = setup();
     service.requestAttention({ reason: "unlock_required", origin: "https://dapp", method: "eth_requestAccounts" });
+
     const beforeR = requested.length;
     const beforeS = stateChanged.length;
+
     const res = service.requestAttention({
       reason: "unlock_required",
       origin: "https://dapp",
       method: "eth_requestAccounts",
     });
+
     expect(res.enqueued).toBe(false);
-    expect(requested.length).toBe(beforeR);
+    expect(requested.length).toBe(beforeR + 1);
     expect(stateChanged.length).toBe(beforeS);
   });
 

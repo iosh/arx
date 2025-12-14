@@ -1,81 +1,74 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { redirect } from "@tanstack/react-router";
 import type { RouterContext } from "@/routes/__root";
-import { UI_SNAPSHOT_QUERY_KEY } from "@/ui/hooks/useUiSnapshot";
-import { uiClient } from "@/ui/lib/uiClient";
+import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { ROUTES } from "./routes";
 
-const resolveSnapshot = async (context: RouterContext): Promise<UiSnapshot | undefined> => {
-  const cached = context.queryClient.getQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY);
-  if (cached) {
-    return cached;
-  }
-  try {
-    return await context.queryClient.fetchQuery({
-      queryKey: UI_SNAPSHOT_QUERY_KEY,
-      queryFn: () => uiClient.getSnapshot(),
-      staleTime: Infinity,
-    });
-  } catch (error) {
-    console.warn("[routeGuards] failed to fetch snapshot", error);
-    return undefined;
-  }
-};
+/**
+ * Route guard responsibilities:
+ * - SessionGate (root UI) owns "locked vs unlocked" rendering (shows UnlockScreen when locked).
+ * - routeGuards only enforce business routing constraints (vault initialized, setup flow, etc).
+ *
+ * Naming:
+ * - require*  => must satisfy condition, otherwise redirect
+ * - redirect* => if condition matches, redirect (non-error control flow)
+ */
 
+/**
+ * check if snapshot has accounts
+
+ */
 const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.list.length ?? 0) > 0;
 
 /**
- * Route guard: Requires wallet to be unlocked
- *
- * Usage in route definition:
- * ```typescript
- * export const Route = createFileRoute("/accounts")({
- *   beforeLoad: requireUnlocked,
- *   component: AccountsPage,
- * });
- * ```
+ * Requires vault to be initialized.
+ * Does not enforce unlocked state (handled by SessionGate).
  */
-export const requireUnlocked = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveSnapshot(context);
-  // If snapshot fetch failed or wallet is locked, redirect to home
-  if (!snapshot || !snapshot.session.isUnlocked) {
-    throw redirect({ to: ROUTES.HOME });
-  }
-};
-
-/**
- * Route guard: Requires vault to be initialized
- */
-export const requireInitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveSnapshot(context);
-  // If snapshot fetch failed or vault not initialized, redirect to home
-  if (!snapshot || !snapshot.vault.initialized) {
-    throw redirect({ to: ROUTES.HOME });
-  }
-};
-
-export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveSnapshot(context);
-  if (!snapshot || snapshot.vault.initialized) {
-    throw redirect({ to: ROUTES.HOME });
-  }
-};
-
-export const requireSetupUnlocked = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveSnapshot(context);
+export const requireVaultInitialized = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveUiSnapshot(context.queryClient);
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
   if (!snapshot.vault.initialized) {
     throw redirect({ to: ROUTES.WELCOME });
   }
-  if (!snapshot.session.isUnlocked || hasAccounts(snapshot)) {
+};
+export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveUiSnapshot(context.queryClient);
+  if (!snapshot || snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+};
+
+/**
+ * Redirects to setup if vault is initialized, unlocked, but has no accounts.
+ * Used on home page to ensure user completes onboarding.
+ */
+export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveUiSnapshot(context.queryClient);
+  if (!snapshot) return;
+  if (!snapshot.vault.initialized) return;
+  if (!snapshot.session.isUnlocked) return;
+  if (hasAccounts(snapshot)) return;
+
+  throw redirect({ to: ROUTES.SETUP_GENERATE, replace: true });
+};
+
+export const requireSetupIncomplete = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await resolveUiSnapshot(context.queryClient);
+  if (!snapshot) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+  if (!snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.WELCOME });
+  }
+  if (hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.HOME });
   }
 };
 
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveSnapshot(context);
+  const snapshot = await resolveUiSnapshot(context.queryClient);
   if (!snapshot || !hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.HOME });
   }

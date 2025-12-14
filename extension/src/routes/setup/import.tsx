@@ -4,7 +4,7 @@ import { Card, Paragraph, XStack, YStack } from "tamagui";
 import { Button } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { requireSetupUnlocked } from "@/ui/lib/routeGuards";
+import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { ImportMnemonicScreen } from "@/ui/screens/onboarding/ImportMnemonicScreen";
 import { ImportPrivateKeyScreen } from "@/ui/screens/onboarding/ImportPrivateKeyScreen";
@@ -12,7 +12,7 @@ import { ImportPrivateKeyScreen } from "@/ui/screens/onboarding/ImportPrivateKey
 type ImportMode = "mnemonic" | "privateKey";
 
 export const Route = createFileRoute("/setup/import")({
-  beforeLoad: requireSetupUnlocked,
+  beforeLoad: requireSetupIncomplete,
   component: ImportSetupRoute,
   validateSearch: (search) => ({
     mode: (search.mode === "privateKey" ? "privateKey" : "mnemonic") as ImportMode,

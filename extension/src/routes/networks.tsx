@@ -4,11 +4,11 @@ import { Card, Paragraph, XStack, YStack } from "tamagui";
 import { Button, LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { requireUnlocked } from "@/ui/lib/routeGuards";
+import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 
 export const Route = createFileRoute("/networks")({
-  beforeLoad: requireUnlocked,
+  beforeLoad: requireVaultInitialized,
   component: NetworkSwitchPage,
 });
 

@@ -4,11 +4,11 @@ import { Card, Input, Paragraph, Separator, Slider, XStack, YStack } from "tamag
 import { Button, LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { requireUnlocked } from "@/ui/lib/routeGuards";
+import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 
 export const Route = createFileRoute("/settings")({
-  beforeLoad: requireUnlocked,
+  beforeLoad: requireVaultInitialized,
   component: SettingsPage,
 });
 

@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { mnemonicSession } from "@/ui/lib/mnemonicSession";
-import { requireSetupUnlocked } from "@/ui/lib/routeGuards";
+import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 
 export const Route = createFileRoute("/setup/generate")({
-  beforeLoad: requireSetupUnlocked,
+  beforeLoad: requireSetupIncomplete,
   component: GenerateMnemonicRoute,
 });
 

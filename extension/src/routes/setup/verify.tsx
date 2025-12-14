@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { mnemonicSession } from "@/ui/lib/mnemonicSession";
-import { requireSetupUnlocked } from "@/ui/lib/routeGuards";
+import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { VerifyMnemonicScreen } from "@/ui/screens/onboarding/VerifyMnemonicScreen";
 
@@ -19,7 +19,7 @@ const buildQuizIndexes = (count: number): number[] => {
 };
 
 export const Route = createFileRoute("/setup/verify")({
-  beforeLoad: requireSetupUnlocked,
+  beforeLoad: requireSetupIncomplete,
   component: VerifyMnemonicRoute,
 });
 function VerifyMnemonicRoute() {

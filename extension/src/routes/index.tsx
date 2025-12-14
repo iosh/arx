@@ -1,18 +1,17 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
-import { UnlockScreen } from "@/ui/screens/UnlockScreen";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: redirectToSetupIfNoAccounts,
   component: HomePage,
 });
-
 function HomePage() {
   const router = useRouter();
-  const { snapshot, isLoading, unlock, lock, markBackedUp } = useUiSnapshot();
+  const { snapshot, lock, markBackedUp } = useUiSnapshot();
   const accountCount = snapshot?.accounts.list.length ?? 0;
   const [markingId, setMarkingId] = useState<string | null>(null);
 
@@ -32,27 +31,8 @@ function HomePage() {
     }
   };
 
-  useEffect(() => {
-    if (!snapshot) return;
-    if (!snapshot.vault.initialized) {
-      router.navigate({ to: ROUTES.WELCOME });
-    }
-  }, [router, snapshot?.vault.initialized, snapshot]);
-
-  useEffect(() => {
-    if (!snapshot) return;
-    if (!snapshot.vault.initialized) return;
-    if (!snapshot.session.isUnlocked) return;
-    if (accountCount > 0) return;
-    router.navigate({ to: ROUTES.SETUP_GENERATE });
-  }, [router, snapshot?.vault.initialized, snapshot?.session.isUnlocked, accountCount, snapshot]);
-
-  if (isLoading || !snapshot) {
-    return <LoadingScreen />;
-  }
-
-  if (!snapshot.session.isUnlocked) {
-    return <UnlockScreen onSubmit={unlock} attention={snapshot.attention} />;
+  if (!snapshot) {
+    return null;
   }
 
   return (

@@ -135,6 +135,48 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const { controllers, engine, messenger, session, keyring } = services;
       const popupActivator = createPopupActivator({ browser });
       const popupLog = extendLogger(runtimeLog, "popupActivator");
+      const trackedPopupWindows = new Map<number, (removedId: number) => void>();
+
+      /**
+       * Reject all pending approvals with a 4001 userRejectedRequest error.
+       * Used when the popup is closed or the session is locked to prevent hanging dApp requests.
+       */
+      const rejectAllPendingApprovals = (reason: string, details?: Record<string, unknown>) => {
+        const pending = controllers.approvals.getState().pending;
+        if (pending.length === 0) return;
+
+        const snapshot = [...pending];
+        for (const item of snapshot) {
+          const providerErrors = getProviderErrors(item.namespace);
+          controllers.approvals.reject(
+            item.id,
+            providerErrors.userRejectedRequest({
+              message: "User rejected the request.",
+              data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
+            }),
+          );
+        }
+      };
+
+      /**
+       * Track popup windows and auto-reject approvals when a window is closed.
+       * This matches common wallet behavior where closing the confirmation UI cancels pending requests.
+       */
+      const attachPopupCloseRejection = (windowId: number) => {
+        if (trackedPopupWindows.has(windowId)) {
+          return;
+        }
+
+        const onRemoved = (removedId: number) => {
+          if (removedId !== windowId) return;
+          browser.windows.onRemoved.removeListener(onRemoved);
+          trackedPopupWindows.delete(windowId);
+          rejectAllPendingApprovals("windowClosed", { windowId });
+        };
+
+        trackedPopupWindows.set(windowId, onRemoved);
+        browser.windows.onRemoved.addListener(onRemoved);
+      };
 
       const publishAccountsState = () => {
         const activePointer = controllers.accounts.getActivePointer();
@@ -146,6 +188,13 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
 
       await services.lifecycle.initialize();
       services.lifecycle.start();
+
+      unsubscribeControllerEvents.push(() => {
+        for (const [windowId, listener] of trackedPopupWindows.entries()) {
+          browser.windows.onRemoved.removeListener(listener);
+          trackedPopupWindows.delete(windowId);
+        }
+      });
 
       unsubscribeControllerEvents.push(
         messenger.subscribe("attention:requested", (request) => {
@@ -164,6 +213,11 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
               method: request.method,
               chainRef: request.chainRef,
               namespace: request.namespace,
+            })
+            .then((result) => {
+              if (result.windowId) {
+                attachPopupCloseRejection(result.windowId);
+              }
             })
             .catch((error) => {
               popupLog("failed to open popup", {
@@ -197,6 +251,8 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       unsubscribeControllerEvents.push(
         session.unlock.onLocked((payload) => {
           sessionLog("event:onLocked", { reason: payload.reason, at: payload.at });
+          // Auto-reject all pending approvals when session is locked.
+          rejectAllPendingApprovals("sessionLocked", { lockReason: payload.reason });
           callbacks.broadcastEvent("session:locked", [payload]);
           publishAccountsState();
           callbacks.broadcastDisconnect();

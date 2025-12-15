@@ -152,11 +152,18 @@ export class InMemoryApprovalController implements ApprovalController {
 
   reject(id: string, reason?: Error): void {
     const entry = this.#pending.get(id);
-    if (!entry) return;
+    const hasQueueItem = this.#state.pending.some((item) => item.id === id);
+    if (!entry && !hasQueueItem) return;
 
     const error = reason ?? new Error(this.#autoRejectMessage);
+
+    // Clear queue state even when the in-memory resolver is missing (e.g. after hydration).
+    if (hasQueueItem) {
+      this.#finalize(id);
+    }
+
+    if (!entry) return;
     this.#pending.delete(id);
-    this.#finalize(id);
     entry.reject(error);
   }
 

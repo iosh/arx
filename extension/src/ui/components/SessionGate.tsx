@@ -22,7 +22,7 @@ export function SessionGate({ snapshot, isLoading, unlock, children }: SessionGa
   }
 
   if (!snapshot.session.isUnlocked) {
-    return <UnlockScreen onSubmit={unlock} attention={snapshot.attention} />;
+    return <UnlockScreen onSubmit={unlock} attention={snapshot.attention} approvalsCount={snapshot.approvals.length} />;
   }
 
   return children;

@@ -5,7 +5,7 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "@arx/core";
-import { KeyringService } from "@arx/core";
+import { ApprovalTypes, KeyringService } from "@arx/core";
 import { keyringErrors, vaultErrors } from "@arx/core/errors";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
@@ -247,6 +247,50 @@ const createAccountsController = () => {
   };
 };
 
+const createApprovalsController = () => {
+  type StubTask = {
+    id: string;
+    type: string;
+    origin: string;
+    namespace?: string;
+    chainRef?: string;
+    payload: unknown;
+    createdAt: number;
+  };
+
+  let tasks: StubTask[] = [];
+  const listeners = new Set<(state: unknown) => void>();
+
+  const getState = () => ({
+    pending: tasks.map((task) => ({
+      id: task.id,
+      type: task.type,
+      origin: task.origin,
+      namespace: task.namespace,
+      chainRef: task.chainRef,
+      createdAt: task.createdAt,
+    })),
+  });
+
+  const emit = () => {
+    const state = getState();
+    for (const fn of listeners) fn(state);
+  };
+
+  return {
+    getState,
+    get: (id: string) => tasks.find((task) => task.id === id),
+    onStateChanged: (fn: (state: unknown) => void) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    setPendingTasks: (next: StubTask[]) => {
+      tasks = next.map((task) => ({ ...task }));
+      emit();
+    },
+  };
+};
+
 const createControllers = () => {
   const accounts = createAccountsController();
   const approvals = {
@@ -322,9 +366,10 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
     ],
   });
   keyring.attach();
-
+  const approvalsController = createApprovalsController();
   const controllers = createControllers();
   (controllers as any).accounts = accountsController;
+  (controllers as any).approvals = approvalsController;
 
   const session = {
     unlock,
@@ -343,7 +388,7 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
   });
 
-  return { bridge, keyring, vault, unlock };
+  return { bridge, keyring, vault, unlock, approvals: approvalsController };
 };
 
 const createPort = () => new FakePort();
@@ -367,6 +412,7 @@ describe("uiBridge", () => {
   let keyring: ReturnType<typeof buildBridge>["keyring"];
   let vault: FakeVault;
   let unlock: FakeUnlock;
+  let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
 
   beforeEach(() => {
@@ -375,8 +421,11 @@ describe("uiBridge", () => {
     keyring = ctx.keyring;
     vault = ctx.vault;
     unlock = ctx.unlock;
+    approvals = ctx.approvals;
+
     port = createPort();
     bridge.attachPort(port as any);
+    bridge.attachListeners();
     port.messages = []; // drop initial snapshot
   });
 
@@ -506,5 +555,39 @@ describe("uiBridge", () => {
     expect(pkResult.privateKey).toBe("deadbeef");
     expect(Array.from(secret).every((byte) => byte === 0)).toBe(true);
     spy.mockRestore();
+  });
+
+  it("emits ui:approvalsChanged when approvals queue changes", async () => {
+    const id = crypto.randomUUID();
+    approvals.setPendingTasks([
+      {
+        id,
+        type: ApprovalTypes.RequestAccounts,
+        origin: "https://example.com",
+        namespace: CHAIN.namespace,
+        chainRef: CHAIN.chainRef,
+        payload: { suggestedAccounts: [] },
+        createdAt: Date.now(),
+      },
+    ]);
+
+    const evt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:approvalsChanged") as any;
+    expect(evt).toBeTruthy();
+    expect(evt.payload).toHaveLength(1);
+    expect(evt.payload[0].id).toBe(id);
+    expect(evt.payload[0].type).toBe("requestAccounts");
+  });
+
+  it("emits ui:unlocked after ui:unlock succeeds", async () => {
+    unlock.setUnlocked(false);
+    vault.setUnlocked(false);
+    port.messages = [];
+
+    const res = await send({ type: "ui:unlock", payload: { password: PASSWORD } } as UiMessage);
+    expectResponse(res.envelope, res.requestId);
+
+    const evt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:unlocked") as any;
+    expect(evt).toBeTruthy();
+    expect(typeof evt.payload?.at).toBe("number");
   });
 });

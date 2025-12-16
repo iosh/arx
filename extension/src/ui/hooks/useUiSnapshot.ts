@@ -1,6 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { uiClient } from "../lib/uiClient";
 import { useUiPort } from "./useUiPort";
 
@@ -45,6 +45,35 @@ export const useUiSnapshot = () => {
     () => void queryClient.invalidateQueries({ queryKey: UI_SNAPSHOT_QUERY_KEY }),
     [queryClient],
   );
+
+  const handleApprovalsChanged = useCallback(
+    (approvals: UiSnapshot["approvals"]) => {
+      queryClient.setQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY, (prev) =>
+        prev
+          ? {
+              ...prev,
+              approvals,
+            }
+          : prev,
+      );
+    },
+    [queryClient],
+  );
+
+  const handleUnlocked = useCallback(() => {
+    invalidate();
+  }, [invalidate]);
+
+  useEffect(() => {
+    uiClient.connect();
+    const unsubscribeApprovals = uiClient.onApprovalsChanged(handleApprovalsChanged);
+    const unsubscribeUnlocked = uiClient.onUnlocked(handleUnlocked);
+
+    return () => {
+      unsubscribeApprovals();
+      unsubscribeUnlocked();
+    };
+  }, [handleApprovalsChanged, handleUnlocked]);
 
   const unlockMutation = useMutation({
     mutationFn: (password: string) => uiClient.unlock(password),

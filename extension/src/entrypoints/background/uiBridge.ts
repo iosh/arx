@@ -6,7 +6,7 @@ import type {
   KeyringService,
   RequestPermissionsApprovalPayload,
 } from "@arx/core";
-import { ApprovalTypes, getProviderErrors, PermissionScopes, zeroize } from "@arx/core";
+import { ApprovalTypes, createLogger, getProviderErrors, PermissionScopes, zeroize } from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import * as Hex from "ox/Hex";
 import type browser from "webextension-polyfill";
@@ -47,7 +47,7 @@ const normalizeError = (error: unknown): { message: string; code?: number; data?
 };
 
 const providerErrors = getProviderErrors();
-
+const uiLog = createLogger("bg:uiBridge");
 const assertUnlocked = (session: BackgroundSessionServices) => {
   if (!session.unlock.isUnlocked()) {
     throw providerErrors.unauthorized({ message: "Wallet is locked" });
@@ -381,6 +381,13 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         await keyring.waitForReady();
         await persistVaultMeta();
         broadcast();
+        const unlockedAt = Date.now();
+        // Notify UI that unlock completed (after hydration).
+        for (const port of Array.from(ports)) {
+          sendToPortSafely(port, { type: "ui:event", event: "ui:unlocked", payload: { at: Date.now() } });
+        }
+        uiLog("event:ui:unlocked", { at: unlockedAt });
+
         return session.unlock.getState();
       }
       case "ui:lock": {
@@ -673,7 +680,26 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
     listeners.push(
       controllers.accounts.onStateChanged(() => broadcast()),
       controllers.network.onStateChanged(() => broadcast()),
-      controllers.approvals.onStateChanged(() => broadcast()),
+      controllers.approvals.onStateChanged(() => {
+        try {
+          const approvalState = controllers.approvals.getState();
+          const approvalSummaries = approvalState.pending
+            .map((item) => {
+              const task = controllers.approvals.get(item.id);
+              return task ? toApprovalSummary(task) : null;
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null);
+
+          for (const port of Array.from(ports)) {
+            sendToPortSafely(port, { type: "ui:event", event: "ui:approvalsChanged", payload: approvalSummaries });
+          }
+          uiLog("event:ui:approvalsChanged", { count: approvalSummaries.length });
+        } catch (error) {
+          console.warn("[uiBridge] failed to emit ui:approvalsChanged", error);
+        }
+
+        broadcast();
+      }),
       session.unlock.onLocked(() => broadcast()),
     );
   };

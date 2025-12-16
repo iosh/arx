@@ -20,6 +20,8 @@ class UiClient {
   #port: browser.Runtime.Port | null = null;
   #pending = new Map<string, PendingRequest<unknown>>();
   #listeners = new Set<(snapshot: UiSnapshot) => void>();
+  #approvalsListeners = new Set<(approvals: UiSnapshot["approvals"]) => void>();
+  #unlockedListeners = new Set<(payload: { at: number }) => void>();
 
   // Use arrow functions to ensure `this` binding is stable
   connect = () => {
@@ -50,9 +52,30 @@ class UiClient {
         return;
       }
 
-      if (envelope.type === "ui:event" && envelope.event === "ui:stateChanged" && envelope.payload) {
-        for (const listener of this.#listeners) {
-          listener(envelope.payload);
+      if (envelope.type === "ui:event") {
+        switch (envelope.event) {
+          case "ui:stateChanged": {
+            for (const listener of this.#listeners) {
+              listener(envelope.payload);
+            }
+            return;
+          }
+          case "ui:approvalsChanged": {
+            console.debug("[uiClient] ui:approvalsChanged", { count: envelope.payload.length });
+            for (const listener of this.#approvalsListeners) {
+              listener(envelope.payload);
+            }
+            return;
+          }
+          case "ui:unlocked": {
+            console.debug("[uiClient] ui:unlocked", envelope.payload);
+            for (const listener of this.#unlockedListeners) {
+              listener(envelope.payload);
+            }
+            return;
+          }
+          default:
+            return;
         }
       }
     });
@@ -77,12 +100,28 @@ class UiClient {
     }
     this.#pending.clear();
     this.#listeners.clear();
+    this.#approvalsListeners.clear();
+    this.#unlockedListeners.clear();
   };
 
   onStateChanged = (listener: (snapshot: UiSnapshot) => void) => {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
+    };
+  };
+
+  onApprovalsChanged = (listener: (approvals: UiSnapshot["approvals"]) => void) => {
+    this.#approvalsListeners.add(listener);
+    return () => {
+      this.#approvalsListeners.delete(listener);
+    };
+  };
+
+  onUnlocked = (listener: (payload: { at: number }) => void) => {
+    this.#unlockedListeners.add(listener);
+    return () => {
+      this.#unlockedListeners.delete(listener);
     };
   };
 

@@ -65,11 +65,10 @@ export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: Unlock
       }
 
       const hasApprovals = (latestSnapshot?.approvals.length ?? approvalsCount) > 0;
-      const hasAttention = (latestSnapshot?.attention.queue.length ?? (latestAttention ? 1 : 0)) > 0;
 
       if (hasApprovals) {
         router.navigate({ to: ROUTES.APPROVALS, replace: true });
-      } else if (hasAttention) {
+      } else {
         router.navigate({ to: ROUTES.HOME, replace: true });
       }
     } catch (err) {

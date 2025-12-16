@@ -51,8 +51,16 @@ export type UiError = {
 /**
  * Envelope types for port message protocol
  */
+type UiPortEvent =
+  | { event: "ui:stateChanged"; payload: UiSnapshot }
+  | { event: "ui:approvalsChanged"; payload: UiSnapshot["approvals"] }
+  | { event: "ui:unlocked"; payload: { at: number } };
+
+/**
+ * Envelope types for port message protocol
+ */
 export type UiPortEnvelope =
   | { type: "ui:request"; requestId: string; payload: UiMessage }
   | { type: "ui:response"; requestId: string; result: unknown }
   | { type: "ui:error"; requestId: string; error: UiError }
-  | { type: "ui:event"; event: "ui:stateChanged"; payload: UiSnapshot };
+  | ({ type: "ui:event" } & UiPortEvent);

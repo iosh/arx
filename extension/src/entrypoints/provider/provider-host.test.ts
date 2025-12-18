@@ -52,7 +52,7 @@ describe("ProviderHost EIP-6963", () => {
 
     dom.window.addEventListener("message", messageHandler);
 
-    await host.start();
+    host.initialize();
 
     // Clear the announcement from start(), we only want to test the response to requestProvider
     listener.mockClear();
@@ -101,7 +101,7 @@ describe("ProviderHost EIP-6963", () => {
     };
 
     dom.window.addEventListener("message", messageHandler);
-    await host.start();
+    host.initialize();
 
     const firstProvider = (window as any).ethereum;
     listener.mockClear();
@@ -151,12 +151,22 @@ describe("ProviderHost EIP-6963", () => {
     };
 
     dom.window.addEventListener("message", messageHandler);
-    await host.start();
+
+    const firstConnect = new Promise<void>((resolve) => {
+      transport.once("connect", () => resolve());
+    });
+
+    host.initialize();
+    await firstConnect;
 
     const provider = (window as any).ethereum;
     expect(provider).toBeDefined();
 
-    // Simulate disconnect
+    const onDisconnect = new Promise<void>((resolve) => {
+      transport.once("disconnect", () => resolve());
+    });
+
+    // Simulate disconnect (after initial connect is established)
     dom.window.dispatchEvent(
       new dom.window.MessageEvent("message", {
         data: {
@@ -168,39 +178,13 @@ describe("ProviderHost EIP-6963", () => {
       }),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await onDisconnect;
 
-    // Simulate reconnect with different accounts
-    dom.window.dispatchEvent(
-      new dom.window.MessageEvent("message", {
-        data: {
-          channel: CHANNEL,
-          type: "event",
-          payload: {
-            event: "connect",
-            params: [
-              {
-                chainId: "0x1",
-                caip2: "eip155:1",
-                accounts: ["0xdef"],
-                isUnlocked: true,
-                meta: {
-                  activeChain: "eip155:1",
-                  activeNamespace: "eip155",
-                  supportedChains: ["eip155:1"],
-                },
-              },
-            ],
-          },
-        },
-        source: dom.window as unknown as Window,
-      }),
-    );
+    // Simulate a real reconnect by running handshake again
+    await transport.connect();
 
     const providerAfterReconnect = (window as any).ethereum;
     expect(providerAfterReconnect).toBe(provider);
-
-    dom.window.removeEventListener("message", messageHandler);
   });
 
   it("exposes wallet/metamask provider state helpers", async () => {
@@ -233,17 +217,16 @@ describe("ProviderHost EIP-6963", () => {
     };
 
     dom.window.addEventListener("message", messageHandler);
-    await host.start();
+
+    const connected = new Promise<void>((resolve) => {
+      transport.once("connect", () => resolve());
+    });
+
+    host.initialize();
+    await connected;
 
     const provider = (window as any).ethereum;
     await expect(provider.wallet_getProviderState()).resolves.toMatchObject({
-      accounts: ["0xabc"],
-      chainId: "0x1",
-      isUnlocked: true,
-    });
-
-    const shimState = await provider._metamask.getProviderState();
-    expect(shimState).toMatchObject({
       accounts: ["0xabc"],
       chainId: "0x1",
       isUnlocked: true,

@@ -4,13 +4,12 @@ import { injectScript } from "wxt/utils/inject-script";
 
 export default defineContentScript({
   matches: ["http://*/*", "https://*/*"],
-  runAt: 'document_start',
+  runAt: "document_start",
   async main() {
-    console.log("Injecting script...");
+    bootstrapContent();
+
     await injectScript("/provider.js", {
       keepInDom: true,
     });
-
-    await bootstrapContent();
   },
 });

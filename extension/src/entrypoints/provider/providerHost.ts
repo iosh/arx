@@ -1,7 +1,8 @@
 import { EthereumProvider } from "@arx/provider-core/provider";
 
-import type { RequestArguments, TransportMeta, TransportState } from "@arx/provider-core/types";
+import type { EIP1193Provider, RequestArguments, TransportMeta, TransportState } from "@arx/provider-core/types";
 import type { InpageTransport } from "@arx/provider-extension/inpage";
+import { initialize } from "wxt";
 
 const EIP155_NAMESPACE = "eip155" as const;
 const PROTECTED_METHODS = new Set<PropertyKey>([
@@ -19,7 +20,11 @@ const NAMESPACE_FACTORIES: Record<string, (opts: { transport: InpageTransport })
   [EIP155_NAMESPACE]: ({ transport }) => {
     const raw = new EthereumProvider({ transport });
     const proxy = createEvmProxy(raw);
-    return { raw, proxy, info: EthereumProvider.providerInfo };
+    return {
+      raw,
+      proxy,
+      info: EthereumProvider.providerInfo,
+    };
   },
 };
 
@@ -28,9 +33,13 @@ type WindowWithArxHost = Window & {
 };
 
 type ProviderEntry = {
-  raw: EthereumProvider;
-  proxy: EthereumProvider;
+  raw: EIP1193Provider;
+  proxy: EIP1193Provider;
   info: typeof EthereumProvider.providerInfo;
+};
+
+const INJECTION_BY_NAMESPACE: Record<string, { windowKey: string } | undefined> = {
+  [EIP155_NAMESPACE]: { windowKey: WINDOW_ETH_PROP },
 };
 
 export const asWindowWithHost = (target: Window): WindowWithArxHost => target as WindowWithArxHost;
@@ -126,32 +135,50 @@ const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
 export class ProviderHost {
   #transport: InpageTransport;
   #providers = new Map<string, ProviderEntry>();
-  #startPromise: Promise<void> | null = null;
   #eip6963Registered = false;
-  #injectedEthereum: EthereumProvider | null = null;
+  #injectedEthereum: EIP1193Provider | null = null;
+
+  #initialized = false;
+  #initializedEventDispatched = false;
 
   constructor(transport: InpageTransport) {
     this.#transport = transport;
   }
 
-  start() {
-    if (this.#startPromise) return this.#startPromise;
+  initialize() {
+    if (this.#initialized) return;
+    this.#initialized = true;
 
-    this.#startPromise = (async () => {
-      this.#registerTransportListeners();
-      try {
-        await this.#transport.connect();
-      } catch (error) {
-        console.error("[provider-host] failed to connect transport", error);
-        this.#startPromise = null;
-        throw error;
-      }
-      this.#syncProvidersFromState(this.#transport.getConnectionState());
-      this.#registerEip6963Listener();
-      this.#announceProviders();
-    })();
+    this.#registerTransportListeners();
 
-    return this.#startPromise;
+    this.#getOrCreateProvider(EIP155_NAMESPACE);
+
+    this.#registerEip6963Listener();
+    this.#announceProviders();
+    this.#dispatchEthereumInitialized();
+
+    void this.#connectToTransport();
+  }
+
+  async #connectToTransport() {
+    try {
+      await this.#transport.connect();
+    } catch (error) {
+      // Best-effort: never block injection flow.
+      console.debug("[provider-host] transport connect failed", error);
+      return;
+    }
+
+    // Sync providers after connection reveals meta/supported chains.
+    this.#syncProvidersFromState(this.#transport.getConnectionState());
+  }
+
+  #dispatchEthereumInitialized() {
+    if (this.#initializedEventDispatched) return;
+    if (!this.#injectedEthereum) return; // Only when we actually injected window.ethereum
+
+    this.#initializedEventDispatched = true;
+    window.dispatchEvent(new window.Event("ethereum#initialized"));
   }
 
   #registerTransportListeners() {
@@ -160,10 +187,10 @@ export class ProviderHost {
   }
 
   /**
-   * Ensure a provider exists for the given namespace.
+   * Get or create a provider for the given namespace.
    * Returns null if no factory is registered for the namespace.
    */
-  #ensureProvider(namespace: string): EthereumProvider | null {
+  #getOrCreateProvider(namespace: string): EIP1193Provider | null {
     if (this.#providers.has(namespace)) return this.#providers.get(namespace)!.proxy;
     const factory = NAMESPACE_FACTORIES[namespace];
     if (!factory) return null;
@@ -171,16 +198,18 @@ export class ProviderHost {
     const entry = factory({ transport: this.#transport });
     this.#providers.set(namespace, entry);
 
-    if (namespace === EIP155_NAMESPACE) {
+    const injection = INJECTION_BY_NAMESPACE[namespace];
+    if (injection?.windowKey === WINDOW_ETH_PROP) {
       this.#injectWindowEthereum(entry.proxy);
     }
+
     return entry.proxy;
   }
 
   #syncProvidersFromState(state: TransportState) {
     const namespaces = this.#extractNamespaces(state.meta, state.caip2);
     for (const namespace of namespaces) {
-      this.#ensureProvider(namespace);
+      this.#getOrCreateProvider(namespace);
     }
   }
 
@@ -233,7 +262,7 @@ export class ProviderHost {
     );
   }
 
-  #injectWindowEthereum(proxy: EthereumProvider) {
+  #injectWindowEthereum(proxy: EIP1193Provider) {
     if (this.#injectedEthereum === proxy) {
       return;
     }

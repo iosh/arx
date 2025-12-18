@@ -2,7 +2,7 @@ import browser from "webextension-polyfill";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 
-export const bootstrapContent = async () => {
+export const bootstrapContent = () => {
   const port = browser.runtime.connect({ name: CHANNEL });
 
   const handleWindowMessage = (event: MessageEvent) => {

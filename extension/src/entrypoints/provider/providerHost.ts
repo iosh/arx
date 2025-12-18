@@ -1,140 +1,20 @@
-import { EthereumProvider } from "@arx/provider-core/provider";
-
-import type { EIP1193Provider, RequestArguments, TransportMeta, TransportState } from "@arx/provider-core/types";
+import type { EIP1193Provider, TransportMeta, TransportState } from "@arx/provider-core/types";
 import type { InpageTransport } from "@arx/provider-extension/inpage";
-import { initialize } from "wxt";
+import { createProviderRegistry, EIP155_NAMESPACE, type ProviderEntry } from "./providerRegistry";
 
-const EIP155_NAMESPACE = "eip155" as const;
-const PROTECTED_METHODS = new Set<PropertyKey>([
-  "request",
-  "send",
-  "sendAsync",
-  "on",
-  "removeListener",
-  "removeAllListeners",
-  "enable",
-]);
 const WINDOW_ETH_PROP = "ethereum";
-
-const NAMESPACE_FACTORIES: Record<string, (opts: { transport: InpageTransport }) => ProviderEntry> = {
-  [EIP155_NAMESPACE]: ({ transport }) => {
-    const raw = new EthereumProvider({ transport });
-    const proxy = createEvmProxy(raw);
-    return {
-      raw,
-      proxy,
-      info: EthereumProvider.providerInfo,
-    };
-  },
-};
 
 type WindowWithArxHost = Window & {
   __ARX_PROVIDER_HOST__?: ProviderHost;
 };
 
-type ProviderEntry = {
-  raw: EIP1193Provider;
-  proxy: EIP1193Provider;
-  info: typeof EthereumProvider.providerInfo;
-};
-
-const INJECTION_BY_NAMESPACE: Record<string, { windowKey: string } | undefined> = {
-  [EIP155_NAMESPACE]: { windowKey: WINDOW_ETH_PROP },
-};
-
 export const asWindowWithHost = (target: Window): WindowWithArxHost => target as WindowWithArxHost;
-
-const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
-  const metamaskShim = Object.freeze({
-    isUnlocked: () => Promise.resolve(target.getProviderState().isUnlocked),
-    getProviderState: () => Promise.resolve(target.getProviderState()),
-    requestBatch: (requests: RequestArguments[]) => {
-      return Promise.all(requests.map((req) => target.request(req)));
-    },
-  });
-
-  const handler: ProxyHandler<EthereumProvider> = {
-    get: (instance, property, receiver) => {
-      switch (property) {
-        case "selectedAddress":
-          return instance.selectedAddress;
-        case "chainId":
-          return instance.chainId;
-        case "isMetaMask":
-          return false;
-        case "wallet_getPermissions":
-          return (params?: RequestArguments["params"]) => instance.request({ method: "wallet_getPermissions", params });
-        case "wallet_requestPermissions":
-          return (params?: RequestArguments["params"]) =>
-            instance.request({ method: "wallet_requestPermissions", params });
-        case "wallet_getProviderState":
-          return () => instance.request({ method: "metamask_getProviderState" });
-        case "_metamask":
-          return metamaskShim;
-        default:
-          return Reflect.get(instance, property, receiver);
-      }
-    },
-    has: (instance, property) => {
-      if (
-        property === "selectedAddress" ||
-        property === "chainId" ||
-        property === "isMetaMask" ||
-        property === "_metamask" ||
-        property === "wallet_getPermissions" ||
-        property === "wallet_requestPermissions" ||
-        property === "wallet_getProviderState"
-      ) {
-        return true;
-      }
-      return property in instance;
-    },
-    set: (instance, property, value, receiver) => {
-      if (PROTECTED_METHODS.has(property)) {
-        return false;
-      }
-      return Reflect.set(instance, property, value, receiver);
-    },
-    defineProperty: (instance, property, descriptor) => {
-      if (PROTECTED_METHODS.has(property)) {
-        return false;
-      }
-      return Reflect.defineProperty(instance, property, descriptor);
-    },
-    getOwnPropertyDescriptor: (instance, property) => {
-      if (property === "selectedAddress" || property === "chainId") {
-        return {
-          configurable: true,
-          enumerable: true,
-          get: () => (property === "selectedAddress" ? instance.selectedAddress : instance.chainId),
-        };
-      }
-      if (property === "isMetaMask") {
-        return {
-          configurable: true,
-          enumerable: true,
-          value: false,
-          writable: false,
-        };
-      }
-      if (property === "_metamask") {
-        return {
-          configurable: true,
-          enumerable: false,
-          value: metamaskShim,
-          writable: false,
-        };
-      }
-      return Reflect.getOwnPropertyDescriptor(instance, property);
-    },
-  };
-
-  return new Proxy(target, handler);
-};
 
 export class ProviderHost {
   #transport: InpageTransport;
   #providers = new Map<string, ProviderEntry>();
+  #registry = createProviderRegistry();
+
   #eip6963Registered = false;
   #injectedEthereum: EIP1193Provider | null = null;
 
@@ -169,13 +49,12 @@ export class ProviderHost {
       return;
     }
 
-    // Sync providers after connection reveals meta/supported chains.
     this.#syncProvidersFromState(this.#transport.getConnectionState());
   }
 
   #dispatchEthereumInitialized() {
     if (this.#initializedEventDispatched) return;
-    if (!this.#injectedEthereum) return; // Only when we actually injected window.ethereum
+    if (!this.#injectedEthereum) return;
 
     this.#initializedEventDispatched = true;
     window.dispatchEvent(new window.Event("ethereum#initialized"));
@@ -186,24 +65,31 @@ export class ProviderHost {
     this.#transport.on("disconnect", this.#handleTransportDisconnect);
   }
 
-  /**
-   * Get or create a provider for the given namespace.
-   * Returns null if no factory is registered for the namespace.
-   */
+  // Lazy-create provider on demand to minimize startup cost
   #getOrCreateProvider(namespace: string): EIP1193Provider | null {
     if (this.#providers.has(namespace)) return this.#providers.get(namespace)!.proxy;
-    const factory = NAMESPACE_FACTORIES[namespace];
-    if (!factory) return null;
+
+    const factory = this.#registry.factories[namespace];
+    if (!factory) return null; // Unknown namespace, silently ignored
 
     const entry = factory({ transport: this.#transport });
     this.#providers.set(namespace, entry);
 
-    const injection = INJECTION_BY_NAMESPACE[namespace];
-    if (injection?.windowKey === WINDOW_ETH_PROP) {
-      this.#injectWindowEthereum(entry.proxy);
+    // Auto-inject to window if configured
+    const injection = this.#registry.injectionByNamespace[namespace];
+    if (injection?.windowKey) {
+      this.#injectWindowProvider(injection.windowKey, entry.proxy);
     }
 
     return entry.proxy;
+  }
+
+  #injectWindowProvider(windowKey: string, provider: EIP1193Provider) {
+    if (windowKey === WINDOW_ETH_PROP) {
+      this.#injectWindowEthereum(provider);
+      return;
+    }
+    // Unknown window keys are intentionally ignored for now.
   }
 
   #syncProvidersFromState(state: TransportState) {
@@ -213,26 +99,26 @@ export class ProviderHost {
     }
   }
 
-  /**
-   * Extract all namespaces from transport state.
-   * Returns all supported namespaces including active and available ones.
-   * Providers are kept alive across chain switches; no garbage collection for now.
-   */
+  // Extract unique namespaces from transport state to determine which providers to create
   #extractNamespaces(meta: TransportMeta | null | undefined, fallback: string | null) {
     const namespaces = new Set<string>();
+
     if (meta?.activeNamespace) {
       namespaces.add(meta.activeNamespace);
     }
+
     if (meta?.supportedChains?.length) {
       for (const chainRef of meta.supportedChains) {
         const [namespace] = chainRef.split(":");
         if (namespace) namespaces.add(namespace);
       }
     }
+
     if (fallback) {
       const [namespace] = fallback.split(":");
       if (namespace) namespaces.add(namespace);
     }
+
     return namespaces;
   }
 
@@ -249,9 +135,8 @@ export class ProviderHost {
 
   #announceProviders() {
     const evmEntry = this.#providers.get(EIP155_NAMESPACE);
-    if (!evmEntry) {
-      return;
-    }
+    if (!evmEntry) return;
+
     window.dispatchEvent(
       new CustomEvent("eip6963:announceProvider", {
         detail: {
@@ -263,22 +148,21 @@ export class ProviderHost {
   }
 
   #injectWindowEthereum(proxy: EIP1193Provider) {
-    if (this.#injectedEthereum === proxy) {
-      return;
-    }
+    if (this.#injectedEthereum === proxy) return;
 
     const hostWindow = window as Window;
     const hasProvider = Object.hasOwn(hostWindow, WINDOW_ETH_PROP);
-    if (!hasProvider) {
-      Object.defineProperty(hostWindow, WINDOW_ETH_PROP, {
-        configurable: true,
-        enumerable: false,
-        value: proxy,
-        writable: false,
-      });
-      this.#injectedEthereum = proxy;
-      return;
-    }
+    // EIP-6963 multi-wallet coexistence: don't overwrite existing ethereum provider
+    if (hasProvider) return;
+
+    Object.defineProperty(hostWindow, WINDOW_ETH_PROP, {
+      configurable: true,
+      enumerable: false, // Non-enumerable to prevent dApp detection via Object.keys
+      value: proxy,
+      writable: false,
+    });
+
+    this.#injectedEthereum = proxy;
   }
 
   #handleTransportConnect = () => {
@@ -288,6 +172,5 @@ export class ProviderHost {
 
   #handleTransportDisconnect = () => {
     // no-op: provider lifecycle is maintained, waiting for next connection.
-    // Provider instances remain alive and will sync state on reconnect.
   };
 }

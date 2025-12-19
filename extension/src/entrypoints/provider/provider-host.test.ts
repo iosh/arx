@@ -45,6 +45,7 @@ describe("ProviderHost EIP-6963", () => {
               },
             },
             source: dom.window as unknown as Window,
+            origin: dom.window.location.origin,
           }),
         );
       }
@@ -226,7 +227,7 @@ describe("ProviderHost EIP-6963", () => {
     await connected;
 
     const provider = (window as any).ethereum;
-    await expect(provider.wallet_getProviderState()).resolves.toMatchObject({
+    await expect(provider.request({ method: "wallet_getProviderState" })).resolves.toMatchObject({
       accounts: ["0xabc"],
       chainId: "0x1",
       isUnlocked: true,

@@ -7,7 +7,7 @@ describe("InpageTransport handshake/disconnect", () => {
   let dom: JSDOM;
 
   beforeEach(() => {
-    dom = new JSDOM("<!doctype html><html><body></body></html>");
+    dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://dapp.test" });
     (global as any).window = dom.window as unknown as Window;
     (global as any).document = dom.window.document;
     // Ensure event constructors are from JSDOM window
@@ -18,6 +18,7 @@ describe("InpageTransport handshake/disconnect", () => {
     const event = new MessageEvent("message", {
       data: { channel: CHANNEL, type: "handshake_ack", payload },
       source: window as MessageEventSource,
+      origin: window.location.origin,
     });
     window.dispatchEvent(event);
   };
@@ -26,6 +27,7 @@ describe("InpageTransport handshake/disconnect", () => {
     const event = new MessageEvent("message", {
       data: { channel: CHANNEL, type: "event", payload: { event: "disconnect", params: error ? [error] : [] } },
       source: window as MessageEventSource,
+      origin: window.location.origin,
     });
     window.dispatchEvent(event);
   };
@@ -71,6 +73,7 @@ describe("InpageTransport handshake/disconnect", () => {
     const event = new MessageEvent("message", {
       data: messageData,
       source: window as MessageEventSource,
+      origin: window.location.origin,
     });
 
     // Dispatch the event

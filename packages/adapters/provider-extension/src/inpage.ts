@@ -229,7 +229,8 @@ export class InpageTransport extends EventEmitter implements Transport {
         },
         timer,
       });
-      window.postMessage(env, "*");
+
+      window.postMessage(env, window.location.origin);
     });
 
     if ("error" in rpc) {
@@ -366,7 +367,7 @@ export class InpageTransport extends EventEmitter implements Transport {
       type: "handshake",
       payload: { version: "2.0" },
     };
-    window.postMessage(msg, "*");
+    window.postMessage(msg, window.location.origin);
   }
 
   retryConnect = async () => {

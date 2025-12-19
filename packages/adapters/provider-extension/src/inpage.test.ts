@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CHANNEL } from "./constants.js";
 import { InpageTransport } from "./inpage.js";
 
@@ -219,5 +219,83 @@ describe("InpageTransport handshake/disconnect", () => {
     expect(state.caip2).toBe("eip155:56");
     expect(state.accounts).toEqual(["0x999"]);
     expect(state.meta?.supportedChains).toEqual(["eip155:56"]);
+  });
+
+  it("times out connect() when handshake_ack never arrives", async () => {
+    const t = new InpageTransport({ handshakeTimeoutMs: 20 });
+
+    await expect(t.connect()).rejects.toMatchObject({ code: 4900 });
+    expect(t.isConnected()).toBe(false);
+  });
+
+  it("dedupes inflight connect() calls and posts one handshake", async () => {
+    const postMessageSpy = vi.spyOn(window, "postMessage");
+    const t = new InpageTransport({ handshakeTimeoutMs: 1_000 });
+
+    const p1 = t.connect().catch((err) => err);
+    const p2 = t.connect().catch((err) => err);
+
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    expect(postMessageSpy.mock.calls[0]?.[0]).toMatchObject({ channel: CHANNEL, type: "handshake" });
+
+    await t.disconnect();
+    await Promise.all([p1, p2]);
+
+    postMessageSpy.mockRestore();
+  });
+
+  it("retryConnect() resends handshake while inflight", async () => {
+    const postMessageSpy = vi.spyOn(window, "postMessage");
+    const t = new InpageTransport({ handshakeTimeoutMs: 1_000 });
+
+    const p1 = t.connect().catch((err) => err);
+    const p2 = t.retryConnect().catch((err) => err);
+
+    expect(postMessageSpy).toHaveBeenCalledTimes(2);
+    expect(postMessageSpy.mock.calls[0]?.[0]).toMatchObject({ channel: CHANNEL, type: "handshake" });
+    expect(postMessageSpy.mock.calls[1]?.[0]).toMatchObject({ channel: CHANNEL, type: "handshake" });
+
+    await t.disconnect();
+    await Promise.all([p1, p2]);
+
+    postMessageSpy.mockRestore();
+  });
+
+  it("accepts late handshake_ack after connect() timeout", async () => {
+    const t = new InpageTransport({ handshakeTimeoutMs: 20 });
+
+    await expect(t.connect()).rejects.toMatchObject({ code: 4900 });
+
+    const connected = new Promise<void>((resolve) => t.once("connect", () => resolve()));
+    dispatchHandshakeAck({
+      chainId: "0x1",
+      caip2: "eip155:1",
+      accounts: [],
+      isUnlocked: true,
+      meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
+    });
+
+    await connected;
+    expect(t.isConnected()).toBe(true);
+    expect(t.getConnectionState().chainId).toBe("0x1");
+  });
+
+  it("allows reconnect after a timeout via a new connect()", async () => {
+    const t = new InpageTransport({ handshakeTimeoutMs: 20 });
+
+    await expect(t.connect()).rejects.toMatchObject({ code: 4900 });
+
+    const pending = t.connect();
+    dispatchHandshakeAck({
+      chainId: "0x1",
+      caip2: "eip155:1",
+      accounts: ["0xabc"],
+      isUnlocked: true,
+      meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
+    });
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(t.isConnected()).toBe(true);
+    expect(t.getConnectionState().accounts).toEqual(["0xabc"]);
   });
 });

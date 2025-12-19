@@ -21,6 +21,12 @@ type ConnectPayload = {
 };
 type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null };
 
+type InpageTransportOptions = {
+  handshakeTimeoutMs?: number;
+};
+
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 1500;
+
 const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   activeChain: meta.activeChain,
   activeNamespace: meta.activeNamespace,
@@ -35,6 +41,7 @@ export class InpageTransport extends EventEmitter implements Transport {
   #isUnlocked: boolean | null = null;
   #meta: TransportMeta | null = null;
   #timeoutMs = 120_000;
+  #handshakeTimeoutMs = DEFAULT_HANDSHAKE_TIMEOUT_MS;
   #pendingRequests = new Map<
     string,
     {
@@ -49,9 +56,15 @@ export class InpageTransport extends EventEmitter implements Transport {
   #handshakePromise: Promise<void> | null = null;
   #handshakeResolve?: (() => void) | undefined;
   #handshakeReject?: ((reason?: unknown) => void) | undefined;
+  #handshakeTimer: number | undefined;
 
-  constructor() {
+  constructor(options: InpageTransportOptions = {}) {
     super();
+
+    const { handshakeTimeoutMs } = options;
+    if (handshakeTimeoutMs) {
+      this.#handshakeTimeoutMs = handshakeTimeoutMs;
+    }
 
     window.addEventListener("message", this.#handleMessage);
   }
@@ -66,10 +79,16 @@ export class InpageTransport extends EventEmitter implements Transport {
       meta: this.#meta ? cloneTransportMeta(this.#meta) : null,
     };
   }
+  #clearHandshakeTimer() {
+    if (this.#handshakeTimer === undefined) return;
+    window.clearTimeout(this.#handshakeTimer);
+    this.#handshakeTimer = undefined;
+  }
 
   #resolveHandshake() {
     if (!this.#handshakePromise) return;
 
+    this.#clearHandshakeTimer();
     this.#handshakeResolve?.();
     this.#handshakePromise = null;
     this.#handshakeResolve = undefined;
@@ -78,10 +97,17 @@ export class InpageTransport extends EventEmitter implements Transport {
 
   #rejectHandshake(error?: unknown) {
     if (!this.#handshakePromise) return;
+
+    this.#clearHandshakeTimer();
     this.#handshakeReject?.(error);
     this.#handshakePromise = null;
     this.#handshakeResolve = undefined;
     this.#handshakeReject = undefined;
+  }
+
+  #normalizeAccounts(accounts: unknown): string[] {
+    if (!Array.isArray(accounts)) return [];
+    return accounts.filter((item): item is string => typeof item === "string");
   }
 
   #getProviderErrors() {
@@ -90,9 +116,7 @@ export class InpageTransport extends EventEmitter implements Transport {
   }
 
   #setConnection(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
-    const accounts = Array.isArray(payload.accounts)
-      ? payload.accounts.filter((item): item is string => typeof item === "string")
-      : [];
+    const accounts = this.#normalizeAccounts(payload.accounts);
     this.#connected = true;
     this.#caip2 = payload.caip2 ?? null;
     this.#chainId = payload.chainId;
@@ -112,7 +136,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     }
   }
   #setAccounts(accounts: string[]) {
-    const next = accounts.filter((item): item is string => typeof item === "string");
+    const next = this.#normalizeAccounts(accounts);
     this.#accounts = next;
     this.emit("accountsChanged", next);
   }
@@ -185,7 +209,13 @@ export class InpageTransport extends EventEmitter implements Transport {
     const rpc = await new Promise<TransportResponse>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.#pendingRequests.delete(id);
-        reject({ code: 408, message: "Request timed out" });
+        const providerErrors = this.#getProviderErrors();
+        reject(
+          providerErrors.custom({
+            code: -32603,
+            message: "Request timed out",
+          }),
+        );
       }, this.#timeoutMs);
 
       this.#pendingRequests.set(id, {
@@ -262,18 +292,13 @@ export class InpageTransport extends EventEmitter implements Transport {
           }
           case "session:locked": {
             this.#isUnlocked = false;
-            if (this.#chainId) {
-              this.#setChain({ chainId: this.#chainId, caip2: this.#caip2 ?? null, isUnlocked: false });
-            }
+
             this.#setAccounts([]);
             this.emit("unlockStateChanged", { isUnlocked: false, payload: params[0] });
             break;
           }
           case "session:unlocked": {
             this.#isUnlocked = true;
-            if (this.#chainId) {
-              this.#setChain({ chainId: this.#chainId, caip2: this.#caip2 ?? null, isUnlocked: true });
-            }
             this.emit("unlockStateChanged", { isUnlocked: true, payload: params[0] });
             break;
           }
@@ -299,37 +324,59 @@ export class InpageTransport extends EventEmitter implements Transport {
     }
   };
 
+  #arraysEqual<T>(a: T[], b: T[]): boolean {
+    return a.length === b.length && a.every((value, index) => value === b[index]);
+  }
+
+  #metaEqual(a: TransportMeta | null, b: TransportMeta | null): boolean {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+
+    return (
+      a.activeChain === b.activeChain &&
+      a.activeNamespace === b.activeNamespace &&
+      this.#arraysEqual(a.supportedChains, b.supportedChains)
+    );
+  }
+
   #shouldRefreshConnection(payload: ConnectPayload) {
     const payloadAccounts = Array.isArray(payload.accounts)
       ? payload.accounts.filter((item): item is string => typeof item === "string")
       : [];
     const payloadUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
-    const sameAccounts =
-      this.#accounts.length === payloadAccounts.length &&
-      this.#accounts.every((value, index) => value === payloadAccounts[index]);
     const payloadMeta = payload.meta ? cloneTransportMeta(payload.meta) : null;
-    const sameMeta =
-      (this.#meta === null && payloadMeta === null) ||
-      (this.#meta &&
-        payloadMeta &&
-        this.#meta.activeChain === payloadMeta.activeChain &&
-        this.#meta.activeNamespace === payloadMeta.activeNamespace &&
-        this.#meta.supportedChains.length === payloadMeta.supportedChains.length &&
-        this.#meta.supportedChains.every((value, index) => value === payloadMeta.supportedChains[index]));
 
     return (
       !this.#connected ||
       this.#chainId !== payload.chainId ||
       (this.#caip2 ?? null) !== (payload.caip2 ?? null) ||
-      !sameAccounts ||
+      !this.#arraysEqual(this.#accounts, payloadAccounts) ||
       (this.#isUnlocked ?? null) !== payloadUnlocked ||
-      !sameMeta
+      !this.#metaEqual(this.#meta, payloadMeta)
     );
   }
 
   isConnected(): boolean {
     return this.#connected;
   }
+
+  #postHandshake() {
+    const msg: Envelope = {
+      channel: CHANNEL,
+      type: "handshake",
+      payload: { version: "2.0" },
+    };
+    window.postMessage(msg, "*");
+  }
+
+  retryConnect = async () => {
+    if (this.#connected) return;
+    if (this.#handshakePromise) {
+      this.#postHandshake();
+      return this.#handshakePromise;
+    }
+    return this.connect();
+  };
 
   connect = async () => {
     if (this.#connected) {
@@ -344,12 +391,17 @@ export class InpageTransport extends EventEmitter implements Transport {
       this.#handshakeReject = reject;
     });
 
-    const msg: Envelope = {
-      channel: CHANNEL,
-      type: "handshake",
-      payload: { version: "2.0" },
-    };
-    window.postMessage(msg, "*");
+    this.#handshakeTimer = window.setTimeout(() => {
+      const providerErrors = this.#getProviderErrors();
+      this.#rejectHandshake(
+        providerErrors.custom({
+          code: 4900,
+          message: "Handshake timed out. Try again.",
+        }),
+      );
+    }, this.#handshakeTimeoutMs);
+
+    this.#postHandshake();
 
     await this.#handshakePromise;
   };

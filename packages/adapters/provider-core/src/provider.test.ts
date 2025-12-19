@@ -191,6 +191,30 @@ describe("EthereumProvider transport meta integration", () => {
     expect(transport.getRequests()[0]?.method).toBe("eth_requestAccounts");
   });
 
+  it("emits accountsChanged when connect snapshot clears accounts", () => {
+    const initialState: TransportState = {
+      ...INITIAL_STATE,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      caip2: "eip155:1",
+    };
+
+    const { transport, provider } = createProvider(initialState);
+    const accountsChanged = vi.fn();
+    provider.on("accountsChanged", accountsChanged);
+
+    transport.emit("connect", {
+      chainId: "0x1",
+      caip2: "eip155:1",
+      accounts: [],
+      isUnlocked: true,
+      meta: buildMeta(),
+    });
+
+    expect(provider.selectedAddress).toBeNull();
+    expect(accountsChanged).toHaveBeenCalledTimes(1);
+    expect(accountsChanged).toHaveBeenCalledWith([]);
+  });
+
   it("emits chainChanged with updated CAIP-2 after wallet_switchEthereumChain", async () => {
     const initialState: TransportState = {
       ...INITIAL_STATE,
@@ -387,14 +411,40 @@ describe("EthereumProvider transport meta integration", () => {
     const handler = vi.fn(async () => "ok");
     transport.setRequestHandler(handler);
 
+    const connectSpy = vi.spyOn(transport, "connect");
+
     const p = provider.request({ method: "eth_blockNumber" });
     expect(handler).not.toHaveBeenCalled();
+    expect(connectSpy).toHaveBeenCalledTimes(1);
 
     transport.updateState({ connected: true, chainId: "0x1", caip2: "eip155:1", meta: buildMeta() });
     transport.emit("connect", { chainId: "0x1", caip2: "eip155:1", accounts: [], isUnlocked: true, meta: buildMeta() });
 
     await expect(p).resolves.toBe("ok");
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+  it("times out non-readonly requests when initialization never completes", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const initial = { ...INITIAL_STATE, connected: false, chainId: null, caip2: null };
+      const { transport, provider } = createProvider(initial);
+
+      const connectSpy = vi.spyOn(transport, "connect");
+      const handler = vi.fn(async () => "ok");
+      transport.setRequestHandler(handler);
+
+      const pending = provider.request({ method: "eth_blockNumber" });
+      const assertion = expect(pending).rejects.toMatchObject({ code: 4900 });
+
+      await vi.runAllTimersAsync();
+
+      await assertion;
+      expect(handler).not.toHaveBeenCalled();
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects wallet_switchEthereumChain when transport throws provider error", async () => {
@@ -511,7 +561,6 @@ describe("EthereumProvider transport meta integration", () => {
       networkVersion: "2",
       isUnlocked: true,
     });
-    expect(transport.getRequests()).toHaveLength(0);
     expect(transport.getRequests()).toHaveLength(0);
   });
 

@@ -27,9 +27,10 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   activeNamespace: meta.activeNamespace,
   supportedChains: [...meta.supportedChains],
 });
-
 const PROVIDER_STATE_METHODS = new Set(["metamask_getProviderState", "wallet_getProviderState"]);
 const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
+
+const DEFAULT_READY_TIMEOUT_MS = 5000;
 
 type ProviderStateSnapshot = {
   accounts: string[];
@@ -37,6 +38,23 @@ type ProviderStateSnapshot = {
   networkVersion: string | null;
   isUnlocked: boolean;
 };
+
+type ProviderSnapshot = {
+  connected: boolean;
+  chainId: string | null;
+  caip2: string | null;
+  accounts: string[];
+  isUnlocked: boolean | null;
+  meta: TransportMeta | null;
+};
+
+type ProviderPatch =
+  | { type: "accounts"; accounts: string[] }
+  | { type: "chain"; chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null }
+  | { type: "unlock"; isUnlocked: boolean }
+  | { type: "meta"; meta: TransportMeta | null };
+
+type ApplyOptions = { emit?: boolean };
 
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #namespace = DEFAULT_NAMESPACE;
@@ -52,6 +70,9 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   #initializedResolve?: (() => void) | undefined;
   #initializedReject?: ((reason?: unknown) => void) | undefined;
   #initializedPromise!: Promise<void>;
+
+  #readyTimeoutMs = DEFAULT_READY_TIMEOUT_MS;
+  #connectInFlight: Promise<void> | null = null;
 
   #resolveProviderErrors = () => getProviderErrors(this.#namespace);
   #resolveRpcErrors = () => getRpcErrors(this.#namespace);
@@ -121,8 +142,104 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   #handleMetaChanged = (payload: unknown) => {
     if (payload === undefined) return;
-    this.#updateMeta((payload ?? undefined) as TransportMeta | null | undefined);
+    this.#applyPatch({ type: "meta", meta: (payload ?? null) as TransportMeta | null }, { emit: false });
   };
+  #applySnapshot(snapshot: ProviderSnapshot, options: ApplyOptions = {}) {
+    const emit = options.emit ?? true;
+
+    const wasInitialized = this.#initialized;
+    const prevAccounts = [...this.#accounts];
+
+    this.#updateMeta(snapshot.meta);
+    const effectiveCaip2 = this.#resolveEffectiveCaip2(snapshot.caip2);
+    this.#updateNamespace(effectiveCaip2);
+
+    this.#updateChain(snapshot.chainId);
+    this.#updateAccounts(snapshot.accounts);
+    this.#isUnlocked = typeof snapshot.isUnlocked === "boolean" ? snapshot.isUnlocked : null;
+
+    if (snapshot.connected) {
+      this.#markInitialized();
+    }
+
+    if (!emit) return;
+
+    const didInitialize = !wasInitialized && this.#initialized;
+    if (didInitialize && this.#chainId) {
+      this.emit("connect", { chainId: this.#chainId });
+    }
+
+    const accountsChanged =
+      prevAccounts.length !== this.#accounts.length ||
+      prevAccounts.some((value, index) => value !== this.#accounts[index]);
+    if (accountsChanged) {
+      this.emit("accountsChanged", [...this.#accounts]);
+    }
+  }
+
+  #applyPatch(patch: ProviderPatch, options: ApplyOptions = {}) {
+    const emit = options.emit ?? true;
+
+    const prevChainId = this.#chainId;
+    const prevAccounts = [...this.#accounts];
+    const prevUnlock = this.#isUnlocked;
+
+    switch (patch.type) {
+      case "meta": {
+        this.#updateMeta(patch.meta);
+        break;
+      }
+
+      case "accounts": {
+        this.#updateAccounts(patch.accounts);
+        break;
+      }
+
+      case "unlock": {
+        this.#isUnlocked = patch.isUnlocked;
+        break;
+      }
+
+      case "chain": {
+        if (patch.meta !== undefined) {
+          this.#updateMeta(patch.meta);
+        }
+        const effectiveCaip2 = this.#resolveEffectiveCaip2(patch.caip2);
+        this.#updateNamespace(effectiveCaip2);
+
+        this.#updateChain(patch.chainId);
+
+        if (typeof patch.isUnlocked === "boolean") {
+          this.#isUnlocked = patch.isUnlocked;
+        }
+        break;
+      }
+
+      default: {
+        const _exhaustive: never = patch;
+        return _exhaustive;
+      }
+    }
+
+    if (!emit) return;
+
+    if (patch.type === "chain" && prevChainId !== this.#chainId && this.#chainId) {
+      this.emit("chainChanged", this.#chainId);
+    }
+
+    if (patch.type === "accounts") {
+      const accountsChanged =
+        prevAccounts.length !== this.#accounts.length ||
+        prevAccounts.some((value, index) => value !== this.#accounts[index]);
+      if (accountsChanged) {
+        this.emit("accountsChanged", [...this.#accounts]);
+      }
+    }
+
+    if (patch.type === "unlock" && prevUnlock !== this.#isUnlocked) {
+      this.emit("unlockStateChanged", { isUnlocked: patch.isUnlocked });
+    }
+  }
 
   #createInitializationPromise() {
     this.#initializedPromise = new Promise((resolve, reject) => {
@@ -130,29 +247,20 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       this.#initializedReject = reject;
     });
   }
-
   #syncWithTransportState() {
     const state = this.#transport.getConnectionState();
 
-    this.#updateMeta(state.meta);
-    const resolvedCaip2 = this.#resolveEffectiveCaip2(state.caip2);
-    this.#updateNamespace(resolvedCaip2);
-
-    if (typeof state.chainId === "string") {
-      this.#updateChain(state.chainId);
-    }
-
-    if (state.accounts.length) {
-      this.#updateAccounts(state.accounts.filter((item): item is string => typeof item === "string"));
-    }
-
-    if (typeof state.isUnlocked === "boolean") {
-      this.#isUnlocked = state.isUnlocked;
-    }
-
-    if (state.connected) {
-      this.#markInitialized();
-    }
+    this.#applySnapshot(
+      {
+        connected: state.connected,
+        chainId: state.chainId,
+        caip2: state.caip2,
+        accounts: state.accounts.filter((item): item is string => typeof item === "string"),
+        isUnlocked: typeof state.isUnlocked === "boolean" ? state.isUnlocked : null,
+        meta: state.meta,
+      },
+      { emit: false },
+    );
   }
 
   #updateNamespace(caip2: string | null | undefined) {
@@ -216,30 +324,19 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       meta: TransportMeta | null;
     }>;
 
-    this.#updateMeta(data.meta ?? null);
-    const resolvedCaip2 = this.#resolveEffectiveCaip2(data.caip2);
-    this.#updateNamespace(resolvedCaip2);
-
-    if (typeof data.chainId === "string") {
-      this.#updateChain(data.chainId);
-    }
-
-    if (Array.isArray(data.accounts)) {
-      this.#updateAccounts(data.accounts.filter((item): item is string => typeof item === "string"));
-    }
-    if (typeof data.isUnlocked === "boolean") {
-      this.#isUnlocked = data.isUnlocked;
-    }
-
-    this.#markInitialized();
-
-    if (this.#chainId) {
-      this.emit("connect", { chainId: this.#chainId });
-    }
-
-    if (this.#accounts.length) {
-      this.emit("accountsChanged", [...this.#accounts]);
-    }
+    this.#applySnapshot(
+      {
+        connected: true,
+        chainId: typeof data.chainId === "string" ? data.chainId : null,
+        caip2: typeof data.caip2 === "string" ? data.caip2 : null,
+        accounts: Array.isArray(data.accounts)
+          ? data.accounts.filter((item): item is string => typeof item === "string")
+          : [],
+        isUnlocked: typeof data.isUnlocked === "boolean" ? data.isUnlocked : null,
+        meta: data.meta ?? null,
+      },
+      { emit: true },
+    );
   };
 
   #handleTransportChainChanged = (payload: unknown) => {
@@ -254,45 +351,88 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
     if (typeof chainId !== "string") return;
 
-    this.#updateChain(chainId);
-    this.#updateMeta((meta ?? undefined) as TransportMeta | null | undefined);
-    const resolvedCaip2 = this.#resolveEffectiveCaip2(caip2);
-    this.#updateNamespace(resolvedCaip2);
+    const patch: ProviderPatch = { type: "chain", chainId };
 
+    if (typeof caip2 === "string" || caip2 === null) {
+      patch.caip2 = caip2;
+    }
     if (typeof isUnlocked === "boolean") {
-      this.#isUnlocked = isUnlocked;
+      patch.isUnlocked = isUnlocked;
+    }
+    if (meta === null || (meta && typeof meta === "object")) {
+      patch.meta = meta as TransportMeta | null;
     }
 
-    this.emit("chainChanged", this.#chainId);
+    this.#applyPatch(patch, { emit: true });
   };
-
   #handleTransportAccountsChanged = (accounts: unknown) => {
     if (!Array.isArray(accounts)) return;
     const next = accounts.filter((item): item is string => typeof item === "string");
-    this.#updateAccounts(next);
-    this.emit("accountsChanged", [...this.#accounts]);
+    this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
   };
 
   #handleUnlockStateChanged = (payload: unknown) => {
     if (!payload || typeof payload !== "object") return;
     const { isUnlocked } = payload as { isUnlocked?: unknown };
     if (typeof isUnlocked !== "boolean") return;
-    this.#isUnlocked = isUnlocked;
-    this.emit("unlockStateChanged", { isUnlocked });
+    this.#applyPatch({ type: "unlock", isUnlocked }, { emit: true });
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
     const disconnectError = error ?? this.#resolveProviderErrors().disconnected();
 
     this.#resetInitialization(disconnectError);
-    this.#updateChain(null);
-    this.#updateAccounts([]);
-    this.#updateNamespace(null);
-    this.#isUnlocked = null;
-    this.#updateMeta(null);
+    this.#applySnapshot(
+      {
+        connected: false,
+        chainId: null,
+        caip2: null,
+        accounts: [],
+        isUnlocked: null,
+        meta: null,
+      },
+      { emit: false },
+    );
 
     this.emit("disconnect", disconnectError);
   };
+  #kickoffConnect() {
+    if (this.#connectInFlight) return;
+
+    this.#connectInFlight = this.#transport
+      .connect()
+      .catch(() => {
+        // Best-effort: readiness is enforced by ready timeout.
+      })
+      .finally(() => {
+        this.#connectInFlight = null;
+      });
+  }
+
+  async #waitForReady() {
+    if (this.#initialized) return;
+
+    this.#kickoffConnect();
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.#initializedPromise,
+        new Promise<void>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(
+              this.#resolveProviderErrors().custom({
+                code: 4900,
+                message: "Provider is initializing. Try again later.",
+              }),
+            );
+          }, this.#readyTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
 
   #buildRequestArgs(method: string, params?: RequestArguments["params"]): RequestArguments {
     return params === undefined ? { method } : { method, params };
@@ -348,7 +488,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
     if (!this.#initialized) {
       try {
-        await this.#initializedPromise;
+        await this.#waitForReady();
       } catch (error) {
         throw this.#toRpcError(error);
       }
@@ -358,8 +498,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       const result = await this.#transport.request(args);
       if (method === "eth_requestAccounts" && Array.isArray(result)) {
         const next = result.filter((item): item is string => typeof item === "string");
-        this.#updateAccounts(next);
-        this.emit("accountsChanged", [...this.#accounts]);
+        this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
       }
       return result;
     } catch (error) {

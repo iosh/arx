@@ -449,6 +449,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   request = async (args: RequestArguments) => {
+    console.log("request", args);
     const rpcErrors = this.#resolveRpcErrors();
     const providerErrors = this.#resolveProviderErrors();
     if (!args || typeof args !== "object" || Array.isArray(args)) {
@@ -478,6 +479,12 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
     if (!this.#initialized && READONLY_EARLY.has(method)) {
       if (method === "eth_chainId") {
+        if (this.#chainId) return this.#chainId;
+        try {
+          await this.#waitForReady();
+        } catch (error) {
+          throw this.#toRpcError(error);
+        }
         if (this.#chainId) return this.#chainId;
         throw providerErrors.disconnected();
       }

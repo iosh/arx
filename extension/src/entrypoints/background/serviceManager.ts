@@ -373,13 +373,25 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
 
       engine.push(
         createAsyncMiddleware(async (req, _res, next) => {
+          const origin = (req as { origin?: string }).origin ?? "unknown://";
           const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
           const definition = resolveMethodDefinition(req.method, rpcContext ?? undefined);
           if (!definition?.approvalRequired) {
             return next();
           }
-
-          // TODO: integrate approval UI/flow here
+          if (!isInternalOrigin(origin, extensionOrigin)) {
+            try {
+              services.attention.requestAttention({
+                reason: "approval_required",
+                origin,
+                method: req.method,
+                chainRef: rpcContext?.chainRef ?? null,
+                namespace: rpcContext?.namespace ?? null,
+              });
+            } catch {
+              // ignore
+            }
+          }
           return next();
         }),
       );

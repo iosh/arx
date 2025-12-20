@@ -103,4 +103,17 @@ describe("InMemoryAttentionService", () => {
 
     expect(stateChanged.length).toBe(before + 1);
   });
+
+  it("accepts approval_required reason", () => {
+    const { service, requested, stateChanged } = setup();
+    const res = service.requestAttention({
+      reason: "approval_required",
+      origin: "https://dapp",
+      method: "personal_sign",
+    });
+
+    expect(res.enqueued).toBe(true);
+    expect(requested.length).toBe(1);
+    expect(stateChanged.length).toBe(1);
+  });
 });

@@ -1,4 +1,4 @@
-export type AttentionReason = "unlock_required";
+export type AttentionReason = "unlock_required" | "approval_required";
 
 export type AttentionRequest = {
   reason: AttentionReason;

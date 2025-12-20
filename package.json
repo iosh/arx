@@ -21,9 +21,9 @@
     "test": "turbo test"
   },
   "devDependencies": {
-    "turbo": "2.5.6",
-    "@biomejs/biome": "2.2.2",
-    "typescript": "5.9.2",
-    "vitest": "3.2.4"
+    "turbo": "2.7.0",
+    "@biomejs/biome": "2.3.10",
+    "typescript": "5.9.3",
+    "vitest": "4.0.16"
   }
 }

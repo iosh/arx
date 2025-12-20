@@ -1,8 +1,10 @@
-import { DEFAULT_NAMESPACE, type JsonRpcParams, type JsonRpcRequest, type JsonRpcVersion2 } from "@arx/core";
+import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "./types/eip1193.js";
 import type { Transport, TransportMeta } from "./types/transport.js";
+
+const DEFAULT_NAMESPACE = "eip155" as const;
 
 const PROVIDER_INFO = {
   uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",

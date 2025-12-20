@@ -1,4 +1,4 @@
-import { getProviderErrors } from "@arx/core";
+import { getProviderErrors } from "@arx/core/errors";
 import { EventEmitter } from "@arx/provider";
 import type {
   EIP1193ProviderRpcError,

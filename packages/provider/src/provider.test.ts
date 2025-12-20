@@ -1,4 +1,9 @@
-import { evmProviderErrors, evmRpcErrors, registerChainErrorFactory, unregisterChainErrorFactory } from "@arx/core";
+import {
+  evmProviderErrors,
+  evmRpcErrors,
+  registerChainErrorFactory,
+  unregisterChainErrorFactory,
+} from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { describe, expect, it, vi } from "vitest";
 import { EthereumProvider } from "./provider.js";

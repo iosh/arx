@@ -1,5 +1,5 @@
-import type { EIP1193Provider, TransportMeta, TransportState } from "@arx/provider/types";
 import type { InpageTransport } from "@arx/extension-provider/inpage";
+import type { EIP1193Provider, TransportMeta, TransportState } from "@arx/provider/types";
 import { createProviderRegistry, EIP155_NAMESPACE, type ProviderEntry } from "./providerRegistry";
 
 const WINDOW_ETH_PROP = "ethereum";

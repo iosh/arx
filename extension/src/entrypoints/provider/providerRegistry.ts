@@ -1,6 +1,6 @@
+import type { InpageTransport } from "@arx/extension-provider/inpage";
 import { EthereumProvider } from "@arx/provider/provider";
 import type { EIP1193Provider } from "@arx/provider/types";
-import type { InpageTransport } from "@arx/extension-provider/inpage";
 import { createEvmProxy } from "./evmProxy";
 
 export const EIP155_NAMESPACE = "eip155" as const;

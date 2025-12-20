@@ -1,7 +1,6 @@
-import type { InpageTransport } from "@arx/extension-provider/inpage";
-import { EthereumProvider } from "@arx/provider/provider";
-import type { EIP1193Provider } from "@arx/provider/types";
-import { createEvmProxy } from "./evmProxy";
+import { EthereumProvider } from "../provider.js";
+import type { EIP1193Provider, Transport } from "../types/index.js";
+import { createEvmProxy } from "../evm/index.js";
 
 export const EIP155_NAMESPACE = "eip155" as const;
 
@@ -11,7 +10,7 @@ export type ProviderEntry = {
   info: typeof EthereumProvider.providerInfo;
 };
 
-export type ProviderFactory = (opts: { transport: InpageTransport }) => ProviderEntry;
+export type ProviderFactory = (opts: { transport: Transport }) => ProviderEntry;
 
 export type ProviderRegistry = {
   factories: Record<string, ProviderFactory>;

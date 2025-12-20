@@ -11,7 +11,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types/index.ts",
-    "./provider": "./src/provider.ts"
+    "./provider": "./src/provider.ts",
+    "./host": "./src/host/index.ts",
+    "./registry": "./src/registry/index.ts",
+    "./evm": "./src/evm/index.ts"
   },
   "devDependencies": {
     "typescript": "catalog:"

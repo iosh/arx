@@ -1,8 +1,9 @@
 import { CHANNEL } from "@arx/extension-provider/constants";
 import { InpageTransport } from "@arx/extension-provider/inpage";
+import type { ProviderHostWindow } from "@arx/provider/host";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProviderHost } from "./providerHost";
+import { createProviderHost } from "@arx/provider/host";
 
 describe("ProviderHost EIP-6963", () => {
   let dom: JSDOM;
@@ -17,7 +18,7 @@ describe("ProviderHost EIP-6963", () => {
   });
   it("announces provider on requestProvider", async () => {
     const transport = new InpageTransport();
-    const host = new ProviderHost(transport);
+    const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const listener = vi.fn();
     window.addEventListener("eip6963:announceProvider", listener);
 
@@ -70,7 +71,7 @@ describe("ProviderHost EIP-6963", () => {
 
   it("handles multiple requestProvider calls idempotently", async () => {
     const transport = new InpageTransport();
-    const host = new ProviderHost(transport);
+    const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const listener = vi.fn();
     window.addEventListener("eip6963:announceProvider", listener);
 
@@ -122,7 +123,7 @@ describe("ProviderHost EIP-6963", () => {
 
   it("reconnects and syncs providers after disconnect", async () => {
     const transport = new InpageTransport();
-    const host = new ProviderHost(transport);
+    const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
 
     // Initial connection
     const messageHandler = (event: MessageEvent) => {
@@ -190,7 +191,7 @@ describe("ProviderHost EIP-6963", () => {
 
   it("exposes wallet/metamask provider state helpers", async () => {
     const transport = new InpageTransport();
-    const host = new ProviderHost(transport);
+    const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const messageHandler = (event: MessageEvent) => {
       const data = event.data;
       if (data?.channel === CHANNEL && data?.type === "handshake") {

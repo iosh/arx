@@ -1,8 +1,6 @@
-import type { EthereumProvider } from "@arx/provider/provider";
-import type { RequestArguments } from "@arx/provider/types";
+import type { EthereumProvider } from "../provider.js";
+import type { RequestArguments } from "../types/eip1193.js";
 
-// Protected methods that cannot be overwritten by dApps
-// Prevents malicious sites from hijacking core provider methods
 const PROTECTED_METHODS = new Set<PropertyKey>([
   "request",
   "send",
@@ -21,14 +19,12 @@ const PROTECTED_METHODS = new Set<PropertyKey>([
 export const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
   const getNetworkVersion = () => target.getProviderState().networkVersion;
 
-  // MetaMask-compatible experimental API shim.
-  // Some dApps rely on these legacy/private APIs for detection.
   const metamaskShim = Object.freeze({
     isUnlocked: () => Promise.resolve(target.getProviderState().isUnlocked),
   });
 
   const handler: ProxyHandler<EthereumProvider> = {
-    get: (instance, property, receiver) => {
+    get: (instance, property) => {
       switch (property) {
         case "selectedAddress":
           return instance.selectedAddress;
@@ -39,14 +35,15 @@ export const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
         case "isMetaMask":
           return true;
         case "wallet_getPermissions":
-          return (params?: RequestArguments["params"]) => instance.request({ method: "wallet_getPermissions", params });
+          return () => instance.request({ method: "wallet_getPermissions" });
         case "wallet_requestPermissions":
           return (params?: RequestArguments["params"]) =>
-            instance.request({ method: "wallet_requestPermissions", params });
+            params === undefined
+              ? instance.request({ method: "wallet_requestPermissions" })
+              : instance.request({ method: "wallet_requestPermissions", params });
         case "_metamask":
           return metamaskShim;
         default:
-          // Ensure class getters using #private fields see the real instance as receiver.
           return Reflect.get(instance, property, instance);
       }
     },
@@ -64,22 +61,16 @@ export const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
       }
       return property in instance;
     },
-    set: (instance, property, value, receiver) => {
-      if (PROTECTED_METHODS.has(property)) {
-        return true;
-      }
+    set: (instance, property, value) => {
+      if (PROTECTED_METHODS.has(property)) return true;
       return Reflect.set(instance, property, value, instance);
     },
     defineProperty: (instance, property, descriptor) => {
-      if (PROTECTED_METHODS.has(property)) {
-        return true;
-      }
+      if (PROTECTED_METHODS.has(property)) return true;
       return Reflect.defineProperty(instance, property, descriptor);
     },
     deleteProperty: (instance, property) => {
-      if (PROTECTED_METHODS.has(property)) {
-        return true;
-      }
+      if (PROTECTED_METHODS.has(property)) return true;
       return Reflect.deleteProperty(instance, property);
     },
     getOwnPropertyDescriptor: (instance, property) => {
@@ -91,27 +82,13 @@ export const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
         };
       }
       if (property === "networkVersion") {
-        return {
-          configurable: true,
-          enumerable: true,
-          get: () => getNetworkVersion(),
-        };
+        return { configurable: true, enumerable: true, get: () => getNetworkVersion() };
       }
       if (property === "isMetaMask") {
-        return {
-          configurable: true,
-          enumerable: true,
-          value: true,
-          writable: false,
-        };
+        return { configurable: true, enumerable: true, value: true, writable: false };
       }
       if (property === "_metamask") {
-        return {
-          configurable: true,
-          enumerable: false,
-          value: metamaskShim,
-          writable: false,
-        };
+        return { configurable: true, enumerable: false, value: metamaskShim, writable: false };
       }
       return Reflect.getOwnPropertyDescriptor(instance, property);
     },

@@ -1,5 +1,5 @@
-import { CHANNEL } from "@arx/provider-extension/constants";
-import { InpageTransport } from "@arx/provider-extension/inpage";
+import { CHANNEL } from "@arx/extension-provider/constants";
+import { InpageTransport } from "@arx/extension-provider/inpage";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderHost } from "./providerHost";

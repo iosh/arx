@@ -44,15 +44,15 @@ importers:
       '@arx/core':
         specifier: workspace:*
         version: link:../packages/core
-      '@arx/provider-core':
+      '@arx/extension-provider':
         specifier: workspace:*
-        version: link:../packages/adapters/provider-core
-      '@arx/provider-extension':
+        version: link:../packages/extension-provider
+      '@arx/provider':
         specifier: workspace:*
-        version: link:../packages/adapters/provider-extension
+        version: link:../packages/provider
       '@arx/storage-dexie':
         specifier: workspace:*
-        version: link:../packages/adapters/storage-dexie
+        version: link:../packages/storage-dexie
       '@tamagui/config':
         specifier: 1.138.0
         version: 1.138.0(react-dom@19.1.1(react@19.1.1))(react-native-reanimated@4.1.5(@babel/core@7.28.5)(react-native-worklets@0.6.1(@babel/core@7.28.5)(react-native@0.82.1(@babel/core@7.28.5)(@types/react@19.1.12)(react@19.1.1))(react@19.1.1))(react-native@0.82.1(@babel/core@7.28.5)(@types/react@19.1.12)(react@19.1.1))(react@19.1.1))(react-native@0.82.1(@babel/core@7.28.5)(@types/react@19.1.12)(react@19.1.1))(react@19.1.1)
@@ -115,63 +115,6 @@ importers:
         specifier: 0.20.11
         version: 0.20.11(@types/node@24.3.1)(jiti@2.5.1)(rollup@4.52.5)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.1)
 
-  packages/adapters/provider-core:
-    dependencies:
-      '@arx/core':
-        specifier: workspace:*
-        version: link:../../core
-      eventemitter3:
-        specifier: 'catalog:'
-        version: 5.0.1
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.2
-
-  packages/adapters/provider-extension:
-    dependencies:
-      '@arx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@arx/provider-core':
-        specifier: workspace:*
-        version: link:../provider-core
-      webextension-polyfill:
-        specifier: 'catalog:'
-        version: 0.12.0
-    devDependencies:
-      '@types/jsdom':
-        specifier: 27.0.0
-        version: 27.0.0
-      '@types/webextension-polyfill':
-        specifier: 'catalog:'
-        version: 0.12.3
-      jsdom:
-        specifier: 27.2.0
-        version: 27.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.2
-
-  packages/adapters/storage-dexie:
-    dependencies:
-      '@arx/core':
-        specifier: workspace:*
-        version: link:../../core
-      dexie:
-        specifier: 4.2.0
-        version: 4.2.0
-    devDependencies:
-      fake-indexeddb:
-        specifier: 6.2.2
-        version: 6.2.2
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.2
-      vitest:
-        specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.3.1)(jiti@2.5.1)(jsdom@27.2.0)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.1)
-
   packages/core:
     dependencies:
       '@metamask/json-rpc-engine':
@@ -214,6 +157,63 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
+
+  packages/extension-provider:
+    dependencies:
+      '@arx/core':
+        specifier: workspace:*
+        version: link:../core
+      '@arx/provider':
+        specifier: workspace:*
+        version: link:../provider
+      webextension-polyfill:
+        specifier: 'catalog:'
+        version: 0.12.0
+    devDependencies:
+      '@types/jsdom':
+        specifier: 27.0.0
+        version: 27.0.0
+      '@types/webextension-polyfill':
+        specifier: 'catalog:'
+        version: 0.12.3
+      jsdom:
+        specifier: 27.2.0
+        version: 27.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+
+  packages/provider:
+    dependencies:
+      '@arx/core':
+        specifier: workspace:*
+        version: link:../core
+      eventemitter3:
+        specifier: 'catalog:'
+        version: 5.0.1
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+
+  packages/storage-dexie:
+    dependencies:
+      '@arx/core':
+        specifier: workspace:*
+        version: link:../core
+      dexie:
+        specifier: 4.2.0
+        version: 4.2.0
+    devDependencies:
+      fake-indexeddb:
+        specifier: 6.2.2
+        version: 6.2.2
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.3.1)(jiti@2.5.1)(jsdom@27.2.0)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.1)
 
 packages:
 

@@ -1,4 +1,4 @@
-import type { TransportMeta, TransportRequest, TransportResponse } from "@arx/provider-core/types";
+import type { TransportMeta, TransportRequest, TransportResponse } from "@arx/provider/types";
 import type { CHANNEL } from "./constants.js";
 
 export type HandshakeAckPayload = {

@@ -1,5 +1,5 @@
 {
-  "name": "@arx/provider-extension",
+  "name": "@arx/extension-provider",
   "version": "1.0.0",
   "description": "",
   "type": "module",
@@ -9,12 +9,11 @@
   "exports": {
     "./inpage": "./src/inpage.ts",
     "./content": "./src/content.ts",
-    "./background": "./src/background.ts",
     "./constants": "./src/constants.ts",
     "./types": "./src/types.ts"
   },
   "dependencies": {
-    "@arx/provider-core": "workspace:*",
+    "@arx/provider": "workspace:*",
     "webextension-polyfill": "catalog:",
     "@arx/core": "workspace:*"
   },

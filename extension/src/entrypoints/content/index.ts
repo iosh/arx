@@ -1,4 +1,4 @@
-import { bootstrapContent } from "@arx/provider-extension/content";
+import { bootstrapContent } from "@arx/extension-provider/content";
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { injectScript } from "wxt/utils/inject-script";
 

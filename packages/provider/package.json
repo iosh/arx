@@ -1,5 +1,5 @@
 {
-  "name": "@arx/provider-core",
+  "name": "@arx/provider",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",

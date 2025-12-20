@@ -1,5 +1,5 @@
 import { getProviderErrors } from "@arx/core";
-import { EventEmitter } from "@arx/provider-core";
+import { EventEmitter } from "@arx/provider";
 import type {
   EIP1193ProviderRpcError,
   RequestArguments,
@@ -8,7 +8,7 @@ import type {
   TransportRequest,
   TransportResponse,
   TransportState,
-} from "@arx/provider-core/types";
+} from "@arx/provider/types";
 import { CHANNEL } from "./constants.js";
 import type { Envelope } from "./types.js";
 

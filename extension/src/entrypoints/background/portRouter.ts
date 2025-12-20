@@ -7,9 +7,9 @@ import {
   type JsonRpcParams,
   type JsonRpcRequest,
 } from "@arx/core";
-import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider-core/types";
-import { CHANNEL } from "@arx/provider-extension/constants";
-import type { Envelope } from "@arx/provider-extension/types";
+import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
+import { CHANNEL } from "@arx/extension-provider/constants";
+import type { Envelope } from "@arx/extension-provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { resolveOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";

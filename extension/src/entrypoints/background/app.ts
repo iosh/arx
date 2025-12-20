@@ -1,4 +1,4 @@
-import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider-core/types";
+import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { getExtensionOrigin } from "./origin";

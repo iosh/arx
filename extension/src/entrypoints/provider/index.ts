@@ -1,4 +1,4 @@
-import { InpageTransport } from "@arx/provider-extension/inpage";
+import { InpageTransport } from "@arx/extension-provider/inpage";
 import { defineUnlistedScript } from "wxt/utils/define-unlisted-script";
 import { asWindowWithHost, ProviderHost } from "./providerHost";
 

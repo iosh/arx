@@ -547,8 +547,17 @@ describe("EthereumProvider transport meta integration", () => {
     };
     const { provider } = createProvider(initial);
 
-    await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({ code: 4900 });
-    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+    vi.useFakeTimers();
+    try {
+      const chainIdPromise = provider.request({ method: "eth_chainId" });
+      const chainIdAssertion = expect(chainIdPromise).rejects.toMatchObject({ code: 4900 });
+      await vi.advanceTimersByTimeAsync(5_001);
+      await chainIdAssertion;
+
+      await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("returns provider snapshot for metamask_getProviderState without transport roundtrip", async () => {
     const { transport, provider } = createProvider();

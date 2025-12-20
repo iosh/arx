@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@arx/core": "workspace:*",
-    "@arx/provider-core": "workspace:*",
-    "@arx/provider-extension": "workspace:*",
+    "@arx/provider": "workspace:*",
+    "@arx/extension-provider": "workspace:*",
     "@arx/storage-dexie": "workspace:*",
     "@tamagui/config": "1.138.0",
     "@tanstack/react-query": "^5.90.9",

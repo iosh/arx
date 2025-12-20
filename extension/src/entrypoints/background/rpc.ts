@@ -1,5 +1,5 @@
 import type { Json, JsonRpcError, ProviderErrorFactory, RpcErrorFactory, RpcInvocationContext } from "@arx/core";
-import type { TransportMeta } from "@arx/provider-core/types";
+import type { TransportMeta } from "@arx/provider/types";
 import type { PortContext } from "./types";
 
 export type ProviderErrorResolver = (context?: RpcInvocationContext) => ProviderErrorFactory;

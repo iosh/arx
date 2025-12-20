@@ -449,7 +449,6 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   request = async (args: RequestArguments) => {
-    console.log("request", args);
     const rpcErrors = this.#resolveRpcErrors();
     const providerErrors = this.#resolveProviderErrors();
     if (!args || typeof args !== "object" || Array.isArray(args)) {

@@ -1,5 +1,5 @@
 import type { ProviderErrorFactory, RpcErrorFactory, RpcInvocationContext, UnlockReason } from "@arx/core";
-import type { TransportMeta } from "@arx/provider-core/types";
+import type { TransportMeta } from "@arx/provider/types";
 
 export type SessionMessage =
   | { type: "session:getStatus" }

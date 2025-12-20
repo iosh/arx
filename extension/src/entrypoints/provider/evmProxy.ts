@@ -1,5 +1,5 @@
-import type { EthereumProvider } from "@arx/provider-core/provider";
-import type { RequestArguments } from "@arx/provider-core/types";
+import type { EthereumProvider } from "@arx/provider/provider";
+import type { RequestArguments } from "@arx/provider/types";
 
 // Protected methods that cannot be overwritten by dApps
 // Prevents malicious sites from hijacking core provider methods

@@ -1,8 +1,7 @@
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { CHANNEL } from "../protocol/channel.js";
-import type { Envelope } from "../protocol/envelope.js";
-import { resolveProtocolVersion } from "../protocol/envelope.js";
+import { type Envelope, isEnvelope, resolveProtocolVersion } from "../protocol/envelope.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import type { EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
 import type {
@@ -49,7 +48,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
   #meta: TransportMeta | null = null;
-  #timeoutMs = 120_000;
+  #requestTimeoutMs = 120_000;
   #handshakeTimeoutMs = DEFAULT_HANDSHAKE_TIMEOUT_MS;
   #handshakeId: string | null = null;
   #sessionId: string;
@@ -58,7 +57,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     {
       resolve: (value: TransportResponse) => void;
       reject: (reason?: EIP1193ProviderRpcError) => void;
-      timer?: number;
+      timeoutId?: number;
     }
   >();
 
@@ -67,7 +66,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   #handshakePromise: Promise<void> | null = null;
   #handshakeResolve?: (() => void) | undefined;
   #handshakeReject?: ((reason?: unknown) => void) | undefined;
-  #handshakeTimer: number | undefined;
+  #handshakeTimeoutId: number | undefined;
 
   constructor(options: WindowPostMessageTransportOptions = {}) {
     super();
@@ -79,7 +78,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
 
     // session is rotated per `connect()` attempt (not per instance lifetime).
     this.#sessionId = createId();
-    window.addEventListener("message", this.#handleMessage);
+    window.addEventListener("message", this.#handleWindowMessage);
   }
 
   getConnectionState(): TransportState {
@@ -93,31 +92,114 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     };
   }
 
-  #clearHandshakeTimer() {
-    if (this.#handshakeTimer === undefined) return;
-    window.clearTimeout(this.#handshakeTimer);
-    this.#handshakeTimer = undefined;
+  isConnected(): boolean {
+    return this.#connected;
   }
 
-  #resolveHandshake() {
-    if (!this.#handshakePromise) return;
+  async request(args: RequestArguments, options?: TransportRequestOptions): Promise<unknown> {
+    if (!this.#connected) {
+      throw this.#getProviderErrors().disconnected();
+    }
 
-    this.#clearHandshakeTimer();
-    this.#handshakeResolve?.();
-    this.#handshakePromise = null;
-    this.#handshakeResolve = undefined;
-    this.#handshakeReject = undefined;
+    const { method, params } = args;
+
+    const request: TransportRequest = {
+      id: (this.#id++).toString(),
+      jsonrpc: "2.0",
+      method,
+      ...(params === undefined ? {} : { params }),
+    };
+    const id = request.id as string;
+    const envelope: Envelope = {
+      channel: CHANNEL,
+      sessionId: this.#sessionId,
+      type: "request",
+      id,
+      payload: request,
+    };
+
+    const rpc = await new Promise<TransportResponse>((resolve, reject) => {
+      const timeoutMs = options?.timeoutMs ?? this.#requestTimeoutMs;
+      const timeoutId = window.setTimeout(() => {
+        this.#pendingRequests.delete(id);
+        const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
+        reject(getRpcErrors(namespace).internal({ message: "Request timed out" }));
+      }, timeoutMs);
+
+      this.#pendingRequests.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeoutId);
+          resolve(value);
+        },
+        reject: (reason) => {
+          clearTimeout(timeoutId);
+          reject(reason);
+        },
+        timeoutId,
+      });
+
+      window.postMessage(envelope, window.location.origin);
+    });
+
+    if ("error" in rpc) {
+      throw Object.assign(new Error(rpc.error.message), {
+        code: rpc.error.code,
+        data: rpc.error.data,
+      });
+    }
+    return rpc.result;
   }
 
-  #rejectHandshake(error?: unknown) {
-    if (!this.#handshakePromise) return;
+  retryConnect = async () => {
+    if (this.#connected) return;
+    if (this.#handshakePromise) {
+      this.#sendHandshake();
+      return this.#handshakePromise;
+    }
+    return this.connect();
+  };
 
-    this.#clearHandshakeTimer();
-    this.#handshakeReject?.(error);
-    this.#handshakePromise = null;
-    this.#handshakeResolve = undefined;
-    this.#handshakeReject = undefined;
-  }
+  connect = async () => {
+    if (this.#connected) {
+      return;
+    }
+    if (this.#handshakePromise) {
+      return this.#handshakePromise;
+    }
+
+    // Start a fresh session for each (re)connect attempt to isolate stale messages.
+    this.#sessionId = createId();
+    this.#handshakeId = createId();
+    this.#handshakePromise = new Promise<void>((resolve, reject) => {
+      this.#handshakeResolve = resolve;
+      this.#handshakeReject = reject;
+    });
+
+    this.#handshakeTimeoutId = window.setTimeout(() => {
+      const providerErrors = this.#getProviderErrors();
+      this.#handshakeId = null;
+      this.#rejectHandshake(
+        providerErrors.custom({
+          code: 4900,
+          message: "Handshake timed out. Try again.",
+        }),
+      );
+    }, this.#handshakeTimeoutMs);
+
+    this.#sendHandshake();
+
+    await this.#handshakePromise;
+  };
+
+  disconnect = async () => {
+    this.#handleDisconnect();
+  };
+
+  destroy = () => {
+    this.#handleDisconnect();
+    window.removeEventListener("message", this.#handleWindowMessage);
+    this.removeAllListeners();
+  };
 
   #normalizeAccounts(accounts: unknown): string[] {
     if (!Array.isArray(accounts)) return [];
@@ -129,7 +211,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     return getProviderErrors(namespace);
   }
 
-  #setConnection(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
+  #applyHandshakePayload(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
     const accounts = this.#normalizeAccounts(payload.accounts);
     this.#connected = true;
     this.#caip2 = payload.caip2;
@@ -150,13 +232,13 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     }
   }
 
-  #setAccounts(accounts: string[]) {
+  #updateAccounts(accounts: string[]) {
     const next = this.#normalizeAccounts(accounts);
     this.#accounts = next;
     this.emit("accountsChanged", next);
   }
 
-  #setChain(update: ChainUpdatePayload) {
+  #updateChain(update: ChainUpdatePayload) {
     if (typeof update.chainId !== "string") {
       return;
     }
@@ -180,6 +262,32 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     });
   }
 
+  #clearHandshakeTimeout() {
+    if (this.#handshakeTimeoutId === undefined) return;
+    window.clearTimeout(this.#handshakeTimeoutId);
+    this.#handshakeTimeoutId = undefined;
+  }
+
+  #resolveHandshake() {
+    if (!this.#handshakePromise) return;
+
+    this.#clearHandshakeTimeout();
+    this.#handshakeResolve?.();
+    this.#handshakePromise = null;
+    this.#handshakeResolve = undefined;
+    this.#handshakeReject = undefined;
+  }
+
+  #rejectHandshake(error?: unknown) {
+    if (!this.#handshakePromise) return;
+
+    this.#clearHandshakeTimeout();
+    this.#handshakeReject?.(error);
+    this.#handshakePromise = null;
+    this.#handshakeResolve = undefined;
+    this.#handshakeReject = undefined;
+  }
+
   #handleDisconnect = (reason?: unknown) => {
     if (!this.#connected && !this.#handshakePromise) {
       return;
@@ -197,6 +305,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.#isUnlocked = null;
     this.#meta = null;
     this.#handshakeId = null;
+    this.#sessionId = createId();
 
     this.#rejectHandshake(error);
     for (const [id, { reject }] of this.#pendingRequests) {
@@ -206,138 +315,94 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.emit("disconnect", error);
   };
 
-  async request(args: RequestArguments, options?: TransportRequestOptions): Promise<unknown> {
-    if (!this.#connected) {
-      throw this.#getProviderErrors().disconnected();
+  #handleHandshakeAckMessage = (payload: unknown) => {
+    if (!this.#handshakePromise) return;
+    if (!this.#handshakeId) return;
+    if (!isConnectPayload(payload)) return;
+    if (payload.handshakeId !== this.#handshakeId) return;
+
+    const incomingVersion = resolveProtocolVersion(payload.protocolVersion);
+    if (incomingVersion !== PROTOCOL_VERSION) {
+      const providerErrors = this.#getProviderErrors();
+      this.#handshakeId = null;
+      this.#rejectHandshake(
+        providerErrors.custom({
+          code: 4900,
+          message: `Unsupported protocol version: ${String(incomingVersion)}`,
+        }),
+      );
+      return;
     }
 
-    const { method, params } = args;
+    this.#applyHandshakePayload(payload, { emitConnect: true });
+  };
 
-    const request: TransportRequest = {
-      id: (this.#id++).toString(),
-      jsonrpc: "2.0",
-      method,
-      ...(params === undefined ? {} : { params }),
-    };
-    const id = request.id as string;
-    const env: Envelope = { channel: CHANNEL, sessionId: this.#sessionId, type: "request", id, payload: request };
+  #handleResponseMessage = (id: string, payload: TransportResponse) => {
+    const entry = this.#pendingRequests.get(id);
+    if (!entry) return;
+    this.#pendingRequests.delete(id);
+    entry.resolve(payload);
+  };
 
-    const rpc = await new Promise<TransportResponse>((resolve, reject) => {
-      const timeoutMs = options?.timeoutMs ?? this.#timeoutMs;
-      const timer = window.setTimeout(() => {
-        this.#pendingRequests.delete(id);
-        const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
-        reject(getRpcErrors(namespace).internal({ message: "Request timed out" }));
-      }, timeoutMs);
+  #handleEventMessage = (payload: { event: string; params?: unknown[] }) => {
+    const { event: eventName, params = [] } = payload;
 
-      this.#pendingRequests.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        reject: (reason) => {
-          clearTimeout(timer);
-          reject(reason);
-        },
-        timer,
-      });
+    switch (eventName) {
+      case "accountsChanged": {
+        const [accounts] = params;
+        if (Array.isArray(accounts)) {
+          this.#updateAccounts(accounts);
+        }
+        break;
+      }
+      case "chainChanged": {
+        const [update] = params;
+        if (update && typeof update === "object" && typeof (update as { chainId?: unknown }).chainId === "string") {
+          this.#updateChain(update as ChainUpdatePayload);
+        }
+        break;
+      }
+      case "session:locked": {
+        this.#isUnlocked = false;
+        this.#updateAccounts([]);
+        this.emit("unlockStateChanged", { isUnlocked: false, payload: params[0] });
+        break;
+      }
+      case "session:unlocked": {
+        this.#isUnlocked = true;
+        this.emit("unlockStateChanged", { isUnlocked: true, payload: params[0] });
+        break;
+      }
+      case "disconnect":
+        this.#handleDisconnect(params[0]);
+        break;
 
-      window.postMessage(env, window.location.origin);
-    });
-
-    if ("error" in rpc) {
-      throw Object.assign(new Error(rpc.error.message), {
-        code: rpc.error.code,
-        data: rpc.error.data,
-      });
+      default:
+        this.emit(eventName, ...params);
     }
-    return rpc.result;
-  }
+  };
 
-  #handleMessage = (event: MessageEvent) => {
+  #handleWindowMessage = (event: MessageEvent) => {
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
 
-    const data = event.data as Envelope | undefined;
-
-    if (!data || typeof data !== "object" || data?.channel !== CHANNEL) return;
+    const data = event.data;
+    if (!isEnvelope(data)) return;
     if (data.sessionId !== this.#sessionId) return;
 
     switch (data.type) {
       case "handshake_ack": {
-        if (!this.#handshakePromise) return;
-        if (!this.#handshakeId) return;
-        if (!isConnectPayload(data.payload)) return;
-        if (data.payload.handshakeId !== this.#handshakeId) return;
-
-        const incomingVersion = resolveProtocolVersion(data.payload.protocolVersion);
-        if (incomingVersion !== PROTOCOL_VERSION) {
-          const providerErrors = this.#getProviderErrors();
-          this.#handshakeId = null;
-          this.#rejectHandshake(
-            providerErrors.custom({
-              code: 4900,
-              message: `Unsupported protocol version: ${String(incomingVersion)}`,
-            }),
-          );
-          return;
-        }
-
-        this.#setConnection(data.payload, { emitConnect: true });
+        this.#handleHandshakeAckMessage(data.payload);
         break;
       }
 
       case "response": {
-        const { id, payload } = data;
-        const entry = this.#pendingRequests.get(id);
-        if (!entry) return;
-        this.#pendingRequests.delete(id);
-        entry.resolve(payload);
+        this.#handleResponseMessage(data.id, data.payload);
         break;
       }
 
       case "event": {
-        const { event: eventName, params = [] } = data.payload;
-
-        switch (eventName) {
-          case "accountsChanged": {
-            const [accounts] = params;
-            if (Array.isArray(accounts)) {
-              this.#setAccounts(accounts);
-            }
-            break;
-          }
-          case "chainChanged": {
-            const [payload] = params;
-            if (
-              payload &&
-              typeof payload === "object" &&
-              typeof (payload as { chainId?: unknown }).chainId === "string"
-            ) {
-              this.#setChain(payload as ChainUpdatePayload);
-            }
-            break;
-          }
-          case "session:locked": {
-            this.#isUnlocked = false;
-
-            this.#setAccounts([]);
-            this.emit("unlockStateChanged", { isUnlocked: false, payload: params[0] });
-            break;
-          }
-          case "session:unlocked": {
-            this.#isUnlocked = true;
-            this.emit("unlockStateChanged", { isUnlocked: true, payload: params[0] });
-            break;
-          }
-          case "disconnect":
-            this.#handleDisconnect(params[0]);
-            break;
-
-          default:
-            this.emit(eventName, ...params);
-        }
-
+        this.#handleEventMessage(data.payload);
         break;
       }
 
@@ -352,11 +417,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     }
   };
 
-  isConnected(): boolean {
-    return this.#connected;
-  }
-
-  #postHandshake() {
+  #sendHandshake() {
     const msg: Envelope = {
       channel: CHANNEL,
       sessionId: this.#sessionId,
@@ -366,55 +427,4 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.#handshakeId = msg.payload.handshakeId;
     window.postMessage(msg, window.location.origin);
   }
-
-  retryConnect = async () => {
-    if (this.#connected) return;
-    if (this.#handshakePromise) {
-      this.#postHandshake();
-      return this.#handshakePromise;
-    }
-    return this.connect();
-  };
-
-  connect = async () => {
-    if (this.#connected) {
-      return;
-    }
-    if (this.#handshakePromise) {
-      return this.#handshakePromise;
-    }
-
-    // Start a fresh session for each (re)connect attempt to isolate stale messages.
-    this.#sessionId = createId();
-    this.#handshakeId = createId();
-    this.#handshakePromise = new Promise<void>((resolve, reject) => {
-      this.#handshakeResolve = resolve;
-      this.#handshakeReject = reject;
-    });
-
-    this.#handshakeTimer = window.setTimeout(() => {
-      const providerErrors = this.#getProviderErrors();
-      this.#handshakeId = null;
-      this.#rejectHandshake(
-        providerErrors.custom({
-          code: 4900,
-          message: "Handshake timed out. Try again.",
-        }),
-      );
-    }, this.#handshakeTimeoutMs);
-
-    this.#postHandshake();
-
-    await this.#handshakePromise;
-  };
-
-  disconnect = async () => {
-    window.removeEventListener("message", this.#handleMessage);
-    this.#handleDisconnect();
-  };
-
-  destroy = () => {
-    window.removeEventListener("message", this.#handleMessage);
-    this.removeAllListeners();
-  };
 }

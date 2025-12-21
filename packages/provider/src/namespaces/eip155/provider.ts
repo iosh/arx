@@ -3,6 +3,7 @@ import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "../../types/eip1193.js";
 import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
+import { isTransportMeta } from "../../utils/transportMeta.js";
 import {
   DEFAULT_APPROVAL_METHODS,
   DEFAULT_APPROVAL_TIMEOUT_MS,
@@ -66,48 +67,57 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   #connectInFlight: Promise<void> | null = null;
 
-  #resolveProviderErrors = () => getProviderErrors(this.#state.namespace);
-  #resolveRpcErrors = () => getRpcErrors(this.#state.namespace);
+  #getProviderErrors = () => getProviderErrors(this.#state.namespace);
+  #getRpcErrors = () => getRpcErrors(this.#state.namespace);
 
   constructor({ transport, timeouts }: Eip155ProviderOptions) {
     super();
     this.#transport = transport;
-    this.#applyTimeouts(timeouts);
-    this.#createInitializationPromise();
+    this.#configureTimeouts(timeouts);
+    this.#createReadyPromise();
 
     this.#transport.on("connect", this.#handleTransportConnect);
     this.#transport.on("disconnect", this.#handleTransportDisconnect);
     this.#transport.on("accountsChanged", this.#handleTransportAccountsChanged);
     this.#transport.on("chainChanged", this.#handleTransportChainChanged);
-    this.#transport.on("unlockStateChanged", this.#handleUnlockStateChanged);
-    this.#transport.on("metaChanged", this.#handleMetaChanged);
+    this.#transport.on("unlockStateChanged", this.#handleTransportUnlockStateChanged);
+    this.#transport.on("metaChanged", this.#handleTransportMetaChanged);
 
     this.#syncWithTransportState();
   }
 
   static readonly providerInfo = PROVIDER_INFO;
 
-  #applyTimeouts(timeouts: Eip155ProviderTimeouts | undefined) {
+  #configureTimeouts(timeouts: Eip155ProviderTimeouts | undefined) {
     if (!timeouts) return;
 
-    if (typeof timeouts.readyTimeoutMs === "number") this.#readyTimeoutMs = timeouts.readyTimeoutMs;
-    if (typeof timeouts.ethAccountsWaitMs === "number") this.#ethAccountsWaitMs = timeouts.ethAccountsWaitMs;
+    this.#readyTimeoutMs = timeouts.readyTimeoutMs ?? this.#readyTimeoutMs;
+    this.#ethAccountsWaitMs = timeouts.ethAccountsWaitMs ?? this.#ethAccountsWaitMs;
 
     const requestTimeouts = timeouts.requestTimeouts;
     if (!requestTimeouts) return;
 
-    if (typeof requestTimeouts.readonlyTimeoutMs === "number")
-      this.#readonlyTimeoutMs = requestTimeouts.readonlyTimeoutMs;
-    if (typeof requestTimeouts.normalTimeoutMs === "number") this.#normalTimeoutMs = requestTimeouts.normalTimeoutMs;
-    if (typeof requestTimeouts.approvalTimeoutMs === "number")
-      this.#approvalTimeoutMs = requestTimeouts.approvalTimeoutMs;
+    this.#readonlyTimeoutMs = requestTimeouts.readonlyTimeoutMs ?? this.#readonlyTimeoutMs;
+    this.#normalTimeoutMs = requestTimeouts.normalTimeoutMs ?? this.#normalTimeoutMs;
+    this.#approvalTimeoutMs = requestTimeouts.approvalTimeoutMs ?? this.#approvalTimeoutMs;
 
-    if (Array.isArray(requestTimeouts.approvalMethods)) {
+    if (requestTimeouts.approvalMethods) {
       this.#approvalMethods = new Set(requestTimeouts.approvalMethods);
     }
-    if (Array.isArray(requestTimeouts.readonlyMethods)) {
+    if (requestTimeouts.readonlyMethods) {
       this.#readonlyMethods = new Set(requestTimeouts.readonlyMethods);
     }
+  }
+
+  #normalizeAccounts(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  #normalizeMeta(value: unknown): TransportMeta | null {
+    if (value === null) return null;
+    if (isTransportMeta(value)) return value;
+    return null;
   }
 
   get caip2() {
@@ -132,10 +142,154 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   getProviderState = (): ProviderStateSnapshot => this.#state.getProviderState();
 
-  #handleMetaChanged = (payload: unknown) => {
-    if (payload === undefined) return;
-    this.#state.applyPatch({ type: "meta", meta: (payload ?? null) as TransportMeta | null });
+  request = async (args: RequestArguments) => {
+    const { method } = this.#parseRequest(args);
+    const providerErrors = this.#getProviderErrors();
+
+    if (PROVIDER_STATE_METHODS.has(method)) {
+      return this.getProviderState();
+    }
+
+    if (method === "eth_accounts") {
+      if (!this.#initialized) {
+        await this.#prefetchAccounts();
+      }
+      return this.#state.accounts;
+    }
+
+    if (!this.#initialized && READONLY_EARLY.has(method)) {
+      if (method === "eth_chainId") {
+        if (this.chainId) return this.chainId;
+        await this.#waitReady();
+        if (this.chainId) return this.chainId;
+        throw providerErrors.disconnected();
+      }
+    }
+
+    if (!this.#initialized) {
+      await this.#waitReady();
+    }
+
+    try {
+      return await this.#sendRpc(args, method);
+    } catch (error) {
+      throw this.#toEip1193Error(error);
+    }
   };
+
+  enable = async () => {
+    const rpcErrors = this.#getRpcErrors();
+    const result = await this.request({ method: "eth_requestAccounts" });
+    if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
+      throw rpcErrors.internal({
+        message: "eth_requestAccounts did not return an array of accounts",
+        data: { result },
+      });
+    }
+    return result;
+  };
+
+  send = (methodOrPayload: string | LegacyPayload, paramsOrCallback?: unknown) => {
+    if (typeof methodOrPayload === "string") {
+      return this.request(this.#createRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]));
+    }
+
+    if (isLegacyCallback(paramsOrCallback)) {
+      this.sendAsync(methodOrPayload, paramsOrCallback);
+      return;
+    }
+
+    return this.request(this.#createRequestArgs(methodOrPayload.method, methodOrPayload.params));
+  };
+
+  sendAsync = (payload: LegacyPayload, callback: LegacyCallback) => {
+    const requestArgs = this.#createRequestArgs(payload.method, payload.params);
+    const id = String(payload.id ?? Date.now());
+    const jsonrpc = payload.jsonrpc ?? "2.0";
+    this.request(requestArgs)
+      .then((result) => {
+        callback(null, { id, jsonrpc, result });
+      })
+      .catch((error) => {
+        const rpcError = this.#toEip1193Error(error);
+        callback(rpcError, { id, jsonrpc, error: rpcError });
+      });
+  };
+
+  destroy() {
+    this.#transport.removeListener("connect", this.#handleTransportConnect);
+    this.#transport.removeListener("disconnect", this.#handleTransportDisconnect);
+    this.#transport.removeListener("accountsChanged", this.#handleTransportAccountsChanged);
+    this.#transport.removeListener("chainChanged", this.#handleTransportChainChanged);
+    this.#transport.removeListener("unlockStateChanged", this.#handleTransportUnlockStateChanged);
+    this.#transport.removeListener("metaChanged", this.#handleTransportMetaChanged);
+    this.removeAllListeners();
+  }
+
+  #createRequestArgs(method: string, params?: RequestArguments["params"]): RequestArguments {
+    return params === undefined ? { method } : { method, params };
+  }
+
+  #toEip1193Error(error: unknown): EIP1193ProviderRpcError {
+    if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
+      return error as EIP1193ProviderRpcError;
+    }
+    return this.#getRpcErrors().internal({
+      message: error instanceof Error ? error.message : String(error),
+      data: { originalError: error },
+    });
+  }
+
+  #getMethodTimeoutMs(method: string): number {
+    if (this.#approvalMethods.has(method)) return this.#approvalTimeoutMs;
+    if (this.#readonlyMethods.has(method)) return this.#readonlyTimeoutMs;
+    if (method.startsWith("eth_get") || method === "eth_call") return this.#readonlyTimeoutMs;
+    return this.#normalTimeoutMs;
+  }
+
+  #parseRequest(args: RequestArguments): { method: string; params: RequestArguments["params"] | undefined } {
+    const rpcErrors = this.#getRpcErrors();
+    if (!args || typeof args !== "object" || Array.isArray(args)) {
+      throw rpcErrors.invalidRequest({
+        message: "Invalid request arguments",
+        data: { args },
+      });
+    }
+
+    const { method, params } = args;
+    if (typeof method !== "string" || method.length === 0) {
+      throw rpcErrors.invalidRequest({
+        message: "Invalid request method",
+        data: { args },
+      });
+    }
+    if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
+      throw rpcErrors.invalidRequest({
+        message: "Invalid request params",
+        data: { args },
+      });
+    }
+
+    return { method, params };
+  }
+
+  async #waitReady() {
+    try {
+      await this.#waitForReady();
+    } catch (error) {
+      throw this.#toEip1193Error(error);
+    }
+  }
+
+  async #sendRpc(args: RequestArguments, method: string) {
+    const timeoutMs = this.#getMethodTimeoutMs(method);
+    const result = await this.#transport.request(args, { timeoutMs });
+    if (method === "eth_requestAccounts" && Array.isArray(result)) {
+      const next = this.#normalizeAccounts(result);
+      this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
+    }
+    return result;
+  }
 
   #applySnapshot(snapshot: ProviderSnapshot, options: ApplyOptions = {}) {
     const emit = options.emit ?? true;
@@ -144,7 +298,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     const { accountsChanged } = this.#state.applySnapshot(snapshot);
 
     if (snapshot.connected) {
-      this.#markInitialized();
+      this.#resolveReady();
     }
 
     if (!emit) return;
@@ -175,7 +329,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     }
   }
 
-  #createInitializationPromise() {
+  #createReadyPromise() {
     this.#initializedPromise = new Promise((resolve, reject) => {
       this.#initializedResolve = resolve;
       this.#initializedReject = reject;
@@ -190,15 +344,15 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         connected: state.connected,
         chainId: state.chainId,
         caip2: state.caip2,
-        accounts: state.accounts.filter((item): item is string => typeof item === "string"),
+        accounts: this.#normalizeAccounts(state.accounts),
         isUnlocked: typeof state.isUnlocked === "boolean" ? state.isUnlocked : null,
-        meta: state.meta,
+        meta: this.#normalizeMeta(state.meta),
       },
       { emit: false },
     );
   }
 
-  #markInitialized() {
+  #resolveReady() {
     if (!this.#initialized) {
       this.#initialized = true;
       this.#initializedResolve?.();
@@ -208,20 +362,27 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     }
   }
 
-  #resetInitialization(error?: unknown) {
+  #restartReady(error?: unknown) {
     this.#initialized = false;
-    const reason = error ?? this.#resolveProviderErrors().disconnected();
+    const reason = error ?? this.#getProviderErrors().disconnected();
     this.#initializedReject?.(reason);
-    this.#createInitializationPromise();
+    this.#createReadyPromise();
   }
+
+  #handleTransportMetaChanged = (payload: unknown) => {
+    if (payload === undefined) return;
+    const meta = this.#normalizeMeta(payload);
+    if (meta === null && payload !== null) return;
+    this.#state.applyPatch({ type: "meta", meta });
+  };
 
   #handleTransportConnect = (payload: unknown) => {
     const data = (payload ?? {}) as Partial<{
       chainId: string;
       caip2: string | null;
-      accounts: string[];
+      accounts: unknown;
       isUnlocked: boolean;
-      meta: TransportMeta | null;
+      meta: unknown;
     }>;
 
     this.#applySnapshot(
@@ -229,11 +390,9 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         connected: true,
         chainId: typeof data.chainId === "string" ? data.chainId : null,
         caip2: typeof data.caip2 === "string" ? data.caip2 : null,
-        accounts: Array.isArray(data.accounts)
-          ? data.accounts.filter((item): item is string => typeof item === "string")
-          : [],
+        accounts: this.#normalizeAccounts(data.accounts),
         isUnlocked: typeof data.isUnlocked === "boolean" ? data.isUnlocked : null,
-        meta: data.meta ?? null,
+        meta: data.meta === undefined ? null : this.#normalizeMeta(data.meta),
       },
       { emit: true },
     );
@@ -259,7 +418,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     if (typeof isUnlocked === "boolean") {
       patch.isUnlocked = isUnlocked;
     }
-    if (meta === null || (meta && typeof meta === "object")) {
+    if (meta === null || isTransportMeta(meta)) {
       patch.meta = meta as TransportMeta | null;
     }
 
@@ -267,12 +426,11 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportAccountsChanged = (accounts: unknown) => {
-    if (!Array.isArray(accounts)) return;
-    const next = accounts.filter((item): item is string => typeof item === "string");
+    const next = this.#normalizeAccounts(accounts);
     this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
   };
 
-  #handleUnlockStateChanged = (payload: unknown) => {
+  #handleTransportUnlockStateChanged = (payload: unknown) => {
     if (!payload || typeof payload !== "object") return;
     const { isUnlocked } = payload as { isUnlocked?: unknown };
     if (typeof isUnlocked !== "boolean") return;
@@ -280,15 +438,15 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    const disconnectError = error ?? this.#resolveProviderErrors().disconnected();
+    const disconnectError = error ?? this.#getProviderErrors().disconnected();
 
-    this.#resetInitialization(disconnectError);
+    this.#restartReady(disconnectError);
     this.#state.reset();
 
     this.emit("disconnect", disconnectError);
   };
 
-  #kickoffConnect() {
+  #startConnect() {
     if (this.#connectInFlight) return;
 
     this.#connectInFlight = this.#transport
@@ -304,7 +462,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   async #waitForReady() {
     if (this.#initialized) return;
 
-    this.#kickoffConnect();
+    this.#startConnect();
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -313,7 +471,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         new Promise<void>((_, reject) => {
           timer = setTimeout(() => {
             reject(
-              this.#resolveProviderErrors().custom({
+              this.#getProviderErrors().custom({
                 code: 4900,
                 message: "Provider is initializing. Try again later.",
               }),
@@ -326,11 +484,11 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     }
   }
 
-  async #ethAccountsBestEffort() {
+  async #prefetchAccounts() {
     if (this.#initialized) return;
     if (this.#state.accounts.length) return;
 
-    this.#kickoffConnect();
+    this.#startConnect();
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -345,144 +503,5 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     } finally {
       if (timer) clearTimeout(timer);
     }
-  }
-
-  #buildRequestArgs(method: string, params?: RequestArguments["params"]): RequestArguments {
-    return params === undefined ? { method } : { method, params };
-  }
-
-  #toRpcError(error: unknown): EIP1193ProviderRpcError {
-    if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
-      return error as EIP1193ProviderRpcError;
-    }
-    return this.#resolveRpcErrors().internal({
-      message: error instanceof Error ? error.message : String(error),
-      data: { originalError: error },
-    });
-  }
-
-  #resolveRequestTimeoutMs(method: string): number {
-    if (this.#approvalMethods.has(method)) return this.#approvalTimeoutMs;
-    if (this.#readonlyMethods.has(method)) return this.#readonlyTimeoutMs;
-    if (method.startsWith("eth_get") || method === "eth_call") return this.#readonlyTimeoutMs;
-    return this.#normalTimeoutMs;
-  }
-
-  request = async (args: RequestArguments) => {
-    const rpcErrors = this.#resolveRpcErrors();
-    const providerErrors = this.#resolveProviderErrors();
-    if (!args || typeof args !== "object" || Array.isArray(args)) {
-      throw rpcErrors.invalidRequest({
-        message: "Invalid request arguments",
-        data: { args },
-      });
-    }
-    const { method, params } = args;
-
-    if (typeof method !== "string" || method.length === 0) {
-      throw rpcErrors.invalidRequest({
-        message: "Invalid request method",
-        data: { args },
-      });
-    }
-    if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
-      throw rpcErrors.invalidRequest({
-        message: "Invalid request params",
-        data: { args },
-      });
-    }
-
-    if (PROVIDER_STATE_METHODS.has(method)) {
-      return this.getProviderState();
-    }
-
-    if (method === "eth_accounts") {
-      if (!this.#initialized) {
-        await this.#ethAccountsBestEffort();
-      }
-      return this.#state.accounts;
-    }
-
-    if (!this.#initialized && READONLY_EARLY.has(method)) {
-      if (method === "eth_chainId") {
-        if (this.chainId) return this.chainId;
-        try {
-          await this.#waitForReady();
-        } catch (error) {
-          throw this.#toRpcError(error);
-        }
-        if (this.chainId) return this.chainId;
-        throw providerErrors.disconnected();
-      }
-    }
-
-    if (!this.#initialized) {
-      try {
-        await this.#waitForReady();
-      } catch (error) {
-        throw this.#toRpcError(error);
-      }
-    }
-
-    try {
-      const timeoutMs = this.#resolveRequestTimeoutMs(method);
-      const result = await this.#transport.request(args, { timeoutMs });
-      if (method === "eth_requestAccounts" && Array.isArray(result)) {
-        const next = result.filter((item): item is string => typeof item === "string");
-        this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
-      }
-      return result;
-    } catch (error) {
-      throw this.#toRpcError(error);
-    }
-  };
-
-  enable = async () => {
-    const rpcErrors = this.#resolveRpcErrors();
-    const result = await this.request({ method: "eth_requestAccounts" });
-    if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
-      throw rpcErrors.internal({
-        message: "eth_requestAccounts did not return an array of accounts",
-        data: { result },
-      });
-    }
-    return result;
-  };
-
-  send = (methodOrPayload: string | LegacyPayload, paramsOrCallback?: unknown) => {
-    if (typeof methodOrPayload === "string") {
-      return this.request(this.#buildRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]));
-    }
-
-    if (isLegacyCallback(paramsOrCallback)) {
-      this.sendAsync(methodOrPayload, paramsOrCallback);
-      return;
-    }
-
-    return this.request(this.#buildRequestArgs(methodOrPayload.method, methodOrPayload.params));
-  };
-
-  sendAsync = (payload: LegacyPayload, callback: LegacyCallback) => {
-    const requestArgs = this.#buildRequestArgs(payload.method, payload.params);
-    const id = String(payload.id ?? Date.now());
-    const jsonrpc = payload.jsonrpc ?? "2.0";
-    this.request(requestArgs)
-      .then((result) => {
-        callback(null, { id, jsonrpc, result });
-      })
-      .catch((error) => {
-        const rpcError = this.#toRpcError(error);
-        callback(rpcError, { id, jsonrpc, error: rpcError });
-      });
-  };
-
-  destroy() {
-    this.#transport.removeListener("connect", this.#handleTransportConnect);
-    this.#transport.removeListener("disconnect", this.#handleTransportDisconnect);
-    this.#transport.removeListener("accountsChanged", this.#handleTransportAccountsChanged);
-    this.#transport.removeListener("chainChanged", this.#handleTransportChainChanged);
-    this.#transport.removeListener("unlockStateChanged", this.#handleUnlockStateChanged);
-    this.#transport.removeListener("metaChanged", this.#handleMetaChanged);
-    this.removeAllListeners();
   }
 }

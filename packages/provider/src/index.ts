@@ -1,1 +1,1 @@
-export { EventEmitter } from "eventemitter3";
+export {};

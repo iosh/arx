@@ -6,9 +6,9 @@ import {
 } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { describe, expect, it, vi } from "vitest";
-import { EthereumProvider } from "./provider/index.js";
-import type { RequestArguments } from "./types/eip1193.js";
-import type { Transport, TransportMeta, TransportState } from "./types/transport.js";
+import { Eip155Provider } from "../../provider/index.js";
+import type { RequestArguments } from "../../types/eip1193.js";
+import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -73,7 +73,7 @@ const buildMeta = (overrides?: Partial<TransportMeta>): TransportMeta => ({
 
 const createProvider = (initialState: TransportState = INITIAL_STATE) => {
   const transport = new StubTransport(initialState);
-  const provider = new EthereumProvider({ transport });
+  const provider = new Eip155Provider({ transport });
   return { transport, provider };
 };
 
@@ -112,10 +112,10 @@ const INITIAL_STATE: TransportState = {
   meta: buildMeta(),
 };
 
-describe("EthereumProvider transport meta integration", () => {
+describe("Eip155Provider transport meta integration", () => {
   it("falls back to transport meta when caip2 is missing", () => {
     const transport = new StubTransport(INITIAL_STATE);
-    const provider = new EthereumProvider({ transport });
+    const provider = new Eip155Provider({ transport });
 
     expect(provider.caip2).toBe("eip155:1");
 
@@ -125,7 +125,7 @@ describe("EthereumProvider transport meta integration", () => {
 
   it("updates namespace when chainChanged event carries meta", () => {
     const transport = new StubTransport(INITIAL_STATE);
-    const provider = new EthereumProvider({ transport });
+    const provider = new Eip155Provider({ transport });
 
     expect(provider.caip2).toBe("eip155:1");
 

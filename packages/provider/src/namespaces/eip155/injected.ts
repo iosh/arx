@@ -1,5 +1,5 @@
-import type { EthereumProvider } from "../provider/index.js";
-import type { RequestArguments } from "../types/eip1193.js";
+import type { RequestArguments } from "../../types/eip1193.js";
+import type { Eip155Provider } from "./provider.js";
 
 const PROTECTED_METHODS = new Set<PropertyKey>([
   "request",
@@ -16,14 +16,17 @@ const PROTECTED_METHODS = new Set<PropertyKey>([
   "_metamask",
 ]);
 
-export const createEvmProxy = (target: EthereumProvider): EthereumProvider => {
+// Injected provider surface for `window.ethereum`.
+// Keeps MetaMask-compatible shims and hardens against dapp-side mutation.
+export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Provider => {
   const getNetworkVersion = () => target.getProviderState().networkVersion;
 
   const metamaskShim = Object.freeze({
     isUnlocked: () => Promise.resolve(target.getProviderState().isUnlocked),
   });
 
-  const handler: ProxyHandler<EthereumProvider> = {
+  const handler: ProxyHandler<Eip155Provider> = {
+    // NOTE: Use `instance` as receiver to avoid Proxy/private-field getter issues.
     get: (instance, property) => {
       switch (property) {
         case "selectedAddress":

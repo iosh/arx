@@ -1,17 +1,21 @@
 import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
-import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
-import type { Transport, TransportMeta } from "../types/transport.js";
-
-const DEFAULT_NAMESPACE = "eip155" as const;
-
-const PROVIDER_INFO = {
-  uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",
-  name: "ARX Wallet",
-  icon: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgICA8ZGVmcz4KICAgICAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImRhcmtTcGFjZSIgeDE9IjAiIHkxPSIwIiB4Mj0iMjAwIiB5Mj0iMjAwIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgICAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzNBM0EzQSIvPgogICAgICAgICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwNTA1MDUiLz4KICAgICAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPC9kZWZzPgogICAgPHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIHJ4PSI0NSIgZmlsbD0idXJsKCNkYXJrU3BhY2UpIi8+CiAgICA8cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZD0iTTEwMCAzMEw0MCAxNzBINzVMMTAwIDExMEwxMjUgMTcwSDE2MEwxMDAgMzBaTTEwMCA5NUwxMTUgMTM1SDg1TDEwMCA5NVoiIGZpbGw9IiNGRkZGRkYiLz4KPC9zdmc+Cg==",
-  rdns: "wallet.arx",
-} as const;
+import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "../../types/eip1193.js";
+import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
+import {
+  DEFAULT_APPROVAL_METHODS,
+  DEFAULT_APPROVAL_TIMEOUT_MS,
+  DEFAULT_ETH_ACCOUNTS_WAIT_MS,
+  DEFAULT_NORMAL_TIMEOUT_MS,
+  DEFAULT_READONLY_METHODS,
+  DEFAULT_READONLY_TIMEOUT_MS,
+  DEFAULT_READY_TIMEOUT_MS,
+  PROVIDER_INFO,
+  PROVIDER_STATE_METHODS,
+  READONLY_EARLY,
+} from "./constants.js";
+import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot, type ProviderStateSnapshot } from "./state.js";
 
 type LegacyResponse = {
   id: string;
@@ -24,56 +28,7 @@ type LegacyPayload = Partial<Pick<JsonRpcRequest<JsonRpcParams>, "id" | "jsonrpc
   Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">;
 const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
 
-const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
-  activeChain: meta.activeChain,
-  activeNamespace: meta.activeNamespace,
-  supportedChains: [...meta.supportedChains],
-});
-const PROVIDER_STATE_METHODS = new Set(["metamask_getProviderState", "wallet_getProviderState"]);
-const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
-
-const DEFAULT_APPROVAL_TIMEOUT_MS = 10 * 60_000;
-const DEFAULT_NORMAL_TIMEOUT_MS = 120_000;
-const DEFAULT_READONLY_TIMEOUT_MS = 60_000;
-
-const DEFAULT_READY_TIMEOUT_MS = 10_000;
-const DEFAULT_ETH_ACCOUNTS_WAIT_MS = 200;
-
-const DEFAULT_APPROVAL_METHODS = new Set<string>([
-  "eth_requestAccounts",
-  "personal_sign",
-  "eth_sign",
-  "eth_signTypedData",
-  "eth_signTypedData_v3",
-  "eth_signTypedData_v4",
-  "eth_sendTransaction",
-  "wallet_addEthereumChain",
-  "wallet_switchEthereumChain",
-  "wallet_requestPermissions",
-  "wallet_watchAsset",
-]);
-
-const DEFAULT_READONLY_METHODS = new Set<string>([
-  "eth_chainId",
-  "eth_accounts",
-  "net_version",
-  "web3_clientVersion",
-  "eth_blockNumber",
-  "eth_getBalance",
-  "eth_getCode",
-  "eth_call",
-  "eth_getTransactionCount",
-  "eth_getLogs",
-  "eth_getBlockByHash",
-  "eth_getBlockByNumber",
-  "eth_getTransactionByHash",
-  "eth_getTransactionReceipt",
-  "eth_feeHistory",
-  "eth_gasPrice",
-  "eth_maxPriorityFeePerGas",
-]);
-
-export type EthereumProviderTimeouts = {
+export type Eip155ProviderTimeouts = {
   readyTimeoutMs?: number;
   ethAccountsWaitMs?: number;
   requestTimeouts?: {
@@ -85,45 +40,17 @@ export type EthereumProviderTimeouts = {
   };
 };
 
-export type EthereumProviderOptions = {
+export type Eip155ProviderOptions = {
   transport: Transport;
-  timeouts?: EthereumProviderTimeouts;
+  timeouts?: Eip155ProviderTimeouts;
 };
-
-type ProviderStateSnapshot = {
-  accounts: string[];
-  chainId: string | null;
-  networkVersion: string | null;
-  isUnlocked: boolean;
-};
-
-type ProviderSnapshot = {
-  connected: boolean;
-  chainId: string | null;
-  caip2: string | null;
-  accounts: string[];
-  isUnlocked: boolean | null;
-  meta: TransportMeta | null;
-};
-
-type ProviderPatch =
-  | { type: "accounts"; accounts: string[] }
-  | { type: "chain"; chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null }
-  | { type: "unlock"; isUnlocked: boolean }
-  | { type: "meta"; meta: TransportMeta | null };
 
 type ApplyOptions = { emit?: boolean };
 
-export class EthereumProvider extends EventEmitter implements EIP1193Provider {
-  #namespace: string = DEFAULT_NAMESPACE;
-  readonly isArx = true;
+export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #transport: Transport;
+  #state = new Eip155ProviderState();
   #initialized = false;
-  #chainId: string | null = null;
-  #caip2: string | null = null;
-  #accounts: string[] = [];
-  #isUnlocked: boolean | null = null;
-  #meta: TransportMeta | null = null;
 
   #initializedResolve?: (() => void) | undefined;
   #initializedReject?: ((reason?: unknown) => void) | undefined;
@@ -139,10 +66,10 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   #connectInFlight: Promise<void> | null = null;
 
-  #resolveProviderErrors = () => getProviderErrors(this.#namespace);
-  #resolveRpcErrors = () => getRpcErrors(this.#namespace);
+  #resolveProviderErrors = () => getProviderErrors(this.#state.namespace);
+  #resolveRpcErrors = () => getRpcErrors(this.#state.namespace);
 
-  constructor({ transport, timeouts }: EthereumProviderOptions) {
+  constructor({ transport, timeouts }: Eip155ProviderOptions) {
     super();
     this.#transport = transport;
     this.#applyTimeouts(timeouts);
@@ -160,7 +87,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   static readonly providerInfo = PROVIDER_INFO;
 
-  #applyTimeouts(timeouts: EthereumProviderTimeouts | undefined) {
+  #applyTimeouts(timeouts: Eip155ProviderTimeouts | undefined) {
     if (!timeouts) return;
 
     if (typeof timeouts.readyTimeoutMs === "number") this.#readyTimeoutMs = timeouts.readyTimeoutMs;
@@ -184,67 +111,37 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   get caip2() {
-    return this.#caip2;
+    return this.#state.caip2;
   }
 
   get isUnlocked() {
-    return this.#isUnlocked;
+    return this.#state.isUnlocked;
   }
 
   get chainId() {
-    return this.#chainId;
+    return this.#state.chainId;
   }
 
   get selectedAddress() {
-    return this.#accounts[0] ?? null;
+    return this.#state.selectedAddress;
   }
 
   isConnected = () => {
     return this.#transport.isConnected();
   };
 
-  getProviderState = (): ProviderStateSnapshot => ({
-    accounts: [...this.#accounts],
-    chainId: this.#chainId,
-    networkVersion: this.#resolveNetworkVersion(),
-    isUnlocked: this.#isUnlocked ?? false,
-  });
-
-  #resolveNumericReference(candidate: string | null | undefined) {
-    if (typeof candidate !== "string" || candidate.length === 0) return null;
-    const [, reference = candidate] = candidate.split(":");
-    return /^\d+$/.test(reference) ? reference : null;
-  }
-
-  #resolveNetworkVersion(): string | null {
-    if (typeof this.#chainId === "string") {
-      try {
-        return BigInt(this.#chainId).toString(10);
-      } catch {
-        // swallow malformed hex to fall back on CAIP references
-      }
-    }
-    return this.#resolveNumericReference(this.#caip2) ?? this.#resolveNumericReference(this.#meta?.activeChain);
-  }
+  getProviderState = (): ProviderStateSnapshot => this.#state.getProviderState();
 
   #handleMetaChanged = (payload: unknown) => {
     if (payload === undefined) return;
-    this.#applyPatch({ type: "meta", meta: (payload ?? null) as TransportMeta | null }, { emit: false });
+    this.#state.applyPatch({ type: "meta", meta: (payload ?? null) as TransportMeta | null });
   };
 
   #applySnapshot(snapshot: ProviderSnapshot, options: ApplyOptions = {}) {
     const emit = options.emit ?? true;
 
     const wasInitialized = this.#initialized;
-    const prevAccounts = [...this.#accounts];
-
-    this.#updateMeta(snapshot.meta);
-    const effectiveCaip2 = this.#resolveEffectiveCaip2(snapshot.caip2);
-    this.#updateNamespace(effectiveCaip2);
-
-    this.#updateChain(snapshot.chainId);
-    this.#updateAccounts(snapshot.accounts);
-    this.#isUnlocked = typeof snapshot.isUnlocked === "boolean" ? snapshot.isUnlocked : null;
+    const { accountsChanged } = this.#state.applySnapshot(snapshot);
 
     if (snapshot.connected) {
       this.#markInitialized();
@@ -253,79 +150,28 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     if (!emit) return;
 
     const didInitialize = !wasInitialized && this.#initialized;
-    if (didInitialize && this.#chainId) {
-      this.emit("connect", { chainId: this.#chainId });
+    if (didInitialize && this.chainId) {
+      this.emit("connect", { chainId: this.chainId });
     }
 
-    const accountsChanged =
-      prevAccounts.length !== this.#accounts.length ||
-      prevAccounts.some((value, index) => value !== this.#accounts[index]);
     if (accountsChanged) {
-      this.emit("accountsChanged", [...this.#accounts]);
+      this.emit("accountsChanged", this.#state.accounts);
     }
   }
 
   #applyPatch(patch: ProviderPatch, options: ApplyOptions = {}) {
     const emit = options.emit ?? true;
-
-    const prevChainId = this.#chainId;
-    const prevAccounts = [...this.#accounts];
-    const prevUnlock = this.#isUnlocked;
-
-    switch (patch.type) {
-      case "meta": {
-        this.#updateMeta(patch.meta);
-        break;
-      }
-
-      case "accounts": {
-        this.#updateAccounts(patch.accounts);
-        break;
-      }
-
-      case "unlock": {
-        this.#isUnlocked = patch.isUnlocked;
-        break;
-      }
-
-      case "chain": {
-        if (patch.meta !== undefined) {
-          this.#updateMeta(patch.meta);
-        }
-        const effectiveCaip2 = this.#resolveEffectiveCaip2(patch.caip2);
-        this.#updateNamespace(effectiveCaip2);
-
-        this.#updateChain(patch.chainId);
-
-        if (typeof patch.isUnlocked === "boolean") {
-          this.#isUnlocked = patch.isUnlocked;
-        }
-        break;
-      }
-
-      default: {
-        const _exhaustive: never = patch;
-        return _exhaustive;
-      }
-    }
-
+    const events = this.#state.applyPatch(patch);
     if (!emit) return;
 
-    if (patch.type === "chain" && prevChainId !== this.#chainId && this.#chainId) {
-      this.emit("chainChanged", this.#chainId);
+    if (events.chainChanged) {
+      this.emit("chainChanged", events.chainChanged);
     }
-
-    if (patch.type === "accounts") {
-      const accountsChanged =
-        prevAccounts.length !== this.#accounts.length ||
-        prevAccounts.some((value, index) => value !== this.#accounts[index]);
-      if (accountsChanged) {
-        this.emit("accountsChanged", [...this.#accounts]);
-      }
+    if (events.accountsChanged) {
+      this.emit("accountsChanged", events.accountsChanged);
     }
-
-    if (patch.type === "unlock" && prevUnlock !== this.#isUnlocked) {
-      this.emit("unlockStateChanged", { isUnlocked: patch.isUnlocked });
+    if (events.unlockChanged) {
+      this.emit("unlockStateChanged", events.unlockChanged);
     }
   }
 
@@ -337,7 +183,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
   }
 
   #syncWithTransportState() {
-    const state = this.#transport.getConnectionState();
+    const state: TransportState = this.#transport.getConnectionState();
 
     this.#applySnapshot(
       {
@@ -352,32 +198,6 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     );
   }
 
-  #updateNamespace(caip2: string | null | undefined) {
-    if (caip2 === undefined) return;
-
-    if (typeof caip2 === "string" && caip2.length > 0) {
-      this.#caip2 = caip2;
-      const [namespace] = caip2.split(":");
-      this.#namespace = namespace ?? DEFAULT_NAMESPACE;
-      return;
-    }
-
-    this.#caip2 = null;
-    this.#namespace = DEFAULT_NAMESPACE;
-  }
-
-  #updateMeta(meta: TransportMeta | null | undefined) {
-    if (meta === undefined) return;
-    this.#meta = meta ? cloneTransportMeta(meta) : null;
-  }
-
-  #resolveEffectiveCaip2(candidate: unknown): string | null {
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-    return this.#meta?.activeChain ?? null;
-  }
-
   #markInitialized() {
     if (!this.#initialized) {
       this.#initialized = true;
@@ -386,14 +206,6 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
       this.emit("_initialized");
     }
-  }
-
-  #updateChain(chainId: string | null) {
-    this.#chainId = chainId;
-  }
-
-  #updateAccounts(accounts: string[]) {
-    this.#accounts = accounts;
   }
 
   #resetInitialization(error?: unknown) {
@@ -471,17 +283,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     const disconnectError = error ?? this.#resolveProviderErrors().disconnected();
 
     this.#resetInitialization(disconnectError);
-    this.#applySnapshot(
-      {
-        connected: false,
-        chainId: null,
-        caip2: null,
-        accounts: [],
-        isUnlocked: null,
-        meta: null,
-      },
-      { emit: false },
-    );
+    this.#state.reset();
 
     this.emit("disconnect", disconnectError);
   };
@@ -526,7 +328,7 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
 
   async #ethAccountsBestEffort() {
     if (this.#initialized) return;
-    if (this.#accounts.length) return;
+    if (this.#state.accounts.length) return;
 
     this.#kickoffConnect();
 
@@ -598,18 +400,18 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
       if (!this.#initialized) {
         await this.#ethAccountsBestEffort();
       }
-      return [...this.#accounts];
+      return this.#state.accounts;
     }
 
     if (!this.#initialized && READONLY_EARLY.has(method)) {
       if (method === "eth_chainId") {
-        if (this.#chainId) return this.#chainId;
+        if (this.chainId) return this.chainId;
         try {
           await this.#waitForReady();
         } catch (error) {
           throw this.#toRpcError(error);
         }
-        if (this.#chainId) return this.#chainId;
+        if (this.chainId) return this.chainId;
         throw providerErrors.disconnected();
       }
     }

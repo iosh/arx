@@ -1,5 +1,5 @@
-import { createEvmProxy } from "../evm/index.js";
-import { EthereumProvider } from "../provider/index.js";
+import { createEip155InjectedProvider } from "../namespaces/eip155/injected.js";
+import { Eip155Provider } from "../provider/index.js";
 import type { EIP1193Provider, Transport } from "../types/index.js";
 
 export const EIP155_NAMESPACE = "eip155" as const;
@@ -7,7 +7,7 @@ export const EIP155_NAMESPACE = "eip155" as const;
 export type ProviderEntry = {
   raw: EIP1193Provider;
   proxy: EIP1193Provider;
-  info: typeof EthereumProvider.providerInfo;
+  info: typeof Eip155Provider.providerInfo;
 };
 
 export type ProviderFactory = (opts: { transport: Transport }) => ProviderEntry;
@@ -19,7 +19,7 @@ export type ProviderRegistry = {
 
 export type ProviderRegistryOptions = {
   ethereum?: {
-    timeouts?: import("../provider/ethereumProvider.js").EthereumProviderTimeouts;
+    timeouts?: import("../namespaces/eip155/provider.js").Eip155ProviderTimeouts;
   };
 };
 
@@ -27,9 +27,9 @@ export const createProviderRegistry = (options: ProviderRegistryOptions = {}): P
   const factories: Record<string, ProviderFactory> = {
     [EIP155_NAMESPACE]: ({ transport }) => {
       const timeouts = options.ethereum?.timeouts;
-      const raw = timeouts ? new EthereumProvider({ transport, timeouts }) : new EthereumProvider({ transport });
-      const proxy = createEvmProxy(raw);
-      return { raw, proxy, info: EthereumProvider.providerInfo };
+      const raw = timeouts ? new Eip155Provider({ transport, timeouts }) : new Eip155Provider({ transport });
+      const proxy = createEip155InjectedProvider(raw);
+      return { raw, proxy, info: Eip155Provider.providerInfo };
     },
   };
 

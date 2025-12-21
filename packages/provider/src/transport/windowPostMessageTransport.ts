@@ -13,6 +13,7 @@ import type {
   TransportResponse,
   TransportState,
 } from "../types/transport.js";
+import { cloneTransportMeta, isTransportMeta } from "../utils/transportMeta.js";
 
 type ConnectPayload = Extract<Envelope, { type: "handshake_ack" }>["payload"];
 type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null };
@@ -22,21 +23,6 @@ export type WindowPostMessageTransportOptions = {
 };
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 8000;
-
-const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
-  activeChain: meta.activeChain,
-  activeNamespace: meta.activeNamespace,
-  supportedChains: [...meta.supportedChains],
-});
-
-const isTransportMeta = (value: unknown): value is TransportMeta => {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<TransportMeta>;
-  if (typeof candidate.activeChain !== "string") return false;
-  if (typeof candidate.activeNamespace !== "string") return false;
-  if (!Array.isArray(candidate.supportedChains)) return false;
-  return candidate.supportedChains.every((chain) => typeof chain === "string");
-};
 
 const isConnectPayload = (value: unknown): value is ConnectPayload => {
   if (!value || typeof value !== "object") return false;

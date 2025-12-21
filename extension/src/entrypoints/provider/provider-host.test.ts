@@ -1,9 +1,9 @@
-import { CHANNEL } from "@arx/extension-provider/constants";
-import { InpageTransport } from "@arx/extension-provider/inpage";
 import type { ProviderHostWindow } from "@arx/provider/host";
+import { createProviderHost } from "@arx/provider/host";
+import { CHANNEL, PROTOCOL_VERSION } from "@arx/provider/protocol";
+import { WindowPostMessageTransport } from "@arx/provider/transport";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createProviderHost } from "@arx/provider/host";
 
 describe("ProviderHost EIP-6963", () => {
   let dom: JSDOM;
@@ -17,7 +17,7 @@ describe("ProviderHost EIP-6963", () => {
     (global as any).MessageEvent = dom.window.MessageEvent;
   });
   it("announces provider on requestProvider", async () => {
-    const transport = new InpageTransport();
+    const transport = new WindowPostMessageTransport();
     const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const listener = vi.fn();
     window.addEventListener("eip6963:announceProvider", listener);
@@ -28,12 +28,17 @@ describe("ProviderHost EIP-6963", () => {
 
       // When receiving handshake request, reply with handshake_ack
       if (data?.channel === CHANNEL && data?.type === "handshake") {
+        const handshakeId = data.payload?.handshakeId;
+        const sessionId = data.sessionId;
         dom.window.dispatchEvent(
           new dom.window.MessageEvent("message", {
             data: {
               channel: CHANNEL,
+              sessionId,
               type: "handshake_ack",
               payload: {
+                protocolVersion: PROTOCOL_VERSION,
+                handshakeId,
                 chainId: "0x1",
                 caip2: "eip155:1",
                 accounts: [],
@@ -70,7 +75,7 @@ describe("ProviderHost EIP-6963", () => {
   });
 
   it("handles multiple requestProvider calls idempotently", async () => {
-    const transport = new InpageTransport();
+    const transport = new WindowPostMessageTransport();
     const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const listener = vi.fn();
     window.addEventListener("eip6963:announceProvider", listener);
@@ -79,12 +84,17 @@ describe("ProviderHost EIP-6963", () => {
     const messageHandler = (event: MessageEvent) => {
       const data = event.data;
       if (data?.channel === CHANNEL && data?.type === "handshake") {
+        const handshakeId = data.payload?.handshakeId;
+        const sessionId = data.sessionId;
         dom.window.dispatchEvent(
           new dom.window.MessageEvent("message", {
             data: {
               channel: CHANNEL,
+              sessionId,
               type: "handshake_ack",
               payload: {
+                protocolVersion: PROTOCOL_VERSION,
+                handshakeId,
                 chainId: "0x1",
                 caip2: "eip155:1",
                 accounts: [],
@@ -97,6 +107,7 @@ describe("ProviderHost EIP-6963", () => {
               },
             },
             source: dom.window as unknown as Window,
+            origin: dom.window.location.origin,
           }),
         );
       }
@@ -122,19 +133,26 @@ describe("ProviderHost EIP-6963", () => {
   });
 
   it("reconnects and syncs providers after disconnect", async () => {
-    const transport = new InpageTransport();
+    const transport = new WindowPostMessageTransport();
     const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
 
     // Initial connection
+    let transportSessionId: string | null = null;
     const messageHandler = (event: MessageEvent) => {
       const data = event.data;
       if (data?.channel === CHANNEL && data?.type === "handshake") {
+        const handshakeId = data.payload?.handshakeId;
+        const sessionId = data.sessionId;
+        transportSessionId = sessionId;
         dom.window.dispatchEvent(
           new dom.window.MessageEvent("message", {
             data: {
               channel: CHANNEL,
+              sessionId,
               type: "handshake_ack",
               payload: {
+                protocolVersion: PROTOCOL_VERSION,
+                handshakeId,
                 chainId: "0x1",
                 caip2: "eip155:1",
                 accounts: ["0xabc"],
@@ -147,6 +165,7 @@ describe("ProviderHost EIP-6963", () => {
               },
             },
             source: dom.window as unknown as Window,
+            origin: dom.window.location.origin,
           }),
         );
       }
@@ -169,14 +188,17 @@ describe("ProviderHost EIP-6963", () => {
     });
 
     // Simulate disconnect (after initial connect is established)
+    expect(transportSessionId).toBeTruthy();
     dom.window.dispatchEvent(
       new dom.window.MessageEvent("message", {
         data: {
           channel: CHANNEL,
+          sessionId: transportSessionId,
           type: "event",
           payload: { event: "disconnect", params: [] },
         },
         source: dom.window as unknown as Window,
+        origin: dom.window.location.origin,
       }),
     );
 
@@ -190,17 +212,22 @@ describe("ProviderHost EIP-6963", () => {
   });
 
   it("exposes wallet/metamask provider state helpers", async () => {
-    const transport = new InpageTransport();
+    const transport = new WindowPostMessageTransport();
     const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
     const messageHandler = (event: MessageEvent) => {
       const data = event.data;
       if (data?.channel === CHANNEL && data?.type === "handshake") {
+        const handshakeId = data.payload?.handshakeId;
+        const sessionId = data.sessionId;
         dom.window.dispatchEvent(
           new dom.window.MessageEvent("message", {
             data: {
               channel: CHANNEL,
+              sessionId,
               type: "handshake_ack",
               payload: {
+                protocolVersion: PROTOCOL_VERSION,
+                handshakeId,
                 chainId: "0x1",
                 caip2: "eip155:1",
                 accounts: ["0xabc"],
@@ -213,6 +240,7 @@ describe("ProviderHost EIP-6963", () => {
               },
             },
             source: dom.window as unknown as Window,
+            origin: dom.window.location.origin,
           }),
         );
       }

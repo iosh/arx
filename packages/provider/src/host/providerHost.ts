@@ -1,10 +1,10 @@
-import type { EIP1193Provider, Transport, TransportMeta, TransportState } from "../types/index.js";
 import {
   createProviderRegistry,
   EIP155_NAMESPACE,
   type ProviderEntry,
   type ProviderRegistry,
 } from "../registry/index.js";
+import type { EIP1193Provider, Transport, TransportMeta, TransportState } from "../types/index.js";
 
 const WINDOW_ETH_PROP = "ethereum";
 

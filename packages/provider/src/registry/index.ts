@@ -1,6 +1,6 @@
+import { createEvmProxy } from "../evm/index.js";
 import { EthereumProvider } from "../provider.js";
 import type { EIP1193Provider, Transport } from "../types/index.js";
-import { createEvmProxy } from "../evm/index.js";
 
 export const EIP155_NAMESPACE = "eip155" as const;
 

@@ -1,31 +1,26 @@
-import { getProviderErrors } from "@arx/core/errors";
-import { EventEmitter } from "@arx/provider";
+import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
+import { EventEmitter } from "eventemitter3";
+import { CHANNEL } from "../protocol/channel.js";
+import type { Envelope } from "../protocol/envelope.js";
+import { PROTOCOL_VERSION } from "../protocol/version.js";
+import type { EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
 import type {
-  EIP1193ProviderRpcError,
-  RequestArguments,
   Transport,
   TransportMeta,
   TransportRequest,
+  TransportRequestOptions,
   TransportResponse,
   TransportState,
-} from "@arx/provider/types";
-import { CHANNEL } from "./constants.js";
-import type { Envelope } from "./types.js";
+} from "../types/transport.js";
 
-type ConnectPayload = {
-  chainId: string;
-  caip2?: string;
-  accounts: string[];
-  isUnlocked?: boolean;
-  meta?: TransportMeta | null;
-};
+type ConnectPayload = Extract<Envelope, { type: "handshake_ack" }>["payload"];
 type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null };
 
-type InpageTransportOptions = {
+export type WindowPostMessageTransportOptions = {
   handshakeTimeoutMs?: number;
 };
 
-const DEFAULT_HANDSHAKE_TIMEOUT_MS = 1500;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 8000;
 
 const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   activeChain: meta.activeChain,
@@ -33,7 +28,13 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   supportedChains: [...meta.supportedChains],
 });
 
-export class InpageTransport extends EventEmitter implements Transport {
+const createId = (): string => {
+  const random = globalThis.crypto?.randomUUID?.();
+  if (random) return random;
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+export class WindowPostMessageTransport extends EventEmitter implements Transport {
   #connected = false;
   #chainId: string | null = null;
   #caip2: string | null = null;
@@ -42,6 +43,8 @@ export class InpageTransport extends EventEmitter implements Transport {
   #meta: TransportMeta | null = null;
   #timeoutMs = 120_000;
   #handshakeTimeoutMs = DEFAULT_HANDSHAKE_TIMEOUT_MS;
+  #handshakeId: string | null = null;
+  #sessionId: string;
   #pendingRequests = new Map<
     string,
     {
@@ -58,7 +61,7 @@ export class InpageTransport extends EventEmitter implements Transport {
   #handshakeReject?: ((reason?: unknown) => void) | undefined;
   #handshakeTimer: number | undefined;
 
-  constructor(options: InpageTransportOptions = {}) {
+  constructor(options: WindowPostMessageTransportOptions = {}) {
     super();
 
     const { handshakeTimeoutMs } = options;
@@ -66,6 +69,8 @@ export class InpageTransport extends EventEmitter implements Transport {
       this.#handshakeTimeoutMs = handshakeTimeoutMs;
     }
 
+    // session is rotated per `connect()` attempt (not per instance lifetime).
+    this.#sessionId = createId();
     window.addEventListener("message", this.#handleMessage);
   }
 
@@ -79,6 +84,7 @@ export class InpageTransport extends EventEmitter implements Transport {
       meta: this.#meta ? cloneTransportMeta(this.#meta) : null,
     };
   }
+
   #clearHandshakeTimer() {
     if (this.#handshakeTimer === undefined) return;
     window.clearTimeout(this.#handshakeTimer);
@@ -118,11 +124,11 @@ export class InpageTransport extends EventEmitter implements Transport {
   #setConnection(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
     const accounts = this.#normalizeAccounts(payload.accounts);
     this.#connected = true;
-    this.#caip2 = payload.caip2 ?? null;
+    this.#caip2 = payload.caip2;
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
-    this.#isUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
-    this.#meta = payload.meta ? cloneTransportMeta(payload.meta) : null;
+    this.#isUnlocked = payload.isUnlocked;
+    this.#meta = cloneTransportMeta(payload.meta);
 
     this.#resolveHandshake();
     if (options?.emitConnect ?? true) {
@@ -135,6 +141,7 @@ export class InpageTransport extends EventEmitter implements Transport {
       });
     }
   }
+
   #setAccounts(accounts: string[]) {
     const next = this.#normalizeAccounts(accounts);
     this.#accounts = next;
@@ -181,6 +188,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.#accounts = [];
     this.#isUnlocked = null;
     this.#meta = null;
+    this.#handshakeId = null;
 
     this.#rejectHandshake(error);
     for (const [id, { reject }] of this.#pendingRequests) {
@@ -190,33 +198,29 @@ export class InpageTransport extends EventEmitter implements Transport {
     this.emit("disconnect", error);
   };
 
-  async request(args: RequestArguments): Promise<unknown> {
+  async request(args: RequestArguments, options?: TransportRequestOptions): Promise<unknown> {
     if (!this.#connected) {
       throw this.#getProviderErrors().disconnected();
     }
 
-    const { method, params = [] } = args;
+    const { method, params } = args;
 
     const request: TransportRequest = {
       id: (this.#id++).toString(),
       jsonrpc: "2.0",
       method,
-      params,
+      ...(params === undefined ? {} : { params }),
     };
     const id = request.id as string;
-    const env: Envelope = { channel: CHANNEL, type: "request", id, payload: request };
+    const env: Envelope = { channel: CHANNEL, sessionId: this.#sessionId, type: "request", id, payload: request };
 
     const rpc = await new Promise<TransportResponse>((resolve, reject) => {
+      const timeoutMs = options?.timeoutMs ?? this.#timeoutMs;
       const timer = window.setTimeout(() => {
         this.#pendingRequests.delete(id);
-        const providerErrors = this.#getProviderErrors();
-        reject(
-          providerErrors.custom({
-            code: -32603,
-            message: "Request timed out",
-          }),
-        );
-      }, this.#timeoutMs);
+        const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
+        reject(getRpcErrors(namespace).internal({ message: "Request timed out" }));
+      }, timeoutMs);
 
       this.#pendingRequests.set(id, {
         resolve: (value) => {
@@ -244,19 +248,19 @@ export class InpageTransport extends EventEmitter implements Transport {
 
   #handleMessage = (event: MessageEvent) => {
     if (event.source !== window) return;
+    if (event.origin !== window.location.origin) return;
 
     const data = event.data as Envelope | undefined;
 
     if (!data || typeof data !== "object" || data?.channel !== CHANNEL) return;
+    if (data.sessionId !== this.#sessionId) return;
 
     switch (data.type) {
       case "handshake_ack": {
-        const shouldUpdate = this.#shouldRefreshConnection(data.payload);
-        if (shouldUpdate) {
-          this.#setConnection(data.payload, { emitConnect: true });
-        } else {
-          this.#resolveHandshake();
-        }
+        if (!this.#handshakePromise) return;
+        if (!this.#handshakeId) return;
+        if (data.payload.handshakeId !== this.#handshakeId) return;
+        this.#setConnection(data.payload, { emitConnect: true });
         break;
       }
 
@@ -325,38 +329,6 @@ export class InpageTransport extends EventEmitter implements Transport {
     }
   };
 
-  #arraysEqual<T>(a: T[], b: T[]): boolean {
-    return a.length === b.length && a.every((value, index) => value === b[index]);
-  }
-
-  #metaEqual(a: TransportMeta | null, b: TransportMeta | null): boolean {
-    if (a === null && b === null) return true;
-    if (a === null || b === null) return false;
-
-    return (
-      a.activeChain === b.activeChain &&
-      a.activeNamespace === b.activeNamespace &&
-      this.#arraysEqual(a.supportedChains, b.supportedChains)
-    );
-  }
-
-  #shouldRefreshConnection(payload: ConnectPayload) {
-    const payloadAccounts = Array.isArray(payload.accounts)
-      ? payload.accounts.filter((item): item is string => typeof item === "string")
-      : [];
-    const payloadUnlocked = typeof payload.isUnlocked === "boolean" ? payload.isUnlocked : null;
-    const payloadMeta = payload.meta ? cloneTransportMeta(payload.meta) : null;
-
-    return (
-      !this.#connected ||
-      this.#chainId !== payload.chainId ||
-      (this.#caip2 ?? null) !== (payload.caip2 ?? null) ||
-      !this.#arraysEqual(this.#accounts, payloadAccounts) ||
-      (this.#isUnlocked ?? null) !== payloadUnlocked ||
-      !this.#metaEqual(this.#meta, payloadMeta)
-    );
-  }
-
   isConnected(): boolean {
     return this.#connected;
   }
@@ -364,9 +336,11 @@ export class InpageTransport extends EventEmitter implements Transport {
   #postHandshake() {
     const msg: Envelope = {
       channel: CHANNEL,
+      sessionId: this.#sessionId,
       type: "handshake",
-      payload: { version: "2.0" },
+      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: this.#handshakeId ?? createId() },
     };
+    this.#handshakeId = msg.payload.handshakeId;
     window.postMessage(msg, window.location.origin);
   }
 
@@ -387,6 +361,9 @@ export class InpageTransport extends EventEmitter implements Transport {
       return this.#handshakePromise;
     }
 
+    // Start a fresh session for each (re)connect attempt to isolate stale messages.
+    this.#sessionId = createId();
+    this.#handshakeId = createId();
     this.#handshakePromise = new Promise<void>((resolve, reject) => {
       this.#handshakeResolve = resolve;
       this.#handshakeReject = reject;
@@ -394,6 +371,7 @@ export class InpageTransport extends EventEmitter implements Transport {
 
     this.#handshakeTimer = window.setTimeout(() => {
       const providerErrors = this.#getProviderErrors();
+      this.#handshakeId = null;
       this.#rejectHandshake(
         providerErrors.custom({
           code: 4900,
@@ -411,6 +389,7 @@ export class InpageTransport extends EventEmitter implements Transport {
     window.removeEventListener("message", this.#handleMessage);
     this.#handleDisconnect();
   };
+
   destroy = () => {
     window.removeEventListener("message", this.#handleMessage);
     this.removeAllListeners();

@@ -42,7 +42,7 @@ class StubTransport extends EventEmitter implements Transport {
     return clone(this.#state);
   }
 
-  request = async (args: RequestArguments) => {
+  request = async (args: RequestArguments, _options?: { timeoutMs?: number }) => {
     this.#requests.push(args);
     return this.#requestHandler(args);
   };

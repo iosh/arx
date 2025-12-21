@@ -20,7 +20,6 @@ export const createBackgroundApp = () => {
     extensionOrigin,
     callbacks: {
       broadcastEvent: (event, params) => portRouter?.broadcastEvent(event, params),
-      broadcastHandshakeAck: (snapshot) => portRouter?.broadcastHandshakeAck(snapshot),
       broadcastDisconnect: () => portRouter?.broadcastDisconnect(),
       syncAllPortContexts: (snapshot) => portRouter?.syncAllPortContexts(snapshot),
     },

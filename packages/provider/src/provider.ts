@@ -32,6 +32,21 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
 const PROVIDER_STATE_METHODS = new Set(["metamask_getProviderState", "wallet_getProviderState"]);
 const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
 
+const APPROVAL_REQUEST_TIMEOUT_MS = 10 * 60_000;
+const APPROVAL_METHODS = new Set<string>([
+  "eth_requestAccounts",
+  "personal_sign",
+  "eth_sign",
+  "eth_signTypedData",
+  "eth_signTypedData_v3",
+  "eth_signTypedData_v4",
+  "eth_sendTransaction",
+  "wallet_addEthereumChain",
+  "wallet_switchEthereumChain",
+  "wallet_requestPermissions",
+  "wallet_watchAsset",
+]);
+
 const DEFAULT_READY_TIMEOUT_MS = 5000;
 
 type ProviderStateSnapshot = {
@@ -59,7 +74,7 @@ type ProviderPatch =
 type ApplyOptions = { emit?: boolean };
 
 export class EthereumProvider extends EventEmitter implements EIP1193Provider {
-  #namespace = DEFAULT_NAMESPACE;
+  #namespace: string = DEFAULT_NAMESPACE;
   readonly isArx = true;
   #transport: Transport;
   #initialized = false;
@@ -503,7 +518,8 @@ export class EthereumProvider extends EventEmitter implements EIP1193Provider {
     }
 
     try {
-      const result = await this.#transport.request(args);
+      const transportOptions = APPROVAL_METHODS.has(method) ? { timeoutMs: APPROVAL_REQUEST_TIMEOUT_MS } : undefined;
+      const result = await this.#transport.request(args, transportOptions);
       if (method === "eth_requestAccounts" && Array.isArray(result)) {
         const next = result.filter((item): item is string => typeof item === "string");
         this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });

@@ -7,8 +7,7 @@ import {
   type JsonRpcParams,
   type JsonRpcRequest,
 } from "@arx/core";
-import { CHANNEL } from "@arx/extension-provider/constants";
-import type { Envelope } from "@arx/extension-provider/types";
+import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { resolveOrigin } from "./origin";
@@ -45,6 +44,7 @@ export const createPortRouter = ({
 }: PortRouterDeps) => {
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
+  const sessionByPort = new Map<Runtime.Port, string>();
 
   const getPendingRequestMap = (port: Runtime.Port) => {
     let requestMap = pendingRequests.get(port);
@@ -76,9 +76,12 @@ export const createPortRouter = ({
     connections.delete(port);
     pendingRequests.delete(port);
     portContexts.delete(port);
+    sessionByPort.delete(port);
     const origin = getPortOrigin(port);
     portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
   };
+
+  const getSessionIdForPort = (port: Runtime.Port) => sessionByPort.get(port) ?? null;
 
   const postEnvelope = (port: Runtime.Port, envelope: Envelope): boolean => {
     try {
@@ -112,10 +115,13 @@ export const createPortRouter = ({
   };
 
   const emitEventToPort = (port: Runtime.Port, event: string, params: unknown[]) => {
+    const sessionId = getSessionIdForPort(port);
+    if (!sessionId) return;
     postEnvelopeOrDrop(
       port,
       {
         channel: CHANNEL,
+        sessionId,
         type: "event",
         payload: { event, params },
       },
@@ -124,10 +130,13 @@ export const createPortRouter = ({
   };
 
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
+    const sessionId = getSessionIdForPort(port);
+    if (!sessionId) return;
     postEnvelopeOrDrop(
       port,
       {
         channel: CHANNEL,
+        sessionId,
         type: "response",
         id,
         payload,
@@ -161,25 +170,34 @@ export const createPortRouter = ({
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
-    broadcastSafe(
-      (port) =>
-        postEnvelope(port, {
-          channel: CHANNEL,
-          type: "event",
-          payload: { event, params },
-        }),
-      "broadcast_event_failed",
-    );
+    broadcastSafe((port) => {
+      const sessionId = getSessionIdForPort(port);
+      if (!sessionId) return true;
+      return postEnvelope(port, {
+        channel: CHANNEL,
+        sessionId,
+        type: "event",
+        payload: { event, params },
+      });
+    }, "broadcast_event_failed");
   };
 
-  const sendHandshakeAck = (port: Runtime.Port, snapshot: ControllerSnapshot) => {
+  const sendHandshakeAck = (
+    port: Runtime.Port,
+    envelope: Extract<Envelope, { type: "handshake" }>,
+    snapshot: ControllerSnapshot,
+  ) => {
     syncPortContext(port, snapshot, portContexts, extensionOrigin);
+    sessionByPort.set(port, envelope.sessionId);
     postEnvelopeOrDrop(
       port,
       {
         channel: CHANNEL,
+        sessionId: envelope.sessionId,
         type: "handshake_ack",
         payload: {
+          protocolVersion: PROTOCOL_VERSION,
+          handshakeId: envelope.payload.handshakeId,
           chainId: snapshot.chain.chainId ?? "0x0",
           caip2: snapshot.chain.caip2,
           accounts: snapshot.accounts,
@@ -189,23 +207,6 @@ export const createPortRouter = ({
       },
       "send_handshake_failed",
     );
-  };
-
-  const broadcastHandshakeAck = (snapshot: ControllerSnapshot) => {
-    broadcastSafe((port) => {
-      syncPortContext(port, snapshot, portContexts, extensionOrigin);
-      return postEnvelope(port, {
-        channel: CHANNEL,
-        type: "handshake_ack",
-        payload: {
-          chainId: snapshot.chain.chainId ?? "0x0",
-          caip2: snapshot.chain.caip2,
-          accounts: snapshot.accounts,
-          isUnlocked: snapshot.isUnlocked,
-          meta: snapshot.meta,
-        },
-      });
-    }, "broadcast_handshake_failed");
   };
 
   const getProviderErrorsForPort = (port: Runtime.Port) => {
@@ -224,10 +225,13 @@ export const createPortRouter = ({
 
   const broadcastDisconnect = () => {
     broadcastSafe((port) => {
+      const sessionId = getSessionIdForPort(port);
+      if (!sessionId) return true;
       const error = getProviderErrorsForPort(port).disconnected().serialize();
       rejectPendingWithDisconnect(port, error);
       const success = postEnvelope(port, {
         channel: CHANNEL,
+        sessionId,
         type: "event",
         payload: { event: "disconnect", params: [error] },
       });
@@ -310,21 +314,35 @@ export const createPortRouter = ({
       });
     }
 
-    const handleHandshake = async () => {
-      await ensureContext();
-      const current = getControllerSnapshot();
-      sendHandshakeAck(port, current);
-    };
-
     const handleMessage = (message: unknown) => {
       const envelope = message as Envelope | undefined;
       if (!envelope || envelope.channel !== CHANNEL) return;
 
       switch (envelope.type) {
-        case "handshake":
-          void handleHandshake();
+        case "handshake": {
+          void (async () => {
+            // Allow session rotation: each connect attempt inpage may start a new sessionId.
+            // If the session changes, drop any background-side pending tracking for the old session.
+            const expectedSessionId = getSessionIdForPort(port);
+            if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
+              clearPendingForPort(port);
+            }
+            await ensureContext();
+            const current = getControllerSnapshot();
+            sendHandshakeAck(port, envelope, current);
+          })();
           break;
+        }
         case "request": {
+          const expectedSessionId = getSessionIdForPort(port);
+          if (!expectedSessionId) {
+            dropStalePort(port, "request_without_handshake");
+            return;
+          }
+          if (envelope.sessionId !== expectedSessionId) {
+            // Stale request from a previous session; ignore.
+            return;
+          }
           handleRpcRequest(port, envelope);
           break;
         }
@@ -344,6 +362,7 @@ export const createPortRouter = ({
         connections.delete(port);
         pendingRequests.delete(port);
         portContexts.delete(port);
+        sessionByPort.delete(port);
       }
 
       port.onMessage.removeListener(handleMessage);
@@ -364,12 +383,12 @@ export const createPortRouter = ({
     connections.clear();
     pendingRequests.clear();
     portContexts.clear();
+    sessionByPort.clear();
   };
 
   return {
     handleConnect,
     broadcastEvent,
-    broadcastHandshakeAck,
     broadcastDisconnect,
     syncAllPortContexts: syncAllPortContextsForSnapshot,
     destroy,

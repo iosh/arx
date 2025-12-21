@@ -37,7 +37,6 @@ export type BackgroundContext = {
 
 type ServiceCallbacks = {
   broadcastEvent: (event: string, params: unknown[]) => void;
-  broadcastHandshakeAck: (snapshot: ControllerSnapshot) => void;
   broadcastDisconnect: () => void;
   syncAllPortContexts: (snapshot: ControllerSnapshot) => void;
 };
@@ -244,8 +243,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           sessionLog("event:onUnlocked", { at: payload.at });
           callbacks.broadcastEvent("session:unlocked", [payload]);
           publishAccountsState();
-          const snapshot = getControllerSnapshot();
-          callbacks.broadcastHandshakeAck(snapshot);
         }),
       );
       unsubscribeControllerEvents.push(

@@ -14,7 +14,9 @@
     "./provider": "./src/provider.ts",
     "./host": "./src/host/index.ts",
     "./registry": "./src/registry/index.ts",
-    "./evm": "./src/evm/index.ts"
+    "./evm": "./src/evm/index.ts",
+    "./protocol": "./src/protocol/index.ts",
+    "./transport": "./src/transport/index.ts"
   },
   "devDependencies": {
     "typescript": "catalog:"

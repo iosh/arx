@@ -30,12 +30,16 @@ export type TransportState = {
   meta: TransportMeta | null;
 };
 
+export type TransportRequestOptions = {
+  timeoutMs?: number;
+};
+
 export interface Transport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
   getConnectionState(): TransportState;
-  request(args: RequestArguments): Promise<unknown>;
+  request(args: RequestArguments, options?: TransportRequestOptions): Promise<unknown>;
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeListener(event: string, listener: (...args: unknown[]) => void): void;
 }

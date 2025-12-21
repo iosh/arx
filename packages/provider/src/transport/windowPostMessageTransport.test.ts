@@ -44,14 +44,20 @@ describe("WindowPostMessageTransport handshake/disconnect", () => {
     return { sessionId: sessionId as string, handshakeId: handshakeId as string };
   };
 
-  const dispatchHandshakeAck = (sessionId: string, handshakeId: string, payload: any) => {
+  const dispatchHandshakeAck = (
+    sessionId: string,
+    handshakeId: string,
+    payload: any,
+    options?: { protocolVersion?: number | null },
+  ) => {
+    const protocolVersion = options?.protocolVersion ?? PROTOCOL_VERSION;
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
           channel: CHANNEL,
           sessionId,
           type: "handshake_ack",
-          payload: { ...payload, protocolVersion: PROTOCOL_VERSION, handshakeId },
+          payload: { ...payload, ...(protocolVersion === null ? {} : { protocolVersion }), handshakeId },
         },
         source: window as MessageEventSource,
         origin: window.location.origin,
@@ -112,6 +118,90 @@ describe("WindowPostMessageTransport handshake/disconnect", () => {
     expect(state.chainId).toBe("0x1");
     expect(state.accounts).toEqual(["0xabc"]);
     expect(state.caip2).toBe("eip155:1");
+    postMessageSpy.mockRestore();
+  });
+
+  it("accepts handshake_ack without protocolVersion (defaults to v1)", async () => {
+    const t = createTransport();
+    const postMessageSpy = vi.spyOn(window, "postMessage");
+
+    const pendingConnect = t.connect();
+    const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
+
+    dispatchHandshakeAck(
+      sessionId,
+      handshakeId,
+      {
+        chainId: "0x1",
+        caip2: "eip155:1",
+        accounts: ["0xabc"],
+        isUnlocked: true,
+        meta: {
+          activeChain: "eip155:1",
+          activeNamespace: "eip155",
+          supportedChains: ["eip155:1"],
+        },
+      },
+      { protocolVersion: null },
+    );
+
+    await expect(pendingConnect).resolves.toBeUndefined();
+    expect(t.isConnected()).toBe(true);
+    postMessageSpy.mockRestore();
+  });
+
+  it("rejects connect when handshake_ack has unsupported protocolVersion", async () => {
+    const t = createTransport();
+    const postMessageSpy = vi.spyOn(window, "postMessage");
+
+    const pendingConnect = t.connect();
+    const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
+
+    dispatchHandshakeAck(
+      sessionId,
+      handshakeId,
+      {
+        chainId: "0x1",
+        caip2: "eip155:1",
+        accounts: ["0xabc"],
+        isUnlocked: true,
+        meta: {
+          activeChain: "eip155:1",
+          activeNamespace: "eip155",
+          supportedChains: ["eip155:1"],
+        },
+      },
+      { protocolVersion: 999 },
+    );
+
+    await expect(pendingConnect).rejects.toMatchObject({ code: 4900 });
+    expect(t.isConnected()).toBe(false);
+    postMessageSpy.mockRestore();
+  });
+
+  it("ignores malformed handshake_ack payload without crashing", async () => {
+    const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 20 });
+    instances.push(t);
+
+    const postMessageSpy = vi.spyOn(window, "postMessage");
+    const pendingConnect = t.connect();
+    const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
+
+    // missing meta/isUnlocked/etc: should be ignored by guards, then timeout
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          channel: CHANNEL,
+          sessionId,
+          type: "handshake_ack",
+          payload: { protocolVersion: PROTOCOL_VERSION, handshakeId, chainId: "0x1" },
+        },
+        source: window as MessageEventSource,
+        origin: window.location.origin,
+      }),
+    );
+
+    await expect(pendingConnect).rejects.toMatchObject({ code: 4900 });
     postMessageSpy.mockRestore();
   });
 

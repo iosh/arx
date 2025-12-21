@@ -1,14 +1,15 @@
 import type { TransportMeta, TransportRequest, TransportResponse } from "../types/transport.js";
 import { CHANNEL } from "./channel.js";
 import type { ProtocolVersion } from "./version.js";
+import { PROTOCOL_VERSION } from "./version.js";
 
 export type HandshakePayload = {
-  protocolVersion: ProtocolVersion;
+  protocolVersion?: ProtocolVersion | number;
   handshakeId: string;
 };
 
 export type HandshakeAckPayload = {
-  protocolVersion: ProtocolVersion;
+  protocolVersion?: ProtocolVersion | number;
   handshakeId: string;
   chainId: string;
   caip2: string;
@@ -28,4 +29,9 @@ export const isEnvelope = (value: unknown): value is Envelope => {
   if (!value || typeof value !== "object") return false;
   const candidate = value as { channel?: unknown; type?: unknown; sessionId?: unknown };
   return candidate.channel === CHANNEL && typeof candidate.type === "string" && typeof candidate.sessionId === "string";
+};
+
+export const resolveProtocolVersion = (value: unknown): ProtocolVersion | number => {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  return PROTOCOL_VERSION;
 };

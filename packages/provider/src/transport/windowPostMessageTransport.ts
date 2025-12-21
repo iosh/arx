@@ -2,6 +2,7 @@ import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { CHANNEL } from "../protocol/channel.js";
 import type { Envelope } from "../protocol/envelope.js";
+import { resolveProtocolVersion } from "../protocol/envelope.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import type { EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
 import type {
@@ -27,6 +28,27 @@ const cloneTransportMeta = (meta: TransportMeta): TransportMeta => ({
   activeNamespace: meta.activeNamespace,
   supportedChains: [...meta.supportedChains],
 });
+
+const isTransportMeta = (value: unknown): value is TransportMeta => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<TransportMeta>;
+  if (typeof candidate.activeChain !== "string") return false;
+  if (typeof candidate.activeNamespace !== "string") return false;
+  if (!Array.isArray(candidate.supportedChains)) return false;
+  return candidate.supportedChains.every((chain) => typeof chain === "string");
+};
+
+const isConnectPayload = (value: unknown): value is ConnectPayload => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ConnectPayload>;
+  if (typeof candidate.handshakeId !== "string") return false;
+  if (typeof candidate.chainId !== "string") return false;
+  if (typeof candidate.caip2 !== "string") return false;
+  if (typeof candidate.isUnlocked !== "boolean") return false;
+  if (!Array.isArray(candidate.accounts) || !candidate.accounts.every((a) => typeof a === "string")) return false;
+  if (!isTransportMeta(candidate.meta)) return false;
+  return true;
+};
 
 const createId = (): string => {
   const random = globalThis.crypto?.randomUUID?.();
@@ -128,7 +150,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
     this.#isUnlocked = payload.isUnlocked;
-    this.#meta = cloneTransportMeta(payload.meta);
+    this.#meta = isTransportMeta(payload.meta) ? cloneTransportMeta(payload.meta) : null;
 
     this.#resolveHandshake();
     if (options?.emitConnect ?? true) {
@@ -161,7 +183,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
       this.#isUnlocked = update.isUnlocked;
     }
     if (update.meta !== undefined) {
-      this.#meta = update.meta ? cloneTransportMeta(update.meta) : null;
+      this.#meta = update.meta && isTransportMeta(update.meta) ? cloneTransportMeta(update.meta) : null;
     }
 
     this.emit("chainChanged", {
@@ -259,7 +281,22 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
       case "handshake_ack": {
         if (!this.#handshakePromise) return;
         if (!this.#handshakeId) return;
+        if (!isConnectPayload(data.payload)) return;
         if (data.payload.handshakeId !== this.#handshakeId) return;
+
+        const incomingVersion = resolveProtocolVersion(data.payload.protocolVersion);
+        if (incomingVersion !== PROTOCOL_VERSION) {
+          const providerErrors = this.#getProviderErrors();
+          this.#handshakeId = null;
+          this.#rejectHandshake(
+            providerErrors.custom({
+              code: 4900,
+              message: `Unsupported protocol version: ${String(incomingVersion)}`,
+            }),
+          );
+          return;
+        }
+
         this.#setConnection(data.payload, { emitConnect: true });
         break;
       }

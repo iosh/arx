@@ -1,4 +1,4 @@
-import type { EthereumProvider } from "../provider.js";
+import type { EthereumProvider } from "../provider/index.js";
 import type { RequestArguments } from "../types/eip1193.js";
 
 const PROTECTED_METHODS = new Set<PropertyKey>([

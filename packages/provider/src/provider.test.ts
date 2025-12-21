@@ -6,7 +6,7 @@ import {
 } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { describe, expect, it, vi } from "vitest";
-import { EthereumProvider } from "./provider.js";
+import { EthereumProvider } from "./provider/index.js";
 import type { RequestArguments } from "./types/eip1193.js";
 import type { Transport, TransportMeta, TransportState } from "./types/transport.js";
 
@@ -538,7 +538,7 @@ describe("EthereumProvider transport meta integration", () => {
     const { provider } = createProvider(initial);
 
     await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
-    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc"]);
   });
 
   it("eth_chainId throws 4900 when not connected and no cache; eth_accounts returns []", async () => {
@@ -556,10 +556,12 @@ describe("EthereumProvider transport meta integration", () => {
     try {
       const chainIdPromise = provider.request({ method: "eth_chainId" });
       const chainIdAssertion = expect(chainIdPromise).rejects.toMatchObject({ code: 4900 });
-      await vi.advanceTimersByTimeAsync(5_001);
+      await vi.advanceTimersByTimeAsync(10_001);
       await chainIdAssertion;
 
-      await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
+      const accountsPromise = provider.request({ method: "eth_accounts" });
+      await vi.advanceTimersByTimeAsync(200);
+      await expect(accountsPromise).resolves.toEqual([]);
     } finally {
       vi.useRealTimers();
     }

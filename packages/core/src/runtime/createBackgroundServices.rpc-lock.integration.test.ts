@@ -107,6 +107,12 @@ describe("createBackgroundServices (locked RPC integration)", () => {
         chainRef: chain.chainRef,
       });
 
+      await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        accounts: [address],
+      });
+
       services.session.unlock.lock("manual");
 
       await expect(harness.callRpc({ method: "eth_accounts" })).resolves.toEqual([]);

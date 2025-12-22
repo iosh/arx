@@ -662,4 +662,73 @@ describe("eip155 handlers - core error paths", () => {
       services.lifecycle.destroy();
     }
   });
+
+  it("returns [] for eth_accounts when wallet is unlocked but origin is not connected", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
+    const chain = services.controllers.network.getActiveChain();
+    await services.controllers.accounts.addAccount({
+      chainRef: chain.chainRef,
+      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      makePrimary: true,
+    });
+
+    const execute = createExecutor(services);
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "eth_accounts", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("returns permitted accounts for eth_accounts after connection writes accountsByChain", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+
+    const chain = services.controllers.network.getActiveChain();
+    const a1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const a2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a1, makePrimary: true });
+    await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a2 });
+
+    await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: chain.chainRef,
+      accounts: [a1, a2],
+    });
+
+    const execute = createExecutor(services);
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "eth_accounts", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([a1, a2]);
+
+      await expect(
+        execute({
+          origin: "https://other.example",
+          request: { method: "eth_accounts", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([]);
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
 });

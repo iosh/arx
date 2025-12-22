@@ -207,12 +207,14 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
     switch (task.type) {
       case ApprovalTypes.RequestAccounts: {
         const payload = extractPayload<RequestAccountsPayload>(task.payload);
+        const suggestedAccounts = Array.isArray(payload.suggestedAccounts)
+          ? payload.suggestedAccounts.map((value) => String(value))
+          : [];
+
         return {
           ...base,
           type: "requestAccounts",
-          payload: {
-            suggestedAccounts: Array.isArray(payload.suggestedAccounts) ? payload.suggestedAccounts : [],
-          },
+          payload: { suggestedAccounts },
         };
       }
       case ApprovalTypes.SignMessage: {
@@ -432,21 +434,38 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
           }
           case ApprovalTypes.RequestAccounts: {
             const result = await controllers.approvals.resolve(task.id, async () => {
+              const chainRef = task.chainRef ?? controllers.network.getActiveChain().chainRef;
+
               const accounts = await controllers.accounts.requestAccounts({
                 origin: task.origin,
-                chainRef: task.chainRef ?? controllers.network.getActiveChain().chainRef,
+                chainRef,
               });
-              if (accounts.length > 0) {
-                await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
-                  namespace: task.namespace ?? "eip155",
-                  chainRef: task.chainRef,
-                });
-                await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
-                  namespace: task.namespace ?? "eip155",
-                  chainRef: task.chainRef,
+
+              const uniqueAccounts = [...new Set(accounts)];
+              if (uniqueAccounts.length === 0) {
+                const providerErrors = getProviderErrors(task.namespace ?? "eip155");
+                throw providerErrors.unauthorized({
+                  message: "No accounts available for connection request",
+                  data: { origin: task.origin, reason: "no_accounts" },
                 });
               }
-              return accounts;
+
+              await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
+                namespace: task.namespace ?? "eip155",
+                chainRef,
+              });
+              await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
+                namespace: task.namespace ?? "eip155",
+                chainRef,
+              });
+
+              await controllers.permissions.setPermittedAccounts(task.origin, {
+                namespace: task.namespace ?? "eip155",
+                chainRef,
+                accounts: uniqueAccounts,
+              });
+
+              return uniqueAccounts;
             });
             broadcast();
             return { id: task.id, result };

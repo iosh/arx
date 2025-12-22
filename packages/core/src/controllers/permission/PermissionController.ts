@@ -1,3 +1,5 @@
+import type { Caip2ChainId } from "../../chains/ids.js";
+import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../chains/registry.js";
 import type { ChainNamespace } from "../account/types.js";
 import type {
   GrantPermissionOptions,
@@ -20,6 +22,13 @@ const DEFAULT_PERMISSION_NAMESPACE: ChainNamespace = "eip155";
 const cloneNamespaceState = (state: NamespacePermissionState): NamespacePermissionState => ({
   scopes: [...state.scopes],
   chains: [...state.chains],
+  ...(state.accountsByChain
+    ? {
+        accountsByChain: Object.fromEntries(
+          Object.entries(state.accountsByChain).map(([chainRef, accounts]) => [chainRef, [...accounts]]),
+        ),
+      }
+    : {}),
 });
 
 const cloneOriginState = (state: OriginPermissionState): OriginPermissionState =>
@@ -38,7 +47,22 @@ const isSameList = (prev: readonly string[], next: readonly string[]) => {
 };
 
 const isSameNamespaceState = (prev: NamespacePermissionState, next: NamespacePermissionState) => {
-  return isSameList(prev.scopes, next.scopes) && isSameList(prev.chains, next.chains);
+  if (!isSameList(prev.scopes, next.scopes) || !isSameList(prev.chains, next.chains)) return false;
+
+  const prevMap = prev.accountsByChain;
+  const nextMap = next.accountsByChain;
+  if (!prevMap && !nextMap) return true;
+  if (!prevMap || !nextMap) return false;
+
+  const prevKeys = Object.keys(prevMap).sort();
+  const nextKeys = Object.keys(nextMap).sort();
+  if (!isSameList(prevKeys, nextKeys)) return false;
+
+  return prevKeys.every((key) => {
+    const prevAccounts = prevMap[key as keyof typeof prevMap] ?? [];
+    const nextAccounts = nextMap[key as keyof typeof nextMap] ?? [];
+    return isSameList(prevAccounts, nextAccounts);
+  });
 };
 
 const isSameOriginState = (prev: OriginPermissionState, next: OriginPermissionState) => {
@@ -90,6 +114,24 @@ const resolveNamespaceFromContext = (context?: Parameters<PermissionScopeResolve
   return parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
 };
 
+const resolveNamespaceFromOptions = (options: {
+  namespace?: ChainNamespace | null;
+  chainRef: Caip2ChainId;
+}): { namespace: ChainNamespace; chainRef: Caip2ChainId } => {
+  const parsed = parseChainRef(options.chainRef);
+  const namespace = (options.namespace ?? parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE) as ChainNamespace;
+  const normalized = (parsed?.value ?? options.chainRef) as Caip2ChainId;
+
+  if (options.namespace && parsed && parsed.namespace !== options.namespace) {
+    throw new Error(
+      `Permission namespace mismatch: chainRef "${parsed.value}" belongs to namespace "${parsed.namespace}" but
+  "${options.namespace}" was provided`,
+    );
+  }
+
+  return { namespace, chainRef: normalized };
+};
+
 const resolveNamespaceState = (
   state: PermissionsState,
   origin: string,
@@ -102,10 +144,12 @@ export class InMemoryPermissionController implements PermissionController {
   #messenger: PermissionMessenger;
   #scopeResolver: PermissionScopeResolver;
   #state: PermissionsState;
+  #chains: ChainModuleRegistry;
 
   constructor({ messenger, scopeResolver, initialState }: PermissionControllerOptions) {
     this.#messenger = messenger;
     this.#scopeResolver = scopeResolver;
+    this.#chains = createDefaultChainModuleRegistry();
     this.#state = cloneState(initialState ?? { origins: {} });
     this.#publishState();
   }
@@ -114,6 +158,78 @@ export class InMemoryPermissionController implements PermissionController {
     return cloneState(this.#state);
   }
 
+  getPermittedAccounts(
+    origin: string,
+    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId },
+  ): string[] {
+    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
+    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    const accounts = namespaceState?.accountsByChain?.[chainRef] ?? [];
+    return [...accounts];
+  }
+
+  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }): boolean {
+    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
+    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    return namespaceState?.accountsByChain?.[chainRef] !== undefined;
+  }
+
+  async setPermittedAccounts(
+    origin: string,
+    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId; accounts: string[] },
+  ): Promise<void> {
+    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
+
+    const seen = new Set<string>();
+    const uniqueAccounts: string[] = [];
+
+    for (const raw of options.accounts) {
+      if (typeof raw !== "string") continue;
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+
+      const canonical =
+        namespace === "eip155" ? this.#chains.normalizeAddress({ chainRef, value: trimmed }).canonical : trimmed;
+
+      if (seen.has(canonical)) continue;
+      seen.add(canonical);
+      uniqueAccounts.push(canonical);
+    }
+
+    const currentOrigin = this.#state.origins[origin] ?? {};
+    const currentNamespace = currentOrigin[namespace] ?? { scopes: [], chains: [] };
+
+    const prev = currentNamespace.accountsByChain?.[chainRef];
+    if (prev && isSameList(prev, uniqueAccounts)) {
+      return;
+    }
+
+    const nextNamespace = cloneNamespaceState(currentNamespace);
+    const nextAccountsByChain = { ...(nextNamespace.accountsByChain ?? {}) };
+    nextAccountsByChain[chainRef] = uniqueAccounts;
+
+    const nextOrigin: OriginPermissionState = {
+      ...currentOrigin,
+      [namespace]: {
+        ...nextNamespace,
+        accountsByChain: nextAccountsByChain,
+      },
+    };
+
+    const nextState: PermissionsState = {
+      origins: {
+        ...this.#state.origins,
+        [origin]: nextOrigin,
+      },
+    };
+
+    this.#state = cloneState(nextState);
+    this.#publishState();
+    this.#publishOrigin({
+      origin,
+      namespaces: cloneOriginState(nextOrigin),
+    });
+  }
   async ensurePermission(
     origin: string,
     method: string,

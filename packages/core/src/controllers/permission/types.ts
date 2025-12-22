@@ -15,6 +15,7 @@ export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionS
 export type NamespacePermissionState = {
   scopes: PermissionScope[];
   chains: Caip2ChainId[];
+  accountsByChain?: Record<Caip2ChainId, string[]>;
 };
 
 export type OriginPermissionState = Record<ChainNamespace, NamespacePermissionState>;
@@ -64,6 +65,18 @@ export type PermissionApprovalResult = {
 
 export type PermissionController = {
   getState(): PermissionsState;
+  getState(): PermissionsState;
+
+  getPermittedAccounts(
+    origin: string,
+    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId },
+  ): string[];
+  setPermittedAccounts(
+    origin: string,
+    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId; accounts: string[] },
+  ): Promise<void>;
+  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }): boolean;
+
   ensurePermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;
   clear(origin: string): Promise<void>;

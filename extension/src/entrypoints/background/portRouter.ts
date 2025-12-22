@@ -61,6 +61,19 @@ export const createPortRouter = ({
 
   const getPortOrigin = (port: Runtime.Port) => resolveOrigin(port, extensionOrigin) || "unknown://";
 
+  const getPermittedAccountsForPort = async (port: Runtime.Port, snapshot: ControllerSnapshot): Promise<string[]> => {
+    const origin = getPortOrigin(port);
+    if (origin === "unknown://") return [];
+
+    const { controllers } = await ensureContext();
+    const portContext = portContexts.get(port);
+
+    const chainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? snapshot.chain.caip2;
+    const namespace = portContext?.namespace ?? snapshot.meta.activeNamespace ?? DEFAULT_NAMESPACE;
+
+    return controllers.permissions.getPermittedAccounts(origin, { namespace, chainRef });
+  };
+
   const toErrorDetails = (error: unknown): Record<string, string> => {
     if (!error) return {};
     if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
@@ -170,6 +183,34 @@ export const createPortRouter = ({
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
+    if (event === "accountsChanged") {
+      const snapshot = getControllerSnapshot();
+
+      for (const port of [...connections]) {
+        const sessionId = getSessionIdForPort(port);
+        if (!sessionId) continue;
+
+        void (async () => {
+          try {
+            const accounts = await getPermittedAccountsForPort(port, snapshot);
+            const ok = postEnvelope(port, {
+              channel: CHANNEL,
+              sessionId,
+              type: "event",
+              payload: { event: "accountsChanged", params: [accounts] },
+            });
+            if (!ok) {
+              dropStalePort(port, "broadcast_accounts_changed_failed");
+            }
+          } catch (error) {
+            dropStalePort(port, "broadcast_accounts_changed_error", error);
+          }
+        })();
+      }
+
+      return;
+    }
+
     broadcastSafe((port) => {
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) return true;
@@ -182,13 +223,16 @@ export const createPortRouter = ({
     }, "broadcast_event_failed");
   };
 
-  const sendHandshakeAck = (
+  const sendHandshakeAck = async (
     port: Runtime.Port,
     envelope: Extract<Envelope, { type: "handshake" }>,
     snapshot: ControllerSnapshot,
   ) => {
     syncPortContext(port, snapshot, portContexts, extensionOrigin);
     sessionByPort.set(port, envelope.sessionId);
+
+    const accounts = await getPermittedAccountsForPort(port, snapshot);
+
     postEnvelopeOrDrop(
       port,
       {
@@ -200,7 +244,7 @@ export const createPortRouter = ({
           handshakeId: envelope.payload.handshakeId,
           chainId: snapshot.chain.chainId ?? "0x0",
           caip2: snapshot.chain.caip2,
-          accounts: snapshot.accounts,
+          accounts,
           isUnlocked: snapshot.isUnlocked,
           meta: snapshot.meta,
         },
@@ -329,7 +373,7 @@ export const createPortRouter = ({
             }
             await ensureContext();
             const current = getControllerSnapshot();
-            sendHandshakeAck(port, envelope, current);
+            await sendHandshakeAck(port, envelope, current);
           })();
           break;
         }

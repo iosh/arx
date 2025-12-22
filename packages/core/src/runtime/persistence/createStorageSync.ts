@@ -78,6 +78,16 @@ export const createStorageSync = ({
             {
               scopes: [...namespaceState.scopes],
               chains: [...namespaceState.chains],
+              ...(namespaceState.accountsByChain
+                ? {
+                    accountsByChain: Object.fromEntries(
+                      Object.entries(namespaceState.accountsByChain).map(([chainRef, accounts]) => [
+                        chainRef,
+                        [...accounts],
+                      ]),
+                    ),
+                  }
+                : {}),
             },
           ]),
         ),

@@ -190,6 +190,7 @@ const chainNamespaceSchema = z.string().min(1);
 const namespacePermissionStateSchema = z.strictObject({
   scopes: z.array(permissionScopeSchema),
   chains: z.array(caip2ChainIdSchema),
+  accountsByChain: z.record(caip2ChainIdSchema, z.array(accountAddressSchema)).optional(),
 });
 
 const originPermissionStateSchema = z.record(chainNamespaceSchema, namespacePermissionStateSchema);

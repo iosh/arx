@@ -1,7 +1,12 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { ZodError } from "zod";
 import type { Caip2ChainId } from "../../../chains/ids.js";
-import { type ChainMetadata, createEip155MetadataFromEip3085, parseCaip2 } from "../../../chains/index.js";
+import {
+  type ChainMetadata,
+  createDefaultChainModuleRegistry,
+  createEip155MetadataFromEip3085,
+  parseCaip2,
+} from "../../../chains/index.js";
 import {
   type ApprovalTask,
   ApprovalTypes,
@@ -94,9 +99,15 @@ const handleEthChainId: MethodHandler = ({ controllers }) => {
   return controllers.network.getActiveChain().chainId;
 };
 
-const handleEthAccounts: MethodHandler = ({ controllers }) => {
+const handleEthAccounts: MethodHandler = ({ origin, controllers }) => {
   const active = controllers.network.getActiveChain();
-  return controllers.accounts.getAccounts({ chainRef: active.chainRef });
+  const accounts = controllers.permissions.getPermittedAccounts(origin, {
+    namespace: EIP155_NAMESPACE,
+    chainRef: active.chainRef,
+  });
+
+  const chains = createDefaultChainModuleRegistry();
+  return accounts.map((canonical) => chains.formatAddress({ chainRef: active.chainRef, canonical }));
 };
 
 const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rpcContext }) => {

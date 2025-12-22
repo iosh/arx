@@ -3,7 +3,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english.js";
+import { wordlist } from "@scure/bip39/wordlists/english";
 import { keyringErrors } from "../../errors/keyring.js";
 import { copyBytes, zeroize } from "../../vault/utils.js";
 import type {

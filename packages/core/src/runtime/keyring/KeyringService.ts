@@ -1,5 +1,5 @@
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english.js";
+import { wordlist } from "@scure/bip39/wordlists/english";
 import { keyringErrors } from "../../errors/keyring.js";
 import { vaultErrors } from "../../errors/vault.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";

@@ -133,14 +133,15 @@ const buildEnvelope = (
 const parseSignature = (payload: HexType, privateKey: Uint8Array): ParsedSignature => {
   const payloadBytes = Hex.toBytes(payload);
 
-  const signatureBytes = secp256k1.sign(payloadBytes, privateKey, { lowS: true, format: "recovered" });
-  const signature = secp256k1.Signature.fromBytes(signatureBytes, "recovered");
+  const signature = secp256k1.sign(payloadBytes, privateKey, { lowS: true });
+
+  const compactBytes = signature.toCompactRawBytes();
 
   return {
     r: signature.r,
     s: signature.s,
     yParity: signature.recovery ?? 0,
-    bytes: signatureBytes,
+    bytes: compactBytes,
   };
 };
 

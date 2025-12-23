@@ -230,7 +230,7 @@ export class InMemoryPermissionController implements PermissionController {
       namespaces: cloneOriginState(nextOrigin),
     });
   }
-  async ensurePermission(
+  async assertPermission(
     origin: string,
     method: string,
     context?: Parameters<PermissionScopeResolver>[1],

@@ -46,10 +46,11 @@ describe("createPermissionGuardMiddleware", () => {
 
   it("skips internal origins", async () => {
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission: vi.fn(),
+      assertPermission: vi.fn(),
       isInternalOrigin: () => true,
       resolveMethodDefinition: vi.fn(),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(
@@ -59,10 +60,11 @@ describe("createPermissionGuardMiddleware", () => {
 
   it("allows methods without definition or scope", async () => {
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission: vi.fn(),
+      assertPermission: vi.fn(),
       isInternalOrigin: () => false,
       resolveMethodDefinition: vi.fn(() => undefined),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(runMiddleware(middleware, { origin: UNKNOWN_ORIGIN, method: "eth_chainId" })).resolves.toBeUndefined();
@@ -71,10 +73,11 @@ describe("createPermissionGuardMiddleware", () => {
   it("enforces permission when scope is present", async () => {
     const ensurePermission = vi.fn(() => Promise.reject(new Error("denied")));
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission,
+      assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_accounts" })).rejects.toThrow(
@@ -85,10 +88,11 @@ describe("createPermissionGuardMiddleware", () => {
   it("skips permission check for scoped bootstrap methods", async () => {
     const ensurePermission = vi.fn(() => Promise.reject(new Error("should not run")));
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission,
+      assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn(), isBootstrap: true }),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(
@@ -100,10 +104,11 @@ describe("createPermissionGuardMiddleware", () => {
     const ensurePermission = vi.fn(() => Promise.reject(new Error("denied")));
     const rpcContext: RpcInvocationContext = { namespace: "eip155", chainRef: "eip155:1" };
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission,
+      assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(
@@ -114,10 +119,11 @@ describe("createPermissionGuardMiddleware", () => {
   it("allows requests when ensurePermission succeeds", async () => {
     const ensurePermission = vi.fn(() => Promise.resolve());
     const middleware = createPermissionGuardMiddleware({
-      ensurePermission,
+      assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       resolveProviderErrors,
+      isConnected: vi.fn(() => false),
     });
 
     await expect(

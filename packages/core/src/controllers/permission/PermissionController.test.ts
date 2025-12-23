@@ -71,14 +71,14 @@ describe("InMemoryPermissionController", () => {
     await controller.grant(ORIGIN, PermissionScopes.Accounts, { chainRef: "eip155:137" });
 
     await expect(
-      controller.ensurePermission(ORIGIN, "eth_accounts", { chainRef: "eip155:137" }),
+      controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "eip155:137" }),
     ).resolves.toBeUndefined();
 
-    await expect(controller.ensurePermission(ORIGIN, "eth_accounts", { chainRef: "eip155:1" })).rejects.toThrow(
+    await expect(controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "eip155:1" })).rejects.toThrow(
       /lacks chain permission for "eip155:1"/,
     );
 
-    await expect(controller.ensurePermission(ORIGIN, "eth_accounts", { chainRef: "conflux:cfx" })).rejects.toThrow(
+    await expect(controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "conflux:cfx" })).rejects.toThrow(
       /lacks scope/,
     );
   });
@@ -90,7 +90,7 @@ describe("InMemoryPermissionController", () => {
     await controller.grant(ORIGIN, PermissionScopes.Basic);
 
     await expect(
-      controller.ensurePermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "malformed" }),
+      controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "malformed" }),
     ).resolves.toBeUndefined();
   });
 
@@ -162,7 +162,7 @@ describe("InMemoryPermissionController", () => {
       const { controller } = createController({ scopeResolver });
 
       await expect(
-        controller.ensurePermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:1" }),
+        controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:1" }),
       ).rejects.toThrow(/lacks scope/);
     });
 
@@ -173,7 +173,7 @@ describe("InMemoryPermissionController", () => {
       await controller.grant(ORIGIN, PermissionScopes.Basic, { chainRef: "eip155:1" });
 
       await expect(
-        controller.ensurePermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:10" }),
+        controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:10" }),
       ).rejects.toThrow(/lacks chain permission for "eip155:10"/);
     });
 
@@ -182,7 +182,7 @@ describe("InMemoryPermissionController", () => {
       const { controller } = createController({ scopeResolver });
 
       await expect(
-        controller.ensurePermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:1" }),
+        controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:1" }),
       ).resolves.toBeUndefined();
     });
   });

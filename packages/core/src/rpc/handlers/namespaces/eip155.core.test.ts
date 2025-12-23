@@ -700,8 +700,8 @@ describe("eip155 handlers - core error paths", () => {
     await services.session.unlock.unlock({ password: "test" });
 
     const chain = services.controllers.network.getActiveChain();
-    const a1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const a2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
+    const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 
     await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a1, makePrimary: true });
     await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a2 });

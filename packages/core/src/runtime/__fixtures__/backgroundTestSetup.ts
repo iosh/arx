@@ -693,8 +693,9 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
 
   engine.push(
     createPermissionGuardMiddleware({
-      ensurePermission: (origin, method, context) =>
-        services.controllers.permissions.ensurePermission(origin, method, context),
+      assertPermission: (origin, method, context) =>
+        services.controllers.permissions.assertPermission(origin, method, context),
+      isConnected: (origin, options) => services.controllers.permissions.isConnected(origin, options),
       isInternalOrigin: (origin) => origin === internalOrigin,
       resolveMethodDefinition,
       resolveProviderErrors,

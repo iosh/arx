@@ -133,7 +133,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
         chainRef: chain.chainRef,
       });
 
-      await expect(harness.callRpc({ method: "eth_accounts" })).resolves.toEqual(expect.arrayContaining([address]));
+      const accounts = (await harness.callRpc({ method: "eth_accounts" })) as string[];
+      expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
       await expect(
         harness.callRpc({
@@ -143,6 +144,51 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       ).resolves.toBe("0xsignedpayload");
 
       expect(approval).toHaveBeenCalledTimes(1);
+    } finally {
+      approval.mockRestore();
+      harness.destroy();
+    }
+  });
+
+  it("allows personal_sign when connected but sign scope is missing", async () => {
+    const harness = await createRpcHarness();
+    const { services } = harness;
+    const approval = vi.spyOn(services.controllers.approvals, "requestApproval").mockResolvedValue("0xsignedpayload");
+
+    try {
+      await initializeSession(services);
+      const { chain, address } = await deriveAccount(services);
+
+      // Simulate a connected origin (accountsByChain present), but do NOT grant Sign scope.
+      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+      });
+      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Accounts, {
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+      });
+      await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+        accounts: [address],
+      });
+
+      const beforeScopes = services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.scopes ?? [];
+      expect(beforeScopes).not.toContain(PermissionScopes.Sign);
+
+      await expect(
+        harness.callRpc({
+          origin: ORIGIN,
+          method: "personal_sign",
+          params: [MESSAGE, address] as JsonRpcParams,
+        }),
+      ).resolves.toBe("0xsignedpayload");
+
+      expect(approval).toHaveBeenCalledTimes(1);
+
+      const afterScopes = services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.scopes ?? [];
+      expect(afterScopes).toContain(PermissionScopes.Sign);
     } finally {
       approval.mockRestore();
       harness.destroy();

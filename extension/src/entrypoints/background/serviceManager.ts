@@ -360,9 +360,10 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
 
       engine.push(
         createPermissionGuardMiddleware({
-          ensurePermission: (origin, method, context) =>
-            controllers.permissions.ensurePermission(origin, method, context),
+          assertPermission: (origin, method, context) =>
+            controllers.permissions.assertPermission(origin, method, context),
           isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
+          isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
           resolveMethodDefinition,
           resolveProviderErrors,
         }),

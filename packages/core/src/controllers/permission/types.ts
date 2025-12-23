@@ -77,7 +77,7 @@ export type PermissionController = {
   ): Promise<void>;
   isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }): boolean;
 
-  ensurePermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
+  assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;
   clear(origin: string): Promise<void>;
   getPermissions(origin: string): OriginPermissionState | undefined;

@@ -62,6 +62,7 @@ export const createPortRouter = ({
   const getPortOrigin = (port: Runtime.Port) => resolveOrigin(port, extensionOrigin) || "unknown://";
 
   const getPermittedAccountsForPort = async (port: Runtime.Port, snapshot: ControllerSnapshot): Promise<string[]> => {
+    if (!snapshot.isUnlocked) return [];
     const origin = getPortOrigin(port);
     if (origin === "unknown://") return [];
 

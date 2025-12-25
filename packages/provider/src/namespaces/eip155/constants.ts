@@ -7,7 +7,6 @@ export const PROVIDER_INFO = {
   rdns: "wallet.arx",
 } as const;
 
-export const PROVIDER_STATE_METHODS = new Set(["metamask_getProviderState", "wallet_getProviderState"]);
 export const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
 
 export const DEFAULT_APPROVAL_TIMEOUT_MS = 10 * 60_000;

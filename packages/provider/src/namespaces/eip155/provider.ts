@@ -13,7 +13,6 @@ import {
   DEFAULT_READONLY_TIMEOUT_MS,
   DEFAULT_READY_TIMEOUT_MS,
   PROVIDER_INFO,
-  PROVIDER_STATE_METHODS,
   READONLY_EARLY,
 } from "./constants.js";
 import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot, type ProviderStateSnapshot } from "./state.js";
@@ -145,10 +144,6 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   request = async (args: RequestArguments) => {
     const { method } = this.#parseRequest(args);
     const providerErrors = this.#getProviderErrors();
-
-    if (PROVIDER_STATE_METHODS.has(method)) {
-      return this.getProviderState();
-    }
 
     if (method === "eth_accounts") {
       if (!this.#initialized) {

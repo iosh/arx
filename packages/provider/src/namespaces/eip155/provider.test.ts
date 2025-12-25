@@ -566,32 +566,37 @@ describe("Eip155Provider transport meta integration", () => {
       vi.useRealTimers();
     }
   });
-  it("returns provider snapshot for metamask_getProviderState without transport roundtrip", async () => {
-    const { transport, provider } = createProvider();
-    transport.emit("accountsChanged", ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
-    transport.emit("chainChanged", { chainId: "0x2", caip2: "eip155:2" });
+  // Intentionally no provider-state helper methods.
+});
 
-    await expect(provider.request({ method: "metamask_getProviderState" })).resolves.toEqual({
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      chainId: "0x2",
-      networkVersion: "2",
-      isUnlocked: true,
-    });
-    expect(transport.getRequests()).toHaveLength(0);
-  });
-
-  it("derives networkVersion from CAIP-2 when chainId is null", async () => {
-    const initialState: TransportState = { ...INITIAL_STATE, chainId: null, caip2: "eip155:10" };
-    const { provider } = createProvider(initialState);
-
-    await expect(provider.request({ method: "metamask_getProviderState" })).resolves.toMatchObject({
-      networkVersion: "10",
-    });
-  });
-
-  it("supports wallet_getProviderState alias", async () => {
+describe("Eip155Provider request input validation", () => {
+  it.each([
+    { label: "undefined", args: undefined },
+    { label: "null", args: null },
+    { label: "array", args: [] },
+    { label: "string", args: "foo" },
+  ])("rejects non-object args ($label)", async ({ args }) => {
     const { provider } = createProvider();
+    await expect(provider.request(args as any)).rejects.toMatchObject({ code: -32600 });
+  });
 
-    await expect(provider.request({ method: "wallet_getProviderState" })).resolves.toMatchObject({ chainId: "0x1" });
+  it.each([
+    { label: "missing method", args: {} },
+    { label: "method null", args: { method: null } },
+    { label: "method number", args: { method: 2 } },
+    { label: "method empty string", args: { method: "" } },
+  ])("rejects invalid args.method ($label)", async ({ args }) => {
+    const { provider } = createProvider();
+    await expect(provider.request(args as any)).rejects.toMatchObject({ code: -32600 });
+  });
+
+  it.each([
+    { label: "null", params: null },
+    { label: "number", params: 2 },
+    { label: "boolean", params: true },
+    { label: "string", params: "a" },
+  ])("rejects invalid args.params ($label)", async ({ params }) => {
+    const { provider } = createProvider();
+    await expect(provider.request({ method: "foo", params } as any)).rejects.toMatchObject({ code: -32600 });
   });
 });

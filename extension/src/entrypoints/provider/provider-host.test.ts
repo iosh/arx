@@ -211,14 +211,20 @@ describe("ProviderHost EIP-6963", () => {
     expect(providerAfterReconnect).toBe(provider);
   });
 
-  it("exposes wallet/metamask provider state helpers", async () => {
+  it("supports standard eth_chainId/eth_accounts after handshake", async () => {
     const transport = new WindowPostMessageTransport();
     const host = createProviderHost({ transport, targetWindow: window as unknown as ProviderHostWindow });
+
     const messageHandler = (event: MessageEvent) => {
-      const data = event.data;
-      if (data?.channel === CHANNEL && data?.type === "handshake") {
+      const data = event.data as any;
+      if (data?.channel !== CHANNEL) return;
+
+      const { sessionId, type } = data;
+
+      // Handle handshake
+      if (type === "handshake") {
         const handshakeId = data.payload?.handshakeId;
-        const sessionId = data.sessionId;
+        if (typeof handshakeId !== "string" || typeof sessionId !== "string") return;
         dom.window.dispatchEvent(
           new dom.window.MessageEvent("message", {
             data: {
@@ -243,6 +249,40 @@ describe("ProviderHost EIP-6963", () => {
             origin: dom.window.location.origin,
           }),
         );
+        return;
+      }
+
+      // Handle RPC requests
+      if (type === "request") {
+        const { id, payload } = data;
+        if (typeof sessionId !== "string" || typeof id !== "string") return;
+        if (!payload || typeof payload !== "object") return;
+
+        const responses: Record<string, unknown> = {
+          eth_chainId: "0x1",
+          eth_accounts: ["0xabc"],
+        };
+        const method = (payload as any).method as string | undefined;
+        if (typeof method !== "string") return;
+        if (!(method in responses)) return;
+
+        dom.window.dispatchEvent(
+          new dom.window.MessageEvent("message", {
+            data: {
+              channel: CHANNEL,
+              sessionId,
+              type: "response",
+              id,
+              payload: {
+                jsonrpc: "2.0",
+                id,
+                result: responses[method],
+              },
+            },
+            source: dom.window as unknown as Window,
+            origin: dom.window.location.origin,
+          }),
+        );
       }
     };
 
@@ -253,14 +293,12 @@ describe("ProviderHost EIP-6963", () => {
     });
 
     host.initialize();
+
     await connected;
 
     const provider = (window as any).ethereum;
-    await expect(provider.request({ method: "wallet_getProviderState" })).resolves.toMatchObject({
-      accounts: ["0xabc"],
-      chainId: "0x1",
-      isUnlocked: true,
-    });
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc"]);
 
     dom.window.removeEventListener("message", messageHandler);
   });

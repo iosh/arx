@@ -230,8 +230,13 @@ describe("Eip155Provider transport meta integration", () => {
 
     const { transport, provider } = createProvider(initialState);
     const chainChanged = vi.fn();
+    const networkChanged = vi.fn();
     const accountsChanged = vi.fn();
+    const order: string[] = [];
     provider.on("chainChanged", chainChanged);
+    provider.on("chainChanged", () => order.push("chainChanged"));
+    provider.on("networkChanged", networkChanged);
+    provider.on("networkChanged", () => order.push("networkChanged"));
     provider.on("accountsChanged", accountsChanged);
 
     transport.setRequestHandler(async (args) => {
@@ -261,6 +266,9 @@ describe("Eip155Provider transport meta integration", () => {
     expect(provider.selectedAddress).toBe("0x1111111111111111111111111111111111111111");
     expect(chainChanged).toHaveBeenCalledTimes(1);
     expect(chainChanged).toHaveBeenCalledWith("0x89");
+    expect(networkChanged).toHaveBeenCalledTimes(1);
+    expect(networkChanged).toHaveBeenCalledWith("137");
+    expect(order).toEqual(["chainChanged", "networkChanged"]);
     expect(accountsChanged).not.toHaveBeenCalled();
     expect(transport.getRequests()).toHaveLength(1);
   });
@@ -322,7 +330,9 @@ describe("Eip155Provider transport meta integration", () => {
 
     const { transport, provider } = createProvider(initialState);
     const chainChanged = vi.fn();
+    const networkChanged = vi.fn();
     provider.on("chainChanged", chainChanged);
+    provider.on("networkChanged", networkChanged);
 
     transport.setRequestHandler(async (args) => {
       expect(args.method).toBe("wallet_addEthereumChain");
@@ -353,6 +363,7 @@ describe("Eip155Provider transport meta integration", () => {
     expect(provider.caip2).toBe("eip155:1");
     expect(provider.selectedAddress).toBe("0x1111111111111111111111111111111111111111");
     expect(chainChanged).not.toHaveBeenCalled();
+    expect(networkChanged).not.toHaveBeenCalled();
 
     // 0x89(137) === eip155:137
     transport.emit(
@@ -370,6 +381,34 @@ describe("Eip155Provider transport meta integration", () => {
 
     expect(provider.chainId).toBe("0x89");
     expect(provider.caip2).toBe("eip155:137");
+    expect(networkChanged).toHaveBeenCalledTimes(1);
+    expect(networkChanged).toHaveBeenCalledWith("137");
+  });
+
+  it("does not emit networkChanged for identical networkVersion", () => {
+    const initialState: TransportState = {
+      ...INITIAL_STATE,
+      chainId: "0x1",
+      caip2: "eip155:1",
+    };
+
+    const { transport, provider } = createProvider(initialState);
+    const networkChanged = vi.fn();
+    provider.on("networkChanged", networkChanged);
+
+    transport.emit("chainChanged", {
+      chainId: "0x89",
+      caip2: "eip155:137",
+      meta: buildMeta({ activeChain: "eip155:137" }),
+    });
+    transport.emit("chainChanged", {
+      chainId: "0x89",
+      caip2: "eip155:137",
+      meta: buildMeta({ activeChain: "eip155:137" }),
+    });
+
+    expect(networkChanged).toHaveBeenCalledTimes(1);
+    expect(networkChanged).toHaveBeenCalledWith("137");
   });
 
   it("uses Conflux error factories after namespace switch", async () => {

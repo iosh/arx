@@ -310,11 +310,16 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   #applyPatch(patch: ProviderPatch, options: ApplyOptions = {}) {
     const emit = options.emit ?? true;
+    const prevNetworkVersion = this.#state.getProviderState().networkVersion;
     const events = this.#state.applyPatch(patch);
+    const nextNetworkVersion = this.#state.getProviderState().networkVersion;
     if (!emit) return;
 
     if (events.chainChanged) {
       this.emit("chainChanged", events.chainChanged);
+    }
+    if (prevNetworkVersion !== nextNetworkVersion) {
+      this.emit("networkChanged", nextNetworkVersion);
     }
     if (events.accountsChanged) {
       this.emit("accountsChanged", events.accountsChanged);
@@ -368,7 +373,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     if (payload === undefined) return;
     const meta = this.#normalizeMeta(payload);
     if (meta === null && payload !== null) return;
-    this.#state.applyPatch({ type: "meta", meta });
+    this.#applyPatch({ type: "meta", meta }, { emit: true });
   };
 
   #handleTransportConnect = (payload: unknown) => {

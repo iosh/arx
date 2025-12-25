@@ -1,7 +1,7 @@
 import type { RequestArguments } from "../../types/eip1193.js";
 import type { Eip155Provider } from "./provider.js";
 
-const PROTECTED_METHODS = new Set<PropertyKey>([
+const PROTECTED_KEYS = new Set<PropertyKey>([
   "request",
   "send",
   "sendAsync",
@@ -9,6 +9,8 @@ const PROTECTED_METHODS = new Set<PropertyKey>([
   "removeListener",
   "removeAllListeners",
   "enable",
+  "wallet_getPermissions",
+  "wallet_requestPermissions",
   "chainId",
   "networkVersion",
   "selectedAddress",
@@ -20,6 +22,8 @@ const PROTECTED_METHODS = new Set<PropertyKey>([
 // Keeps MetaMask-compatible shims and hardens against dapp-side mutation.
 export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Provider => {
   const getNetworkVersion = () => target.getProviderState().networkVersion;
+  const getInjectedProperty = (instance: Eip155Provider, property: PropertyKey) =>
+    Reflect.get(instance, property, instance);
 
   const metamaskShim = Object.freeze({
     isUnlocked: () => Promise.resolve(target.getProviderState().isUnlocked),
@@ -65,15 +69,15 @@ export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Prov
       return property in instance;
     },
     set: (instance, property, value) => {
-      if (PROTECTED_METHODS.has(property)) return true;
+      if (PROTECTED_KEYS.has(property)) return true;
       return Reflect.set(instance, property, value, instance);
     },
     defineProperty: (instance, property, descriptor) => {
-      if (PROTECTED_METHODS.has(property)) return true;
+      if (PROTECTED_KEYS.has(property)) return true;
       return Reflect.defineProperty(instance, property, descriptor);
     },
     deleteProperty: (instance, property) => {
-      if (PROTECTED_METHODS.has(property)) return true;
+      if (PROTECTED_KEYS.has(property)) return true;
       return Reflect.deleteProperty(instance, property);
     },
     getOwnPropertyDescriptor: (instance, property) => {
@@ -81,7 +85,7 @@ export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Prov
         return {
           configurable: true,
           enumerable: true,
-          get: () => (property === "selectedAddress" ? instance.selectedAddress : instance.chainId),
+          get: () => getInjectedProperty(instance, property),
         };
       }
       if (property === "networkVersion") {

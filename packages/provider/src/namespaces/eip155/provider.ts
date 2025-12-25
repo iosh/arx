@@ -1,4 +1,4 @@
-import type { JsonRpcParams, JsonRpcRequest, JsonRpcVersion2 } from "@arx/core";
+import type { JsonRpcVersion2 } from "@arx/core";
 import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "../../types/eip1193.js";
@@ -18,14 +18,21 @@ import {
 import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot, type ProviderStateSnapshot } from "./state.js";
 
 type LegacyResponse = {
-  id: string;
+  id: unknown;
   jsonrpc: JsonRpcVersion2;
   result?: unknown;
   error?: EIP1193ProviderRpcError;
 };
-type LegacyCallback = (error: EIP1193ProviderRpcError | null, response: LegacyResponse | undefined) => void;
-type LegacyPayload = Partial<Pick<JsonRpcRequest<JsonRpcParams>, "id" | "jsonrpc">> &
-  Pick<JsonRpcRequest<JsonRpcParams>, "method" | "params">;
+type LegacyCallback = (
+  error: EIP1193ProviderRpcError | null,
+  response: LegacyResponse | LegacyResponse[] | undefined,
+) => void;
+type LegacyPayload = {
+  method: string;
+  params?: unknown;
+  id?: unknown;
+  jsonrpc?: JsonRpcVersion2;
+};
 const isLegacyCallback = (value: unknown): value is LegacyCallback => typeof value === "function";
 
 export type Eip155ProviderTimeouts = {
@@ -184,9 +191,14 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     return result;
   };
 
+  // Legacy compatibility surface for older dapps and libraries.
+  // - send(method, params): resolves a JSON-RPC response object (id is always undefined)
+  // - send(payload): supports a minimal sync subset (eth_accounts/eth_coinbase/net_version)
+  // - sendAsync(payload|payload[]): supports single and batch callback style
   send = (methodOrPayload: string | LegacyPayload, paramsOrCallback?: unknown) => {
     if (typeof methodOrPayload === "string") {
-      return this.request(this.#createRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]));
+      const requestArgs = this.#createRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]);
+      return this.request(requestArgs).then((result) => ({ id: undefined, jsonrpc: "2.0", result }));
     }
 
     if (isLegacyCallback(paramsOrCallback)) {
@@ -194,21 +206,58 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
       return;
     }
 
-    return this.request(this.#createRequestArgs(methodOrPayload.method, methodOrPayload.params));
+    return this.#legacySendSync(methodOrPayload);
   };
 
-  sendAsync = (payload: LegacyPayload, callback: LegacyCallback) => {
-    const requestArgs = this.#createRequestArgs(payload.method, payload.params);
-    const id = String(payload.id ?? Date.now());
+  sendAsync = (payload: LegacyPayload | LegacyPayload[], callback: LegacyCallback) => {
+    if (Array.isArray(payload)) {
+      Promise.all(payload.map((item) => this.#legacyRpcRequest(item))).then((responses) => callback(null, responses));
+      return;
+    }
+
+    void this.#legacyRpcRequest(payload).then((response) => {
+      callback(response.error ?? null, response);
+    });
+  };
+
+  #legacyRpcRequest = async (payload: LegacyPayload): Promise<LegacyResponse> => {
+    const requestArgs = this.#createRequestArgs(payload.method, payload.params as RequestArguments["params"]);
+    const id = payload.id;
     const jsonrpc = payload.jsonrpc ?? "2.0";
-    this.request(requestArgs)
-      .then((result) => {
-        callback(null, { id, jsonrpc, result });
-      })
-      .catch((error) => {
-        const rpcError = this.#toEip1193Error(error);
-        callback(rpcError, { id, jsonrpc, error: rpcError });
-      });
+
+    try {
+      const result = await this.request(requestArgs);
+      return { id, jsonrpc, result };
+    } catch (error) {
+      const rpcError = this.#toEip1193Error(error);
+      return { id, jsonrpc, error: rpcError };
+    }
+  };
+
+  #legacySendSync = (payload: LegacyPayload): LegacyResponse => {
+    const id = payload.id;
+    const jsonrpc = payload.jsonrpc ?? "2.0";
+
+    switch (payload.method) {
+      case "eth_accounts": {
+        const result = this.selectedAddress ? [this.selectedAddress] : [];
+        return { id, jsonrpc, result };
+      }
+
+      case "eth_coinbase": {
+        const result = this.selectedAddress ?? null;
+        return { id, jsonrpc, result };
+      }
+
+      case "net_version": {
+        const result = this.getProviderState().networkVersion;
+        return { id, jsonrpc, result };
+      }
+
+      default: {
+        throw new Error(`Unsupported sync method "${payload.method}"`);
+      }
+    }
   };
 
   destroy() {

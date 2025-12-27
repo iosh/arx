@@ -6,7 +6,15 @@ import type {
   KeyringService,
   RequestPermissionsApprovalPayload,
 } from "@arx/core";
-import { ApprovalTypes, createLogger, getProviderErrors, PermissionScopes, zeroize } from "@arx/core";
+import {
+  ApprovalTypes,
+  ArxReasons,
+  arxError,
+  createLogger,
+  encodeErrorWithAdapters,
+  PermissionScopes,
+  zeroize,
+} from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import * as Hex from "ox/Hex";
 import type browser from "webextension-polyfill";
@@ -38,19 +46,10 @@ type BridgeDeps = {
   attention: Pick<AttentionService, "getSnapshot">;
 };
 
-const normalizeError = (error: unknown): { message: string; code?: number; data?: unknown } => {
-  if (error && typeof error === "object" && "message" in error) {
-    const err = error as { message?: string; code?: number; data?: unknown };
-    return { message: err.message ?? "Unknown error", code: err.code, data: err.data };
-  }
-  return { message: String(error ?? "Unknown error") };
-};
-
-const providerErrors = getProviderErrors();
 const uiLog = createLogger("bg:uiBridge");
 const assertUnlocked = (session: BackgroundSessionServices) => {
   if (!session.unlock.isUnlocked()) {
-    throw providerErrors.unauthorized({ message: "Wallet is locked" });
+    throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
   }
 };
 
@@ -70,31 +69,6 @@ const withSensitiveBytes = <T>(secret: Uint8Array, transform: (bytes: Uint8Array
 const toPlainHex = (bytes: Uint8Array): string => {
   const out = Hex.from(bytes);
   return out.startsWith("0x") ? out.slice(2) : out;
-};
-
-const normalizeUiError = (error: unknown) => {
-  const base = normalizeError(error);
-  const code = (error as { code?: unknown })?.code;
-
-  if (typeof base.code === "number") return base;
-
-  switch (code) {
-    case "ARX_VAULT_LOCKED":
-    case "ARX_VAULT_INVALID_PASSWORD":
-    case "ARX_KEYRING_SECRET_UNAVAILABLE":
-      return { message: base.message, code: 4100 };
-    case "ARX_KEYRING_INVALID_MNEMONIC":
-    case "ARX_KEYRING_INVALID_PRIVATE_KEY":
-    case "ARX_KEYRING_INVALID_ADDRESS":
-    case "ARX_KEYRING_INDEX_OUT_OF_RANGE":
-      return { message: base.message, code: 32602 };
-    case "ARX_KEYRING_DUPLICATE_ACCOUNT":
-      return { message: base.message, code: 4001, data: { reason: "resourceExists" } };
-    case "ARX_KEYRING_ACCOUNT_NOT_FOUND":
-      return { message: base.message, code: 32602 };
-    default:
-      return { message: base.message, code: 4200 };
-  }
 };
 
 // Generic diagnostic converter for warnings and issues
@@ -443,8 +417,8 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
 
               const uniqueAccounts = [...new Set(accounts)];
               if (uniqueAccounts.length === 0) {
-                const providerErrors = getProviderErrors(task.namespace ?? "eip155");
-                throw providerErrors.unauthorized({
+                throw arxError({
+                  reason: ArxReasons.PermissionDenied,
                   message: "No accounts available for connection request",
                   data: { origin: task.origin, reason: "no_accounts" },
                 });
@@ -670,10 +644,17 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         const result = await handleMessage(envelope.payload);
         sendToPortSafely(port, { type: "ui:response", requestId: envelope.requestId, result });
       } catch (error) {
+        const activeChain = controllers.network.getActiveChain();
+        const encoded = encodeErrorWithAdapters(error, {
+          surface: "ui",
+          namespace: activeChain.namespace,
+          chainRef: activeChain.chainRef,
+          method: envelope.payload.type,
+        });
         sendToPortSafely(port, {
           type: "ui:error",
           requestId: envelope.requestId,
-          error: normalizeUiError(error),
+          error: encoded as any,
         });
       }
     };

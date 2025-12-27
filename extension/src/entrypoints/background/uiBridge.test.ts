@@ -5,7 +5,7 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "@arx/core";
-import { ApprovalTypes, KeyringService } from "@arx/core";
+import { ApprovalTypes, ArxReasons, KeyringService } from "@arx/core";
 import { keyringErrors, vaultErrors } from "@arx/core/errors";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
@@ -393,12 +393,9 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
 
 const createPort = () => new FakePort();
 
-const expectError = (msg: any, code: number, reason?: string) => {
+const expectError = (msg: any, reason: string) => {
   expect(msg?.type).toBe("ui:error");
-  expect(msg?.error?.code).toBe(code);
-  if (reason) {
-    expect(msg?.error?.data?.reason).toBe(reason);
-  }
+  expect(msg?.error?.reason).toBe(reason);
 };
 
 const expectResponse = (msg: any, requestId: string) => {
@@ -441,18 +438,18 @@ describe("uiBridge", () => {
     vault.setUnlocked(false);
 
     const { envelope } = await send({ type: "ui:generateMnemonic", payload: { wordCount: 12 } } as UiMessage);
-    expectError(envelope, 4100);
+    expectError(envelope, ArxReasons.SessionLocked);
   });
 
-  it("maps invalid mnemonic to 32602", async () => {
+  it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
     const { envelope } = await send({
       type: "ui:confirmNewMnemonic",
       payload: { words: ["foo", "bar"], alias: "bad" },
     } as UiMessage);
-    expectError(envelope, 32602);
+    expectError(envelope, ArxReasons.KeyringInvalidMnemonic);
   });
 
-  it("maps duplicate mnemonic to 4001/resourceExists", async () => {
+  it("maps duplicate mnemonic to keyring/duplicate_account", async () => {
     const words = TEST_MNEMONIC.split(" ");
     const first = await send({
       type: "ui:confirmNewMnemonic",
@@ -464,7 +461,7 @@ describe("uiBridge", () => {
       type: "ui:confirmNewMnemonic",
       payload: { words, alias: "dup" },
     } as UiMessage);
-    expectError(second.envelope, 4001, "resourceExists");
+    expectError(second.envelope, ArxReasons.KeyringDuplicateAccount);
   });
 
   it("happy path: derive, hide/unhide, export", async () => {
@@ -527,7 +524,7 @@ describe("uiBridge", () => {
       payload: { keyringId, password: "wrong-password" },
     } as UiMessage);
 
-    expectError(exportAttempt.envelope, 4100);
+    expectError(exportAttempt.envelope, ArxReasons.VaultInvalidPassword);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });

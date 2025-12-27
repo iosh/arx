@@ -1,4 +1,6 @@
 import {
+  ArxReasons,
+  arxError,
   type BackgroundSessionServices,
   createAsyncMiddleware,
   createBackgroundServices,
@@ -11,10 +13,9 @@ import {
   createPermissionGuardMiddleware,
   createPermissionScopeResolver,
   DEFAULT_NAMESPACE,
+  encodeErrorWithAdapters,
   extendLogger,
-  getProviderErrors,
   getRegisteredNamespaceAdapters,
-  getRpcErrors,
   type Json,
   type JsonRpcParams,
   type RpcInvocationContext,
@@ -22,7 +23,6 @@ import {
 import browser from "webextension-polyfill";
 import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
-import { toJsonRpcError } from "./rpc";
 import { createPopupActivator } from "./services/popupActivator";
 import type { ControllerSnapshot } from "./types";
 import { createUiBridge } from "./uiBridge";
@@ -55,9 +55,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
   const runtimeLog = createLogger("bg:runtime");
   const sessionLog = extendLogger(runtimeLog, "session");
 
-  let providerErrorResolver: ((context?: RpcInvocationContext) => ReturnType<typeof getProviderErrors>) | null = null;
-  let rpcErrorResolver: ((context?: RpcInvocationContext) => ReturnType<typeof getRpcErrors>) | null = null;
-
   const persistVaultMeta = async (target?: BackgroundContext | null) => {
     const active = target ?? context;
     if (!active) {
@@ -70,20 +67,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     } catch (error) {
       console.warn("[background] failed to persist vault meta", error);
     }
-  };
-
-  const getActiveProviderErrors = (rpcContext?: RpcInvocationContext) => {
-    if (!context || !providerErrorResolver) {
-      throw new Error("Background context is not initialized");
-    }
-    return providerErrorResolver(rpcContext);
-  };
-
-  const getActiveRpcErrors = (rpcContext?: RpcInvocationContext) => {
-    if (!context || !rpcErrorResolver) {
-      throw new Error("Background context is not initialized");
-    }
-    return rpcErrorResolver(rpcContext);
   };
 
   const getControllerSnapshot = (): ControllerSnapshot => {
@@ -146,10 +129,10 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
 
         const snapshot = [...pending];
         for (const item of snapshot) {
-          const providerErrors = getProviderErrors(item.namespace);
           controllers.approvals.reject(
             item.id,
-            providerErrors.userRejectedRequest({
+            arxError({
+              reason: ArxReasons.ApprovalRejected,
               message: "User rejected the request.",
               data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
             }),
@@ -276,14 +259,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       }
 
       const executeMethod = createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
-      const resolveProviderErrors = (rpcContext?: RpcInvocationContext) => {
-        const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
-        return getProviderErrors(namespace);
-      };
-      const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => {
-        const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
-        return getRpcErrors(namespace);
-      };
       const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
 
       const resolveMethodNamespace = createMethodNamespaceResolver(controllers);
@@ -342,7 +317,16 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           try {
             await next();
           } catch (middlewareError) {
-            res.error = toJsonRpcError(middlewareError, req.method, rpcContext ?? undefined, resolveRpcErrors);
+            const origin = (req as { origin?: string }).origin ?? "unknown://";
+            const namespace = rpcContext?.namespace ?? resolveMethodNamespace(req.method, rpcContext ?? undefined);
+            const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
+            res.error = encodeErrorWithAdapters(middlewareError, {
+              surface: "dapp",
+              namespace,
+              chainRef,
+              origin,
+              method: req.method,
+            }) as any;
           }
         }),
       );
@@ -353,7 +337,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           resolveMethodDefinition,
           resolveLockedPolicy,
           resolvePassthroughAllowance,
-          resolveProviderErrors,
           attentionService: services.attention,
         }),
       );
@@ -365,7 +348,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
           isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
           resolveMethodDefinition,
-          resolveProviderErrors,
         }),
       );
 
@@ -428,8 +410,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       );
 
       context = { services, controllers, engine, session };
-      providerErrorResolver = resolveProviderErrors;
-      rpcErrorResolver = resolveRpcErrors;
 
       uiBridge = createUiBridge({
         controllers,
@@ -467,8 +447,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
 
     context?.services.lifecycle.destroy();
     context = null;
-    providerErrorResolver = null;
-    rpcErrorResolver = null;
   };
 
   return {
@@ -477,7 +455,5 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     attachUiPort,
     persistVaultMeta,
     getControllerSnapshot,
-    getActiveProviderErrors,
-    getActiveRpcErrors,
   };
 };

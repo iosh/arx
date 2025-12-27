@@ -1,7 +1,10 @@
 import type { RpcInvocationContext } from "@arx/core";
 import {
+  ArxReasons,
+  arxError,
   createLogger,
   DEFAULT_NAMESPACE,
+  encodeErrorWithAdapters,
   extendLogger,
   type JsonRpcError,
   type JsonRpcParams,
@@ -12,7 +15,7 @@ import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provide
 import type { Runtime } from "webextension-polyfill";
 import { resolveOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
-import { buildRpcContext, type ProviderErrorResolver, type RpcErrorResolver, toJsonRpcError } from "./rpc";
+import { buildRpcContext } from "./rpc";
 import type { BackgroundContext } from "./serviceManager";
 import type { ArxRpcContext, ControllerSnapshot, PortContext } from "./types";
 import { UI_CHANNEL } from "./uiBridge";
@@ -27,8 +30,6 @@ type PortRouterDeps = {
   ensureContext: () => Promise<BackgroundContext>;
   getControllerSnapshot: () => ControllerSnapshot;
   attachUiPort: (port: Runtime.Port) => Promise<void>;
-  getActiveProviderErrors: ProviderErrorResolver;
-  getActiveRpcErrors: RpcErrorResolver;
 };
 
 export const createPortRouter = ({
@@ -39,8 +40,6 @@ export const createPortRouter = ({
   ensureContext,
   getControllerSnapshot,
   attachUiPort,
-  getActiveProviderErrors,
-  getActiveRpcErrors,
 }: PortRouterDeps) => {
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
@@ -163,14 +162,19 @@ export const createPortRouter = ({
     const requestMap = pendingRequests.get(port);
     if (!requestMap) return;
     const portContext = portContexts.get(port);
-    const rpcContext = buildRpcContext(
-      portContext,
-      portContext?.meta?.activeChain ?? portContext?.caip2 ?? null,
-      getActiveProviderErrors,
-      getActiveRpcErrors,
-    );
-    const providerErrors = rpcContext?.errors?.provider ?? getActiveProviderErrors(rpcContext);
-    const error = overrideError ?? providerErrors.disconnected().serialize();
+    const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+    const origin = portContext?.origin ?? getPortOrigin(port);
+    const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
+    const chainRef = rpcContext?.chainRef ?? null;
+    const error =
+      overrideError ??
+      (encodeErrorWithAdapters(arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }), {
+        surface: "dapp",
+        namespace,
+        chainRef,
+        origin,
+        method: "disconnect",
+      }) as JsonRpcError);
 
     for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
       sendReply(port, messageId, {
@@ -254,25 +258,25 @@ export const createPortRouter = ({
     );
   };
 
-  const getProviderErrorsForPort = (port: Runtime.Port) => {
-    const portContext = portContexts.get(port);
-    const rpcContext = buildRpcContext(
-      portContext,
-      portContext?.meta?.activeChain ?? portContext?.caip2 ?? null,
-      getActiveProviderErrors,
-      getActiveRpcErrors,
-    );
-    if (rpcContext?.errors?.provider) {
-      return rpcContext.errors.provider;
-    }
-    return getActiveProviderErrors(rpcContext);
-  };
-
   const broadcastDisconnect = () => {
     broadcastSafe((port) => {
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) return true;
-      const error = getProviderErrorsForPort(port).disconnected().serialize();
+      const portContext = portContexts.get(port);
+      const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+      const origin = portContext?.origin ?? getPortOrigin(port);
+      const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
+      const chainRef = rpcContext?.chainRef ?? null;
+      const error = encodeErrorWithAdapters(
+        arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
+        {
+          surface: "dapp",
+          namespace,
+          chainRef,
+          origin,
+          method: "disconnect",
+        },
+      ) as JsonRpcError;
       rejectPendingWithDisconnect(port, error);
       const success = postEnvelope(port, {
         channel: CHANNEL,
@@ -297,7 +301,7 @@ export const createPortRouter = ({
     const portContext = portContexts.get(port);
     const origin = portContext?.origin ?? resolveOrigin(port, extensionOrigin);
     const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? null;
-    const rpcContext = buildRpcContext(portContext, effectiveChainRef, getActiveProviderErrors, getActiveRpcErrors);
+    const rpcContext = buildRpcContext(portContext, effectiveChainRef);
 
     const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
       id: envelope.payload.id,
@@ -310,7 +314,6 @@ export const createPortRouter = ({
           chainRef: rpcContext.chainRef,
           namespace: rpcContext.namespace,
           meta: rpcContext.meta,
-          errors: rpcContext.errors,
         } satisfies RpcInvocationContext,
       }),
     };
@@ -331,7 +334,13 @@ export const createPortRouter = ({
       sendReply(port, envelope.id, {
         id: rpcId,
         jsonrpc,
-        error: toJsonRpcError(error, method, rpcContext, getActiveRpcErrors),
+        error: encodeErrorWithAdapters(error, {
+          surface: "dapp",
+          namespace: rpcContext?.namespace ?? DEFAULT_NAMESPACE,
+          chainRef: rpcContext?.chainRef ?? null,
+          origin: origin ?? "unknown://",
+          method,
+        }) as JsonRpcError,
       });
     } finally {
       pendingRequestMap.delete(envelope.id);

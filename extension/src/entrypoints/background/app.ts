@@ -33,8 +33,6 @@ export const createBackgroundApp = () => {
     ensureContext: serviceManager.ensureContext,
     getControllerSnapshot: serviceManager.getControllerSnapshot,
     attachUiPort: serviceManager.attachUiPort,
-    getActiveProviderErrors: serviceManager.getActiveProviderErrors,
-    getActiveRpcErrors: serviceManager.getActiveRpcErrors,
   });
 
   const runtimeMessageProxy = createRuntimeMessageProxy({

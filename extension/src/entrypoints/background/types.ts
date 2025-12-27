@@ -1,4 +1,4 @@
-import type { ProviderErrorFactory, RpcErrorFactory, RpcInvocationContext, UnlockReason } from "@arx/core";
+import type { RpcInvocationContext, UnlockReason } from "@arx/core";
 import type { TransportMeta } from "@arx/provider/types";
 
 export type SessionMessage =
@@ -22,12 +22,7 @@ export type ControllerSnapshot = {
   meta: TransportMeta;
 };
 
-export type ErrorFactoriesForRequest = {
-  provider: ProviderErrorFactory;
-  rpc: RpcErrorFactory;
-};
-
 export type ArxRpcContext = {
   origin: string;
-  arx?: (RpcInvocationContext & { meta: TransportMeta | null; errors: ErrorFactoriesForRequest }) | undefined;
+  arx?: (RpcInvocationContext & { meta: TransportMeta | null }) | undefined;
 };

@@ -63,8 +63,6 @@ describe("portRouter privacy", () => {
       ensureContext: ensureContext as any,
       getControllerSnapshot: () => makeSnapshot(false) as any,
       attachUiPort: vi.fn(async () => {}),
-      getActiveProviderErrors: vi.fn(() => ({})) as any,
-      getActiveRpcErrors: vi.fn(() => ({})) as any,
     });
 
     const port = new FakePort();
@@ -98,8 +96,6 @@ describe("portRouter privacy", () => {
       ensureContext: ensureContext as any,
       getControllerSnapshot: () => makeSnapshot(false) as any,
       attachUiPort: vi.fn(async () => {}),
-      getActiveProviderErrors: vi.fn(() => ({})) as any,
-      getActiveRpcErrors: vi.fn(() => ({})) as any,
     });
 
     const port = new FakePort();
@@ -137,8 +133,6 @@ describe("portRouter privacy", () => {
       ensureContext: ensureContext as any,
       getControllerSnapshot: () => makeSnapshot(true) as any,
       attachUiPort: vi.fn(async () => {}),
-      getActiveProviderErrors: vi.fn(() => ({})) as any,
-      getActiveRpcErrors: vi.fn(() => ({})) as any,
     });
 
     const port = new FakePort();

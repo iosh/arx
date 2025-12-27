@@ -121,8 +121,6 @@ export const aesGcmDecrypt = async (
     );
     return new Uint8Array(decrypted);
   } catch (cause) {
-    const error = vaultErrors.invalidCiphertext();
-    (error as Error & { cause?: unknown }).cause = cause;
-    throw error;
+    throw vaultErrors.invalidCiphertext(cause);
   }
 };

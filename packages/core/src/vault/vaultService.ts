@@ -1,3 +1,4 @@
+import { ArxReasons, isArxError } from "@arx/errors";
 import { vaultErrors } from "../errors/vault.js";
 import type {
   InitializeVaultParams,
@@ -156,8 +157,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         return copyBytes(plain);
       } catch (error) {
         clearSession();
-        const maybeVaultError = error as { code?: string };
-        if (maybeVaultError?.code === "ARX_VAULT_INVALID_CIPHERTEXT") {
+        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
           throw vaultErrors.invalidPassword();
         }
         throw error;
@@ -254,8 +254,7 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
         keyMaterial = await deriveKeyMaterial(passwordKey, saltBytes, iterations);
         await aesGcmDecrypt(keyMaterial, cipherBytes, ivBytes);
       } catch (error) {
-        const maybeVaultError = error as { code?: string };
-        if (maybeVaultError?.code === "ARX_VAULT_INVALID_CIPHERTEXT") {
+        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
           throw vaultErrors.invalidPassword();
         }
         throw error;

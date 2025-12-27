@@ -1,23 +1,15 @@
-export type VaultErrorCode =
-  | "ARX_VAULT_NOT_INITIALIZED"
-  | "ARX_VAULT_LOCKED"
-  | "ARX_VAULT_INVALID_CIPHERTEXT"
-  | "ARX_VAULT_INVALID_PASSWORD";
-
-type VaultError = Error & { code: VaultErrorCode };
-
-export const createVaultError = (message: string, code: VaultErrorCode): VaultError => {
-  const error = new Error(message) as VaultError;
-  error.name = "VaultError";
-  error.code = code;
-  return error;
-};
+import { type ArxError, ArxReasons, arxError } from "@arx/errors";
 
 export const vaultErrors = {
-  notInitialized: (): VaultError => createVaultError("Vault has not been initialized", "ARX_VAULT_NOT_INITIALIZED"),
-  locked: (): VaultError => createVaultError("Vault is locked", "ARX_VAULT_LOCKED"),
-  invalidCiphertext: (): VaultError =>
-    createVaultError("Vault ciphertext is invalid or corrupted", "ARX_VAULT_INVALID_CIPHERTEXT"),
-  invalidPassword: (): VaultError =>
-    createVaultError("Vault password is missing or incorrect", "ARX_VAULT_INVALID_PASSWORD"),
+  notInitialized: (): ArxError =>
+    arxError({ reason: ArxReasons.VaultNotInitialized, message: "Vault has not been initialized" }),
+  locked: (): ArxError => arxError({ reason: ArxReasons.VaultLocked, message: "Vault is locked" }),
+  invalidCiphertext: (cause?: unknown): ArxError =>
+    arxError({
+      reason: ArxReasons.VaultInvalidCiphertext,
+      message: "Vault ciphertext is invalid or corrupted",
+      cause,
+    }),
+  invalidPassword: (): ArxError =>
+    arxError({ reason: ArxReasons.VaultInvalidPassword, message: "Vault password is missing or incorrect" }),
 };

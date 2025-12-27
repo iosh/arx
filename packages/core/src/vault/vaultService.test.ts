@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { VaultCiphertext } from "./types.js";
 import { randomBytes } from "./utils.js";
@@ -39,7 +40,7 @@ describe("vaultService", () => {
 
     vault.lock();
     await expect(vault.unlock({ password: "wrong", ciphertext })).rejects.toMatchObject({
-      code: "ARX_VAULT_INVALID_PASSWORD",
+      reason: ArxReasons.VaultInvalidPassword,
     });
   });
 
@@ -79,7 +80,7 @@ describe("vaultService", () => {
 
     vault.lock();
     await expect(vault.unlock({ password: PASSWORD, ciphertext: tampered })).rejects.toMatchObject({
-      code: "ARX_VAULT_INVALID_CIPHERTEXT",
+      reason: ArxReasons.VaultInvalidCiphertext,
     });
   });
 
@@ -125,7 +126,7 @@ describe("vaultService", () => {
     expect(toArray(recovered)).toEqual(toArray(customSecret));
 
     await expect(vault.unlock({ password: "old-password", ciphertext: sealed })).rejects.toMatchObject({
-      code: "ARX_VAULT_INVALID_PASSWORD",
+      reason: ArxReasons.VaultInvalidPassword,
     });
   });
 
@@ -163,7 +164,7 @@ describe("vaultService", () => {
         password: PASSWORD,
         ciphertext: { ...ciphertext, iv: Buffer.from(tamperedIv).toString("base64") },
       }),
-    ).rejects.toMatchObject({ code: "ARX_VAULT_INVALID_PASSWORD" });
+    ).rejects.toMatchObject({ reason: ArxReasons.VaultInvalidPassword });
   });
 
   it("rejects unlock attempts when ciphertext salt is tampered", async () => {
@@ -186,7 +187,7 @@ describe("vaultService", () => {
         password: PASSWORD,
         ciphertext: { ...ciphertext, salt: Buffer.from(tamperedSalt).toString("base64") },
       }),
-    ).rejects.toMatchObject({ code: "ARX_VAULT_INVALID_PASSWORD" });
+    ).rejects.toMatchObject({ reason: ArxReasons.VaultInvalidPassword });
   });
 
   it("throws when reseal is called while locked", async () => {

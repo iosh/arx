@@ -1,3 +1,4 @@
+import { ArxReasons, isArxError } from "@arx/errors";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import { keyringErrors } from "../../errors/keyring.js";
@@ -347,9 +348,7 @@ export class KeyringService {
     try {
       await this.#options.vault.verifyPassword(password);
     } catch (error) {
-      if ((error as { code?: string }).code === "ARX_VAULT_INVALID_PASSWORD") {
-        throw vaultErrors.invalidPassword();
-      }
+      if (isArxError(error) && error.reason === ArxReasons.VaultInvalidPassword) throw error;
       throw error;
     }
   }

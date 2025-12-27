@@ -1,3 +1,4 @@
+import type { UiErrorPayload } from "@arx/errors";
 import type { UnlockReason } from "../controllers/index.js";
 import type { UiSnapshot } from "./schemas.js";
 
@@ -43,9 +44,9 @@ export type UiMessage =
  * Error structure for UI responses
  */
 export type UiError = {
-  message: string;
-  code?: number;
-  data?: unknown;
+  reason: UiErrorPayload["reason"];
+  message: UiErrorPayload["message"];
+  data?: UiErrorPayload["data"];
 };
 
 /**

@@ -1,17 +1,17 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import { keyringErrors } from "../../errors/keyring.js";
 import type { KeyringAccount, SimpleKeyringSnapshot } from "../types.js";
 import { PrivateKeyKeyring } from "./PrivateKeyKeyring.js";
 
 const PK = "0xe4489a71aa574af4c240b10161854d43981965b4ab8c4fbc393401a508e11d00";
 const PK2 = "0xd05a5b7b99209028f6550ef16790697515273d4252f9445cf5c7f1b74df32659";
 
-const expectCode = (fn: () => unknown, code: string) => {
+const expectReason = (fn: () => unknown, reason: string) => {
   try {
     fn();
     throw new Error("Expected function to throw");
   } catch (error) {
-    expect((error as { code?: string }).code).toBe(code);
+    expect((error as { reason?: string }).reason).toBe(reason);
   }
 };
 
@@ -45,7 +45,7 @@ describe("PrivateKeyKeyring", () => {
     const [account] = keyring.getAccounts();
     keyring.removeAccount(account!.address);
     expect(keyring.getAccounts()).toHaveLength(0);
-    expectCode(() => keyring.removeAccount(account!.address), keyringErrors.accountNotFound().code);
+    expectReason(() => keyring.removeAccount(account!.address), ArxReasons.KeyringAccountNotFound);
   });
 
   it("hydrates only when secret is loaded and addresses match", () => {
@@ -59,7 +59,7 @@ describe("PrivateKeyKeyring", () => {
         source: "imported",
       },
     };
-    expectCode(() => keyring.hydrate(snapshot), keyringErrors.secretUnavailable().code);
+    expectReason(() => keyring.hydrate(snapshot), ArxReasons.KeyringSecretUnavailable);
 
     keyring.loadFromPrivateKey(PK);
     const goodSnapshot = keyring.toSnapshot();
@@ -74,7 +74,7 @@ describe("PrivateKeyKeyring", () => {
         source: "imported",
       },
     };
-    expectCode(() => keyring.hydrate(badSnapshot), keyringErrors.secretUnavailable().code);
+    expectReason(() => keyring.hydrate(badSnapshot), ArxReasons.KeyringSecretUnavailable);
 
     keyring.hydrate({ type: "simple", account: null });
     expect(keyring.getAccounts()).toHaveLength(0);
@@ -82,20 +82,20 @@ describe("PrivateKeyKeyring", () => {
 
   it("derive methods are unsupported", () => {
     const keyring = new PrivateKeyKeyring();
-    expectCode(() => keyring.deriveNextAccount(), keyringErrors.indexOutOfRange().code);
-    expectCode(() => keyring.deriveAccount(), keyringErrors.indexOutOfRange().code);
+    expectReason(() => keyring.deriveNextAccount(), ArxReasons.KeyringIndexOutOfRange);
+    expectReason(() => keyring.deriveAccount(), ArxReasons.KeyringIndexOutOfRange);
   });
 
   it("hydrates with loaded secret and rejects mismatches", () => {
     const keyring = new PrivateKeyKeyring();
 
-    expectCode(
+    expectReason(
       () =>
         keyring.hydrate({
           type: "simple",
           account: { address: "0xabc...", derivationPath: null, derivationIndex: null, source: "imported" },
         }),
-      keyringErrors.secretUnavailable().code,
+      ArxReasons.KeyringSecretUnavailable,
     );
 
     keyring.loadFromPrivateKey(PK);
@@ -111,7 +111,7 @@ describe("PrivateKeyKeyring", () => {
         source: "imported" as const,
       },
     };
-    expectCode(() => keyring.hydrate(bad), keyringErrors.secretUnavailable().code);
+    expectReason(() => keyring.hydrate(bad), ArxReasons.KeyringSecretUnavailable);
 
     keyring.hydrate({ type: "simple", account: null });
     expect(keyring.getAccounts()).toHaveLength(0);

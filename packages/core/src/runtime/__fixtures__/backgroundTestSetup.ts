@@ -5,11 +5,11 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import { getProviderErrors, getRpcErrors } from "../../errors/index.js";
 import {
   createMethodDefinitionResolver,
   createMethodExecutor,
   createMethodNamespaceResolver,
+  encodeErrorWithAdapters,
   getRegisteredNamespaceAdapters,
   type RpcInvocationContext,
 } from "../../rpc/index.js";
@@ -557,14 +557,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const resolveMethodDefinition = createMethodDefinitionResolver(services.controllers);
   const resolveMethodNamespace = createMethodNamespaceResolver(services.controllers);
   const executeMethod = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
-  const resolveProviderErrors = (rpcContext?: RpcInvocationContext) => {
-    const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
-    return getProviderErrors(namespace);
-  };
-  const resolveRpcErrors = (rpcContext?: RpcInvocationContext) => {
-    const namespace = rpcContext?.namespace ?? services.getActiveNamespace(rpcContext);
-    return getRpcErrors(namespace);
-  };
   const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
     if (!chainRef) {
       return null;
@@ -618,41 +610,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     };
   };
 
-  const toJsonRpcError = (error: unknown, method: string, rpcContext?: RpcInvocationContext): JsonRpcError => {
-    if (
-      error &&
-      typeof error === "object" &&
-      "serialize" in error &&
-      typeof (error as { serialize?: unknown }).serialize === "function"
-    ) {
-      return (error as { serialize: () => JsonRpcError }).serialize();
-    }
-
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      typeof (error as { code?: unknown }).code === "number"
-    ) {
-      const rpcError = error as { code: number; message?: string; data?: Json };
-      return {
-        code: rpcError.code,
-        message: rpcError.message ?? "Unknown error",
-        ...(rpcError.data !== undefined &&
-          rpcError.data !== null && {
-            data: rpcError.data,
-          }),
-      };
-    }
-
-    return resolveRpcErrors(rpcContext)
-      .internal({
-        message: `Unexpected error while handling ${method}`,
-        data: { method },
-      })
-      .serialize();
-  };
-
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
     const chain = services.controllers.network.getActiveChain();
     const namespace = overrides?.namespace ?? chain.namespace;
@@ -661,20 +618,36 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       namespace,
       chainRef,
       ...(overrides?.meta ? { meta: overrides.meta } : {}),
-      errors: {
-        provider: getProviderErrors(namespace),
-        rpc: getRpcErrors(namespace),
-      },
     };
   };
 
   engine.push(
     createAsyncMiddleware(async (req, res, next) => {
       const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+      const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
+      const namespace = resolveMethodNamespace(req.method, rpcContext ?? undefined);
+      const chainRef = rpcContext?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
       try {
         await next();
       } catch (error) {
-        res.error = toJsonRpcError(error, req.method, rpcContext ?? undefined);
+        res.error = encodeErrorWithAdapters(error, {
+          surface: "dapp",
+          namespace,
+          chainRef,
+          origin,
+          method: req.method,
+        }) as JsonRpcError;
+        return;
+      }
+
+      if (res.error) {
+        res.error = encodeErrorWithAdapters(res.error, {
+          surface: "dapp",
+          namespace,
+          chainRef,
+          origin,
+          method: req.method,
+        }) as JsonRpcError;
       }
     }),
   );
@@ -686,7 +659,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       resolveMethodDefinition,
       resolveLockedPolicy,
       resolvePassthroughAllowance,
-      resolveProviderErrors,
       attentionService: services.attention,
     }),
   );
@@ -698,7 +670,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       isConnected: (origin, options) => services.controllers.permissions.isConnected(origin, options),
       isInternalOrigin: (origin) => origin === internalOrigin,
       resolveMethodDefinition,
-      resolveProviderErrors,
     }),
   );
 
@@ -719,6 +690,8 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   let nextRequestId = 0;
   const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {
     const contextPayload = buildRpcContext(rpcContext);
+    const resolvedNamespace = resolveMethodNamespace(method, contextPayload);
+    const resolvedChainRef = contextPayload.chainRef ?? services.controllers.network.getActiveChain().chainRef;
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {
@@ -731,7 +704,15 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         } as JsonRpcRequest,
         (error, response) => {
           if (error) {
-            reject(error);
+            reject(
+              encodeErrorWithAdapters(error, {
+                surface: "dapp",
+                namespace: resolvedNamespace,
+                chainRef: resolvedChainRef,
+                origin,
+                method,
+              }),
+            );
             return;
           }
           if (!response) {

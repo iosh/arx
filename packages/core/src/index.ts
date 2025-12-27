@@ -1,3 +1,5 @@
+export type { ArxReason } from "@arx/errors";
+export { ArxError, ArxReasons, arxError, isArxError } from "@arx/errors";
 export { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 export type {
   Json,

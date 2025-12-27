@@ -1,3 +1,4 @@
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { JsonRpcParams } from "@metamask/utils";
 import { ZodError } from "zod";
 import type { Caip2ChainId } from "../../../chains/ids.js";
@@ -18,7 +19,6 @@ import {
   type TransactionController,
   type TransactionMeta,
 } from "../../../controllers/index.js";
-import { evmProviderErrors, evmRpcErrors } from "../../../errors/index.js";
 import {
   type BuildWalletPermissionsOptions,
   buildWalletPermissions,
@@ -31,10 +31,9 @@ import {
   buildEip155TransactionRequest,
   createTaskId,
   EIP155_NAMESPACE,
+  isDomainError,
   isRpcError,
   normaliseTypedData,
-  resolveProviderErrors,
-  resolveRpcErrors,
   resolveSigningInputs,
   toParamsArray,
 } from "./utils.js";
@@ -111,7 +110,6 @@ const handleEthAccounts: MethodHandler = ({ origin, controllers }) => {
 };
 
 const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rpcContext }) => {
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const activeChain = controllers.network.getActiveChain();
   const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });
 
@@ -131,22 +129,23 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rp
   try {
     return await controllers.approvals.requestApproval(task);
   } catch (error) {
-    if (isRpcError(error)) throw error;
-    throw providerErrors.userRejectedRequest({
+    if (isDomainError(error) || isRpcError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.ApprovalRejected,
       message: "User rejected account access",
       data: { origin },
+      cause: error,
     });
   }
 };
 
 const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, controllers, rpcContext }) => {
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const params = request.params;
   const [first] = Array.isArray(params) ? params : params ? [params] : [];
 
   if (!first || typeof first !== "object" || Array.isArray(first)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_switchEthereumChain expects a single object parameter",
       data: { params },
     });
@@ -157,7 +156,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   const rawCaip2 = typeof payload.caip2 === "string" ? payload.caip2.trim() : undefined;
 
   if (!rawChainId && !rawCaip2) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_switchEthereumChain requires a chainId or caip2 value",
       data: { params },
     });
@@ -165,7 +165,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
 
   const normalizedChainId = rawChainId?.toLowerCase();
   if (normalizedChainId && !/^0x[0-9a-f]+$/i.test(normalizedChainId)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_switchEthereumChain received an invalid hex chainId",
       data: { chainId: rawChainId },
     });
@@ -176,8 +177,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
     try {
       const parsed = parseCaip2(rawCaip2);
       if (parsed.namespace !== "eip155") {
-        throw providerErrors.custom({
-          code: 4902,
+        throw arxError({
+          reason: ArxReasons.ChainNotCompatible,
           message: "Requested chain is not compatible with wallet_switchEthereumChain",
           data: { caip2: rawCaip2 },
         });
@@ -185,7 +186,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
       if (normalizedChainId) {
         const decimal = BigInt(normalizedChainId).toString(10);
         if (decimal !== parsed.reference) {
-          throw rpcErrors.invalidParams({
+          throw arxError({
+            reason: ArxReasons.RpcInvalidParams,
             message: "wallet_switchEthereumChain chainId does not match caip2 reference",
             data: { chainId: rawChainId, caip2: rawCaip2 },
           });
@@ -193,10 +195,12 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
       }
       normalizedCaip2 = `${parsed.namespace}:${parsed.reference}`;
     } catch (error) {
-      if (isRpcError(error)) throw error;
-      throw rpcErrors.invalidParams({
+      if (isDomainError(error) || isRpcError(error)) throw error;
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
         message: "wallet_switchEthereumChain received an invalid caip2 identifier",
         data: { caip2: rawCaip2 },
+        cause: error,
       });
     }
   }
@@ -212,16 +216,16 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
   });
 
   if (!target) {
-    throw providerErrors.custom({
-      code: 4902,
+    throw arxError({
+      reason: ArxReasons.ChainNotFound,
       message: "Requested chain is not registered with ARX",
       data: { chainId: rawChainId, caip2: rawCaip2 },
     });
   }
 
   if (target.namespace !== "eip155") {
-    throw providerErrors.custom({
-      code: 4902,
+    throw arxError({
+      reason: ArxReasons.ChainNotCompatible,
       message: "Requested chain is not compatible with wallet_switchEthereumChain",
       data: { chainRef: target.chainRef },
     });
@@ -229,8 +233,8 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
 
   const supportsFeature = target.features?.includes("wallet_switchEthereumChain") ?? false;
   if (!supportsFeature) {
-    throw providerErrors.custom({
-      code: 4902,
+    throw arxError({
+      reason: ArxReasons.ChainNotSupported,
       message: "Requested chain does not support wallet_switchEthereumChain",
       data: { chainRef: target.chainRef },
     });
@@ -241,24 +245,30 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
     return null;
   } catch (error) {
     if (error instanceof Error && /unknown chain/i.test(error.message)) {
-      throw providerErrors.custom({
-        code: 4902,
+      throw arxError({
+        reason: ArxReasons.ChainNotFound,
         message: error.message,
         data: { chainId: rawChainId ?? target.chainId, caip2: normalizedCaip2 ?? target.chainRef },
+        cause: error,
       });
     }
-    throw error;
+    if (isArxError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
+      message: error instanceof Error ? error.message : "Failed to switch chain",
+      data: { chainRef: target.chainRef },
+      cause: error,
+    });
   }
 };
 
 const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
   const [raw] = paramsArray;
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_addEthereumChain expects a single object parameter",
       data: { params: request.params },
     });
@@ -275,15 +285,17 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
           ? error.message
           : "Invalid chain parameters";
 
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message,
       data: { params: request.params },
+      cause: error,
     });
   }
 
   if (metadata.namespace !== "eip155") {
-    throw providerErrors.custom({
-      code: 4902,
+    throw arxError({
+      reason: ArxReasons.ChainNotCompatible,
       message: "Requested chain is not compatible with wallet_addEthereumChain",
       data: { chainRef: metadata.chainRef },
     });
@@ -291,8 +303,8 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
 
   const existing = controllers.chainRegistry.getChain(metadata.chainRef);
   if (existing && existing.namespace !== "eip155") {
-    throw providerErrors.custom({
-      code: 4902,
+    throw arxError({
+      reason: ArxReasons.ChainNotCompatible,
       message: "Requested chain conflicts with an existing non-EVM chain",
       data: { chainRef: metadata.chainRef },
     });
@@ -315,10 +327,12 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   try {
     await controllers.approvals.requestApproval(task);
   } catch (error) {
-    if (isRpcError(error)) throw error;
-    throw providerErrors.userRejectedRequest({
+    if (isDomainError(error) || isRpcError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.ApprovalRejected,
       message: "User rejected chain addition",
       data: { origin },
+      cause: error,
     });
   }
 
@@ -341,12 +355,12 @@ const handleWalletGetPermissions: MethodHandler = ({ origin, controllers }) => {
 };
 const normalizePermissionRequests = (
   params: JsonRpcParams | undefined,
-  rpcErrors: ReturnType<typeof resolveRpcErrors>,
   defaultChain: Caip2ChainId,
 ): PermissionRequestDescriptor[] => {
   const [raw] = toParamsArray(params);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_requestPermissions expects a single object parameter",
       data: { params },
     });
@@ -354,7 +368,8 @@ const normalizePermissionRequests = (
 
   const entries = Object.keys(raw);
   if (entries.length === 0) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "wallet_requestPermissions requires at least one capability",
       data: { params },
     });
@@ -364,7 +379,8 @@ const normalizePermissionRequests = (
   const addCapability = (capability: string) => {
     const scope = CAPABILITY_TO_SCOPE.get(capability);
     if (!scope) {
-      throw rpcErrors.invalidParams({
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
         message: `wallet_requestPermissions does not support capability "${capability}"`,
         data: { capability },
       });
@@ -392,11 +408,9 @@ const normalizePermissionRequests = (
 };
 
 const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const activeChain = controllers.network.getActiveChain();
 
-  const requested = normalizePermissionRequests(request.params, rpcErrors, activeChain.chainRef);
+  const requested = normalizePermissionRequests(request.params, activeChain.chainRef);
   const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
     id: createTaskId("wallet_requestPermissions"),
     type: ApprovalTypes.RequestPermissions,
@@ -421,10 +435,12 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
       }
     }
   } catch (error) {
-    if (isRpcError(error)) throw error;
-    throw providerErrors.userRejectedRequest({
+    if (isDomainError(error) || isRpcError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.ApprovalRejected,
       message: "User rejected permission request",
       data: { origin },
+      cause: error,
     });
   }
 
@@ -436,11 +452,10 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
 
 const handlePersonalSign: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
   const paramsArray = toParamsArray(request.params);
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
 
   if (paramsArray.length < 2) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "personal_sign requires message and account parameters",
       data: { params: request.params },
     });
@@ -449,14 +464,16 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
   const { address, message } = resolveSigningInputs(paramsArray);
 
   if (!address) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "personal_sign expects an account address parameter",
       data: { params: request.params },
     });
   }
 
   if (!message) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "personal_sign expects a message parameter",
       data: { params: request.params },
     });
@@ -489,27 +506,28 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
 
     return signature;
   } catch (error) {
-    if (isRpcError(error)) throw error;
-    throw providerErrors.userRejectedRequest({
+    if (isDomainError(error) || isRpcError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.ApprovalRejected,
       message: "User rejected message signing",
       data: { origin },
+      cause: error,
     });
   }
 };
 
 const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
 
   if (paramsArray.length < 2) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "eth_signTypedData_v4 requires address and typed data parameters",
       data: { params: request.params },
     });
   }
 
-  const { address, typedData } = normaliseTypedData(paramsArray, rpcErrors);
+  const { address, typedData } = normaliseTypedData(paramsArray);
   const activeChain = controllers.network.getActiveChain();
 
   const task = {
@@ -537,28 +555,29 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
 
     return signature;
   } catch (error) {
-    if (isRpcError(error)) throw error;
-    throw providerErrors.userRejectedRequest({
+    if (isDomainError(error) || isRpcError(error)) throw error;
+    throw arxError({
+      reason: ArxReasons.ApprovalRejected,
       message: "User rejected typed data signing",
       data: { origin },
+      cause: error,
     });
   }
 };
 
 const handleEthSendTransaction: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
-  const rpcErrors = resolveRpcErrors(controllers, rpcContext);
-  const providerErrors = resolveProviderErrors(controllers, rpcContext);
   const paramsArray = toParamsArray(request.params);
 
   if (paramsArray.length === 0) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "eth_sendTransaction requires at least one transaction parameter",
       data: { params: request.params },
     });
   }
 
   const activeChain = controllers.network.getActiveChain();
-  const txRequest = buildEip155TransactionRequest(paramsArray, rpcErrors, activeChain.chainRef);
+  const txRequest = buildEip155TransactionRequest(paramsArray, activeChain.chainRef);
 
   try {
     const meta = await controllers.transactions.submitTransaction(origin, txRequest);
@@ -575,7 +594,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
 
     return broadcastMeta.hash;
   } catch (error) {
-    if (isRpcError(error)) {
+    if (isDomainError(error) || isRpcError(error)) {
       throw error;
     }
 
@@ -583,7 +602,8 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
       const { meta: failedMeta } = error;
 
       if (failedMeta.userRejected) {
-        throw providerErrors.userRejectedRequest({
+        throw arxError({
+          reason: ArxReasons.ApprovalRejected,
           message: "User rejected transaction",
           data: { origin, id: failedMeta.id },
         });
@@ -599,15 +619,18 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
         throw rpcLikeError;
       }
 
-      throw rpcErrors.internal({
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
         message: failure?.message ?? "Transaction failed to broadcast",
         data: { origin, id: failedMeta.id, error: failure ?? undefined },
       });
     }
 
-    throw providerErrors.userRejectedRequest({
-      message: "User rejected transaction",
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
+      message: error instanceof Error ? error.message : "Transaction submission failed",
       data: { origin },
+      cause: error,
     });
   }
 };
@@ -747,8 +770,4 @@ export const createEip155Adapter = (): NamespaceAdapter => ({
   methodPrefixes: ["eth_", "personal_", "wallet_", "net_", "web3_"],
   definitions: buildEip155Definitions(),
   passthrough: EIP155_PASSTHROUGH_CONFIG,
-  errors: {
-    rpc: evmRpcErrors,
-    provider: evmProviderErrors,
-  },
 });

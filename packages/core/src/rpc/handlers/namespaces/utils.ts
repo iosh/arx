@@ -1,6 +1,6 @@
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Caip2ChainId } from "../../../chains/ids.js";
 import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
-import { getProviderErrors, getRpcErrors } from "../../../errors/index.js";
 import type { HandlerControllers, Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";
@@ -13,6 +13,8 @@ export const createTaskId = (prefix: string) => {
 
 export const isRpcError = (value: unknown): value is { code: number } =>
   Boolean(value && typeof value === "object" && "code" in (value as Record<string, unknown>));
+
+export const isDomainError = isArxError;
 
 /**
  * Extract namespace from RPC invocation context.
@@ -36,20 +38,6 @@ const resolveNamespace = (controllers: HandlerControllers, context?: RpcInvocati
   return (namespace ?? EIP155_NAMESPACE) as Namespace;
 };
 
-export const resolveProviderErrors = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
-  if (context?.errors?.provider) {
-    return context.errors.provider;
-  }
-  return getProviderErrors(resolveNamespace(controllers, context));
-};
-
-export const resolveRpcErrors = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
-  if (context?.errors?.rpc) {
-    return context.errors.rpc;
-  }
-  return getRpcErrors(resolveNamespace(controllers, context));
-};
-
 export const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 export const toParamsArray = (params: unknown): readonly unknown[] => {
@@ -63,7 +51,7 @@ export const resolveSigningInputs = (params: readonly unknown[]) => {
   return { address, message };
 };
 
-export const normaliseTypedData = (params: readonly unknown[], rpcErrors: ReturnType<typeof resolveRpcErrors>) => {
+export const normaliseTypedData = (params: readonly unknown[]) => {
   let address: string | undefined;
   let payload: unknown;
 
@@ -79,7 +67,8 @@ export const normaliseTypedData = (params: readonly unknown[], rpcErrors: Return
   }
 
   if (!address || payload === undefined) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "eth_signTypedData_v4 expects an address and typed data payload",
       data: { params },
     });
@@ -92,22 +81,24 @@ export const normaliseTypedData = (params: readonly unknown[], rpcErrors: Return
   try {
     return { address, typedData: JSON.stringify(payload) };
   } catch (error) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "Failed to serialise typed data payload",
       data: { params, error: error instanceof Error ? error.message : String(error) },
+      cause: error,
     });
   }
 };
 
 export const buildEip155TransactionRequest = (
   params: readonly unknown[],
-  rpcErrors: ReturnType<typeof resolveRpcErrors>,
   caip2: Caip2ChainId,
 ): TransactionRequest<"eip155"> => {
   const [raw] = params;
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "eth_sendTransaction expects params[0] to be a transaction object",
       data: { params },
     });
@@ -116,7 +107,8 @@ export const buildEip155TransactionRequest = (
   const tx = raw as Record<string, unknown>;
 
   if (typeof tx.from !== "string" || !HEX_ADDRESS_PATTERN.test(tx.from)) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "eth_sendTransaction requires a valid from address",
       data: { params },
     });
@@ -130,7 +122,8 @@ export const buildEip155TransactionRequest = (
     if (tx.to === null || (typeof tx.to === "string" && tx.to.startsWith("0x"))) {
       payload.to = tx.to as string | null;
     } else {
-      throw rpcErrors.invalidParams({
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
         message: "Transaction 'to' must be null or a 0x-prefixed string",
         data: { params },
       });
@@ -151,7 +144,8 @@ export const buildEip155TransactionRequest = (
     const value = tx[key];
     if (value === undefined) continue;
     if (typeof value !== "string" || !value.startsWith("0x")) {
-      throw rpcErrors.invalidParams({
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
         message: `Transaction '${key}' must be a 0x-prefixed string`,
         data: { params },
       });

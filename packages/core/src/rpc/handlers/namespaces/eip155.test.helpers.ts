@@ -3,7 +3,7 @@ import type { ChainMetadata } from "../../../chains/metadata.js";
 import type { ApprovalTask } from "../../../controllers/index.js";
 import { FakeVault } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
-import { createMethodExecutor } from "../../index.js";
+import { createMethodExecutor, executeWithAdapters } from "../../index.js";
 
 // Shared test constants
 export const ORIGIN = "https://dapp.example";
@@ -65,8 +65,24 @@ export const createServices = (overrides?: Parameters<typeof createBackgroundSer
 };
 
 // Create method executor from services
-export const createExecutor = (services: ReturnType<typeof createServices>) =>
-  createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
+export const createExecutor = (services: ReturnType<typeof createServices>) => {
+  const execute = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
+  return async (args: Parameters<typeof execute>[0]) => {
+    const chainRef = args.context?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
+    const result = await executeWithAdapters(
+      {
+        surface: "dapp",
+        namespace: "eip155",
+        chainRef,
+        origin: args.origin,
+        method: args.request.method,
+      },
+      () => execute(args),
+    );
+    if (result.ok) return result.result;
+    throw result.error;
+  };
+};
 
 export const waitForChainInNetwork = async (
   services: ReturnType<typeof createServices>,

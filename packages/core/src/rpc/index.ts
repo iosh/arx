@@ -1,6 +1,7 @@
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
-import { getRpcErrors, registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
+import { registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
 import { createEip155ProtocolAdapter } from "./eip155ProtocolAdapter.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
@@ -21,6 +22,7 @@ export type {
   Eip155RpcClient,
 } from "./clients/eip155/eip155.js";
 export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
+export { encodeErrorWithAdapters, executeWithAdapters } from "./executeWithAdapters.js";
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
 export * from "./permissions.js";
 export { getNamespaceProtocolAdapter, registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
@@ -231,10 +233,10 @@ export const createMethodExecutor =
     }
 
     const adapter = namespaceAdapters.get(namespace);
-    const rpcErrors = context?.errors?.rpc ?? adapter?.errors?.rpc ?? getRpcErrors(namespace);
     const passthrough = adapter?.passthrough;
     if (!passthrough || !passthrough.allowedMethods.includes(request.method)) {
-      throw rpcErrors.methodNotFound({
+      throw arxError({
+        reason: ArxReasons.RpcMethodNotFound,
         message: `Method "${request.method}" is not implemented`,
         data: { namespace, method: request.method },
       });
@@ -243,7 +245,8 @@ export const createMethodExecutor =
     const chainRef = context?.chainRef ?? controllers.network.getActiveChain().chainRef;
     const [chainNamespace] = chainRef.split(":");
     if (chainNamespace && chainNamespace !== namespace) {
-      throw rpcErrors.invalidRequest({
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
         message: `Namespace mismatch for "${request.method}"`,
         data: { namespace, chainRef },
       });
@@ -287,9 +290,12 @@ export const createMethodExecutor =
         }
         throw error;
       }
-      throw rpcErrors.internal({
+      if (isArxError(error)) throw error;
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
         message: `Failed to execute "${request.method}"`,
         data: { namespace, chainRef },
+        cause: error,
       });
     }
   };

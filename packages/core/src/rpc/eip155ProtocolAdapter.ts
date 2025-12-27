@@ -50,11 +50,22 @@ export const createEip155ProtocolAdapter = (): NamespaceProtocolAdapter => ({
       case ArxReasons.VaultLocked:
       case ArxReasons.SessionLocked:
       case ArxReasons.PermissionNotConnected:
+      case ArxReasons.PermissionDenied:
         return buildJsonRpcError(4100, error);
 
-      case ArxReasons.PermissionDenied:
       case ArxReasons.ApprovalRejected:
         return buildJsonRpcError(4001, error);
+
+      case ArxReasons.TransportDisconnected:
+        return buildJsonRpcError(4900, error);
+
+      case ArxReasons.ChainNotFound:
+      case ArxReasons.ChainNotCompatible:
+      case ArxReasons.ChainNotSupported:
+        return buildJsonRpcError(4902, error);
+
+      case ArxReasons.RpcInvalidRequest:
+        return buildJsonRpcError(-32600, error);
 
       case ArxReasons.RpcInvalidParams:
         return buildJsonRpcError(-32602, error);

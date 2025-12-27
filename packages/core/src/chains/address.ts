@@ -1,5 +1,5 @@
 import * as Address from "ox/Address";
-import { keyringErrors } from "../errors/keyring.js";
+import { keyringErrors } from "../keyring/errors.js";
 // Canonical lower-case EVM/eSpace address normalizer
 export const normalizeEvmAddress = (value: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {

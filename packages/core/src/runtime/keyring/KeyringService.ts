@@ -1,12 +1,12 @@
 import { ArxReasons, isArxError } from "@arx/errors";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import { keyringErrors } from "../../errors/keyring.js";
-import { vaultErrors } from "../../errors/vault.js";
+import { keyringErrors } from "../../keyring/errors.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import { getAddressKey } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
+import { vaultErrors } from "../../vault/errors.js";
 import { KeyringHydration } from "./KeyringHydration.js";
 import { decodePayload, encodePayload } from "./keyring-utils.js";
 import type {

@@ -1,5 +1,5 @@
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
-import { keyringErrors } from "../../errors/keyring.js";
+import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { decodePayload } from "./keyring-utils.js";
 import type { AccountMeta, KeyringMeta, KeyringServiceOptions, Payload, RuntimeKeyring } from "./types.js";

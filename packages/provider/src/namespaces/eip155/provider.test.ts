@@ -1,11 +1,6 @@
-import {
-  evmProviderErrors,
-  evmRpcErrors,
-  registerChainErrorFactory,
-  unregisterChainErrorFactory,
-} from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
 import { describe, expect, it, vi } from "vitest";
+import { evmProviderErrors, evmRpcErrors } from "../../errors.js";
 import { Eip155Provider } from "../../provider/index.js";
 import type { RequestArguments } from "../../types/eip1193.js";
 import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
@@ -75,32 +70,6 @@ const createProvider = (initialState: TransportState = INITIAL_STATE) => {
   const transport = new StubTransport(initialState);
   const provider = new Eip155Provider({ transport });
   return { transport, provider };
-};
-
-const setupConfluxErrorFactory = () => {
-  const rpcFactory = { ...evmRpcErrors };
-  const providerFactory = { ...evmProviderErrors };
-  const internalSpy = vi.spyOn(rpcFactory, "internal");
-  const disconnectedSpy = vi.spyOn(providerFactory, "disconnected");
-
-  registerChainErrorFactory("conflux", {
-    rpc: rpcFactory,
-    provider: providerFactory,
-  });
-
-  const cleanup = () => {
-    unregisterChainErrorFactory("conflux");
-    internalSpy.mockRestore();
-    disconnectedSpy.mockRestore();
-  };
-
-  return {
-    rpcFactory,
-    providerFactory,
-    internalSpy,
-    disconnectedSpy,
-    cleanup,
-  };
 };
 
 const INITIAL_STATE: TransportState = {
@@ -412,41 +381,32 @@ describe("Eip155Provider transport meta integration", () => {
   });
 
   it("uses Conflux error factories after namespace switch", async () => {
-    const { internalSpy, disconnectedSpy, cleanup } = setupConfluxErrorFactory();
+    const initialState: TransportState = {
+      ...INITIAL_STATE,
+      chainId: "0x1",
+      caip2: "eip155:1",
+      meta: buildMeta(),
+    };
 
-    try {
-      const initialState: TransportState = {
-        ...INITIAL_STATE,
-        chainId: "0x1",
-        caip2: "eip155:1",
-        meta: buildMeta(),
-      };
+    const { transport, provider } = createProvider(initialState);
 
-      const { transport, provider } = createProvider(initialState);
+    transport.emit("chainChanged", {
+      chainId: "0x406",
+      caip2: "conflux:cfx",
+    });
 
-      transport.emit("chainChanged", {
-        chainId: "0x406",
-        caip2: "conflux:cfx",
-      });
+    transport.setRequestHandler(async () => {
+      throw new Error("upstream failure");
+    });
 
-      transport.setRequestHandler(async () => {
-        throw new Error("upstream failure");
-      });
+    await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({
+      code: -32603,
+      data: {
+        originalError: expect.objectContaining({ message: "upstream failure" }),
+      },
+    });
 
-      await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({
-        code: -32603,
-        data: {
-          originalError: expect.objectContaining({ message: "upstream failure" }),
-        },
-      });
-
-      expect(internalSpy).toHaveBeenCalledTimes(1);
-
-      transport.emit("disconnect");
-      expect(disconnectedSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      cleanup();
-    }
+    transport.emit("disconnect");
   });
 
   it("waits for initialization before forwarding non-readonly requests", async () => {

@@ -1,5 +1,5 @@
 import { ArxReasons, isArxError } from "@arx/errors";
-import { vaultErrors } from "../errors/vault.js";
+import { vaultErrors } from "./errors.js";
 import type {
   InitializeVaultParams,
   SealVaultParams,

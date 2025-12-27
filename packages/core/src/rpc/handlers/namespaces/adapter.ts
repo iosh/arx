@@ -1,4 +1,3 @@
-import type { ChainErrorFactory } from "../../../errors/factories.js";
 import type { MethodDefinition, Namespace } from "../types.js";
 
 /**
@@ -19,5 +18,4 @@ export type NamespaceAdapter = {
   methodPrefixes?: string[];
   definitions: Record<string, MethodDefinition>;
   passthrough?: NamespaceAdapterPassthrough;
-  errors?: ChainErrorFactory;
 };

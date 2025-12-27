@@ -1,7 +1,7 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
-import { registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
+
 import { createLogger, extendLogger } from "../utils/logger.js";
 import { createEip155ProtocolAdapter } from "./eip155ProtocolAdapter.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
@@ -56,23 +56,13 @@ export const registerNamespaceAdapter = (adapter: NamespaceAdapter, options?: { 
     replace: options?.replace ?? true,
     methodPrefixes: adapter.methodPrefixes ?? [],
   });
-  const previous = namespaceAdapters.get(adapter.namespace);
-  namespaceAdapters.set(adapter.namespace, adapter);
 
-  if (adapter.errors) {
-    registerChainErrorFactory(adapter.namespace, adapter.errors);
-  } else if (previous?.errors && (options?.replace ?? true)) {
-    unregisterChainErrorFactory(adapter.namespace);
-  }
+  namespaceAdapters.set(adapter.namespace, adapter);
 };
 
 export const unregisterNamespaceAdapter = (namespace: Namespace): void => {
-  const existing = namespaceAdapters.get(namespace);
   namespaceAdapters.delete(namespace);
   unregisterNamespaceDefinitions(namespace);
-  if (existing?.errors) {
-    unregisterChainErrorFactory(namespace);
-  }
 };
 
 export const getRegisteredNamespaceAdapters = (): NamespaceAdapter[] => [...namespaceAdapters.values()];

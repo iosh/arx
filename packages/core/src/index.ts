@@ -12,7 +12,6 @@ export type {
 } from "@metamask/utils";
 export * from "./chains/index.js";
 export * from "./controllers/index.js";
-export * from "./errors/index.js";
 export * from "./messenger/index.js";
 export type { HandlerControllers } from "./rpc/handlers/types.js";
 export * from "./rpc/index.js";

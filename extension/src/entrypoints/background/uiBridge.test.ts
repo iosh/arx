@@ -5,8 +5,7 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "@arx/core";
-import { ApprovalTypes, ArxReasons, KeyringService } from "@arx/core";
-import { keyringErrors, vaultErrors } from "@arx/core/errors";
+import { ApprovalTypes, ArxReasons, arxError, KeyringService } from "@arx/core";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -83,7 +82,10 @@ class FakeVault {
 
   async verifyPassword(password: string) {
     if (password !== this.#password) {
-      throw vaultErrors.invalidPassword();
+      throw arxError({
+        reason: ArxReasons.VaultInvalidPassword,
+        message: "Vault password is missing or incorrect",
+      });
     }
   }
 }

@@ -1,6 +1,6 @@
 import type { JsonRpcVersion2 } from "@arx/core";
-import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
+import { evmProviderErrors, evmRpcErrors } from "../../errors.js";
 import type { EIP1193Provider, EIP1193ProviderRpcError, RequestArguments } from "../../types/eip1193.js";
 import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
 import { isTransportMeta } from "../../utils/transportMeta.js";
@@ -72,9 +72,6 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #readonlyMethods = DEFAULT_READONLY_METHODS;
 
   #connectInFlight: Promise<void> | null = null;
-
-  #getProviderErrors = () => getProviderErrors(this.#state.namespace);
-  #getRpcErrors = () => getRpcErrors(this.#state.namespace);
 
   constructor({ transport, timeouts }: Eip155ProviderOptions) {
     super();
@@ -150,7 +147,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   request = async (args: RequestArguments) => {
     const { method } = this.#parseRequest(args);
-    const providerErrors = this.#getProviderErrors();
+    const providerErrors = evmProviderErrors;
 
     if (method === "eth_accounts") {
       if (!this.#initialized) {
@@ -180,7 +177,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   enable = async () => {
-    const rpcErrors = this.#getRpcErrors();
+    const rpcErrors = evmRpcErrors;
     const result = await this.request({ method: "eth_requestAccounts" });
     if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
       throw rpcErrors.internal({
@@ -278,7 +275,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     if (error && typeof error === "object" && "code" in (error as Record<string, unknown>)) {
       return error as EIP1193ProviderRpcError;
     }
-    return this.#getRpcErrors().internal({
+    return evmRpcErrors.internal({
       message: error instanceof Error ? error.message : String(error),
       data: { originalError: error },
     });
@@ -292,7 +289,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   }
 
   #parseRequest(args: RequestArguments): { method: string; params: RequestArguments["params"] | undefined } {
-    const rpcErrors = this.#getRpcErrors();
+    const rpcErrors = evmRpcErrors;
     if (!args || typeof args !== "object" || Array.isArray(args)) {
       throw rpcErrors.invalidRequest({
         message: "Invalid request arguments",
@@ -413,7 +410,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   #restartReady(error?: unknown) {
     this.#initialized = false;
-    const reason = error ?? this.#getProviderErrors().disconnected();
+    const reason = error ?? evmProviderErrors.disconnected();
     this.#initializedReject?.(reason);
     this.#createReadyPromise();
   }
@@ -487,7 +484,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    const disconnectError = error ?? this.#getProviderErrors().disconnected();
+    const disconnectError = error ?? evmProviderErrors.disconnected();
 
     this.#restartReady(disconnectError);
     this.#state.reset();
@@ -520,7 +517,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         new Promise<void>((_, reject) => {
           timer = setTimeout(() => {
             reject(
-              this.#getProviderErrors().custom({
+              evmProviderErrors.custom({
                 code: 4900,
                 message: "Provider is initializing. Try again later.",
               }),

@@ -1,5 +1,5 @@
-import { getProviderErrors, getRpcErrors } from "@arx/core/errors";
 import { EventEmitter } from "eventemitter3";
+import { evmProviderErrors, evmRpcErrors } from "../errors.js";
 import { CHANNEL } from "../protocol/channel.js";
 import { type Envelope, isEnvelope, resolveProtocolVersion } from "../protocol/envelope.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
@@ -98,7 +98,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
 
   async request(args: RequestArguments, options?: TransportRequestOptions): Promise<unknown> {
     if (!this.#connected) {
-      throw this.#getProviderErrors().disconnected();
+      throw evmProviderErrors.disconnected();
     }
 
     const { method, params } = args;
@@ -122,8 +122,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
       const timeoutMs = options?.timeoutMs ?? this.#requestTimeoutMs;
       const timeoutId = window.setTimeout(() => {
         this.#pendingRequests.delete(id);
-        const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
-        reject(getRpcErrors(namespace).internal({ message: "Request timed out" }));
+        reject(evmRpcErrors.internal({ message: "Request timed out" }));
       }, timeoutMs);
 
       this.#pendingRequests.set(id, {
@@ -176,7 +175,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     });
 
     this.#handshakeTimeoutId = window.setTimeout(() => {
-      const providerErrors = this.#getProviderErrors();
+      const providerErrors = evmProviderErrors;
       this.#handshakeId = null;
       this.#rejectHandshake(
         providerErrors.custom({
@@ -204,11 +203,6 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   #normalizeAccounts(accounts: unknown): string[] {
     if (!Array.isArray(accounts)) return [];
     return accounts.filter((item): item is string => typeof item === "string");
-  }
-
-  #getProviderErrors() {
-    const namespace = this.#meta?.activeNamespace ?? this.#caip2 ?? undefined;
-    return getProviderErrors(namespace);
   }
 
   #applyHandshakePayload(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
@@ -292,7 +286,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     if (!this.#connected && !this.#handshakePromise) {
       return;
     }
-    const providerErrors = this.#getProviderErrors();
+    const providerErrors = evmProviderErrors;
     const error =
       reason && typeof reason === "object" && "code" in (reason as Record<string, unknown>)
         ? (reason as EIP1193ProviderRpcError)
@@ -323,7 +317,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
 
     const incomingVersion = resolveProtocolVersion(payload.protocolVersion);
     if (incomingVersion !== PROTOCOL_VERSION) {
-      const providerErrors = this.#getProviderErrors();
+      const providerErrors = evmProviderErrors;
       this.#handshakeId = null;
       this.#rejectHandshake(
         providerErrors.custom({

@@ -1,4 +1,4 @@
-import { vaultErrors } from "../errors/vault.js";
+import { vaultErrors } from "./errors.js";
 
 const KEY_LENGTH_BITS = 256;
 

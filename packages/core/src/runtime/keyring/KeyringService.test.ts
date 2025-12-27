@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { normalizeEvmAddress } from "../../chains/index.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
-import { keyringErrors } from "../../errors/keyring.js";
-import { vaultErrors } from "../../errors/vault.js";
+import { keyringErrors } from "../../keyring/errors.js";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
 import type { KeyringStorePort } from "../../storage/keyringStore.js";
+import { vaultErrors } from "../../vault/errors.js";
 import type { VaultService } from "../../vault/types.js";
 import { KeyringService } from "./KeyringService.js";
 

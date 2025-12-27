@@ -1,3 +1,4 @@
+import type { ArxReason } from "@arx/core";
 import {
   UI_CHANNEL,
   type UiAccountMeta,
@@ -7,6 +8,8 @@ import {
   type UiSnapshot,
 } from "@arx/core/ui";
 import browser from "webextension-polyfill";
+
+type UiRemoteError = Error & { reason?: ArxReason; data?: unknown };
 
 type PendingRequest<T = unknown> = {
   resolve: (value: T) => void;
@@ -44,9 +47,10 @@ class UiClient {
       }
 
       if (envelope.type === "ui:error") {
-        const error = new Error(envelope.error.message);
-        if (envelope.error.code) {
-          (error as Error & { code?: number }).code = envelope.error.code;
+        const error = new Error(envelope.error.message) as UiRemoteError;
+        error.reason = envelope.error.reason;
+        if (envelope.error.data !== undefined) {
+          error.data = envelope.error.data;
         }
         this.#rejectRequest(envelope.requestId, error);
         return;

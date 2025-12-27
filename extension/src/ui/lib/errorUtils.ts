@@ -1,5 +1,7 @@
+import { type ArxReason, ArxReasons } from "@arx/core";
+
 export type WalletError = Error & {
-  code?: number;
+  reason?: ArxReason;
   data?: unknown;
 };
 
@@ -7,23 +9,22 @@ export type WalletError = Error & {
  * Type guard to check if error is a WalletError
  */
 export const isWalletError = (error: unknown): error is WalletError => {
-  return error instanceof Error && typeof (error as WalletError).code === "number";
+  return error instanceof Error && typeof (error as WalletError).reason === "string";
 };
 
 export const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     const walletError = error as WalletError;
-    switch (walletError.code) {
-      case 4001:
+    switch (walletError.reason) {
+      case ArxReasons.ApprovalRejected:
         return "Request rejected by user";
-      case 4100:
+      case ArxReasons.SessionLocked:
+      case ArxReasons.VaultLocked:
         return "Wallet is locked. Please unlock first.";
-      case 4200:
+      case ArxReasons.PermissionNotConnected:
+        return "Not connected. Please connect first.";
+      case ArxReasons.RpcMethodNotFound:
         return "Unsupported method";
-      case 4900:
-        return "Connection lost. Please try again.";
-      case 4901:
-        return "Chain not connected";
       default:
         return walletError.message || "An unknown error occurred";
     }
@@ -32,7 +33,7 @@ export const getErrorMessage = (error: unknown): string => {
 };
 
 export const isUserRejection = (error: unknown): boolean => {
-  return isWalletError(error) && error.code === 4001;
+  return isWalletError(error) && error.reason === ArxReasons.ApprovalRejected;
 };
 
 const normalizeMessage = (value: unknown) => {
@@ -43,7 +44,10 @@ const normalizeMessage = (value: unknown) => {
 
 export const getUnlockErrorMessage = (error: unknown): string => {
   const walletError = error as WalletError | undefined;
-  if (walletError?.code) {
+  if (walletError?.reason) {
+    if (walletError.reason === ArxReasons.VaultInvalidPassword) {
+      return "Incorrect password. Please try again.";
+    }
     return getErrorMessage(error);
   }
   const message = normalizeMessage(error).toLowerCase();
@@ -55,7 +59,7 @@ export const getUnlockErrorMessage = (error: unknown): string => {
 
 export const getInitErrorMessage = (error: unknown): string => {
   const walletError = error as WalletError | undefined;
-  if (walletError?.code) {
+  if (walletError?.reason) {
     return getErrorMessage(error);
   }
   const message = normalizeMessage(error).toLowerCase();

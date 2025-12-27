@@ -1,3 +1,4 @@
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { Caip2ChainId } from "../../../chains/ids.js";
@@ -12,9 +13,6 @@ type PermissionGuardDeps = {
 
   isConnected: (origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }) => boolean;
   resolveMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
-  resolveProviderErrors(context?: RpcInvocationContext): {
-    unauthorized(args: { message: string; data: { origin: string; method: string; reason: string } }): unknown;
-  };
 };
 
 export const createPermissionGuardMiddleware = ({
@@ -22,7 +20,6 @@ export const createPermissionGuardMiddleware = ({
   isConnected,
   isInternalOrigin,
   resolveMethodDefinition,
-  resolveProviderErrors,
 }: PermissionGuardDeps): JsonRpcMiddleware<JsonRpcParams, Json> => {
   return createAsyncMiddleware(async (req, _res, next) => {
     const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
@@ -40,8 +37,6 @@ export const createPermissionGuardMiddleware = ({
       (definition.scope === PermissionScopes.Sign || definition.scope === PermissionScopes.Transaction);
 
     if (isApprovalScopedSignOrTx) {
-      const providerErrors = resolveProviderErrors(rpcContext);
-
       const chainRef = rpcContext?.chainRef;
       const namespace = rpcContext?.namespace;
 
@@ -55,9 +50,10 @@ export const createPermissionGuardMiddleware = ({
         });
 
       if (!connected) {
-        throw providerErrors.unauthorized({
+        throw arxError({
+          reason: ArxReasons.PermissionNotConnected,
           message: `Origin "${origin}" is not connected`,
-          data: { origin, method: req.method, reason: "not_connected" },
+          data: { origin, method: req.method, chainRef: chainRef ?? null, namespace: namespace ?? null },
         });
       }
 
@@ -77,10 +73,14 @@ export const createPermissionGuardMiddleware = ({
     try {
       await assertPermission(origin, req.method, rpcContext);
     } catch (error) {
-      const providerErrors = resolveProviderErrors(rpcContext);
-      throw providerErrors.unauthorized({
+      if (isArxError(error)) {
+        throw error;
+      }
+      throw arxError({
+        reason: ArxReasons.PermissionDenied,
         message: (error as Error)?.message ?? `Origin lacks permission for ${req.method}`,
-        data: { origin, method: req.method, reason: "permission_denied" },
+        data: { origin, method: req.method },
+        cause: error,
       });
     }
 

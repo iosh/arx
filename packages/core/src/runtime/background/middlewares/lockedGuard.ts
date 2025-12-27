@@ -1,4 +1,11 @@
-import { type AttentionService, createAsyncMiddleware, type Json, type RpcInvocationContext } from "@arx/core";
+import {
+  ArxReasons,
+  type AttentionService,
+  arxError,
+  createAsyncMiddleware,
+  type Json,
+  type RpcInvocationContext,
+} from "@arx/core";
 
 /**
  * Lock policy priority (highest to lowest):
@@ -31,9 +38,6 @@ type LockedGuardDeps = {
     context?: RpcInvocationContext,
   ): { allow?: boolean; response?: unknown; hasResponse?: boolean } | undefined;
   resolvePassthroughAllowance(method: string, context?: RpcInvocationContext): PassthroughAllowance;
-  resolveProviderErrors(context?: RpcInvocationContext): {
-    unauthorized(args: { message: string; data: { origin: string; method: string } }): unknown;
-  };
   attentionService: Pick<AttentionService, "requestAttention">;
 };
 /**
@@ -50,7 +54,6 @@ export const createLockedGuardMiddleware = ({
   resolveMethodDefinition,
   resolveLockedPolicy,
   resolvePassthroughAllowance,
-  resolveProviderErrors,
   attentionService,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
@@ -75,7 +78,6 @@ export const createLockedGuardMiddleware = ({
     }
 
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-    const getProviderErrors = () => resolveProviderErrors(rpcContext);
     const definition = resolveMethodDefinition(req.method, rpcContext);
     const passthrough = resolvePassthroughAllowance(req.method, rpcContext);
 
@@ -85,15 +87,17 @@ export const createLockedGuardMiddleware = ({
           return next();
         }
         requestUnlockAttention(req.method, rpcContext);
-        throw getProviderErrors().unauthorized({
+        throw arxError({
+          reason: ArxReasons.SessionLocked,
           message: `Request ${req.method} requires an unlocked session`,
           data: { origin, method: req.method },
         });
       }
 
-      throw getProviderErrors().unauthorized({
-        message: `Request ${req.method} is blocked until the active namespace declares it`,
-        data: { origin, method: req.method },
+      throw arxError({
+        reason: ArxReasons.RpcMethodNotFound,
+        message: `Method "${req.method}" is not implemented`,
+        data: { origin, method: req.method, namespace: rpcContext?.namespace ?? null },
       });
     }
 
@@ -114,7 +118,8 @@ export const createLockedGuardMiddleware = ({
     }
 
     requestUnlockAttention(req.method, rpcContext);
-    throw getProviderErrors().unauthorized({
+    throw arxError({
+      reason: ArxReasons.SessionLocked,
       message: `Request ${req.method} requires an unlocked session`,
       data: { origin, method: req.method },
     });

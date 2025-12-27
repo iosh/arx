@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { JsonRpcParams } from "@metamask/utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,12 +34,6 @@ const runMiddleware = async (
   });
 };
 
-const resolveProviderErrors = vi.fn(() => ({
-  unauthorized: vi.fn((payload) => {
-    throw Object.assign(new Error("unauthorized"), { payload });
-  }),
-}));
-
 describe("createPermissionGuardMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,7 +44,6 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: vi.fn(),
       isInternalOrigin: () => true,
       resolveMethodDefinition: vi.fn(),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 
@@ -63,7 +57,6 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: vi.fn(),
       isInternalOrigin: () => false,
       resolveMethodDefinition: vi.fn(() => undefined),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 
@@ -76,13 +69,14 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 
-    await expect(runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_accounts" })).rejects.toThrow(
-      "unauthorized",
-    );
+    await expect(
+      runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_accounts" }),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.PermissionDenied,
+    });
     expect(ensurePermission).toHaveBeenCalledWith("https://dapp.example", "eth_accounts", undefined);
   });
   it("skips permission check for scoped bootstrap methods", async () => {
@@ -91,7 +85,6 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn(), isBootstrap: true }),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 
@@ -107,13 +100,12 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 
     await expect(
       runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_accounts", context: rpcContext }),
-    ).rejects.toThrow("unauthorized");
+    ).rejects.toMatchObject({ reason: ArxReasons.PermissionDenied });
     expect(ensurePermission).toHaveBeenCalledWith("https://dapp.example", "eth_accounts", rpcContext);
   });
   it("allows requests when ensurePermission succeeds", async () => {
@@ -122,7 +114,6 @@ describe("createPermissionGuardMiddleware", () => {
       assertPermission: ensurePermission,
       isInternalOrigin: () => false,
       resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
-      resolveProviderErrors,
       isConnected: vi.fn(() => false),
     });
 

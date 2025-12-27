@@ -1,14 +1,8 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { createLockedGuardMiddleware } from "./lockedGuard.js";
 
 const ORIGIN = "https://dapp.example";
-
-const createErrorHelpers = () => {
-  const error = new Error("unauthorized");
-  const unauthorized = vi.fn(() => error);
-  const resolveProviderErrors = vi.fn(() => ({ unauthorized }));
-  return { error, unauthorized, resolveProviderErrors };
-};
 
 const createAttentionHelpers = () => {
   const requestAttention = vi.fn(() => ({ enqueued: true, request: null, state: { queue: [], count: 0 } }));
@@ -31,7 +25,6 @@ const createNextStub = () =>
 describe("createLockedGuardMiddleware", () => {
   it("allows internal origins", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -39,7 +32,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -49,13 +41,10 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
-    expect(helpers.unauthorized).not.toHaveBeenCalled();
   });
 
   it("allows unlocked sessions", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => true,
@@ -63,7 +52,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -73,14 +61,11 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
-    expect(helpers.unauthorized).not.toHaveBeenCalled();
   });
 
   it("rejects when method definition is missing", async () => {
     const next = createNextStub();
     const end = vi.fn();
-    const helpers = createErrorHelpers();
     const resolveMethodDefinition = vi.fn(() => undefined);
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
@@ -89,7 +74,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition,
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -100,17 +84,13 @@ describe("createLockedGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
-    expect(end).toHaveBeenCalledWith(helpers.error);
+    const [error] = end.mock.calls[0] ?? [];
+    expect((error as any)?.reason).toBe(ArxReasons.RpcMethodNotFound);
     expect(resolveMethodDefinition).toHaveBeenCalledWith("eth_unknown", undefined);
-    expect(helpers.resolveProviderErrors).toHaveBeenCalledTimes(1);
-    expect(helpers.unauthorized).toHaveBeenCalledWith({
-      message: "Request eth_unknown is blocked until the active namespace declares it",
-      data: { origin: ORIGIN, method: "eth_unknown" },
-    });
+    expect(attention.requestAttention).not.toHaveBeenCalled();
   });
   it("allows methods without scope", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -118,7 +98,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => ({}),
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -128,13 +107,10 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
-    expect(helpers.unauthorized).not.toHaveBeenCalled();
   });
 
   it("allows methods when locked.allow is true", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -142,7 +118,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -152,13 +127,10 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
-    expect(helpers.unauthorized).not.toHaveBeenCalled();
   });
 
   it("returns locked.response payload", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -166,7 +138,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -177,12 +148,10 @@ describe("createLockedGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.result).toEqual(["0x123"]);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
   });
 
   it("allows passthrough methods when allowWhenLocked is true", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -190,7 +159,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: true }),
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -200,12 +168,10 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(helpers.resolveProviderErrors).not.toHaveBeenCalled();
   });
 
   it("rejects passthrough methods that require unlocked sessions", async () => {
     const next = createNextStub();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -213,7 +179,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => undefined,
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: false }),
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -223,11 +188,8 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).not.toHaveBeenCalled();
-    expect(end).toHaveBeenCalledWith(helpers.error);
-    expect(helpers.unauthorized).toHaveBeenCalledWith({
-      message: "Request eth_newFilter requires an unlocked session",
-      data: { origin: ORIGIN, method: "eth_newFilter" },
-    });
+    const [error] = end.mock.calls[0] ?? [];
+    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
 
     expect(attention.requestAttention).toHaveBeenCalledWith({
       reason: "unlock_required",
@@ -241,7 +203,6 @@ describe("createLockedGuardMiddleware", () => {
   it("rejects scoped methods by default", async () => {
     const next = createNextStub();
     const end = vi.fn();
-    const helpers = createErrorHelpers();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
@@ -249,7 +210,6 @@ describe("createLockedGuardMiddleware", () => {
       resolveMethodDefinition: () => ({ scope: "accounts" }),
       resolveLockedPolicy: () => undefined,
       resolvePassthroughAllowance: defaultPassthroughAllowance,
-      resolveProviderErrors: helpers.resolveProviderErrors,
       attentionService: attention,
     });
 
@@ -260,12 +220,8 @@ describe("createLockedGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
-    expect(end).toHaveBeenCalledWith(helpers.error);
-    expect(helpers.resolveProviderErrors).toHaveBeenCalledTimes(1);
-    expect(helpers.unauthorized).toHaveBeenCalledWith({
-      message: "Request eth_requestAccounts requires an unlocked session",
-      data: { origin: ORIGIN, method: "eth_requestAccounts" },
-    });
+    const [error] = end.mock.calls[0] ?? [];
+    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
     expect(attention.requestAttention).toHaveBeenCalledWith({
       reason: "unlock_required",
       origin: ORIGIN,

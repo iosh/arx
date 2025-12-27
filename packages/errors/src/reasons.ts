@@ -19,6 +19,13 @@ export const ArxReasons = {
   ApprovalRejected: "approval/rejected",
   SessionLocked: "session/locked",
 
+  TransportDisconnected: "transport/disconnected",
+
+  ChainNotFound: "chain/not_found",
+  ChainNotCompatible: "chain/not_compatible",
+  ChainNotSupported: "chain/not_supported",
+
+  RpcInvalidRequest: "rpc/invalid_request",
   RpcInvalidParams: "rpc/invalid_params",
   RpcMethodNotFound: "rpc/method_not_found",
   RpcInternal: "rpc/internal",

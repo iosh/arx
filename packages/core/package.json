@@ -10,7 +10,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./messenger": "./src/messenger/index.ts",
-    "./errors": "./src/errors/index.ts",
     "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
     "./ui": "./src/ui/index.ts",
@@ -18,7 +17,6 @@
   },
   "dependencies": {
     "@metamask/json-rpc-engine": "10.0.3",
-    "@metamask/rpc-errors": "7.0.3",
     "@metamask/utils": "11.8.0",
     "@arx/errors": "workspace:*",
     "@noble/curves": "1.9.1",

@@ -120,9 +120,6 @@ importers:
       '@metamask/json-rpc-engine':
         specifier: 10.0.3
         version: 10.0.3
-      '@metamask/rpc-errors':
-        specifier: 7.0.3
-        version: 7.0.3
       '@metamask/utils':
         specifier: 11.8.0
         version: 11.8.0

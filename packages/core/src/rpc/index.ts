@@ -2,6 +2,7 @@ import type { Caip2ChainId } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 import { getRpcErrors, registerChainErrorFactory, unregisterChainErrorFactory } from "../errors/index.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
+import { createEip155ProtocolAdapter } from "./eip155ProtocolAdapter.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
 import type {
@@ -11,6 +12,7 @@ import type {
   RpcInvocationContext,
   RpcRequest,
 } from "./handlers/types.js";
+import { registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
 import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
 
 export type {
@@ -21,6 +23,7 @@ export type {
 export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
 export * from "./permissions.js";
+export { getNamespaceProtocolAdapter, registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
 export {
   type RpcClient,
   type RpcClientFactory,
@@ -307,5 +310,8 @@ export const createDomainChainService = (): DomainChainService => ({
 
 const EIP155_ADAPTER = createEip155Adapter();
 registerNamespaceAdapter(EIP155_ADAPTER);
+
+const EIP155_PROTOCOL_ADAPTER = createEip155ProtocolAdapter();
+registerNamespaceProtocolAdapter(EIP155_NAMESPACE, EIP155_PROTOCOL_ADAPTER);
 
 export type { RpcInvocationContext };

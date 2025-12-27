@@ -114,6 +114,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@arx/errors':
+        specifier: workspace:*
+        version: link:../errors
       '@metamask/json-rpc-engine':
         specifier: 10.0.3
         version: 10.0.3

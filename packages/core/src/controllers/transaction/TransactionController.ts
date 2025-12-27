@@ -1,3 +1,4 @@
+import { ArxReasons, isArxError } from "@arx/errors";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type {
   ReceiptResolution,
@@ -301,7 +302,10 @@ export class InMemoryTransactionController implements TransactionController {
   async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
     const now = this.#now();
     const error = this.#normalizeError(reason);
-    const isUserRejected = error?.code === 4001 || error?.name === "TransactionRejectedError";
+    const isUserRejected =
+      (reason && isArxError(reason) && reason.reason === ArxReasons.ApprovalRejected) ||
+      error?.code === 4001 ||
+      error?.name === "TransactionRejectedError";
 
     const pendingIndex = this.#state.pending.findIndex((meta) => meta.id === id);
     if (pendingIndex > -1) {

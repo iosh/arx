@@ -1,6 +1,6 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../../chains/registry.js";
 import type { Eip155TransactionPayload } from "../../../controllers/transaction/types.js";
-import { getRpcErrors } from "../../../errors/index.js";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
@@ -19,13 +19,13 @@ type DraftBuilderDeps = {
 
 export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
   const chains = deps.chains ?? createDefaultChainModuleRegistry();
-  const rpcErrors = getRpcErrors("eip155");
   const readNow = deps.now ?? Date.now;
   const resolveAddresses = createAddressResolver({ chains });
 
   return async (ctx: TransactionAdapterContext): Promise<Eip155TransactionDraft> => {
     if (ctx.namespace !== "eip155") {
-      throw rpcErrors.invalidRequest({
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
         message: `Draft builder expects namespace "eip155" but received "${ctx.namespace}"`,
       });
     }

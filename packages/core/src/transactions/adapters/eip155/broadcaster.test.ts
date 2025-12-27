@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import type { SignedTransactionPayload } from "../types.js";
 import { TEST_CHAINS } from "./__fixtures__/constants.js";
@@ -30,8 +31,9 @@ describe("createEip155Broadcaster", () => {
     const broadcaster = createEip155Broadcaster({ rpcClientFactory: factory });
 
     await expect(broadcaster.broadcast(BASE_CONTEXT, SIGNED)).rejects.toMatchObject({
-      code: -32603,
+      reason: ArxReasons.RpcInternal,
       message: "RPC node returned a transaction hash with invalid format.",
+      data: { hash: "0x1234" },
     });
   });
 
@@ -42,7 +44,7 @@ describe("createEip155Broadcaster", () => {
     const broadcaster = createEip155Broadcaster({ rpcClientFactory: factory });
 
     await expect(broadcaster.broadcast(BASE_CONTEXT, SIGNED)).rejects.toMatchObject({
-      code: -32603,
+      reason: ArxReasons.RpcInternal,
       message: "Failed to create RPC client for the active chain.",
       data: expect.objectContaining({ chainRef: TEST_CHAINS.MAINNET }),
     });
@@ -65,7 +67,7 @@ describe("createEip155Broadcaster", () => {
     const broadcaster = createEip155Broadcaster({ rpcClientFactory: factory });
 
     await expect(broadcaster.broadcast(BASE_CONTEXT, SIGNED)).rejects.toMatchObject({
-      code: -32603,
+      reason: ArxReasons.RpcInternal,
       message: "Broadcast failed due to an unexpected error.",
       data: expect.objectContaining({ origin: "https://dapp.example" }),
     });
@@ -76,8 +78,9 @@ describe("createEip155Broadcaster", () => {
     const broadcaster = createEip155Broadcaster({ rpcClientFactory: factory });
 
     await expect(broadcaster.broadcast(BASE_CONTEXT, SIGNED)).rejects.toMatchObject({
-      code: -32603,
+      reason: ArxReasons.RpcInternal,
       message: "RPC node returned a non-string transaction hash.",
+      data: { hash: 12345 },
     });
   });
 
@@ -86,8 +89,9 @@ describe("createEip155Broadcaster", () => {
     const broadcaster = createEip155Broadcaster({ rpcClientFactory: factory });
 
     await expect(broadcaster.broadcast(BASE_CONTEXT, SIGNED)).rejects.toMatchObject({
-      code: -32603,
+      reason: ArxReasons.RpcInternal,
       message: "RPC node returned a non-string transaction hash.",
+      data: { hash: null },
     });
   });
 

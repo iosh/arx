@@ -1,4 +1,4 @@
-import { getRpcErrors } from "../../../errors/index.js";
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { SignedTransactionPayload, TransactionAdapterContext } from "../types.js";
 
@@ -12,15 +12,17 @@ export type Eip155Broadcaster = {
   broadcast(context: TransactionAdapterContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
 };
 
-const normaliseHash = (value: unknown, rpcErrors: ReturnType<typeof getRpcErrors>): string => {
+const normaliseHash = (value: unknown): string => {
   if (typeof value !== "string") {
-    throw rpcErrors.internal({
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
       message: "RPC node returned a non-string transaction hash.",
       data: { hash: value },
     });
   }
   if (!HASH_PATTERN.test(value)) {
-    throw rpcErrors.internal({
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
       message: "RPC node returned a transaction hash with invalid format.",
       data: { hash: value },
     });
@@ -29,24 +31,27 @@ const normaliseHash = (value: unknown, rpcErrors: ReturnType<typeof getRpcErrors
 };
 
 export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaster => {
-  const rpcErrors = getRpcErrors("eip155");
-
   return {
     async broadcast(context, signed) {
       let client: Eip155RpcCapabilities;
       try {
         client = deps.rpcClientFactory(context.chainRef);
       } catch (error) {
-        throw rpcErrors.internal({
+        throw arxError({
+          reason: ArxReasons.RpcInternal,
           message: "Failed to create RPC client for the active chain.",
           data: { chainRef: context.chainRef, error: error instanceof Error ? error.message : String(error) },
+          cause: error,
         });
       }
 
       try {
         const hash = await client.sendRawTransaction(signed.raw);
-        return { hash: normaliseHash(hash, rpcErrors) };
+        return { hash: normaliseHash(hash) };
       } catch (error) {
+        if (isArxError(error)) {
+          throw error;
+        }
         if (
           error &&
           typeof error === "object" &&
@@ -58,13 +63,15 @@ export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaste
           throw error;
         }
 
-        throw rpcErrors.internal({
+        throw arxError({
+          reason: ArxReasons.RpcInternal,
           message: "Broadcast failed due to an unexpected error.",
           data: {
             chainRef: context.chainRef,
             origin: context.origin,
             error: error instanceof Error ? error.message : String(error),
           },
+          cause: error,
         });
       }
     },

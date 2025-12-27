@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import * as Hash from "ox/Hash";
 import type { Hex as HexType } from "ox/Hex";
@@ -6,16 +7,12 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-
 import { parseCaip2 } from "../../../chains/caip.js";
-import { getProviderErrors, getRpcErrors } from "../../../errors/index.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import { zeroize } from "../../../vault/utils.js";
 import type { SignedTransactionPayload, TransactionAdapterContext, TransactionDraft } from "../types.js";
 import type { Eip155DraftPrepared, Eip155TransactionDraft } from "./types.js";
 
-const rpcErrors = getRpcErrors("eip155");
-const providerErrors = getProviderErrors("eip155");
 const textEncoder = new TextEncoder();
 
 type SignerDeps = {
@@ -47,7 +44,7 @@ const isHexValue = (value: unknown): value is HexType => typeof value === "strin
 const toBigInt = (value: HexType | null | undefined, label: string, required = false): bigint | undefined => {
   if (value == null) {
     if (required) {
-      throw rpcErrors.invalidRequest({ message: `Transaction ${label} is required.` });
+      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Transaction ${label} is required.` });
     }
     return undefined;
   }
@@ -55,7 +52,10 @@ const toBigInt = (value: HexType | null | undefined, label: string, required = f
     Hex.assert(value, { strict: false });
     return Hex.toBigInt(value);
   } catch {
-    throw rpcErrors.invalidRequest({ message: `Transaction ${label} is not a valid hex quantity.` });
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `Transaction ${label} is not a valid hex quantity.`,
+    });
   }
 };
 
@@ -67,19 +67,26 @@ const deriveChainId = (context: TransactionAdapterContext, prepared: Record<stri
   if (prepared.chainId) {
     const numeric = Number(Hex.toBigInt(prepared.chainId as Hex.Hex));
     if (!Number.isSafeInteger(numeric) || numeric <= 0) {
-      throw rpcErrors.invalidRequest({ message: "Transaction chainId must be a positive 53-bit integer." });
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: "Transaction chainId must be a positive 53-bit integer.",
+      });
     }
     return numeric;
   }
 
   const { namespace, reference } = parseCaip2(context.chainRef);
   if (namespace !== "eip155") {
-    throw rpcErrors.invalidRequest({ message: `Namespace "${namespace}" does not support Ethereum signing.` });
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `Namespace "${namespace}" does not support Ethereum signing.`,
+    });
   }
 
   const fallback = Number.parseInt(reference, 10);
   if (!Number.isSafeInteger(fallback) || fallback <= 0) {
-    throw rpcErrors.invalidRequest({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
       message: `Active chainRef "${context.chainRef}" cannot provide a numeric chainId.`,
     });
   }
@@ -154,8 +161,10 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
 
 const assertUnlockedAccount = (keyring: SignerDeps["keyring"], address: string) => {
   if (!keyring.hasAccount("eip155", address)) {
-    throw providerErrors.unauthorized({
+    throw arxError({
+      reason: ArxReasons.SessionLocked,
       message: `Address ${address} is not unlocked.`,
+      data: { address },
     });
   }
 };
@@ -182,14 +191,16 @@ const parseTypedDataPayload = (raw: string) => {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "Typed data payload must be valid JSON.",
       data: { error: readErrorMessage(error) },
     });
   }
 
   if (!parsed || typeof parsed !== "object") {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "Typed data payload must be a JSON object.",
     });
   }
@@ -197,7 +208,8 @@ const parseTypedDataPayload = (raw: string) => {
   try {
     TypedData.assert(parsed as TypedData.Definition<Record<string, unknown>, string>);
   } catch (error) {
-    throw rpcErrors.invalidParams({
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
       message: "Typed data payload failed validation.",
       data: { error: readErrorMessage(error) },
     });
@@ -213,16 +225,19 @@ const assertEip155Draft = (draft: TransactionDraft): draft is Eip155TransactionD
 export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
   const signTransaction: Eip155Signer["signTransaction"] = async (context, draft) => {
     if (context.namespace !== "eip155") {
-      throw rpcErrors.invalidRequest({ message: `EIP-155 signer cannot handle namespace "${context.namespace}".` });
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: `EIP-155 signer cannot handle namespace "${context.namespace}".`,
+      });
     }
 
     if (!assertEip155Draft(draft)) {
-      throw rpcErrors.invalidRequest({ message: "Signer expected an EIP-155 draft payload." });
+      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Signer expected an EIP-155 draft payload." });
     }
 
     const requestFrom = context.meta.from;
     if (!requestFrom) {
-      throw rpcErrors.invalidRequest({ message: "Transaction from address is required." });
+      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Transaction from address is required." });
     }
 
     const activeFrom = context.from;
@@ -230,7 +245,8 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
       const normalizedRequest = requestFrom.toLowerCase();
       const normalizedActive = activeFrom.toLowerCase();
       if (normalizedRequest !== normalizedActive) {
-        throw rpcErrors.invalidRequest({
+        throw arxError({
+          reason: ArxReasons.RpcInvalidRequest,
           message: "Transaction from address does not match active account.",
           data: { requestFrom, activeAccount: activeFrom },
         });

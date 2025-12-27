@@ -1,5 +1,5 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
-import { getRpcErrors } from "../../../errors/index.js";
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionAdapterContext } from "../types.js";
 
@@ -104,15 +104,15 @@ export type Eip155ReceiptService = {
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {
-  const rpcErrors = getRpcErrors("eip155");
-
   const getClient = (chainRef: string) => {
     try {
       return deps.rpcClientFactory(chainRef);
     } catch (error) {
-      throw rpcErrors.internal({
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
         message: "Failed to create RPC client for receipt tracking.",
         data: { chainRef, error: error instanceof Error ? error.message : String(error) },
+        cause: error,
       });
     }
   };
@@ -126,7 +126,8 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       }
 
       if (rawReceipt.transactionHash && rawReceipt.transactionHash.toLowerCase() !== hash.toLowerCase()) {
-        throw rpcErrors.internal({
+        throw arxError({
+          reason: ArxReasons.RpcInternal,
           message: "RPC node returned a receipt with mismatched transaction hash.",
           data: { expected: hash, received: rawReceipt.transactionHash },
         });

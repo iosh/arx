@@ -2,22 +2,13 @@ import {
   ArxReasons,
   arxError,
   type BackgroundSessionServices,
-  createAsyncMiddleware,
   createBackgroundServices,
-  createLockedGuardMiddleware,
   createLogger,
-  createMethodDefinitionResolver,
-  createMethodExecutor,
-  createMethodNamespaceResolver,
   createNamespaceResolver,
-  createPermissionGuardMiddleware,
   createPermissionScopeResolver,
+  createRpcEngineForBackground,
   DEFAULT_NAMESPACE,
-  encodeErrorWithAdapters,
   extendLogger,
-  getRegisteredNamespaceAdapters,
-  type Json,
-  type JsonRpcParams,
   type RpcInvocationContext,
 } from "@arx/core";
 import browser from "webextension-polyfill";
@@ -258,136 +249,11 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         });
       }
 
-      const executeMethod = createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
-      const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
-
-      const resolveMethodNamespace = createMethodNamespaceResolver(controllers);
-      const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
-        if (!chainRef) {
-          return null;
-        }
-        const typed = chainRef;
-        const networkChain = controllers.network.getChain(typed);
-        if (networkChain?.providerPolicies?.locked) {
-          return networkChain.providerPolicies.locked;
-        }
-        const registryEntity = controllers.chainRegistry.getChain(typed);
-        return registryEntity?.metadata.providerPolicies?.locked ?? null;
-      };
-
-      const resolveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
-        const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
-        const policies = readLockedPoliciesForChain(chainRef);
-        if (!policies) {
-          return undefined;
-        }
-
-        const pick = (key: string) => (Object.hasOwn(policies, key) ? policies[key] : undefined);
-        const selected = pick(method);
-        const fallback = selected === undefined ? pick("*") : undefined;
-        const value = selected ?? fallback;
-
-        if (value === undefined || value === null) {
-          return undefined;
-        }
-
-        return {
-          allow: value.allow,
-          response: value.response,
-          hasResponse: Object.hasOwn(value, "response"),
-        } as const;
-      };
-
-      const resolvePassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
-        const namespace = resolveMethodNamespace(method, rpcContext);
-        const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
-        if (!adapter?.passthrough) {
-          return { isPassthrough: false, allowWhenLocked: false };
-        }
-        const isPassthrough = adapter.passthrough.allowedMethods.includes(method);
-        return {
-          isPassthrough,
-          allowWhenLocked: isPassthrough && (adapter.passthrough.allowWhenLocked?.includes(method) ?? false),
-        };
-      };
-
-      engine.push(
-        createAsyncMiddleware(async (req, res, next) => {
-          const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-          try {
-            await next();
-          } catch (middlewareError) {
-            const origin = (req as { origin?: string }).origin ?? "unknown://";
-            const namespace = rpcContext?.namespace ?? resolveMethodNamespace(req.method, rpcContext ?? undefined);
-            const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
-            res.error = encodeErrorWithAdapters(middlewareError, {
-              surface: "dapp",
-              namespace,
-              chainRef,
-              origin,
-              method: req.method,
-            }) as any;
-          }
-        }),
-      );
-      engine.push(
-        createLockedGuardMiddleware({
-          isUnlocked: () => session.unlock.isUnlocked(),
-          isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
-          resolveMethodDefinition,
-          resolveLockedPolicy,
-          resolvePassthroughAllowance,
-          attentionService: services.attention,
-        }),
-      );
-
-      engine.push(
-        createPermissionGuardMiddleware({
-          assertPermission: (origin, method, context) =>
-            controllers.permissions.assertPermission(origin, method, context),
-          isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
-          isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
-          resolveMethodDefinition,
-        }),
-      );
-
-      engine.push(
-        createAsyncMiddleware(async (req, _res, next) => {
-          const origin = (req as { origin?: string }).origin ?? "unknown://";
-          const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-          const definition = resolveMethodDefinition(req.method, rpcContext ?? undefined);
-          if (!definition?.approvalRequired) {
-            return next();
-          }
-          if (!isInternalOrigin(origin, extensionOrigin)) {
-            try {
-              services.attention.requestAttention({
-                reason: "approval_required",
-                origin,
-                method: req.method,
-                chainRef: rpcContext?.chainRef ?? null,
-                namespace: rpcContext?.namespace ?? null,
-              });
-            } catch {
-              // ignore
-            }
-          }
-          return next();
-        }),
-      );
-
-      engine.push(
-        createAsyncMiddleware(async (req, res) => {
-          const origin = (req as { origin?: string }).origin ?? "unknown://";
-          const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-          const result = await executeMethod({
-            origin,
-            request: { method: req.method, params: req.params as JsonRpcParams },
-            context: rpcContext ?? undefined,
-          });
-          res.result = result as Json;
-        }),
-      );
+      createRpcEngineForBackground(services, {
+        isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
+        shouldRequestUnlockAttention: () => true,
+        shouldRequestApprovalAttention: () => true,
+      });
 
       unsubscribeControllerEvents.push(
         controllers.network.onChainChanged(() => {

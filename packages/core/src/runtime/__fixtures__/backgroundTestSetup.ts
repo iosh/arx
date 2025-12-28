@@ -1,18 +1,11 @@
-import { createAsyncMiddleware, JsonRpcEngine } from "@metamask/json-rpc-engine";
-import type { Json, JsonRpcError, JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
+import type { JsonRpcEngine } from "@metamask/json-rpc-engine";
+import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import { vi } from "vitest";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { Caip2ChainId } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import {
-  createMethodDefinitionResolver,
-  createMethodExecutor,
-  createMethodNamespaceResolver,
-  encodeErrorWithAdapters,
-  getRegisteredNamespaceAdapters,
-  type RpcInvocationContext,
-} from "../../rpc/index.js";
+import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
 import type {
   AccountsSnapshot,
   ApprovalsSnapshot,
@@ -37,9 +30,7 @@ import {
 import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
 import type { KeyringStorePort } from "../../storage/keyringStore.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
-import { UNKNOWN_ORIGIN } from "../background/constants.js";
-import { createLockedGuardMiddleware } from "../background/middlewares/lockedGuard.js";
-import { createPermissionGuardMiddleware } from "../background/middlewares/permissionGuard.js";
+import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";
 
 // Test constants
@@ -552,63 +543,8 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
   const { services } = background;
 
-  const engine = new JsonRpcEngine();
-
-  const resolveMethodDefinition = createMethodDefinitionResolver(services.controllers);
   const resolveMethodNamespace = createMethodNamespaceResolver(services.controllers);
-  const executeMethod = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
-  const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
-    if (!chainRef) {
-      return null;
-    }
-    const networkChain = services.controllers.network.getChain(chainRef);
-    if (networkChain?.providerPolicies?.locked) {
-      return networkChain.providerPolicies.locked;
-    }
-    const registryEntity = services.controllers.chainRegistry.getChain(chainRef);
-    return registryEntity?.metadata.providerPolicies?.locked ?? null;
-  };
-
-  const resolveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
-    const chainRef = rpcContext?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
-    const policies = readLockedPoliciesForChain(chainRef);
-    if (!policies) {
-      return undefined;
-    }
-
-    const pick = (key: string) => (Object.hasOwn(policies, key) ? policies[key] : undefined);
-    const selected = pick(method);
-    const fallback = selected === undefined ? pick("*") : undefined;
-    const value = selected ?? fallback;
-
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-
-    const result: { allow?: boolean; response?: unknown; hasResponse?: boolean } = {
-      hasResponse: Object.hasOwn(value, "response"),
-    };
-    if (value.allow !== undefined) {
-      result.allow = value.allow;
-    }
-    if (result.hasResponse) {
-      result.response = value.response;
-    }
-    return result;
-  };
-
-  const resolvePassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
-    const namespace = resolveMethodNamespace(method, rpcContext);
-    const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
-    if (!adapter?.passthrough) {
-      return { isPassthrough: false, allowWhenLocked: false };
-    }
-    const isPassthrough = adapter.passthrough.allowedMethods.includes(method);
-    return {
-      isPassthrough,
-      allowWhenLocked: isPassthrough && (adapter.passthrough.allowWhenLocked?.includes(method) ?? false),
-    };
-  };
+  const engine = services.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
     const chain = services.controllers.network.getActiveChain();
@@ -621,71 +557,11 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     };
   };
 
-  engine.push(
-    createAsyncMiddleware(async (req, res, next) => {
-      const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-      const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
-      const namespace = resolveMethodNamespace(req.method, rpcContext ?? undefined);
-      const chainRef = rpcContext?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
-      try {
-        await next();
-      } catch (error) {
-        res.error = encodeErrorWithAdapters(error, {
-          surface: "dapp",
-          namespace,
-          chainRef,
-          origin,
-          method: req.method,
-        }) as JsonRpcError;
-        return;
-      }
-
-      if (res.error) {
-        res.error = encodeErrorWithAdapters(res.error, {
-          surface: "dapp",
-          namespace,
-          chainRef,
-          origin,
-          method: req.method,
-        }) as JsonRpcError;
-      }
-    }),
-  );
-
-  engine.push(
-    createLockedGuardMiddleware({
-      isUnlocked: () => services.session.unlock.isUnlocked(),
-      isInternalOrigin: (origin) => origin === internalOrigin,
-      resolveMethodDefinition,
-      resolveLockedPolicy,
-      resolvePassthroughAllowance,
-      attentionService: services.attention,
-    }),
-  );
-
-  engine.push(
-    createPermissionGuardMiddleware({
-      assertPermission: (origin, method, context) =>
-        services.controllers.permissions.assertPermission(origin, method, context),
-      isConnected: (origin, options) => services.controllers.permissions.isConnected(origin, options),
-      isInternalOrigin: (origin) => origin === internalOrigin,
-      resolveMethodDefinition,
-    }),
-  );
-
-  engine.push(
-    createAsyncMiddleware(async (req, res) => {
-      const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
-      const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-      const invocation = {
-        origin,
-        request: { method: req.method, params: req.params as JsonRpcParams },
-        ...(rpcContext ? { context: rpcContext } : {}),
-      };
-      const result = await executeMethod(invocation);
-      res.result = result as Json;
-    }),
-  );
+  createRpcEngineForBackground(services, {
+    isInternalOrigin: (origin) => origin === internalOrigin,
+    shouldRequestUnlockAttention: () => false,
+    shouldRequestApprovalAttention: () => false,
+  });
 
   let nextRequestId = 0;
   const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {

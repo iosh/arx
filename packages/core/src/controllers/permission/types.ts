@@ -65,7 +65,6 @@ export type PermissionApprovalResult = {
 
 export type PermissionController = {
   getState(): PermissionsState;
-  getState(): PermissionsState;
 
   getPermittedAccounts(
     origin: string,

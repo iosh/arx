@@ -1,11 +1,8 @@
-import {
-  ArxReasons,
-  type AttentionService,
-  arxError,
-  createAsyncMiddleware,
-  type Json,
-  type RpcInvocationContext,
-} from "@arx/core";
+import { ArxReasons, arxError } from "@arx/errors";
+import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
+import type { Json } from "@metamask/utils";
+import type { RpcInvocationContext } from "../../../rpc/index.js";
+import type { AttentionService } from "../../../services/attention/types.js";
 
 /**
  * Lock policy priority (highest to lowest):

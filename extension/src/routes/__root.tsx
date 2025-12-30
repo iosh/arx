@@ -1,32 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
-import { createContext, useContext, useState } from "react";
-import { Theme, YStack } from "tamagui";
+import { YStack } from "tamagui";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { ROUTES } from "@/ui/lib/routes";
-
-// Define context type for type safety
-interface ThemeContextType {
-  theme: "light" | "dark";
-  setTheme: (theme: "light" | "dark" | ((prev: "light" | "dark") => "light" | "dark")) => void;
-}
-
-// Create React Context for theme
-const ThemeContext = createContext<ThemeContextType | null>(null);
-
-// Custom hook to use theme context
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeContext.Provider");
-  }
-  return context;
-}
 
 // Router context type for route guards
 export interface RouterContext {
@@ -65,20 +46,15 @@ function RootLayout() {
 }
 
 function RootInner() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const { snapshot, isLoading, unlock } = useUiSnapshot();
   const enabled = snapshot?.session.isUnlocked ?? false;
   useIdleTimer(enabled);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
-      <Theme name={theme}>
-        <YStack backgroundColor="$background" minHeight="100vh" data-theme={theme}>
-          <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
-            <Outlet />
-          </SessionGate>
-        </YStack>
-      </Theme>
-    </ThemeContext.Provider>
+    <YStack backgroundColor="$bg" height="100%">
+      <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
+        <Outlet />
+      </SessionGate>
+    </YStack>
   );
 }

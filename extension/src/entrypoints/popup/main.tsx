@@ -2,8 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { TamaguiProvider } from "tamagui";
-import config from "../../tamagui.config.ts";
+import { AppProviders } from "../../ui/providers/AppProviders";
 import "./style.css";
 
 // Import the generated route tree
@@ -34,8 +33,8 @@ declare module "@tanstack/react-router" {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <TamaguiProvider config={config} defaultTheme="light">
+    <AppProviders>
       <RouterProvider router={router} />
-    </TamaguiProvider>
+    </AppProviders>
   </React.StrictMode>,
 );

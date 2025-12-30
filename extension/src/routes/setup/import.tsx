@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Card, Paragraph, XStack, YStack } from "tamagui";
-import { Button } from "@/ui/components";
+import { Button, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
@@ -76,7 +76,7 @@ function ImportSetupRoute() {
   };
 
   return (
-    <YStack flex={1} padding="$4" gap="$3">
+    <Screen scroll={false}>
       <Button onPress={() => router.navigate({ to: ROUTES.WELCOME })}>Back</Button>
 
       <Card padded bordered gap="$2">
@@ -101,6 +101,6 @@ function ImportSetupRoute() {
       ) : (
         <ImportPrivateKeyScreen error={privateError} isLoading={privatePending} onSubmit={handlePrivateImport} />
       )}
-    </YStack>
+    </Screen>
   );
 }

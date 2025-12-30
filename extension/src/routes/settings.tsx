@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Card, Input, Paragraph, Separator, Slider, XStack, YStack } from "tamagui";
-import { Button, LoadingScreen } from "@/ui/components";
+import { Input, Paragraph, Separator, Slider, XStack, YStack } from "tamagui";
+import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -57,7 +57,7 @@ function SettingsPage() {
   }
 
   return (
-    <YStack flex={1} gap="$3" padding="$4">
+    <Screen>
       <Button onPress={() => router.navigate({ to: ROUTES.HOME })} disabled={pending}>
         Back
       </Button>
@@ -66,10 +66,10 @@ function SettingsPage() {
         <Paragraph fontSize="$6" fontWeight="600">
           Auto-lock
         </Paragraph>
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           Choose how long the wallet stays unlocked (1–60 minutes).
         </Paragraph>
-        <Separator marginVertical="$2" />
+        <Divider marginVertical="$2" />
 
         <Paragraph fontWeight="600">Duration: {minutes} min</Paragraph>
         <Slider
@@ -96,7 +96,7 @@ function SettingsPage() {
           </Button>
         </XStack>
 
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           {timeLeftLabel}
         </Paragraph>
         {error ? (
@@ -114,6 +114,6 @@ function SettingsPage() {
           </Button>
         </XStack>
       </Card>
-    </YStack>
+    </Screen>
   );
 }

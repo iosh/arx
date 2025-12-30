@@ -1,8 +1,7 @@
-import type { UiKeyringMeta } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, Paragraph, Separator, XStack, YStack } from "tamagui";
-import { Button, LoadingScreen } from "@/ui/components";
+import { useMemo, useState } from "react";
+import { Paragraph, Separator, XStack, YStack } from "tamagui";
+import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -57,7 +56,7 @@ function AccountSwitchPage() {
   };
 
   return (
-    <YStack flex={1} gap="$3" padding="$4">
+    <Screen>
       {backupWarnings.length > 0 && (
         <Card padded bordered backgroundColor="$yellow2" gap="$2">
           <Paragraph fontWeight="600">Backup reminders</Paragraph>
@@ -87,11 +86,11 @@ function AccountSwitchPage() {
         <Paragraph fontSize="$6" fontWeight="600">
           Accounts
         </Paragraph>
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           Chain: {snapshot.chain.displayName} ({snapshot.chain.chainRef})
         </Paragraph>
 
-        <Separator marginVertical="$2" />
+        <Divider marginVertical="$2" />
 
         {snapshot.accounts.list.length === 0 ? (
           <Paragraph color="$color10">No accounts available yet.</Paragraph>
@@ -100,12 +99,12 @@ function AccountSwitchPage() {
             const isActive = snapshot.accounts.active === address;
             const loading = pendingAddress === address;
             return (
-              <Card key={address} padded bordered borderColor={isActive ? "$colorFocus" : "$borderColor"} gap="$2">
+              <Card key={address} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
                 <Paragraph fontFamily="$mono" fontSize="$3">
                   {address}
                 </Paragraph>
                 <XStack alignItems="center" justifyContent="space-between">
-                  <Paragraph color={isActive ? "$colorFocus" : "$color10"} fontSize="$2">
+                  <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
                     {isActive ? "Active" : "Available"}
                   </Paragraph>
                   <Button size="$3" disabled={isActive || loading} onPress={() => void handleAccountSwitch(address)}>
@@ -132,6 +131,6 @@ function AccountSwitchPage() {
         <Button disabled>Derive New Account</Button>
         <Button disabled>Import Private Key</Button>
       </Card>
-    </YStack>
+    </Screen>
   );
 }

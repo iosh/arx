@@ -1,6 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { Card, H2, Paragraph, XStack, YStack } from "tamagui";
-import { Button } from "../components";
+import { Button, Screen } from "../components";
 
 const MS_PER_SECOND = 1000;
 
@@ -35,7 +35,7 @@ export const HomeScreen = ({
   const activeAccountLabel = accounts.active ?? "No active account";
 
   return (
-    <YStack flex={1} padding="$4" gap="$4" backgroundColor="$backgroundStrong">
+    <Screen>
       {backupWarnings.length > 0 && (
         <Card padded bordered backgroundColor="$yellow2" gap="$2">
           <Paragraph fontWeight="600">Backup required</Paragraph>
@@ -57,11 +57,11 @@ export const HomeScreen = ({
       <YStack gap="$3">
         <Card padded bordered>
           <YStack gap="$1">
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               Current Chain
             </Paragraph>
             <H2>{chain.displayName}</H2>
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               {chain.chainRef}
             </Paragraph>
           </YStack>
@@ -72,13 +72,13 @@ export const HomeScreen = ({
 
         <Card padded bordered>
           <YStack gap="$1">
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               Active Account
             </Paragraph>
             <Paragraph fontSize="$5" fontWeight="600" fontFamily="$mono">
               {activeAccountLabel}
             </Paragraph>
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               {accounts.list.length > 0
                 ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""} available`
                 : "No accounts available"}
@@ -89,12 +89,12 @@ export const HomeScreen = ({
           </Button>
         </Card>
 
-        <Card padded bordered borderColor={hasApprovals ? "$orange7" : "$borderColor"}>
+        <Card padded bordered borderColor={hasApprovals ? "$accent" : "$border"}>
           <YStack gap="$1">
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               Approvals
             </Paragraph>
-            <Paragraph color={hasApprovals ? "$orange10" : "$color10"} fontWeight="600">
+            <Paragraph color={hasApprovals ? "$accent" : "$mutedText"} fontWeight="600">
               {hasApprovals
                 ? `${approvals.length} pending approval${approvals.length > 1 ? "s" : ""}`
                 : "No pending approvals"}
@@ -107,9 +107,9 @@ export const HomeScreen = ({
       </YStack>
 
       <YStack gap="$2" paddingBottom="$2">
-        <Card padded bordered backgroundColor="$backgroundFocus">
+        <Card padded bordered backgroundColor="$surface">
           <XStack alignItems="center" justifyContent="space-between">
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               Session
             </Paragraph>
             <Paragraph color="$colorFocus">{autoLockLabel}</Paragraph>
@@ -122,6 +122,6 @@ export const HomeScreen = ({
 
         <Button onPress={() => void onLock()}>Lock Wallet</Button>
       </YStack>
-    </YStack>
+    </Screen>
   );
 };

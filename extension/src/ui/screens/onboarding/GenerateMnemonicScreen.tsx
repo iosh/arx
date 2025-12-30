@@ -1,5 +1,5 @@
 import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui";
-import { Button } from "@/ui/components";
+import { Button, Screen } from "@/ui/components";
 
 type GenerateMnemonicScreenProps = {
   words: string[];
@@ -19,7 +19,7 @@ export function GenerateMnemonicScreen({
   onSkip,
 }: GenerateMnemonicScreenProps) {
   return (
-    <YStack flex={1} padding="$4" gap="$3">
+    <Screen scroll={false}>
       <Paragraph fontSize="$6" fontWeight="600">
         Backup your recovery phrase
       </Paragraph>
@@ -33,18 +33,24 @@ export function GenerateMnemonicScreen({
         ) : words.length === 0 ? (
           <Paragraph color="$color10">Tap “Regenerate” to fetch a new phrase.</Paragraph>
         ) : (
-          <ScrollView>
-            <XStack flexWrap="wrap" gap="$2">
-              {words.map((word, index) => (
-                <Card key={`${word}`} padded bordered width="30%" minWidth={90}>
-                  <Paragraph color="$color10" fontSize="$2">
-                    {index + 1}.
-                  </Paragraph>
-                  <Paragraph fontWeight="600">{word}</Paragraph>
-                </Card>
-              ))}
-            </XStack>
-          </ScrollView>
+          <Card padded bordered minHeight={160}>
+            {isLoading ? (
+              <Paragraph>Generating phrase…</Paragraph>
+            ) : words.length === 0 ? (
+              <Paragraph color="$mutedText">Tap “Regenerate” to fetch a new phrase.</Paragraph>
+            ) : (
+              <XStack flexWrap="wrap" gap="$2">
+                {words.map((word, index) => (
+                  <Card key={`${word}`} padded bordered width="30%" minWidth={90}>
+                    <Paragraph color="$mutedText" fontSize="$2">
+                      {index + 1}.
+                    </Paragraph>
+                    <Paragraph fontWeight="600">{word}</Paragraph>
+                  </Card>
+                ))}
+              </XStack>
+            )}
+          </Card>
         )}
       </Card>
 
@@ -63,6 +69,6 @@ export function GenerateMnemonicScreen({
       <Button onPress={onSkip} disabled={isLoading || words.length === 0} color="$orange10">
         Skip verification (mark as not backed up)
       </Button>
-    </YStack>
+    </Screen>
   );
 }

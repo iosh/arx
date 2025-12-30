@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Form, H2, Input, Paragraph, YStack } from "tamagui";
-import { Button } from "../components";
+import { Button, Screen } from "../components";
 import { getInitErrorMessage } from "../lib/errorUtils";
 
 type InitScreenProps = {
@@ -43,38 +43,40 @@ export const InitScreen = ({ onSubmit }: InitScreenProps) => {
   };
 
   return (
-    <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
-      <YStack gap="$2">
-        <H2>Create Password</H2>
-        <Paragraph color="$color10">
-          Choose a strong password. It will be required every time you unlock the wallet.
-        </Paragraph>
-      </YStack>
+    <Screen scroll={false}>
+      <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
+        <YStack gap="$2">
+          <H2>Create Password</H2>
+          <Paragraph color="$color10">
+            Choose a strong password. It will be required every time you unlock the wallet.
+          </Paragraph>
+        </YStack>
 
-      <YStack gap="$1">
-        <Paragraph>Password</Paragraph>
-        <Input secureTextEntry placeholder="Enter password" value={password} onChangeText={setPassword} autoFocus />
-        {password.length > 0 ? (
-          <Paragraph color={strength.valid ? "$color10" : "$red10"} fontSize="$2">
-            {strength.message}
+        <YStack gap="$1">
+          <Paragraph>Password</Paragraph>
+          <Input secureTextEntry placeholder="Enter password" value={password} onChangeText={setPassword} autoFocus />
+          {password.length > 0 ? (
+            <Paragraph color={strength.valid ? "$color10" : "$red10"} fontSize="$2">
+              {strength.message}
+            </Paragraph>
+          ) : null}
+        </YStack>
+
+        <YStack gap="$1">
+          <Paragraph>Confirm Password</Paragraph>
+          <Input secureTextEntry placeholder="Re-enter password" value={confirm} onChangeText={setConfirm} />
+        </YStack>
+
+        {error ? (
+          <Paragraph color="$red10" fontSize="$2">
+            {error}
           </Paragraph>
         ) : null}
-      </YStack>
 
-      <YStack gap="$1">
-        <Paragraph>Confirm Password</Paragraph>
-        <Input secureTextEntry placeholder="Re-enter password" value={confirm} onChangeText={setConfirm} />
-      </YStack>
-
-      {error ? (
-        <Paragraph color="$red10" fontSize="$2">
-          {error}
-        </Paragraph>
-      ) : null}
-
-      <Button onPress={handleSubmit} disabled={!passwordsMatch || isSubmitting} loading={isSubmitting}>
-        Create Password
-      </Button>
-    </Form>
+        <Button onPress={handleSubmit} disabled={!passwordsMatch || isSubmitting} loading={isSubmitting}>
+          Create Password
+        </Button>
+      </Form>
+    </Screen>
   );
 };

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, Input, Paragraph, YStack } from "tamagui";
-import { Button } from "@/ui/components";
+import { Button, Screen } from "@/ui/components";
 
 type VerifyMnemonicScreenProps = {
   quizIndexes: number[];
@@ -24,7 +24,7 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
   };
 
   return (
-    <YStack flex={1} padding="$4" gap="$3">
+    <Screen scroll={false} flex={1} padding="$4" gap="$3">
       <Button onPress={onBack} disabled={pending}>
         Back
       </Button>
@@ -60,6 +60,6 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
           Confirm mnemonic
         </Button>
       </Card>
-    </YStack>
+    </Screen>
   );
 }

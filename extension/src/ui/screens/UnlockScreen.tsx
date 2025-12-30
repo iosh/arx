@@ -2,7 +2,7 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card, Form, H2, Input, Paragraph, YStack } from "tamagui";
-import { Button } from "../components";
+import { Button, Screen } from "../components";
 import { getUnlockErrorMessage } from "../lib/errorUtils";
 import { ROUTES } from "../lib/routes";
 import { uiClient } from "../lib/uiClient";
@@ -78,41 +78,43 @@ export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: Unlock
     }
   };
   return (
-    <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
-      <YStack gap="$2">
-        <H2>Unlock Wallet</H2>
-        <Paragraph color="$color10">Enter your password to access accounts.</Paragraph>
-      </YStack>
+    <Screen scroll={false}>
+      <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
+        <YStack gap="$2">
+          <H2>Unlock Wallet</H2>
+          <Paragraph color="$color10">Enter your password to access accounts.</Paragraph>
+        </YStack>
 
-      {latestAttention ? (
-        <Card padded bordered backgroundColor="$orange2" borderColor="$orange7" gap="$2">
-          <Paragraph fontWeight="600" color="$orange10">
-            Action required
+        {latestAttention ? (
+          <Card padded bordered backgroundColor="$orange2" borderColor="$orange7" gap="$2">
+            <Paragraph fontWeight="600" color="$orange10">
+              Action required
+            </Paragraph>
+            <Paragraph color="$color10" fontSize="$2">
+              Pending {requestLabel} from {originHost}. ({attentionCount} total) Unlock, then return to the dApp and
+              retry.
+            </Paragraph>
+            <YStack gap="$1">
+              <Paragraph fontSize="$2">Origin: {originHost}</Paragraph>
+              <Paragraph fontSize="$2">Method: {latestAttention.method}</Paragraph>
+              <Paragraph fontSize="$2">Chain: {latestAttention.chainRef ?? "-"}</Paragraph>
+              <Paragraph fontSize="$2">Namespace: {latestAttention.namespace ?? "-"}</Paragraph>
+            </YStack>
+          </Card>
+        ) : null}
+
+        <Input secureTextEntry placeholder="Password" value={password} onChangeText={setPassword} autoFocus />
+
+        {error ? (
+          <Paragraph color="$red10" fontSize="$2">
+            {error}
           </Paragraph>
-          <Paragraph color="$color10" fontSize="$2">
-            Pending {requestLabel} from {originHost}. ({attentionCount} total) Unlock, then return to the dApp and
-            retry.
-          </Paragraph>
-          <YStack gap="$1">
-            <Paragraph fontSize="$2">Origin: {originHost}</Paragraph>
-            <Paragraph fontSize="$2">Method: {latestAttention.method}</Paragraph>
-            <Paragraph fontSize="$2">Chain: {latestAttention.chainRef ?? "-"}</Paragraph>
-            <Paragraph fontSize="$2">Namespace: {latestAttention.namespace ?? "-"}</Paragraph>
-          </YStack>
-        </Card>
-      ) : null}
+        ) : null}
 
-      <Input secureTextEntry placeholder="Password" value={password} onChangeText={setPassword} autoFocus />
-
-      {error ? (
-        <Paragraph color="$red10" fontSize="$2">
-          {error}
-        </Paragraph>
-      ) : null}
-
-      <Button onPress={handleSubmit} disabled={!password || isSubmitting} loading={isSubmitting}>
-        Unlock
-      </Button>
-    </Form>
+        <Button onPress={handleSubmit} disabled={!password || isSubmitting} loading={isSubmitting}>
+          Unlock
+        </Button>
+      </Form>
+    </Screen>
   );
 };

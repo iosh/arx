@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, Input, Paragraph, YStack } from "tamagui";
+import { Card, Input, Paragraph } from "tamagui";
 import { Button } from "@/ui/components";
 
 type ImportPrivateKeyScreenProps = {

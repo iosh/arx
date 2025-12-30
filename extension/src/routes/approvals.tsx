@@ -2,7 +2,7 @@ import type { ApprovalSummary } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui";
-import { Button, LoadingScreen } from "@/ui/components";
+import { Button, ListItem, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -66,7 +66,7 @@ function ApprovalsPage() {
   }
 
   return (
-    <YStack flex={1} gap="$3" padding="$4">
+    <Screen>
       <Button onPress={() => router.navigate({ to: ROUTES.HOME })}>Back</Button>
 
       <Card padded bordered gap="$2">
@@ -91,7 +91,7 @@ function ApprovalsPage() {
           </YStack>
         </ScrollView>
       )}
-    </YStack>
+    </Screen>
   );
 }
 
@@ -99,19 +99,16 @@ function ApprovalListItem({ approval, onSelect }: { approval: ApprovalSummary; o
   const typeLabel = getTypeLabel(approval.type);
 
   return (
-    <Card padded bordered pressTheme onPress={onSelect}>
-      <XStack justifyContent="space-between" alignItems="center">
-        <YStack gap="$1" flex={1}>
-          <Paragraph fontWeight="600">{typeLabel}</Paragraph>
-          <Paragraph color="$color10" fontSize="$2" numberOfLines={1}>
-            {approval.origin}
-          </Paragraph>
-        </YStack>
-        <Paragraph color="$color10" fontSize="$2">
+    <ListItem
+      title={typeLabel}
+      subtitle={approval.origin}
+      onPress={onSelect}
+      right={
+        <Paragraph color="$mutedText" fontSize="$2" numberOfLines={1}>
           {approval.chainRef}
         </Paragraph>
-      </XStack>
-    </Card>
+      }
+    />
   );
 }
 
@@ -130,8 +127,29 @@ function ApprovalDetail({
   pending: "approve" | "reject" | null;
   errorMessage: string | null;
 }) {
+  const footer = (
+    <YStack gap="$2">
+      {errorMessage ? (
+        <Card padded bordered borderColor="$danger" backgroundColor="$surface">
+          <Paragraph color="$danger" fontSize="$2">
+            {errorMessage}
+          </Paragraph>
+        </Card>
+      ) : null}
+
+      <XStack gap="$3">
+        <Button flex={1} onPress={onReject} disabled={pending !== null} backgroundColor="$danger" color="$dangerText">
+          {pending === "reject" ? "Rejecting..." : "Reject"}
+        </Button>
+        <Button flex={1} onPress={onApprove} disabled={pending !== null} backgroundColor="$accent" color="$accentText">
+          {pending === "approve" ? "Approving..." : "Approve"}
+        </Button>
+      </XStack>
+    </YStack>
+  );
+
   return (
-    <YStack flex={1} gap="$3" padding="$4">
+    <Screen scroll={false} footer={footer}>
       <Button onPress={onBack} disabled={pending !== null}>
         Back
       </Button>
@@ -140,38 +158,20 @@ function ApprovalDetail({
         <Paragraph fontSize="$6" fontWeight="600">
           {getTypeLabel(approval.type)}
         </Paragraph>
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           {approval.origin}
         </Paragraph>
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           Chain: {approval.chainRef}
         </Paragraph>
       </Card>
 
-      <ScrollView flex={1}>
+      <ScrollView flex={1} minHeight={0}>
         <ApprovalPayloadDetail approval={approval} />
       </ScrollView>
-
-      {errorMessage && (
-        <Card padded bordered borderColor="$red7" backgroundColor="$red2">
-          <Paragraph color="$red10" fontSize="$2">
-            {errorMessage}
-          </Paragraph>
-        </Card>
-      )}
-
-      <XStack gap="$3">
-        <Button flex={1} onPress={onReject} disabled={pending !== null} backgroundColor="$red9">
-          {pending === "reject" ? "Rejecting..." : "Reject"}
-        </Button>
-        <Button flex={1} onPress={onApprove} disabled={pending !== null} backgroundColor="$green9">
-          {pending === "approve" ? "Approving..." : "Approve"}
-        </Button>
-      </XStack>
-    </YStack>
+    </Screen>
   );
 }
-
 function ApprovalPayloadDetail({ approval }: { approval: ApprovalSummary }) {
   switch (approval.type) {
     case "requestAccounts":

@@ -1,31 +1,73 @@
-import { Spinner, Button as TamaguiButton, type ButtonProps as TamaguiButtonProps } from "tamagui";
+import type { ReactNode } from "react";
+import { type GetProps, Spinner, styled, Button as TamaguiButton } from "tamagui";
 
-// Extended button props with loading state
-export interface ButtonProps extends TamaguiButtonProps {
-  /** Show loading spinner and disable button */
+const ButtonFrame = styled(TamaguiButton, {
+  name: "ArxButton",
+  borderWidth: 1,
+  borderRadius: "$md",
+  borderColor: "$border",
+
+  variants: {
+    variant: {
+      secondary: {
+        backgroundColor: "$surface",
+        color: "$text",
+        borderColor: "$border",
+        hoverStyle: { backgroundColor: "$cardBg" },
+        pressStyle: { opacity: 0.9 },
+        focusVisibleStyle: { borderColor: "$accent" },
+      },
+      primary: {
+        backgroundColor: "$accent",
+        color: "$accentText",
+        borderColor: "$accent",
+        hoverStyle: { backgroundColor: "$accentHover", borderColor: "$accentHover" },
+        pressStyle: { backgroundColor: "$accentPress", borderColor: "$accentPress" },
+        focusVisibleStyle: { borderColor: "$accentHover" },
+      },
+      danger: {
+        backgroundColor: "$danger",
+        color: "$dangerText",
+        borderColor: "$danger",
+        hoverStyle: { backgroundColor: "$dangerHover", borderColor: "$dangerHover" },
+        pressStyle: { backgroundColor: "$dangerPress", borderColor: "$dangerPress" },
+        focusVisibleStyle: { borderColor: "$dangerHover" },
+      },
+      ghost: {
+        chromeless: true,
+        borderWidth: 0,
+        backgroundColor: "transparent",
+        color: "$text",
+        hoverStyle: { backgroundColor: "$surface" },
+        pressStyle: { opacity: 0.9 },
+        focusVisibleStyle: { backgroundColor: "$surface" },
+      },
+    },
+  },
+
+  defaultVariants: {
+    variant: "secondary",
+  },
+
+  disabledStyle: {
+    opacity: 0.55,
+    cursor: "not-allowed",
+  },
+});
+
+type ButtonFrameProps = GetProps<typeof ButtonFrame>;
+export type ButtonVariant = NonNullable<ButtonFrameProps["variant"]>;
+
+export type ButtonProps = Omit<ButtonFrameProps, "variant"> & {
+  variant?: ButtonVariant;
   loading?: boolean;
-  /** Custom loading text (optional, defaults to original children) */
-  loadingText?: string;
-  /** Spinner size (default: 'small') */
+  loadingText?: ReactNode;
   spinnerSize?: "small" | "large";
-  /** Spinner position relative to text (default: 'before') */
   spinnerPosition?: "before" | "after" | "replace";
-}
+};
 
-/**
- * Enhanced Button component with loading state support
- *
- * Features:
- * - Auto-disable when loading
- * - Spinner indicator with customizable position
- * - Preserves all original Tamagui Button functionality
- *
- * @example
- * <Button loading={isLoading} onPress={handleSubmit}>
- *   Submit
- * </Button>
- */
 export function Button({
+  variant = "secondary",
   loading = false,
   loadingText,
   spinnerSize = "small",
@@ -36,33 +78,42 @@ export function Button({
   iconAfter,
   ...props
 }: ButtonProps) {
-  // Disable button when loading
   const isDisabled = disabled || loading;
-
-  // Determine what to display based on loading state and position
-  const displayContent = loading ? loadingText || children : children;
-
-  // Spinner component
+  const { textProps, ...rest } = props;
   const spinner = loading ? <Spinner size={spinnerSize} color="$color" /> : null;
 
-  // Configure icon props based on spinner position
-  let displayIcon = icon;
-  let displayIconAfter = iconAfter;
+  const mergedTextProps = {
+    ...textProps,
+    cursor: isDisabled ? "not-allowed" : textProps?.cursor,
+  };
 
-  if (loading) {
-    if (spinnerPosition === "before") {
-      displayIcon = spinner;
-    } else if (spinnerPosition === "after") {
-      displayIconAfter = spinner;
-    } else if (spinnerPosition === "replace") {
-      // When replace, show only spinner without text
-      return <TamaguiButton disabled={isDisabled} icon={spinner} {...props} />;
-    }
+  if (loading && spinnerPosition === "replace") {
+    return (
+      <ButtonFrame
+        variant={variant}
+        disabled={isDisabled}
+        aria-busy={loading}
+        icon={spinner}
+        textProps={mergedTextProps}
+        {...rest}
+      />
+    );
   }
 
+  const displayIcon = loading && spinnerPosition === "before" ? spinner : icon;
+  const displayIconAfter = loading && spinnerPosition === "after" ? spinner : iconAfter;
+
   return (
-    <TamaguiButton disabled={isDisabled} icon={displayIcon} iconAfter={displayIconAfter} {...props}>
-      {displayContent}
-    </TamaguiButton>
+    <ButtonFrame
+      variant={variant}
+      disabled={isDisabled}
+      aria-busy={loading}
+      icon={displayIcon}
+      iconAfter={displayIconAfter}
+      textProps={mergedTextProps}
+      {...rest}
+    >
+      {loading ? (loadingText ?? children) : children}
+    </ButtonFrame>
   );
 }

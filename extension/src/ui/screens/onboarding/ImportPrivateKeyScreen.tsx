@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Card, Input, Paragraph } from "tamagui";
-import { Button } from "@/ui/components";
+import { Card, Paragraph } from "tamagui";
+import { Button, TextField } from "@/ui/components";
 
 type ImportPrivateKeyScreenProps = {
   isLoading: boolean;
@@ -19,23 +19,32 @@ export function ImportPrivateKeyScreen({ isLoading, error, onSubmit }: ImportPri
   return (
     <Card padded bordered gap="$2">
       <Paragraph fontWeight="600">Private key</Paragraph>
-      <Input
+
+      <TextField
+        label="Private key"
         placeholder="0x..."
         value={privateKey}
         autoCapitalize="none"
         autoCorrect={false}
-        editable={!isLoading}
+        disabled={isLoading}
         onChangeText={setPrivateKey}
       />
-      <Input placeholder="Alias (optional)" value={alias} editable={!isLoading} onChangeText={setAlias} />
+
+      <TextField
+        label="Alias (optional)"
+        placeholder="Alias"
+        value={alias}
+        disabled={isLoading}
+        onChangeText={setAlias}
+      />
 
       {error ? (
-        <Paragraph color="$red10" fontSize="$2">
+        <Paragraph color="$danger" fontSize="$2">
           {error}
         </Paragraph>
       ) : null}
 
-      <Button onPress={handleSubmit} loading={isLoading}>
+      <Button variant="primary" onPress={handleSubmit} loading={isLoading}>
         Import private key
       </Button>
     </Card>

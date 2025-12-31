@@ -3,5 +3,7 @@ export { Card, type CardProps } from "./Card";
 export { Divider, type DividerProps } from "./Divider";
 export { ListItem, type ListItemProps } from "./ListItem";
 export { LoadingScreen } from "./LoadingScreen";
+export { PasswordInput, type PasswordInputProps, type PasswordRevealMode } from "./PasswordInput";
 export { Screen, type ScreenProps } from "./Screen";
 export { Sheet, type SheetProps } from "./Sheet";
+export { TextField, type TextFieldProps } from "./TextField";

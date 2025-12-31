@@ -1,8 +1,8 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Card, Form, H2, Input, Paragraph, YStack } from "tamagui";
-import { Button, Screen } from "../components";
+import { Card, Form, H2, Paragraph, YStack } from "tamagui";
+import { Button, PasswordInput, Screen } from "../components";
 import { getUnlockErrorMessage } from "../lib/errorUtils";
 import { ROUTES } from "../lib/routes";
 import { uiClient } from "../lib/uiClient";
@@ -82,15 +82,15 @@ export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: Unlock
       <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
         <YStack gap="$2">
           <H2>Unlock Wallet</H2>
-          <Paragraph color="$color10">Enter your password to access accounts.</Paragraph>
+          <Paragraph color="$mutedText">Enter your password to access accounts.</Paragraph>
         </YStack>
 
         {latestAttention ? (
-          <Card padded bordered backgroundColor="$orange2" borderColor="$orange7" gap="$2">
-            <Paragraph fontWeight="600" color="$orange10">
+          <Card padded bordered backgroundColor="$surface" borderColor="$accent" gap="$2">
+            <Paragraph fontWeight="600" color="$accent">
               Action required
             </Paragraph>
-            <Paragraph color="$color10" fontSize="$2">
+            <Paragraph color="$mutedText" fontSize="$2">
               Pending {requestLabel} from {originHost}. ({attentionCount} total) Unlock, then return to the dApp and
               retry.
             </Paragraph>
@@ -103,15 +103,18 @@ export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: Unlock
           </Card>
         ) : null}
 
-        <Input secureTextEntry placeholder="Password" value={password} onChangeText={setPassword} autoFocus />
+        <PasswordInput
+          label="Password"
+          revealMode="press"
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          autoFocus
+          disabled={isSubmitting}
+          errorText={error ?? undefined}
+        />
 
-        {error ? (
-          <Paragraph color="$red10" fontSize="$2">
-            {error}
-          </Paragraph>
-        ) : null}
-
-        <Button onPress={handleSubmit} disabled={!password || isSubmitting} loading={isSubmitting}>
+        <Button variant="primary" onPress={handleSubmit} disabled={!password || isSubmitting} loading={isSubmitting}>
           Unlock
         </Button>
       </Form>

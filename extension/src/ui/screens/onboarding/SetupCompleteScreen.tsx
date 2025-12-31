@@ -14,7 +14,9 @@ export function SetupCompleteScreen({ onContinue }: SetupCompleteScreenProps) {
           <Paragraph color="$mutedText" textAlign="center">
             Your first account is ready. You can start using ARX Wallet now.
           </Paragraph>
-          <Button onPress={onContinue}>Go to dashboard</Button>
+          <Button variant="primary" onPress={onContinue}>
+            Go to dashboard
+          </Button>
         </Card>
       </YStack>
     </Screen>

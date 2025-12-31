@@ -1,4 +1,4 @@
-import { Card, H2, Paragraph, YStack } from "tamagui";
+import { Card, H2, Paragraph } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 
 type WelcomeScreenProps = {
@@ -21,7 +21,9 @@ export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }
           <Paragraph color="$mutedText" fontSize="$2">
             Generate a recovery phrase and start with a fresh vault.
           </Paragraph>
-          <Button onPress={onCreate}>Create password</Button>
+          <Button variant="primary" onPress={onCreate}>
+            Create password
+          </Button>
         </Card>
 
         <Button onPress={onImportMnemonic}>Import seed phrase</Button>

@@ -37,8 +37,10 @@ export const HomeScreen = ({
   return (
     <Screen>
       {backupWarnings.length > 0 && (
-        <Card padded bordered backgroundColor="$yellow2" gap="$2">
-          <Paragraph fontWeight="600">Backup required</Paragraph>
+        <Card padded bordered backgroundColor="$surface" borderColor="$danger" gap="$2">
+          <Paragraph fontWeight="600" color="$danger">
+            Backup required
+          </Paragraph>
           {backupWarnings.map((warning) => (
             <XStack key={warning.keyringId} alignItems="center" justifyContent="space-between" gap="$2">
               <Paragraph fontSize="$3">{warning.alias ?? "HD keyring"} needs backup</Paragraph>
@@ -80,7 +82,8 @@ export const HomeScreen = ({
             </Paragraph>
             <Paragraph color="$mutedText" fontSize="$2">
               {accounts.list.length > 0
-                ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""} available`
+                ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""}
+            available`
                 : "No accounts available"}
             </Paragraph>
           </YStack>

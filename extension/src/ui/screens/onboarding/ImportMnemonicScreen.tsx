@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Card, Input, Paragraph, TextArea } from "tamagui";
-import { Button } from "@/ui/components";
+import { Card, Paragraph, TextArea } from "tamagui";
+import { Button, TextField } from "@/ui/components";
 
 type ImportMnemonicScreenProps = {
   isLoading: boolean;
@@ -19,6 +19,7 @@ export function ImportMnemonicScreen({ isLoading, error, onSubmit }: ImportMnemo
   return (
     <Card padded bordered gap="$2">
       <Paragraph fontWeight="600">Seed phrase</Paragraph>
+
       <TextArea
         value={phrase}
         placeholder="Enter words separated by spaces"
@@ -27,15 +28,22 @@ export function ImportMnemonicScreen({ isLoading, error, onSubmit }: ImportMnemo
         editable={!isLoading}
         onChangeText={setPhrase}
       />
-      <Input placeholder="Alias (optional)" value={alias} editable={!isLoading} onChangeText={setAlias} />
+
+      <TextField
+        label="Alias (optional)"
+        value={alias}
+        disabled={isLoading}
+        onChangeText={setAlias}
+        placeholder="Alias"
+      />
 
       {error ? (
-        <Paragraph color="$red10" fontSize="$2">
+        <Paragraph color="$danger" fontSize="$2">
           {error}
         </Paragraph>
       ) : null}
 
-      <Button onPress={handleSubmit} loading={isLoading}>
+      <Button variant="primary" onPress={handleSubmit} loading={isLoading}>
         Import mnemonic
       </Button>
     </Card>

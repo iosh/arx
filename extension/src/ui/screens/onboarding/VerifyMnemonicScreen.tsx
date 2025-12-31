@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Card, Input, Paragraph, YStack } from "tamagui";
-import { Button, Screen } from "@/ui/components";
+import { Card, Paragraph, YStack } from "tamagui";
+import { Button, Screen, TextField } from "@/ui/components";
 
 type VerifyMnemonicScreenProps = {
   quizIndexes: number[];
@@ -25,7 +25,7 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
 
   return (
     <Screen scroll={false} flex={1} padding="$4" gap="$3">
-      <Button onPress={onBack} disabled={pending}>
+      <Button variant="ghost" onPress={onBack} disabled={pending}>
         Back
       </Button>
 
@@ -33,30 +33,30 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
         <Paragraph fontSize="$6" fontWeight="600">
           Verify recovery phrase
         </Paragraph>
-        <Paragraph color="$color10" fontSize="$2">
+        <Paragraph color="$mutedText" fontSize="$2">
           Enter the requested words to confirm you saved them correctly.
         </Paragraph>
 
         {quizIndexes.map((index) => (
           <YStack key={index} gap="$1">
-            <Paragraph>Word #{index + 1}</Paragraph>
-            <Input
+            <TextField
+              label={`Word #${index + 1}`}
               value={answers[index] ?? ""}
               onChangeText={(value) => handleChange(index, value)}
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!pending}
+              disabled={pending}
             />
           </YStack>
         ))}
 
         {error ? (
-          <Paragraph color="$red10" fontSize="$2">
+          <Paragraph color="$danger" fontSize="$2">
             {error}
           </Paragraph>
         ) : null}
 
-        <Button onPress={handleSubmit} loading={pending}>
+        <Button variant="primary" onPress={handleSubmit} loading={pending}>
           Confirm mnemonic
         </Button>
       </Card>

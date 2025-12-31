@@ -26,12 +26,13 @@
     "@tanstack/react-query": "^5.90.9",
     "@tanstack/react-router": "^1.136.5",
     "events": "3.3.0",
+    "lucide-react": "^0.562.0",
+    "ox": "0.9.14",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "react-native-web": "^0.21.2",
     "tamagui": "1.138.0",
-    "webextension-polyfill": "catalog:",
-    "ox": "0.9.14"
+    "webextension-polyfill": "catalog:"
   },
   "devDependencies": {
     "@tanstack/router-cli": "^1.136.6",

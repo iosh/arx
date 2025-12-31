@@ -1,3 +1,4 @@
+import "./polyfills";
 import { QueryClient } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";

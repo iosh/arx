@@ -22,7 +22,8 @@
     "@arx/core": "workspace:*",
     "@arx/provider": "workspace:*",
     "@arx/storage-dexie": "workspace:*",
-    "@tamagui/config": "1.138.0",
+    "@tamagui/animations-css": "1.141.5",
+    "@tamagui/config": "1.141.5",
     "@tanstack/react-query": "^5.90.9",
     "@tanstack/react-router": "^1.136.5",
     "events": "3.3.0",
@@ -31,7 +32,7 @@
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "react-native-web": "^0.21.2",
-    "tamagui": "1.138.0",
+    "tamagui": "1.141.5",
     "webextension-polyfill": "catalog:"
   },
   "devDependencies": {

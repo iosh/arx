@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { TamaguiProvider, Theme } from "tamagui";
+import { TamaguiProvider, Theme, YStack } from "tamagui";
 import config from "@/tamagui.config";
 import { useThemeMode } from "@/ui/lib/themeMode";
+import { ToastHost } from "../components";
 
 function getSystemThemeName(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
@@ -18,7 +19,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <TamaguiProvider config={config} defaultTheme={themeName}>
-      <Theme name={themeName}>{children}</Theme>
+      <Theme name={themeName}>
+        <YStack flex={1} position="relative">
+          {children}
+          <ToastHost />
+        </YStack>
+      </Theme>
     </TamaguiProvider>
   );
 }

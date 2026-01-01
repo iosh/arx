@@ -1,9 +1,24 @@
+import { createAnimations } from "@tamagui/animations-css";
 import { config as defaultConfig } from "@tamagui/config";
 import { createTamagui } from "tamagui";
 
 // Use Tamagui's default configuration, only keeping light/dark themes
 const config = createTamagui({
   ...defaultConfig,
+  animations: createAnimations({
+    fast: {
+      type: "timing",
+      duration: 120,
+    },
+    toast: {
+      type: "timing",
+      duration: 160,
+    },
+    sheet: {
+      type: "timing",
+      duration: 220,
+    },
+  }),
   tokens: {
     ...defaultConfig.tokens,
     space: {
@@ -41,6 +56,14 @@ const config = createTamagui({
       slow: 240, // panel enter/exit
       sheet: 220, // sheet open/close
       toast: 160, // toast enter/exit
+    },
+    size: {
+      ...defaultConfig.tokens.size,
+      title: 20, // Page titles
+      section: 16, // Card titles, section headers
+      body: 14, // Body text (default)
+      caption: 12, // Helper text, muted text
+      mono: 12, // Monospace for raw data
     },
   },
   themes: {

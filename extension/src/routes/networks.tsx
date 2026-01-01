@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Paragraph, XStack, YStack } from "tamagui";
-import { Button, Card, LoadingScreen, Screen } from "@/ui/components";
+import { Paragraph, XStack } from "tamagui";
+import { Button, Card, ChainBadge, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -59,10 +59,7 @@ function NetworkSwitchPage() {
             const loading = pendingRef === item.chainRef;
             return (
               <Card key={item.chainRef} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
-                <Paragraph fontWeight="600">{item.displayName}</Paragraph>
-                <Paragraph color="$mutedText" fontSize="$2">
-                  {item.chainRef}
-                </Paragraph>
+                <ChainBadge chainRef={item.chainRef} displayName={item.displayName} size="sm" />
                 <XStack alignItems="center" justifyContent="space-between">
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
                     {isActive ? "Active" : "Available"}

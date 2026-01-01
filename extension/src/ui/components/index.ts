@@ -1,5 +1,8 @@
+export { AddressDisplay, type AddressDisplayProps } from "./AddressDisplay";
+export { BalanceDisplay, type BalanceDisplayProps } from "./BalanceDisplay";
 export { Button, type ButtonProps } from "./Button";
 export { Card, type CardProps } from "./Card";
+export { ChainBadge, type ChainBadgeProps, type ChainBadgeSize } from "./ChainBadge";
 export { Divider, type DividerProps } from "./Divider";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";

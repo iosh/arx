@@ -20,7 +20,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <TamaguiProvider config={config} defaultTheme={themeName}>
       <Theme name={themeName}>
-        <YStack flex={1} position="relative">
+        <YStack flex={1} height="100%" position="relative">
           {children}
           <ToastHost />
         </YStack>

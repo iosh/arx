@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Paragraph, Separator, XStack, YStack } from "tamagui";
-import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
+import { Paragraph, XStack } from "tamagui";
+import { AddressDisplay, Button, Card, ChainBadge, Divider, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -86,9 +86,7 @@ function AccountSwitchPage() {
         <Paragraph fontSize="$6" fontWeight="600">
           Accounts
         </Paragraph>
-        <Paragraph color="$mutedText" fontSize="$2">
-          Chain: {snapshot.chain.displayName} ({snapshot.chain.chainRef})
-        </Paragraph>
+        <ChainBadge chainRef={snapshot.chain.chainRef} displayName={snapshot.chain.displayName} size="sm" />
 
         <Divider marginVertical="$2" />
 
@@ -100,9 +98,11 @@ function AccountSwitchPage() {
             const loading = pendingAddress === address;
             return (
               <Card key={address} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
-                <Paragraph fontFamily="$mono" fontSize="$3">
-                  {address}
-                </Paragraph>
+                <AddressDisplay
+                  address={address}
+                  namespace={snapshot.chain.namespace}
+                  chainRef={snapshot.chain.chainRef}
+                />
                 <XStack alignItems="center" justifyContent="space-between">
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
                     {isActive ? "Active" : "Available"}

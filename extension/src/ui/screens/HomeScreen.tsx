@@ -1,6 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { Card, H2, Paragraph, XStack, YStack } from "tamagui";
-import { Button, Screen } from "../components";
+import { AddressDisplay, Button, ChainBadge, Screen } from "../components";
 
 const MS_PER_SECOND = 1000;
 
@@ -62,10 +62,7 @@ export const HomeScreen = ({
             <Paragraph color="$mutedText" fontSize="$2">
               Current Chain
             </Paragraph>
-            <H2>{chain.displayName}</H2>
-            <Paragraph color="$mutedText" fontSize="$2">
-              {chain.chainRef}
-            </Paragraph>
+            <ChainBadge chainRef={chain.chainRef} displayName={chain.displayName} />
           </YStack>
           <Button size="$3" marginTop="$2" onPress={onNavigateNetworks}>
             Switch Network
@@ -77,9 +74,11 @@ export const HomeScreen = ({
             <Paragraph color="$mutedText" fontSize="$2">
               Active Account
             </Paragraph>
-            <Paragraph fontSize="$5" fontWeight="600" fontFamily="$mono">
-              {activeAccountLabel}
-            </Paragraph>
+            {accounts.active ? (
+              <AddressDisplay address={accounts.active} namespace={chain.namespace} chainRef={chain.chainRef} />
+            ) : (
+              <H2>{activeAccountLabel}</H2>
+            )}
             <Paragraph color="$mutedText" fontSize="$2">
               {accounts.list.length > 0
                 ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""}

@@ -51,7 +51,7 @@ function RootInner() {
   useIdleTimer(enabled);
 
   return (
-    <YStack backgroundColor="$bg" height="100%">
+    <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>
       <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
         <Outlet />
       </SessionGate>

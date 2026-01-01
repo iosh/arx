@@ -56,7 +56,7 @@ const ButtonFrame = styled(TamaguiButton, {
 });
 
 type ButtonFrameProps = GetProps<typeof ButtonFrame>;
-export type ButtonVariant = NonNullable<ButtonFrameProps["variant"]>;
+export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 export type ButtonProps = Omit<ButtonFrameProps, "variant"> & {
   variant?: ButtonVariant;

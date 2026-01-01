@@ -15,7 +15,7 @@ export function Screen({ title, subtitle, scroll = true, padded = true, footer, 
   const contentPaddingBottom = footer ? "$8" : padding;
 
   return (
-    <YStack flex={1} minHeight="100%" backgroundColor="$bg" {...props}>
+    <YStack flex={1} backgroundColor="$bg" {...props}>
       {title ? (
         <YStack padding={padding} paddingBottom="$3" gap="$1">
           <H2 color="$text">{title}</H2>

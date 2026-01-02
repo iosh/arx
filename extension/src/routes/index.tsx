@@ -12,7 +12,7 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const router = useRouter();
   const { snapshot, lock, markBackedUp } = useUiSnapshot();
-  const accountCount = snapshot?.accounts.list.length ?? 0;
+  const accountCount = snapshot?.accounts.totalCount ?? 0;
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const backupWarnings = useMemo(

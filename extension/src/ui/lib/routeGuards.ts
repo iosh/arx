@@ -18,7 +18,7 @@ import { ROUTES } from "./routes";
  * check if snapshot has accounts
 
  */
-const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.list.length ?? 0) > 0;
+const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.totalCount ?? 0) > 0;
 
 /**
  * Requires vault to be initialized.
@@ -35,9 +35,16 @@ export const requireVaultInitialized = async ({ context }: { context: RouterCont
 };
 export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
   const snapshot = await resolveUiSnapshot(context.queryClient);
-  if (!snapshot || snapshot.vault.initialized) {
+  if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
+  if (!snapshot.vault.initialized) {
+    return;
+  }
+  if (hasAccounts(snapshot)) {
+    throw redirect({ to: ROUTES.SETUP_COMPLETE });
+  }
+  throw redirect({ to: ROUTES.HOME });
 };
 
 /**
@@ -63,13 +70,18 @@ export const requireSetupIncomplete = async ({ context }: { context: RouterConte
     throw redirect({ to: ROUTES.WELCOME });
   }
   if (hasAccounts(snapshot)) {
-    throw redirect({ to: ROUTES.HOME });
+    throw redirect({ to: ROUTES.SETUP_COMPLETE });
   }
 };
-
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
   const snapshot = await resolveUiSnapshot(context.queryClient);
-  if (!snapshot || !hasAccounts(snapshot)) {
+  if (!snapshot) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+  if (!snapshot.vault.initialized) {
+    throw redirect({ to: ROUTES.WELCOME });
+  }
+  if (!hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.HOME });
   }
 };

@@ -79,10 +79,10 @@ export const HomeScreen = ({
             ) : (
               <H2>{activeAccountLabel}</H2>
             )}
+
             <Paragraph color="$mutedText" fontSize="$2">
-              {accounts.list.length > 0
-                ? `${accounts.list.length} account${accounts.list.length > 1 ? "s" : ""}
-            available`
+              {accounts.totalCount > 0
+                ? `${accounts.totalCount} account${accounts.totalCount > 1 ? "s" : ""} available`
                 : "No accounts available"}
             </Paragraph>
           </YStack>

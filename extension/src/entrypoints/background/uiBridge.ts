@@ -333,9 +333,13 @@ export const createUiBridge = ({
     const networkState = controllers.network.getState();
     const activePointer = controllers.accounts.getActivePointer();
     const resolvedChain = activePointer?.chainRef ?? chain.chainRef;
+
     const accountList = session.unlock.isUnlocked()
       ? controllers.accounts.getAccounts({ chainRef: resolvedChain })
       : [];
+
+    const accountsState = controllers.accounts.getState();
+    const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.all.length, 0);
 
     const approvalState = controllers.approvals.getState();
     const approvalSummaries = approvalState.pending
@@ -374,6 +378,7 @@ export const createUiBridge = ({
         })),
       },
       accounts: {
+        totalCount,
         list: accountList,
         active: activePointer?.address ?? null,
       },

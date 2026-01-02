@@ -10,6 +10,7 @@ export const ChainSnapshotSchema = z.object({
 });
 
 export const AccountsSnapshotSchema = z.object({
+  totalCount: z.number().int().nonnegative(),
   list: z.array(z.string()),
   active: z.string().nullable(),
 });

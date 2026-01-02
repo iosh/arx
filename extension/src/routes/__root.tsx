@@ -7,8 +7,9 @@ import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
+import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { uiClient } from "@/ui/lib/uiClient";
 import { ROUTES } from "@/ui/lib/routes";
-
 // Router context type for route guards
 export interface RouterContext {
   queryClient: QueryClient;
@@ -19,19 +20,25 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ context, location }) => {
     if (isOnboardingPath(location.pathname)) return;
 
-    try {
-      const snapshot = await resolveUiSnapshot(context.queryClient);
-      if (!snapshot) return;
-      if (snapshot.vault.initialized) return;
+    const snapshot = await resolveUiSnapshot(context.queryClient);
+    if (!snapshot) return;
+    if (snapshot.vault.initialized) return;
 
-      throw redirect({ to: ROUTES.WELCOME, replace: true });
-    } catch (error) {
-      // Re-throw redirect errors, only catch fetch errors
-      if (error && typeof error === "object" && "isRedirect" in error) {
-        throw error;
-      }
-      console.warn("[__root] failed to enforce onboarding redirect", error);
+    const entryIntent = getEntryIntent();
+
+    if (entryIntent === "manual_open") {
+      void uiClient.openOnboardingTab({ reason: "manual_open" });
+      window.close();
+      return;
     }
+
+    if (entryIntent === "attention_open") {
+      window.close();
+      return;
+    }
+
+    // onboarding_tab: enforce onboarding flow inside the tab
+    throw redirect({ to: ROUTES.WELCOME, replace: true });
   },
   component: RootLayout,
 });

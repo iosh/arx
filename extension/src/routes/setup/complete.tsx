@@ -9,5 +9,5 @@ export const Route = createFileRoute("/setup/complete")({
 
 function SetupCompleteRoute() {
   const router = useRouter();
-  return <SetupCompleteScreen onContinue={() => router.navigate({ to: ROUTES.HOME })} />;
+  return <SetupCompleteScreen onContinue={() => window.close()} />;
 }

@@ -12,10 +12,13 @@ export function SetupCompleteScreen({ onContinue }: SetupCompleteScreenProps) {
         <Card padded bordered gap="$2" alignItems="center">
           <H2>Wallet ready</H2>
           <Paragraph color="$mutedText" textAlign="center">
-            Your first account is ready. You can start using ARX Wallet now.
+            Setup is complete. Click the extension icon to open your wallet.
+          </Paragraph>
+          <Paragraph color="$mutedText" textAlign="center">
+            You can close this tab.
           </Paragraph>
           <Button variant="primary" onPress={onContinue}>
-            Go to dashboard
+            Close tab
           </Button>
         </Card>
       </YStack>

@@ -179,10 +179,10 @@ class UiClient {
     });
   };
 
-  openOnboardingTab = (reason: string) => {
+  openOnboardingTab = (params: { reason: string }) => {
     return this.request<{ activationPath: "focus" | "create" | "debounced"; tabId?: number }>({
       type: "ui:openOnboardingTab",
-      payload: { reason },
+      payload: params,
     });
   };
 

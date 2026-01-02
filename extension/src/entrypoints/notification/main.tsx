@@ -7,6 +7,9 @@ import { AppProviders } from "../../ui/providers/AppProviders";
 import "../popup/style.css";
 
 import { routeTree } from "../../routeTree.gen";
+import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { ErrorState, Screen } from "@/ui/components";
+import { uiClient } from "../../ui/lib/uiClient";
 
 const queryClient = new QueryClient();
 const hashHistory = createHashHistory();
@@ -27,10 +30,56 @@ declare module "@tanstack/react-router" {
 }
 
 // TODO: In later stage, notification entry may need different UX when vault is uninitialized.
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
-  </React.StrictMode>,
-);
+
+const renderApp = () => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const renderEntryIntentError = (message: string) => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <Screen title="Startup error" scroll={false}>
+          <ErrorState
+            title="Invalid entry intent"
+            message={message}
+            primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
+            secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
+          />
+        </Screen>
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const boot = async () => {
+  try {
+    getEntryIntent();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderEntryIntentError(message);
+    return;
+  }
+
+  try {
+    const snapshot = await uiClient.getSnapshot();
+    if (!snapshot.vault.initialized) {
+      window.close();
+      return;
+    }
+  } catch {
+    // Fail-closed for attention surface to avoid showing UI under unknown state.
+    window.close();
+    return;
+  }
+
+  renderApp();
+};
+
+void boot();

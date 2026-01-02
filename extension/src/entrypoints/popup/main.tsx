@@ -5,9 +5,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { AppProviders } from "../../ui/providers/AppProviders";
 import "./style.css";
+import { uiClient } from "../../ui/lib/uiClient";
 
 // Import the generated route tree
 import { routeTree } from "../../routeTree.gen";
+import { ErrorState, Screen } from "@/ui/components";
+import { getEntryIntent } from "@/ui/lib/entryIntent";
 
 // Create QueryClient instance (shared across entire app)
 const queryClient = new QueryClient();
@@ -32,10 +35,55 @@ declare module "@tanstack/react-router" {
   }
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
-  </React.StrictMode>,
-);
+const renderApp = () => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const renderEntryIntentError = (message: string) => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <Screen title="Startup error" scroll={false}>
+          <ErrorState
+            title="Invalid entry intent"
+            message={message}
+            primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
+            secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
+          />
+        </Screen>
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const boot = async () => {
+  try {
+    // Guard against running under wrong entrypoint semantics.
+    getEntryIntent();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderEntryIntentError(message);
+    return;
+  }
+
+  try {
+    const snapshot = await uiClient.getSnapshot();
+    if (!snapshot.vault.initialized) {
+      void uiClient.openOnboardingTab({ reason: "manual_open" });
+      window.close();
+      return;
+    }
+  } catch (error) {
+    console.error("[popup] preflight snapshot failed; rendering popup", error);
+  }
+
+  renderApp();
+};
+
+void boot();

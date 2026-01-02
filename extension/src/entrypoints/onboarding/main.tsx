@@ -7,6 +7,8 @@ import { AppProviders } from "../../ui/providers/AppProviders";
 import "../popup/style.css";
 
 import { routeTree } from "../../routeTree.gen";
+import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { ErrorState, Screen } from "@/ui/components";
 
 const queryClient = new QueryClient();
 const hashHistory = createHashHistory();
@@ -26,10 +28,43 @@ declare module "@tanstack/react-router" {
   }
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
-  </React.StrictMode>,
-);
+const renderApp = () => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const renderEntryIntentError = (message: string) => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <AppProviders>
+        <Screen title="Startup error" scroll={false}>
+          <ErrorState
+            title="Invalid entry intent"
+            message={message}
+            primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
+            secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
+          />
+        </Screen>
+      </AppProviders>
+    </React.StrictMode>,
+  );
+};
+
+const boot = () => {
+  try {
+    getEntryIntent();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderEntryIntentError(message);
+    return;
+  }
+
+  renderApp();
+};
+
+boot();

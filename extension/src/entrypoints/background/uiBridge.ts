@@ -17,7 +17,7 @@ import {
 } from "@arx/core";
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import * as Hex from "ox/Hex";
-import type browser from "webextension-polyfill";
+import type browserDefaultType from "webextension-polyfill";
 
 export { UI_CHANNEL } from "@arx/core/ui";
 
@@ -39,6 +39,7 @@ type UiIssue = {
 };
 
 type BridgeDeps = {
+  browser: typeof browserDefaultType;
   controllers: HandlerControllers;
   session: BackgroundSessionServices;
   persistVaultMeta: () => Promise<void>;
@@ -147,12 +148,80 @@ type SendTransactionPayload = {
   draft?: { summary?: Record<string, unknown> };
 };
 
-export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring, attention }: BridgeDeps) => {
-  const ports = new Set<browser.Runtime.Port>();
-  const portCleanups = new Map<browser.Runtime.Port, () => void>();
+export const createUiBridge = ({
+  browser: runtimeBrowser,
+  controllers,
+  session,
+  persistVaultMeta,
+  keyring,
+  attention,
+}: BridgeDeps) => {
+  const ports = new Set<browserDefaultType.Runtime.Port>();
+  const portCleanups = new Map<browserDefaultType.Runtime.Port, () => void>();
   const listeners: Array<() => void> = [];
 
-  const sendToPortSafely = (port: browser.Runtime.Port, envelope: UiPortEnvelope): boolean => {
+  type OpenOnboardingTabResult = {
+    activationPath: "focus" | "create" | "debounced";
+    tabId?: number;
+  };
+
+  const onboardingCooldownMs = 500;
+  let lastOnboardingAttemptAt: number | null = null;
+  let onboardingInFlight: Promise<OpenOnboardingTabResult> | null = null;
+  let cachedOnboardingTabId: number | null = null;
+
+  const openOnboardingTab = (_reason: string): Promise<OpenOnboardingTabResult> => {
+    if (onboardingInFlight) return onboardingInFlight;
+
+    const promise = (async (): Promise<OpenOnboardingTabResult> => {
+      const now = Date.now();
+
+      if (lastOnboardingAttemptAt !== null && now - lastOnboardingAttemptAt < onboardingCooldownMs) {
+        return cachedOnboardingTabId
+          ? { activationPath: "debounced", tabId: cachedOnboardingTabId }
+          : { activationPath: "debounced" };
+      }
+      lastOnboardingAttemptAt = now;
+
+      const onboardingBaseUrl = runtimeBrowser.runtime.getURL("onboarding.html");
+      const onboardingTargetUrl = `${onboardingBaseUrl}#/welcome`;
+
+      let existingTabs: browserDefaultType.Tabs.Tab[] = [];
+      try {
+        existingTabs = await runtimeBrowser.tabs.query({ url: [`${onboardingBaseUrl}*`] });
+      } catch {
+        const allTabs = await runtimeBrowser.tabs.query({});
+        existingTabs = (allTabs ?? []).filter(
+          (tab) => typeof tab.url === "string" && tab.url.startsWith(onboardingBaseUrl),
+        );
+      }
+
+      const existing = existingTabs.find((tab) => typeof tab.id === "number");
+      if (existing?.id) {
+        cachedOnboardingTabId = existing.id;
+        await runtimeBrowser.tabs.update(existing.id, { active: true });
+        if (typeof existing.windowId === "number") {
+          await runtimeBrowser.windows.update(existing.windowId, { focused: true });
+        }
+        return { activationPath: "focus", tabId: existing.id };
+      }
+
+      const created = await runtimeBrowser.tabs.create({ url: onboardingTargetUrl, active: true });
+      if (typeof created.windowId === "number") {
+        await runtimeBrowser.windows.update(created.windowId, { focused: true });
+      }
+      cachedOnboardingTabId = typeof created.id === "number" ? created.id : null;
+      return typeof created.id === "number"
+        ? { activationPath: "create", tabId: created.id }
+        : { activationPath: "create" };
+    })().finally(() => {
+      onboardingInFlight = null;
+    });
+
+    onboardingInFlight = promise;
+    return promise;
+  };
+  const sendToPortSafely = (port: browserDefaultType.Runtime.Port, envelope: UiPortEnvelope): boolean => {
     try {
       port.postMessage(envelope);
       return true;
@@ -365,6 +434,9 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
         uiLog("event:ui:unlocked", { at: unlockedAt });
 
         return session.unlock.getState();
+      }
+      case "ui:openOnboardingTab": {
+        return await openOnboardingTab(message.payload.reason);
       }
       case "ui:lock": {
         session.unlock.lock(message.payload?.reason ?? "manual");
@@ -632,7 +704,7 @@ export const createUiBridge = ({ controllers, session, persistVaultMeta, keyring
     }
   };
 
-  const attachPort = (port: browser.Runtime.Port) => {
+  const attachPort = (port: browserDefaultType.Runtime.Port) => {
     ports.add(port);
 
     const onMessage = async (raw: unknown) => {

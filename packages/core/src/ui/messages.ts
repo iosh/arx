@@ -14,6 +14,7 @@ export type UiMessage =
   | { type: "ui:getSnapshot" }
   | { type: "ui:vaultInit"; payload: { password: string } }
   | { type: "ui:unlock"; payload: { password: string } }
+  | { type: "ui:openOnboardingTab"; payload: { reason: string } }
   | { type: "ui:lock"; payload?: { reason?: UnlockReason } }
   | { type: "ui:resetAutoLockTimer" }
   | { type: "ui:switchAccount"; payload: { chainRef: string; address?: string | null } }

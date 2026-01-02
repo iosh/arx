@@ -107,6 +107,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       });
       const { controllers, engine, messenger, session, keyring } = services;
       const popupActivator = createPopupActivator({ browser });
+      const notificationActivator = createPopupActivator({ browser, popupPath: "notification.html" });
       const popupLog = extendLogger(runtimeLog, "popupActivator");
       const trackedPopupWindows = new Map<number, (removedId: number) => void>();
 
@@ -179,7 +180,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             namespace: request.namespace,
           });
 
-          void popupActivator
+          void notificationActivator
             .open({
               reason: request.reason,
               origin: request.origin,
@@ -193,7 +194,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
               }
             })
             .catch((error) => {
-              popupLog("failed to open popup", {
+              popupLog("failed to open notification window", {
                 error,
                 reason: request.reason,
                 origin: request.origin,
@@ -278,6 +279,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       context = { services, controllers, engine, session };
 
       uiBridge = createUiBridge({
+        browser,
         controllers,
         session,
         persistVaultMeta,

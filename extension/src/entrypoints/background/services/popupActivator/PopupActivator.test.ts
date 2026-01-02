@@ -8,6 +8,20 @@ const makeBrowser = () => {
 };
 
 describe("PopupActivator", () => {
+  it("uses custom popupPath for notification window", async () => {
+    const browser = makeBrowser();
+    browser.windows.getAll.mockResolvedValue([]);
+    browser.windows.create.mockResolvedValue({ id: 1 });
+
+    const act = createPopupActivator({ browser, now: () => 0, popupPath: "notification.html" });
+    await expect(act.open()).resolves.toMatchObject({ activationPath: "create", windowId: 1 });
+
+    expect(browser.windows.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "ext://notification.html",
+      }),
+    );
+  });
   it("creates popup when missing", async () => {
     const browser = makeBrowser();
     browser.windows.getAll.mockResolvedValue([]);

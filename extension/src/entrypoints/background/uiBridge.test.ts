@@ -10,6 +10,7 @@ import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUiBridge } from "./uiBridge";
+import type browserDefaultType from "webextension-polyfill";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
@@ -337,6 +338,17 @@ const createControllers = () => {
     signers,
   } as unknown as HandlerControllers;
 };
+const makeBrowser = () => {
+  return {
+    runtime: { getURL: (p: string) => `ext://${p}` },
+    tabs: {
+      query: vi.fn(async () => []),
+      update: vi.fn(async () => ({})),
+      create: vi.fn(async () => ({ id: 1, windowId: 1 })),
+    },
+    windows: { update: vi.fn(async () => ({})) },
+  } as unknown as typeof browserDefaultType;
+};
 
 const buildBridge = (opts?: { unlocked?: boolean }) => {
   const vault = new FakeVault(new Uint8Array(), opts?.unlocked ?? true);
@@ -383,6 +395,7 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
   } as unknown as BackgroundSessionServices;
 
   const bridge = createUiBridge({
+    browser: makeBrowser(),
     controllers,
     session,
     persistVaultMeta: async () => {},

@@ -179,6 +179,13 @@ class UiClient {
     });
   };
 
+  openOnboardingTab = (reason: string) => {
+    return this.request<{ activationPath: "focus" | "create" | "debounced"; tabId?: number }>({
+      type: "ui:openOnboardingTab",
+      payload: { reason },
+    });
+  };
+
   lock = () => {
     return this.request<void>({ type: "ui:lock" });
   };

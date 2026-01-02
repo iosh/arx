@@ -9,8 +9,8 @@ import { ApprovalTypes, ArxReasons, arxError, KeyringService } from "@arx/core";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createUiBridge } from "./uiBridge";
 import type browserDefaultType from "webextension-polyfill";
+import { createUiBridge } from "./uiBridge";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
@@ -338,7 +338,18 @@ const createControllers = () => {
     signers,
   } as unknown as HandlerControllers;
 };
-const makeBrowser = () => {
+type MockBrowserApi = {
+  runtime: { getURL: (p: string) => string };
+  tabs: {
+    query: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  };
+  windows: {
+    update: ReturnType<typeof vi.fn>;
+  };
+};
+const makeBrowser = (): MockBrowserApi => {
   return {
     runtime: { getURL: (p: string) => `ext://${p}` },
     tabs: {
@@ -347,7 +358,7 @@ const makeBrowser = () => {
       create: vi.fn(async () => ({ id: 1, windowId: 1 })),
     },
     windows: { update: vi.fn(async () => ({})) },
-  } as unknown as typeof browserDefaultType;
+  };
 };
 
 const buildBridge = (opts?: { unlocked?: boolean }) => {
@@ -393,9 +404,9 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
   } as unknown as BackgroundSessionServices;
-
+  const browserApi = makeBrowser();
   const bridge = createUiBridge({
-    browser: makeBrowser(),
+    browser: browserApi as any,
     controllers,
     session,
     persistVaultMeta: async () => {},
@@ -403,7 +414,7 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
   });
 
-  return { bridge, keyring, vault, unlock, approvals: approvalsController };
+  return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi };
 };
 
 const createPort = () => new FakePort();
@@ -426,6 +437,7 @@ describe("uiBridge", () => {
   let unlock: FakeUnlock;
   let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
+  let runtimeBrowser: ReturnType<typeof makeBrowser>;
 
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
@@ -434,6 +446,7 @@ describe("uiBridge", () => {
     vault = ctx.vault;
     unlock = ctx.unlock;
     approvals = ctx.approvals;
+    runtimeBrowser = ctx.browser;
 
     port = createPort();
     bridge.attachPort(port as any);
@@ -601,5 +614,97 @@ describe("uiBridge", () => {
     const evt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:unlocked") as any;
     expect(evt).toBeTruthy();
     expect(typeof evt.payload?.at).toBe("number");
+  });
+
+  it("openOnboardingTab: creates then debounces within cooldown", async () => {
+    let t = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => t);
+
+    runtimeBrowser.tabs.query.mockResolvedValueOnce([]);
+    runtimeBrowser.tabs.create.mockResolvedValueOnce({ id: 1, windowId: 2 });
+
+    const first = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+    expect(expectResponse(first.envelope, first.requestId)).toMatchObject({ activationPath: "create", tabId: 1 });
+    expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({ url: "ext://onboarding.html", active: true });
+
+    t = 100;
+    const second = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+    expect(expectResponse(second.envelope, second.requestId)).toMatchObject({ activationPath: "debounced", tabId: 1 });
+    expect(runtimeBrowser.tabs.create).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
+
+  it("openOnboardingTab: focuses existing tab via query fallback", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+
+    runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: any) => {
+      if (queryInfo?.url) throw new Error("query-by-url failed");
+      return [{ id: 7, windowId: 8, url: "ext://onboarding.html" }];
+    });
+
+    const res = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+
+    expect(expectResponse(res.envelope, res.requestId)).toMatchObject({ activationPath: "focus", tabId: 7 });
+    expect(runtimeBrowser.tabs.update).toHaveBeenCalledWith(7, { active: true });
+    expect(runtimeBrowser.windows.update).toHaveBeenCalledWith(8, { focused: true });
+    expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();
+
+    nowSpy.mockRestore();
+  });
+
+  it("openOnboardingTab: creates then debounces within cooldown", async () => {
+    let t = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => t);
+
+    runtimeBrowser.tabs.query.mockResolvedValueOnce([]);
+    runtimeBrowser.tabs.create.mockResolvedValueOnce({ id: 1, windowId: 2 });
+
+    const first = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+    expect(expectResponse(first.envelope, first.requestId)).toMatchObject({ activationPath: "create", tabId: 1 });
+    expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({ url: "ext://onboarding.html", active: true });
+
+    t = 100;
+    const second = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+    expect(expectResponse(second.envelope, second.requestId)).toMatchObject({ activationPath: "debounced", tabId: 1 });
+    expect(runtimeBrowser.tabs.create).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
+
+  it("openOnboardingTab: focuses existing tab via query fallback", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+
+    runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: any) => {
+      if (queryInfo?.url) throw new Error("query-by-url failed");
+      return [{ id: 7, windowId: 8, url: "ext://onboarding.html" }];
+    });
+
+    const res = await send({
+      type: "ui:openOnboardingTab",
+      payload: { reason: "manual_open" },
+    } as UiMessage);
+
+    expect(expectResponse(res.envelope, res.requestId)).toMatchObject({ activationPath: "focus", tabId: 7 });
+    expect(runtimeBrowser.tabs.update).toHaveBeenCalledWith(7, { active: true });
+    expect(runtimeBrowser.windows.update).toHaveBeenCalledWith(8, { focused: true });
+    expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();
+
+    nowSpy.mockRestore();
   });
 });

@@ -18,6 +18,7 @@ import {
 import { type UiMessage, type UiPortEnvelope, type UiSnapshot, UiSnapshotSchema } from "@arx/core/ui";
 import * as Hex from "ox/Hex";
 import type browserDefaultType from "webextension-polyfill";
+import { ENTRYPOINTS } from "./constants";
 
 export { UI_CHANNEL } from "@arx/core/ui";
 
@@ -183,8 +184,8 @@ export const createUiBridge = ({
       }
       lastOnboardingAttemptAt = now;
 
-      const onboardingBaseUrl = runtimeBrowser.runtime.getURL("onboarding.html");
-      const onboardingTargetUrl = `${onboardingBaseUrl}#/welcome`;
+      const onboardingBaseUrl = runtimeBrowser.runtime.getURL(ENTRYPOINTS.ONBOARDING);
+      const onboardingTargetUrl = onboardingBaseUrl;
 
       let existingTabs: browserDefaultType.Tabs.Tab[] = [];
       try {

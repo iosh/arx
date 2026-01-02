@@ -13,6 +13,7 @@ import {
 } from "@arx/core";
 import browser from "webextension-polyfill";
 import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
+import { ENTRYPOINTS } from "./constants";
 import { isInternalOrigin } from "./origin";
 import { createPopupActivator } from "./services/popupActivator";
 import type { ControllerSnapshot } from "./types";
@@ -107,7 +108,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       });
       const { controllers, engine, messenger, session, keyring } = services;
       const popupActivator = createPopupActivator({ browser });
-      const notificationActivator = createPopupActivator({ browser, popupPath: "notification.html" });
+      const notificationActivator = createPopupActivator({ browser, popupPath: ENTRYPOINTS.NOTIFICATION });
       const popupLog = extendLogger(runtimeLog, "popupActivator");
       const trackedPopupWindows = new Map<number, (removedId: number) => void>();
 
@@ -179,6 +180,18 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             chainRef: request.chainRef,
             namespace: request.namespace,
           });
+
+          const vaultInitialized = session.vault.getStatus().hasCiphertext;
+          if (!vaultInitialized) {
+            popupLog("skip notification window (vault uninitialized)", {
+              reason: request.reason,
+              origin: request.origin,
+              method: request.method,
+              chainRef: request.chainRef,
+              namespace: request.namespace,
+            });
+            return;
+          }
 
           void notificationActivator
             .open({

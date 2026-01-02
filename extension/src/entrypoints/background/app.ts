@@ -1,6 +1,7 @@
 import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
+import { ENTRYPOINTS } from "./constants";
 import { getExtensionOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
 import { createRuntimeMessageProxy } from "./runtimeMessages";
@@ -41,15 +42,44 @@ export const createBackgroundApp = () => {
     runtimeId: browser.runtime.id,
   });
 
+  const openOrFocusOnboardingTab = async (): Promise<void> => {
+    const onboardingBaseUrl = browser.runtime.getURL(ENTRYPOINTS.ONBOARDING);
+
+    const tabs = await browser.tabs.query({ url: [`${onboardingBaseUrl}*`] });
+    const existing = (tabs ?? []).find((tab) => typeof tab.id === "number");
+
+    if (existing?.id) {
+      await browser.tabs.update(existing.id, { active: true });
+      if (typeof existing.windowId === "number") {
+        await browser.windows.update(existing.windowId, { focused: true });
+      }
+      return;
+    }
+
+    const created = await browser.tabs.create({ url: onboardingBaseUrl, active: true });
+    if (typeof created.windowId === "number") {
+      await browser.windows.update(created.windowId, { focused: true });
+    }
+  };
+
+  const handleOnInstalled = (details: Runtime.OnInstalledDetailsType) => {
+    if (details.reason !== "install") return;
+    void openOrFocusOnboardingTab().catch((error) => {
+      console.warn("[bg] failed to open onboarding tab on install", error);
+    });
+  };
+
   const start = () => {
     void serviceManager.ensureContext();
     browser.runtime.onConnect.addListener(portRouter.handleConnect);
     browser.runtime.onMessage.addListener(runtimeMessageProxy);
+    browser.runtime.onInstalled.addListener(handleOnInstalled);
   };
 
   const stop = () => {
     browser.runtime.onConnect.removeListener(portRouter.handleConnect);
     browser.runtime.onMessage.removeListener(runtimeMessageProxy);
+    browser.runtime.onInstalled.removeListener(handleOnInstalled);
     portRouter.destroy();
     serviceManager.destroy();
   };

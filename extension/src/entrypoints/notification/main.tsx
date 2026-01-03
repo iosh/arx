@@ -6,9 +6,9 @@ import ReactDOM from "react-dom/client";
 import { AppProviders } from "../../ui/providers/AppProviders";
 import "../popup/style.css";
 
-import { routeTree } from "../../routeTree.gen";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { ErrorState, Screen } from "@/ui/components";
+import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { routeTree } from "../../routeTree.gen";
 import { uiClient } from "../../ui/lib/uiClient";
 
 const queryClient = new QueryClient();

@@ -2,10 +2,10 @@ import { Card, H2, Paragraph, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 
 type SetupCompleteScreenProps = {
-  onContinue: () => void;
+  onOpenWallet: () => void;
 };
 
-export function SetupCompleteScreen({ onContinue }: SetupCompleteScreenProps) {
+export function SetupCompleteScreen({ onOpenWallet }: SetupCompleteScreenProps) {
   return (
     <Screen scroll={false}>
       <YStack flex={1} alignItems="center" justifyContent="center">
@@ -17,8 +17,8 @@ export function SetupCompleteScreen({ onContinue }: SetupCompleteScreenProps) {
           <Paragraph color="$mutedText" textAlign="center">
             You can close this tab.
           </Paragraph>
-          <Button variant="primary" onPress={onContinue}>
-            Close tab
+          <Button variant="primary" onPress={onOpenWallet}>
+            Open wallet
           </Button>
         </Card>
       </YStack>

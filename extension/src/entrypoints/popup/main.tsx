@@ -5,12 +5,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { AppProviders } from "../../ui/providers/AppProviders";
 import "./style.css";
-import { uiClient } from "../../ui/lib/uiClient";
-
-// Import the generated route tree
-import { routeTree } from "../../routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
+// Import the generated route tree
+import { routeTree } from "../../routeTree.gen";
+import { uiClient } from "../../ui/lib/uiClient";
 
 // Create QueryClient instance (shared across entire app)
 const queryClient = new QueryClient();
@@ -74,7 +74,9 @@ const boot = async () => {
 
   try {
     const snapshot = await uiClient.getSnapshot();
-    if (!snapshot.vault.initialized) {
+    const needsOnboardingNow = needsOnboarding(snapshot);
+
+    if (needsOnboardingNow) {
       void uiClient.openOnboardingTab({ reason: "manual_open" });
       window.close();
       return;

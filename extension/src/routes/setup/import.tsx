@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Card, Paragraph, XStack, YStack } from "tamagui";
+import { useState } from "react";
+import { Card, Paragraph, XStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
@@ -10,6 +10,11 @@ import { ImportMnemonicScreen } from "@/ui/screens/onboarding/ImportMnemonicScre
 import { ImportPrivateKeyScreen } from "@/ui/screens/onboarding/ImportPrivateKeyScreen";
 
 type ImportMode = "mnemonic" | "privateKey";
+
+const IMPORT_TABS = [
+  { value: "mnemonic" as const, label: "Seed phrase" },
+  { value: "privateKey" as const, label: "Private key" },
+] as const;
 
 export const Route = createFileRoute("/setup/import")({
   beforeLoad: requireSetupIncomplete,
@@ -24,21 +29,19 @@ function ImportSetupRoute() {
   const search = Route.useSearch();
   const { importMnemonic, importPrivateKey } = useUiSnapshot();
 
-  const initialMode: ImportMode = search.mode === "privateKey" ? "privateKey" : "mnemonic";
-  const [mode, setMode] = useState<ImportMode>(initialMode);
+  const mode = search.mode;
   const [mnemonicError, setMnemonicError] = useState<string | null>(null);
   const [privateError, setPrivateError] = useState<string | null>(null);
   const [mnemonicPending, setMnemonicPending] = useState(false);
   const [privatePending, setPrivatePending] = useState(false);
 
-  // [import-route] Define tab metadata once
-  const tabs = useMemo(
-    () => [
-      { value: "mnemonic" as const, label: "Seed phrase" },
-      { value: "privateKey" as const, label: "Private key" },
-    ],
-    [],
-  );
+  const handleTabChange = (newMode: ImportMode) => {
+    router.navigate({
+      to: ROUTES.SETUP_IMPORT,
+      search: { mode: newMode },
+      replace: true, // Use replace to avoid polluting history
+    });
+  };
 
   const handleMnemonicImport = async (phrase: string, alias?: string) => {
     if (!phrase.trim()) {
@@ -77,8 +80,6 @@ function ImportSetupRoute() {
 
   return (
     <Screen>
-      <Button onPress={() => router.navigate({ to: ROUTES.WELCOME })}>Back</Button>
-
       <Card padded bordered gap="$2">
         <Paragraph fontSize="$6" fontWeight="600">
           Import wallet
@@ -88,8 +89,13 @@ function ImportSetupRoute() {
         </Paragraph>
 
         <XStack gap="$2" marginTop="$3">
-          {tabs.map((tab) => (
-            <Button key={tab.value} flex={1} onPress={() => setMode(tab.value)}>
+          {IMPORT_TABS.map((tab) => (
+            <Button
+              key={tab.value}
+              flex={1}
+              onPress={() => handleTabChange(tab.value)}
+              variant={mode === tab.value ? "primary" : "secondary"}
+            >
               {tab.label}
             </Button>
           ))}

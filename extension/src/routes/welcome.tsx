@@ -13,9 +13,13 @@ function WelcomeRoute() {
 
   return (
     <WelcomeScreen
-      onCreate={() => router.navigate({ to: ROUTES.SETUP_PASSWORD })}
-      onImportMnemonic={() => router.navigate({ to: ROUTES.SETUP_IMPORT, search: { mode: "mnemonic" } })}
-      onImportPrivateKey={() => router.navigate({ to: ROUTES.SETUP_IMPORT, search: { mode: "privateKey" } })}
+      onCreate={() => router.navigate({ to: ROUTES.SETUP_PASSWORD, search: { intent: "create", mode: "mnemonic" } })}
+      onImportMnemonic={() =>
+        router.navigate({ to: ROUTES.SETUP_PASSWORD, search: { intent: "import", mode: "mnemonic" } })
+      }
+      onImportPrivateKey={() =>
+        router.navigate({ to: ROUTES.SETUP_PASSWORD, search: { intent: "import", mode: "privateKey" } })
+      }
     />
   );
 }

@@ -9,7 +9,7 @@ type WelcomeScreenProps = {
 
 export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }: WelcomeScreenProps) {
   return (
-    <Screen scroll={false}>
+    <Screen>
       <Card gap="$3">
         <H2>Welcome to ARX Wallet</H2>
         <Paragraph color="$mutedText">

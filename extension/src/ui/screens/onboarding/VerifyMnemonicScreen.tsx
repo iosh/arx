@@ -24,7 +24,7 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
   };
 
   return (
-    <Screen scroll={false} flex={1} padding="$4" gap="$3">
+    <Screen>
       <Button variant="ghost" onPress={onBack} disabled={pending}>
         Back
       </Button>

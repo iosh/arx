@@ -19,7 +19,7 @@ export function GenerateMnemonicScreen({
   onSkip,
 }: GenerateMnemonicScreenProps) {
   return (
-    <Screen scroll={false}>
+    <Screen>
       <Paragraph fontSize="$6" fontWeight="600">
         Backup your recovery phrase
       </Paragraph>
@@ -35,7 +35,7 @@ export function GenerateMnemonicScreen({
         ) : (
           <XStack flexWrap="wrap" gap="$2">
             {words.map((word, index) => (
-              <Card key={`${word}`} padded bordered width="30%" minWidth={90}>
+              <Card key={`${index}-${word}`} padded bordered width="30%" minWidth={90}>
                 <Paragraph color="$mutedText" fontSize="$2">
                   {index + 1}.
                 </Paragraph>

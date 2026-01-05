@@ -5,6 +5,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { AppProviders } from "../../ui/providers/AppProviders";
 import "../popup/style.css";
+import "./style.css";
 
 import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";

@@ -76,7 +76,7 @@ function ImportSetupRoute() {
   };
 
   return (
-    <Screen scroll={false}>
+    <Screen>
       <Button onPress={() => router.navigate({ to: ROUTES.WELCOME })}>Back</Button>
 
       <Card padded bordered gap="$2">

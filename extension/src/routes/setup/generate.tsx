@@ -40,9 +40,6 @@ function GenerateMnemonicRoute() {
       return;
     }
     void refreshWords();
-    return () => {
-      mnemonicSession.clear();
-    };
   }, [refreshWords]);
 
   const handleVerify = () => {

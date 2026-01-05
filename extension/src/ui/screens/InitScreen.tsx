@@ -49,7 +49,7 @@ export const InitScreen = ({ onSubmit }: InitScreenProps) => {
   };
 
   return (
-    <Screen scroll={false}>
+    <Screen padded={false}>
       <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
         <YStack gap="$2">
           <H2>Create Password</H2>

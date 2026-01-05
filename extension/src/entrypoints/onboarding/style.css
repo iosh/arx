@@ -1,0 +1,9 @@
+html,
+body {
+  overflow: auto;
+}
+
+body {
+  min-width: 0;
+  min-height: 0;
+}

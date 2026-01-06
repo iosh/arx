@@ -11,7 +11,7 @@ export function SetupCompleteScreen({ onOpenWallet }: SetupCompleteScreenProps) 
       <Card padded bordered gap="$2" alignItems="center">
         <H2>Wallet ready</H2>
         <Paragraph color="$mutedText" textAlign="center">
-          Setup is complete. Click the extension icon to open your wallet.
+          Onboarding is complete. Click the extension icon to open your wallet.
         </Paragraph>
         <Paragraph color="$mutedText" textAlign="center">
           You can close this tab.

@@ -18,7 +18,7 @@ const buildQuizIndexes = (count: number): number[] => {
   return Array.from(indexes.values()).sort((a, b) => a - b);
 };
 
-export const Route = createFileRoute("/setup/verify")({
+export const Route = createFileRoute("/onboarding/verify")({
   beforeLoad: requireSetupIncomplete,
   component: VerifyMnemonicRoute,
 });
@@ -32,7 +32,7 @@ function VerifyMnemonicRoute() {
   useEffect(() => {
     const cached = mnemonicSession.peek();
     if (!cached || cached.length === 0) {
-      router.navigate({ to: ROUTES.SETUP_GENERATE });
+      router.navigate({ to: ROUTES.ONBOARDING_GENERATE });
       return;
     }
     setWords(cached);
@@ -57,7 +57,7 @@ function VerifyMnemonicRoute() {
     try {
       await confirmNewMnemonic({ words, skipBackup: false });
       mnemonicSession.clear();
-      router.navigate({ to: ROUTES.SETUP_COMPLETE });
+      router.navigate({ to: ROUTES.ONBOARDING_COMPLETE });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -70,7 +70,7 @@ function VerifyMnemonicRoute() {
       quizIndexes={quizIndexes}
       pending={pending}
       error={error}
-      onBack={() => router.navigate({ to: ROUTES.SETUP_GENERATE })}
+      onBack={() => router.navigate({ to: ROUTES.ONBOARDING_GENERATE })}
       onSubmit={handleSubmit}
     />
   );

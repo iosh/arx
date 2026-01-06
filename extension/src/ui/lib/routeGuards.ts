@@ -42,7 +42,7 @@ export const requireVaultUninitialized = async ({ context }: { context: RouterCo
     return;
   }
   if (hasAccounts(snapshot)) {
-    throw redirect({ to: ROUTES.SETUP_COMPLETE });
+    throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
   throw redirect({ to: ROUTES.HOME });
 };
@@ -58,7 +58,7 @@ export const redirectToSetupIfNoAccounts = async ({ context }: { context: Router
   if (!snapshot.session.isUnlocked) return;
   if (hasAccounts(snapshot)) return;
 
-  throw redirect({ to: ROUTES.SETUP_GENERATE, replace: true });
+  throw redirect({ to: ROUTES.ONBOARDING_GENERATE, replace: true });
 };
 
 export const requireSetupIncomplete = async ({ context }: { context: RouterContext }) => {
@@ -70,7 +70,7 @@ export const requireSetupIncomplete = async ({ context }: { context: RouterConte
     throw redirect({ to: ROUTES.WELCOME });
   }
   if (hasAccounts(snapshot)) {
-    throw redirect({ to: ROUTES.SETUP_COMPLETE });
+    throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
 };
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {

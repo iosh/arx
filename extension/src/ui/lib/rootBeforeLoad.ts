@@ -45,8 +45,8 @@ export function decideRootBeforeLoad(params: {
     const target = !snapshot.vault.initialized
       ? ROUTES.WELCOME
       : hasAccounts
-        ? ROUTES.SETUP_COMPLETE
-        : ROUTES.SETUP_GENERATE;
+        ? ROUTES.ONBOARDING_COMPLETE
+        : ROUTES.ONBOARDING_GENERATE;
 
     return { type: "redirect", to: target, replace: true };
   }

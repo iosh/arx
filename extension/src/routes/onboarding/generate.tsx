@@ -7,7 +7,7 @@ import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { GenerateMnemonicScreen } from "@/ui/screens/onboarding/GenerateMnemonicScreen";
 
-export const Route = createFileRoute("/setup/generate")({
+export const Route = createFileRoute("/onboarding/generate")({
   beforeLoad: requireSetupIncomplete,
   component: GenerateMnemonicRoute,
 });
@@ -45,7 +45,7 @@ function GenerateMnemonicRoute() {
   const handleVerify = () => {
     if (words.length === 0 || pending) return;
     mnemonicSession.store(words);
-    router.navigate({ to: ROUTES.SETUP_VERIFY });
+    router.navigate({ to: ROUTES.ONBOARDING_VERIFY });
   };
 
   const handleSkip = async () => {
@@ -55,7 +55,7 @@ function GenerateMnemonicRoute() {
     try {
       await confirmNewMnemonic({ words, skipBackup: true });
       mnemonicSession.clear();
-      router.navigate({ to: ROUTES.SETUP_COMPLETE });
+      router.navigate({ to: ROUTES.ONBOARDING_COMPLETE });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

@@ -30,7 +30,7 @@ describe("decideRootBeforeLoad", () => {
   it("attention_open + onboarding path => close (fail-closed)", () => {
     const decision = decideRootBeforeLoad({
       entryIntent: "attention_open",
-      pathname: "/setup/generate",
+      pathname: "/onboarding/generate",
       snapshot: null,
     });
 
@@ -40,7 +40,7 @@ describe("decideRootBeforeLoad", () => {
   it("onboarding_tab + onboarding path => allow", () => {
     const decision = decideRootBeforeLoad({
       entryIntent: "onboarding_tab",
-      pathname: "/setup/verify",
+      pathname: "/onboarding/verify",
       snapshot: null,
     });
 
@@ -62,7 +62,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/",
         snapshot: SNAPSHOT_NO_ACCOUNTS,
       }),
-    ).toEqual({ type: "redirect", to: "/setup/generate", replace: true });
+    ).toEqual({ type: "redirect", to: "/onboarding/generate", replace: true });
 
     expect(
       decideRootBeforeLoad({
@@ -70,7 +70,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/",
         snapshot: SNAPSHOT_READY,
       }),
-    ).toEqual({ type: "redirect", to: "/setup/complete", replace: true });
+    ).toEqual({ type: "redirect", to: "/onboarding/complete", replace: true });
   });
 
   it("manual_open + non-onboarding path + no accounts => openOnboardingAndClose (best practice)", () => {

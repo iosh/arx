@@ -6,13 +6,11 @@ import { ROUTES } from "@/ui/lib/routes";
 import { PasswordSetupScreen } from "@/ui/screens/onboarding/PasswordSetupScreen";
 
 type PasswordSetupIntent = "create" | "import";
-type ImportMode = "mnemonic" | "privateKey";
 
-export const Route = createFileRoute("/setup/password")({
+export const Route = createFileRoute("/onboarding/password")({
   beforeLoad: requireVaultUninitialized,
-  validateSearch: (search) => ({
+  validateSearch: (search): { intent: PasswordSetupIntent } => ({
     intent: (search.intent === "import" ? "import" : "create") as PasswordSetupIntent,
-    mode: (search.mode === "privateKey" ? "privateKey" : "mnemonic") as ImportMode,
   }),
   component: PasswordSetupRoute,
 });
@@ -26,12 +24,12 @@ function PasswordSetupRoute() {
       await vaultInit(password);
       await unlock(password);
       if (search.intent === "import") {
-        router.navigate({ to: ROUTES.SETUP_IMPORT, search: { mode: search.mode } });
+        router.navigate({ to: ROUTES.ONBOARDING_IMPORT });
         return;
       }
-      router.navigate({ to: ROUTES.SETUP_GENERATE });
+      router.navigate({ to: ROUTES.ONBOARDING_GENERATE });
     },
-    [router, search.intent, search.mode, unlock, vaultInit],
+    [router, search.intent, unlock, vaultInit],
   );
 
   return <PasswordSetupScreen onSubmit={handleSubmit} />;

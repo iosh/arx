@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { mnemonicSession } from "@/ui/lib/mnemonicSession";
 import { requireSetupComplete } from "@/ui/lib/routeGuards";
 import { SetupCompleteScreen } from "@/ui/screens/onboarding/SetupCompleteScreen";
-export const Route = createFileRoute("/setup/complete")({
+export const Route = createFileRoute("/onboarding/complete")({
   beforeLoad: requireSetupComplete,
   component: SetupCompleteRoute,
 });

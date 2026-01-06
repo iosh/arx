@@ -1,14 +1,13 @@
-import { ArrowDownToLine, KeyRound, Plus, WalletMinimal } from "lucide-react";
+import { ArrowDownToLine, Plus, WalletMinimal } from "lucide-react";
 import { H2, Paragraph, Separator, useTheme, XStack, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 
 type WelcomeScreenProps = {
   onCreate: () => void;
-  onImportMnemonic: () => void;
-  onImportPrivateKey: () => void;
+  onImport: () => void;
 };
 
-export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }: WelcomeScreenProps) {
+export function WelcomeScreen({ onCreate, onImport }: WelcomeScreenProps) {
   const theme = useTheme();
 
   return (
@@ -52,14 +51,9 @@ export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }
             <Separator />
           </XStack>
 
-          <YStack gap="$3">
-            <Button variant="secondary" size="$4" icon={<ArrowDownToLine size={18} />} onPress={onImportMnemonic}>
-              Import Recovery Phrase
-            </Button>
-            <Button variant="secondary" size="$4" icon={<KeyRound size={18} />} onPress={onImportPrivateKey}>
-              Import Private Key
-            </Button>
-          </YStack>
+          <Button variant="secondary" size="$4" icon={<ArrowDownToLine size={18} />} onPress={onImport}>
+            Import an existing Wallet
+          </Button>
         </YStack>
       </YStack>
     </Screen>

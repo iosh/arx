@@ -1,5 +1,5 @@
 import { ArrowDownToLine, KeyRound, Plus, WalletMinimal } from "lucide-react";
-import { H2, Paragraph, Separator, XStack, YStack, useTheme } from "tamagui";
+import { H2, Paragraph, Separator, useTheme, XStack, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 
 type WelcomeScreenProps = {
@@ -40,13 +40,7 @@ export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }
 
         {/* Actions */}
         <YStack gap="$4" width="100%">
-          <Button
-            variant="primary"
-            size="$5"
-            icon={<Plus size={20} />}
-            onPress={onCreate}
-            fontWeight="600"
-          >
+          <Button variant="primary" size="$5" icon={<Plus size={20} />} onPress={onCreate} fontWeight="600">
             Create a new Wallet
           </Button>
 
@@ -59,20 +53,10 @@ export function WelcomeScreen({ onCreate, onImportMnemonic, onImportPrivateKey }
           </XStack>
 
           <YStack gap="$3">
-            <Button
-              variant="secondary"
-              size="$4"
-              icon={<ArrowDownToLine size={18} />}
-              onPress={onImportMnemonic}
-            >
+            <Button variant="secondary" size="$4" icon={<ArrowDownToLine size={18} />} onPress={onImportMnemonic}>
               Import Recovery Phrase
             </Button>
-            <Button
-              variant="secondary"
-              size="$4"
-              icon={<KeyRound size={18} />}
-              onPress={onImportPrivateKey}
-            >
+            <Button variant="secondary" size="$4" icon={<KeyRound size={18} />} onPress={onImportPrivateKey}>
               Import Private Key
             </Button>
           </YStack>

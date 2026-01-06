@@ -12,6 +12,9 @@ export type TextFieldProps = Omit<InputProps, "disabled" | "right"> & {
   id?: string;
 };
 
+const isPrimitiveText = (value: ReactNode): value is string | number =>
+  typeof value === "string" || typeof value === "number";
+
 export function TextField({
   label,
   helperText,
@@ -58,13 +61,21 @@ export function TextField({
       </YStack>
 
       {hasError ? (
-        <Paragraph color="$danger" fontSize="$2">
-          {errorText}
-        </Paragraph>
+        isPrimitiveText(errorText) ? (
+          <Paragraph color="$danger" fontSize="$2">
+            {errorText}
+          </Paragraph>
+        ) : (
+          errorText
+        )
       ) : helperText ? (
-        <Paragraph color="$mutedText" fontSize="$2">
-          {helperText}
-        </Paragraph>
+        isPrimitiveText(helperText) ? (
+          <Paragraph color="$mutedText" fontSize="$2">
+            {helperText}
+          </Paragraph>
+        ) : (
+          helperText
+        )
       ) : null}
     </YStack>
   );

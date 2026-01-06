@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { requireVaultUninitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
-import { InitScreen } from "@/ui/screens/InitScreen";
+import { PasswordSetupScreen } from "@/ui/screens/onboarding/PasswordSetupScreen";
 
 type PasswordSetupIntent = "create" | "import";
 type ImportMode = "mnemonic" | "privateKey";
@@ -34,5 +34,5 @@ function PasswordSetupRoute() {
     [router, search.intent, search.mode, unlock, vaultInit],
   );
 
-  return <InitScreen onSubmit={handleSubmit} />;
+  return <PasswordSetupScreen onSubmit={handleSubmit} />;
 }

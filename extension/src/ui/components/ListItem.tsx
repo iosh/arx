@@ -5,10 +5,12 @@ export type ListItemProps = Omit<XStackProps, "children" | "right"> & {
   title: ReactNode;
   subtitle?: ReactNode;
   right?: ReactNode;
+  variant?: "card" | "flat";
 };
 
-export function ListItem({ title, subtitle, right, onPress, ...props }: ListItemProps) {
+export function ListItem({ title, subtitle, right, onPress, variant = "card", ...props }: ListItemProps) {
   const pressable = typeof onPress === "function";
+  const isCard = variant === "card";
 
   return (
     <XStack
@@ -17,9 +19,9 @@ export function ListItem({ title, subtitle, right, onPress, ...props }: ListItem
       paddingVertical="$3"
       paddingHorizontal="$3"
       borderRadius="$md"
-      backgroundColor="$cardBg"
-      borderWidth={1}
-      borderColor="$border"
+      backgroundColor={isCard ? "$cardBg" : "transparent"}
+      borderWidth={isCard ? 1 : 0}
+      borderColor={isCard ? "$border" : "transparent"}
       minWidth={0}
       cursor={pressable ? "pointer" : undefined}
       hoverStyle={pressable ? { backgroundColor: "$surface" } : undefined}

@@ -41,6 +41,8 @@ export function TextField({
       <YStack position="relative" minWidth={0}>
         <Input
           id={inputId}
+          borderWidth={1}
+          borderRadius="$md"
           disabled={disabled}
           editable={disabled ? false : editable}
           backgroundColor="$surface"

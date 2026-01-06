@@ -1,6 +1,6 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Button } from "tamagui";
+import { Button } from "./Button";
 import { TextField, type TextFieldProps } from "./TextField";
 
 export type PasswordRevealMode = "toggle" | "press";
@@ -28,7 +28,7 @@ export function PasswordInput({ revealMode = "toggle", disabled, ...props }: Pas
 
   const endAdornment = (
     <Button
-      chromeless
+      variant="ghost"
       circular
       size="$2"
       disabled={disabled}

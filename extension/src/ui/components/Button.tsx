@@ -80,7 +80,9 @@ export function Button({
 }: ButtonProps) {
   const isDisabled = disabled || loading;
   const { textProps, ...rest } = props;
-  const spinner = loading ? <Spinner size={spinnerSize} color="$color" /> : null;
+
+  const spinnerColor = variant === "primary" ? "$accentText" : variant === "danger" ? "$dangerText" : "$text";
+  const spinner = loading ? <Spinner size={spinnerSize} color={spinnerColor} /> : null;
 
   const mergedTextProps = {
     ...textProps,

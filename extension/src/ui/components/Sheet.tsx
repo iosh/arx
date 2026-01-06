@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Button, Paragraph, Separator, Sheet as TamaguiSheet, XStack, YStack } from "tamagui";
+import { Paragraph, Separator, Sheet as TamaguiSheet, XStack, YStack } from "tamagui";
+import { Button } from "./Button";
 
 export type SheetSnapPointsMode = "percent" | "constant" | "fit" | "mixed";
 
@@ -96,14 +97,11 @@ export function Sheet({
               </Paragraph>
               {showCloseButton ? (
                 <Button
-                  chromeless
+                  variant="ghost"
                   circular
                   aria-label="Close"
-                  accessibilityLabel="Close"
                   icon={<X size={18} />}
                   onPress={() => setOpen(false)}
-                  hoverStyle={{ backgroundColor: "$surface" }}
-                  pressStyle={{ backgroundColor: "$surface", opacity: 0.85 }}
                 />
               ) : null}
             </XStack>

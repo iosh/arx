@@ -85,6 +85,11 @@ export const useUiSnapshot = () => {
     onSuccess: invalidate,
   });
 
+  const vaultInitAndUnlockMutation = useMutation({
+    mutationFn: (password: string) => uiClient.vaultInitAndUnlock(password),
+    onSuccess: invalidate,
+  });
+
   const lockMutation = useMutation({
     mutationFn: () => uiClient.lock(),
     onSuccess: invalidate,
@@ -256,6 +261,7 @@ export const useUiSnapshot = () => {
     error: snapshotQuery.error,
     unlock: unlockMutation.mutateAsync,
     vaultInit: vaultInitMutation.mutateAsync,
+    vaultInitAndUnlock: vaultInitAndUnlockMutation.mutateAsync,
     lock: lockMutation.mutateAsync,
     resetAutoLockTimer: resetAutoLockMutation.mutate,
     switchAccount: switchAccountMutation.mutateAsync,

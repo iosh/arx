@@ -13,6 +13,7 @@ export const UI_CHANNEL = "arx:ui" as const;
 export type UiMessage =
   | { type: "ui:getSnapshot" }
   | { type: "ui:vaultInit"; payload: { password: string } }
+  | { type: "ui:vaultInitAndUnlock"; payload: { password: string } }
   | { type: "ui:unlock"; payload: { password: string } }
   | { type: "ui:openOnboardingTab"; payload: { reason: string } }
   | { type: "ui:lock"; payload?: { reason?: UnlockReason } }

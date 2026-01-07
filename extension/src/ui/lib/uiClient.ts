@@ -172,6 +172,13 @@ class UiClient {
     return this.request({ type: "ui:vaultInit", payload: { password } });
   };
 
+  vaultInitAndUnlock = (password: string) => {
+    return this.request<{ isUnlocked: boolean; nextAutoLockAt: number | null }>({
+      type: "ui:vaultInitAndUnlock",
+      payload: { password },
+    });
+  };
+
   unlock = (password: string) => {
     return this.request<{ isUnlocked: boolean; nextAutoLockAt: number | null }>({
       type: "ui:unlock",

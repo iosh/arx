@@ -416,6 +416,17 @@ export const createUiBridge = ({
     }
   };
 
+  const emitUnlockCompleted = () => {
+    broadcast();
+    const unlockedAt = Date.now();
+    // Notify UI that unlock completed (after hydration).
+    for (const port of Array.from(ports)) {
+      sendToPortSafely(port, { type: "ui:event", event: "ui:unlocked", payload: { at: unlockedAt } });
+    }
+    uiLog("event:ui:unlocked", { at: unlockedAt });
+    return session.unlock.getState();
+  };
+
   const handleMessage = async (message: UiMessage) => {
     switch (message.type) {
       case "ui:getSnapshot":
@@ -426,20 +437,28 @@ export const createUiBridge = ({
         broadcast();
         return { ciphertext };
       }
+      case "ui:vaultInitAndUnlock": {
+        const { password } = message.payload;
+        const status = session.vault.getStatus();
+
+        if (!status.hasCiphertext) {
+          await session.vault.initialize({ password });
+          await persistVaultMeta();
+        }
+
+        await session.unlock.unlock({ password });
+        // Wait for keyring hydration to complete before broadcasting
+        await keyring.waitForReady();
+        await persistVaultMeta();
+
+        return emitUnlockCompleted();
+      }
       case "ui:unlock": {
         await session.unlock.unlock({ password: message.payload.password });
         // Wait for keyring hydration to complete before broadcasting
         await keyring.waitForReady();
         await persistVaultMeta();
-        broadcast();
-        const unlockedAt = Date.now();
-        // Notify UI that unlock completed (after hydration).
-        for (const port of Array.from(ports)) {
-          sendToPortSafely(port, { type: "ui:event", event: "ui:unlocked", payload: { at: Date.now() } });
-        }
-        uiLog("event:ui:unlocked", { at: unlockedAt });
-
-        return session.unlock.getState();
+        return emitUnlockCompleted();
       }
       case "ui:openOnboardingTab": {
         return await openOnboardingTab(message.payload.reason);
@@ -691,12 +710,9 @@ export const createUiBridge = ({
       case "ui:exportMnemonic": {
         assertUnlocked(session);
         await verifyExportPassword(session, message.payload.password);
-        let mnemonic = await keyring.exportMnemonic(message.payload.keyringId, message.payload.password);
-        // Split before clearing from memory
-        const words = mnemonic.split(" ");
-        // Clear mnemonic from memory
-        mnemonic = "";
-        return { words };
+        return {
+          words: (await keyring.exportMnemonic(message.payload.keyringId, message.payload.password)).split(" "),
+        };
       }
       case "ui:exportPrivateKey": {
         assertUnlocked(session);

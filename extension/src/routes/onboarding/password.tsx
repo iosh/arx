@@ -17,19 +17,18 @@ export const Route = createFileRoute("/onboarding/password")({
 function PasswordSetupRoute() {
   const router = useRouter();
   const search = Route.useSearch();
-  const { vaultInit, unlock } = useUiSnapshot();
+  const { vaultInitAndUnlock } = useUiSnapshot();
 
   const handleSubmit = useCallback(
     async (password: string) => {
-      await vaultInit(password);
-      await unlock(password);
+      await vaultInitAndUnlock(password);
       if (search.intent === "import") {
         router.navigate({ to: ROUTES.ONBOARDING_IMPORT });
         return;
       }
       router.navigate({ to: ROUTES.ONBOARDING_GENERATE });
     },
-    [router, search.intent, unlock, vaultInit],
+    [router, search.intent, vaultInitAndUnlock],
   );
 
   return <PasswordSetupScreen onSubmit={handleSubmit} />;

@@ -361,11 +361,12 @@ const makeBrowser = (): MockBrowserApi => {
   };
 };
 
-const buildBridge = (opts?: { unlocked?: boolean }) => {
+const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => {
   const vault = new FakeVault(new Uint8Array(), opts?.unlocked ?? true);
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
   const keyringStore = createMemoryKeyringStore();
   const accountsController = createAccountsController();
+  let hasCiphertext = opts?.hasCiphertext ?? true;
 
   const keyring = new KeyringService({
     vault: {
@@ -399,7 +400,11 @@ const buildBridge = (opts?: { unlocked?: boolean }) => {
   const session = {
     unlock,
     vault: {
-      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext: true }),
+      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext }),
+      initialize: async (_params: { password: string }) => {
+        hasCiphertext = true;
+        return new Uint8Array();
+      },
 
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
@@ -616,50 +621,45 @@ describe("uiBridge", () => {
     expect(typeof evt.payload?.at).toBe("number");
   });
 
-  it("openOnboardingTab: creates then debounces within cooldown", async () => {
-    let t = 0;
-    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => t);
+  it("vaultInitAndUnlock broadcasts only unlocked snapshot", async () => {
+    const ctx = buildBridge({ unlocked: false, hasCiphertext: false });
+    bridge = ctx.bridge;
+    keyring = ctx.keyring;
+    vault = ctx.vault;
+    unlock = ctx.unlock;
+    approvals = ctx.approvals;
+    runtimeBrowser = ctx.browser;
 
-    runtimeBrowser.tabs.query.mockResolvedValueOnce([]);
-    runtimeBrowser.tabs.create.mockResolvedValueOnce({ id: 1, windowId: 2 });
+    port = createPort();
+    bridge.attachPort(port as any);
+    bridge.attachListeners();
+    port.messages = []; // drop initial snapshot
 
-    const first = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
-    expect(expectResponse(first.envelope, first.requestId)).toMatchObject({ activationPath: "create", tabId: 1 });
-    expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({ url: "ext://onboarding.html", active: true });
+    unlock.setUnlocked(false);
+    vault.setUnlocked(false);
 
-    t = 100;
-    const second = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
-    expect(expectResponse(second.envelope, second.requestId)).toMatchObject({ activationPath: "debounced", tabId: 1 });
-    expect(runtimeBrowser.tabs.create).toHaveBeenCalledTimes(1);
+    const res = await send({ type: "ui:vaultInitAndUnlock", payload: { password: PASSWORD } } as UiMessage);
+    expectResponse(res.envelope, res.requestId);
 
-    nowSpy.mockRestore();
-  });
+    const stateEvents = port.messages.filter(
+      (m: any) => m?.type === "ui:event" && m?.event === "ui:stateChanged",
+    ) as any[];
+    expect(stateEvents.length).toBeGreaterThan(0);
 
-  it("openOnboardingTab: focuses existing tab via query fallback", async () => {
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
+    // During init+unlock, other listeners can trigger additional stateChanged events (e.g. account hydration).
+    // The key guarantee is that UI should not observe an initialized-but-locked snapshot in between.
+    const hasInitializedButLocked = stateEvents.some(
+      (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === false,
+    );
+    expect(hasInitializedButLocked).toBe(false);
 
-    runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: any) => {
-      if (queryInfo?.url) throw new Error("query-by-url failed");
-      return [{ id: 7, windowId: 8, url: "ext://onboarding.html" }];
-    });
+    const hasInitializedAndUnlocked = stateEvents.some(
+      (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === true,
+    );
+    expect(hasInitializedAndUnlocked).toBe(true);
 
-    const res = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
-
-    expect(expectResponse(res.envelope, res.requestId)).toMatchObject({ activationPath: "focus", tabId: 7 });
-    expect(runtimeBrowser.tabs.update).toHaveBeenCalledWith(7, { active: true });
-    expect(runtimeBrowser.windows.update).toHaveBeenCalledWith(8, { focused: true });
-    expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();
-
-    nowSpy.mockRestore();
+    const unlockedEvt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:unlocked") as any;
+    expect(unlockedEvt).toBeTruthy();
   });
 
   it("openOnboardingTab: creates then debounces within cooldown", async () => {

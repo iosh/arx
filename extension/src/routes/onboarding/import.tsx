@@ -1,6 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
@@ -86,13 +85,5 @@ function ImportSetupRoute() {
     }
   };
 
-  return (
-    <Screen>
-      <ImportWalletScreen
-        isLoading={isLoading}
-        error={error}
-        onSubmit={handleImport}
-      />
-    </Screen>
-  );
+  return <ImportWalletScreen isLoading={isLoading} error={error} onSubmit={handleImport} />;
 }

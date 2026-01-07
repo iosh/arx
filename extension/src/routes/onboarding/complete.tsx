@@ -12,5 +12,7 @@ function SetupCompleteRoute() {
   useEffect(() => {
     mnemonicSession.clear();
   }, []);
+  // The user can't actually "Open wallet" via the button if it's already open in the extension context,
+  // but if this is a full page tab, closing it is the logical action to "end" the onboarding.
   return <SetupCompleteScreen onOpenWallet={() => window.close()} />;
 }

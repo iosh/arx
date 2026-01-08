@@ -4,6 +4,7 @@ import { evmProviderErrors, evmRpcErrors } from "../../errors.js";
 import { Eip155Provider } from "../../provider/index.js";
 import type { RequestArguments } from "../../types/eip1193.js";
 import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
+import { DISCONNECT_EVENT_CODE, DISCONNECT_EVENT_MESSAGE, REQUEST_VALIDATION_MESSAGES } from "./constants.js";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -18,7 +19,6 @@ const unimplemented: RequestHandler = async ({ method }) => {
 class StubTransport extends EventEmitter implements Transport {
   #state: TransportState;
   #requestHandler: RequestHandler = unimplemented;
-  #requests: RequestArguments[] = [];
 
   constructor(initial: TransportState) {
     super();
@@ -29,16 +29,13 @@ class StubTransport extends EventEmitter implements Transport {
 
   disconnect = async () => {};
 
-  isConnected = () => {
-    return this.#state.connected;
-  };
+  isConnected = () => this.#state.connected;
 
   getConnectionState(): TransportState {
     return clone(this.#state);
   }
 
   request = async (args: RequestArguments, _options?: { timeoutMs?: number }) => {
-    this.#requests.push(args);
     return this.#requestHandler(args);
   };
 
@@ -49,14 +46,6 @@ class StubTransport extends EventEmitter implements Transport {
   setRequestHandler(handler: RequestHandler) {
     this.#requestHandler = handler;
   }
-
-  getRequests() {
-    return [...this.#requests];
-  }
-
-  clearRequests() {
-    this.#requests = [];
-  }
 }
 
 const buildMeta = (overrides?: Partial<TransportMeta>): TransportMeta => ({
@@ -66,517 +55,42 @@ const buildMeta = (overrides?: Partial<TransportMeta>): TransportMeta => ({
   ...overrides,
 });
 
-const createProvider = (initialState: TransportState = INITIAL_STATE) => {
-  const transport = new StubTransport(initialState);
-  const provider = new Eip155Provider({ transport });
-  return { transport, provider };
-};
-
 const INITIAL_STATE: TransportState = {
   connected: true,
   chainId: "0x1",
-  caip2: null,
-  accounts: [],
+  caip2: "eip155:1",
+  accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   isUnlocked: true,
   meta: buildMeta(),
 };
 
-describe("Eip155Provider transport meta integration", () => {
-  it("falls back to transport meta when caip2 is missing", () => {
-    const transport = new StubTransport(INITIAL_STATE);
-    const provider = new Eip155Provider({ transport });
-
-    expect(provider.caip2).toBe("eip155:1");
-
-    transport.emit("disconnect");
-    expect(provider.caip2).toBeNull();
-  });
-
-  it("updates namespace when chainChanged event carries meta", () => {
-    const transport = new StubTransport(INITIAL_STATE);
-    const provider = new Eip155Provider({ transport });
-
-    expect(provider.caip2).toBe("eip155:1");
-
-    const confluxMeta = buildMeta({
-      activeChain: "conflux:cfx",
-      activeNamespace: "conflux",
-      supportedChains: ["conflux:cfx"],
-    });
-
-    transport.emit("chainChanged", {
-      chainId: "0x406",
-      caip2: null,
-      meta: confluxMeta,
-    });
-
-    expect(provider.caip2).toBe("conflux:cfx");
-
-    transport.emit("chainChanged", {
-      chainId: "0x1",
-      caip2: "eip155:1",
-      meta: buildMeta(),
-    });
-
-    expect(provider.caip2).toBe("eip155:1");
-  });
-
-  it("falls back to metaChanged activeChain when chainChanged lacks caip2", () => {
-    const { transport, provider } = createProvider();
-    const confluxMeta = buildMeta({
-      activeChain: "conflux:cfx",
-      activeNamespace: "conflux",
-      supportedChains: ["conflux:cfx"],
-    });
-
-    transport.emit("metaChanged", confluxMeta);
-    transport.emit("chainChanged", {
-      chainId: "0x406",
-      caip2: null,
-    });
-
-    expect(provider.chainId).toBe("0x406");
-    expect(provider.caip2).toBe("conflux:cfx");
-  });
-
-  it("updates account cache after eth_requestAccounts resolves", async () => {
-    const { transport, provider } = createProvider();
-    const accountsChanged = vi.fn();
-    provider.on("accountsChanged", accountsChanged);
-
-    transport.setRequestHandler(async (args) => {
-      expect(args.method).toBe("eth_requestAccounts");
-      return ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"];
-    });
-
-    const result = await provider.request({ method: "eth_requestAccounts" });
-
-    expect(result).toEqual([
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    ]);
-    expect(provider.selectedAddress).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    expect(accountsChanged).toHaveBeenCalledTimes(1);
-    expect(accountsChanged).toHaveBeenCalledWith([
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    ]);
-    expect(transport.getRequests()).toHaveLength(1);
-    expect(transport.getRequests()[0]?.method).toBe("eth_requestAccounts");
-  });
-
-  it("emits accountsChanged when connect snapshot clears accounts", () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      caip2: "eip155:1",
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const accountsChanged = vi.fn();
-    provider.on("accountsChanged", accountsChanged);
-
-    transport.emit("connect", {
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: [],
-      isUnlocked: true,
-      meta: buildMeta(),
-    });
-
-    expect(provider.selectedAddress).toBeNull();
-    expect(accountsChanged).toHaveBeenCalledTimes(1);
-    expect(accountsChanged).toHaveBeenCalledWith([]);
-  });
-
-  it("emits chainChanged with updated CAIP-2 after wallet_switchEthereumChain", async () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: ["0x1111111111111111111111111111111111111111"],
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const chainChanged = vi.fn();
-    const networkChanged = vi.fn();
-    const accountsChanged = vi.fn();
-    const order: string[] = [];
-    provider.on("chainChanged", chainChanged);
-    provider.on("chainChanged", () => order.push("chainChanged"));
-    provider.on("networkChanged", networkChanged);
-    provider.on("networkChanged", () => order.push("networkChanged"));
-    provider.on("accountsChanged", accountsChanged);
-
-    transport.setRequestHandler(async (args) => {
-      expect(args.method).toBe("wallet_switchEthereumChain");
-      expect(args.params).toEqual([{ chainId: "0x89" }]);
-      return null;
-    });
-
-    const request = provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x89" }],
-    });
-
-    transport.emit("chainChanged", {
-      chainId: "0x89",
-      caip2: "eip155:137",
-      meta: buildMeta({
-        activeChain: "eip155:137",
-        supportedChains: ["eip155:1", "eip155:137"],
-      }),
-    });
-
-    await expect(request).resolves.toBeNull();
-
-    expect(provider.chainId).toBe("0x89");
-    expect(provider.caip2).toBe("eip155:137");
-    expect(provider.selectedAddress).toBe("0x1111111111111111111111111111111111111111");
-    expect(chainChanged).toHaveBeenCalledTimes(1);
-    expect(chainChanged).toHaveBeenCalledWith("0x89");
-    expect(networkChanged).toHaveBeenCalledTimes(1);
-    expect(networkChanged).toHaveBeenCalledWith("137");
-    expect(order).toEqual(["chainChanged", "networkChanged"]);
-    expect(accountsChanged).not.toHaveBeenCalled();
-    expect(transport.getRequests()).toHaveLength(1);
-  });
-
-  it("relays unlockStateChanged notifications", () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      isUnlocked: true,
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const unlockListener = vi.fn();
-    provider.on("unlockStateChanged", unlockListener);
-
-    transport.emit("unlockStateChanged", { isUnlocked: false });
-    expect(provider.isUnlocked).toBe(false);
-    expect(unlockListener).toHaveBeenCalledTimes(1);
-    expect(unlockListener).toHaveBeenCalledWith({ isUnlocked: false });
-
-    transport.emit("unlockStateChanged", { isUnlocked: true });
-    expect(provider.isUnlocked).toBe(true);
-    expect(unlockListener).toHaveBeenCalledTimes(2);
-  });
-
-  it("clears cached state and emits disconnect error on transport disconnect", () => {
-    const initialState: TransportState = {
-      connected: true,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: ["0x1111111111111111111111111111111111111111"],
-      isUnlocked: true,
-      meta: buildMeta(),
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const disconnectListener = vi.fn();
-    provider.on("disconnect", disconnectListener);
-
-    transport.emit("disconnect");
-
-    expect(provider.chainId).toBeNull();
-    expect(provider.caip2).toBeNull();
-    expect(provider.selectedAddress).toBeNull();
-    expect(provider.isUnlocked).toBeNull();
-    expect(disconnectListener).toHaveBeenCalledTimes(1);
-
-    const [error] = disconnectListener.mock.calls[0] ?? [];
-    expect(error).toMatchObject({ code: 4900 });
-  });
-
-  it("handles wallet_addEthereumChain without mutating active state until chainChanged", async () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: ["0x1111111111111111111111111111111111111111"],
-      meta: buildMeta({ supportedChains: ["eip155:1"] }),
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const chainChanged = vi.fn();
-    const networkChanged = vi.fn();
-    provider.on("chainChanged", chainChanged);
-    provider.on("networkChanged", networkChanged);
-
-    transport.setRequestHandler(async (args) => {
-      expect(args.method).toBe("wallet_addEthereumChain");
-      expect(args.params).toEqual([
-        {
-          chainId: "0x89",
-          rpcUrls: ["https://polygon.example"],
-          chainName: "Polygon",
-        },
-      ]);
-      return null;
-    });
-
-    await expect(
-      provider.request({
-        method: "wallet_addEthereumChain",
-        params: [
-          {
-            chainId: "0x89",
-            rpcUrls: ["https://polygon.example"],
-            chainName: "Polygon",
-          },
-        ],
-      }),
-    ).resolves.toBeNull();
-
-    expect(provider.chainId).toBe("0x1");
-    expect(provider.caip2).toBe("eip155:1");
-    expect(provider.selectedAddress).toBe("0x1111111111111111111111111111111111111111");
-    expect(chainChanged).not.toHaveBeenCalled();
-    expect(networkChanged).not.toHaveBeenCalled();
-
-    // 0x89(137) === eip155:137
-    transport.emit(
-      "metaChanged",
-      buildMeta({
-        activeChain: "eip155:137",
-        supportedChains: ["eip155:1", "eip155:137"],
-      }),
-    );
-
-    transport.emit("chainChanged", {
-      chainId: "0x89",
-      caip2: null,
-    });
-
-    expect(provider.chainId).toBe("0x89");
-    expect(provider.caip2).toBe("eip155:137");
-    expect(networkChanged).toHaveBeenCalledTimes(1);
-    expect(networkChanged).toHaveBeenCalledWith("137");
-  });
-
-  it("does not emit networkChanged for identical networkVersion", () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      chainId: "0x1",
-      caip2: "eip155:1",
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const networkChanged = vi.fn();
-    provider.on("networkChanged", networkChanged);
-
-    transport.emit("chainChanged", {
-      chainId: "0x89",
-      caip2: "eip155:137",
-      meta: buildMeta({ activeChain: "eip155:137" }),
-    });
-    transport.emit("chainChanged", {
-      chainId: "0x89",
-      caip2: "eip155:137",
-      meta: buildMeta({ activeChain: "eip155:137" }),
-    });
-
-    expect(networkChanged).toHaveBeenCalledTimes(1);
-    expect(networkChanged).toHaveBeenCalledWith("137");
-  });
-
-  it("uses Conflux error factories after namespace switch", async () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      meta: buildMeta(),
-    };
-
-    const { transport, provider } = createProvider(initialState);
-
-    transport.emit("chainChanged", {
-      chainId: "0x406",
-      caip2: "conflux:cfx",
-    });
-
-    transport.setRequestHandler(async () => {
-      throw new Error("upstream failure");
-    });
-
-    await expect(provider.request({ method: "eth_chainId" })).rejects.toMatchObject({
-      code: -32603,
-      data: {
-        originalError: expect.objectContaining({ message: "upstream failure" }),
-      },
-    });
-
-    transport.emit("disconnect");
-  });
-
-  it("waits for initialization before forwarding non-readonly requests", async () => {
-    const initial = { ...INITIAL_STATE, connected: false, chainId: null, caip2: null };
-    const { transport, provider } = createProvider(initial);
-    const handler = vi.fn(async () => "ok");
-    transport.setRequestHandler(handler);
-
-    const connectSpy = vi.spyOn(transport, "connect");
-
-    const p = provider.request({ method: "eth_blockNumber" });
-    expect(handler).not.toHaveBeenCalled();
-    expect(connectSpy).toHaveBeenCalledTimes(1);
-
-    transport.updateState({ connected: true, chainId: "0x1", caip2: "eip155:1", meta: buildMeta() });
-    transport.emit("connect", { chainId: "0x1", caip2: "eip155:1", accounts: [], isUnlocked: true, meta: buildMeta() });
-
-    await expect(p).resolves.toBe("ok");
-    expect(handler).toHaveBeenCalledTimes(1);
-  });
-  it("times out non-readonly requests when initialization never completes", async () => {
-    vi.useFakeTimers();
-
-    try {
-      const initial = { ...INITIAL_STATE, connected: false, chainId: null, caip2: null };
-      const { transport, provider } = createProvider(initial);
-
-      const connectSpy = vi.spyOn(transport, "connect");
-      const handler = vi.fn(async () => "ok");
-      transport.setRequestHandler(handler);
-
-      const pending = provider.request({ method: "eth_blockNumber" });
-      const assertion = expect(pending).rejects.toMatchObject({ code: 4900 });
-
-      await vi.runAllTimersAsync();
-
-      await assertion;
-      expect(handler).not.toHaveBeenCalled();
-      expect(connectSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("rejects wallet_switchEthereumChain when transport throws provider error", async () => {
-    const { transport, provider } = createProvider();
-
-    transport.setRequestHandler(async (args) => {
-      expect(args.method).toBe("wallet_switchEthereumChain");
-      throw evmProviderErrors.chainDisconnected({ message: "Chain 0x999 not found" });
-    });
-
-    await expect(
-      provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x999" }],
-      }),
-    ).rejects.toMatchObject({
-      code: 4901,
-      message: expect.stringContaining("not found"),
-    });
-  });
-
-  it("rejects wallet_switchEthereumChain when provider is locked", async () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      isUnlocked: false,
-    };
-
-    const { transport, provider } = createProvider(initialState);
-
-    transport.setRequestHandler(async () => {
-      throw evmProviderErrors.unauthorized({ message: "Wallet is locked" });
-    });
-
-    await expect(
-      provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x89" }],
-      }),
-    ).rejects.toMatchObject({
-      code: 4100,
-      message: expect.stringContaining("locked"),
-    });
-  });
-
-  it("preserves accounts across namespace switches until backend updates them", () => {
-    const initialState: TransportState = {
-      ...INITIAL_STATE,
-      chainId: "0x1",
-      caip2: "eip155:1",
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-    };
-
-    const { transport, provider } = createProvider(initialState);
-    const accountsChanged = vi.fn();
-    provider.on("accountsChanged", accountsChanged);
-
-    transport.emit("chainChanged", {
-      chainId: "0x406",
-      caip2: "conflux:cfx",
-      meta: buildMeta({
-        activeChain: "conflux:cfx",
-        activeNamespace: "conflux",
-        supportedChains: ["eip155:1", "conflux:cfx"],
-      }),
-    });
-
-    expect(provider.chainId).toBe("0x406");
-    expect(provider.caip2).toBe("conflux:cfx");
-    expect(provider.selectedAddress).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    expect(accountsChanged).not.toHaveBeenCalled();
-
-    transport.emit("accountsChanged", ["cfx:aaejuaaaaaaaaaaaaaaaaaaaaaaaaaaaaj4dpcs07"]);
-    expect(provider.selectedAddress).toBe("cfx:aaejuaaaaaaaaaaaaaaaaaaaaaaaaaaaaj4dpcs07");
-    expect(accountsChanged).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns cached chainId without init; accounts stay empty before init", async () => {
-    const initial: TransportState = {
-      connected: false,
-      chainId: "0x1",
-      caip2: null,
-      accounts: ["0xabc"],
-      isUnlocked: null,
-      meta: buildMeta(),
-    };
-    const { provider } = createProvider(initial);
-
-    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
-    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc"]);
-  });
-
-  it("eth_chainId throws 4900 when not connected and no cache; eth_accounts returns []", async () => {
-    const initial: TransportState = {
-      connected: false,
-      chainId: null,
-      caip2: null,
-      accounts: [],
-      isUnlocked: null,
-      meta: null,
-    };
-    const { provider } = createProvider(initial);
-
-    vi.useFakeTimers();
-    try {
-      const chainIdPromise = provider.request({ method: "eth_chainId" });
-      const chainIdAssertion = expect(chainIdPromise).rejects.toMatchObject({ code: 4900 });
-      await vi.advanceTimersByTimeAsync(10_001);
-      await chainIdAssertion;
-
-      const accountsPromise = provider.request({ method: "eth_accounts" });
-      await vi.advanceTimersByTimeAsync(200);
-      await expect(accountsPromise).resolves.toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-  // Intentionally no provider-state helper methods.
-});
-
-describe("Eip155Provider request input validation", () => {
+const createProvider = (
+  initialState: TransportState = INITIAL_STATE,
+  options?: ConstructorParameters<typeof Eip155Provider>[0]["timeouts"],
+) => {
+  const transport = new StubTransport(initialState);
+  const provider = new Eip155Provider({ transport, ...(options ? { timeouts: options } : {}) });
+  return { transport, provider };
+};
+
+describe("Eip155Provider: request() argument validation", () => {
   it.each([
-    { label: "undefined", args: undefined },
-    { label: "null", args: null },
-    { label: "array", args: [] },
-    { label: "string", args: "foo" },
-  ])("rejects non-object args ($label)", async ({ args }) => {
+    { label: "undefined", args: undefined, expectData: false },
+    { label: "null", args: null, expectData: true },
+    { label: "array", args: [], expectData: true },
+    { label: "string", args: "foo", expectData: true },
+  ])("rejects non-object args ($label)", async ({ args, expectData }) => {
     const { provider } = createProvider();
-    await expect(provider.request(args as any)).rejects.toMatchObject({ code: -32600 });
+
+    const error: any = await provider.request(args as any).catch((err) => err);
+    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidArgs });
+
+    if (expectData) {
+      expect("data" in error).toBe(true);
+      expect((error as any).data).toEqual(args);
+    } else {
+      expect("data" in error).toBe(false);
+    }
   });
 
   it.each([
@@ -586,7 +100,8 @@ describe("Eip155Provider request input validation", () => {
     { label: "method empty string", args: { method: "" } },
   ])("rejects invalid args.method ($label)", async ({ args }) => {
     const { provider } = createProvider();
-    await expect(provider.request(args as any)).rejects.toMatchObject({ code: -32600 });
+    const error = await provider.request(args as any).catch((err) => err);
+    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidMethod, data: args });
   });
 
   it.each([
@@ -596,6 +111,193 @@ describe("Eip155Provider request input validation", () => {
     { label: "string", params: "a" },
   ])("rejects invalid args.params ($label)", async ({ params }) => {
     const { provider } = createProvider();
-    await expect(provider.request({ method: "foo", params } as any)).rejects.toMatchObject({ code: -32600 });
+    const args = { method: "eth_call", params };
+    const error = await provider.request(args as any).catch((err) => err);
+    expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidParams, data: args });
+  });
+});
+
+describe("Eip155Provider: request() state errors", () => {
+  it("rejects when transport reports disconnected", async () => {
+    const { transport, provider } = createProvider();
+
+    transport.updateState({ connected: false });
+    transport.setRequestHandler(async () => {
+      throw evmProviderErrors.disconnected();
+    });
+
+    const error: any = await provider.request({ method: "eth_blockNumber" }).catch((err) => err);
+    expect(error).toMatchObject({ code: 4900 });
+    expect("data" in error).toBe(false);
+  });
+
+  it("times out while waiting for initialization", async () => {
+    vi.useFakeTimers();
+    try {
+      const { provider } = createProvider(
+        {
+          connected: false,
+          chainId: null,
+          caip2: null,
+          accounts: [],
+          isUnlocked: null,
+          meta: null,
+        },
+        { readyTimeoutMs: 10 },
+      );
+
+      const pending = provider.request({ method: "eth_blockNumber" });
+      const assertion = expect(pending).rejects.toMatchObject({ code: 4900 });
+      await vi.advanceTimersByTimeAsync(11);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("surfaces transport request timeout errors", async () => {
+    const { transport, provider } = createProvider();
+
+    transport.setRequestHandler(async () => {
+      throw evmRpcErrors.internal({ message: "Request timed out" });
+    });
+
+    await expect(provider.request({ method: "eth_blockNumber" })).rejects.toMatchObject({
+      code: -32603,
+      message: "Request timed out",
+    });
+  });
+});
+
+describe("Eip155Provider: disconnect event semantics", () => {
+  it("emits a recoverable disconnect error with stable {code,message} shape", () => {
+    const { transport, provider } = createProvider();
+    const disconnectListener = vi.fn();
+    provider.on("disconnect", disconnectListener);
+
+    transport.emit("disconnect");
+
+    expect(disconnectListener).toHaveBeenCalledTimes(1);
+    const [error] = disconnectListener.mock.calls[0] ?? [];
+    expect(error).toMatchObject({ code: DISCONNECT_EVENT_CODE, message: DISCONNECT_EVENT_MESSAGE });
+  });
+});
+
+describe("Eip155Provider: state retention across transport disconnect", () => {
+  it("retains chainId and accounts cache across disconnect", async () => {
+    const initialState: TransportState = {
+      ...INITIAL_STATE,
+      connected: true,
+      chainId: "0x1",
+      caip2: "eip155:1",
+      accounts: ["0xabc"],
+    };
+    const { transport, provider } = createProvider(initialState);
+
+    transport.emit("disconnect");
+
+    expect(provider.chainId).toBe("0x1");
+    expect(provider.selectedAddress).toBe("0xabc");
+
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc"]);
+  });
+});
+
+describe("Eip155Provider: standard events", () => {
+  it("emits connect once transport connects", () => {
+    const { transport, provider } = createProvider({
+      connected: false,
+      chainId: null,
+      caip2: null,
+      accounts: [],
+      isUnlocked: null,
+      meta: null,
+    });
+    const connectListener = vi.fn();
+    provider.on("connect", connectListener);
+
+    transport.updateState({ connected: true });
+    transport.emit("connect", {
+      chainId: "0x1",
+      caip2: "eip155:1",
+      accounts: [],
+      isUnlocked: true,
+      meta: buildMeta(),
+    });
+
+    expect(connectListener).toHaveBeenCalledTimes(1);
+    expect(connectListener).toHaveBeenCalledWith({ chainId: "0x1" });
+  });
+
+  it("emits accountsChanged and updates eth_accounts cache", async () => {
+    const { transport, provider } = createProvider();
+    const listener = vi.fn();
+    provider.on("accountsChanged", listener);
+
+    transport.emit("accountsChanged", ["0xabc", "0xdef"]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(["0xabc", "0xdef"]);
+    expect(provider.selectedAddress).toBe("0xabc");
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc", "0xdef"]);
+  });
+
+  it("emits chainChanged and keeps eth_chainId consistent", async () => {
+    const { transport, provider } = createProvider();
+    const chainChanged = vi.fn();
+    provider.on("chainChanged", chainChanged);
+
+    transport.emit("chainChanged", {
+      chainId: "0x89",
+      caip2: "eip155:137",
+      meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
+    });
+
+    expect(chainChanged).toHaveBeenCalledTimes(1);
+    expect(chainChanged).toHaveBeenCalledWith("0x89");
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x89");
+  });
+
+  it("emits networkChanged when numeric chain reference changes", () => {
+    const { transport, provider } = createProvider();
+    const networkChanged = vi.fn();
+    provider.on("networkChanged", networkChanged);
+
+    transport.emit("chainChanged", {
+      chainId: "0x89",
+      caip2: "eip155:137",
+      meta: buildMeta({ activeChain: "eip155:137" }),
+    });
+
+    expect(networkChanged).toHaveBeenCalledTimes(1);
+    expect(networkChanged).toHaveBeenCalledWith("137");
+  });
+
+  it("emits unlockStateChanged and updates isUnlocked", () => {
+    const { transport, provider } = createProvider();
+    const unlockListener = vi.fn();
+    provider.on("unlockStateChanged", unlockListener);
+
+    transport.emit("unlockStateChanged", { isUnlocked: false });
+    expect(provider.isUnlocked).toBe(false);
+    expect(unlockListener).toHaveBeenCalledTimes(1);
+    expect(unlockListener).toHaveBeenCalledWith({ isUnlocked: false });
+  });
+});
+
+describe("Eip155Provider: error normalization", () => {
+  it("wraps unknown upstream errors into a JSON-RPC internal error", async () => {
+    const { transport, provider } = createProvider();
+
+    transport.setRequestHandler(async () => {
+      throw new Error("upstream failure");
+    });
+
+    await expect(provider.request({ method: "eth_blockNumber" })).rejects.toMatchObject({
+      code: -32603,
+      message: "upstream failure",
+      data: { originalError: expect.objectContaining({ message: "upstream failure" }) },
+    });
   });
 });

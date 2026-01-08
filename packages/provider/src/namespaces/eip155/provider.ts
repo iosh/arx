@@ -12,8 +12,10 @@ import {
   DEFAULT_READONLY_METHODS,
   DEFAULT_READONLY_TIMEOUT_MS,
   DEFAULT_READY_TIMEOUT_MS,
+  DISCONNECT_EVENT_CODE,
+  DISCONNECT_EVENT_MESSAGE,
   PROVIDER_INFO,
-  READONLY_EARLY,
+  REQUEST_VALIDATION_MESSAGES,
 } from "./constants.js";
 import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot, type ProviderStateSnapshot } from "./state.js";
 
@@ -53,6 +55,9 @@ export type Eip155ProviderOptions = {
 };
 
 type ApplyOptions = { emit?: boolean };
+
+const createDisconnectError = (): EIP1193ProviderRpcError =>
+  Object.assign(new Error(DISCONNECT_EVENT_MESSAGE), { code: DISCONNECT_EVENT_CODE });
 
 export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #transport: Transport;
@@ -156,13 +161,11 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
       return this.#state.accounts;
     }
 
-    if (!this.#initialized && READONLY_EARLY.has(method)) {
-      if (method === "eth_chainId") {
-        if (this.chainId) return this.chainId;
-        await this.#waitReady();
-        if (this.chainId) return this.chainId;
-        throw providerErrors.disconnected();
-      }
+    if (method === "eth_chainId") {
+      if (this.chainId) return this.chainId;
+      await this.#waitReady();
+      if (this.chainId) return this.chainId;
+      throw providerErrors.disconnected();
     }
 
     if (!this.#initialized) {
@@ -292,22 +295,22 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     const rpcErrors = evmRpcErrors;
     if (!args || typeof args !== "object" || Array.isArray(args)) {
       throw rpcErrors.invalidRequest({
-        message: "Invalid request arguments",
-        data: { args },
+        message: REQUEST_VALIDATION_MESSAGES.invalidArgs,
+        data: args,
       });
     }
 
     const { method, params } = args;
     if (typeof method !== "string" || method.length === 0) {
       throw rpcErrors.invalidRequest({
-        message: "Invalid request method",
-        data: { args },
+        message: REQUEST_VALIDATION_MESSAGES.invalidMethod,
+        data: args,
       });
     }
     if (params !== undefined && !Array.isArray(params) && (typeof params !== "object" || params === null)) {
       throw rpcErrors.invalidRequest({
-        message: "Invalid request params",
-        data: { args },
+        message: REQUEST_VALIDATION_MESSAGES.invalidParams,
+        data: args,
       });
     }
 
@@ -484,12 +487,11 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    const disconnectError = error ?? evmProviderErrors.disconnected();
+    const readinessError = error ?? evmProviderErrors.disconnected();
 
-    this.#restartReady(disconnectError);
-    this.#state.reset();
+    this.#restartReady(readinessError);
 
-    this.emit("disconnect", disconnectError);
+    this.emit("disconnect", createDisconnectError());
   };
 
   #startConnect() {

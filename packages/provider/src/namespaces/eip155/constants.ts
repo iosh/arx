@@ -9,6 +9,16 @@ export const PROVIDER_INFO = {
 
 export const READONLY_EARLY = new Set(["eth_chainId", "eth_accounts"]);
 
+export const REQUEST_VALIDATION_MESSAGES = {
+  invalidArgs: "Expected a single, non-array, object argument.",
+  invalidMethod: "'args.method' must be a non-empty string.",
+  invalidParams: "'args.params' must be an object or array if provided.",
+} as const;
+
+// CloseEvent status code used by widely-compatible providers for recoverable disconnects.
+export const DISCONNECT_EVENT_CODE = 1013;
+export const DISCONNECT_EVENT_MESSAGE = "Disconnected from chain. Attempting to connect.";
+
 export const DEFAULT_APPROVAL_TIMEOUT_MS = 10 * 60_000;
 export const DEFAULT_NORMAL_TIMEOUT_MS = 120_000;
 export const DEFAULT_READONLY_TIMEOUT_MS = 60_000;

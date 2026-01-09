@@ -60,66 +60,206 @@ const INITIAL_STATE: TransportState = {
   meta: buildMeta(),
 };
 
-describe("createEip155InjectedProvider hardening", () => {
-  it("exposes MetaMask compatibility shims and blocks mutation", async () => {
-    const transport = new StubTransport(INITIAL_STATE);
+const PROTECTED_KEYS = [
+  "request",
+  "send",
+  "sendAsync",
+  "on",
+  "removeListener",
+  "removeAllListeners",
+  "enable",
+  "wallet_getPermissions",
+  "wallet_requestPermissions",
+  "chainId",
+  "networkVersion",
+  "selectedAddress",
+  "isMetaMask",
+  "_metamask",
+] as const;
+
+describe("createEip155InjectedProvider", () => {
+  const createInjected = (initialState: TransportState = INITIAL_STATE) => {
+    const transport = new StubTransport(initialState);
     const raw = new Eip155Provider({ transport });
     const injected = createEip155InjectedProvider(raw) as any;
+    return { transport, raw, injected };
+  };
 
-    expect(injected.isMetaMask).toBe(true);
-    expect(await injected._metamask.isUnlocked()).toBe(true);
+  const restorePrototypeProperty = (property: string, prev: PropertyDescriptor | undefined) => {
+    if (prev) {
+      Object.defineProperty(Object.prototype, property, prev);
+      return;
+    }
 
-    const isMetaMaskDesc = Object.getOwnPropertyDescriptor(injected, "isMetaMask");
-    expect(isMetaMaskDesc).toMatchObject({ enumerable: true, value: true, writable: false });
+    delete (Object.prototype as any)[property];
+  };
 
-    const metamaskDesc = Object.getOwnPropertyDescriptor(injected, "_metamask");
-    expect(metamaskDesc).toMatchObject({ enumerable: false, writable: false });
+  describe("compatibility shims", () => {
+    it("exposes isMetaMask/_metamask and legacy read-only fields", async () => {
+      const { injected } = createInjected();
 
-    injected.isMetaMask = false;
-    expect(injected.isMetaMask).toBe(true);
+      expect(injected.isMetaMask).toBe(true);
+      expect(await injected._metamask.isUnlocked()).toBe(true);
 
-    Object.defineProperty(injected, "isMetaMask", { value: false });
-    expect(injected.isMetaMask).toBe(true);
+      expect(injected.selectedAddress).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      expect(injected.chainId).toBe("0x1");
+      expect(injected.networkVersion).toBe("1");
 
-    delete injected.isMetaMask;
-    expect(injected.isMetaMask).toBe(true);
-  });
+      expect(Object.getOwnPropertyDescriptor(injected, "selectedAddress")).toMatchObject({
+        configurable: true,
+        enumerable: true,
+      });
+      expect(Object.getOwnPropertyDescriptor(injected, "chainId")).toMatchObject({
+        configurable: true,
+        enumerable: true,
+      });
+      expect(Object.getOwnPropertyDescriptor(injected, "networkVersion")).toMatchObject({
+        configurable: true,
+        enumerable: true,
+      });
 
-  it("protects wallet_getPermissions and wallet_requestPermissions from dapp overrides", async () => {
-    const transport = new StubTransport(INITIAL_STATE);
-    const raw = new Eip155Provider({ transport });
-    const injected = createEip155InjectedProvider(raw) as any;
-
-    const handler = vi.fn(async ({ method }: RequestArguments) => {
-      if (method === "wallet_getPermissions") return [{ parentCapability: "eth_accounts" }];
-      if (method === "wallet_requestPermissions") return [{ parentCapability: "eth_accounts" }];
-      throw new Error(`unexpected method ${method}`);
+      expect(Object.getOwnPropertyDescriptor(injected, "isMetaMask")).toMatchObject({
+        configurable: true,
+        enumerable: true,
+        value: true,
+        writable: false,
+      });
+      expect(Object.getOwnPropertyDescriptor(injected, "_metamask")).toMatchObject({
+        configurable: true,
+        enumerable: false,
+        writable: false,
+      });
     });
-    transport.setRequestHandler(handler);
 
-    const evil = vi.fn(async () => "evil");
-    injected.wallet_getPermissions = evil;
-    injected.wallet_requestPermissions = evil;
+    it("keeps selectedAddress/chainId/networkVersion in sync with provider state", () => {
+      const { transport, injected } = createInjected();
 
-    await expect(injected.wallet_getPermissions()).resolves.toEqual([{ parentCapability: "eth_accounts" }]);
-    await expect(injected.wallet_requestPermissions([{ eth_accounts: {} }])).resolves.toEqual([
-      { parentCapability: "eth_accounts" },
-    ]);
+      transport.emit("accountsChanged", ["0xabc"]);
+      expect(injected.selectedAddress).toBe("0xabc");
 
-    expect(evil).not.toHaveBeenCalled();
-    expect(handler).toHaveBeenCalledWith({ method: "wallet_getPermissions" });
-    expect(handler).toHaveBeenCalledWith({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+      transport.emit("chainChanged", {
+        chainId: "0x89",
+        caip2: "eip155:137",
+        meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
+      });
+      expect(injected.chainId).toBe("0x89");
+      expect(injected.networkVersion).toBe("137");
+    });
+
+    it("reports injected properties via the `in` operator (feature detection)", () => {
+      const { injected } = createInjected();
+
+      // dApps frequently use `in` for feature detection and compatibility checks.
+      expect("chainId" in injected).toBe(true);
+      expect("networkVersion" in injected).toBe(true);
+      expect("selectedAddress" in injected).toBe(true);
+      expect("isMetaMask" in injected).toBe(true);
+      expect("_metamask" in injected).toBe(true);
+    });
   });
 
-  it("reports injected properties via the `in` operator", () => {
-    const transport = new StubTransport(INITIAL_STATE);
-    const raw = new Eip155Provider({ transport });
-    const injected = createEip155InjectedProvider(raw) as any;
+  describe("hardening against dapp-side mutation", () => {
+    it.each(PROTECTED_KEYS)("rejects mutation attempts for %s (read-only)", (key) => {
+      const { injected } = createInjected();
 
-    expect("chainId" in injected).toBe(true);
-    expect("networkVersion" in injected).toBe(true);
-    expect("selectedAddress" in injected).toBe(true);
-    expect("isMetaMask" in injected).toBe(true);
-    expect("_metamask" in injected).toBe(true);
+      expect(() => {
+        injected[key] = "evil";
+      }).toThrow(TypeError);
+      expect(() => Object.defineProperty(injected, key, { value: "evil" })).toThrow(TypeError);
+      expect(() => {
+        delete injected[key];
+      }).toThrow(TypeError);
+    });
+
+    it("protects wallet_getPermissions and wallet_requestPermissions from dapp overrides (injected helpers)", async () => {
+      const { transport, injected } = createInjected();
+
+      // These methods are injected by the Proxy (they are not part of the provider's own API surface).
+      // Verify they cannot be overridden and still route correctly through request().
+      const handler = vi.fn(async ({ method }: RequestArguments) => {
+        if (method === "wallet_getPermissions") return [{ parentCapability: "eth_accounts" }];
+        if (method === "wallet_requestPermissions") return [{ parentCapability: "eth_accounts" }];
+        throw new Error(`unexpected method ${method}`);
+      });
+      transport.setRequestHandler(handler);
+
+      const attemptedOverride = vi.fn(async () => "evil");
+      expect(() => {
+        injected.wallet_getPermissions = attemptedOverride;
+      }).toThrow(TypeError);
+      expect(() => {
+        injected.wallet_requestPermissions = attemptedOverride;
+      }).toThrow(TypeError);
+
+      await expect(injected.wallet_getPermissions()).resolves.toEqual([{ parentCapability: "eth_accounts" }]);
+      await expect(injected.wallet_requestPermissions([{ eth_accounts: {} }])).resolves.toEqual([
+        { parentCapability: "eth_accounts" },
+      ]);
+
+      expect(attemptedOverride).not.toHaveBeenCalled();
+      expect(handler).toHaveBeenCalledWith({ method: "wallet_getPermissions" });
+      expect(handler).toHaveBeenCalledWith({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+    });
+  });
+
+  describe("hardening against prototype pollution", () => {
+    it("ignores Object.prototype pollution for injected shims", async () => {
+      const { injected } = createInjected();
+
+      const prevIsMetaMask = Object.getOwnPropertyDescriptor(Object.prototype, "isMetaMask");
+      const prevMetamask = Object.getOwnPropertyDescriptor(Object.prototype, "_metamask");
+
+      try {
+        Object.defineProperty(Object.prototype, "isMetaMask", {
+          configurable: true,
+          get: () => {
+            throw new Error("polluted isMetaMask getter should not run");
+          },
+        });
+        Object.defineProperty(Object.prototype, "_metamask", {
+          configurable: true,
+          get: () => {
+            throw new Error("polluted _metamask getter should not run");
+          },
+        });
+
+        expect(injected.isMetaMask).toBe(true);
+        expect(await injected._metamask.isUnlocked()).toBe(true);
+      } finally {
+        restorePrototypeProperty("isMetaMask", prevIsMetaMask);
+        restorePrototypeProperty("_metamask", prevMetamask);
+      }
+    });
+
+    it("ignores Object.prototype pollution for core provider methods", () => {
+      const { injected } = createInjected();
+
+      const coreKeys = ["request", "send", "sendAsync", "on", "removeListener", "removeAllListeners"] as const;
+      const prev = Object.fromEntries(
+        coreKeys.map((key) => [key, Object.getOwnPropertyDescriptor(Object.prototype, key)]),
+      ) as Record<(typeof coreKeys)[number], PropertyDescriptor | undefined>;
+
+      try {
+        for (const key of coreKeys) {
+          Object.defineProperty(Object.prototype, key, {
+            configurable: true,
+            get: () => {
+              throw new Error(`polluted ${key} getter should not run`);
+            },
+          });
+        }
+
+        expect(typeof injected.request).toBe("function");
+        expect(typeof injected.send).toBe("function");
+        expect(typeof injected.sendAsync).toBe("function");
+        expect(typeof injected.on).toBe("function");
+        expect(typeof injected.removeListener).toBe("function");
+        expect(typeof injected.removeAllListeners).toBe("function");
+      } finally {
+        for (const key of coreKeys) {
+          restorePrototypeProperty(key, prev[key]);
+        }
+      }
+    });
   });
 });

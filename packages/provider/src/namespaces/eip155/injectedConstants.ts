@@ -1,0 +1,16 @@
+export const EIP155_INJECTED_PROTECTED_KEYS = [
+  "request",
+  "send",
+  "sendAsync",
+  "on",
+  "removeListener",
+  "removeAllListeners",
+  "enable",
+  "wallet_getPermissions",
+  "wallet_requestPermissions",
+  "chainId",
+  "networkVersion",
+  "selectedAddress",
+  "isMetaMask",
+  "_metamask",
+] as const;

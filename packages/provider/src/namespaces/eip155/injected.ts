@@ -1,27 +1,15 @@
 import type { RequestArguments } from "../../types/eip1193.js";
+import { EIP155_INJECTED_PROTECTED_KEYS } from "./injectedConstants.js";
 import type { Eip155Provider } from "./provider.js";
 
-const PROTECTED_KEYS = new Set<PropertyKey>([
-  "request",
-  "send",
-  "sendAsync",
-  "on",
-  "removeListener",
-  "removeAllListeners",
-  "enable",
-  "wallet_getPermissions",
-  "wallet_requestPermissions",
-  "chainId",
-  "networkVersion",
-  "selectedAddress",
-  "isMetaMask",
-  "_metamask",
-]);
+const PROTECTED_KEYS = new Set<PropertyKey>(EIP155_INJECTED_PROTECTED_KEYS);
 
 // Injected provider surface for `window.ethereum`.
-// Keeps MetaMask-compatible shims and hardens against dapp-side mutation.
+// Keeps compatibility shims and hardens against dapp-side mutation.
 export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Provider => {
   const getNetworkVersion = () => target.getProviderState().networkVersion;
+  // Always read values with `instance` as receiver so getters can access private fields safely.
+  // (If a getter uses `#private`, using the Proxy as receiver would throw.)
   const getInjectedProperty = (instance: Eip155Provider, property: PropertyKey) =>
     Reflect.get(instance, property, instance);
 
@@ -69,15 +57,19 @@ export const createEip155InjectedProvider = (target: Eip155Provider): Eip155Prov
       return property in instance;
     },
     set: (instance, property, value) => {
-      if (PROTECTED_KEYS.has(property)) return true;
+      // Enforce a read-only injected surface by reporting a failed assignment.
+      // In strict mode, this becomes a TypeError (matching common ecosystem expectations).
+      if (PROTECTED_KEYS.has(property)) return false;
       return Reflect.set(instance, property, value, instance);
     },
     defineProperty: (instance, property, descriptor) => {
-      if (PROTECTED_KEYS.has(property)) return true;
+      // Enforce read-only semantics for protected keys.
+      if (PROTECTED_KEYS.has(property)) return false;
       return Reflect.defineProperty(instance, property, descriptor);
     },
     deleteProperty: (instance, property) => {
-      if (PROTECTED_KEYS.has(property)) return true;
+      // Enforce read-only semantics for protected keys.
+      if (PROTECTED_KEYS.has(property)) return false;
       return Reflect.deleteProperty(instance, property);
     },
     getOwnPropertyDescriptor: (instance, property) => {

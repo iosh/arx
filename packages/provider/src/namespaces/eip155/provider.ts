@@ -383,6 +383,9 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
       this.#initializedResolve = resolve;
       this.#initializedReject = reject;
     });
+    // This promise may be rejected on transport disconnect even when no consumer is awaiting it.
+    // Attach a no-op handler to prevent noisy unhandled rejection warnings in host environments/tests.
+    void this.#initializedPromise.catch(() => {});
   }
 
   #syncWithTransportState() {

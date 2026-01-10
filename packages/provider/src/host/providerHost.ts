@@ -154,9 +154,12 @@ export class ProviderHost {
     const evmEntry = this.#providers.get(EIP155_NAMESPACE);
     if (!evmEntry) return;
 
+    const info = Object.freeze({ ...evmEntry.info });
+    const detail = Object.freeze({ info, provider: evmEntry.proxy });
+
     this.#targetWindow.dispatchEvent(
       new this.#targetWindow.CustomEvent("eip6963:announceProvider", {
-        detail: { info: evmEntry.info, provider: evmEntry.proxy },
+        detail,
       }),
     );
   }
@@ -168,14 +171,24 @@ export class ProviderHost {
     const hasProvider = Object.hasOwn(hostWindow, WINDOW_ETH_PROP);
     if (hasProvider) return;
 
-    Object.defineProperty(hostWindow, WINDOW_ETH_PROP, {
-      configurable: true,
-      enumerable: false,
-      value: proxy,
-      writable: false,
-    });
+    try {
+      Object.defineProperty(hostWindow, WINDOW_ETH_PROP, {
+        configurable: true,
+        enumerable: false,
+        value: proxy,
+        writable: false,
+      });
+    } catch {
+      try {
+        (hostWindow as unknown as Record<string, unknown>)[WINDOW_ETH_PROP] = proxy;
+      } catch {
+        // Best-effort: do not throw if the window is locked down by another wallet / environment.
+      }
+    }
 
-    this.#injectedEthereum = proxy;
+    if ((hostWindow as unknown as Record<string, unknown>)[WINDOW_ETH_PROP] === proxy) {
+      this.#injectedEthereum = proxy;
+    }
   }
 
   #handleTransportConnect = () => {

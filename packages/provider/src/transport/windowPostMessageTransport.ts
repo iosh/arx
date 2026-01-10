@@ -173,6 +173,9 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
       this.#handshakeResolve = resolve;
       this.#handshakeReject = reject;
     });
+    // Consumers may trigger background connect attempts (e.g. fire-and-forget).
+    // Always attach a rejection handler to avoid noisy unhandled rejections.
+    void this.#handshakePromise.catch(() => {});
 
     this.#handshakeTimeoutId = window.setTimeout(() => {
       const providerErrors = evmProviderErrors;
@@ -274,6 +277,10 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
 
   #rejectHandshake(error?: unknown) {
     if (!this.#handshakePromise) return;
+
+    // Ensure handshake promise rejections never surface as unhandled rejections
+    // (e.g. test teardown destroying a still-connecting transport).
+    void this.#handshakePromise.catch(() => {});
 
     this.#clearHandshakeTimeout();
     this.#handshakeReject?.(error);

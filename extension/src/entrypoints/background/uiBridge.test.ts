@@ -7,9 +7,15 @@ import type {
 } from "@arx/core";
 import { ApprovalTypes, ArxReasons, arxError, KeyringService } from "@arx/core";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
-import { UI_CHANNEL, type UiMessage } from "@arx/core/ui";
+import {
+  UI_CHANNEL,
+  UI_EVENT_SNAPSHOT_CHANGED,
+  type UiMethodName,
+  type UiMethodParams,
+  type UiPortEnvelope,
+  type UiSnapshot,
+} from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type browserDefaultType from "webextension-polyfill";
 import { createUiBridge } from "./uiBridge";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -304,7 +310,7 @@ const createControllers = () => {
     },
   };
   const permissions = {
-    getState: () => ({}),
+    getState: () => ({ origins: {} }),
   };
   const networkListeners = new Set<() => void>();
   const network = {
@@ -338,6 +344,7 @@ const createControllers = () => {
     signers,
   } as unknown as HandlerControllers;
 };
+
 type MockBrowserApi = {
   runtime: { getURL: (p: string) => string };
   tabs: {
@@ -349,6 +356,7 @@ type MockBrowserApi = {
     update: ReturnType<typeof vi.fn>;
   };
 };
+
 const makeBrowser = (): MockBrowserApi => {
   return {
     runtime: { getURL: (p: string) => `ext://${p}` },
@@ -392,6 +400,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
     ],
   });
   keyring.attach();
+
   const approvalsController = createApprovalsController();
   const controllers = createControllers();
   (controllers as any).accounts = accountsController;
@@ -403,23 +412,32 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
       getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext }),
       initialize: async (_params: { password: string }) => {
         hasCiphertext = true;
-        return new Uint8Array();
+        return {
+          version: 1,
+          algorithm: "pbkdf2-sha256",
+          salt: "salt",
+          iterations: 1,
+          iv: "iv",
+          cipher: "cipher",
+          createdAt: Date.now(),
+        };
       },
-
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
   } as unknown as BackgroundSessionServices;
+
   const browserApi = makeBrowser();
+  const persistVaultMeta = vi.fn(async () => {});
   const bridge = createUiBridge({
     browser: browserApi as any,
     controllers,
     session,
-    persistVaultMeta: async () => {},
+    persistVaultMeta,
     keyring,
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
   });
 
-  return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi };
+  return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi, persistVaultMeta };
 };
 
 const createPort = () => new FakePort();
@@ -429,10 +447,19 @@ const expectError = (msg: any, reason: string) => {
   expect(msg?.error?.reason).toBe(reason);
 };
 
-const expectResponse = (msg: any, requestId: string) => {
+const expectResponse = (msg: any, id: string) => {
   expect(msg?.type).toBe("ui:response");
-  expect(msg?.requestId).toBe(requestId);
+  expect(msg?.id).toBe(id);
   return msg?.result;
+};
+
+const latestSnapshotFromMessages = (messages: unknown[]) => {
+  const events = messages.filter(
+    (m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED,
+  ) as any[];
+  const last = events[events.length - 1];
+  expect(last).toBeTruthy();
+  return last.payload as UiSnapshot;
 };
 
 describe("uiBridge", () => {
@@ -459,104 +486,72 @@ describe("uiBridge", () => {
     port.messages = []; // drop initial snapshot
   });
 
-  const send = async (payload: UiMessage) => {
-    const requestId = crypto.randomUUID();
-    await port.triggerMessage({ type: "ui:request", requestId, payload });
-    const message = port.messages.find((m: any) => m.requestId === requestId);
-    return { envelope: message as any, requestId };
+  const send = async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>) => {
+    const id = crypto.randomUUID();
+    const envelope: UiPortEnvelope = { type: "ui:request", id, method, params };
+    await port.triggerMessage(envelope);
+    const message = port.messages.find((m: any) => m?.id === id && (m?.type === "ui:response" || m?.type === "ui:error"));
+    return { envelope: message as any, id };
   };
 
   it("rejects when locked", async () => {
     unlock.setUnlocked(false);
     vault.setUnlocked(false);
 
-    const { envelope } = await send({ type: "ui:generateMnemonic", payload: { wordCount: 12 } } as UiMessage);
+    const { envelope } = await send("ui.keyrings.generateMnemonic", { wordCount: 12 });
     expectError(envelope, ArxReasons.SessionLocked);
   });
 
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
-    const { envelope } = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words: ["foo", "bar"], alias: "bad" },
-    } as UiMessage);
+    const words = Array.from({ length: 12 }, () => "foo");
+    const { envelope } = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "bad" } as any);
     expectError(envelope, ArxReasons.KeyringInvalidMnemonic);
   });
 
   it("maps duplicate mnemonic to keyring/duplicate_account", async () => {
     const words = TEST_MNEMONIC.split(" ");
-    const first = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words, alias: "first" },
-    } as UiMessage);
-    expectResponse(first.envelope, first.requestId);
+    const first = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "first" });
+    expectResponse(first.envelope, first.id);
 
-    const second = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words, alias: "dup" },
-    } as UiMessage);
+    const second = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "dup" });
     expectError(second.envelope, ArxReasons.KeyringDuplicateAccount);
   });
 
   it("happy path: derive, hide/unhide, export", async () => {
     const words = TEST_MNEMONIC.split(" ");
-    const createRes = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words, alias: "main" },
-    } as UiMessage);
-    const createResult = expectResponse(createRes.envelope, createRes.requestId) as {
-      keyringId: string;
-      address: string;
-    };
+    const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
+    const createResult = expectResponse(createRes.envelope, createRes.id) as { keyringId: string; address: string };
     const { keyringId, address } = createResult;
     expect(keyringId).toBeTruthy();
     expect(address).toMatch(/^0x/);
 
-    const deriveRes = await send({ type: "ui:deriveAccount", payload: { keyringId } } as UiMessage);
-    const derived = expectResponse(deriveRes.envelope, deriveRes.requestId) as {
-      address: string;
-      derivationIndex?: number;
-    };
+    const deriveRes = await send("ui.keyrings.deriveAccount", { keyringId });
+    const derived = expectResponse(deriveRes.envelope, deriveRes.id) as { address: string; derivationIndex?: number | null };
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 
-    const hideRes = await send({ type: "ui:hideHdAccount", payload: { address: derived.address } } as UiMessage);
-    expectResponse(hideRes.envelope, hideRes.requestId);
+    const hideRes = await send("ui.keyrings.hideHdAccount", { address: derived.address });
+    expectResponse(hideRes.envelope, hideRes.id);
 
-    const unhideRes = await send({ type: "ui:unhideHdAccount", payload: { address: derived.address } } as UiMessage);
-    expectResponse(unhideRes.envelope, unhideRes.requestId);
+    const unhideRes = await send("ui.keyrings.unhideHdAccount", { address: derived.address });
+    expectResponse(unhideRes.envelope, unhideRes.id);
 
-    const exportMnemonic = await send({
-      type: "ui:exportMnemonic",
-      payload: { keyringId, password: PASSWORD },
-    } as UiMessage);
-    const exported = expectResponse(exportMnemonic.envelope, exportMnemonic.requestId) as { words: string[] };
+    const exportMnemonic = await send("ui.keyrings.exportMnemonic", { keyringId, password: PASSWORD });
+    const exported = expectResponse(exportMnemonic.envelope, exportMnemonic.id) as { words: string[] };
     expect(exported.words.join(" ")).toBe(TEST_MNEMONIC);
 
-    const exportPk = await send({
-      type: "ui:exportPrivateKey",
-      payload: { address, password: PASSWORD },
-    } as UiMessage);
-    const pkResult = expectResponse(exportPk.envelope, exportPk.requestId) as { privateKey: string };
+    const exportPk = await send("ui.keyrings.exportPrivateKey", { address, password: PASSWORD });
+    const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
     expect(pkResult.privateKey.length).toBe(64);
   });
 
   it("requires valid password before exporting mnemonic", async () => {
     const words = TEST_MNEMONIC.split(" ");
-    const createRes = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words, alias: "main" },
-    } as UiMessage);
-    const { keyringId } = expectResponse(createRes.envelope, createRes.requestId) as {
-      keyringId: string;
-      address: string;
-    };
+    const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
+    const { keyringId } = expectResponse(createRes.envelope, createRes.id) as { keyringId: string };
 
     const spy = vi.spyOn(keyring, "exportMnemonic");
-    const exportAttempt = await send({
-      type: "ui:exportMnemonic",
-      payload: { keyringId, password: "wrong-password" },
-    } as UiMessage);
-
+    const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: "wrong-password" });
     expectError(exportAttempt.envelope, ArxReasons.VaultInvalidPassword);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
@@ -564,30 +559,21 @@ describe("uiBridge", () => {
 
   it("zeroizes private key buffers after export", async () => {
     const words = TEST_MNEMONIC.split(" ");
-    const createRes = await send({
-      type: "ui:confirmNewMnemonic",
-      payload: { words, alias: "main" },
-    } as UiMessage);
-    const createResult = expectResponse(createRes.envelope, createRes.requestId) as {
-      keyringId: string;
-      address: string;
-    };
+    const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
+    const createResult = expectResponse(createRes.envelope, createRes.id) as { keyringId: string; address: string };
 
-    const secret = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    const secret = new Uint8Array([0xde, 0xad, 0xbe, 0xef, ...new Uint8Array(28)]);
     const spy = vi.spyOn(keyring, "exportPrivateKeyByAddress").mockResolvedValue(secret);
 
-    const exportPk = await send({
-      type: "ui:exportPrivateKey",
-      payload: { address: createResult.address, password: PASSWORD },
-    } as UiMessage);
-    const pkResult = expectResponse(exportPk.envelope, exportPk.requestId) as { privateKey: string };
+    const exportPk = await send("ui.keyrings.exportPrivateKey", { address: createResult.address, password: PASSWORD });
+    const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
 
-    expect(pkResult.privateKey).toBe("deadbeef");
+    expect(pkResult.privateKey).toBe(`deadbeef${"00".repeat(28)}`);
     expect(Array.from(secret).every((byte) => byte === 0)).toBe(true);
     spy.mockRestore();
   });
 
-  it("emits ui:approvalsChanged when approvals queue changes", async () => {
+  it("emits snapshotChanged when approvals queue changes", async () => {
     const id = crypto.randomUUID();
     approvals.setPendingTasks([
       {
@@ -601,27 +587,25 @@ describe("uiBridge", () => {
       },
     ]);
 
-    const evt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:approvalsChanged") as any;
-    expect(evt).toBeTruthy();
-    expect(evt.payload).toHaveLength(1);
-    expect(evt.payload[0].id).toBe(id);
-    expect(evt.payload[0].type).toBe("requestAccounts");
+    const snapshot = latestSnapshotFromMessages(port.messages);
+    expect(snapshot.approvals).toHaveLength(1);
+    expect(snapshot.approvals[0].id).toBe(id);
+    expect(snapshot.approvals[0].type).toBe("requestAccounts");
   });
 
-  it("emits ui:unlocked after ui:unlock succeeds", async () => {
+  it("session.unlock triggers snapshotChanged with unlocked state", async () => {
     unlock.setUnlocked(false);
     vault.setUnlocked(false);
     port.messages = [];
 
-    const res = await send({ type: "ui:unlock", payload: { password: PASSWORD } } as UiMessage);
-    expectResponse(res.envelope, res.requestId);
+    const res = await send("ui.session.unlock", { password: PASSWORD });
+    expectResponse(res.envelope, res.id);
 
-    const evt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:unlocked") as any;
-    expect(evt).toBeTruthy();
-    expect(typeof evt.payload?.at).toBe("number");
+    const snapshot = latestSnapshotFromMessages(port.messages);
+    expect(snapshot.session.isUnlocked).toBe(true);
   });
 
-  it("vaultInitAndUnlock broadcasts only unlocked snapshot", async () => {
+  it("vault.initAndUnlock broadcasts only unlocked snapshot", async () => {
     const ctx = buildBridge({ unlocked: false, hasCiphertext: false });
     bridge = ctx.bridge;
     keyring = ctx.keyring;
@@ -638,56 +622,45 @@ describe("uiBridge", () => {
     unlock.setUnlocked(false);
     vault.setUnlocked(false);
 
-    const res = await send({ type: "ui:vaultInitAndUnlock", payload: { password: PASSWORD } } as UiMessage);
-    expectResponse(res.envelope, res.requestId);
+    const res = await send("ui.vault.initAndUnlock", { password: PASSWORD });
+    expectResponse(res.envelope, res.id);
 
-    const stateEvents = port.messages.filter(
-      (m: any) => m?.type === "ui:event" && m?.event === "ui:stateChanged",
+    const snapshotEvents = port.messages.filter(
+      (m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED,
     ) as any[];
-    expect(stateEvents.length).toBeGreaterThan(0);
+    expect(snapshotEvents.length).toBeGreaterThan(0);
 
-    // During init+unlock, other listeners can trigger additional stateChanged events (e.g. account hydration).
-    // The key guarantee is that UI should not observe an initialized-but-locked snapshot in between.
-    const hasInitializedButLocked = stateEvents.some(
+    const hasInitializedButLocked = snapshotEvents.some(
       (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === false,
     );
     expect(hasInitializedButLocked).toBe(false);
 
-    const hasInitializedAndUnlocked = stateEvents.some(
+    const hasInitializedAndUnlocked = snapshotEvents.some(
       (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === true,
     );
     expect(hasInitializedAndUnlocked).toBe(true);
-
-    const unlockedEvt = port.messages.find((m: any) => m?.type === "ui:event" && m?.event === "ui:unlocked") as any;
-    expect(unlockedEvt).toBeTruthy();
   });
 
-  it("openOnboardingTab: creates then debounces within cooldown", async () => {
+  it("onboarding.openTab: creates then debounces within cooldown", async () => {
     let t = 0;
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => t);
 
     runtimeBrowser.tabs.query.mockResolvedValueOnce([]);
     runtimeBrowser.tabs.create.mockResolvedValueOnce({ id: 1, windowId: 2 });
 
-    const first = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
-    expect(expectResponse(first.envelope, first.requestId)).toMatchObject({ activationPath: "create", tabId: 1 });
+    const first = await send("ui.onboarding.openTab", { reason: "manual_open" });
+    expect(expectResponse(first.envelope, first.id)).toMatchObject({ activationPath: "create", tabId: 1 });
     expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({ url: "ext://onboarding.html", active: true });
 
     t = 100;
-    const second = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
-    expect(expectResponse(second.envelope, second.requestId)).toMatchObject({ activationPath: "debounced", tabId: 1 });
+    const second = await send("ui.onboarding.openTab", { reason: "manual_open" });
+    expect(expectResponse(second.envelope, second.id)).toMatchObject({ activationPath: "debounced", tabId: 1 });
     expect(runtimeBrowser.tabs.create).toHaveBeenCalledTimes(1);
 
     nowSpy.mockRestore();
   });
 
-  it("openOnboardingTab: focuses existing tab via query fallback", async () => {
+  it("onboarding.openTab: focuses existing tab via query fallback", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
 
     runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: any) => {
@@ -695,12 +668,9 @@ describe("uiBridge", () => {
       return [{ id: 7, windowId: 8, url: "ext://onboarding.html" }];
     });
 
-    const res = await send({
-      type: "ui:openOnboardingTab",
-      payload: { reason: "manual_open" },
-    } as UiMessage);
+    const res = await send("ui.onboarding.openTab", { reason: "manual_open" });
 
-    expect(expectResponse(res.envelope, res.requestId)).toMatchObject({ activationPath: "focus", tabId: 7 });
+    expect(expectResponse(res.envelope, res.id)).toMatchObject({ activationPath: "focus", tabId: 7 });
     expect(runtimeBrowser.tabs.update).toHaveBeenCalledWith(7, { active: true });
     expect(runtimeBrowser.windows.update).toHaveBeenCalledWith(8, { focused: true });
     expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();

@@ -5,10 +5,15 @@ import { ROUTES } from "./routes";
 type SnapshotLike = {
   vault: { initialized: boolean };
   accounts: { totalCount: number };
+  session: { isUnlocked: boolean };
 };
 
 export function needsOnboarding(snapshot: SnapshotLike): boolean {
-  return !snapshot.vault.initialized || (snapshot.accounts.totalCount ?? 0) === 0;
+  if (!snapshot.vault.initialized) return true;
+  // When locked we may not have access to account state; treat onboarding as unknown
+  // and avoid forcing onboarding routes (SessionGate will prompt for unlock).
+  if (!snapshot.session.isUnlocked) return false;
+  return (snapshot.accounts.totalCount ?? 0) === 0;
 }
 
 export type RootBeforeLoadDecision =
@@ -44,10 +49,13 @@ export function decideRootBeforeLoad(params: {
   if (entryIntent === "onboarding_tab") {
     const target = !snapshot.vault.initialized
       ? ROUTES.WELCOME
-      : hasAccounts
-        ? ROUTES.ONBOARDING_COMPLETE
-        : ROUTES.ONBOARDING_GENERATE;
+      : !snapshot.session.isUnlocked
+        ? ROUTES.HOME
+        : hasAccounts
+          ? ROUTES.ONBOARDING_COMPLETE
+          : ROUTES.ONBOARDING_GENERATE;
 
+    if (pathname === target) return { type: "allow" };
     return { type: "redirect", to: target, replace: true };
   }
 

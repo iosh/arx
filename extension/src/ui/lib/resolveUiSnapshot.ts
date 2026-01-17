@@ -8,9 +8,10 @@ export async function resolveUiSnapshot(queryClient: QueryClient): Promise<UiSna
   if (cached) return cached;
 
   try {
+    uiClient.connect();
     return await queryClient.fetchQuery({
       queryKey: UI_SNAPSHOT_QUERY_KEY,
-      queryFn: () => uiClient.getSnapshot(),
+      queryFn: () => uiClient.waitForSnapshot(),
       staleTime: Infinity,
     });
   } catch (error) {

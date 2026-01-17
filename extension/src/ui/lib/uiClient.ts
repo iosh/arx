@@ -1,9 +1,12 @@
 import type { ArxReason } from "@arx/core";
 import {
   UI_CHANNEL,
-  type UiAccountMeta,
-  type UiKeyringMeta,
-  type UiMessage,
+  UI_EVENT_SNAPSHOT_CHANGED,
+  parseUiEventPayload,
+  parseUiMethodResult,
+  type UiMethodName,
+  type UiMethodParams,
+  type UiMethodResult,
   type UiPortEnvelope,
   type UiSnapshot,
 } from "@arx/core/ui";
@@ -12,6 +15,7 @@ import browser from "webextension-polyfill";
 type UiRemoteError = Error & { reason?: ArxReason; data?: unknown };
 
 type PendingRequest<T = unknown> = {
+  method: UiMethodName;
   resolve: (value: T) => void;
   reject: (reason: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -22,14 +26,19 @@ const REQUEST_TIMEOUT_MS = 30_000;
 class UiClient {
   #port: browser.Runtime.Port | null = null;
   #pending = new Map<string, PendingRequest<unknown>>();
-  #listeners = new Set<(snapshot: UiSnapshot) => void>();
-  #approvalsListeners = new Set<(approvals: UiSnapshot["approvals"]) => void>();
-  #unlockedListeners = new Set<(payload: { at: number }) => void>();
+  #snapshotListeners = new Set<(snapshot: UiSnapshot) => void>();
+  #lastSnapshot: UiSnapshot | null = null;
+  #reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  #reconnectAttempts = 0;
+  #closed = false;
 
-  // Use arrow functions to ensure `this` binding is stable
   connect = () => {
-    if (this.#port) {
-      return this.#port;
+    if (this.#port) return this.#port;
+
+    this.#closed = false;
+    if (this.#reconnectTimer) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
     }
 
     const port = browser.runtime.connect({ name: UI_CHANNEL });
@@ -37,12 +46,10 @@ class UiClient {
 
     port.onMessage.addListener((message: unknown) => {
       const envelope = message as UiPortEnvelope;
-      if (!envelope || typeof envelope !== "object") {
-        return;
-      }
+      if (!envelope || typeof envelope !== "object") return;
 
       if (envelope.type === "ui:response") {
-        this.#resolveRequest(envelope.requestId, envelope.result);
+        this.#resolveRequest(envelope.id, envelope.result);
         return;
       }
 
@@ -52,34 +59,19 @@ class UiClient {
         if (envelope.error.data !== undefined) {
           error.data = envelope.error.data;
         }
-        this.#rejectRequest(envelope.requestId, error);
+        this.#rejectRequest(envelope.id, error);
         return;
       }
 
       if (envelope.type === "ui:event") {
-        switch (envelope.event) {
-          case "ui:stateChanged": {
-            for (const listener of this.#listeners) {
-              listener(envelope.payload);
-            }
-            return;
-          }
-          case "ui:approvalsChanged": {
-            console.debug("[uiClient] ui:approvalsChanged", { count: envelope.payload.length });
-            for (const listener of this.#approvalsListeners) {
-              listener(envelope.payload);
-            }
-            return;
-          }
-          case "ui:unlocked": {
-            console.debug("[uiClient] ui:unlocked", envelope.payload);
-            for (const listener of this.#unlockedListeners) {
-              listener(envelope.payload);
-            }
-            return;
-          }
-          default:
-            return;
+        if (envelope.event !== UI_EVENT_SNAPSHOT_CHANGED) return;
+        try {
+          const snapshot = parseUiEventPayload(UI_EVENT_SNAPSHOT_CHANGED, envelope.payload);
+          this.#lastSnapshot = snapshot;
+          this.#reconnectAttempts = 0;
+          for (const listener of this.#snapshotListeners) listener(snapshot);
+        } catch (error) {
+          console.warn("[uiClient] invalid snapshot payload", error);
         }
       }
     });
@@ -91,60 +83,123 @@ class UiClient {
       }
       this.#pending.clear();
       this.#port = null;
+      this.#scheduleReconnect();
     });
 
     return port;
   };
 
+  #scheduleReconnect() {
+    if (this.#closed) return;
+    if (this.#port) return;
+    if (this.#snapshotListeners.size === 0) return;
+    if (this.#reconnectTimer) return;
+
+    const attempt = this.#reconnectAttempts;
+    this.#reconnectAttempts += 1;
+
+    // Small backoff to avoid hot reconnect loops when BG is unavailable.
+    const delayMs = Math.min(5_000, 200 * 2 ** attempt);
+    this.#reconnectTimer = setTimeout(() => {
+      this.#reconnectTimer = null;
+      try {
+        this.connect();
+      } catch (error) {
+        console.warn("[uiClient] reconnect failed", error);
+        this.#scheduleReconnect();
+      }
+    }, delayMs);
+  }
+
   disconnect = () => {
+    this.#closed = true;
+    if (this.#reconnectTimer) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
+    }
     this.#port?.disconnect();
     this.#port = null;
     for (const pending of this.#pending.values()) {
       clearTimeout(pending.timeout);
     }
     this.#pending.clear();
-    this.#listeners.clear();
-    this.#approvalsListeners.clear();
-    this.#unlockedListeners.clear();
+    this.#snapshotListeners.clear();
+    this.#lastSnapshot = null;
   };
 
-  onStateChanged = (listener: (snapshot: UiSnapshot) => void) => {
-    this.#listeners.add(listener);
+  onSnapshotChanged = (listener: (snapshot: UiSnapshot) => void) => {
+    this.#snapshotListeners.add(listener);
     return () => {
-      this.#listeners.delete(listener);
+      this.#snapshotListeners.delete(listener);
     };
   };
 
-  onApprovalsChanged = (listener: (approvals: UiSnapshot["approvals"]) => void) => {
-    this.#approvalsListeners.add(listener);
-    return () => {
-      this.#approvalsListeners.delete(listener);
-    };
+  getLastSnapshot = () => this.#lastSnapshot;
+
+  waitForSnapshot = async (opts?: { timeoutMs?: number; predicate?: (snapshot: UiSnapshot) => boolean }) => {
+    const timeoutMs = opts?.timeoutMs ?? 30_000;
+    const predicate = opts?.predicate;
+
+    const existing = this.#lastSnapshot;
+    if (existing && (!predicate || predicate(existing))) return existing;
+
+    return await new Promise<UiSnapshot>((resolve, reject) => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const maybeResolve = (snapshot: UiSnapshot) => {
+        if (settled) return;
+        if (predicate && !predicate(snapshot)) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        unsubscribe();
+        resolve(snapshot);
+      };
+
+      const unsubscribe = this.onSnapshotChanged(maybeResolve);
+
+      // Subscribe before connecting, then re-check last snapshot to avoid races
+      // where the first snapshot arrives between connect() and onSnapshotChanged().
+      try {
+        this.connect();
+      } catch (error) {
+        unsubscribe();
+        reject(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+
+      const postConnect = this.#lastSnapshot;
+      if (postConnect) maybeResolve(postConnect);
+
+      timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        reject(new Error("Timed out waiting for UI snapshot"));
+      }, timeoutMs);
+    });
   };
 
-  onUnlocked = (listener: (payload: { at: number }) => void) => {
-    this.#unlockedListeners.add(listener);
-    return () => {
-      this.#unlockedListeners.delete(listener);
-    };
-  };
-
-  request = async <T = unknown>(payload: UiMessage): Promise<T> => {
+  call = async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>): Promise<UiMethodResult<M>> => {
     const port = this.connect();
-    const requestId = crypto.randomUUID();
+    const id = crypto.randomUUID();
 
-    return new Promise<T>((resolve, reject) => {
+    return new Promise<UiMethodResult<M>>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        if (this.#pending.has(requestId)) {
-          this.#pending.delete(requestId);
+        if (this.#pending.has(id)) {
+          this.#pending.delete(id);
           reject(new Error("UI request timed out"));
         }
       }, REQUEST_TIMEOUT_MS);
 
-      this.#pending.set(requestId, { resolve: resolve as (v: unknown) => void, reject, timeout });
-
-      const envelope: UiPortEnvelope = { type: "ui:request", requestId, payload };
-      port.postMessage(envelope);
+      this.#pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, timeout });
+      try {
+        port.postMessage({ type: "ui:request", id, method, params } satisfies UiPortEnvelope);
+      } catch (error) {
+        clearTimeout(timeout);
+        this.#pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   };
 
@@ -153,7 +208,12 @@ class UiClient {
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.#pending.delete(id);
-    pending.resolve(result);
+
+    try {
+      pending.resolve(parseUiMethodResult(pending.method, result));
+    } catch (error) {
+      pending.reject(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   #rejectRequest(id: string, error: Error) {
@@ -164,136 +224,42 @@ class UiClient {
     pending.reject(error);
   }
 
-  getSnapshot = () => {
-    return this.request<UiSnapshot>({ type: "ui:getSnapshot" });
-  };
+  getSnapshot = () => this.call("ui.snapshot.get");
+  vaultInit = (password: string) => this.call("ui.vault.init", { password });
+  vaultInitAndUnlock = (password: string) => this.call("ui.vault.initAndUnlock", { password });
+  unlock = (password: string) => this.call("ui.session.unlock", { password });
+  openOnboardingTab = (params: { reason: string }) => this.call("ui.onboarding.openTab", params);
+  lock = () => this.call("ui.session.lock", {});
+  resetAutoLockTimer = () => this.call("ui.session.resetAutoLockTimer");
+  setAutoLockDuration = (durationMs: number) => this.call("ui.session.setAutoLockDuration", { durationMs });
+  switchAccount = (chainRef: string, address?: string | null) =>
+    this.call("ui.accounts.switchActive", { chainRef, address: address ?? null });
+  switchChain = (chainRef: string) => this.call("ui.networks.switchActive", { chainRef });
 
-  vaultInit = (password: string) => {
-    return this.request({ type: "ui:vaultInit", payload: { password } });
-  };
+  approveApproval = (id: string) => this.call("ui.approvals.approve", { id });
+  rejectApproval = (id: string, reason?: string) => this.call("ui.approvals.reject", { id, reason });
 
-  vaultInitAndUnlock = (password: string) => {
-    return this.request<{ isUnlocked: boolean; nextAutoLockAt: number | null }>({
-      type: "ui:vaultInitAndUnlock",
-      payload: { password },
-    });
-  };
-
-  unlock = (password: string) => {
-    return this.request<{ isUnlocked: boolean; nextAutoLockAt: number | null }>({
-      type: "ui:unlock",
-      payload: { password },
-    });
-  };
-
-  openOnboardingTab = (params: { reason: string }) => {
-    return this.request<{ activationPath: "focus" | "create" | "debounced"; tabId?: number }>({
-      type: "ui:openOnboardingTab",
-      payload: params,
-    });
-  };
-
-  lock = () => {
-    return this.request<void>({ type: "ui:lock" });
-  };
-
-  resetAutoLockTimer = () => {
-    return this.request<void>({ type: "ui:resetAutoLockTimer" });
-  };
-
-  switchAccount = (chainRef: string, address?: string | null) => {
-    return this.request<string | null>({
-      type: "ui:switchAccount",
-      payload: { chainRef, address: address ?? null },
-    });
-  };
-
-  switchChain = (chainRef: string) => {
-    return this.request<UiSnapshot["chain"]>({
-      type: "ui:switchChain",
-      payload: { chainRef },
-    });
-  };
-
-  approveApproval = (id: string) => {
-    return this.request<{ id: string }>({ type: "ui:approve", payload: { id } });
-  };
-
-  rejectApproval = (id: string, reason?: string) => {
-    return this.request<{ id: string }>({ type: "ui:reject", payload: { id, reason } });
-  };
-
-  setAutoLockDuration = (durationMs: number) => {
-    return this.request<{ autoLockDurationMs: number; nextAutoLockAt: number | null }>({
-      type: "ui:setAutoLockDuration",
-      payload: { durationMs },
-    });
-  };
-
-  generateMnemonic = (wordCount?: 12 | 24) => {
-    return this.request<{ words: string[] }>({
-      type: "ui:generateMnemonic",
-      payload: wordCount ? { wordCount } : {},
-    });
-  };
-
-  confirmNewMnemonic = (params: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string }) => {
-    return this.request<{ keyringId: string; address?: string | null }>({
-      type: "ui:confirmNewMnemonic",
-      payload: params,
-    });
-  };
-
-  importMnemonic = (params: { words: string[]; alias?: string; namespace?: string }) => {
-    return this.request<{ keyringId: string; address?: string | null }>({
-      type: "ui:importMnemonic",
-      payload: params,
-    });
-  };
-
-  importPrivateKey = (params: { privateKey: string; alias?: string; namespace?: string }) => {
-    return this.request<{ keyringId: string; account: { address: string; derivationIndex?: number | null } }>({
-      type: "ui:importPrivateKey",
-      payload: params,
-    });
-  };
-
-  deriveAccount = (keyringId: string) => {
-    return this.request<{ address: string; derivationPath?: string | null; derivationIndex?: number | null }>({
-      type: "ui:deriveAccount",
-      payload: { keyringId },
-    });
-  };
-
-  getKeyrings = () => this.request<UiKeyringMeta[]>({ type: "ui:getKeyrings" });
-
-  getAccountsByKeyring = (params: { keyringId: string; includeHidden?: boolean }) => {
-    return this.request<UiAccountMeta[]>({
-      type: "ui:getAccountsByKeyring",
-      payload: { keyringId: params.keyringId, includeHidden: params.includeHidden ?? false },
-    });
-  };
-
-  renameKeyring = (params: { keyringId: string; alias: string }) =>
-    this.request<void>({ type: "ui:renameKeyring", payload: params });
-
-  renameAccount = (params: { address: string; alias: string }) =>
-    this.request<void>({ type: "ui:renameAccount", payload: params });
-
-  markBackedUp = (keyringId: string) => this.request<void>({ type: "ui:markBackedUp", payload: { keyringId } });
-
-  hideHdAccount = (address: string) => this.request<void>({ type: "ui:hideHdAccount", payload: { address } });
-
-  unhideHdAccount = (address: string) => this.request<void>({ type: "ui:unhideHdAccount", payload: { address } });
-
-  removePrivateKeyKeyring = (keyringId: string) =>
-    this.request<void>({ type: "ui:removePrivateKeyKeyring", payload: { keyringId } });
-
-  exportMnemonic = (params: { keyringId: string; password: string }) =>
-    this.request<{ words: string[] }>({ type: "ui:exportMnemonic", payload: params });
-
+  generateMnemonic = (wordCount?: 12 | 24) =>
+    this.call("ui.keyrings.generateMnemonic", wordCount ? { wordCount } : undefined);
+  confirmNewMnemonic = (params: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string }) =>
+    this.call("ui.keyrings.confirmNewMnemonic", params);
+  importMnemonic = (params: { words: string[]; alias?: string; namespace?: string }) =>
+    this.call("ui.keyrings.importMnemonic", params);
+  importPrivateKey = (params: { privateKey: string; alias?: string; namespace?: string }) =>
+    this.call("ui.keyrings.importPrivateKey", params);
+  deriveAccount = (keyringId: string) => this.call("ui.keyrings.deriveAccount", { keyringId });
+  getKeyrings = () => this.call("ui.keyrings.list");
+  getAccountsByKeyring = (params: { keyringId: string; includeHidden?: boolean }) =>
+    this.call("ui.keyrings.getAccountsByKeyring", params);
+  renameKeyring = (params: { keyringId: string; alias: string }) => this.call("ui.keyrings.renameKeyring", params);
+  renameAccount = (params: { address: string; alias: string }) => this.call("ui.keyrings.renameAccount", params);
+  markBackedUp = (keyringId: string) => this.call("ui.keyrings.markBackedUp", { keyringId });
+  hideHdAccount = (address: string) => this.call("ui.keyrings.hideHdAccount", { address });
+  unhideHdAccount = (address: string) => this.call("ui.keyrings.unhideHdAccount", { address });
+  removePrivateKeyKeyring = (keyringId: string) => this.call("ui.keyrings.removePrivateKeyKeyring", { keyringId });
+  exportMnemonic = (params: { keyringId: string; password: string }) => this.call("ui.keyrings.exportMnemonic", params);
   exportPrivateKey = (params: { address: string; password: string }) =>
-    this.request<{ privateKey: string }>({ type: "ui:exportPrivateKey", payload: params });
+    this.call("ui.keyrings.exportPrivateKey", params);
 }
 
 export const uiClient = new UiClient();

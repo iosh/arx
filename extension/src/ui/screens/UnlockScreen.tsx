@@ -57,14 +57,16 @@ export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: Unlock
     try {
       await onSubmit(pwd);
 
-      let latestSnapshot: UiSnapshot | null = null;
+      let hasApprovals = approvalsCount > 0;
       try {
-        latestSnapshot = await uiClient.getSnapshot();
+        const latestSnapshot = await uiClient.waitForSnapshot({
+          timeoutMs: 2000,
+          predicate: (snapshot) => snapshot.session.isUnlocked,
+        });
+        hasApprovals = latestSnapshot.approvals.length > 0;
       } catch {
         // Best-effort: navigation should not fail unlock UX if snapshot fetch fails.
       }
-
-      const hasApprovals = (latestSnapshot?.approvals.length ?? approvalsCount) > 0;
 
       if (hasApprovals) {
         router.navigate({ to: ROUTES.APPROVALS, replace: true });

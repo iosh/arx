@@ -1,22 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { decideRootBeforeLoad } from "./rootBeforeLoad";
+import { decideRootBeforeLoad, needsOnboarding } from "./rootBeforeLoad";
 
 const SNAPSHOT_UNINITIALIZED = {
   vault: { initialized: false },
   accounts: { totalCount: 0 },
+  session: { isUnlocked: false },
 };
 
 const SNAPSHOT_NO_ACCOUNTS = {
   vault: { initialized: true },
   accounts: { totalCount: 0 },
+  session: { isUnlocked: true },
 };
 
 const SNAPSHOT_READY = {
   vault: { initialized: true },
   accounts: { totalCount: 1 },
+  session: { isUnlocked: true },
+};
+
+const SNAPSHOT_LOCKED = {
+  vault: { initialized: true },
+  accounts: { totalCount: 0 },
+  session: { isUnlocked: false },
 };
 
 describe("decideRootBeforeLoad", () => {
+  it("needsOnboarding is false when locked (unknown account state)", () => {
+    expect(needsOnboarding(SNAPSHOT_LOCKED)).toBe(false);
+  });
+
   it("manual_open + onboarding path => openOnboardingAndClose", () => {
     const decision = decideRootBeforeLoad({
       entryIntent: "manual_open",
@@ -55,6 +68,22 @@ describe("decideRootBeforeLoad", () => {
         snapshot: SNAPSHOT_UNINITIALIZED,
       }),
     ).toEqual({ type: "redirect", to: "/welcome", replace: true });
+
+    expect(
+      decideRootBeforeLoad({
+        entryIntent: "onboarding_tab",
+        pathname: "/",
+        snapshot: SNAPSHOT_LOCKED,
+      }),
+    ).toEqual({ type: "allow" });
+
+    expect(
+      decideRootBeforeLoad({
+        entryIntent: "onboarding_tab",
+        pathname: "/accounts",
+        snapshot: SNAPSHOT_LOCKED,
+      }),
+    ).toEqual({ type: "redirect", to: "/", replace: true });
 
     expect(
       decideRootBeforeLoad({

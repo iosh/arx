@@ -1,6 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { uiClient } from "../lib/uiClient";
 import { useUiPort } from "./useUiPort";
 
@@ -25,7 +25,7 @@ export const useUiSnapshot = () => {
 
   const snapshotQuery = useQuery<UiSnapshot>({
     queryKey: UI_SNAPSHOT_QUERY_KEY,
-    queryFn: () => uiClient.getSnapshot(),
+    queryFn: () => uiClient.waitForSnapshot(),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -41,58 +41,20 @@ export const useUiSnapshot = () => {
 
   useUiPort(handleSnapshot);
 
-  const invalidate = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: UI_SNAPSHOT_QUERY_KEY }),
-    [queryClient],
-  );
-
-  const handleApprovalsChanged = useCallback(
-    (approvals: UiSnapshot["approvals"]) => {
-      queryClient.setQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY, (prev) =>
-        prev
-          ? {
-              ...prev,
-              approvals,
-            }
-          : prev,
-      );
-    },
-    [queryClient],
-  );
-
-  const handleUnlocked = useCallback(() => {
-    invalidate();
-  }, [invalidate]);
-
-  useEffect(() => {
-    uiClient.connect();
-    const unsubscribeApprovals = uiClient.onApprovalsChanged(handleApprovalsChanged);
-    const unsubscribeUnlocked = uiClient.onUnlocked(handleUnlocked);
-
-    return () => {
-      unsubscribeApprovals();
-      unsubscribeUnlocked();
-    };
-  }, [handleApprovalsChanged, handleUnlocked]);
-
   const unlockMutation = useMutation({
     mutationFn: (password: string) => uiClient.unlock(password),
-    onSuccess: invalidate,
   });
 
   const vaultInitMutation = useMutation({
     mutationFn: (password: string) => uiClient.vaultInit(password),
-    onSuccess: invalidate,
   });
 
   const vaultInitAndUnlockMutation = useMutation({
     mutationFn: (password: string) => uiClient.vaultInitAndUnlock(password),
-    onSuccess: invalidate,
   });
 
   const lockMutation = useMutation({
     mutationFn: () => uiClient.lock(),
-    onSuccess: invalidate,
   });
 
   const resetAutoLockMutation = useMutation({
@@ -102,40 +64,22 @@ export const useUiSnapshot = () => {
   const switchAccountMutation = useMutation({
     mutationFn: ({ chainRef, address }: { chainRef: string; address?: string | null }) =>
       uiClient.switchAccount(chainRef, address),
-    onSuccess: invalidate,
   });
 
   const switchChainMutation = useMutation({
     mutationFn: (chainRef: string) => uiClient.switchChain(chainRef),
-    onSuccess: invalidate,
   });
 
   const approveApprovalMutation = useMutation({
     mutationFn: (id: string) => uiClient.approveApproval(id),
-    onSuccess: invalidate,
   });
 
   const rejectApprovalMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => uiClient.rejectApproval(id, reason),
-    onSuccess: invalidate,
   });
 
   const setAutoLockDurationMutation = useMutation({
     mutationFn: (durationMs: number) => uiClient.setAutoLockDuration(durationMs),
-    onSuccess: (data) => {
-      queryClient.setQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY, (prev) =>
-        prev
-          ? {
-              ...prev,
-              session: {
-                ...prev.session,
-                autoLockDurationMs: data.autoLockDurationMs,
-                nextAutoLockAt: data.nextAutoLockAt,
-              },
-            }
-          : prev,
-      );
-    },
   });
 
   const generateMnemonicMutation = useMutation({
@@ -146,7 +90,6 @@ export const useUiSnapshot = () => {
     mutationFn: (params: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string }) =>
       uiClient.confirmNewMnemonic(params),
     onSuccess: (result) => {
-      invalidate();
       invalidateKeyrings();
       if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
     },
@@ -155,7 +98,6 @@ export const useUiSnapshot = () => {
   const importMnemonicMutation = useMutation({
     mutationFn: (params: { words: string[]; alias?: string; namespace?: string }) => uiClient.importMnemonic(params),
     onSuccess: (result) => {
-      invalidate();
       invalidateKeyrings();
       if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
     },
@@ -165,7 +107,6 @@ export const useUiSnapshot = () => {
     mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
       uiClient.importPrivateKey(params),
     onSuccess: (result) => {
-      invalidate();
       invalidateKeyrings();
       if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
     },
@@ -174,7 +115,6 @@ export const useUiSnapshot = () => {
   const deriveAccountMutation = useMutation({
     mutationFn: (params: { keyringId: string }) => uiClient.deriveAccount(params.keyringId),
     onSuccess: (_res, variables) => {
-      invalidate();
       invalidateAccountsByKeyring(variables.keyringId);
     },
   });
@@ -182,7 +122,6 @@ export const useUiSnapshot = () => {
   const renameKeyringMutation = useMutation({
     mutationFn: (params: { keyringId: string; alias: string }) => uiClient.renameKeyring(params),
     onSuccess: (_res, variables) => {
-      invalidate();
       invalidateKeyrings();
       invalidateAccountsByKeyring(variables.keyringId);
     },
@@ -190,15 +129,11 @@ export const useUiSnapshot = () => {
 
   const renameAccountMutation = useMutation({
     mutationFn: (params: { address: string; alias: string }) => uiClient.renameAccount(params),
-    onSuccess: (res, variables) => {
-      invalidate();
-    },
   });
 
   const markBackedUpMutation = useMutation({
     mutationFn: (keyringId: string) => uiClient.markBackedUp(keyringId),
     onSuccess: (_res, keyringId) => {
-      invalidate();
       invalidateKeyrings();
       invalidateAccountsByKeyring(keyringId);
     },
@@ -206,22 +141,15 @@ export const useUiSnapshot = () => {
 
   const hideHdAccountMutation = useMutation({
     mutationFn: (address: string) => uiClient.hideHdAccount(address),
-    onSuccess: () => {
-      invalidate();
-    },
   });
 
   const unhideHdAccountMutation = useMutation({
     mutationFn: (address: string) => uiClient.unhideHdAccount(address),
-    onSuccess: () => {
-      invalidate();
-    },
   });
 
   const removePrivateKeyKeyringMutation = useMutation({
     mutationFn: (keyringId: string) => uiClient.removePrivateKeyKeyring(keyringId),
     onSuccess: (_res, keyringId) => {
-      invalidate();
       invalidateKeyrings();
       invalidateAccountsByKeyring(keyringId);
     },

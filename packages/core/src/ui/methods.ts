@@ -4,11 +4,21 @@ import { ChainSnapshotSchema, UiAccountMetaSchema, UiKeyringMetaSchema, UiSnapsh
 export type UiMethodDefinition = {
   paramsSchema: z.ZodTypeAny;
   resultSchema: z.ZodTypeAny;
+  effects?: {
+    broadcastSnapshot?: boolean;
+    persistVaultMeta?: boolean;
+    holdBroadcast?: boolean;
+  };
 };
 
-const defineMethod = <P extends z.ZodTypeAny, R extends z.ZodTypeAny>(paramsSchema: P, resultSchema: R) => ({
+const defineMethod = <P extends z.ZodTypeAny, R extends z.ZodTypeAny>(
+  paramsSchema: P,
+  resultSchema: R,
+  effects?: UiMethodDefinition["effects"],
+) => ({
   paramsSchema,
   resultSchema,
+  ...(effects ? { effects } : {}),
 });
 
 const UnlockReasonSchema = z.enum(["manual", "timeout", "blur", "suspend", "reload"]);
@@ -140,23 +150,39 @@ export const uiMethods = {
   "ui.snapshot.get": defineMethod(z.undefined(), UiSnapshotSchema.strict()),
 
   // --- vault ---
-  "ui.vault.init": defineMethod(z.strictObject({ password: z.string().min(1) }), VaultInitResultSchema),
+  "ui.vault.init": defineMethod(z.strictObject({ password: z.string().min(1) }), VaultInitResultSchema, {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+  }),
 
-  "ui.vault.initAndUnlock": defineMethod(z.strictObject({ password: z.string().min(1) }), UnlockStateSchema),
+  "ui.vault.initAndUnlock": defineMethod(z.strictObject({ password: z.string().min(1) }), UnlockStateSchema, {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+    holdBroadcast: true,
+  }),
 
   // --- session ---
-  "ui.session.unlock": defineMethod(z.strictObject({ password: z.string().min(1) }), UnlockStateSchema),
+  "ui.session.unlock": defineMethod(z.strictObject({ password: z.string().min(1) }), UnlockStateSchema, {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+    holdBroadcast: true,
+  }),
 
   "ui.session.lock": defineMethod(
     z.strictObject({ reason: UnlockReasonSchema.optional() }).optional(),
     UnlockStateSchema,
+    { broadcastSnapshot: true, persistVaultMeta: true },
   ),
 
-  "ui.session.resetAutoLockTimer": defineMethod(z.undefined(), UnlockStateSchema),
+  "ui.session.resetAutoLockTimer": defineMethod(z.undefined(), UnlockStateSchema, {
+    broadcastSnapshot: true,
+    persistVaultMeta: true,
+  }),
 
   "ui.session.setAutoLockDuration": defineMethod(
     z.strictObject({ durationMs: z.number().finite() }),
     SetAutoLockDurationResultSchema,
+    { broadcastSnapshot: true, persistVaultMeta: true },
   ),
 
   // --- onboarding ---
@@ -169,20 +195,25 @@ export const uiMethods = {
       address: z.string().nullable().optional(),
     }),
     z.string().nullable(),
+    { broadcastSnapshot: true },
   ),
 
   // --- networks ---
   "ui.networks.switchActive": defineMethod(
     z.strictObject({ chainRef: z.string().min(1) }),
     ChainSnapshotSchema.strict(),
+    { broadcastSnapshot: true },
   ),
 
   // --- approvals ---
-  "ui.approvals.approve": defineMethod(z.strictObject({ id: z.string().min(1) }), ApprovalApproveResultSchema),
+  "ui.approvals.approve": defineMethod(z.strictObject({ id: z.string().min(1) }), ApprovalApproveResultSchema, {
+    broadcastSnapshot: true,
+  }),
 
   "ui.approvals.reject": defineMethod(
     z.strictObject({ id: z.string().min(1), reason: z.string().min(1).optional() }),
     ApprovalRejectResultSchema,
+    { broadcastSnapshot: true },
   ),
 
   // --- keyrings ---
@@ -199,6 +230,7 @@ export const uiMethods = {
       namespace: z.string().min(1).optional(),
     }),
     ConfirmMnemonicResultSchema,
+    { broadcastSnapshot: true },
   ),
 
   "ui.keyrings.importMnemonic": defineMethod(
@@ -208,6 +240,7 @@ export const uiMethods = {
       namespace: z.string().min(1).optional(),
     }),
     ConfirmMnemonicResultSchema,
+    { broadcastSnapshot: true },
   ),
 
   "ui.keyrings.importPrivateKey": defineMethod(
@@ -217,9 +250,12 @@ export const uiMethods = {
       namespace: z.string().min(1).optional(),
     }),
     ImportPrivateKeyResultSchema,
+    { broadcastSnapshot: true },
   ),
 
-  "ui.keyrings.deriveAccount": defineMethod(z.strictObject({ keyringId: z.uuid() }), KeyringAccountSchema),
+  "ui.keyrings.deriveAccount": defineMethod(z.strictObject({ keyringId: z.uuid() }), KeyringAccountSchema, {
+    broadcastSnapshot: true,
+  }),
 
   "ui.keyrings.list": defineMethod(z.undefined(), z.array(UiKeyringMetaSchema.strict())),
 
@@ -231,20 +267,30 @@ export const uiMethods = {
   "ui.keyrings.renameKeyring": defineMethod(
     z.strictObject({ keyringId: z.uuid(), alias: z.string().min(1) }),
     z.null(),
+    { broadcastSnapshot: true },
   ),
 
   "ui.keyrings.renameAccount": defineMethod(
     z.strictObject({ address: z.string().min(1), alias: z.string().min(1) }),
     z.null(),
+    { broadcastSnapshot: true },
   ),
 
-  "ui.keyrings.markBackedUp": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null()),
+  "ui.keyrings.markBackedUp": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null(), {
+    broadcastSnapshot: true,
+  }),
 
-  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null()),
+  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null(), {
+    broadcastSnapshot: true,
+  }),
 
-  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null()),
+  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null(), {
+    broadcastSnapshot: true,
+  }),
 
-  "ui.keyrings.removePrivateKeyKeyring": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null()),
+  "ui.keyrings.removePrivateKeyKeyring": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null(), {
+    broadcastSnapshot: true,
+  }),
 
   "ui.keyrings.exportMnemonic": defineMethod(
     z.strictObject({ keyringId: z.uuid(), password: z.string().min(1) }),

@@ -1,7 +1,17 @@
 export { UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./events.js";
-export type { UiError, UiMessage, UiPortEnvelope } from "./messages.js";
+export type {
+  UiContext,
+  UiError,
+  UiErrorEnvelope,
+  UiEventEnvelope,
+  UiPortEnvelope,
+  UiRequestEnvelope,
+  UiResponseEnvelope,
+} from "./messages.js";
 export { UI_CHANNEL } from "./messages.js";
 export { uiMethods } from "./methods.js";
+export { createUiDispatcher } from "./runtime/index.js";
+export type { UiDispatchEffects, UiDispatchOutput, UiOnboardingOpenTabResult, UiPlatformAdapter, UiRuntimeDeps } from "./runtime/index.js";
 export {
   isUiEventName,
   isUiMethodName,

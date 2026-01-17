@@ -25,6 +25,25 @@ export const VaultSnapshotSchema = z.object({
   initialized: z.boolean(),
 });
 
+const PermissionScopeSchema = z.enum([
+  "wallet_basic",
+  "wallet_accounts",
+  "wallet_sign",
+  "wallet_transaction",
+]);
+
+const NamespacePermissionStateSchema = z.object({
+  scopes: z.array(PermissionScopeSchema),
+  chains: z.array(z.string().min(1)),
+  accountsByChain: z.record(z.string().min(1), z.array(z.string().min(1))).optional(),
+});
+
+const OriginPermissionStateSchema = z.record(z.string().min(1), NamespacePermissionStateSchema);
+
+const PermissionsStateSchema = z.object({
+  origins: z.record(z.string().min(1), OriginPermissionStateSchema),
+});
+
 const approvalPayloadBase = z.object({
   id: z.string(),
   origin: z.string(),
@@ -144,7 +163,7 @@ export const UiSnapshotSchema = z.object({
     queue: z.array(AttentionRequestSchema),
     count: z.number().int().nonnegative(),
   }),
-  permissions: z.unknown().optional(), // TODO update schema
+  permissions: PermissionsStateSchema,
   vault: VaultSnapshotSchema,
   warnings: z.object({
     hdKeyringsNeedingBackup: z.array(HdBackupWarningSchema),

@@ -140,7 +140,8 @@ const toApprovalSummary = (
         type: "signTypedData",
         payload: {
           from: String(payload.from ?? ""),
-          typedData: typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData ?? {}),
+          typedData:
+            typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData ?? {}),
         },
       };
     }
@@ -265,4 +266,3 @@ export const buildUiSnapshot = (deps: {
 
   return UiSnapshotSchema.parse(snapshot);
 };
-

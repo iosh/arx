@@ -1,9 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import * as Hex from "ox/Hex";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
-import * as Hex from "ox/Hex";
 import { buildUiSnapshot } from "./snapshot.js";
 import type { UiRuntimeDeps } from "./types.js";
 
@@ -329,4 +329,3 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
     },
   } as const;
 };
-

@@ -1,12 +1,12 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { encodeErrorWithAdapters } from "../../rpc/index.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../events.js";
-import { uiMethods } from "../methods.js";
-import { isUiMethodName, parseUiMethodParams, parseUiMethodResult } from "../protocol.js";
-import type { UiMethodName } from "../protocol.js";
 import type { UiEventEnvelope, UiPortEnvelope, UiRequestEnvelope } from "../messages.js";
-import { buildUiSnapshot } from "./snapshot.js";
+import { uiMethods } from "../methods.js";
+import type { UiMethodName } from "../protocol.js";
+import { isUiMethodName, parseUiMethodParams, parseUiMethodResult } from "../protocol.js";
 import { createUiHandlers } from "./handlers.js";
+import { buildUiSnapshot } from "./snapshot.js";
 import type { UiRuntimeDeps } from "./types.js";
 
 export type UiDispatchEffects = {
@@ -99,4 +99,3 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
 
   return { dispatch, buildSnapshotEvent };
 };
-

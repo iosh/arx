@@ -1,7 +1,7 @@
-import type { AttentionService } from "../../services/attention/index.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { AttentionService } from "../../services/attention/index.js";
 
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
@@ -19,4 +19,3 @@ export type UiRuntimeDeps = {
   attention: Pick<AttentionService, "getSnapshot">;
   platform: UiPlatformAdapter;
 };
-

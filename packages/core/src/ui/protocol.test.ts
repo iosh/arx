@@ -45,6 +45,9 @@ const SNAPSHOT_FIXTURE = {
     queue: [],
     count: 0,
   },
+  permissions: {
+    origins: {},
+  },
   vault: {
     initialized: false,
   },

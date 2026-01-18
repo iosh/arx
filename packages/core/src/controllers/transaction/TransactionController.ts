@@ -456,7 +456,7 @@ export class InMemoryTransactionController implements TransactionController {
   #scheduleProcess() {
     if (this.#scheduled) return;
     this.#scheduled = true;
-    queueMicrotask(() => {
+    Promise.resolve().then(() => {
       this.#scheduled = false;
       this.#processQueue();
     });

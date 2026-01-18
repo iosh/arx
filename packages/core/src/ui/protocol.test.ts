@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "./events.js";
+import { parseUiEnvelope } from "./messages.js";
 import {
   isUiEventName,
   isUiMethodName,
@@ -100,5 +101,78 @@ describe("ui protocol registry", () => {
   it("validates event payloads (strict)", () => {
     const payload = parseUiEventPayload(UI_EVENT_SNAPSHOT_CHANGED, SNAPSHOT_FIXTURE);
     expect(payload.chain.chainId).toBe("0x1");
+  });
+});
+
+describe("ui envelope parsing", () => {
+  it("parses valid envelopes and rejects unknown method/event", () => {
+    expect(
+      parseUiEnvelope({
+        type: "ui:request",
+        id: "1",
+        method: "ui.snapshot.get",
+      }),
+    ).toMatchObject({ type: "ui:request", id: "1", method: "ui.snapshot.get" });
+
+    expect(
+      parseUiEnvelope({
+        type: "ui:response",
+        id: "1",
+        result: { ok: true },
+        context: { namespace: "eip155", chainRef: "eip155:1" },
+      }),
+    ).toMatchObject({ type: "ui:response", id: "1" });
+
+    expect(
+      parseUiEnvelope({
+        type: "ui:error",
+        id: "1",
+        error: { reason: "RpcInvalidRequest", message: "nope" },
+      }),
+    ).toMatchObject({ type: "ui:error", id: "1" });
+
+    expect(
+      parseUiEnvelope({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: SNAPSHOT_FIXTURE,
+      }),
+    ).toMatchObject({ type: "ui:event", event: UI_EVENT_SNAPSHOT_CHANGED });
+
+    expect(() =>
+      parseUiEnvelope({
+        type: "ui:request",
+        id: "1",
+        method: "ui.snapshot.nope",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseUiEnvelope({
+        type: "ui:event",
+        event: "ui:unknown",
+        payload: {},
+      }),
+    ).toThrow();
+  });
+
+  it("rejects invalid envelope shapes", () => {
+    expect(() => parseUiEnvelope(null)).toThrow();
+
+    expect(() =>
+      parseUiEnvelope({
+        type: "ui:error",
+        id: "1",
+        error: { reason: "X", message: 123 },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseUiEnvelope({
+        type: "ui:response",
+        id: 1,
+        result: {},
+      }),
+    ).toThrow();
   });
 });

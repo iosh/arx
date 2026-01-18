@@ -1,3 +1,7 @@
+export type { UiActions } from "./actions.js";
+export { uiActions } from "./actions.js";
+export type { UiClient, UiClientOptions, UiProtocolError, UiRemoteError, UiTransport } from "./client/index.js";
+export { createUiClient } from "./client/index.js";
 export { UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./events.js";
 export type {
   UiContext,
@@ -8,10 +12,9 @@ export type {
   UiRequestEnvelope,
   UiResponseEnvelope,
 } from "./messages.js";
-export { UI_CHANNEL } from "./messages.js";
+export { parseUiEnvelope, UI_CHANNEL } from "./messages.js";
 export { uiMethods } from "./methods.js";
-export { createUiDispatcher } from "./runtime/index.js";
-export type { UiDispatchEffects, UiDispatchOutput, UiOnboardingOpenTabResult, UiPlatformAdapter, UiRuntimeDeps } from "./runtime/index.js";
+
 export {
   isUiEventName,
   isUiMethodName,

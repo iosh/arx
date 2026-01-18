@@ -2,10 +2,10 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card, Form, H2, Paragraph, YStack } from "tamagui";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { Button, PasswordInput, Screen } from "../components";
 import { getUnlockErrorMessage } from "../lib/errorUtils";
 import { ROUTES } from "../lib/routes";
-import { uiClient } from "../lib/uiClient";
 
 type UnlockScreenProps = {
   onSubmit: (password: string) => Promise<unknown>;

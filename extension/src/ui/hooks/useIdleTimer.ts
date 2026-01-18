@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { uiClient } from "../lib/uiClient";
+import { uiClient } from "../lib/uiBridgeClient";
 
 const DEBOUNCE_MS = 2_000;
 const MIN_INTERVAL_MS = 10_000;
@@ -28,7 +28,7 @@ export const useIdleTimer = (enabled: boolean) => {
         const now = Date.now();
         if (now - lastNotifyRef.current >= MIN_INTERVAL_MS) {
           lastNotifyRef.current = now;
-          void uiClient.resetAutoLockTimer();
+          void uiClient.session.resetAutoLockTimer();
         } else {
           const remaining = MIN_INTERVAL_MS - (now - lastNotifyRef.current);
           schedule(Math.max(remaining, DEBOUNCE_MS));

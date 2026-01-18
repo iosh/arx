@@ -9,7 +9,7 @@ import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
-import { uiClient } from "@/ui/lib/uiClient";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 // Router context type for route guards
 export interface RouterContext {
   queryClient: QueryClient;
@@ -28,7 +28,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (preDecision.type === "openOnboardingAndClose") {
-      void uiClient.openOnboardingTab({ reason: preDecision.reason });
+      void uiClient.onboarding.openTab(preDecision.reason);
       window.close();
       return;
     }
@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (decision.type === "openOnboardingAndClose") {
-      void uiClient.openOnboardingTab({ reason: decision.reason });
+      void uiClient.onboarding.openTab(decision.reason);
       window.close();
       return;
     }

@@ -1,15 +1,15 @@
-import "../../ui/lib/polyfills";
+import "@/ui/lib/polyfills";
 import { QueryClient } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { AppProviders } from "../../ui/providers/AppProviders";
+import { AppProviders } from "@/ui/providers/AppProviders";
 import "../popup/style.css";
 
+import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
-import { routeTree } from "../../routeTree.gen";
-import { uiClient } from "../../ui/lib/uiClient";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 
 const queryClient = new QueryClient();
 const hashHistory = createHashHistory();
@@ -68,7 +68,7 @@ const boot = async () => {
   }
 
   try {
-    const snapshot = await uiClient.getSnapshot();
+    const snapshot = await uiClient.snapshot.get();
     if (!snapshot.vault.initialized) {
       window.close();
       return;

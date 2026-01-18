@@ -454,9 +454,7 @@ const expectResponse = (msg: any, id: string) => {
 };
 
 const latestSnapshotFromMessages = (messages: unknown[]) => {
-  const events = messages.filter(
-    (m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED,
-  ) as any[];
+  const events = messages.filter((m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED) as any[];
   const last = events[events.length - 1];
   expect(last).toBeTruthy();
   return last.payload as UiSnapshot;
@@ -490,7 +488,9 @@ describe("uiBridge", () => {
     const id = crypto.randomUUID();
     const envelope: UiPortEnvelope = { type: "ui:request", id, method, params };
     await port.triggerMessage(envelope);
-    const message = port.messages.find((m: any) => m?.id === id && (m?.type === "ui:response" || m?.type === "ui:error"));
+    const message = port.messages.find(
+      (m: any) => m?.id === id && (m?.type === "ui:response" || m?.type === "ui:error"),
+    );
     return { envelope: message as any, id };
   };
 
@@ -526,7 +526,10 @@ describe("uiBridge", () => {
     expect(address).toMatch(/^0x/);
 
     const deriveRes = await send("ui.keyrings.deriveAccount", { keyringId });
-    const derived = expectResponse(deriveRes.envelope, deriveRes.id) as { address: string; derivationIndex?: number | null };
+    const derived = expectResponse(deriveRes.envelope, deriveRes.id) as {
+      address: string;
+      derivationIndex?: number | null;
+    };
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 

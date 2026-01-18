@@ -1,11 +1,7 @@
 import type { AttentionService, BackgroundSessionServices, HandlerControllers, KeyringService } from "@arx/core";
-import {
-  createUiDispatcher,
-  isUiMethodName,
-  type UiRequestEnvelope,
-  uiMethods,
-} from "@arx/core/ui";
-import type { UiDispatchOutput } from "@arx/core/ui";
+import { isUiMethodName, type UiRequestEnvelope, uiMethods } from "@arx/core/ui";
+import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/runtime";
+
 import type browserDefaultType from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPortHub } from "./ui/portHub";
@@ -21,7 +17,14 @@ type BridgeDeps = {
   attention: Pick<AttentionService, "getSnapshot">;
 };
 
-export const createUiBridge = ({ browser: runtimeBrowser, controllers, session, persistVaultMeta, keyring, attention }: BridgeDeps) => {
+export const createUiBridge = ({
+  browser: runtimeBrowser,
+  controllers,
+  session,
+  persistVaultMeta,
+  keyring,
+  attention,
+}: BridgeDeps) => {
   const portHub = createUiPortHub();
   const listeners: Array<() => void> = [];
 

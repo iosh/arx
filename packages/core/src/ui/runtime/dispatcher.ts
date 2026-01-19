@@ -32,7 +32,7 @@ const resolveContext = (deps: Pick<UiRuntimeDeps, "controllers">) => {
 };
 
 export const createUiDispatcher = (deps: UiRuntimeDeps) => {
-  const handlers = createUiHandlers(deps) as Record<UiMethodName, (params: any) => Promise<any> | any>;
+  const handlers = createUiHandlers(deps);
 
   const buildSnapshotEvent = (): UiEventEnvelope => {
     const snapshot = buildUiSnapshot({
@@ -77,7 +77,8 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
 
     try {
       const params = parseUiMethodParams(method, raw.params);
-      const result = await handlers[method](params as any);
+
+      const result = await (handlers[method] as (params: unknown) => unknown)(params);
       const parsed = parseUiMethodResult(method, result);
       return {
         reply: { type: "ui:response", id: raw.id, result: parsed, context: ctx },

@@ -42,15 +42,15 @@ export const useUiSnapshot = () => {
   useUiPort(handleSnapshot);
 
   const unlockMutation = useMutation({
-    mutationFn: (password: string) => uiClient.session.unlock(password),
+    mutationFn: (password: string) => uiClient.session.unlock({ password }),
   });
 
   const vaultInitMutation = useMutation({
-    mutationFn: (password: string) => uiClient.vault.init(password),
+    mutationFn: (password: string) => uiClient.vault.init({ password }),
   });
 
   const vaultInitAndUnlockMutation = useMutation({
-    mutationFn: (password: string) => uiClient.vault.initAndUnlock(password),
+    mutationFn: (password: string) => uiClient.vault.initAndUnlock({ password }),
   });
 
   const lockMutation = useMutation({
@@ -63,27 +63,27 @@ export const useUiSnapshot = () => {
 
   const switchAccountMutation = useMutation({
     mutationFn: ({ chainRef, address }: { chainRef: string; address?: string | null }) =>
-      uiClient.accounts.switchActiveAccount(chainRef, address),
+      uiClient.accounts.switchActive({ chainRef, address }),
   });
 
   const switchChainMutation = useMutation({
-    mutationFn: (chainRef: string) => uiClient.networks.switchActive(chainRef),
+    mutationFn: (chainRef: string) => uiClient.networks.switchActive({ chainRef }),
   });
 
   const approveApprovalMutation = useMutation({
-    mutationFn: (id: string) => uiClient.approvals.approve(id),
+    mutationFn: (id: string) => uiClient.approvals.approve({ id }),
   });
 
   const rejectApprovalMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => uiClient.approvals.reject(id, reason),
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => uiClient.approvals.reject({ id, reason }),
   });
 
   const setAutoLockDurationMutation = useMutation({
-    mutationFn: (durationMs: number) => uiClient.session.setAutoLockDuration(durationMs),
+    mutationFn: (durationMs: number) => uiClient.session.setAutoLockDuration({ durationMs }),
   });
 
   const generateMnemonicMutation = useMutation({
-    mutationFn: (wordCount?: 12 | 24) => uiClient.keyrings.generateMnemonic(wordCount),
+    mutationFn: (wordCount?: 12 | 24) => uiClient.keyrings.generateMnemonic(wordCount ? { wordCount } : undefined),
   });
 
   const confirmNewMnemonicMutation = useMutation({
@@ -114,7 +114,7 @@ export const useUiSnapshot = () => {
   });
 
   const deriveAccountMutation = useMutation({
-    mutationFn: (params: { keyringId: string }) => uiClient.keyrings.deriveAccount(params.keyringId),
+    mutationFn: (params: { keyringId: string }) => uiClient.keyrings.deriveAccount(params),
     onSuccess: (_res, variables) => {
       invalidateAccountsByKeyring(variables.keyringId);
     },
@@ -133,7 +133,7 @@ export const useUiSnapshot = () => {
   });
 
   const markBackedUpMutation = useMutation({
-    mutationFn: (keyringId: string) => uiClient.keyrings.markBackedUp(keyringId),
+    mutationFn: (keyringId: string) => uiClient.keyrings.markBackedUp({ keyringId }),
     onSuccess: (_res, keyringId) => {
       invalidateKeyrings();
       invalidateAccountsByKeyring(keyringId);
@@ -141,15 +141,15 @@ export const useUiSnapshot = () => {
   });
 
   const hideHdAccountMutation = useMutation({
-    mutationFn: (address: string) => uiClient.keyrings.hideHdAccount(address),
+    mutationFn: (address: string) => uiClient.keyrings.hideHdAccount({ address }),
   });
 
   const unhideHdAccountMutation = useMutation({
-    mutationFn: (address: string) => uiClient.keyrings.unhideHdAccount(address),
+    mutationFn: (address: string) => uiClient.keyrings.unhideHdAccount({ address }),
   });
 
   const removePrivateKeyKeyringMutation = useMutation({
-    mutationFn: (keyringId: string) => uiClient.keyrings.removePrivateKeyKeyring(keyringId),
+    mutationFn: (keyringId: string) => uiClient.keyrings.removePrivateKeyKeyring({ keyringId }),
     onSuccess: (_res, keyringId) => {
       invalidateKeyrings();
       invalidateAccountsByKeyring(keyringId);

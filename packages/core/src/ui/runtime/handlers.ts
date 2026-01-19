@@ -5,7 +5,7 @@ import { PermissionScopes } from "../../controllers/permission/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
 import { buildUiSnapshot } from "./snapshot.js";
-import type { UiRuntimeDeps } from "./types.js";
+import type { UiHandlers, UiRuntimeDeps } from "./types.js";
 
 const MIN_AUTO_LOCK_MS = 60_000;
 const MAX_AUTO_LOCK_MS = 60 * 60_000;
@@ -17,7 +17,22 @@ const assertUnlocked = (session: BackgroundSessionServices) => {
 };
 
 const verifyExportPassword = async (session: BackgroundSessionServices, password: string): Promise<void> => {
-  await session.vault.verifyPassword(password);
+  if (!password || password.trim().length === 0) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Password cannot be empty",
+    });
+  }
+
+  try {
+    await session.vault.verifyPassword(password);
+  } catch (error) {
+    throw arxError({
+      reason: ArxReasons.VaultInvalidPassword,
+      message: "Password verification failed",
+      data: { context: "export_operation" },
+    });
+  }
 };
 
 const withSensitiveBytes = <T>(secret: Uint8Array, transform: (bytes: Uint8Array) => T): T => {
@@ -33,7 +48,131 @@ const toPlainHex = (bytes: Uint8Array): string => {
   return out.startsWith("0x") ? out.slice(2) : out;
 };
 
-export const createUiHandlers = (deps: UiRuntimeDeps) => {
+// Helper to resolve chain context from task
+const resolveChainContext = (
+  task: { chainRef?: string; namespace?: string },
+  controllers: { network: { getActiveChain: () => { chainRef: string } } }
+) => {
+  const chainRef = task.chainRef ?? controllers.network.getActiveChain().chainRef;
+  const namespace = task.namespace ?? "eip155";
+  return { chainRef, namespace };
+};
+
+// Approval task type
+type ApprovalTask = {
+  id: string;
+  type: string;
+  origin: string;
+  chainRef?: string;
+  namespace?: string;
+  payload?: unknown;
+};
+
+// Approval result can be transaction meta, accounts array, signature string, permission result, or null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApprovalResult = any; // Will be validated by zod schema
+
+type ApprovalHandlerFn = (
+  task: ApprovalTask,
+  controllers: UiRuntimeDeps["controllers"]
+) => Promise<ApprovalResult>;
+
+// Individual approval handlers organized by type
+const approvalHandlers: Record<string, ApprovalHandlerFn> = {
+  [ApprovalTypes.SendTransaction]: async (task, controllers) => {
+    const approved = await controllers.transactions.approveTransaction(task.id);
+    if (!approved) throw new Error("Transaction not found");
+    await controllers.transactions.processTransaction(task.id);
+    return approved;
+  },
+
+  [ApprovalTypes.RequestAccounts]: async (task, controllers) => {
+    const { chainRef, namespace } = resolveChainContext(task, controllers);
+
+    const accounts = await controllers.accounts.requestAccounts({
+      origin: task.origin,
+      chainRef,
+    });
+
+    const uniqueAccounts = [...new Set(accounts)];
+    if (uniqueAccounts.length === 0) {
+      throw arxError({
+        reason: ArxReasons.PermissionDenied,
+        message: "No accounts available for connection request",
+        data: { origin: task.origin, reason: "no_accounts" },
+      });
+    }
+
+    await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
+      namespace,
+      chainRef,
+    });
+    await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
+      namespace,
+      chainRef,
+    });
+
+    await controllers.permissions.setPermittedAccounts(task.origin, {
+      namespace,
+      chainRef,
+      accounts: uniqueAccounts,
+    });
+
+    return uniqueAccounts;
+  },
+
+  [ApprovalTypes.SignMessage]: async (task, controllers) => {
+    const payload = task.payload as { from: string; message: string };
+    const { chainRef, namespace } = resolveChainContext(task, controllers);
+
+    const signature = await controllers.signers.eip155.signPersonalMessage({
+      address: payload.from,
+      message: payload.message,
+    });
+
+    await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+      namespace,
+      chainRef,
+    });
+
+    return signature;
+  },
+
+  [ApprovalTypes.SignTypedData]: async (task, controllers) => {
+    const payload = task.payload as { from: string; typedData: unknown };
+    const { chainRef, namespace } = resolveChainContext(task, controllers);
+
+    const typedDataStr =
+      typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
+
+    const signature = await controllers.signers.eip155.signTypedData({
+      address: payload.from,
+      typedData: typedDataStr,
+    });
+
+    await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+      namespace,
+      chainRef,
+    });
+
+    return signature;
+  },
+
+  [ApprovalTypes.RequestPermissions]: async (task) => {
+    const payload = task.payload as { requested: any[] };
+    return { granted: payload.requested };
+  },
+
+  [ApprovalTypes.AddChain]: async (task, controllers) => {
+    const payload = task.payload as { metadata: unknown };
+    await controllers.chainRegistry.upsertChain(
+      payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0]
+    );
+    return null;
+  },
+};
+
+export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
   const { controllers, session, keyring, attention, platform } = deps;
 
   const buildSnapshot = () =>
@@ -59,12 +198,12 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
   return {
     "ui.snapshot.get": async () => buildSnapshot(),
 
-    "ui.vault.init": async ({ password }: { password: string }) => {
+    "ui.vault.init": async ({ password }) => {
       const ciphertext = await session.vault.initialize({ password });
       return { ciphertext };
     },
 
-    "ui.vault.initAndUnlock": async ({ password }: { password: string }) => {
+    "ui.vault.initAndUnlock": async ({ password }) => {
       const status = session.vault.getStatus();
       if (!status.hasCiphertext) {
         await session.vault.initialize({ password });
@@ -74,13 +213,13 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
       return session.unlock.getState();
     },
 
-    "ui.session.unlock": async ({ password }: { password: string }) => {
+    "ui.session.unlock": async ({ password }) => {
       await session.unlock.unlock({ password });
       await keyring.waitForReady();
       return session.unlock.getState();
     },
 
-    "ui.session.lock": async (payload?: { reason?: "manual" | "timeout" | "blur" | "suspend" | "reload" }) => {
+    "ui.session.lock": async (payload) => {
       session.unlock.lock(payload?.reason ?? "manual");
       return session.unlock.getState();
     },
@@ -90,7 +229,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
       return session.unlock.getState();
     },
 
-    "ui.session.setAutoLockDuration": async ({ durationMs }: { durationMs: number }) => {
+    "ui.session.setAutoLockDuration": async ({ durationMs }) => {
       if (!Number.isFinite(durationMs)) {
         throw new Error("Auto-lock duration must be a number");
       }
@@ -104,11 +243,11 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
       return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
     },
 
-    "ui.onboarding.openTab": async ({ reason }: { reason: string }) => {
+    "ui.onboarding.openTab": async ({ reason }) => {
       return await platform.openOnboardingTab(reason);
     },
 
-    "ui.accounts.switchActive": async ({ chainRef, address }: { chainRef: string; address?: string | null }) => {
+    "ui.accounts.switchActive": async ({ chainRef, address }) => {
       await controllers.accounts.switchActive({
         chainRef,
         address: address ?? null,
@@ -116,154 +255,66 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
       return buildSnapshot().accounts.active;
     },
 
-    "ui.networks.switchActive": async ({ chainRef }: { chainRef: string }) => {
+    "ui.networks.switchActive": async ({ chainRef }) => {
       await controllers.network.switchChain(chainRef);
       return toChainSnapshot();
     },
 
-    "ui.approvals.approve": async ({ id }: { id: string }) => {
+    "ui.approvals.approve": async ({ id }) => {
       const task = controllers.approvals.get(id);
       if (!task) throw new Error("Approval not found");
 
-      switch (task.type) {
-        case ApprovalTypes.SendTransaction: {
-          const result = await controllers.approvals.resolve(task.id, async () => {
-            const approved = await controllers.transactions.approveTransaction(task.id);
-            if (!approved) throw new Error("Transaction not found");
-            await controllers.transactions.processTransaction(task.id);
-            return approved;
-          });
-          return { id: task.id, result };
-        }
-        case ApprovalTypes.RequestAccounts: {
-          const result = await controllers.approvals.resolve(task.id, async () => {
-            const resolvedChainRef = task.chainRef ?? controllers.network.getActiveChain().chainRef;
-
-            const accounts = await controllers.accounts.requestAccounts({
-              origin: task.origin,
-              chainRef: resolvedChainRef,
-            });
-
-            const uniqueAccounts = [...new Set(accounts)];
-            if (uniqueAccounts.length === 0) {
-              throw arxError({
-                reason: ArxReasons.PermissionDenied,
-                message: "No accounts available for connection request",
-                data: { origin: task.origin, reason: "no_accounts" },
-              });
-            }
-
-            await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
-              namespace: task.namespace ?? "eip155",
-              chainRef: resolvedChainRef,
-            });
-            await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
-              namespace: task.namespace ?? "eip155",
-              chainRef: resolvedChainRef,
-            });
-
-            await controllers.permissions.setPermittedAccounts(task.origin, {
-              namespace: task.namespace ?? "eip155",
-              chainRef: resolvedChainRef,
-              accounts: uniqueAccounts,
-            });
-
-            return uniqueAccounts;
-          });
-          return { id: task.id, result };
-        }
-        case ApprovalTypes.SignMessage: {
-          const payload = task.payload as { from: string; message: string };
-          const result = await controllers.approvals.resolve(task.id, async () => {
-            const signature = await controllers.signers.eip155.signPersonalMessage({
-              address: payload.from,
-              message: payload.message,
-            });
-            await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
-              namespace: task.namespace ?? "eip155",
-              chainRef: task.chainRef,
-            });
-            return signature;
-          });
-          return { id: task.id, result };
-        }
-        case ApprovalTypes.SignTypedData: {
-          const payload = task.payload as { from: string; typedData: unknown };
-          const result = await controllers.approvals.resolve(task.id, async () => {
-            const typedDataStr =
-              typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
-            const signature = await controllers.signers.eip155.signTypedData({
-              address: payload.from,
-              typedData: typedDataStr,
-            });
-            await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
-              namespace: task.namespace ?? "eip155",
-              chainRef: task.chainRef,
-            });
-            return signature;
-          });
-          return { id: task.id, result };
-        }
-        case ApprovalTypes.RequestPermissions: {
-          const payload = task.payload as { requested: any[] };
-          const result = await controllers.approvals.resolve(task.id, async () => ({
-            granted: payload.requested,
-          }));
-          return { id: task.id, result };
-        }
-        case ApprovalTypes.AddChain: {
-          const payload = task.payload as { metadata: unknown };
-          const result = await controllers.approvals.resolve(task.id, async () => {
-            await controllers.chainRegistry.upsertChain(
-              payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0],
-            );
-            return null;
-          });
-          return { id: task.id, result };
-        }
-        default:
-          throw new Error(`Unsupported approval type: ${task.type}`);
+      const handler = approvalHandlers[task.type];
+      if (!handler) {
+        throw new Error(`Unsupported approval type: ${task.type}`);
       }
+
+      const result = await controllers.approvals.resolve(task.id, () =>
+        handler(task as ApprovalTask, controllers)
+      );
+
+      return { id: task.id, result };
     },
 
-    "ui.approvals.reject": async ({ id, reason }: { id: string; reason?: string }) => {
+    "ui.approvals.reject": async ({ id, reason }) => {
       const task = controllers.approvals.get(id);
       if (!task) throw new Error("Approval not found");
       controllers.approvals.reject(task.id, new Error(reason ?? "User rejected"));
       return { id: task.id };
     },
 
-    "ui.keyrings.generateMnemonic": async (payload?: { wordCount?: 12 | 24 }) => {
+    "ui.keyrings.generateMnemonic": async (payload) => {
       assertUnlocked(session);
       const mnemonic = keyring.generateMnemonic(payload?.wordCount ?? 12);
       return { words: mnemonic.split(" ") };
     },
 
-    "ui.keyrings.confirmNewMnemonic": async (params: {
-      words: string[];
-      alias?: string;
-      skipBackup?: boolean;
-      namespace?: string;
-    }) => {
+    "ui.keyrings.confirmNewMnemonic": async (params) => {
       assertUnlocked(session);
-      return await keyring.confirmNewMnemonic(params.words.join(" "), {
-        alias: params.alias,
-        skipBackup: params.skipBackup,
-        namespace: params.namespace,
-      });
+      const opts: { alias?: string; skipBackup?: boolean; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      return await keyring.confirmNewMnemonic(params.words.join(" "), opts);
     },
 
-    "ui.keyrings.importMnemonic": async (params: { words: string[]; alias?: string; namespace?: string }) => {
+    "ui.keyrings.importMnemonic": async (params) => {
       assertUnlocked(session);
-      return await keyring.importMnemonic(params.words.join(" "), { alias: params.alias, namespace: params.namespace });
+      const opts: { alias?: string; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      return await keyring.importMnemonic(params.words.join(" "), opts);
     },
 
-    "ui.keyrings.importPrivateKey": async (params: { privateKey: string; alias?: string; namespace?: string }) => {
+    "ui.keyrings.importPrivateKey": async (params) => {
       assertUnlocked(session);
-      return await keyring.importPrivateKey(params.privateKey, { alias: params.alias, namespace: params.namespace });
+      const opts: { alias?: string; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      return await keyring.importPrivateKey(params.privateKey, opts);
     },
 
-    "ui.keyrings.deriveAccount": async (params: { keyringId: string }) => {
+    "ui.keyrings.deriveAccount": async (params) => {
       assertUnlocked(session);
       return await keyring.deriveAccount(params.keyringId);
     },
@@ -273,59 +324,59 @@ export const createUiHandlers = (deps: UiRuntimeDeps) => {
       return keyring.getKeyrings();
     },
 
-    "ui.keyrings.getAccountsByKeyring": async (params: { keyringId: string; includeHidden?: boolean }) => {
+    "ui.keyrings.getAccountsByKeyring": async (params) => {
       assertUnlocked(session);
       return keyring.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
     },
 
-    "ui.keyrings.renameKeyring": async (params: { keyringId: string; alias: string }) => {
+    "ui.keyrings.renameKeyring": async (params) => {
       assertUnlocked(session);
       await keyring.renameKeyring(params.keyringId, params.alias);
       return null;
     },
 
-    "ui.keyrings.renameAccount": async (params: { address: string; alias: string }) => {
+    "ui.keyrings.renameAccount": async (params) => {
       assertUnlocked(session);
       await keyring.renameAccount(params.address, params.alias);
       return null;
     },
 
-    "ui.keyrings.markBackedUp": async (params: { keyringId: string }) => {
+    "ui.keyrings.markBackedUp": async (params) => {
       assertUnlocked(session);
       await keyring.markBackedUp(params.keyringId);
       return null;
     },
 
-    "ui.keyrings.hideHdAccount": async (params: { address: string }) => {
+    "ui.keyrings.hideHdAccount": async (params) => {
       assertUnlocked(session);
       await keyring.hideHdAccount(params.address);
       return null;
     },
 
-    "ui.keyrings.unhideHdAccount": async (params: { address: string }) => {
+    "ui.keyrings.unhideHdAccount": async (params) => {
       assertUnlocked(session);
       await keyring.unhideHdAccount(params.address);
       return null;
     },
 
-    "ui.keyrings.removePrivateKeyKeyring": async (params: { keyringId: string }) => {
+    "ui.keyrings.removePrivateKeyKeyring": async (params) => {
       assertUnlocked(session);
       await keyring.removePrivateKeyKeyring(params.keyringId);
       return null;
     },
 
-    "ui.keyrings.exportMnemonic": async (params: { keyringId: string; password: string }) => {
+    "ui.keyrings.exportMnemonic": async (params) => {
       assertUnlocked(session);
       await verifyExportPassword(session, params.password);
       return { words: (await keyring.exportMnemonic(params.keyringId, params.password)).split(" ") };
     },
 
-    "ui.keyrings.exportPrivateKey": async (params: { address: string; password: string }) => {
+    "ui.keyrings.exportPrivateKey": async (params) => {
       assertUnlocked(session);
       await verifyExportPassword(session, params.password);
       const secret = await keyring.exportPrivateKeyByAddress(params.address, params.password);
       const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
       return { privateKey };
     },
-  } as const;
+  } as const satisfies UiHandlers;
 };

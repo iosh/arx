@@ -1,7 +1,7 @@
-import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 import { useState } from "react";
-import { Card, Form, H2, Paragraph, YStack } from "tamagui";
+import { Form, H3, Paragraph, useTheme, YStack } from "tamagui";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { Button, PasswordInput, Screen } from "../components";
 import { getUnlockErrorMessage } from "../lib/errorUtils";
@@ -9,117 +9,110 @@ import { ROUTES } from "../lib/routes";
 
 type UnlockScreenProps = {
   onSubmit: (password: string) => Promise<unknown>;
-  attention?: UiSnapshot["attention"];
   approvalsCount?: number;
 };
 
-export const UnlockScreen = ({ onSubmit, attention, approvalsCount = 0 }: UnlockScreenProps) => {
+export const UnlockScreen = ({ onSubmit, approvalsCount = 0 }: UnlockScreenProps) => {
   const router = useRouter();
+  const theme = useTheme();
   const [password, setPassword] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const attentionQueue = attention?.queue ?? [];
-  const attentionCount = attention?.count ?? attentionQueue.length;
-  const latestAttention = attentionQueue.length > 0 ? attentionQueue[attentionQueue.length - 1] : null;
-
-  const formatOriginHost = (origin: string) => {
-    try {
-      return new URL(origin).host || origin;
-    } catch {
-      return origin;
-    }
-  };
-
-  const getRequestLabel = (method: string) => {
-    switch (method) {
-      case "eth_requestAccounts":
-      case "wallet_requestPermissions":
-        return "connection request";
-      case "personal_sign":
-      case "eth_signTypedData_v4":
-        return "signature request";
-      case "eth_sendTransaction":
-        return "transaction request";
-      default:
-        return "request";
-    }
-  };
-
-  const originHost = latestAttention ? formatOriginHost(latestAttention.origin) : null;
-  const requestLabel = latestAttention ? getRequestLabel(latestAttention.method) : null;
   const handleSubmit = async () => {
     if (!password || isSubmitting) return;
     setSubmitting(true);
     setError(null);
     const pwd = password;
-    setPassword("");
+
     try {
       await onSubmit(pwd);
+      setPassword("");
 
-      let hasApprovals = approvalsCount > 0;
-      try {
-        const latestSnapshot = await uiClient.waitForSnapshot({
-          timeoutMs: 2000,
-          predicate: (snapshot) => snapshot.session.isUnlocked,
-        });
-        hasApprovals = latestSnapshot.approvals.length > 0;
-      } catch {
-        // Best-effort: navigation should not fail unlock UX if snapshot fetch fails.
-      }
-
-      if (hasApprovals) {
+      // If approvals are already queued, go there immediately.
+      if (approvalsCount > 0) {
         router.navigate({ to: ROUTES.APPROVALS, replace: true });
-      } else {
-        router.navigate({ to: ROUTES.HOME, replace: true });
+        return;
       }
+
+      // Otherwise, give the UI a brief window to receive any approval that may be created
+      // right after unlock (reduces races before Orchestrator owns all navigation).
+      try {
+        await uiClient.waitForSnapshot({
+          timeoutMs: 750,
+          predicate: (snapshot) => snapshot.session.isUnlocked && snapshot.approvals.length > 0,
+        });
+        router.navigate({ to: ROUTES.APPROVALS, replace: true });
+        return;
+      } catch {
+        // Best-effort: falling back to HOME should not fail unlock UX.
+      }
+
+      router.navigate({ to: ROUTES.HOME, replace: true });
     } catch (err) {
       setError(getUnlockErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
   };
+
   return (
     <Screen scroll={false}>
-      <Form onSubmit={handleSubmit} alignItems="stretch" padding="$4" gap="$4">
-        <YStack gap="$2">
-          <H2>Unlock Wallet</H2>
-          <Paragraph color="$mutedText">Enter your password to access accounts.</Paragraph>
-        </YStack>
-
-        {latestAttention ? (
-          <Card padded bordered backgroundColor="$surface" borderColor="$accent" gap="$2">
-            <Paragraph fontWeight="600" color="$accent">
-              Action required
-            </Paragraph>
-            <Paragraph color="$mutedText" fontSize="$2">
-              Pending {requestLabel} from {originHost}. ({attentionCount} total) Unlock, then return to the dApp and
-              retry.
-            </Paragraph>
-            <YStack gap="$1">
-              <Paragraph fontSize="$2">Origin: {originHost}</Paragraph>
-              <Paragraph fontSize="$2">Method: {latestAttention.method}</Paragraph>
-              <Paragraph fontSize="$2">Chain: {latestAttention.chainRef ?? "-"}</Paragraph>
-              <Paragraph fontSize="$2">Namespace: {latestAttention.namespace ?? "-"}</Paragraph>
+      <YStack flex={1} justifyContent="center" paddingVertical="$8">
+        <YStack width="100%" maxWidth={400} alignSelf="center" gap="$6">
+          <YStack alignItems="center" gap="$4">
+            <YStack
+              backgroundColor="$surface"
+              padding="$4"
+              borderRadius={100}
+              alignItems="center"
+              justifyContent="center"
+              animation="fast"
+            >
+              <Lock size={32} color={theme.text.get()} strokeWidth={2} />
             </YStack>
-          </Card>
-        ) : null}
 
-        <PasswordInput
-          label="Password"
-          revealMode="press"
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          autoFocus
-          disabled={isSubmitting}
-          errorText={error ?? undefined}
-        />
+            <YStack alignItems="center" gap="$2">
+              <H3 textAlign="center" fontWeight="700">
+                Welcome Back
+              </H3>
+              <Paragraph color="$mutedText" textAlign="center" size="$3">
+                Enter your password to unlock
+              </Paragraph>
+            </YStack>
+          </YStack>
 
-        <Button variant="primary" onPress={handleSubmit} disabled={!password || isSubmitting} loading={isSubmitting}>
-          Unlock
-        </Button>
-      </Form>
+          <Form onSubmit={handleSubmit} gap="$4" alignItems="stretch">
+            <YStack gap="$2">
+              <PasswordInput
+                revealMode="press"
+                placeholder="Password"
+                aria-label="Password"
+                autoComplete="current-password"
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (error) setError(null);
+                }}
+                autoFocus
+                disabled={isSubmitting}
+                errorText={error ?? undefined}
+                size="$4"
+              />
+            </YStack>
+
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              disabled={!password || isSubmitting}
+              loading={isSubmitting}
+              size="$4"
+            >
+              Unlock
+            </Button>
+          </Form>
+        </YStack>
+      </YStack>
     </Screen>
   );
 };

@@ -11,6 +11,7 @@ import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { ensureWindowInnerSize } from "@/ui/lib/windowSizing";
 
 // Create QueryClient instance (shared across entire app)
 const queryClient = new QueryClient();
@@ -72,12 +73,14 @@ const boot = async () => {
     return;
   }
 
+  ensureWindowInnerSize();
+
   try {
     const snapshot = await uiClient.snapshot.get();
     const needsOnboardingNow = needsOnboarding(snapshot);
 
     if (needsOnboardingNow) {
-      void uiClient.onboarding.openTab("manual_open");
+      void uiClient.onboarding.openTab({ reason: "onboarding" });
       window.close();
       return;
     }

@@ -5,6 +5,9 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  --arx-ui-width: 384px;
+  --arx-ui-height: 600px;
 }
 
 html,
@@ -20,8 +23,8 @@ body {
   overflow: hidden;
 }
 body {
-  min-width: 400px;
-  min-height: 600px;
+  min-width: var(--arx-ui-width);
+  min-height: var(--arx-ui-height);
 }
 *,
 *::before,

@@ -10,6 +10,7 @@ import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { ensureWindowInnerSize } from "@/ui/lib/windowSizing";
 
 const queryClient = new QueryClient();
 const hashHistory = createHashHistory();
@@ -66,6 +67,8 @@ const boot = async () => {
     renderEntryIntentError(message);
     return;
   }
+
+  ensureWindowInnerSize();
 
   try {
     const snapshot = await uiClient.snapshot.get();

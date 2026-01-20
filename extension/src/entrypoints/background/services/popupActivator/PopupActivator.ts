@@ -1,5 +1,6 @@
 import { createLogger } from "@arx/core";
 import type browserDefault from "webextension-polyfill";
+import { ARX_UI_INNER_SIZE } from "@/ui/lib/uiWindow";
 
 export type PopupOpenContext = {
   reason?: string;
@@ -35,7 +36,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
   const now = deps.now ?? (() => Date.now());
   const cooldownMs = deps.cooldownMs ?? 500;
   const popupPath = deps.popupPath ?? "popup.html";
-  const size = deps.size ?? { width: 400, height: 600 };
+  const size = deps.size ?? ARX_UI_INNER_SIZE;
 
   let cachedWindowId: number | null = null;
   let lastAttemptAt: number | null = null;

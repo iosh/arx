@@ -51,7 +51,7 @@ const toPlainHex = (bytes: Uint8Array): string => {
 // Helper to resolve chain context from task
 const resolveChainContext = (
   task: { chainRef?: string; namespace?: string },
-  controllers: { network: { getActiveChain: () => { chainRef: string } } }
+  controllers: { network: { getActiveChain: () => { chainRef: string } } },
 ) => {
   const chainRef = task.chainRef ?? controllers.network.getActiveChain().chainRef;
   const namespace = task.namespace ?? "eip155";
@@ -72,10 +72,7 @@ type ApprovalTask = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ApprovalResult = any; // Will be validated by zod schema
 
-type ApprovalHandlerFn = (
-  task: ApprovalTask,
-  controllers: UiRuntimeDeps["controllers"]
-) => Promise<ApprovalResult>;
+type ApprovalHandlerFn = (task: ApprovalTask, controllers: UiRuntimeDeps["controllers"]) => Promise<ApprovalResult>;
 
 // Individual approval handlers organized by type
 const approvalHandlers: Record<string, ApprovalHandlerFn> = {
@@ -142,8 +139,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     const payload = task.payload as { from: string; typedData: unknown };
     const { chainRef, namespace } = resolveChainContext(task, controllers);
 
-    const typedDataStr =
-      typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
+    const typedDataStr = typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
 
     const signature = await controllers.signers.eip155.signTypedData({
       address: payload.from,
@@ -166,7 +162,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.AddChain]: async (task, controllers) => {
     const payload = task.payload as { metadata: unknown };
     await controllers.chainRegistry.upsertChain(
-      payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0]
+      payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0],
     );
     return null;
   },
@@ -269,9 +265,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         throw new Error(`Unsupported approval type: ${task.type}`);
       }
 
-      const result = await controllers.approvals.resolve(task.id, () =>
-        handler(task as ApprovalTask, controllers)
-      );
+      const result = await controllers.approvals.resolve(task.id, () => handler(task as ApprovalTask, controllers));
 
       return { id: task.id, result };
     },

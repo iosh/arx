@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { uiActions } from "./actions.js";
 import { uiMethods } from "./methods.js";
-import { parseUiMethodParams } from "./protocol.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol.js";
+import { parseUiMethodParams } from "./protocol.js";
 
 describe("ui actions", () => {
   it("invokes all uiMethods keys exactly", () => {

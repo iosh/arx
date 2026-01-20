@@ -18,4 +18,3 @@ export const ensureWindowInnerSize = (target = ARX_UI_INNER_SIZE) => {
     // Some extension surfaces may disallow resizing.
   }
 };
-

@@ -25,9 +25,10 @@ export type UiPlatformAdapter = {
 
 type Awaitable<T> = T | Promise<T>;
 
-export type UiHandlerFn<M extends UiMethodName> = undefined extends UiMethodParams<M>
-  ? (params?: UiMethodParams<M>) => Awaitable<UiMethodResult<M>>
-  : (params: UiMethodParams<M>) => Awaitable<UiMethodResult<M>>;
+export type UiHandlerFn<M extends UiMethodName> =
+  undefined extends UiMethodParams<M>
+    ? (params?: UiMethodParams<M>) => Awaitable<UiMethodResult<M>>
+    : (params: UiMethodParams<M>) => Awaitable<UiMethodResult<M>>;
 
 export type UiHandlers = {
   [M in UiMethodName]: UiHandlerFn<M>;

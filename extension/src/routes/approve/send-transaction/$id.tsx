@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ApprovalDetailScreen } from "@/ui/approvals";
+import { ApprovalDetailScreen, useApprovalSnooze } from "@/ui/approvals";
 import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/approve/send-transaction/$id")({
 function ApproveSendTransactionByIdPage() {
   const router = useRouter();
   const { id } = Route.useParams();
+  const { snoozeHeadId } = useApprovalSnooze();
   const { snapshot, isLoading, approveApproval, rejectApproval } = useUiSnapshot();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,7 +78,10 @@ function ApproveSendTransactionByIdPage() {
       approval={approval}
       onApprove={() => void handleApprove()}
       onReject={() => void handleReject()}
-      onBack={() => router.navigate({ to: ROUTES.APPROVALS })}
+      onBack={() => {
+        snoozeHeadId(snapshot.approvals[0]?.id ?? null);
+        router.navigate({ to: ROUTES.APPROVALS });
+      }}
       pending={pending}
       errorMessage={errorMessage}
     />

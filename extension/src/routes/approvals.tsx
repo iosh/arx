@@ -2,7 +2,7 @@ import type { ApprovalSummary } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card, Paragraph, YStack } from "tamagui";
-import { ApprovalDetailScreen, getApprovalTypeLabel } from "@/ui/approvals";
+import { ApprovalDetailScreen, getApprovalTypeLabel, useApprovalSnooze } from "@/ui/approvals";
 import { Button, ListItem, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/approvals")({
 
 function ApprovalsPage() {
   const router = useRouter();
+  const { snoozeHeadId } = useApprovalSnooze();
   const { snapshot, isLoading, approveApproval, rejectApproval } = useUiSnapshot();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
@@ -68,7 +69,14 @@ function ApprovalsPage() {
 
   return (
     <Screen>
-      <Button onPress={() => router.navigate({ to: ROUTES.HOME })}>Back</Button>
+      <Button
+        onPress={() => {
+          snoozeHeadId(snapshot.approvals[0]?.id ?? null);
+          router.navigate({ to: ROUTES.HOME });
+        }}
+      >
+        Back
+      </Button>
 
       <Card padded bordered gap="$2">
         <Paragraph fontSize="$6" fontWeight="600">

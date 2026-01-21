@@ -1,19 +1,14 @@
-import { useRouter } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 import { useState } from "react";
 import { Form, H3, Paragraph, useTheme, YStack } from "tamagui";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { Button, PasswordInput, Screen } from "../components";
 import { getUnlockErrorMessage } from "../lib/errorUtils";
-import { ROUTES } from "../lib/routes";
 
 type UnlockScreenProps = {
   onSubmit: (password: string) => Promise<unknown>;
-  approvalsCount?: number;
 };
 
-export const UnlockScreen = ({ onSubmit, approvalsCount = 0 }: UnlockScreenProps) => {
-  const router = useRouter();
+export const UnlockScreen = ({ onSubmit }: UnlockScreenProps) => {
   const theme = useTheme();
   const [password, setPassword] = useState("");
   const [isSubmitting, setSubmitting] = useState(false);
@@ -28,27 +23,6 @@ export const UnlockScreen = ({ onSubmit, approvalsCount = 0 }: UnlockScreenProps
     try {
       await onSubmit(pwd);
       setPassword("");
-
-      // If approvals are already queued, go there immediately.
-      if (approvalsCount > 0) {
-        router.navigate({ to: ROUTES.APPROVALS, replace: true });
-        return;
-      }
-
-      // Otherwise, give the UI a brief window to receive any approval that may be created
-      // right after unlock (reduces races before Orchestrator owns all navigation).
-      try {
-        await uiClient.waitForSnapshot({
-          timeoutMs: 750,
-          predicate: (snapshot) => snapshot.session.isUnlocked && snapshot.approvals.length > 0,
-        });
-        router.navigate({ to: ROUTES.APPROVALS, replace: true });
-        return;
-      } catch {
-        // Best-effort: falling back to HOME should not fail unlock UX.
-      }
-
-      router.navigate({ to: ROUTES.HOME, replace: true });
     } catch (err) {
       setError(getUnlockErrorMessage(err));
     } finally {

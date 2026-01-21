@@ -1,5 +1,6 @@
 import type { Eip155TransactionPayload, TransactionMeta } from "../../../../controllers/transaction/types.js";
-import type { TransactionAdapterContext } from "../../../types.js";
+import type { TransactionAdapterContext } from "../../types.js";
+
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_VALUES } from "./constants.js";
 
 /**

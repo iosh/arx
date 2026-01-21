@@ -28,7 +28,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (preDecision.type === "openOnboardingAndClose") {
-      void uiClient.onboarding.openTab(preDecision.reason);
+      void uiClient.onboarding.openTab({ reason: preDecision.reason });
       window.close();
       return;
     }
@@ -52,7 +52,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     });
 
     if (decision.type === "openOnboardingAndClose") {
-      void uiClient.onboarding.openTab(decision.reason);
+      void uiClient.onboarding.openTab({ reason: decision.reason });
       window.close();
       return;
     }

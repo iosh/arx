@@ -93,8 +93,8 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     }
 
     contextPromise = (async () => {
-      let resolveNamespaceRef: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
-      const namespaceResolver = (ctx?: RpcInvocationContext) => resolveNamespaceRef(ctx);
+      let getNamespace: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
+      const namespaceResolver = (ctx?: RpcInvocationContext) => getNamespace(ctx);
       const storage = getExtensionStorage();
       const chainRegistry = getExtensionChainRegistry();
       const keyringStore = getExtensionKeyringStore();
@@ -224,7 +224,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
 
-      resolveNamespaceRef = createNamespaceResolver(controllers);
+      getNamespace = createNamespaceResolver(controllers);
 
       unsubscribeControllerEvents.push(
         session.unlock.onUnlocked((payload) => {

@@ -353,7 +353,7 @@ const handleWalletGetPermissions: MethodHandler = ({ origin, controllers }) => {
 
   return buildWalletPermissions(options);
 };
-const normalizePermissionRequests = (
+const parsePermissionRequests = (
   params: JsonRpcParams | undefined,
   defaultChain: Caip2ChainId,
 ): PermissionRequestDescriptor[] => {
@@ -410,7 +410,7 @@ const normalizePermissionRequests = (
 const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {
   const activeChain = controllers.network.getActiveChain();
 
-  const requested = normalizePermissionRequests(request.params, activeChain.chainRef);
+  const requested = parsePermissionRequests(request.params, activeChain.chainRef);
   const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
     id: createTaskId("wallet_requestPermissions"),
     type: ApprovalTypes.RequestPermissions,

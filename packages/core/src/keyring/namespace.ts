@@ -10,10 +10,10 @@ export type NamespaceKeyringFactories = {
 
 export type NamespaceConfig = {
   namespace: string; // e.g., "eip155", "conflux"
-  normalizeAddress: AddressNormalizer;
+  toCanonicalAddress: AddressNormalizer;
   factories: NamespaceKeyringFactories;
 };
 
-// Namespace + normalized address → global dedupe key
-export const getAddressKey = (namespace: string, value: string, normalize: AddressNormalizer): string =>
-  `${namespace}:${normalize(value)}`;
+// Namespace + canonical address → global dedupe key
+export const getAddressKey = (namespace: string, value: string, toCanonicalAddress: AddressNormalizer): string =>
+  `${namespace}:${toCanonicalAddress(value)}`;

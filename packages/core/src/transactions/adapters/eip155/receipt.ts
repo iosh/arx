@@ -36,7 +36,7 @@ const cloneReceipt = (receipt: RawReceipt): Record<string, unknown> => {
   return Object.fromEntries(Object.entries(receipt).map(([key, entry]) => [key, cloneValue(entry)]));
 };
 
-const resolveStatus = (receipt: RawReceipt): "success" | "failed" => {
+const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   const status = receipt.status;
 
   if (typeof status === "string") {
@@ -134,7 +134,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       }
 
       const receipt = cloneReceipt(rawReceipt);
-      const status = resolveStatus(rawReceipt);
+      const status = deriveReceiptStatus(rawReceipt);
       return { status, receipt };
     },
 

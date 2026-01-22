@@ -116,7 +116,7 @@ const buildEndpointInfoList = (endpoints: RpcEndpoint[]): RpcEndpointInfo[] =>
     headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
   }));
 
-const normalizeStrategy = (strategy?: RpcStrategyConfig): RpcStrategyConfig => {
+const deriveStrategyConfig = (strategy?: RpcStrategyConfig): RpcStrategyConfig => {
   if (!strategy) return { ...DEFAULT_STRATEGY };
   return { id: strategy.id, options: strategy.options ? { ...strategy.options } : undefined };
 };
@@ -139,7 +139,7 @@ export class InMemoryNetworkController implements NetworkController {
     defaultCooldownMs = 5_000,
   }: NetworkControllerOptions) {
     this.#messenger = messenger;
-    this.#defaultStrategy = normalizeStrategy(defaultStrategy);
+    this.#defaultStrategy = deriveStrategyConfig(defaultStrategy);
     this.#now = now;
     this.#logger = logger;
     this.#defaultCooldownMs = defaultCooldownMs;
@@ -219,7 +219,7 @@ export class InMemoryNetworkController implements NetworkController {
   ): Promise<ChainMetadata> {
     const incoming = cloneMetadata(metadata);
     const existing = this.#chains.get(incoming.chainRef);
-    const strategy = normalizeStrategy(options?.strategy ?? existing?.strategy ?? this.#defaultStrategy);
+    const strategy = deriveStrategyConfig(options?.strategy ?? existing?.strategy ?? this.#defaultStrategy);
     const runtime = this.#createRuntime(incoming, strategy, existing);
     this.#chains.set(incoming.chainRef, runtime);
 
@@ -253,7 +253,7 @@ export class InMemoryNetworkController implements NetworkController {
     }
 
     const now = this.#now();
-    const targetIndex = this.#resolveEndpointIndex(runtime, outcome.endpointIndex);
+    const targetIndex = this.#selectEndpointIndex(runtime, outcome.endpointIndex);
     runtime.activeIndex = targetIndex;
     const health = runtime.health[targetIndex]!;
 
@@ -345,7 +345,7 @@ export class InMemoryNetworkController implements NetworkController {
 
   setStrategy(chainRef: Caip2ChainId, strategy: RpcStrategyConfig): void {
     const runtime = this.#requireRuntime(chainRef);
-    runtime.strategy = normalizeStrategy(strategy);
+    runtime.strategy = deriveStrategyConfig(strategy);
     runtime.lastUpdatedAt = this.#now();
     this.#logger({
       level: "info",
@@ -395,7 +395,7 @@ export class InMemoryNetworkController implements NetworkController {
     const chainMap = new Map<Caip2ChainId, ChainRuntime>();
     for (const metadata of sortChains(state.knownChains.map(cloneMetadata))) {
       const snapshot = state.rpc[metadata.chainRef];
-      const strategy = normalizeStrategy(snapshot?.strategy ?? this.#defaultStrategy);
+      const strategy = deriveStrategyConfig(snapshot?.strategy ?? this.#defaultStrategy);
       const runtime = this.#createRuntimeFromSnapshot(metadata, strategy, snapshot);
       chainMap.set(metadata.chainRef, runtime);
     }
@@ -422,7 +422,7 @@ export class InMemoryNetworkController implements NetworkController {
 
     return {
       metadata,
-      strategy: normalizeStrategy(strategy),
+      strategy: deriveStrategyConfig(strategy),
       endpoints,
       health,
       activeIndex,
@@ -489,7 +489,7 @@ export class InMemoryNetworkController implements NetworkController {
     return health;
   }
 
-  #resolveEndpointIndex(runtime: ChainRuntime, provided?: number): number {
+  #selectEndpointIndex(runtime: ChainRuntime, provided?: number): number {
     if (provided === undefined) {
       return runtime.activeIndex;
     }
@@ -549,7 +549,7 @@ export class InMemoryNetworkController implements NetworkController {
       activeIndex: runtime.activeIndex,
       endpoints: buildEndpointInfoList(runtime.endpoints),
       health: cloneHealth(runtime.health),
-      strategy: normalizeStrategy(runtime.strategy),
+      strategy: deriveStrategyConfig(runtime.strategy),
       lastUpdatedAt: runtime.lastUpdatedAt,
     };
   }

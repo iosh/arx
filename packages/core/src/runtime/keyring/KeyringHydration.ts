@@ -186,7 +186,7 @@ export class KeyringHydration {
 
               for (const meta of derived) {
                 const derivedAccount = hd.deriveAccount(meta.derivationIndex ?? 0);
-                if (config.normalizeAddress(derivedAccount.address) !== meta.address) {
+                if (config.toCanonicalAddress(derivedAccount.address) !== meta.address) {
                   throw keyringErrors.secretUnavailable();
                 }
               }

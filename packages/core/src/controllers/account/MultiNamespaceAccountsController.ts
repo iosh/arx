@@ -254,7 +254,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
   }
 
   #canonical(chainRef: Caip2ChainId, address: AccountAddress<T>): AccountAddress<T> {
-    const result = this.#chains.normalizeAddress({ chainRef, value: address });
+    const result = this.#chains.toCanonicalAddress({ chainRef, value: address });
     return result.canonical as AccountAddress<T>;
   }
 

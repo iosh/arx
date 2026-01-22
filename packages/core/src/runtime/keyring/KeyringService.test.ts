@@ -89,7 +89,7 @@ const flushAsync = async () => {
 const baseNamespaces = [
   {
     namespace: EIP155_NAMESPACE,
-    normalizeAddress: toCanonicalEvmAddress,
+    toCanonicalAddress: toCanonicalEvmAddress,
     factories: {
       hd: () => new EthereumHdKeyring(),
       "private-key": () => new PrivateKeyKeyring(),

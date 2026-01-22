@@ -8,13 +8,13 @@ import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
 
 type ImportMode = "mnemonic" | "privateKey";
 
-const normalizeWords = (value: string) =>
+const splitMnemonicWords = (value: string) =>
   value
     .trim()
     .split(/[\s,]+/)
     .filter(Boolean);
 
-const normalizePrivateKey = (value: string) => value.trim().replace(/[\s,]+/g, "");
+const sanitizePrivateKeyInput = (value: string) => value.trim().replace(/[\s,]+/g, "");
 
 export const Route = createFileRoute("/onboarding/import")({
   beforeLoad: requireSetupIncomplete,
@@ -46,18 +46,18 @@ function ImportSetupRoute() {
 
     try {
       if (forcedMode === "mnemonic") {
-        const words = normalizeWords(value);
+        const words = splitMnemonicWords(value);
         await importMnemonic({ words, alias });
       } else if (forcedMode === "privateKey") {
-        await importPrivateKey({ privateKey: normalizePrivateKey(value), alias });
+        await importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias });
       } else {
-        const words = normalizeWords(value);
+        const words = splitMnemonicWords(value);
         const looksLikeMnemonic = words.length >= 11;
         const primary = looksLikeMnemonic
           ? async () => importMnemonic({ words, alias })
-          : async () => importPrivateKey({ privateKey: normalizePrivateKey(value), alias });
+          : async () => importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias });
         const secondary = looksLikeMnemonic
-          ? async () => importPrivateKey({ privateKey: normalizePrivateKey(value), alias })
+          ? async () => importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias })
           : async () => importMnemonic({ words, alias });
 
         try {

@@ -11,7 +11,7 @@ type GasResolverParams = {
   nonceProvided?: Hex.Hex | null;
 };
 
-export const resolveGas = async (
+export const deriveGas = async (
   params: GasResolverParams,
   issues: Eip155TransactionDraft["issues"],
   warnings: Eip155TransactionDraft["warnings"],

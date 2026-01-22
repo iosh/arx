@@ -108,13 +108,13 @@ const parseChainRef = (chainRef: string | null | undefined): ParsedChainRef | nu
   };
 };
 
-const resolveNamespaceFromContext = (context?: Parameters<PermissionScopeResolver>[1]): ChainNamespace => {
+const deriveNamespaceFromContext = (context?: Parameters<PermissionScopeResolver>[1]): ChainNamespace => {
   if (context?.namespace) return context.namespace as ChainNamespace;
   const parsed = parseChainRef(context?.chainRef ?? null);
   return parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
 };
 
-const resolveNamespaceFromOptions = (options: {
+const deriveNamespaceFromOptions = (options: {
   namespace?: ChainNamespace | null;
   chainRef: Caip2ChainId;
 }): { namespace: ChainNamespace; chainRef: Caip2ChainId } => {
@@ -132,7 +132,7 @@ const resolveNamespaceFromOptions = (options: {
   return { namespace, chainRef: normalized };
 };
 
-const resolveNamespaceState = (
+const findNamespaceState = (
   state: PermissionsState,
   origin: string,
   namespace: ChainNamespace,
@@ -162,15 +162,15 @@ export class InMemoryPermissionController implements PermissionController {
     origin: string,
     options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId },
   ): string[] {
-    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
-    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
+    const namespaceState = findNamespaceState(this.#state, origin, namespace);
     const accounts = namespaceState?.accountsByChain?.[chainRef] ?? [];
     return [...accounts];
   }
 
   isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }): boolean {
-    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
-    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
+    const namespaceState = findNamespaceState(this.#state, origin, namespace);
     return namespaceState?.accountsByChain?.[chainRef] !== undefined;
   }
 
@@ -178,7 +178,7 @@ export class InMemoryPermissionController implements PermissionController {
     origin: string,
     options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId; accounts: string[] },
   ): Promise<void> {
-    const { namespace, chainRef } = resolveNamespaceFromOptions(options);
+    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
 
     const seen = new Set<string>();
     const uniqueAccounts: string[] = [];
@@ -189,7 +189,7 @@ export class InMemoryPermissionController implements PermissionController {
       if (!trimmed) continue;
 
       const canonical =
-        namespace === "eip155" ? this.#chains.normalizeAddress({ chainRef, value: trimmed }).canonical : trimmed;
+        namespace === "eip155" ? this.#chains.toCanonicalAddress({ chainRef, value: trimmed }).canonical : trimmed;
 
       if (seen.has(canonical)) continue;
       seen.add(canonical);
@@ -238,8 +238,8 @@ export class InMemoryPermissionController implements PermissionController {
     const scope = this.#scopeResolver(method, context);
     if (!scope) return;
 
-    const namespace = resolveNamespaceFromContext(context);
-    const namespaceState = resolveNamespaceState(this.#state, origin, namespace);
+    const namespace = deriveNamespaceFromContext(context);
+    const namespaceState = findNamespaceState(this.#state, origin, namespace);
     const scopes = namespaceState?.scopes ?? [];
 
     if (!scopes.includes(scope)) {

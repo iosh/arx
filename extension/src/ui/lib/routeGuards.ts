@@ -1,7 +1,7 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { redirect } from "@tanstack/react-router";
 import type { RouterContext } from "@/routes/__root";
-import { getOrFetchUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
+import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
 import { ROUTES } from "./routes";
 
 /**

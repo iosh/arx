@@ -36,7 +36,7 @@ export const isUserRejection = (error: unknown): boolean => {
   return isWalletError(error) && error.reason === ArxReasons.ApprovalRejected;
 };
 
-const normalizeMessage = (value: unknown) => {
+const getMessageText = (value: unknown) => {
   if (value instanceof Error) return value.message ?? "";
   if (typeof value === "string") return value;
   return "";
@@ -50,7 +50,7 @@ export const getUnlockErrorMessage = (error: unknown): string => {
     }
     return getErrorMessage(error);
   }
-  const message = normalizeMessage(error).toLowerCase();
+  const message = getMessageText(error).toLowerCase();
   if (message.includes("invalid password") || message.includes("incorrect password")) {
     return "Incorrect password. Please try again.";
   }
@@ -62,7 +62,7 @@ export const getInitErrorMessage = (error: unknown): string => {
   if (walletError?.reason) {
     return getErrorMessage(error);
   }
-  const message = normalizeMessage(error).toLowerCase();
+  const message = getMessageText(error).toLowerCase();
   if (message.includes("already initialized")) {
     return "Wallet is already initialized. Please unlock instead.";
   }

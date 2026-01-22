@@ -4,9 +4,9 @@ import type { Eip155TransactionPayload } from "../../../controllers/transaction/
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
-import { resolveFees } from "./resolvers/feeResolver.js";
-import { resolveFields } from "./resolvers/fieldResolver.js";
-import { resolveGas } from "./resolvers/gasResolver.js";
+import { deriveFees } from "./resolvers/feeResolver.js";
+import { deriveFields } from "./resolvers/fieldResolver.js";
+import { deriveGas } from "./resolvers/gasResolver.js";
 import type { Eip155DraftPrepared, Eip155DraftSummary, Eip155TransactionDraft } from "./types.js";
 import { pickDefined } from "./utils/helpers.js";
 import { pushIssue, readErrorMessage } from "./utils/validation.js";
@@ -20,7 +20,7 @@ type DraftBuilderDeps = {
 export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
   const chains = deps.chains ?? createDefaultChainModuleRegistry();
   const readNow = deps.now ?? Date.now;
-  const resolveAddresses = createAddressResolver({ chains });
+  const deriveAddresses = createAddressResolver({ chains });
 
   return async (ctx: TransactionAdapterContext): Promise<Eip155TransactionDraft> => {
     if (ctx.namespace !== "eip155") {
@@ -43,7 +43,7 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
       callParams: {},
     };
 
-    const addresses = resolveAddresses(
+    const addresses = deriveAddresses(
       ctx,
       { from: payload.from ?? null, to: "to" in payload ? (payload.to ?? null) : undefined },
       issues,
@@ -51,7 +51,7 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
     Object.assign(prepared, addresses.prepared);
     Object.assign(summary, addresses.summary);
 
-    const fields = resolveFields(ctx, payload, issues, warnings);
+    const fields = deriveFields(ctx, payload, issues, warnings);
     Object.assign(prepared, fields.prepared);
     Object.assign(summary, fields.summary);
 
@@ -82,7 +82,7 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
       "nonce",
     ] as const);
 
-    const gasResolution = await resolveGas(
+    const gasResolution = await deriveGas(
       {
         rpc,
         callParams: prepared.callParams,
@@ -104,7 +104,7 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
       "maxPriorityFeePerGas",
     ] as const);
 
-    const feeParams: Parameters<typeof resolveFees>[0] = {
+    const feeParams: Parameters<typeof deriveFees>[0] = {
       rpc,
       feeValues: feeValueInputs,
       payloadFees: payloadFeeInputs,
@@ -112,7 +112,7 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
     if (prepared.gas) feeParams.gas = prepared.gas;
     if (prepared.value) feeParams.value = prepared.value;
 
-    const feeResolution = await resolveFees(feeParams, issues);
+    const feeResolution = await deriveFees(feeParams, issues);
     Object.assign(prepared, feeResolution.prepared);
     Object.assign(summary, feeResolution.summary);
 

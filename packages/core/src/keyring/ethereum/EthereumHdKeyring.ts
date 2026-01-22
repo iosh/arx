@@ -68,7 +68,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   importAccount(privateKey: string | Uint8Array): EthereumKeyringAccount {
-    const secret = this.#normalizePrivateKey(privateKey);
+    const secret = this.#parsePrivateKeyBytes(privateKey);
     try {
       const address = this.#addressFromSecret(secret);
       if (this.#accounts.has(address)) {
@@ -94,18 +94,18 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   getAccount(address: string): EthereumKeyringAccount | undefined {
-    const canonical = this.#normalizeAddress(address);
+    const canonical = this.#toCanonicalAddress(address);
     const entry = this.#accounts.get(canonical);
     return entry ? { ...entry.account } : undefined;
   }
 
   hasAccount(address: string): boolean {
-    const canonical = this.#normalizeAddress(address);
+    const canonical = this.#toCanonicalAddress(address);
     return this.#accounts.has(canonical);
   }
 
   removeAccount(address: string): void {
-    const canonical = this.#normalizeAddress(address);
+    const canonical = this.#toCanonicalAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
       throw keyringErrors.accountNotFound();
@@ -123,7 +123,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   exportPrivateKey(address: string): Uint8Array {
-    const canonical = this.#normalizeAddress(address);
+    const canonical = this.#toCanonicalAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
       throw keyringErrors.accountNotFound();
@@ -149,7 +149,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
         throw keyringErrors.secretUnavailable();
       }
       const derived = this.#deriveAndStore(account.derivationIndex);
-      if (derived.account.address !== this.#normalizeAddress(account.address)) {
+      if (derived.account.address !== this.#toCanonicalAddress(account.address)) {
         throw keyringErrors.secretUnavailable();
       }
     }
@@ -205,7 +205,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   #storeAccount(account: EthereumKeyringAccount, secret: Uint8Array): StoredAccount {
-    const canonical = this.#normalizeAddress(account.address);
+    const canonical = this.#toCanonicalAddress(account.address);
     const entry: StoredAccount = {
       account: { ...account, address: canonical },
       secret: copyBytes(secret),
@@ -231,7 +231,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     return `0x${bytesToHex(addressBytes)}`;
   }
 
-  #normalizeAddress(value: string): string {
+  #toCanonicalAddress(value: string): string {
     if (typeof value !== "string" || value.trim().length === 0) {
       throw keyringErrors.invalidAddress();
     }
@@ -242,7 +242,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     return normalized.startsWith("0x") ? normalized : `0x${normalized}`;
   }
 
-  #normalizePrivateKey(value: string | Uint8Array): Uint8Array {
+  #parsePrivateKeyBytes(value: string | Uint8Array): Uint8Array {
     if (value instanceof Uint8Array) {
       if (value.length !== 32) {
         throw keyringErrors.invalidPrivateKey();

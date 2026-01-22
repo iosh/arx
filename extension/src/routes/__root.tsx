@@ -7,8 +7,8 @@ import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
-import { getOrFetchUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
 // Router context type for route guards

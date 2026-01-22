@@ -192,7 +192,7 @@ describe("AccountsKeyringBridge", () => {
       namespaces: [
         {
           namespace,
-          normalizeAddress: toCanonicalEvmAddress,
+          toCanonicalAddress: toCanonicalEvmAddress,
           factories: { hd: () => new EthereumHdKeyring(), "private-key": () => new PrivateKeyKeyring() },
         },
       ],

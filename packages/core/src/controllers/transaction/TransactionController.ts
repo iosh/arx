@@ -153,20 +153,20 @@ export class InMemoryTransactionController implements TransactionController {
       throw new Error("Active chain is required for transactions");
     }
 
-    const resolvedCaip2 = request.caip2 ?? activeChain.chainRef;
+    const chainRef = request.caip2 ?? activeChain.chainRef;
     const adapter = this.#registry.get(request.namespace);
 
     const id = this.#generateId();
     const timestamp = this.#now();
-    const fromAddress = this.#resolveFrom(request) ?? this.#accounts.getActivePointer()?.address ?? null;
+    const fromAddress = this.#findFromAddress(request) ?? this.#accounts.getActivePointer()?.address ?? null;
 
     const meta: TransactionMeta = {
       id,
       namespace: request.namespace,
-      caip2: resolvedCaip2,
+      caip2: chainRef,
       origin,
       from: fromAddress,
-      request: cloneRequest({ ...request, caip2: resolvedCaip2 }),
+      request: cloneRequest({ ...request, caip2: chainRef }),
       status: "pending",
       hash: null,
       receipt: null,
@@ -301,7 +301,7 @@ export class InMemoryTransactionController implements TransactionController {
   }
   async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
     const now = this.#now();
-    const error = this.#normalizeError(reason);
+    const error = this.#coerceTransactionError(reason);
     const isUserRejected =
       (reason && isArxError(reason) && reason.reason === ArxReasons.ApprovalRejected) ||
       error?.code === 4001 ||
@@ -422,7 +422,7 @@ export class InMemoryTransactionController implements TransactionController {
     };
   }
 
-  #resolveFrom(request: TransactionRequest): AccountAddress | null {
+  #findFromAddress(request: TransactionRequest): AccountAddress | null {
     const payload = request.payload;
     if (payload && typeof payload === "object") {
       const candidate = (payload as { from?: unknown }).from;
@@ -479,7 +479,7 @@ export class InMemoryTransactionController implements TransactionController {
     }
   }
 
-  #normalizeError(reason?: Error | TransactionError | null): TransactionError | null {
+  #coerceTransactionError(reason?: Error | TransactionError | null): TransactionError | null {
     if (!reason) return null;
     if ("name" in reason && "message" in reason && typeof reason.name === "string") {
       const error: TransactionError = {

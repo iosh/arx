@@ -40,7 +40,7 @@ const computeMaxCost = (
   }
 };
 
-export const resolveFees = async (
+export const deriveFees = async (
   params: FeeResolverParams,
   issues: Eip155TransactionDraft["issues"],
 ): Promise<FeeResolutionResult> => {

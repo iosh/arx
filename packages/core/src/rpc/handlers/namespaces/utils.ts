@@ -30,14 +30,6 @@ export const namespaceFromContext = (context?: RpcInvocationContext | null): Nam
   return undefined;
 };
 
-const resolveNamespace = (controllers: HandlerControllers, context?: RpcInvocationContext) => {
-  const resolved = namespaceFromContext(context);
-  if (resolved) return resolved;
-  const active = controllers.network.getActiveChain().chainRef;
-  const [namespace] = active.split(":");
-  return (namespace ?? EIP155_NAMESPACE) as Namespace;
-};
-
 export const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 export const toParamsArray = (params: unknown): readonly unknown[] => {
@@ -92,7 +84,7 @@ export const parseTypedDataParams = (params: readonly unknown[]) => {
 
 export const buildEip155TransactionRequest = (
   params: readonly unknown[],
-  caip2: Caip2ChainId,
+  chainRef: Caip2ChainId,
 ): TransactionRequest<"eip155"> => {
   const [raw] = params;
 
@@ -155,7 +147,7 @@ export const buildEip155TransactionRequest = (
 
   return {
     namespace: "eip155",
-    caip2,
+    caip2: chainRef,
     payload,
   };
 };

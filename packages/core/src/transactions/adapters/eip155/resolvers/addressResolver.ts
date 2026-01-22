@@ -26,7 +26,7 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
       pushIssue(issues, "transaction.draft.from_missing", "Transaction requires a from address.");
     } else {
       try {
-        const normalized = deps.chains.normalizeAddress({ chainRef: context.chainRef, value: resolvedFrom });
+        const normalized = deps.chains.toCanonicalAddress({ chainRef: context.chainRef, value: resolvedFrom });
         Hex.assert(normalized.canonical as Hex.Hex, { strict: false });
         prepared.from = normalized.canonical as Hex.Hex;
         summary.from = deps.chains.formatAddress({
@@ -35,11 +35,11 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
         }) as Hex.Hex;
 
         if (requestFrom && contextFrom) {
-          const requestCanonical = deps.chains.normalizeAddress({
+          const requestCanonical = deps.chains.toCanonicalAddress({
             chainRef: context.chainRef,
             value: requestFrom,
           }).canonical;
-          const contextCanonical = deps.chains.normalizeAddress({
+          const contextCanonical = deps.chains.toCanonicalAddress({
             chainRef: context.chainRef,
             value: contextFrom,
           }).canonical;
@@ -64,7 +64,7 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
         summary.to = null;
       } else if (payload.to !== undefined) {
         try {
-          const normalized = deps.chains.normalizeAddress({ chainRef: context.chainRef, value: payload.to });
+          const normalized = deps.chains.toCanonicalAddress({ chainRef: context.chainRef, value: payload.to });
           Hex.assert(normalized.canonical as Hex.Hex, { strict: false });
           prepared.to = normalized.canonical as Hex.Hex;
           summary.to = deps.chains.formatAddress({

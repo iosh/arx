@@ -32,7 +32,7 @@ export class ChainModuleRegistry {
     return this.getDescriptor(chainRef).address;
   }
 
-  normalizeAddress(params: NormalizeAddressParams): NormalizedAddressResult {
+  toCanonicalAddress(params: NormalizeAddressParams): NormalizedAddressResult {
     return this.getAddressModule(params.chainRef).normalize(params);
   }
 

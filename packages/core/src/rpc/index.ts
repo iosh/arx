@@ -131,7 +131,7 @@ export const unregisterNamespaceDefinitions = (namespace: Namespace): void => {
 
 export const getRegisteredNamespaces = (): Namespace[] => [...namespaceDefinitions.keys()];
 
-const resolveNamespaceFromChainRef = (chainRef: string | null | undefined): Namespace | null => {
+const namespaceFromChainRef = (chainRef: string | null | undefined): Namespace | null => {
   if (!chainRef) {
     return null;
   }
@@ -139,7 +139,7 @@ const resolveNamespaceFromChainRef = (chainRef: string | null | undefined): Name
   return namespace ? (namespace as Namespace) : null;
 };
 
-const resolveNamespaceFromMethod = (method: string): Namespace | null => {
+const deriveNamespaceFromMethod = (method: string): Namespace | null => {
   for (const [prefix, namespace] of namespacePrefixes) {
     if (method.startsWith(prefix)) {
       return namespace;
@@ -157,12 +157,12 @@ const selectNamespace = (
     return context.namespace;
   }
 
-  const fromChain = resolveNamespaceFromChainRef(context?.chainRef ?? null);
+  const fromChain = namespaceFromChainRef(context?.chainRef ?? null);
   if (fromChain && namespaceDefinitions.has(fromChain)) {
     return fromChain;
   }
 
-  const fromMethod = resolveNamespaceFromMethod(method);
+  const fromMethod = deriveNamespaceFromMethod(method);
   if (fromMethod && namespaceDefinitions.has(fromMethod)) {
     return fromMethod;
   }
@@ -291,7 +291,7 @@ export const createMethodExecutor =
   };
 
 export type DomainChainService = {
-  setDomainChain(origin: string, caip2: Caip2ChainId): Promise<void>;
+  setDomainChain(origin: string, chainRef: Caip2ChainId): Promise<void>;
   getDomainChain(origin: string): Promise<Caip2ChainId | null>;
 };
 

@@ -6,7 +6,7 @@ describe("ChainModuleRegistry", () => {
   it("normalizes address via registered descriptor", () => {
     const registry = createDefaultChainModuleRegistry();
 
-    const normalized = registry.normalizeAddress({
+    const normalized = registry.toCanonicalAddress({
       chainRef: "eip155:1",
       value: "0xAaBbCcDdEeFf00112233445566778899AaBbCcDd",
     });
@@ -45,7 +45,7 @@ describe("ChainModuleRegistry", () => {
     const registry = new ChainModuleRegistry();
     registry.registerDescriptor(descriptor);
 
-    const normalized = registry.normalizeAddress({ chainRef: "demo:1", value: "input" });
+    const normalized = registry.toCanonicalAddress({ chainRef: "demo:1", value: "input" });
     expect(normalized).toEqual({ canonical: "canonical-value", metadata: { note: "normalized" } });
 
     const formatted = registry.formatAddress({ chainRef: "demo:1", canonical: "canonical-value" });
@@ -62,7 +62,7 @@ describe("ChainModuleRegistry", () => {
     const registry = createDefaultChainModuleRegistry();
 
     expect(() =>
-      registry.normalizeAddress({
+      registry.toCanonicalAddress({
         chainRef: "solana:mainnet",
         value: "0x0000000000000000000000000000000000000000",
       }),

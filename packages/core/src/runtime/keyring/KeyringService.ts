@@ -100,7 +100,7 @@ export class KeyringService {
     const [account] = keyring.getAccounts();
     if (!account) throw keyringErrors.secretUnavailable();
 
-    const canonical = config.normalizeAddress(account.address);
+    const canonical = config.toCanonicalAddress(account.address);
     this.#assertNoDuplicate(namespace, canonical);
 
     const now = Date.now();
@@ -147,7 +147,7 @@ export class KeyringService {
     const instance = runtime.instance as HierarchicalDeterministicKeyring;
     const index = meta.derivedCount ?? 0;
     const derived = instance.deriveAccount(index);
-    const canonical = this.#normalize(runtime.namespace, derived.address);
+    const canonical = this.#toCanonicalAddress(runtime.namespace, derived.address);
 
     this.#assertNoDuplicate(runtime.namespace, canonical);
 
@@ -210,7 +210,7 @@ export class KeyringService {
 
   async renameAccount(address: string, alias: string): Promise<void> {
     const ref = await this.getAccountRef(address);
-    const canonical = this.#normalize(ref.namespace, address);
+    const canonical = this.#toCanonicalAddress(ref.namespace, address);
     const meta = this.#accountMetas.get(canonical);
     if (!meta) return Promise.resolve();
     this.#accountMetas.set(canonical, { ...meta, alias });
@@ -230,7 +230,7 @@ export class KeyringService {
 
   async removeAccount(namespace: string, address: string): Promise<void> {
     await this.#waitForHydration();
-    const canonical = this.#normalize(namespace, address);
+    const canonical = this.#toCanonicalAddress(namespace, address);
     const meta = this.#accountMetas.get(canonical);
     if (!meta) throw keyringErrors.accountNotFound();
     const runtime = this.#keyrings.get(meta.keyringId);
@@ -293,7 +293,7 @@ export class KeyringService {
   async getAccountRef(address: string): Promise<{ namespace: string; keyringId: string }> {
     await this.#waitForHydration();
     for (const [namespace, config] of this.#namespacesConfig) {
-      const key = getAddressKey(namespace, address, config.normalizeAddress);
+      const key = getAddressKey(namespace, address, config.toCanonicalAddress);
       const ref = this.#addressIndex.get(key);
       if (ref) return { namespace, keyringId: ref.keyringId };
     }
@@ -336,7 +336,7 @@ export class KeyringService {
 
   async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
     await this.#waitForHydration();
-    const canonical = this.#normalize(namespace, address);
+    const canonical = this.#toCanonicalAddress(namespace, address);
     const key = this.#toKey(namespace, canonical);
     const indexed = this.#addressIndex.get(key);
     if (!indexed) throw keyringErrors.accountNotFound();
@@ -386,7 +386,7 @@ export class KeyringService {
     const keyring = factory();
     keyring.loadFromMnemonic(normalized);
     const first = keyring.deriveNextAccount();
-    const canonical = config.normalizeAddress(first.address);
+    const canonical = config.toCanonicalAddress(first.address);
     this.#assertNoDuplicate(namespace, canonical);
 
     const now = Date.now();
@@ -473,10 +473,10 @@ export class KeyringService {
   #indexAccounts(strict = true) {
     this.#addressIndex.clear();
     for (const runtime of this.#keyrings.values()) {
-      const normalize = this.#getConfig(runtime.namespace).normalizeAddress;
+      const toCanonicalAddress = this.#getConfig(runtime.namespace).toCanonicalAddress;
       const accounts = this.getAccounts(true).filter((a) => a.keyringId === runtime.id);
       for (const account of accounts) {
-        const key = getAddressKey(runtime.namespace, account.address, normalize);
+        const key = getAddressKey(runtime.namespace, account.address, toCanonicalAddress);
         if (this.#addressIndex.has(key)) {
           if (strict) {
             throw keyringErrors.duplicateAccount();
@@ -518,7 +518,7 @@ export class KeyringService {
     await this.#waitForHydration();
     this.#assertUnlocked();
     const ref = await this.getAccountRef(address);
-    const canonical = this.#normalize(ref.namespace, address);
+    const canonical = this.#toCanonicalAddress(ref.namespace, address);
     const meta = this.#accountMetas.get(canonical);
     if (!meta) throw keyringErrors.accountNotFound();
     this.#accountMetas.set(canonical, { ...meta, hidden });
@@ -526,8 +526,8 @@ export class KeyringService {
     this.#syncAccountsState();
   }
 
-  #normalize(namespace: string, address: string): string {
-    return this.#getConfig(namespace).normalizeAddress(address);
+  #toCanonicalAddress(namespace: string, address: string): string {
+    return this.#getConfig(namespace).toCanonicalAddress(address);
   }
 
   #assertNoDuplicate(namespace: string, address: string) {
@@ -544,7 +544,7 @@ export class KeyringService {
   }
 
   #toKey(namespace: string, address: string): string {
-    return getAddressKey(namespace, address, this.#getConfig(namespace).normalizeAddress);
+    return getAddressKey(namespace, address, this.#getConfig(namespace).toCanonicalAddress);
   }
 
   #getRuntimeKeyring(namespace: string, keyringId: string): RuntimeKeyring {

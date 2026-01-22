@@ -30,7 +30,7 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
 
   // Replace any existing secret with the provided one.
   loadFromPrivateKey(privateKey: string | Uint8Array): void {
-    const secret = this.#normalizePrivateKey(privateKey);
+    const secret = this.#parsePrivateKeyBytes(privateKey);
     try {
       const address = this.#addressFromSecret(secret);
       this.#clearEntry(); // always replace
@@ -65,7 +65,7 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
 
   hasAccount(address: string): boolean {
     if (!this.#entry) return false;
-    return this.#normalizeAddress(address) === this.#entry.account.address;
+    return this.#toCanonicalAddress(address) === this.#entry.account.address;
   }
 
   removeAccount(address: string): void {
@@ -98,8 +98,8 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
     if (!this.#entry) {
       throw keyringErrors.secretUnavailable();
     }
-    const canonical = this.#normalizeAddress(snapshot.account.address);
-    if (this.#normalizeAddress(this.#entry.account.address) !== canonical) {
+    const canonical = this.#toCanonicalAddress(snapshot.account.address);
+    if (this.#toCanonicalAddress(this.#entry.account.address) !== canonical) {
       throw keyringErrors.secretUnavailable();
     }
     this.#entry = {
@@ -126,7 +126,7 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
     return `0x${bytesToHex(addressBytes)}`;
   }
 
-  #normalizeAddress(value: string): string {
+  #toCanonicalAddress(value: string): string {
     if (typeof value !== "string" || value.trim().length === 0) {
       throw keyringErrors.invalidAddress();
     }
@@ -137,7 +137,7 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
     return normalized.startsWith("0x") ? normalized : `0x${normalized}`;
   }
 
-  #normalizePrivateKey(value: string | Uint8Array): Uint8Array {
+  #parsePrivateKeyBytes(value: string | Uint8Array): Uint8Array {
     if (value instanceof Uint8Array) {
       if (value.length !== 32) {
         throw keyringErrors.invalidPrivateKey();

@@ -391,7 +391,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
     namespaces: [
       {
         namespace: CHAIN.namespace,
-        normalizeAddress: (addr: string) => addr.toLowerCase(),
+        toCanonicalAddress: (addr: string) => addr.toLowerCase(),
         factories: {
           hd: () => new EthereumHdKeyring(),
           "private-key": () => new PrivateKeyKeyring(),

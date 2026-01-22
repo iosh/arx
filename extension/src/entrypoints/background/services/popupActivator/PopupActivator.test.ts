@@ -62,11 +62,11 @@ describe("PopupActivator", () => {
     const browser = makeBrowser();
     browser.windows.getAll.mockResolvedValue([]);
 
-    let resolveCreate: ((value: { id: number }) => void) | undefined;
+    let fulfillCreate: ((value: { id: number }) => void) | undefined;
     browser.windows.create.mockImplementation(
       () =>
-        new Promise((r) => {
-          resolveCreate = r;
+        new Promise((resolve) => {
+          fulfillCreate = resolve;
         }),
     );
 
@@ -75,7 +75,7 @@ describe("PopupActivator", () => {
     const p2 = act.open();
 
     await vi.waitFor(() => expect(browser.windows.create).toHaveBeenCalledTimes(1));
-    resolveCreate?.({ id: 3 });
+    fulfillCreate?.({ id: 3 });
     await Promise.all([p1, p2]);
   });
 });

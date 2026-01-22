@@ -77,7 +77,7 @@ export const initSessionLayer = ({
   getIsHydrating,
   getIsDestroyed,
 }: SessionLayerParams): SessionLayerResult => {
-  const resolveVault = (): VaultService => {
+  const createVault = (): VaultService => {
     const candidate = sessionOptions?.vault;
     if (!candidate) {
       return createVaultService();
@@ -85,7 +85,7 @@ export const initSessionLayer = ({
     return typeof candidate === "function" ? (candidate as VaultFactory)() : candidate;
   };
 
-  const baseVault = resolveVault();
+  const baseVault = createVault();
   const unlockFactory =
     sessionOptions?.unlock ?? ((options: UnlockControllerOptions) => new InMemoryUnlockController(options));
 
@@ -263,7 +263,7 @@ export const initSessionLayer = ({
     namespaces: [
       {
         namespace: EIP155_NAMESPACE,
-        normalizeAddress: toCanonicalEvmAddress,
+        toCanonicalAddress: toCanonicalEvmAddress,
         factories: {
           hd: () => new EthereumHdKeyring(),
           "private-key": () => new PrivateKeyKeyring(),

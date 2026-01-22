@@ -5,7 +5,7 @@ import type { Eip155TransactionDraft, FieldResolutionResult } from "../types.js"
 import { deriveExpectedChainId } from "../utils/chainHelpers.js";
 import { parseHexData, parseHexQuantity, pushIssue, pushWarning } from "../utils/validation.js";
 
-export const resolveFields = (
+export const deriveFields = (
   context: TransactionAdapterContext,
   payload: Eip155TransactionPayload,
   issues: Eip155TransactionDraft["issues"],

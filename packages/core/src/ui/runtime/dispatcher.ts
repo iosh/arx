@@ -26,7 +26,7 @@ const isRequestEnvelope = (value: unknown): value is UiRequestEnvelope => {
   return v.type === "ui:request" && typeof v.id === "string" && typeof v.method === "string";
 };
 
-const resolveContext = (deps: Pick<UiRuntimeDeps, "controllers">) => {
+const getUiContext = (deps: Pick<UiRuntimeDeps, "controllers">) => {
   const chain = deps.controllers.network.getActiveChain();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
@@ -46,7 +46,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
       type: "ui:event",
       event: UI_EVENT_SNAPSHOT_CHANGED,
       payload: snapshot,
-      context: resolveContext(deps),
+      context: getUiContext(deps),
     };
   };
 
@@ -54,7 +54,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
     if (!isRequestEnvelope(raw)) return null;
     if (raw.id.length === 0) return null;
 
-    const ctx = resolveContext(deps);
+    const ctx = getUiContext(deps);
 
     if (!isUiMethodName(raw.method)) {
       const encoded = encodeErrorWithAdapters(

@@ -29,12 +29,12 @@ type PassthroughAllowance = {
 type LockedGuardDeps = {
   isUnlocked(): boolean;
   isInternalOrigin(origin: string): boolean;
-  resolveMethodDefinition(method: string, context?: RpcInvocationContext): LockedDefinition;
-  resolveLockedPolicy(
+  findMethodDefinition(method: string, context?: RpcInvocationContext): LockedDefinition;
+  deriveLockedPolicy(
     method: string,
     context?: RpcInvocationContext,
   ): { allow?: boolean; response?: unknown; hasResponse?: boolean } | undefined;
-  resolvePassthroughAllowance(method: string, context?: RpcInvocationContext): PassthroughAllowance;
+  getPassthroughAllowance(method: string, context?: RpcInvocationContext): PassthroughAllowance;
   attentionService: Pick<AttentionService, "requestAttention">;
 };
 /**
@@ -48,9 +48,9 @@ type LockedGuardDeps = {
 export const createLockedGuardMiddleware = ({
   isUnlocked,
   isInternalOrigin,
-  resolveMethodDefinition,
-  resolveLockedPolicy,
-  resolvePassthroughAllowance,
+  findMethodDefinition,
+  deriveLockedPolicy,
+  getPassthroughAllowance,
   attentionService,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
@@ -75,8 +75,8 @@ export const createLockedGuardMiddleware = ({
     }
 
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-    const definition = resolveMethodDefinition(req.method, rpcContext);
-    const passthrough = resolvePassthroughAllowance(req.method, rpcContext);
+    const definition = findMethodDefinition(req.method, rpcContext);
+    const passthrough = getPassthroughAllowance(req.method, rpcContext);
 
     if (!definition) {
       if (passthrough.isPassthrough) {
@@ -102,7 +102,7 @@ export const createLockedGuardMiddleware = ({
       return next();
     }
 
-    const resolvedPolicy = resolveLockedPolicy(req.method, rpcContext);
+    const resolvedPolicy = deriveLockedPolicy(req.method, rpcContext);
     const locked = resolvedPolicy ?? definition.locked ?? {};
 
     if (resolvedPolicy?.allow ?? locked.allow) {

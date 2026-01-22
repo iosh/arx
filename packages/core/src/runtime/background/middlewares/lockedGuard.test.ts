@@ -29,9 +29,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: (origin) => origin === ORIGIN,
-      resolveMethodDefinition: () => undefined,
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => undefined,
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -49,9 +49,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => true,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => undefined,
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => undefined,
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -66,14 +66,14 @@ describe("createLockedGuardMiddleware", () => {
   it("rejects when method definition is missing", async () => {
     const next = createNextStub();
     const end = vi.fn();
-    const resolveMethodDefinition = vi.fn(() => undefined);
+    const findMethodDefinition = vi.fn(() => undefined);
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition,
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition,
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -86,7 +86,7 @@ describe("createLockedGuardMiddleware", () => {
     expect(end).toHaveBeenCalledTimes(1);
     const [error] = end.mock.calls[0] ?? [];
     expect((error as any)?.reason).toBe(ArxReasons.RpcMethodNotFound);
-    expect(resolveMethodDefinition).toHaveBeenCalledWith("eth_unknown", undefined);
+    expect(findMethodDefinition).toHaveBeenCalledWith("eth_unknown", undefined);
     expect(attention.requestAttention).not.toHaveBeenCalled();
   });
   it("allows methods without scope", async () => {
@@ -95,9 +95,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({}),
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => ({}),
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -115,9 +115,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -135,9 +135,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 
@@ -156,9 +156,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => undefined,
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: true }),
+      findMethodDefinition: () => undefined,
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: true }),
       attentionService: attention,
     });
 
@@ -176,9 +176,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => undefined,
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: false }),
+      findMethodDefinition: () => undefined,
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: false }),
       attentionService: attention,
     });
 
@@ -207,9 +207,9 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "accounts" }),
-      resolveLockedPolicy: () => undefined,
-      resolvePassthroughAllowance: defaultPassthroughAllowance,
+      findMethodDefinition: () => ({ scope: "accounts" }),
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
 

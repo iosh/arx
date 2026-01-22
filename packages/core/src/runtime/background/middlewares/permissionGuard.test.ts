@@ -43,7 +43,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission: vi.fn(),
       isInternalOrigin: () => true,
-      resolveMethodDefinition: vi.fn(),
+      findMethodDefinition: vi.fn(),
       isConnected: vi.fn(() => false),
     });
 
@@ -56,7 +56,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission: vi.fn(),
       isInternalOrigin: () => false,
-      resolveMethodDefinition: vi.fn(() => undefined),
+      findMethodDefinition: vi.fn(() => undefined),
       isConnected: vi.fn(() => false),
     });
 
@@ -68,7 +68,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
+      findMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       isConnected: vi.fn(() => false),
     });
 
@@ -84,7 +84,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn(), isBootstrap: true }),
+      findMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn(), isBootstrap: true }),
       isConnected: vi.fn(() => false),
     });
 
@@ -99,7 +99,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
+      findMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       isConnected: vi.fn(() => false),
     });
 
@@ -113,7 +113,7 @@ describe("createPermissionGuardMiddleware", () => {
     const middleware = createPermissionGuardMiddleware({
       assertPermission,
       isInternalOrigin: () => false,
-      resolveMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
+      findMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn() }),
       isConnected: vi.fn(() => false),
     });
 

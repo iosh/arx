@@ -48,8 +48,8 @@ const toPlainHex = (bytes: Uint8Array): string => {
   return out.startsWith("0x") ? out.slice(2) : out;
 };
 
-// Helper to resolve chain context from task
-const resolveChainContext = (
+// Helper to derive chain context from a task (with fallback to active chain).
+const deriveChainContext = (
   task: { chainRef?: string; namespace?: string },
   controllers: { network: { getActiveChain: () => { chainRef: string } } },
 ) => {
@@ -84,7 +84,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   },
 
   [ApprovalTypes.RequestAccounts]: async (task, controllers) => {
-    const { chainRef, namespace } = resolveChainContext(task, controllers);
+    const { chainRef, namespace } = deriveChainContext(task, controllers);
 
     const accounts = await controllers.accounts.requestAccounts({
       origin: task.origin,
@@ -120,7 +120,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 
   [ApprovalTypes.SignMessage]: async (task, controllers) => {
     const payload = task.payload as { from: string; message: string };
-    const { chainRef, namespace } = resolveChainContext(task, controllers);
+    const { chainRef, namespace } = deriveChainContext(task, controllers);
 
     const signature = await controllers.signers.eip155.signPersonalMessage({
       address: payload.from,
@@ -137,7 +137,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 
   [ApprovalTypes.SignTypedData]: async (task, controllers) => {
     const payload = task.payload as { from: string; typedData: unknown };
-    const { chainRef, namespace } = resolveChainContext(task, controllers);
+    const { chainRef, namespace } = deriveChainContext(task, controllers);
 
     const typedDataStr = typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
 

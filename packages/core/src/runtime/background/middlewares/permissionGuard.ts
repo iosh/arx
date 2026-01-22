@@ -12,14 +12,14 @@ type PermissionGuardDeps = {
   isInternalOrigin(origin: string): boolean;
 
   isConnected: (origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }) => boolean;
-  resolveMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
+  findMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
 };
 
 export const createPermissionGuardMiddleware = ({
   assertPermission,
   isConnected,
   isInternalOrigin,
-  resolveMethodDefinition,
+  findMethodDefinition,
 }: PermissionGuardDeps): JsonRpcMiddleware<JsonRpcParams, Json> => {
   return createAsyncMiddleware(async (req, _res, next) => {
     const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
@@ -29,7 +29,7 @@ export const createPermissionGuardMiddleware = ({
     }
 
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-    const definition = resolveMethodDefinition(req.method, rpcContext);
+    const definition = findMethodDefinition(req.method, rpcContext);
 
     const isApprovalScopedSignOrTx =
       definition?.approvalRequired === true &&

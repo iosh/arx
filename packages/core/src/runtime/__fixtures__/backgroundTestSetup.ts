@@ -543,7 +543,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
   const { services } = background;
 
-  const resolveMethodNamespace = createMethodNamespaceResolver(services.controllers);
+  const deriveMethodNamespace = createMethodNamespaceResolver(services.controllers);
   const engine = services.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
@@ -566,7 +566,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   let nextRequestId = 0;
   const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {
     const contextPayload = buildRpcContext(rpcContext);
-    const resolvedNamespace = resolveMethodNamespace(method, contextPayload);
+    const namespace = deriveMethodNamespace(method, contextPayload);
     const resolvedChainRef = contextPayload.chainRef ?? services.controllers.network.getActiveChain().chainRef;
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
@@ -583,7 +583,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
             reject(
               encodeErrorWithAdapters(error, {
                 surface: "dapp",
-                namespace: resolvedNamespace,
+                namespace,
                 chainRef: resolvedChainRef,
                 origin,
                 method,

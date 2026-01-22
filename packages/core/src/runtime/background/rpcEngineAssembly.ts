@@ -101,8 +101,8 @@ const wrapAttentionService = (service: AttentionService, envHooks: BackgroundRpc
 export const createBackgroundRpcMiddlewares = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = services.controllers;
 
-  const resolveMethodDefinition = createMethodDefinitionResolver(controllers);
-  const resolveMethodNamespace = createMethodNamespaceResolver(controllers);
+  const findMethodDefinition = createMethodDefinitionResolver(controllers);
+  const deriveMethodNamespace = createMethodNamespaceResolver(controllers);
 
   const executeMethod = createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
 
@@ -122,7 +122,7 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     return registryEntity?.metadata.providerPolicies?.locked ?? null;
   };
 
-  const resolveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
+  const deriveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
     const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
     const policies = readLockedPoliciesForChain(chainRef);
     if (!policies) return undefined;
@@ -145,8 +145,8 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     }
     return result;
   };
-  const resolvePassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
-    const namespace = resolveMethodNamespace(method, rpcContext);
+  const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
+    const namespace = deriveMethodNamespace(method, rpcContext);
     const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
     if (!adapter?.passthrough) {
       return { isPassthrough: false, allowWhenLocked: false };
@@ -161,7 +161,7 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
     const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
-    const namespace = resolveMethodNamespace(req.method, rpcContext ?? undefined);
+    const namespace = deriveMethodNamespace(req.method, rpcContext ?? undefined);
     const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
 
     try {
@@ -191,9 +191,9 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   const lockedGuard: Middleware = createLockedGuardMiddleware({
     isUnlocked: () => services.session.unlock.isUnlocked(),
     isInternalOrigin: envHooks.isInternalOrigin,
-    resolveMethodDefinition,
-    resolveLockedPolicy,
-    resolvePassthroughAllowance,
+    findMethodDefinition,
+    deriveLockedPolicy,
+    getPassthroughAllowance,
     attentionService: wrappedAttentionService,
   }) as unknown as Middleware;
 
@@ -201,13 +201,13 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     assertPermission: (origin, method, context) => controllers.permissions.assertPermission(origin, method, context),
     isInternalOrigin: envHooks.isInternalOrigin,
     isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
-    resolveMethodDefinition,
+    findMethodDefinition,
   });
 
   const approvalAttention: Middleware = createAsyncMiddleware(async (req, _res, next) => {
     const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-    const definition = resolveMethodDefinition(req.method, rpcContext ?? undefined);
+    const definition = findMethodDefinition(req.method, rpcContext ?? undefined);
 
     if (!definition?.approvalRequired) {
       return next();

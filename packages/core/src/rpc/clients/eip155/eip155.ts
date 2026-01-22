@@ -83,7 +83,7 @@ const toBigIntQuantity = (value: unknown): bigint | undefined => {
   }
 };
 
-const normalizeBlockSelector = (blockTag?: string): { blockTag?: BlockTag; blockNumber?: bigint } => {
+const parseBlockSelector = (blockTag?: string): { blockTag?: BlockTag; blockNumber?: bigint } => {
   if (!blockTag) {
     return {};
   }
@@ -178,7 +178,7 @@ export const createEip155RpcClientFactory = (): RpcClientFactory<Eip155RpcCapabi
         const timeoutMs = overrides?.timeoutMs;
         const client = createViemClient(transport, timeoutMs);
 
-        const selector = normalizeBlockSelector(blockTag);
+        const selector = parseBlockSelector(blockTag);
 
         const params: GetTransactionCountParameters = {
           address: address as Address,

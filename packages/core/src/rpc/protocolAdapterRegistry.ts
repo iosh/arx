@@ -7,7 +7,7 @@ export const registerNamespaceProtocolAdapter = (namespace: string, adapter: Nam
   namespaceProtocolAdapters.set(namespace, adapter);
 };
 
-const resolveKey = (namespace: string): string | null => {
+const findAdapterKey = (namespace: string): string | null => {
   if (namespaceProtocolAdapters.has(namespace)) return namespace;
 
   const [prefix] = namespace.split(":");
@@ -19,7 +19,7 @@ const resolveKey = (namespace: string): string | null => {
 export const getNamespaceProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => {
   if (!namespace) throw new Error('[rpc] getNamespaceProtocolAdapter requires a non-empty "namespace"');
 
-  const key = resolveKey(namespace);
+  const key = findAdapterKey(namespace);
   if (!key) {
     throw new Error(`[rpc] protocol adapter not registered for namespace "${namespace}"`);
   }

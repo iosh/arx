@@ -28,7 +28,7 @@ const eip3085Schema = z.object({
 
 const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((value) => value.trim())));
 
-const normaliseHexChainId = (chainId: string) => {
+const toCanonicalHexChainId = (chainId: string) => {
   const lower = chainId.toLowerCase();
   if (!/^0x[0-9a-f]+$/.test(lower)) {
     throw new Error("chainId must be a 0x-prefixed hexadecimal string");
@@ -44,7 +44,7 @@ const toChainRef = (hexChainId: string) => {
 export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata => {
   const payload = eip3085Schema.parse(input);
 
-  const chainId = normaliseHexChainId(payload.chainId);
+  const chainId = toCanonicalHexChainId(payload.chainId);
   const chainRef = toChainRef(chainId);
 
   const rpcUrls = dedupe(payload.rpcUrls).filter(Boolean);

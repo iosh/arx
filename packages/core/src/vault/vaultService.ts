@@ -45,7 +45,7 @@ const assertPositiveInteger = (value: number, label: string) => {
   }
 };
 
-const resolveConfig = (config?: VaultConfig): ResolvedVaultConfig => {
+const deriveVaultConfig = (config?: VaultConfig): ResolvedVaultConfig => {
   const iterations = config?.iterations ?? DEFAULT_CONFIG.iterations;
   const saltBytes = config?.saltBytes ?? DEFAULT_CONFIG.saltBytes;
   const ivBytes = config?.ivBytes ?? DEFAULT_CONFIG.ivBytes;
@@ -62,7 +62,7 @@ const resolveConfig = (config?: VaultConfig): ResolvedVaultConfig => {
 const cloneCiphertext = (ciphertext: VaultCiphertext): VaultCiphertext => ({ ...ciphertext });
 
 export const createVaultService = (config?: VaultConfig): VaultService => {
-  const resolved = resolveConfig(config);
+  const resolved = deriveVaultConfig(config);
 
   let ciphertext: VaultCiphertext | null = null;
   let derivedKey: Uint8Array | null = null;

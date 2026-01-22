@@ -45,13 +45,13 @@ export const toParamsArray = (params: unknown): readonly unknown[] => {
   return Array.isArray(params) ? params : [params];
 };
 
-export const resolveSigningInputs = (params: readonly unknown[]) => {
+export const deriveSigningInputs = (params: readonly unknown[]) => {
   const address = params.find((value): value is string => typeof value === "string" && HEX_ADDRESS_PATTERN.test(value));
   const message = params.find((value): value is string => typeof value === "string" && (!address || value !== address));
   return { address, message };
 };
 
-export const normaliseTypedData = (params: readonly unknown[]) => {
+export const parseTypedDataParams = (params: readonly unknown[]) => {
   let address: string | undefined;
   let payload: unknown;
 

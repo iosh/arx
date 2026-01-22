@@ -30,11 +30,11 @@ import type { NamespaceAdapter } from "./adapter.js";
 import {
   buildEip155TransactionRequest,
   createTaskId,
+  deriveSigningInputs,
   EIP155_NAMESPACE,
   isDomainError,
   isRpcError,
-  normaliseTypedData,
-  resolveSigningInputs,
+  parseTypedDataParams,
   toParamsArray,
 } from "./utils.js";
 
@@ -461,7 +461,7 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
     });
   }
 
-  const { address, message } = resolveSigningInputs(paramsArray);
+  const { address, message } = deriveSigningInputs(paramsArray);
 
   if (!address) {
     throw arxError({
@@ -527,7 +527,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
     });
   }
 
-  const { address, typedData } = normaliseTypedData(paramsArray);
+  const { address, typedData } = parseTypedDataParams(paramsArray);
   const activeChain = controllers.network.getActiveChain();
 
   const task = {

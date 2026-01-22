@@ -4,7 +4,7 @@ import { chainMetadataSchema } from "../chains/metadata.js";
 import { ApprovalTypes } from "../controllers/index.js";
 import { PermissionScopes } from "../controllers/permission/types.js";
 
-const CAIP2_CHAIN_ID_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
+const CHAIN_REF_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
 const HEX_CHAIN_ID_REGEX = /^0x[0-9a-fA-F]+$/;
 const HEX_QUANTITY_REGEX = /^0x[0-9a-fA-F]+$/;
 const HEX_DATA_REGEX = /^0x[0-9a-fA-F]*$/;
@@ -39,7 +39,7 @@ const accountAddressSchema = z
     error: "Account address must not contain whitespace characters",
   });
 
-const caip2ChainIdSchema = z.string().regex(CAIP2_CHAIN_ID_REGEX, {
+const chainRefSchema = z.string().regex(CHAIN_REF_REGEX, {
   error: "CAIP-2 identifier must follow namespace:reference format",
 });
 
@@ -104,9 +104,9 @@ const rpcEndpointStateSchema = z
 
 const networkStateSchema = z
   .strictObject({
-    activeChain: caip2ChainIdSchema,
+    activeChain: chainRefSchema,
     knownChains: z.array(chainMetadataSchema).min(1),
-    rpc: z.record(caip2ChainIdSchema, rpcEndpointStateSchema),
+    rpc: z.record(chainRefSchema, rpcEndpointStateSchema),
   })
   .refine((value) => value.knownChains.some((chain) => chain.chainRef === value.activeChain), {
     error: "Active chain must appear in knownChains",
@@ -156,7 +156,7 @@ const namespaceAccountsStateSchema = z
 const activePointerSchema = z
   .strictObject({
     namespace: z.string().min(1),
-    chainRef: caip2ChainIdSchema,
+    chainRef: chainRefSchema,
     address: accountAddressSchema.nullable(),
   })
   .nullable();
@@ -189,8 +189,8 @@ const chainNamespaceSchema = z.string().min(1);
 
 const namespacePermissionStateSchema = z.strictObject({
   scopes: z.array(permissionScopeSchema),
-  chains: z.array(caip2ChainIdSchema),
-  accountsByChain: z.record(caip2ChainIdSchema, z.array(accountAddressSchema)).optional(),
+  chains: z.array(chainRefSchema),
+  accountsByChain: z.record(chainRefSchema, z.array(accountAddressSchema)).optional(),
 });
 
 const originPermissionStateSchema = z.record(chainNamespaceSchema, namespacePermissionStateSchema);
@@ -204,7 +204,7 @@ const approvalQueueItemSchema = z.strictObject({
   type: z.enum(APPROVAL_TYPE_VALUES),
   origin: originStringSchema,
   namespace: chainNamespaceSchema.optional(),
-  chainRef: caip2ChainIdSchema.optional(),
+  chainRef: chainRefSchema.optional(),
   createdAt: epochMillisecondsSchema,
 });
 
@@ -237,14 +237,14 @@ const eip155TransactionPayloadSchema = z.strictObject({
 
 const eip155TransactionRequestSchema = z.strictObject({
   namespace: z.literal("eip155"),
-  caip2: caip2ChainIdSchema.optional(),
+  chainRef: chainRefSchema.optional(),
   payload: eip155TransactionPayloadSchema,
 });
 
 const genericTransactionRequestSchema = z
   .strictObject({
     namespace: z.string().min(1),
-    caip2: caip2ChainIdSchema.optional(),
+    chainRef: chainRefSchema.optional(),
     payload: z.record(z.string(), z.unknown()),
   })
   .refine((value) => value.namespace !== "eip155", {
@@ -281,7 +281,7 @@ const transactionStatusSchema = z.enum([
 const transactionMetaSchema = z.strictObject({
   id: nonEmptyStringSchema,
   namespace: nonEmptyStringSchema,
-  caip2: caip2ChainIdSchema,
+  chainRef: chainRefSchema,
   origin: originStringSchema,
   from: accountAddressSchema.nullable(),
   request: transactionRequestSchema,
@@ -318,7 +318,7 @@ const createSnapshotSchema = <TPayload extends ZodType, TVersion extends number>
 
 const chainRegistryEntitySchema = z
   .strictObject({
-    chainRef: caip2ChainIdSchema,
+    chainRef: chainRefSchema,
     namespace: z.string().min(1),
     metadata: chainMetadataSchema,
     schemaVersion: z.number().int().positive(),
@@ -446,7 +446,7 @@ export {
   transactionErrorSchema as TransactionErrorSchema,
   transactionReceiptSchema as TransactionReceiptSchema,
   accountAddressSchema,
-  caip2ChainIdSchema,
+  chainRefSchema,
   epochMillisecondsSchema,
   hexDataSchema,
   hexQuantitySchema,

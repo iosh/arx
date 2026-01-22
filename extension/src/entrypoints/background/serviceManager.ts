@@ -72,7 +72,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     const accounts = isUnlocked ? controllers.accounts.getAccounts({ chainRef }) : [];
 
     return {
-      chain: { chainId: activeChain.chainId, caip2: activeChain.chainRef },
+      chain: { chainId: activeChain.chainId, chainRef: activeChain.chainRef },
       accounts,
       isUnlocked,
       meta: {
@@ -276,7 +276,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           callbacks.broadcastEvent("chainChanged", [
             {
               chainId: snapshot.chain.chainId,
-              caip2: snapshot.chain.caip2,
+              chainRef: snapshot.chain.chainRef,
               isUnlocked: snapshot.isUnlocked,
               meta: snapshot.meta,
             },

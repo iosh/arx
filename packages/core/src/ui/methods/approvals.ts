@@ -26,14 +26,14 @@ const TransactionErrorSchema = z.strictObject({
 
 const TransactionRequestSchema = z.strictObject({
   namespace: z.string().min(1),
-  caip2: z.string().min(1).optional(),
+  chainRef: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()),
 });
 
 const TransactionMetaSchema = z.strictObject({
   id: z.string().min(1),
   namespace: z.string().min(1),
-  caip2: z.string().min(1),
+  chainRef: z.string().min(1),
   origin: z.string().min(1),
   from: z.string().min(1).nullable(),
   request: TransactionRequestSchema,

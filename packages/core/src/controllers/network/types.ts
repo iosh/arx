@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../../chains/metadata.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 
@@ -54,13 +54,13 @@ export type RpcOutcomeReport =
     };
 
 export type NetworkState = {
-  activeChain: Caip2ChainId;
+  activeChain: ChainRef;
   knownChains: ChainMetadata[];
-  rpc: Record<Caip2ChainId, RpcEndpointState>;
+  rpc: Record<ChainRef, RpcEndpointState>;
 };
 
 export type RpcEndpointChange = {
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   previous: RpcEndpointInfo;
   next: RpcEndpointInfo;
 };
@@ -68,7 +68,7 @@ export type RpcEndpointChange = {
 export type RpcLogEvent = {
   level: "info" | "warn";
   event: "rpcFailure" | "rpcRecovery" | "strategyChanged" | "endpointsUpdated";
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   endpoint?: RpcEndpointInfo;
   nextEndpoint?: RpcEndpointInfo;
   consecutiveFailures?: number;
@@ -84,7 +84,7 @@ export type NetworkMessengerTopic = {
   "network:stateChanged": NetworkState;
   "network:chainChanged": ChainMetadata;
   "network:rpcEndpointChanged": RpcEndpointChange;
-  "network:rpcHealthChanged": { chainRef: Caip2ChainId; state: RpcEndpointState };
+  "network:rpcHealthChanged": { chainRef: ChainRef; state: RpcEndpointState };
 };
 
 export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
@@ -92,21 +92,21 @@ export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
 export interface NetworkController {
   getState(): NetworkState;
   getActiveChain(): ChainMetadata;
-  getChain(chainRef: Caip2ChainId): ChainMetadata | null;
-  getEndpointState(chainRef: Caip2ChainId): RpcEndpointState | null;
-  getActiveEndpoint(chainRef?: Caip2ChainId): RpcEndpointInfo;
+  getChain(chainRef: ChainRef): ChainMetadata | null;
+  getEndpointState(chainRef: ChainRef): RpcEndpointState | null;
+  getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo;
   onStateChanged(handler: (state: NetworkState) => void): () => void;
   onChainChanged(handler: (chain: ChainMetadata) => void): () => void;
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void;
-  onRpcHealthChanged(handler: (update: { chainRef: Caip2ChainId; state: RpcEndpointState }) => void): () => void;
-  switchChain(target: Caip2ChainId): Promise<ChainMetadata>;
+  onRpcHealthChanged(handler: (update: { chainRef: ChainRef; state: RpcEndpointState }) => void): () => void;
+  switchChain(target: ChainRef): Promise<ChainMetadata>;
   addChain(
     chain: ChainMetadata,
     options?: { activate?: boolean; strategy?: RpcStrategyConfig },
   ): Promise<ChainMetadata>;
-  removeChain(chainRef: Caip2ChainId): Promise<void>;
-  reportRpcOutcome(chainRef: Caip2ChainId, outcome: RpcOutcomeReport): void;
-  setStrategy(chainRef: Caip2ChainId, strategy: RpcStrategyConfig): void;
+  removeChain(chainRef: ChainRef): Promise<void>;
+  reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
+  setStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
   syncChain(chain: ChainMetadata): Promise<void>;
   replaceState(state: NetworkState): void;
 }

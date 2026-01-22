@@ -1,5 +1,5 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
-import { type ChainModuleRegistry, createDefaultChainModuleRegistry, parseCaip2 } from "../../chains/index.js";
+import type { ChainRef } from "../../chains/ids.js";
+import { type ChainModuleRegistry, createDefaultChainModuleRegistry, parseChainRef } from "../../chains/index.js";
 import type {
   AccountAddress,
   AccountMessenger,
@@ -104,7 +104,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     return clonePointer(this.#state.active);
   }
 
-  getAccounts(params?: { chainRef?: Caip2ChainId }): T[] {
+  getAccounts(params?: { chainRef?: ChainRef }): T[] {
     const chainRef = params?.chainRef ?? this.#state.active?.chainRef;
     if (!chainRef) return [];
     const namespace = this.#namespaceFor(chainRef);
@@ -121,7 +121,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     chainRef,
     address,
   }: {
-    chainRef: Caip2ChainId;
+    chainRef: ChainRef;
     address?: AccountAddress<T> | null;
   }): Promise<ActivePointer<T>> {
     const namespace = this.#namespaceFor(chainRef);
@@ -154,7 +154,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     address,
     makePrimary,
   }: {
-    chainRef: Caip2ChainId;
+    chainRef: ChainRef;
     address: AccountAddress<T>;
     makePrimary?: boolean;
   }): Promise<NamespaceAccountsState<T>> {
@@ -185,7 +185,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     chainRef,
     address,
   }: {
-    chainRef: Caip2ChainId;
+    chainRef: ChainRef;
     address: AccountAddress<T>;
   }): Promise<NamespaceAccountsState<T>> {
     const namespace = this.#namespaceFor(chainRef);
@@ -207,13 +207,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     return cloneNamespace(nextState);
   }
 
-  async requestAccounts({
-    origin,
-    chainRef,
-  }: {
-    origin: string;
-    chainRef: Caip2ChainId;
-  }): Promise<AccountAddress<T>[]> {
+  async requestAccounts({ origin, chainRef }: { origin: string; chainRef: ChainRef }): Promise<AccountAddress<T>[]> {
     void origin; // currently unused, reserved for future
 
     const namespace = this.#namespaceFor(chainRef);
@@ -253,7 +247,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     return this.#messenger.subscribe(ACTIVE_TOPIC, handler);
   }
 
-  #canonical(chainRef: Caip2ChainId, address: AccountAddress<T>): AccountAddress<T> {
+  #canonical(chainRef: ChainRef, address: AccountAddress<T>): AccountAddress<T> {
     const result = this.#chains.toCanonicalAddress({ chainRef, value: address });
     return result.canonical as AccountAddress<T>;
   }
@@ -269,8 +263,8 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     return cloneNamespace(fresh);
   }
 
-  #namespaceFor(chainRef: Caip2ChainId): ChainNamespace {
-    const { namespace } = parseCaip2(chainRef);
+  #namespaceFor(chainRef: ChainRef): ChainNamespace {
+    const { namespace } = parseChainRef(chainRef);
     return namespace;
   }
 

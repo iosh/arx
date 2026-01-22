@@ -1,7 +1,7 @@
-import type { Caip2ChainId } from "./ids.js";
+import type { ChainRef } from "./ids.js";
 
 export type NormalizeAddressParams = {
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   value: string;
 };
 
@@ -11,7 +11,7 @@ export type NormalizedAddressResult<TMetadata = Record<string, unknown>> = {
 };
 
 export type FormatAddressParams<TMetadata = Record<string, unknown>> = {
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   canonical: string;
   metadata?: TMetadata;
 };
@@ -24,6 +24,6 @@ export type ChainAddressModule<TMetadata = Record<string, unknown>> = {
 
 export type ChainDescriptor<TMetadata = Record<string, unknown>> = {
   namespace: string;
-  supportsChain(chainRef: Caip2ChainId): boolean;
+  supportsChain(chainRef: ChainRef): boolean;
   address: ChainAddressModule<TMetadata>;
 };

@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../chains/ids.js";
+import type { ChainRef } from "../chains/ids.js";
 import { type OriginPermissionState, type PermissionScope, PermissionScopes } from "../controllers/permission/types.js";
 
 export type WalletPermissionCaveat = {
@@ -15,7 +15,7 @@ export type WalletPermissionDescriptor = {
 export type BuildWalletPermissionsOptions = {
   origin: string;
   permissions?: OriginPermissionState;
-  getAccounts?: (chainRef: Caip2ChainId) => readonly string[] | undefined;
+  getAccounts?: (chainRef: ChainRef) => readonly string[] | undefined;
 };
 
 // Map internal scopes to the EIP-2255 capability strings dApps expect.

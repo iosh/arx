@@ -9,7 +9,7 @@ import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
 const INITIAL_STATE: TransportState = {
   connected: true,
   chainId: "0x1",
-  caip2: "eip155:1",
+  chainRef: "eip155:1",
   accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   isUnlocked: true,
   meta: buildMeta(),
@@ -89,7 +89,7 @@ describe("Eip155Provider: request() state errors", () => {
         {
           connected: false,
           chainId: null,
-          caip2: null,
+          chainRef: null,
           accounts: [],
           isUnlocked: null,
           meta: null,
@@ -140,7 +140,7 @@ describe("Eip155Provider: state retention across transport disconnect", () => {
       ...INITIAL_STATE,
       connected: true,
       chainId: "0x1",
-      caip2: "eip155:1",
+      chainRef: "eip155:1",
       accounts: ["0xabc"],
     };
     const { transport, provider } = createProvider(initialState);
@@ -160,7 +160,7 @@ describe("Eip155Provider: standard events", () => {
     const { transport, provider } = createProvider({
       connected: false,
       chainId: null,
-      caip2: null,
+      chainRef: null,
       accounts: [],
       isUnlocked: null,
       meta: null,
@@ -171,7 +171,7 @@ describe("Eip155Provider: standard events", () => {
     transport.updateState({ connected: true });
     transport.emit("connect", {
       chainId: "0x1",
-      caip2: "eip155:1",
+      chainRef: "eip155:1",
       accounts: [],
       isUnlocked: true,
       meta: buildMeta(),
@@ -201,7 +201,7 @@ describe("Eip155Provider: standard events", () => {
 
     transport.emit("chainChanged", {
       chainId: "0x89",
-      caip2: "eip155:137",
+      chainRef: "eip155:137",
       meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
     });
 
@@ -217,7 +217,7 @@ describe("Eip155Provider: standard events", () => {
 
     transport.emit("chainChanged", {
       chainId: "0x89",
-      caip2: "eip155:137",
+      chainRef: "eip155:137",
       meta: buildMeta({ activeChain: "eip155:137" }),
     });
 

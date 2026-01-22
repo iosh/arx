@@ -66,7 +66,7 @@ export const createPortRouter = ({
     const { controllers } = await getOrInitContext();
     const portContext = portContexts.get(port);
 
-    const chainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? snapshot.chain.caip2;
+    const chainRef = portContext?.meta?.activeChain ?? portContext?.chainRef ?? snapshot.chain.chainRef;
     const namespace = portContext?.namespace ?? snapshot.meta.activeNamespace ?? DEFAULT_NAMESPACE;
 
     return controllers.permissions.getPermittedAccounts(origin, { namespace, chainRef });
@@ -160,7 +160,7 @@ export const createPortRouter = ({
     const requestMap = pendingRequests.get(port);
     if (!requestMap) return;
     const portContext = portContexts.get(port);
-    const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+    const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
     const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
     const chainRef = rpcContext?.chainRef ?? null;
@@ -246,7 +246,7 @@ export const createPortRouter = ({
           protocolVersion: PROTOCOL_VERSION,
           handshakeId: envelope.payload.handshakeId,
           chainId: snapshot.chain.chainId ?? "0x0",
-          caip2: snapshot.chain.caip2,
+          chainRef: snapshot.chain.chainRef,
           accounts,
           isUnlocked: snapshot.isUnlocked,
           meta: snapshot.meta,
@@ -261,7 +261,7 @@ export const createPortRouter = ({
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) return true;
       const portContext = portContexts.get(port);
-      const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
+      const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.chainRef ?? null);
       const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
       const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
       const chainRef = rpcContext?.chainRef ?? null;
@@ -298,7 +298,7 @@ export const createPortRouter = ({
 
     const portContext = portContexts.get(port);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? null;
+    const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.chainRef ?? null;
     const rpcContext = buildRpcContext(portContext, effectiveChainRef);
 
     const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
@@ -360,7 +360,7 @@ export const createPortRouter = ({
       portContexts.set(port, {
         origin,
         meta: null,
-        caip2: null,
+        chainRef: null,
         chainId: null,
         namespace: DEFAULT_NAMESPACE,
       });

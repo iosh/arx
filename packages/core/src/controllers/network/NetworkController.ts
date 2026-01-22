@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ChainIcon, ChainMetadata, ExplorerLink, RpcEndpoint } from "../../chains/metadata.js";
 import type {
   NetworkController,
@@ -123,8 +123,8 @@ const deriveStrategyConfig = (strategy?: RpcStrategyConfig): RpcStrategyConfig =
 
 export class InMemoryNetworkController implements NetworkController {
   #messenger: NetworkMessenger;
-  #chains = new Map<Caip2ChainId, ChainRuntime>();
-  #activeChain: Caip2ChainId;
+  #chains = new Map<ChainRef, ChainRuntime>();
+  #activeChain: ChainRef;
   #defaultStrategy: RpcStrategyConfig;
   #now: () => number;
   #logger: RpcEventLogger;
@@ -157,18 +157,18 @@ export class InMemoryNetworkController implements NetworkController {
     return cloneMetadata(this.#requireRuntime(this.#activeChain).metadata);
   }
 
-  getChain(chainRef: Caip2ChainId): ChainMetadata | null {
+  getChain(chainRef: ChainRef): ChainMetadata | null {
     const runtime = this.#chains.get(chainRef);
     return runtime ? cloneMetadata(runtime.metadata) : null;
   }
 
-  getEndpointState(chainRef: Caip2ChainId): RpcEndpointState | null {
+  getEndpointState(chainRef: ChainRef): RpcEndpointState | null {
     const runtime = this.#chains.get(chainRef);
     if (!runtime) return null;
     return this.#buildEndpointState(chainRef, runtime);
   }
 
-  getActiveEndpoint(chainRef?: Caip2ChainId): RpcEndpointInfo {
+  getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo {
     const runtime = this.#requireRuntime(chainRef ?? this.#activeChain);
     const index = runtime.activeIndex;
     const endpoint = runtime.endpoints[index];
@@ -196,11 +196,11 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_RPC_ENDPOINT_TOPIC, handler);
   }
 
-  onRpcHealthChanged(handler: (update: { chainRef: Caip2ChainId; state: RpcEndpointState }) => void): () => void {
+  onRpcHealthChanged(handler: (update: { chainRef: ChainRef; state: RpcEndpointState }) => void): () => void {
     return this.#messenger.subscribe(NETWORK_RPC_HEALTH_TOPIC, handler);
   }
 
-  async switchChain(target: Caip2ChainId): Promise<ChainMetadata> {
+  async switchChain(target: ChainRef): Promise<ChainMetadata> {
     if (this.#activeChain === target) {
       return this.getActiveChain();
     }
@@ -231,7 +231,7 @@ export class InMemoryNetworkController implements NetworkController {
     return cloneMetadata(runtime.metadata);
   }
 
-  async removeChain(chainRef: Caip2ChainId): Promise<void> {
+  async removeChain(chainRef: ChainRef): Promise<void> {
     if (!this.#chains.has(chainRef)) {
       return;
     }
@@ -246,7 +246,7 @@ export class InMemoryNetworkController implements NetworkController {
     this.#publishState();
   }
 
-  reportRpcOutcome(chainRef: Caip2ChainId, outcome: RpcOutcomeReport): void {
+  reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void {
     const runtime = this.#requireRuntime(chainRef);
     if (runtime.endpoints.length === 0) {
       throw new Error(`Cannot report RPC outcome for chain ${chainRef} without endpoints`);
@@ -343,7 +343,7 @@ export class InMemoryNetworkController implements NetworkController {
     }
   }
 
-  setStrategy(chainRef: Caip2ChainId, strategy: RpcStrategyConfig): void {
+  setStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void {
     const runtime = this.#requireRuntime(chainRef);
     runtime.strategy = deriveStrategyConfig(strategy);
     runtime.lastUpdatedAt = this.#now();
@@ -392,7 +392,7 @@ export class InMemoryNetworkController implements NetworkController {
       throw new Error(`Active chain ${state.activeChain} must be present in knownChains`);
     }
 
-    const chainMap = new Map<Caip2ChainId, ChainRuntime>();
+    const chainMap = new Map<ChainRef, ChainRuntime>();
     for (const metadata of sortChains(state.knownChains.map(cloneMetadata))) {
       const snapshot = state.rpc[metadata.chainRef];
       const strategy = deriveStrategyConfig(snapshot?.strategy ?? this.#defaultStrategy);
@@ -544,7 +544,7 @@ export class InMemoryNetworkController implements NetworkController {
     };
   }
 
-  #buildEndpointState(chainRef: Caip2ChainId, runtime: ChainRuntime): RpcEndpointState {
+  #buildEndpointState(chainRef: ChainRef, runtime: ChainRuntime): RpcEndpointState {
     return {
       activeIndex: runtime.activeIndex,
       endpoints: buildEndpointInfoList(runtime.endpoints),
@@ -554,7 +554,7 @@ export class InMemoryNetworkController implements NetworkController {
     };
   }
 
-  #buildEndpointInfo(chainRef: Caip2ChainId, runtime: ChainRuntime, index: number): RpcEndpointInfo {
+  #buildEndpointInfo(chainRef: ChainRef, runtime: ChainRuntime, index: number): RpcEndpointInfo {
     const endpoint = runtime.endpoints[index];
     if (!endpoint) {
       throw new Error(`Endpoint index ${index} is out of bounds for ${chainRef}`);
@@ -600,11 +600,11 @@ export class InMemoryNetworkController implements NetworkController {
     });
   }
 
-  #publishEndpointChange(chainRef: Caip2ChainId, previous: RpcEndpointInfo, next: RpcEndpointInfo) {
+  #publishEndpointChange(chainRef: ChainRef, previous: RpcEndpointInfo, next: RpcEndpointInfo) {
     this.#messenger.publish(NETWORK_RPC_ENDPOINT_TOPIC, { chainRef, previous, next }, { force: true });
   }
 
-  #publishRpcHealth(chainRef: Caip2ChainId, runtime: ChainRuntime) {
+  #publishRpcHealth(chainRef: ChainRef, runtime: ChainRuntime) {
     this.#messenger.publish(
       NETWORK_RPC_HEALTH_TOPIC,
       { chainRef, state: this.#buildEndpointState(chainRef, runtime) },
@@ -612,7 +612,7 @@ export class InMemoryNetworkController implements NetworkController {
     );
   }
 
-  #requireRuntime(chainRef: Caip2ChainId): ChainRuntime {
+  #requireRuntime(chainRef: ChainRef): ChainRuntime {
     const runtime = this.#chains.get(chainRef);
     if (!runtime) {
       throw new Error(`Unknown chain: ${chainRef}`);

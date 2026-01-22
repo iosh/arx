@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../chains/ids.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { createDefaultChainModuleRegistry } from "../chains/registry.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
@@ -248,7 +248,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const selectActiveChainRef = (
     currentState: ReturnType<typeof networkController.getState>,
     registryChains: ChainMetadata[],
-  ): Caip2ChainId => {
+  ): ChainRef => {
     if (registryChains.length === 0) {
       return currentState.activeChain;
     }

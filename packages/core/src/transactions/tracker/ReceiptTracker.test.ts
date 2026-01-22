@@ -9,7 +9,7 @@ const BASE_CONTEXT: TransactionAdapterContext = {
   from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   request: {
     namespace: "eip155",
-    caip2: "eip155:1",
+    chainRef: "eip155:1",
     payload: {
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -21,12 +21,12 @@ const BASE_CONTEXT: TransactionAdapterContext = {
   meta: {
     id: "tx-1",
     namespace: "eip155",
-    caip2: "eip155:1",
+    chainRef: "eip155:1",
     origin: "https://dapp.example",
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     request: {
       namespace: "eip155",
-      caip2: "eip155:1",
+      chainRef: "eip155:1",
       payload: {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

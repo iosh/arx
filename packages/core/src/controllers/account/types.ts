@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 
 export type AccountAddress<T extends string = string> = T;
@@ -14,7 +14,7 @@ export type NamespaceAccountsState<T extends string = string> = AccountsState<T>
 
 export type ActivePointer<T extends string = string> = {
   namespace: ChainNamespace;
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   address: AccountAddress<T> | null;
 };
 
@@ -45,16 +45,16 @@ export type AccountMessenger<T extends string = string> = ControllerMessenger<Ac
 export type MultiNamespaceAccountController<T extends string = string> = {
   getState(): MultiNamespaceAccountsState<T>;
   getActivePointer(): ActivePointer<T> | null;
-  getAccounts(params?: { chainRef?: Caip2ChainId }): AccountAddress<T>[];
+  getAccounts(params?: { chainRef?: ChainRef }): AccountAddress<T>[];
   getAccountsForNamespace(namespace: ChainNamespace): AccountAddress<T>[];
-  switchActive(params: { chainRef: Caip2ChainId; address?: AccountAddress<T> | null }): Promise<ActivePointer<T>>;
+  switchActive(params: { chainRef: ChainRef; address?: AccountAddress<T> | null }): Promise<ActivePointer<T>>;
   addAccount(params: {
-    chainRef: Caip2ChainId;
+    chainRef: ChainRef;
     address: AccountAddress<T>;
     makePrimary?: boolean;
   }): Promise<NamespaceAccountsState<T>>;
-  removeAccount(params: { chainRef: Caip2ChainId; address: AccountAddress<T> }): Promise<NamespaceAccountsState<T>>;
-  requestAccounts(params: { origin: string; chainRef: Caip2ChainId }): Promise<AccountAddress<T>[]>;
+  removeAccount(params: { chainRef: ChainRef; address: AccountAddress<T> }): Promise<NamespaceAccountsState<T>>;
+  requestAccounts(params: { origin: string; chainRef: ChainRef }): Promise<AccountAddress<T>[]>;
   replaceState(state: MultiNamespaceAccountsState<T>): void;
   onStateChanged(handler: (state: MultiNamespaceAccountsState<T>) => void): () => void;
   onNamespaceChanged(handler: (payload: NamespaceStateChange<T>) => void): () => void;

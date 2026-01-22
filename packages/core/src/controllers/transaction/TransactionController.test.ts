@@ -31,7 +31,7 @@ const CHAIN: ChainMetadata = {
 };
 const REQUEST: TransactionRequest<"eip155"> = {
   namespace: "eip155",
-  caip2: CHAIN.chainRef,
+  chainRef: CHAIN.chainRef,
   payload: {
     from: ACCOUNT,
     to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -253,12 +253,12 @@ describe("InMemoryTransactionController", () => {
     const approvedMeta: TransactionMeta = {
       id: "tx-1",
       namespace: "eip155",
-      caip2: CHAIN.chainRef,
+      chainRef: CHAIN.chainRef,
       origin: ORIGIN,
       from: ACCOUNT,
       request: {
         namespace: "eip155",
-        caip2: CHAIN.chainRef,
+        chainRef: CHAIN.chainRef,
         payload: { ...REQUEST.payload },
       },
       status: "approved",
@@ -327,12 +327,12 @@ describe("InMemoryTransactionController", () => {
     const signedMeta: TransactionMeta = {
       id: "tx-1",
       namespace: "eip155",
-      caip2: CHAIN.chainRef,
+      chainRef: CHAIN.chainRef,
       origin: ORIGIN,
       from: ACCOUNT,
       request: {
         namespace: "eip155",
-        caip2: CHAIN.chainRef,
+        chainRef: CHAIN.chainRef,
         payload: { ...REQUEST.payload },
       },
       status: "signed",

@@ -1,5 +1,5 @@
 import type { Hex } from "ox/Hex";
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
@@ -31,7 +31,7 @@ export type TransactionDraftPreview = {
   warnings: TransactionWarning[];
 };
 export type TransactionApprovalChainMetadata = {
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   namespace: string;
   name: string;
   shortName?: string | null;
@@ -70,14 +70,14 @@ export type TransactionPayloadMap = {
 
 export type TransactionRequest<TNamespace extends string = keyof TransactionPayloadMap | string> = {
   namespace: TNamespace;
-  caip2?: Caip2ChainId | undefined;
+  chainRef?: ChainRef | undefined;
   payload: TNamespace extends keyof TransactionPayloadMap ? TransactionPayloadMap[TNamespace] : Record<string, unknown>;
 };
 
 export type TransactionMeta = {
   id: string;
   namespace: string;
-  caip2: Caip2ChainId;
+  chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
   request: TransactionRequest;
@@ -106,7 +106,7 @@ export type TransactionMessengerTopics = {
 export type TransactionMessenger = ControllerMessenger<TransactionMessengerTopics>;
 
 export type TransactionApprovalTaskPayload = {
-  caip2: Caip2ChainId;
+  chainRef: ChainRef;
   origin: string;
   chain?: TransactionApprovalChainMetadata | null;
   from: AccountAddress | null;

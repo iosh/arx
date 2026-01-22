@@ -36,7 +36,7 @@ class FakePort {
 }
 
 const makeSnapshot = (isUnlocked: boolean) => ({
-  chain: { chainId: "0x1", caip2: "eip155:1" },
+  chain: { chainId: "0x1", chainRef: "eip155:1" },
   accounts: [],
   isUnlocked,
   meta: {

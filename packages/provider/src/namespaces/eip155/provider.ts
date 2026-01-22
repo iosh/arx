@@ -128,8 +128,8 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     return null;
   }
 
-  get caip2() {
-    return this.#state.caip2;
+  get chainRef() {
+    return this.#state.chainRef;
   }
 
   get isUnlocked() {
@@ -390,12 +390,13 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   #syncWithTransportState() {
     const state: TransportState = this.#transport.getConnectionState();
+    const chainRef = state.chainRef;
 
     this.#applySnapshot(
       {
         connected: state.connected,
         chainId: state.chainId,
-        caip2: state.caip2,
+        chainRef,
         accounts: this.#coerceAccounts(state.accounts),
         isUnlocked: typeof state.isUnlocked === "boolean" ? state.isUnlocked : null,
         meta: this.#coerceTransportMeta(state.meta),
@@ -431,17 +432,18 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #handleTransportConnect = (payload: unknown) => {
     const data = (payload ?? {}) as Partial<{
       chainId: string;
-      caip2: string | null;
+      chainRef: string | null;
       accounts: unknown;
       isUnlocked: boolean;
       meta: unknown;
     }>;
 
+    const chainRef = typeof data.chainRef === "string" ? data.chainRef : null;
     this.#applySnapshot(
       {
         connected: true,
         chainId: typeof data.chainId === "string" ? data.chainId : null,
-        caip2: typeof data.caip2 === "string" ? data.caip2 : null,
+        chainRef,
         accounts: this.#coerceAccounts(data.accounts),
         isUnlocked: typeof data.isUnlocked === "boolean" ? data.isUnlocked : null,
         meta: data.meta === undefined ? null : this.#coerceTransportMeta(data.meta),
@@ -453,9 +455,9 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #handleTransportChainChanged = (payload: unknown) => {
     if (!payload || typeof payload !== "object") return;
 
-    const { chainId, caip2, isUnlocked, meta } = payload as Partial<{
+    const { chainId, chainRef, isUnlocked, meta } = payload as Partial<{
       chainId: unknown;
-      caip2: unknown;
+      chainRef: unknown;
       isUnlocked: unknown;
       meta: unknown;
     }>;
@@ -464,8 +466,8 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
     const patch: ProviderPatch = { type: "chain", chainId };
 
-    if (typeof caip2 === "string" || caip2 === null) {
-      patch.caip2 = caip2;
+    if (typeof chainRef === "string" || chainRef === null) {
+      patch.chainRef = chainRef;
     }
     if (typeof isUnlocked === "boolean") {
       patch.isUnlocked = isUnlocked;

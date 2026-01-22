@@ -12,7 +12,7 @@ export type HandshakeAckPayload = {
   protocolVersion?: ProtocolVersion | number;
   handshakeId: string;
   chainId: string;
-  caip2: string;
+  chainRef: string;
   accounts: string[];
   isUnlocked: boolean;
   meta: TransportMeta;

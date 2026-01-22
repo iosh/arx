@@ -174,7 +174,7 @@ describe("draftBuilder - validation", () => {
       });
 
       const request = createEip155Request();
-      request.caip2 = "eip155:mainnet";
+      request.chainRef = "eip155:mainnet";
       request.payload.chainId = TEST_CHAINS.MAINNET_CHAIN_ID;
 
       const ctx = createAdapterContext({

@@ -6,7 +6,7 @@ import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
 const INITIAL_STATE: TransportState = {
   connected: true,
   chainId: "0x1",
-  caip2: "eip155:1",
+  chainRef: "eip155:1",
   accounts: [],
   isUnlocked: true,
   meta: buildMeta(),

@@ -10,13 +10,13 @@ export type SessionMessage =
 export type PortContext = {
   origin: string;
   meta: TransportMeta | null;
-  caip2: string | null;
+  chainRef: string | null;
   chainId: string | null;
   namespace: string;
 };
 
 export type ControllerSnapshot = {
-  chain: { chainId: string; caip2: string };
+  chain: { chainId: string; chainRef: string };
   accounts: string[];
   isUnlocked: boolean;
   meta: TransportMeta;

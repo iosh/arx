@@ -7,7 +7,7 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { parseCaip2 } from "../../../chains/caip.js";
+import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import { zeroize } from "../../../vault/utils.js";
 import type { SignedTransactionPayload, TransactionAdapterContext, TransactionDraft } from "../types.js";
@@ -75,7 +75,7 @@ const deriveChainId = (context: TransactionAdapterContext, prepared: Record<stri
     return numeric;
   }
 
-  const { namespace, reference } = parseCaip2(context.chainRef);
+  const { namespace, reference } = parseChainRef(context.chainRef);
   if (namespace !== "eip155") {
     throw arxError({
       reason: ArxReasons.RpcInvalidRequest,

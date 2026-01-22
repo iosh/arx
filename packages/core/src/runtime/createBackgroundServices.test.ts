@@ -132,12 +132,12 @@ const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
       {
         id: "tx-1",
         namespace: "eip155",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         origin: "https://dapp.example",
         from: "0xabc",
         request: {
           namespace: "eip155",
-          caip2: "eip155:1",
+          chainRef: "eip155:1",
           payload: {
             chainId: "0x1",
             from: "0xabc",
@@ -587,12 +587,12 @@ describe("createBackgroundServices", () => {
     const pendingTx = {
       id: "tx-test-1",
       namespace: "eip155",
-      caip2: "eip155:1",
+      chainRef: "eip155:1",
       origin: "https://dapp.example",
       from: "0x1111111111111111111111111111111111111111",
       request: {
         namespace: "eip155",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         payload: {
           chainId: "0x1",
           from: "0x1111111111111111111111111111111111111111",

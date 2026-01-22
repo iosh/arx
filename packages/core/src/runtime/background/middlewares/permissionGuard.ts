@@ -1,7 +1,7 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
-import type { Caip2ChainId } from "../../../chains/ids.js";
+import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainNamespace, PermissionScopes } from "../../../controllers/index.js";
 import type { MethodDefinition } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
@@ -11,7 +11,7 @@ type PermissionGuardDeps = {
   assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   isInternalOrigin(origin: string): boolean;
 
-  isConnected: (origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }) => boolean;
+  isConnected: (origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }) => boolean;
   findMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
 };
 
@@ -46,7 +46,7 @@ export const createPermissionGuardMiddleware = ({
         chainRef.length > 0 &&
         isConnected(origin, {
           namespace: (namespace ?? null) as ChainNamespace | null,
-          chainRef: chainRef as Caip2ChainId,
+          chainRef: chainRef as ChainRef,
         });
 
       if (!connected) {

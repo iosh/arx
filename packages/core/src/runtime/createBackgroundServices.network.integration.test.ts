@@ -191,12 +191,12 @@ describe("createBackgroundServices (network integration)", () => {
           {
             id: "tx-storage-1",
             namespace: mainChain.namespace,
-            caip2: mainChain.chainRef,
+            chainRef: mainChain.chainRef,
             origin: "https://dapp.example",
             from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             request: {
               namespace: mainChain.namespace,
-              caip2: mainChain.chainRef,
+              chainRef: mainChain.chainRef,
               payload: {
                 from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

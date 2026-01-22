@@ -12,7 +12,7 @@ export const buildRpcContext = (
 ): ExtendedRpcContext | undefined => {
   if (!portContext) return undefined;
   const namespace = portContext.namespace;
-  const resolvedChainRef = chainRef ?? portContext.caip2 ?? null;
+  const resolvedChainRef = chainRef ?? portContext.chainRef ?? null;
   const baseContext: RpcInvocationContext = { namespace, chainRef: resolvedChainRef };
   return {
     ...baseContext,

@@ -1,5 +1,5 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
-import { parseCaip2 } from "../../chains/index.js";
+import type { ChainRef } from "../../chains/ids.js";
+import { parseChainRef } from "../../chains/index.js";
 import type { AccountController, NamespaceAccountsState } from "../../controllers/account/types.js";
 import type { KeyringAccount } from "../../keyring/types.js";
 import type { KeyringService } from "./KeyringService.js";
@@ -17,7 +17,7 @@ type BridgeOptions = {
 
 type DeriveAccountOptions = {
   namespace: string;
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   keyringId?: string;
   makePrimary?: boolean;
   switchActive?: boolean;
@@ -29,13 +29,13 @@ type ImportAccountOptions = DeriveAccountOptions & {
 
 type RemoveAccountOptions = {
   namespace: string;
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   address: string;
 };
 
 type SetPrimaryOptions = {
   namespace: string;
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   address: string;
 };
 
@@ -138,11 +138,11 @@ export class AccountsKeyringBridge {
     return namespaceState;
   }
 
-  #assertNamespace(namespace: string, chainRef: Caip2ChainId): void {
+  #assertNamespace(namespace: string, chainRef: ChainRef): void {
     if (!this.#keyring.hasNamespace(namespace)) {
       throw new Error(`Namespace "${namespace}" is not initialized in the keyring`);
     }
-    const { namespace: parsedNamespace } = parseCaip2(chainRef);
+    const { namespace: parsedNamespace } = parseChainRef(chainRef);
     if (parsedNamespace !== namespace) {
       throw new Error(`Chain ${chainRef} does not belong to namespace "${namespace}"`);
     }

@@ -10,7 +10,7 @@ export const createEip155Request = (
   overrides: Partial<Eip155TransactionPayload> = {},
 ): TransactionAdapterContext["request"] => ({
   namespace: "eip155",
-  caip2: TEST_CHAINS.MAINNET,
+  chainRef: TEST_CHAINS.MAINNET,
   payload: {
     from: TEST_ADDRESSES.FROM_A,
     to: TEST_ADDRESSES.TO_B,
@@ -30,7 +30,7 @@ export const createTransactionMeta = (
 ): TransactionMeta => ({
   id: "tx-1",
   namespace: "eip155",
-  caip2: TEST_CHAINS.MAINNET,
+  chainRef: TEST_CHAINS.MAINNET,
   origin: "https://dapp.example",
   from: TEST_ADDRESSES.FROM_A,
   request,
@@ -72,7 +72,7 @@ export const createBroadcasterContext = (
 ): TransactionAdapterContext => {
   const baseRequest = {
     namespace: "eip155" as const,
-    caip2: TEST_CHAINS.MAINNET,
+    chainRef: TEST_CHAINS.MAINNET,
     payload: {
       from: TEST_ADDRESSES.ACCOUNT_AA,
     },
@@ -95,7 +95,7 @@ export const createBroadcasterContext = (
 export const createReceiptContext = (overrides: Partial<TransactionAdapterContext> = {}): TransactionAdapterContext => {
   const baseRequest = {
     namespace: "eip155" as const,
-    caip2: TEST_CHAINS.MAINNET,
+    chainRef: TEST_CHAINS.MAINNET,
     payload: {
       from: TEST_ADDRESSES.ACCOUNT_AA,
       to: TEST_ADDRESSES.ACCOUNT_BB,

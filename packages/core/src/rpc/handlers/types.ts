@@ -1,5 +1,5 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
@@ -30,7 +30,7 @@ export type RpcRequest = {
 };
 
 export type RpcInvocationContext = {
-  chainRef?: Caip2ChainId | null;
+  chainRef?: ChainRef | null;
   namespace?: Namespace | null;
   meta?: unknown;
 };

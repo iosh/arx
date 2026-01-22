@@ -106,7 +106,7 @@ describe("WindowPostMessageTransport", () => {
     const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
     dispatchHandshakeAck(sessionId, handshakeId, {
       chainId: "0x1",
-      caip2: "eip155:1",
+      chainRef: "eip155:1",
       accounts: options?.accounts ?? [],
       isUnlocked: true,
       meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -122,7 +122,7 @@ describe("WindowPostMessageTransport", () => {
       expect(t.getConnectionState()).toEqual({
         connected: false,
         chainId: null,
-        caip2: null,
+        chainRef: null,
         accounts: [],
         isUnlocked: null,
         meta: null,
@@ -138,7 +138,7 @@ describe("WindowPostMessageTransport", () => {
 
       dispatchHandshakeAck(sessionId, handshakeId, {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -150,7 +150,7 @@ describe("WindowPostMessageTransport", () => {
       expect(state.connected).toBe(true);
       expect(state.chainId).toBe("0x1");
       expect(state.accounts).toEqual(["0xabc"]);
-      expect(state.caip2).toBe("eip155:1");
+      expect(state.chainRef).toBe("eip155:1");
       postMessageSpy.mockRestore();
     });
 
@@ -166,7 +166,7 @@ describe("WindowPostMessageTransport", () => {
         handshakeId,
         {
           chainId: "0x1",
-          caip2: "eip155:1",
+          chainRef: "eip155:1",
           accounts: ["0xabc"],
           isUnlocked: true,
           meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -191,7 +191,7 @@ describe("WindowPostMessageTransport", () => {
         handshakeId,
         {
           chainId: "0x1",
-          caip2: "eip155:1",
+          chainRef: "eip155:1",
           accounts: ["0xabc"],
           isUnlocked: true,
           meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -234,7 +234,7 @@ describe("WindowPostMessageTransport", () => {
       const t = createTransport();
       dispatchHandshakeAck("not-a-real-session", "not-a-real-handshake", {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -308,7 +308,7 @@ describe("WindowPostMessageTransport", () => {
 
         dispatchHandshakeAck("stale-session", "stale", {
           chainId: "0x1",
-          caip2: "eip155:1",
+          chainRef: "eip155:1",
           accounts: [],
           isUnlocked: true,
           meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -335,7 +335,7 @@ describe("WindowPostMessageTransport", () => {
         const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
         dispatchHandshakeAck(sessionId, handshakeId, {
           chainId: "0x1",
-          caip2: "eip155:1",
+          chainRef: "eip155:1",
           accounts: ["0xabc"],
           isUnlocked: true,
           meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -406,7 +406,7 @@ describe("WindowPostMessageTransport", () => {
       const firstHandshake = getHandshakeFromSpy(postMessageSpy);
       dispatchHandshakeAck(firstHandshake.sessionId, firstHandshake.handshakeId, {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -420,7 +420,7 @@ describe("WindowPostMessageTransport", () => {
       const secondHandshake = getHandshakeFromSpy(postMessageSpy);
       dispatchHandshakeAck(secondHandshake.sessionId, secondHandshake.handshakeId, {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: [],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -462,7 +462,7 @@ describe("WindowPostMessageTransport", () => {
       const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
       dispatchHandshakeAck(sessionId, handshakeId, {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: [],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -507,7 +507,7 @@ describe("WindowPostMessageTransport", () => {
       const { sessionId, handshakeId } = getHandshakeFromSpy(postMessageSpy);
       dispatchHandshakeAck(sessionId, handshakeId, {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: [],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -548,7 +548,7 @@ describe("WindowPostMessageTransport", () => {
 
       const initialPayload = {
         chainId: "0x1",
-        caip2: "eip155:1",
+        chainRef: "eip155:1",
         accounts: ["0xabc"],
         isUnlocked: true,
         meta: { activeChain: "eip155:1", activeNamespace: "eip155", supportedChains: ["eip155:1"] },
@@ -571,7 +571,7 @@ describe("WindowPostMessageTransport", () => {
       const secondHandshake = getHandshakeFromSpy(postMessageSpy);
       const reconnectPayload = {
         chainId: "0x2",
-        caip2: "eip155:5",
+        chainRef: "eip155:5",
         accounts: ["0xdef"],
         isUnlocked: true,
         meta: { activeChain: "eip155:5", activeNamespace: "eip155", supportedChains: ["eip155:5"] },
@@ -582,7 +582,7 @@ describe("WindowPostMessageTransport", () => {
       const state = t.getConnectionState();
       expect(state.connected).toBe(true);
       expect(state.chainId).toBe("0x2");
-      expect(state.caip2).toBe("eip155:5");
+      expect(state.chainRef).toBe("eip155:5");
       expect(state.accounts).toEqual(["0xdef"]);
       expect(state.meta?.activeChain).toBe("eip155:5");
       expect(state.isUnlocked).toBe(true);

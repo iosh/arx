@@ -63,7 +63,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
         namespace: chain.namespace,
-        caip2: chain.chainRef,
+        chainRef: chain.chainRef,
         payload: {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -166,7 +166,7 @@ describe("createBackgroundServices (transactions integration)", () => {
         fromAddresses.map((from, index) =>
           context.services.controllers.transactions.submitTransaction("https://dapp.example", {
             namespace: chain.namespace,
-            caip2: chain.chainRef,
+            chainRef: chain.chainRef,
             payload: {
               from,
               to: toAddresses[index],
@@ -261,7 +261,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
         namespace: chain.namespace,
-        caip2: chain.chainRef,
+        chainRef: chain.chainRef,
         payload: {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -333,7 +333,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
         namespace: chain.namespace,
-        caip2: chain.chainRef,
+        chainRef: chain.chainRef,
         payload: {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -406,7 +406,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     try {
       const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
         namespace: chain.namespace,
-        caip2: chain.chainRef,
+        chainRef: chain.chainRef,
         payload: {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

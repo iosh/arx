@@ -326,7 +326,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(stored.status).toBe("broadcast");
       expect(stored.hash).toBe(txHash);
       expect(stored.namespace).toBe("eip155");
-      expect(stored.caip2).toBe(mainnet.chainRef);
+      expect(stored.chainRef).toBe(mainnet.chainRef);
       expect(stored.from).toBe(account.address);
       expect(stored.warnings).toEqual([expect.objectContaining({ code: "transaction.draft.chain_id_missing" })]);
       expect(stored.issues).toEqual([]);

@@ -196,7 +196,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     const provider = (window as any).ethereum;
 
     const chainChanged = new Promise<string>((resolve) => provider.once("chainChanged", resolve));
-    bridge.emitChainChanged({ chainId: "0x2", caip2: "eip155:2" });
+    bridge.emitChainChanged({ chainId: "0x2", chainRef: "eip155:2" });
     await expect(chainChanged).resolves.toBe("0x2");
     await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x2");
 

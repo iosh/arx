@@ -24,7 +24,7 @@ export type TransportMeta = {
 export type TransportState = {
   connected: boolean;
   chainId: string | null;
-  caip2: string | null;
+  chainRef: string | null;
   accounts: string[];
   isUnlocked: boolean | null;
   meta: TransportMeta | null;

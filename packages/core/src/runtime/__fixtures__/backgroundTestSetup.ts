@@ -2,7 +2,7 @@ import type { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import { vi } from "vitest";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
@@ -202,7 +202,7 @@ export const createInMemoryKeyringStore = (): KeyringStorePort => {
 
 // Mock chain registry implementation
 export class MemoryChainRegistryPort implements ChainRegistryPort {
-  private entities = new Map<Caip2ChainId, ChainRegistryEntity>();
+  private entities = new Map<ChainRef, ChainRegistryEntity>();
 
   constructor(seed?: ChainRegistryEntity[]) {
     seed?.forEach((entity) => {
@@ -210,7 +210,7 @@ export class MemoryChainRegistryPort implements ChainRegistryPort {
     });
   }
 
-  async get(chainRef: Caip2ChainId): Promise<ChainRegistryEntity | null> {
+  async get(chainRef: ChainRef): Promise<ChainRegistryEntity | null> {
     const entity = this.entities.get(chainRef);
     return entity ? clone(entity) : null;
   }
@@ -229,7 +229,7 @@ export class MemoryChainRegistryPort implements ChainRegistryPort {
     });
   }
 
-  async delete(chainRef: Caip2ChainId): Promise<void> {
+  async delete(chainRef: ChainRef): Promise<void> {
     this.entities.delete(chainRef);
   }
 

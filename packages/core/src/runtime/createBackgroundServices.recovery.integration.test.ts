@@ -53,12 +53,12 @@ describe("createBackgroundServices (recovery integration)", () => {
           {
             id: "tx-storage-1",
             namespace: chain.namespace,
-            caip2: chain.chainRef,
+            chainRef: chain.chainRef,
             origin: "https://dapp.example",
             from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             request: {
               namespace: chain.namespace,
-              caip2: chain.chainRef,
+              chainRef: chain.chainRef,
               payload: {
                 from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -141,12 +141,12 @@ describe("createBackgroundServices (recovery integration)", () => {
     const approvedMeta: TransactionsSnapshot["payload"]["pending"][number] = {
       id: "tx-resume-1",
       namespace: chain.namespace,
-      caip2: chain.chainRef,
+      chainRef: chain.chainRef,
       origin: "https://dapp.example",
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: {
         namespace: chain.namespace,
-        caip2: chain.chainRef,
+        chainRef: chain.chainRef,
         payload: {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -221,7 +221,7 @@ describe("createBackgroundServices (recovery integration)", () => {
           {
             id: "broken",
             namespace: chain.namespace,
-            caip2: chain.chainRef,
+            chainRef: chain.chainRef,
             origin: "https://dapp.example",
           },
         ],

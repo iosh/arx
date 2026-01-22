@@ -87,7 +87,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("switches chains when only caip2 is provided", async () => {
+  it("switches chains when only chainRef is provided", async () => {
     const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();
@@ -101,7 +101,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: {
             method: "wallet_switchEthereumChain",
-            params: [{ caip2: ALT_CHAIN.chainRef }] as JsonRpcParams,
+            params: [{ chainRef: ALT_CHAIN.chainRef }] as JsonRpcParams,
           },
         }),
       ).resolves.toBeNull();
@@ -112,7 +112,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("rejects when chainId and caip2 do not match", async () => {
+  it("rejects when chainId and chainRef do not match", async () => {
     const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();
@@ -126,7 +126,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: {
             method: "wallet_switchEthereumChain",
-            params: [{ chainId: "0x1", caip2: ALT_CHAIN.chainRef }] as JsonRpcParams,
+            params: [{ chainId: "0x1", chainRef: ALT_CHAIN.chainRef }] as JsonRpcParams,
           },
         }),
       ).rejects.toMatchObject({
@@ -214,7 +214,7 @@ describe("eip155 handlers - core error paths", () => {
           origin: ORIGIN,
           request: {
             method: "wallet_switchEthereumChain",
-            params: [{ caip2: "conflux:cfx" }] as JsonRpcParams,
+            params: [{ chainRef: "conflux:cfx" }] as JsonRpcParams,
           },
         }),
       ).rejects.toMatchObject({

@@ -1,12 +1,12 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { JsonRpcParams } from "@metamask/utils";
 import { ZodError } from "zod";
-import type { Caip2ChainId } from "../../../chains/ids.js";
+import type { ChainRef } from "../../../chains/ids.js";
 import {
   type ChainMetadata,
   createDefaultChainModuleRegistry,
   createEip155MetadataFromEip3085,
-  parseCaip2,
+  parseChainRef,
 } from "../../../chains/index.js";
 import {
   type ApprovalTask,
@@ -121,7 +121,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rp
     chainRef: activeChain.chainRef,
     createdAt: Date.now(),
     payload: {
-      caip2: activeChain.chainRef,
+      chainRef: activeChain.chainRef,
       suggestedAccounts: [...suggested],
     },
   };
@@ -153,12 +153,12 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
 
   const payload = first as Record<string, unknown>;
   const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
-  const rawCaip2 = typeof payload.caip2 === "string" ? payload.caip2.trim() : undefined;
+  const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
 
-  if (!rawChainId && !rawCaip2) {
+  if (!rawChainId && !rawChainRef) {
     throw arxError({
       reason: ArxReasons.RpcInvalidParams,
-      message: "wallet_switchEthereumChain requires a chainId or caip2 value",
+      message: "wallet_switchEthereumChain requires a chainId or chainRef value",
       data: { params },
     });
   }
@@ -172,15 +172,15 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
     });
   }
 
-  let normalizedCaip2: string | undefined;
-  if (rawCaip2) {
+  let normalizedChainRef: string | undefined;
+  if (rawChainRef) {
     try {
-      const parsed = parseCaip2(rawCaip2);
+      const parsed = parseChainRef(rawChainRef);
       if (parsed.namespace !== "eip155") {
         throw arxError({
           reason: ArxReasons.ChainNotCompatible,
           message: "Requested chain is not compatible with wallet_switchEthereumChain",
-          data: { caip2: rawCaip2 },
+          data: { chainRef: rawChainRef },
         });
       }
       if (normalizedChainId) {
@@ -188,18 +188,18 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
         if (decimal !== parsed.reference) {
           throw arxError({
             reason: ArxReasons.RpcInvalidParams,
-            message: "wallet_switchEthereumChain chainId does not match caip2 reference",
-            data: { chainId: rawChainId, caip2: rawCaip2 },
+            message: "wallet_switchEthereumChain chainId does not match chainRef reference",
+            data: { chainId: rawChainId, chainRef: rawChainRef },
           });
         }
       }
-      normalizedCaip2 = `${parsed.namespace}:${parsed.reference}`;
+      normalizedChainRef = `${parsed.namespace}:${parsed.reference}`;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain received an invalid caip2 identifier",
-        data: { caip2: rawCaip2 },
+        message: "wallet_switchEthereumChain received an invalid chainRef identifier",
+        data: { chainRef: rawChainRef },
         cause: error,
       });
     }
@@ -207,7 +207,7 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
 
   const state = controllers.network.getState();
   const target = state.knownChains.find((item) => {
-    if (normalizedCaip2 && item.chainRef === normalizedCaip2) return true;
+    if (normalizedChainRef && item.chainRef === normalizedChainRef) return true;
     if (normalizedChainId) {
       const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
       if (candidateChainId && candidateChainId === normalizedChainId) return true;
@@ -219,7 +219,7 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
     throw arxError({
       reason: ArxReasons.ChainNotFound,
       message: "Requested chain is not registered with ARX",
-      data: { chainId: rawChainId, caip2: rawCaip2 },
+      data: { chainId: rawChainId, chainRef: rawChainRef },
     });
   }
 
@@ -248,7 +248,7 @@ const handleWalletSwitchEthereumChain: MethodHandler = async ({ request, control
       throw arxError({
         reason: ArxReasons.ChainNotFound,
         message: error.message,
-        data: { chainId: rawChainId ?? target.chainId, caip2: normalizedCaip2 ?? target.chainRef },
+        data: { chainId: rawChainId ?? target.chainId, chainRef: normalizedChainRef ?? target.chainRef },
         cause: error,
       });
     }
@@ -355,7 +355,7 @@ const handleWalletGetPermissions: MethodHandler = ({ origin, controllers }) => {
 };
 const parsePermissionRequests = (
   params: JsonRpcParams | undefined,
-  defaultChain: Caip2ChainId,
+  defaultChain: ChainRef,
 ): PermissionRequestDescriptor[] => {
   const [raw] = toParamsArray(params);
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -489,7 +489,7 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
     chainRef: activeChain.chainRef,
     createdAt: Date.now(),
     payload: {
-      caip2: activeChain.chainRef,
+      chainRef: activeChain.chainRef,
       from: address,
       message,
     },
@@ -538,7 +538,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
     chainRef: activeChain.chainRef,
     createdAt: Date.now(),
     payload: {
-      caip2: activeChain.chainRef,
+      chainRef: activeChain.chainRef,
       from: address,
       typedData,
     },
@@ -589,7 +589,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
 
     await controllers.permissions.grant(origin, PermissionScopes.Transaction, {
       namespace: broadcastMeta.namespace,
-      chainRef: broadcastMeta.caip2,
+      chainRef: broadcastMeta.chainRef,
     });
 
     return broadcastMeta.hash;

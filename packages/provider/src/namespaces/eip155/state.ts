@@ -12,7 +12,7 @@ export type ProviderStateSnapshot = {
 export type ProviderSnapshot = {
   connected: boolean;
   chainId: string | null;
-  caip2: string | null;
+  chainRef: string | null;
   accounts: string[];
   isUnlocked: boolean | null;
   meta: TransportMeta | null;
@@ -20,7 +20,7 @@ export type ProviderSnapshot = {
 
 export type ProviderPatch =
   | { type: "accounts"; accounts: string[] }
-  | { type: "chain"; chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null }
+  | { type: "chain"; chainId: string; chainRef?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null }
   | { type: "unlock"; isUnlocked: boolean }
   | { type: "meta"; meta: TransportMeta | null };
 
@@ -32,7 +32,7 @@ const didAccountsChange = (prev: string[], next: string[]) => {
 export class Eip155ProviderState {
   #namespace: string = DEFAULT_NAMESPACE;
   #chainId: string | null = null;
-  #caip2: string | null = null;
+  #chainRef: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
   #meta: TransportMeta | null = null;
@@ -41,8 +41,8 @@ export class Eip155ProviderState {
     return this.#namespace;
   }
 
-  get caip2() {
-    return this.#caip2;
+  get chainRef() {
+    return this.#chainRef;
   }
 
   get chainId() {
@@ -74,8 +74,8 @@ export class Eip155ProviderState {
     const prevAccounts = [...this.#accounts];
 
     this.#updateMeta(snapshot.meta);
-    const effectiveCaip2 = this.#deriveEffectiveCaip2(snapshot.caip2);
-    this.#updateNamespace(effectiveCaip2);
+    const effectiveChainRef = this.#deriveEffectiveChainRef(snapshot.chainRef);
+    this.#updateNamespace(effectiveChainRef);
 
     this.#chainId = snapshot.chainId;
     this.#accounts = snapshot.accounts;
@@ -119,8 +119,8 @@ export class Eip155ProviderState {
         if (patch.meta !== undefined) {
           this.#updateMeta(patch.meta);
         }
-        const effectiveCaip2 = this.#deriveEffectiveCaip2(patch.caip2);
-        this.#updateNamespace(effectiveCaip2);
+        const effectiveChainRef = this.#deriveEffectiveChainRef(patch.chainRef);
+        this.#updateNamespace(effectiveChainRef);
 
         this.#chainId = patch.chainId;
         if (typeof patch.isUnlocked === "boolean") {
@@ -143,23 +143,23 @@ export class Eip155ProviderState {
   reset() {
     this.#namespace = DEFAULT_NAMESPACE;
     this.#chainId = null;
-    this.#caip2 = null;
+    this.#chainRef = null;
     this.#accounts = [];
     this.#isUnlocked = null;
     this.#meta = null;
   }
 
-  #updateNamespace(caip2: string | null | undefined) {
-    if (caip2 === undefined) return;
+  #updateNamespace(chainRef: string | null | undefined) {
+    if (chainRef === undefined) return;
 
-    if (typeof caip2 === "string" && caip2.length > 0) {
-      this.#caip2 = caip2;
-      const [namespace] = caip2.split(":");
+    if (typeof chainRef === "string" && chainRef.length > 0) {
+      this.#chainRef = chainRef;
+      const [namespace] = chainRef.split(":");
       this.#namespace = namespace ?? DEFAULT_NAMESPACE;
       return;
     }
 
-    this.#caip2 = null;
+    this.#chainRef = null;
     this.#namespace = DEFAULT_NAMESPACE;
   }
 
@@ -168,7 +168,7 @@ export class Eip155ProviderState {
     this.#meta = meta ? cloneTransportMeta(meta) : null;
   }
 
-  #deriveEffectiveCaip2(candidate: unknown): string | null {
+  #deriveEffectiveChainRef(candidate: unknown): string | null {
     if (typeof candidate === "string" && candidate.length > 0) {
       return candidate;
     }
@@ -189,6 +189,6 @@ export class Eip155ProviderState {
         // swallow malformed hex to fall back on CAIP references
       }
     }
-    return this.#parseNumericReference(this.#caip2) ?? this.#parseNumericReference(this.#meta?.activeChain);
+    return this.#parseNumericReference(this.#chainRef) ?? this.#parseNumericReference(this.#meta?.activeChain);
   }
 }

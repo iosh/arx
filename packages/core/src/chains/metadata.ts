@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { type ParsedCaip2, parseCaip2 } from "./caip.js";
-import type { Caip2ChainId } from "./ids.js";
+import { type ParsedChainRef, parseChainRef } from "./caip.js";
+import type { ChainRef } from "./ids.js";
 
 export type ChainFeature = string;
 
@@ -31,7 +31,7 @@ export interface NativeCurrency {
 }
 
 export interface ChainMetadata {
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   namespace: string;
   chainId: string;
   displayName: string;
@@ -58,7 +58,7 @@ export interface ChainProviderPolicies {
 
 export type NamespaceMetadataValidator = (params: {
   metadata: ChainMetadata;
-  parsed: ParsedCaip2;
+  parsed: ParsedChainRef;
   ctx: z.RefinementCtx;
 }) => void;
 
@@ -185,9 +185,9 @@ export const createChainMetadataSchema = (options?: {
 }): z.ZodType<ChainMetadata> => {
   const validators = { ...defaultNamespaceValidators, ...(options?.namespaceValidators ?? {}) };
   return baseSchema.superRefine((value, ctx) => {
-    let parsed: ParsedCaip2;
+    let parsed: ParsedChainRef;
     try {
-      parsed = parseCaip2(value.chainRef);
+      parsed = parseChainRef(value.chainRef);
     } catch (error) {
       ctx.addIssue({
         code: "custom",

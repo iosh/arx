@@ -1,1 +1,1 @@
-export type Caip2ChainId = string;
+export type ChainRef = string;

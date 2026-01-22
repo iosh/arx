@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { ChainNamespace } from "../account/types.js";
@@ -14,8 +14,8 @@ export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionS
 
 export type NamespacePermissionState = {
   scopes: PermissionScope[];
-  chains: Caip2ChainId[];
-  accountsByChain?: Record<Caip2ChainId, string[]>;
+  chains: ChainRef[];
+  accountsByChain?: Record<ChainRef, string[]>;
 };
 
 export type OriginPermissionState = Record<ChainNamespace, NamespacePermissionState>;
@@ -31,7 +31,7 @@ export type PermissionsState = {
 
 export type GrantPermissionOptions = {
   namespace?: ChainNamespace | null;
-  chainRef?: Caip2ChainId | null;
+  chainRef?: ChainRef | null;
 };
 
 export type PermissionMessengerTopics = {
@@ -52,7 +52,7 @@ export type PermissionControllerOptions = {
 export type PermissionRequestDescriptor = {
   scope: PermissionScope;
   capability: string;
-  chains: Caip2ChainId[];
+  chains: ChainRef[];
 };
 
 export type RequestPermissionsApprovalPayload = {
@@ -66,15 +66,12 @@ export type PermissionApprovalResult = {
 export type PermissionController = {
   getState(): PermissionsState;
 
-  getPermittedAccounts(
-    origin: string,
-    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId },
-  ): string[];
+  getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[];
   setPermittedAccounts(
     origin: string,
-    options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId; accounts: string[] },
+    options: { namespace?: ChainNamespace | null; chainRef: ChainRef; accounts: string[] },
   ): Promise<void>;
-  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: Caip2ChainId }): boolean;
+  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean;
 
   assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;

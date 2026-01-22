@@ -8,7 +8,7 @@ import { Eip155Provider } from "./provider.js";
 const INITIAL_STATE: TransportState = {
   connected: true,
   chainId: "0x1",
-  caip2: "eip155:1",
+  chainRef: "eip155:1",
   accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   isUnlocked: true,
   meta: buildMeta(),
@@ -93,7 +93,7 @@ describe("createEip155InjectedProvider", () => {
 
       transport.emit("chainChanged", {
         chainId: "0x89",
-        caip2: "eip155:137",
+        chainRef: "eip155:137",
         meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
       });
       expect(injected.chainId).toBe("0x89");

@@ -153,7 +153,7 @@ export class InMemoryTransactionController implements TransactionController {
       throw new Error("Active chain is required for transactions");
     }
 
-    const chainRef = request.caip2 ?? activeChain.chainRef;
+    const chainRef = request.chainRef ?? activeChain.chainRef;
     const adapter = this.#registry.get(request.namespace);
 
     const id = this.#generateId();
@@ -163,10 +163,10 @@ export class InMemoryTransactionController implements TransactionController {
     const meta: TransactionMeta = {
       id,
       namespace: request.namespace,
-      caip2: chainRef,
+      chainRef,
       origin,
       from: fromAddress,
-      request: cloneRequest({ ...request, caip2: chainRef }),
+      request: cloneRequest({ ...request, chainRef }),
       status: "pending",
       hash: null,
       receipt: null,
@@ -405,10 +405,10 @@ export class InMemoryTransactionController implements TransactionController {
       type: ApprovalTypes.SendTransaction,
       origin: meta.origin,
       namespace: meta.request.namespace,
-      chainRef: meta.caip2,
+      chainRef: meta.chainRef,
       createdAt: meta.createdAt,
       payload: {
-        caip2: meta.caip2,
+        chainRef: meta.chainRef,
         origin: meta.origin,
         chain: this.#buildChainMetadata(meta),
         from: meta.from,
@@ -538,7 +538,7 @@ export class InMemoryTransactionController implements TransactionController {
   #buildContext(meta: TransactionMeta): TransactionAdapterContext {
     return {
       namespace: meta.namespace,
-      chainRef: meta.caip2,
+      chainRef: meta.chainRef,
       origin: meta.origin,
       from: meta.from,
       request: cloneRequest(meta.request),
@@ -696,9 +696,9 @@ export class InMemoryTransactionController implements TransactionController {
   }
 
   #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {
-    const explicit = this.#network.getChain(meta.caip2);
+    const explicit = this.#network.getChain(meta.chainRef);
     const active = this.#network.getActiveChain();
-    const resolved = explicit ?? (active.chainRef === meta.caip2 ? active : null);
+    const resolved = explicit ?? (active.chainRef === meta.chainRef ? active : null);
     if (!resolved) return null;
 
     const chainId = resolved.chainId.startsWith("0x") ? (resolved.chainId as `0x${string}`) : null;

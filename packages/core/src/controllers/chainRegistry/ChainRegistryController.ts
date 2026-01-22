@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
 import {
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
@@ -212,7 +212,7 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
   #now: () => number;
   #logger: (message: string, error?: unknown) => void;
   #defaultSchemaVersion: number;
-  #chains = new Map<Caip2ChainId, ChainRegistryEntity>();
+  #chains = new Map<ChainRef, ChainRegistryEntity>();
   #ready: Promise<void>;
 
   constructor({ messenger, port, now = Date.now, logger = () => {}, seed = [], schemaVersion }: ControllerOptions) {
@@ -228,7 +228,7 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     return cloneState(this.#chains.values());
   }
 
-  getChain(chainRef: Caip2ChainId): ChainRegistryEntity | null {
+  getChain(chainRef: ChainRef): ChainRegistryEntity | null {
     const entry = this.#chains.get(chainRef);
     return entry ? cloneEntity(entry) : null;
   }
@@ -266,7 +266,7 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     return result;
   }
 
-  async removeChain(chainRef: Caip2ChainId): Promise<{ removed: boolean; previous?: ChainRegistryEntity }> {
+  async removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainRegistryEntity }> {
     await this.#ready;
 
     const previous = this.#chains.get(chainRef);

@@ -55,8 +55,8 @@ const cloneRequest = (request: TransactionRequest): TransactionRequest => {
     payload: clonePayload(request.namespace, request.payload),
   };
 
-  if (request.caip2 !== undefined) {
-    next.caip2 = request.caip2;
+  if (request.chainRef !== undefined) {
+    next.chainRef = request.chainRef;
   }
 
   return next;

@@ -15,7 +15,12 @@ import type {
 import { cloneTransportMeta, isTransportMeta } from "../utils/transportMeta.js";
 
 type ConnectPayload = Extract<Envelope, { type: "handshake_ack" }>["payload"];
-type ChainUpdatePayload = { chainId: string; caip2?: string | null; isUnlocked?: boolean; meta?: TransportMeta | null };
+type ChainUpdatePayload = {
+  chainId: string;
+  chainRef?: string | null;
+  isUnlocked?: boolean;
+  meta?: TransportMeta | null;
+};
 
 export type WindowPostMessageTransportOptions = {
   handshakeTimeoutMs?: number;
@@ -28,7 +33,7 @@ const isConnectPayload = (value: unknown): value is ConnectPayload => {
   const candidate = value as Partial<ConnectPayload>;
   if (typeof candidate.handshakeId !== "string") return false;
   if (typeof candidate.chainId !== "string") return false;
-  if (typeof candidate.caip2 !== "string") return false;
+  if (typeof candidate.chainRef !== "string") return false;
   if (typeof candidate.isUnlocked !== "boolean") return false;
   if (!Array.isArray(candidate.accounts) || !candidate.accounts.every((a) => typeof a === "string")) return false;
   if (!isTransportMeta(candidate.meta)) return false;
@@ -44,7 +49,7 @@ const createId = (): string => {
 export class WindowPostMessageTransport extends EventEmitter implements Transport {
   #connected = false;
   #chainId: string | null = null;
-  #caip2: string | null = null;
+  #chainRef: string | null = null;
   #accounts: string[] = [];
   #isUnlocked: boolean | null = null;
   #meta: TransportMeta | null = null;
@@ -85,7 +90,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     return {
       connected: this.#connected,
       chainId: this.#chainId,
-      caip2: this.#caip2,
+      chainRef: this.#chainRef,
       accounts: [...this.#accounts],
       isUnlocked: this.#isUnlocked,
       meta: this.#meta ? cloneTransportMeta(this.#meta) : null,
@@ -211,7 +216,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   #applyHandshakePayload(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
     const accounts = this.#coerceAccounts(payload.accounts);
     this.#connected = true;
-    this.#caip2 = payload.caip2;
+    this.#chainRef = payload.chainRef;
     this.#chainId = payload.chainId;
     this.#accounts = accounts;
     this.#isUnlocked = payload.isUnlocked;
@@ -221,7 +226,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     if (options?.emitConnect ?? true) {
       this.emit("connect", {
         chainId: payload.chainId,
-        ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
+        ...(this.#chainRef ? { chainRef: this.#chainRef } : {}),
         accounts,
         ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
         ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
@@ -241,8 +246,8 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     }
 
     this.#chainId = update.chainId;
-    if (update.caip2 !== undefined) {
-      this.#caip2 = update.caip2 ?? null;
+    if (update.chainRef !== undefined) {
+      this.#chainRef = update.chainRef ?? null;
     }
     if (typeof update.isUnlocked === "boolean") {
       this.#isUnlocked = update.isUnlocked;
@@ -253,7 +258,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
 
     this.emit("chainChanged", {
       chainId: this.#chainId,
-      ...(this.#caip2 ? { caip2: this.#caip2 } : {}),
+      ...(this.#chainRef ? { chainRef: this.#chainRef } : {}),
       ...(this.#isUnlocked !== null ? { isUnlocked: this.#isUnlocked } : {}),
       ...(this.#meta ? { meta: cloneTransportMeta(this.#meta) } : {}),
     });
@@ -300,7 +305,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
         : providerErrors.disconnected();
 
     this.#connected = false;
-    this.#caip2 = null;
+    this.#chainRef = null;
     this.#chainId = null;
     this.#accounts = [];
     this.#isUnlocked = null;

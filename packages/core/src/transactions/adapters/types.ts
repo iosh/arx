@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type {
   TransactionIssue,
@@ -22,7 +22,7 @@ export type SignedTransactionPayload = {
 
 export type TransactionAdapterContext = {
   namespace: string;
-  chainRef: Caip2ChainId;
+  chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
   request: TransactionRequest;

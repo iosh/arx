@@ -1,13 +1,13 @@
-import type { Caip2ChainId } from "./ids.js";
+import type { ChainRef } from "./ids.js";
 
 const CAIP2_NAMESPACE_PATTERN = /^[a-z0-9]{3,8}$/;
 const CAIP2_REFERENCE_PATTERN = /^[a-zA-Z0-9-]{1,32}$/;
 
-export type ParsedCaip2 = {
+export type ParsedChainRef = {
   namespace: string;
   reference: string;
 };
-export const parseCaip2 = (value: Caip2ChainId): ParsedCaip2 => {
+export const parseChainRef = (value: ChainRef): ParsedChainRef => {
   if (typeof value !== "string") {
     throw new Error(`Invalid CAIP-2 identifier: ${String(value)}`);
   }
@@ -24,8 +24,8 @@ export const parseCaip2 = (value: Caip2ChainId): ParsedCaip2 => {
   return { namespace, reference };
 };
 
-export const assertNamespace = (chainRef: Caip2ChainId, expected: string): void => {
-  const { namespace } = parseCaip2(chainRef);
+export const assertNamespace = (chainRef: ChainRef, expected: string): void => {
+  const { namespace } = parseChainRef(chainRef);
   if (namespace !== expected) {
     throw new Error(`Chain ${chainRef} does not belong to namespace "${expected}"`);
   }

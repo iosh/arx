@@ -113,13 +113,13 @@ export class ProviderHost {
   }
 
   #syncProvidersFromState(state: TransportState) {
-    const namespaces = this.#extractNamespaces(state.meta, state.caip2);
+    const namespaces = this.#extractNamespaces(state.meta, state.chainRef);
     for (const namespace of namespaces) {
       this.#getOrCreateProvider(namespace);
     }
   }
 
-  #extractNamespaces(meta: TransportMeta | null | undefined, fallback: string | null) {
+  #extractNamespaces(meta: TransportMeta | null | undefined, fallbackChainRef: string | null) {
     const namespaces = new Set<string>();
 
     if (meta?.activeNamespace) namespaces.add(meta.activeNamespace);
@@ -131,8 +131,8 @@ export class ProviderHost {
       }
     }
 
-    if (fallback) {
-      const [namespace] = fallback.split(":");
+    if (fallbackChainRef) {
+      const [namespace] = fallbackChainRef.split(":");
       if (namespace) namespaces.add(namespace);
     }
 

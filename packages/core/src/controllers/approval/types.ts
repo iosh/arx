@@ -1,4 +1,4 @@
-import type { Caip2ChainId } from "../../chains/ids.js";
+import type { ChainRef } from "../../chains/ids.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainNamespace } from "../account/types.js";
 
@@ -16,7 +16,7 @@ export type ApprovalQueueItem = {
   type: ApprovalType;
   origin: string;
   namespace?: ChainNamespace | undefined;
-  chainRef?: Caip2ChainId | undefined;
+  chainRef?: ChainRef | undefined;
   createdAt: number;
 };
 
@@ -27,7 +27,7 @@ export type ApprovalTask<T> = {
   type: ApprovalType;
   origin: string;
   namespace?: ChainNamespace | undefined;
-  chainRef?: Caip2ChainId | undefined;
+  chainRef?: ChainRef | undefined;
   payload: T;
   createdAt: number;
 };
@@ -35,7 +35,7 @@ export type ApprovalTask<T> = {
 export type ApprovalResult<T> = {
   id: string;
   namespace?: ChainNamespace | undefined;
-  chainRef?: Caip2ChainId | undefined;
+  chainRef?: ChainRef | undefined;
   value: T;
 };
 

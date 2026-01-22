@@ -1,5 +1,5 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
-import type { Caip2ChainId } from "../../../chains/ids.js";
+import type { ChainRef } from "../../../chains/ids.js";
 import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
 import type { HandlerControllers, Namespace, RpcInvocationContext } from "../types.js";
 
@@ -84,7 +84,7 @@ export const parseTypedDataParams = (params: readonly unknown[]) => {
 
 export const buildEip155TransactionRequest = (
   params: readonly unknown[],
-  chainRef: Caip2ChainId,
+  chainRef: ChainRef,
 ): TransactionRequest<"eip155"> => {
   const [raw] = params;
 
@@ -147,7 +147,7 @@ export const buildEip155TransactionRequest = (
 
   return {
     namespace: "eip155",
-    caip2: chainRef,
+    chainRef,
     payload,
   };
 };

@@ -60,7 +60,7 @@ export class MockContentBridge {
   #handshakeId: string | null = null;
   #handshakeWaiters: Array<() => void> = [];
   #chainId = "0x1";
-  #caip2 = "eip155:1";
+  #chainRef = "eip155:1";
   #accounts: string[] = [];
   #requestAccountsResult: string[] = [];
   #requestCounts = new Map<string, number>();
@@ -86,9 +86,9 @@ export class MockContentBridge {
     return this.#requestCounts.get(method) ?? 0;
   }
 
-  setChain(chainId: string, caip2: string) {
+  setChain(chainId: string, chainRef: string) {
     this.#chainId = chainId;
-    this.#caip2 = caip2;
+    this.#chainRef = chainRef;
   }
 
   setAccounts(accounts: string[]) {
@@ -104,13 +104,13 @@ export class MockContentBridge {
     await new Promise<void>((resolve) => this.#handshakeWaiters.push(resolve));
   }
 
-  ackHandshake(overrides?: Partial<{ chainId: string; caip2: string; accounts: string[] }>) {
+  ackHandshake(overrides?: Partial<{ chainId: string; chainRef: string; accounts: string[] }>) {
     if (!this.#sessionId || !this.#handshakeId) {
       throw new Error("No pending handshake to acknowledge");
     }
 
     const chainId = overrides?.chainId ?? this.#chainId;
-    const caip2 = overrides?.caip2 ?? this.#caip2;
+    const chainRef = overrides?.chainRef ?? this.#chainRef;
     const accounts = overrides?.accounts ?? this.#accounts;
 
     this.#dispatchMessage({
@@ -121,10 +121,10 @@ export class MockContentBridge {
         protocolVersion: PROTOCOL_VERSION,
         handshakeId: this.#handshakeId,
         chainId,
-        caip2,
+        chainRef,
         accounts,
         isUnlocked: true,
-        meta: buildMeta(caip2),
+        meta: buildMeta(chainRef),
       },
     });
   }
@@ -139,7 +139,7 @@ export class MockContentBridge {
     });
   }
 
-  emitChainChanged(update: { chainId: string; caip2: string }) {
+  emitChainChanged(update: { chainId: string; chainRef: string }) {
     if (!this.#sessionId) throw new Error("No active sessionId");
     this.#dispatchMessage({
       channel: CHANNEL,
@@ -147,7 +147,7 @@ export class MockContentBridge {
       type: "event",
       payload: {
         event: "chainChanged",
-        params: [{ chainId: update.chainId, caip2: update.caip2, meta: buildMeta(update.caip2) }],
+        params: [{ chainId: update.chainId, chainRef: update.chainRef, meta: buildMeta(update.chainRef) }],
       },
     });
   }

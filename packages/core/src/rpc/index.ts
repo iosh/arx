@@ -1,5 +1,5 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
-import type { Caip2ChainId } from "../chains/ids.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 
 import { createLogger, extendLogger } from "../utils/logger.js";
@@ -291,8 +291,8 @@ export const createMethodExecutor =
   };
 
 export type DomainChainService = {
-  setDomainChain(origin: string, chainRef: Caip2ChainId): Promise<void>;
-  getDomainChain(origin: string): Promise<Caip2ChainId | null>;
+  setDomainChain(origin: string, chainRef: ChainRef): Promise<void>;
+  getDomainChain(origin: string): Promise<ChainRef | null>;
 };
 
 export const createDomainChainService = (): DomainChainService => ({

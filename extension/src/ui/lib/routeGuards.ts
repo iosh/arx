@@ -1,7 +1,7 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { redirect } from "@tanstack/react-router";
 import type { RouterContext } from "@/routes/__root";
-import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
+import { getOrFetchUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { ROUTES } from "./routes";
 
 /**
@@ -25,7 +25,7 @@ const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.totalCount ??
  * Does not enforce unlocked state (handled by SessionGate).
  */
 export const requireVaultInitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
@@ -34,7 +34,7 @@ export const requireVaultInitialized = async ({ context }: { context: RouterCont
   }
 };
 export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
@@ -52,7 +52,7 @@ export const requireVaultUninitialized = async ({ context }: { context: RouterCo
  * Used on home page to ensure user completes onboarding.
  */
 export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
   if (!snapshot) return;
   if (!snapshot.vault.initialized) return;
   if (!snapshot.session.isUnlocked) return;
@@ -62,7 +62,7 @@ export const redirectToSetupIfNoAccounts = async ({ context }: { context: Router
 };
 
 export const requireSetupIncomplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
@@ -74,7 +74,7 @@ export const requireSetupIncomplete = async ({ context }: { context: RouterConte
   }
 };
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await resolveUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }

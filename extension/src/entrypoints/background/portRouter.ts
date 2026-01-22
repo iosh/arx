@@ -13,7 +13,7 @@ import {
 import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
-import { resolveOrigin } from "./origin";
+import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
 import { buildRpcContext } from "./rpc";
 import type { BackgroundContext } from "./serviceManager";
@@ -27,7 +27,7 @@ type PortRouterDeps = {
   connections: Set<Runtime.Port>;
   pendingRequests: Map<Runtime.Port, Map<string, PendingEntry>>;
   portContexts: Map<Runtime.Port, PortContext>;
-  ensureContext: () => Promise<BackgroundContext>;
+  getOrInitContext: () => Promise<BackgroundContext>;
   getControllerSnapshot: () => ControllerSnapshot;
   attachUiPort: (port: Runtime.Port) => Promise<void>;
 };
@@ -37,7 +37,7 @@ export const createPortRouter = ({
   connections,
   pendingRequests,
   portContexts,
-  ensureContext,
+  getOrInitContext,
   getControllerSnapshot,
   attachUiPort,
 }: PortRouterDeps) => {
@@ -58,14 +58,12 @@ export const createPortRouter = ({
     pendingRequests.delete(port);
   };
 
-  const getPortOrigin = (port: Runtime.Port) => resolveOrigin(port, extensionOrigin) || "unknown://";
-
   const getPermittedAccountsForPort = async (port: Runtime.Port, snapshot: ControllerSnapshot): Promise<string[]> => {
     if (!snapshot.isUnlocked) return [];
-    const origin = getPortOrigin(port);
+    const origin = getPortOrigin(port, extensionOrigin);
     if (origin === "unknown://") return [];
 
-    const { controllers } = await ensureContext();
+    const { controllers } = await getOrInitContext();
     const portContext = portContexts.get(port);
 
     const chainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? snapshot.chain.caip2;
@@ -90,7 +88,7 @@ export const createPortRouter = ({
     pendingRequests.delete(port);
     portContexts.delete(port);
     sessionByPort.delete(port);
-    const origin = getPortOrigin(port);
+    const origin = getPortOrigin(port, extensionOrigin);
     portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
   };
 
@@ -101,7 +99,7 @@ export const createPortRouter = ({
       port.postMessage(envelope);
       return true;
     } catch (error) {
-      const origin = getPortOrigin(port);
+      const origin = getPortOrigin(port, extensionOrigin);
       portLog("postMessage failed", { origin, envelopeType: envelope.type, ...toErrorDetails(error) });
       return false;
     }
@@ -163,7 +161,7 @@ export const createPortRouter = ({
     if (!requestMap) return;
     const portContext = portContexts.get(port);
     const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
-    const origin = portContext?.origin ?? getPortOrigin(port);
+    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
     const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
     const chainRef = rpcContext?.chainRef ?? null;
     const error =
@@ -264,7 +262,7 @@ export const createPortRouter = ({
       if (!sessionId) return true;
       const portContext = portContexts.get(port);
       const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.caip2 ?? null);
-      const origin = portContext?.origin ?? getPortOrigin(port);
+      const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
       const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
       const chainRef = rpcContext?.chainRef ?? null;
       const error = encodeErrorWithAdapters(
@@ -285,7 +283,7 @@ export const createPortRouter = ({
         payload: { event: "disconnect", params: [error] },
       });
       if (success) {
-        const origin = getPortOrigin(port);
+        const origin = getPortOrigin(port, extensionOrigin);
         portLog("broadcastDisconnect", { origin, errorCode: error.code });
       }
       return success;
@@ -293,13 +291,13 @@ export const createPortRouter = ({
   };
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { engine } = await ensureContext();
+    const { engine } = await getOrInitContext();
     const { id: rpcId, jsonrpc, method } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
     pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
 
     const portContext = portContexts.get(port);
-    const origin = portContext?.origin ?? resolveOrigin(port, extensionOrigin);
+    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
     const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.caip2 ?? null;
     const rpcContext = buildRpcContext(portContext, effectiveChainRef);
 
@@ -338,7 +336,7 @@ export const createPortRouter = ({
           surface: "dapp",
           namespace: rpcContext?.namespace ?? DEFAULT_NAMESPACE,
           chainRef: rpcContext?.chainRef ?? null,
-          origin: origin ?? "unknown://",
+          origin,
           method,
         }) as JsonRpcError,
       });
@@ -356,7 +354,7 @@ export const createPortRouter = ({
     if (port.name !== CHANNEL) return;
 
     connections.add(port);
-    const origin = getPortOrigin(port);
+    const origin = getPortOrigin(port, extensionOrigin);
     portLog("connect", { origin, portName: port.name, total: connections.size });
     if (!portContexts.has(port)) {
       portContexts.set(port, {
@@ -381,7 +379,7 @@ export const createPortRouter = ({
             if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
               clearPendingForPort(port);
             }
-            await ensureContext();
+            await getOrInitContext();
             const current = getControllerSnapshot();
             await sendHandshakeAck(port, envelope, current);
           })();
@@ -410,7 +408,7 @@ export const createPortRouter = ({
         rejectPendingWithDisconnect(port);
       } catch (error) {
         // Best-effort: cleanup must never throw.
-        const origin = getPortOrigin(port);
+        const origin = getPortOrigin(port, extensionOrigin);
         portLog("disconnect cleanup error", { origin, ...toErrorDetails(error) });
       } finally {
         connections.delete(port);
@@ -421,7 +419,7 @@ export const createPortRouter = ({
 
       port.onMessage.removeListener(handleMessage);
       port.onDisconnect.removeListener(handleDisconnect);
-      const disconnectOrigin = getPortOrigin(port);
+      const disconnectOrigin = getPortOrigin(port, extensionOrigin);
       portLog("disconnect", { origin: disconnectOrigin, remaining: connections.size });
     };
 

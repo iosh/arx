@@ -4,18 +4,18 @@ import type { BackgroundContext } from "./serviceManager";
 import type { SessionMessage } from "./types";
 
 type RuntimeMessageDeps = {
-  ensureContext: () => Promise<BackgroundContext>;
+  getOrInitContext: () => Promise<BackgroundContext>;
   persistVaultMeta: (target?: BackgroundContext | null) => Promise<void>;
   runtimeId: string;
 };
 
-export const createRuntimeMessageProxy = ({ ensureContext, persistVaultMeta, runtimeId }: RuntimeMessageDeps) => {
+export const createRuntimeMessageProxy = ({ getOrInitContext, persistVaultMeta, runtimeId }: RuntimeMessageDeps) => {
   const handleRuntimeMessage = async (message: SessionMessage, sender: Runtime.MessageSender) => {
     if (sender.id !== runtimeId) {
       throw new Error("Unauthorized sender");
     }
 
-    const background = await ensureContext();
+    const background = await getOrInitContext();
     const { session } = background;
     const { unlock, vault } = session;
     switch (message.type) {

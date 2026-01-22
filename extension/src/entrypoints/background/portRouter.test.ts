@@ -1,10 +1,10 @@
 import { CHANNEL } from "@arx/provider/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveOrigin } from "./origin";
+import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
 
 vi.mock("./origin", () => ({
-  resolveOrigin: vi.fn(),
+  getPortOrigin: vi.fn(),
 }));
 
 type Listener = (msg: unknown) => void;
@@ -48,19 +48,19 @@ const makeSnapshot = (isUnlocked: boolean) => ({
 
 describe("portRouter privacy", () => {
   beforeEach(() => {
-    vi.mocked(resolveOrigin).mockReturnValue("https://example.com");
+    vi.mocked(getPortOrigin).mockReturnValue("https://example.com");
   });
 
   it("sends handshake_ack with empty accounts when locked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const ensureContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      ensureContext: ensureContext as any,
+      getOrInitContext: getOrInitContext as any,
       getControllerSnapshot: () => makeSnapshot(false) as any,
       attachUiPort: vi.fn(async () => {}),
     });
@@ -86,14 +86,14 @@ describe("portRouter privacy", () => {
 
   it("broadcasts accountsChanged([]) when locked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const ensureContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      ensureContext: ensureContext as any,
+      getOrInitContext: getOrInitContext as any,
       getControllerSnapshot: () => makeSnapshot(false) as any,
       attachUiPort: vi.fn(async () => {}),
     });
@@ -123,14 +123,14 @@ describe("portRouter privacy", () => {
 
   it("sends handshake_ack with permitted accounts when unlocked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const ensureContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      ensureContext: ensureContext as any,
+      getOrInitContext: getOrInitContext as any,
       getControllerSnapshot: () => makeSnapshot(true) as any,
       attachUiPort: vi.fn(async () => {}),
     });

@@ -169,7 +169,7 @@ const assertUnlockedAccount = (keyring: SignerDeps["keyring"], address: string) 
   }
 };
 
-const normalisePersonalMessage = (message: HexType | string): HexType => {
+const toPersonalMessageHex = (message: HexType | string): HexType => {
   if (isHexValue(message)) {
     Hex.assert(message, { strict: false });
     return message;
@@ -288,7 +288,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
   const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ address, message }) => {
     assertUnlockedAccount(deps.keyring, address);
 
-    const messageHex = normalisePersonalMessage(message);
+    const messageHex = toPersonalMessageHex(message);
     const payload = PersonalMessage.getSignPayload(messageHex);
 
     const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", address);

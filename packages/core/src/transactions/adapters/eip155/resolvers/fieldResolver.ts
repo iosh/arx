@@ -3,7 +3,7 @@ import type { Eip155TransactionPayload } from "../../../../controllers/transacti
 import type { TransactionAdapterContext } from "../../types.js";
 import type { Eip155TransactionDraft, FieldResolutionResult } from "../types.js";
 import { deriveExpectedChainId } from "../utils/chainHelpers.js";
-import { normaliseHexData, normaliseHexQuantity, pushIssue, pushWarning } from "../utils/validation.js";
+import { parseHexData, parseHexQuantity, pushIssue, pushWarning } from "../utils/validation.js";
 
 export const resolveFields = (
   context: TransactionAdapterContext,
@@ -21,7 +21,7 @@ export const resolveFields = (
   }
 
   if (payload.chainId) {
-    const chainId = normaliseHexQuantity(issues, payload.chainId, "chainId");
+    const chainId = parseHexQuantity(issues, payload.chainId, "chainId");
     if (chainId) {
       prepared.chainId = chainId;
       summary.chainId = chainId;
@@ -36,7 +36,7 @@ export const resolveFields = (
     pushWarning(warnings, "transaction.draft.chain_id_missing", "Transaction payload is missing chainId.");
   }
 
-  const valueHex = normaliseHexQuantity(issues, payload.value, "value");
+  const valueHex = parseHexQuantity(issues, payload.value, "value");
   if (valueHex) {
     prepared.value = valueHex;
     summary.valueHex = valueHex;
@@ -47,38 +47,38 @@ export const resolveFields = (
     }
   }
 
-  const dataHex = normaliseHexData(issues, payload.data);
+  const dataHex = parseHexData(issues, payload.data);
   if (dataHex) {
     prepared.data = dataHex;
     summary.data = dataHex;
   }
 
-  const gasHex = normaliseHexQuantity(issues, payload.gas, "gas");
+  const gasHex = parseHexQuantity(issues, payload.gas, "gas");
   if (gasHex) {
     prepared.gas = gasHex;
     summary.gas = gasHex;
     payloadValues.gas = gasHex;
   }
 
-  const gasPriceHex = normaliseHexQuantity(issues, payload.gasPrice, "gasPrice");
+  const gasPriceHex = parseHexQuantity(issues, payload.gasPrice, "gasPrice");
   if (gasPriceHex) {
     prepared.gasPrice = gasPriceHex;
     payloadValues.gasPrice = gasPriceHex;
   }
 
-  const maxFeeHex = normaliseHexQuantity(issues, payload.maxFeePerGas, "maxFeePerGas");
+  const maxFeeHex = parseHexQuantity(issues, payload.maxFeePerGas, "maxFeePerGas");
   if (maxFeeHex) {
     prepared.maxFeePerGas = maxFeeHex;
     payloadValues.maxFeePerGas = maxFeeHex;
   }
 
-  const priorityFeeHex = normaliseHexQuantity(issues, payload.maxPriorityFeePerGas, "maxPriorityFeePerGas");
+  const priorityFeeHex = parseHexQuantity(issues, payload.maxPriorityFeePerGas, "maxPriorityFeePerGas");
   if (priorityFeeHex) {
     prepared.maxPriorityFeePerGas = priorityFeeHex;
     payloadValues.maxPriorityFeePerGas = priorityFeeHex;
   }
 
-  const nonceHex = normaliseHexQuantity(issues, payload.nonce, "nonce");
+  const nonceHex = parseHexQuantity(issues, payload.nonce, "nonce");
   if (nonceHex) {
     prepared.nonce = nonceHex;
     summary.nonce = nonceHex;

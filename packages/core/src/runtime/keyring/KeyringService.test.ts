@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEvmAddress } from "../../chains/index.js";
+import { toCanonicalEvmAddress } from "../../chains/index.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { UnlockController, UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../keyring/errors.js";
@@ -89,7 +89,7 @@ const flushAsync = async () => {
 const baseNamespaces = [
   {
     namespace: EIP155_NAMESPACE,
-    normalizeAddress: normalizeEvmAddress,
+    normalizeAddress: toCanonicalEvmAddress,
     factories: {
       hd: () => new EthereumHdKeyring(),
       "private-key": () => new PrivateKeyKeyring(),
@@ -148,7 +148,7 @@ const buildHdPayload = (accountCount: number, keyringId = "10000000-0000-4000-80
     metas: {
       keyring: { id: keyringId, type: "hd" as const, createdAt: Date.now(), derivedCount: accountCount },
       accounts: keyring.getAccounts().map((acc, idx) => ({
-        address: normalizeEvmAddress(acc.address),
+        address: toCanonicalEvmAddress(acc.address),
         keyringId,
         derivationIndex: idx,
         createdAt: Date.now(),
@@ -188,7 +188,7 @@ describe("KeyringService", () => {
 
     const hdMeta = service.getKeyrings().find((k) => k.type === "hd")!;
     const derived = await service.deriveAccount(hdMeta.id);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(normalizeEvmAddress(derived.address));
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(toCanonicalEvmAddress(derived.address));
   });
 
   it("creates hd keyring when unlocked", async () => {
@@ -214,7 +214,7 @@ describe("KeyringService", () => {
 
     const { keyringId, account } = await service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE });
     expect(service.getKeyrings().filter((k) => k.type === "private-key")).toHaveLength(1);
-    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(normalizeEvmAddress(account.address));
+    expect(accounts.getState().namespaces[EIP155_NAMESPACE]?.all).toContain(toCanonicalEvmAddress(account.address));
     await expect(() => service.importPrivateKey(PRIVATE_KEY, { namespace: EIP155_NAMESPACE })).rejects.toThrowError(
       keyringErrors.duplicateAccount().message,
     );

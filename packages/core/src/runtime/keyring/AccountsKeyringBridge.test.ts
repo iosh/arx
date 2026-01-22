@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeEvmAddress } from "../../chains/address.js";
+import { toCanonicalEvmAddress } from "../../chains/address.js";
 import { InMemoryMultiNamespaceAccountsController } from "../../controllers/account/MultiNamespaceAccountsController.js";
 import type { AccountMessengerTopics } from "../../controllers/account/types.js";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
@@ -192,7 +192,7 @@ describe("AccountsKeyringBridge", () => {
       namespaces: [
         {
           namespace,
-          normalizeAddress: normalizeEvmAddress,
+          normalizeAddress: toCanonicalEvmAddress,
           factories: { hd: () => new EthereumHdKeyring(), "private-key": () => new PrivateKeyKeyring() },
         },
       ],

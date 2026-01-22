@@ -12,7 +12,7 @@ export type Eip155Broadcaster = {
   broadcast(context: TransactionAdapterContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
 };
 
-const normaliseHash = (value: unknown): string => {
+const toCanonicalTransactionHash = (value: unknown): string => {
   if (typeof value !== "string") {
     throw arxError({
       reason: ArxReasons.RpcInternal,
@@ -47,7 +47,7 @@ export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaste
 
       try {
         const hash = await client.sendRawTransaction(signed.raw);
-        return { hash: normaliseHash(hash) };
+        return { hash: toCanonicalTransactionHash(hash) };
       } catch (error) {
         if (isArxError(error)) {
           throw error;

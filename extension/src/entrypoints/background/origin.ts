@@ -5,7 +5,7 @@ export const getExtensionOrigin = () => browser.runtime.getURL("").replace(/\/$/
 
 export const isInternalOrigin = (origin: string, extensionOrigin: string) => origin === extensionOrigin;
 
-export const resolveOrigin = (port: Runtime.Port, extensionOrigin: string) => {
+export const getPortOrigin = (port: Runtime.Port, extensionOrigin: string): string => {
   const sender = port.sender;
   const sourceUrl = sender?.url ?? sender?.tab?.url;
 

@@ -83,7 +83,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     };
   };
 
-  const ensureContext = async (): Promise<BackgroundContext> => {
+  const getOrInitContext = async (): Promise<BackgroundContext> => {
     if (context) {
       return context;
     }
@@ -312,7 +312,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
   };
 
   const attachUiPort = async (port: browser.Runtime.Port) => {
-    await ensureContext();
+    await getOrInitContext();
     uiBridge?.attachPort(port);
   };
 
@@ -331,7 +331,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
   };
 
   return {
-    ensureContext,
+    getOrInitContext,
     destroy,
     attachUiPort,
     persistVaultMeta,

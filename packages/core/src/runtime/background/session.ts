@@ -1,4 +1,4 @@
-import { normalizeEvmAddress } from "../../chains/address.js";
+import { toCanonicalEvmAddress } from "../../chains/address.js";
 import type {
   UnlockController,
   UnlockControllerOptions,
@@ -100,7 +100,7 @@ export const initSessionLayer = ({
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionListenersAttached = false;
 
-  const ensureInitializedTimestamp = () => {
+  const getOrInitVaultInitializedAt = () => {
     if (vaultInitializedAt === null) {
       vaultInitializedAt = storageNow();
     }
@@ -141,7 +141,7 @@ export const initSessionLayer = ({
       payload: {
         ciphertext,
         autoLockDuration: unlockState.timeoutMs,
-        initializedAt: ensureInitializedTimestamp(),
+        initializedAt: getOrInitVaultInitializedAt(),
         unlockState: {
           isUnlocked: unlockState.isUnlocked,
           lastUnlockedAt: unlockState.lastUnlockedAt,
@@ -263,7 +263,7 @@ export const initSessionLayer = ({
     namespaces: [
       {
         namespace: EIP155_NAMESPACE,
-        normalizeAddress: normalizeEvmAddress,
+        normalizeAddress: toCanonicalEvmAddress,
         factories: {
           hd: () => new EthereumHdKeyring(),
           "private-key": () => new PrivateKeyKeyring(),
@@ -386,7 +386,7 @@ export const initSessionLayer = ({
       return {
         ciphertext: vaultProxy.getCiphertext(),
         autoLockDuration: unlockState.timeoutMs,
-        initializedAt: ensureInitializedTimestamp(),
+        initializedAt: getOrInitVaultInitializedAt(),
         unlockState: {
           isUnlocked: unlockState.isUnlocked,
           lastUnlockedAt: unlockState.lastUnlockedAt,

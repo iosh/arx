@@ -8,7 +8,7 @@ import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
-import { resolveUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
+import { getOrFetchUiSnapshot } from "@/ui/lib/resolveUiSnapshot";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
 // Router context type for route guards
@@ -44,7 +44,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       return;
     }
 
-    const snapshot = await resolveUiSnapshot(context.queryClient);
+    const snapshot = await getOrFetchUiSnapshot(context.queryClient);
 
     const decision = decideRootBeforeLoad({
       entryIntent,

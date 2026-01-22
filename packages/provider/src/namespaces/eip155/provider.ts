@@ -117,12 +117,12 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     }
   }
 
-  #normalizeAccounts(value: unknown): string[] {
+  #coerceAccounts(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter((item): item is string => typeof item === "string");
   }
 
-  #normalizeMeta(value: unknown): TransportMeta | null {
+  #coerceTransportMeta(value: unknown): TransportMeta | null {
     if (value === null) return null;
     if (isTransportMeta(value)) return value;
     return null;
@@ -329,7 +329,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     const timeoutMs = this.#getMethodTimeoutMs(method);
     const result = await this.#transport.request(args, { timeoutMs });
     if (method === "eth_requestAccounts" && Array.isArray(result)) {
-      const next = this.#normalizeAccounts(result);
+      const next = this.#coerceAccounts(result);
       this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
     }
     return result;
@@ -342,7 +342,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     const { accountsChanged } = this.#state.applySnapshot(snapshot);
 
     if (snapshot.connected) {
-      this.#resolveReady();
+      this.#markInitialized();
     }
 
     if (!emit) return;
@@ -396,15 +396,15 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         connected: state.connected,
         chainId: state.chainId,
         caip2: state.caip2,
-        accounts: this.#normalizeAccounts(state.accounts),
+        accounts: this.#coerceAccounts(state.accounts),
         isUnlocked: typeof state.isUnlocked === "boolean" ? state.isUnlocked : null,
-        meta: this.#normalizeMeta(state.meta),
+        meta: this.#coerceTransportMeta(state.meta),
       },
       { emit: false },
     );
   }
 
-  #resolveReady() {
+  #markInitialized() {
     if (!this.#initialized) {
       this.#initialized = true;
       this.#initializedResolve?.();
@@ -423,7 +423,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
 
   #handleTransportMetaChanged = (payload: unknown) => {
     if (payload === undefined) return;
-    const meta = this.#normalizeMeta(payload);
+    const meta = this.#coerceTransportMeta(payload);
     if (meta === null && payload !== null) return;
     this.#applyPatch({ type: "meta", meta }, { emit: true });
   };
@@ -442,9 +442,9 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
         connected: true,
         chainId: typeof data.chainId === "string" ? data.chainId : null,
         caip2: typeof data.caip2 === "string" ? data.caip2 : null,
-        accounts: this.#normalizeAccounts(data.accounts),
+        accounts: this.#coerceAccounts(data.accounts),
         isUnlocked: typeof data.isUnlocked === "boolean" ? data.isUnlocked : null,
-        meta: data.meta === undefined ? null : this.#normalizeMeta(data.meta),
+        meta: data.meta === undefined ? null : this.#coerceTransportMeta(data.meta),
       },
       { emit: true },
     );
@@ -478,7 +478,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportAccountsChanged = (accounts: unknown) => {
-    const next = this.#normalizeAccounts(accounts);
+    const next = this.#coerceAccounts(accounts);
     this.#applyPatch({ type: "accounts", accounts: next }, { emit: true });
   };
 

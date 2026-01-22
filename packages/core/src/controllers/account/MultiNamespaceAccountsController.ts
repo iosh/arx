@@ -125,7 +125,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     address?: AccountAddress<T> | null;
   }): Promise<ActivePointer<T>> {
     const namespace = this.#namespaceFor(chainRef);
-    const state = this.#ensureNamespace(namespace);
+    const state = this.#getOrInitNamespaceState(namespace);
     const canonical = address != null ? this.#canonical(chainRef, address) : null;
 
     if (canonical && !state.all.includes(canonical)) {
@@ -160,7 +160,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
   }): Promise<NamespaceAccountsState<T>> {
     const namespace = this.#namespaceFor(chainRef);
     const canonical = this.#canonical(chainRef, address);
-    const current = this.#ensureNamespace(namespace);
+    const current = this.#getOrInitNamespaceState(namespace);
     const exists = current.all.includes(canonical);
     const nextAll = exists ? [...current.all] : [...current.all, canonical];
     const shouldBePrimary = makePrimary ?? (!current.primary && nextAll.length > 0);
@@ -190,7 +190,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
   }): Promise<NamespaceAccountsState<T>> {
     const namespace = this.#namespaceFor(chainRef);
     const canonical = this.#canonical(chainRef, address);
-    const current = this.#ensureNamespace(namespace);
+    const current = this.#getOrInitNamespaceState(namespace);
     if (!current.all.includes(canonical)) {
       return cloneNamespace(current);
     }
@@ -217,7 +217,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     void origin; // currently unused, reserved for future
 
     const namespace = this.#namespaceFor(chainRef);
-    const current = this.#ensureNamespace(namespace);
+    const current = this.#getOrInitNamespaceState(namespace);
 
     if (!current.primary && current.all.length > 0) {
       const nextState: NamespaceAccountsState<T> = {
@@ -258,7 +258,7 @@ export class InMemoryMultiNamespaceAccountsController<T extends string = string>
     return result.canonical as AccountAddress<T>;
   }
 
-  #ensureNamespace(namespace: ChainNamespace): NamespaceAccountsState<T> {
+  #getOrInitNamespaceState(namespace: ChainNamespace): NamespaceAccountsState<T> {
     const existing = this.#state.namespaces[namespace];
     if (existing) return cloneNamespace(existing);
     const fresh = emptyNamespaceState<T>();

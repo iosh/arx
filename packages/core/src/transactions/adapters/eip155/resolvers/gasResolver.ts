@@ -1,7 +1,7 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
 import type { Eip155DraftPrepared, Eip155TransactionDraft, GasResolutionResult } from "../types.js";
-import { normaliseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
+import { parseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
 
 type GasResolverParams = {
   rpc: Eip155RpcCapabilities | null;
@@ -22,10 +22,10 @@ export const resolveGas = async (
   if (!params.nonceProvided && params.rpc && params.callParams.from) {
     try {
       const fetchedNonce = await params.rpc.getTransactionCount(params.callParams.from, "pending");
-      const normalisedNonce = normaliseHexQuantity(issues, fetchedNonce, "nonce");
-      if (normalisedNonce) {
-        prepared.nonce = normalisedNonce;
-        summary.nonce = normalisedNonce;
+      const nonceHex = parseHexQuantity(issues, fetchedNonce, "nonce");
+      if (nonceHex) {
+        prepared.nonce = nonceHex;
+        summary.nonce = nonceHex;
       }
     } catch (error) {
       pushIssue(issues, "transaction.draft.nonce_failed", "Failed to fetch nonce from RPC.", {
@@ -52,9 +52,9 @@ export const resolveGas = async (
 
       summary.estimateInput = estimateArgs;
       const estimatedGas = await params.rpc.estimateGas([estimateArgs]);
-      const normalisedGas = normaliseHexQuantity(issues, estimatedGas, "gas");
-      if (normalisedGas) {
-        const gasValue = Hex.toBigInt(normalisedGas);
+      const gasHex = parseHexQuantity(issues, estimatedGas, "gas");
+      if (gasHex) {
+        const gasValue = Hex.toBigInt(gasHex);
         if (gasValue === BigInt(0)) {
           pushIssue(issues, "transaction.draft.gas_zero", "RPC returned gas=0x0, please confirm manually.", {
             estimate: estimatedGas,
@@ -64,8 +64,8 @@ export const resolveGas = async (
             estimate: estimatedGas,
           });
         }
-        prepared.gas = normalisedGas;
-        summary.gas = normalisedGas;
+        prepared.gas = gasHex;
+        summary.gas = gasHex;
       }
     } catch (error) {
       pushIssue(issues, "transaction.draft.gas_estimation_failed", "Failed to estimate gas.", {

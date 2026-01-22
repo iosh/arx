@@ -6,7 +6,7 @@ import { ARX_UI_INNER_SIZE } from "@/ui/lib/uiWindow";
  *
  * Resize by the measured delta to reach a target content-area size.
  */
-export const ensureWindowInnerSize = (target = ARX_UI_INNER_SIZE) => {
+export const adjustWindowInnerSize = (target = ARX_UI_INNER_SIZE) => {
   try {
     const missingWidth = target.width - window.innerWidth;
     const missingHeight = target.height - window.innerHeight;

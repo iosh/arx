@@ -30,7 +30,7 @@ export const pushWarning = (
   warnings.push(entry);
 };
 
-export const normaliseHexQuantity = (
+export const parseHexQuantity = (
   issues: Eip155TransactionDraft["issues"],
   value: string | undefined,
   label: string,
@@ -50,10 +50,7 @@ export const normaliseHexQuantity = (
   }
 };
 
-export const normaliseHexData = (
-  issues: Eip155TransactionDraft["issues"],
-  value: string | undefined,
-): Hex.Hex | null => {
+export const parseHexData = (issues: Eip155TransactionDraft["issues"], value: string | undefined): Hex.Hex | null => {
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
   try {

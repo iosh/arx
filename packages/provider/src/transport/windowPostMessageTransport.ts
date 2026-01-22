@@ -1,7 +1,7 @@
 import { EventEmitter } from "eventemitter3";
 import { evmProviderErrors, evmRpcErrors } from "../errors.js";
 import { CHANNEL } from "../protocol/channel.js";
-import { type Envelope, isEnvelope, resolveProtocolVersion } from "../protocol/envelope.js";
+import { deriveProtocolVersion, type Envelope, isEnvelope } from "../protocol/envelope.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import type { EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
 import type {
@@ -203,13 +203,13 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.removeAllListeners();
   };
 
-  #normalizeAccounts(accounts: unknown): string[] {
+  #coerceAccounts(accounts: unknown): string[] {
     if (!Array.isArray(accounts)) return [];
     return accounts.filter((item): item is string => typeof item === "string");
   }
 
   #applyHandshakePayload(payload: ConnectPayload, options?: { emitConnect?: boolean }) {
-    const accounts = this.#normalizeAccounts(payload.accounts);
+    const accounts = this.#coerceAccounts(payload.accounts);
     this.#connected = true;
     this.#caip2 = payload.caip2;
     this.#chainId = payload.chainId;
@@ -217,7 +217,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.#isUnlocked = payload.isUnlocked;
     this.#meta = isTransportMeta(payload.meta) ? cloneTransportMeta(payload.meta) : null;
 
-    this.#resolveHandshake();
+    this.#completeHandshake();
     if (options?.emitConnect ?? true) {
       this.emit("connect", {
         chainId: payload.chainId,
@@ -230,7 +230,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   }
 
   #updateAccounts(accounts: string[]) {
-    const next = this.#normalizeAccounts(accounts);
+    const next = this.#coerceAccounts(accounts);
     this.#accounts = next;
     this.emit("accountsChanged", next);
   }
@@ -265,7 +265,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     this.#handshakeTimeoutId = undefined;
   }
 
-  #resolveHandshake() {
+  #completeHandshake() {
     if (!this.#handshakePromise) return;
 
     this.#clearHandshakeTimeout();
@@ -322,7 +322,7 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     if (!isConnectPayload(payload)) return;
     if (payload.handshakeId !== this.#handshakeId) return;
 
-    const incomingVersion = resolveProtocolVersion(payload.protocolVersion);
+    const incomingVersion = deriveProtocolVersion(payload.protocolVersion);
     if (incomingVersion !== PROTOCOL_VERSION) {
       const providerErrors = evmProviderErrors;
       this.#handshakeId = null;

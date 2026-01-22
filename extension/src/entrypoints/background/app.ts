@@ -31,13 +31,13 @@ export const createBackgroundApp = () => {
     connections,
     pendingRequests,
     portContexts,
-    ensureContext: serviceManager.ensureContext,
+    getOrInitContext: serviceManager.getOrInitContext,
     getControllerSnapshot: serviceManager.getControllerSnapshot,
     attachUiPort: serviceManager.attachUiPort,
   });
 
   const runtimeMessageProxy = createRuntimeMessageProxy({
-    ensureContext: serviceManager.ensureContext,
+    getOrInitContext: serviceManager.getOrInitContext,
     persistVaultMeta: serviceManager.persistVaultMeta,
     runtimeId: browser.runtime.id,
   });
@@ -70,7 +70,7 @@ export const createBackgroundApp = () => {
   };
 
   const start = () => {
-    void serviceManager.ensureContext();
+    void serviceManager.getOrInitContext();
     browser.runtime.onConnect.addListener(portRouter.handleConnect);
     browser.runtime.onMessage.addListener(runtimeMessageProxy);
     browser.runtime.onInstalled.addListener(handleOnInstalled);

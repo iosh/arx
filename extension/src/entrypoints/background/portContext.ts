@@ -1,6 +1,6 @@
 import { DEFAULT_NAMESPACE, getRegisteredNamespaceAdapters } from "@arx/core";
 import type { Runtime } from "webextension-polyfill";
-import { resolveOrigin } from "./origin";
+import { getPortOrigin } from "./origin";
 import type { ControllerSnapshot, PortContext } from "./types";
 
 const isNamespaceRegistered = (namespace: string | null | undefined) => {
@@ -10,7 +10,7 @@ const isNamespaceRegistered = (namespace: string | null | undefined) => {
   return getRegisteredNamespaceAdapters().some((adapter) => adapter.namespace === namespace);
 };
 
-export const resolveNamespace = (caip2: string | null, metaNamespace?: string): string => {
+export const deriveNamespace = (caip2: string | null, metaNamespace?: string): string => {
   if (metaNamespace) {
     if (isNamespaceRegistered(metaNamespace)) {
       return metaNamespace;
@@ -36,12 +36,12 @@ export const syncPortContext = (
   extensionOrigin: string,
 ) => {
   const existing = portContexts.get(port);
-  const resolvedOrigin = resolveOrigin(port, extensionOrigin);
+  const resolvedOrigin = getPortOrigin(port, extensionOrigin);
   const origin = existing?.origin && existing.origin !== "unknown://" ? existing.origin : resolvedOrigin;
 
   // meta.activeChain and chain.caip2 come from the same source; meta is checked first for future per-port overrides;
   const caip2 = snapshot.meta?.activeChain ?? snapshot.chain.caip2 ?? null;
-  const namespace = resolveNamespace(caip2, snapshot.meta?.activeNamespace);
+  const namespace = deriveNamespace(caip2, snapshot.meta?.activeNamespace);
 
   portContexts.set(port, {
     origin,

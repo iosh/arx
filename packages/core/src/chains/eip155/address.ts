@@ -9,9 +9,9 @@ import type {
 
 const HEX_ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/i;
 
-const ensurePrefixed = (value: string): Hex => (value.startsWith("0x") ? (value as Hex) : `0x${value}`);
+const with0xPrefix = (value: string): Hex => (value.startsWith("0x") ? (value as Hex) : `0x${value}`);
 
-const toCanonical = (value: string): Hex => ensurePrefixed(value).toLowerCase() as Hex;
+const toCanonical = (value: string): Hex => with0xPrefix(value).toLowerCase() as Hex;
 
 const assertValidInput = (value: string): void => {
   if (typeof value !== "string" || value.trim().length === 0) {

@@ -1,7 +1,7 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
 import type { Eip155DraftPrepared, Eip155DraftSummary, Eip155TransactionDraft, FeeResolutionResult } from "../types.js";
-import { normaliseHexQuantity, pushIssue, readErrorMessage } from "../utils/validation.js";
+import { parseHexQuantity, pushIssue, readErrorMessage } from "../utils/validation.js";
 
 type FeeResolverParams = {
   rpc: Eip155RpcCapabilities | null;
@@ -81,8 +81,8 @@ export const resolveFees = async (
     try {
       const feeData = await params.rpc.getFeeData();
       if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-        const fetchedMaxFee = normaliseHexQuantity(issues, feeData.maxFeePerGas, "maxFeePerGas");
-        const fetchedPriorityFee = normaliseHexQuantity(issues, feeData.maxPriorityFeePerGas, "maxPriorityFeePerGas");
+        const fetchedMaxFee = parseHexQuantity(issues, feeData.maxFeePerGas, "maxFeePerGas");
+        const fetchedPriorityFee = parseHexQuantity(issues, feeData.maxPriorityFeePerGas, "maxPriorityFeePerGas");
         if (fetchedMaxFee && fetchedPriorityFee) {
           feeMode = "eip1559";
           maxFee = fetchedMaxFee;
@@ -91,7 +91,7 @@ export const resolveFees = async (
           preparedPatch.maxPriorityFeePerGas = fetchedPriorityFee;
         }
       } else if (feeData.gasPrice) {
-        const fetchedGasPrice = normaliseHexQuantity(issues, feeData.gasPrice, "gasPrice");
+        const fetchedGasPrice = parseHexQuantity(issues, feeData.gasPrice, "gasPrice");
         if (fetchedGasPrice) {
           feeMode = "legacy";
           gasPrice = fetchedGasPrice;

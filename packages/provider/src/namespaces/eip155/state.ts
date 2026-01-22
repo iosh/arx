@@ -65,7 +65,7 @@ export class Eip155ProviderState {
     return {
       accounts: [...this.#accounts],
       chainId: this.#chainId,
-      networkVersion: this.#resolveNetworkVersion(),
+      networkVersion: this.#deriveNetworkVersion(),
       isUnlocked: this.#isUnlocked ?? false,
     };
   }
@@ -74,7 +74,7 @@ export class Eip155ProviderState {
     const prevAccounts = [...this.#accounts];
 
     this.#updateMeta(snapshot.meta);
-    const effectiveCaip2 = this.#resolveEffectiveCaip2(snapshot.caip2);
+    const effectiveCaip2 = this.#deriveEffectiveCaip2(snapshot.caip2);
     this.#updateNamespace(effectiveCaip2);
 
     this.#chainId = snapshot.chainId;
@@ -119,7 +119,7 @@ export class Eip155ProviderState {
         if (patch.meta !== undefined) {
           this.#updateMeta(patch.meta);
         }
-        const effectiveCaip2 = this.#resolveEffectiveCaip2(patch.caip2);
+        const effectiveCaip2 = this.#deriveEffectiveCaip2(patch.caip2);
         this.#updateNamespace(effectiveCaip2);
 
         this.#chainId = patch.chainId;
@@ -168,20 +168,20 @@ export class Eip155ProviderState {
     this.#meta = meta ? cloneTransportMeta(meta) : null;
   }
 
-  #resolveEffectiveCaip2(candidate: unknown): string | null {
+  #deriveEffectiveCaip2(candidate: unknown): string | null {
     if (typeof candidate === "string" && candidate.length > 0) {
       return candidate;
     }
     return this.#meta?.activeChain ?? null;
   }
 
-  #resolveNumericReference(candidate: string | null | undefined) {
+  #parseNumericReference(candidate: string | null | undefined) {
     if (typeof candidate !== "string" || candidate.length === 0) return null;
     const [, reference = candidate] = candidate.split(":");
     return /^\d+$/.test(reference) ? reference : null;
   }
 
-  #resolveNetworkVersion(): string | null {
+  #deriveNetworkVersion(): string | null {
     if (typeof this.#chainId === "string") {
       try {
         return BigInt(this.#chainId).toString(10);
@@ -189,6 +189,6 @@ export class Eip155ProviderState {
         // swallow malformed hex to fall back on CAIP references
       }
     }
-    return this.#resolveNumericReference(this.#caip2) ?? this.#resolveNumericReference(this.#meta?.activeChain);
+    return this.#parseNumericReference(this.#caip2) ?? this.#parseNumericReference(this.#meta?.activeChain);
   }
 }

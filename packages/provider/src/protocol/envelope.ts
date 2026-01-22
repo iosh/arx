@@ -31,7 +31,7 @@ export const isEnvelope = (value: unknown): value is Envelope => {
   return candidate.channel === CHANNEL && typeof candidate.type === "string" && typeof candidate.sessionId === "string";
 };
 
-export const resolveProtocolVersion = (value: unknown): ProtocolVersion | number => {
+export const deriveProtocolVersion = (value: unknown): ProtocolVersion | number => {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
   return PROTOCOL_VERSION;
 };

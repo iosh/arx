@@ -1,8 +1,11 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
+import { pushToast } from "@/ui/lib/toast";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 
 export const Route = createFileRoute("/")({
@@ -11,8 +14,7 @@ export const Route = createFileRoute("/")({
 });
 function HomePage() {
   const router = useRouter();
-  const { snapshot, lock, markBackedUp } = useUiSnapshot();
-  const accountCount = snapshot?.accounts.totalCount ?? 0;
+  const { snapshot, markBackedUp } = useUiSnapshot();
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const backupWarnings = useMemo(
@@ -26,6 +28,8 @@ function HomePage() {
       await markBackedUp(keyringId);
     } catch (error) {
       console.warn("[HomePage] failed to mark keyring backup", error);
+      pushToast({ kind: "error", message: getErrorMessage(error), dedupeKey: `mark-backed-up:${keyringId}` });
+      throw error;
     } finally {
       setMarkingId((current) => (current === keyringId ? null : current));
     }
@@ -41,10 +45,17 @@ function HomePage() {
       backupWarnings={backupWarnings}
       onMarkBackedUp={handleMarkBackedUp}
       markingKeyringId={markingId}
-      onLock={lock}
+      onOpenApprovals={() => {
+        void uiClient.attention
+          .openNotification()
+          .then(() => window.close())
+          .catch((error) => {
+            pushToast({ kind: "error", message: getErrorMessage(error), dedupeKey: "open-approvals" });
+            router.navigate({ to: ROUTES.APPROVALS });
+          });
+      }}
       onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
       onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
-      onNavigateApprovals={() => router.navigate({ to: ROUTES.APPROVALS })}
       onNavigateSettings={() => router.navigate({ to: ROUTES.SETTINGS })}
     />
   );

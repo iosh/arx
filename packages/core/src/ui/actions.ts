@@ -18,6 +18,10 @@ export const uiActions = (client: UiClient) => {
       get: call("ui.snapshot.get"),
     },
 
+    attention: {
+      openNotification: call("ui.attention.openNotification"),
+    },
+
     vault: {
       init: call("ui.vault.init"),
       initAndUnlock: call("ui.vault.initAndUnlock"),

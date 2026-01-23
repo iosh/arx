@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef } from "react";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { getApprovalRoutePath } from "./routes";
-import { useApprovalSnooze } from "./snooze";
 
 export function ApprovalsOrchestrator({
   snapshot,
@@ -15,7 +14,6 @@ export function ApprovalsOrchestrator({
 }) {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { snoozedHeadId, snoozeHeadId } = useApprovalSnooze();
   const entryIntent = useMemo(() => getEntryIntent(), []);
   const hadApprovalsSinceUnlockRef = useRef(false);
   const waitingForApprovalsRef = useRef(false);
@@ -26,7 +24,8 @@ export function ApprovalsOrchestrator({
 
   useEffect(() => {
     if (isLoading || !snapshot) return;
-    if (entryIntent !== "manual_open" && entryIntent !== "attention_open") return;
+    // In manual_open (regular popup), do not auto-navigate; we only auto-route in attention_open (confirmation window).
+    if (entryIntent !== "attention_open") return;
     if (!snapshot.vault.initialized) return;
 
     if (!isUnlocked) {
@@ -40,9 +39,6 @@ export function ApprovalsOrchestrator({
     }
 
     if (approvalsCount === 0) {
-      if (snoozedHeadId !== null) snoozeHeadId(null);
-      if (entryIntent !== "attention_open") return;
-
       // If we already had approvals in this unlocked session, close immediately (queue drained).
       if (hadApprovalsSinceUnlockRef.current) {
         window.close();
@@ -79,27 +75,8 @@ export function ApprovalsOrchestrator({
     if (!approvalsHead) return;
 
     const target = getApprovalRoutePath(approvalsHead);
-
-    if (entryIntent === "attention_open") {
-      if (pathname !== target) router.navigate({ to: target, replace: true });
-      return;
-    }
-
-    // manual_open
-    if (snoozedHeadId === approvalsHead.id) return;
     if (pathname !== target) router.navigate({ to: target, replace: true });
-  }, [
-    approvalsCount,
-    approvalsHead,
-    entryIntent,
-    isLoading,
-    isUnlocked,
-    pathname,
-    router,
-    snapshot,
-    snoozedHeadId,
-    snoozeHeadId,
-  ]);
+  }, [approvalsCount, approvalsHead, entryIntent, isLoading, isUnlocked, pathname, router, snapshot]);
 
   return null;
 }

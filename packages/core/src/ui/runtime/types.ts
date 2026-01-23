@@ -21,6 +21,12 @@ export type UiOnboardingOpenTabResult = {
 export type UiPlatformAdapter = {
   /** Open or focus the onboarding tab/screen */
   openOnboardingTab: (reason: string) => Promise<UiOnboardingOpenTabResult>;
+
+  /** Open or focus the confirmation/notification popup window (extension only) */
+  openNotificationPopup: () => Promise<{
+    activationPath: "focus" | "create" | "debounced";
+    windowId?: number;
+  }>;
 };
 
 type Awaitable<T> = T | Promise<T>;

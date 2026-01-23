@@ -1,7 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { from as addressFrom } from "ox/Address";
 import { useEffect, useMemo, useState } from "react";
-import { Paragraph, XStack } from "tamagui";
+import { Paragraph, type TextProps, XStack } from "tamagui";
 import { copyToClipboard } from "@/ui/lib/clipboard";
 import { pushToast } from "@/ui/lib/toast";
 import { Button } from "./Button";
@@ -12,7 +12,24 @@ export type AddressDisplayProps = {
   chainRef?: string | null;
   copyable?: boolean;
   toastOnCopied?: boolean;
+  fontSize?: TextProps["fontSize"];
+  expandedFontSize?: TextProps["fontSize"];
+  fontWeight?: TextProps["fontWeight"];
+  color?: TextProps["color"];
 };
+
+function deriveExpandedFontSize(fontSize: TextProps["fontSize"] | undefined): TextProps["fontSize"] | undefined {
+  // Common case in this codebase: Tamagui font tokens like "$6".
+  if (typeof fontSize === "string") {
+    const match = /^\$(\d+)$/.exec(fontSize);
+    if (match) {
+      const current = Number(match[1]);
+      const next = Math.max(1, current - 2);
+      return `$${next}` as TextProps["fontSize"];
+    }
+  }
+  return fontSize;
+}
 
 function isEvmNamespace(namespace: string, chainRef?: string | null) {
   if (namespace === "eip155") return true;
@@ -65,6 +82,10 @@ export function AddressDisplay({
   chainRef,
   copyable = true,
   toastOnCopied = false,
+  fontSize = "$3",
+  expandedFontSize,
+  fontWeight,
+  color = "$text",
 }: AddressDisplayProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -80,6 +101,7 @@ export function AddressDisplay({
   }, [copied]);
 
   const label = expanded ? full : short;
+  const resolvedFontSize = expanded ? (expandedFontSize ?? deriveExpandedFontSize(fontSize)) : fontSize;
 
   return (
     <XStack
@@ -98,10 +120,21 @@ export function AddressDisplay({
         flex={1}
         minWidth={0}
         fontFamily="$mono"
-        fontSize="$3"
-        color="$text"
+        fontSize={resolvedFontSize}
+        fontWeight={fontWeight}
+        color={color}
         numberOfLines={expanded ? undefined : 1}
-        style={expanded ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as const) : undefined}
+        style={
+          expanded
+            ? ({
+                overflowX: "auto",
+                overflowY: "hidden",
+                whiteSpace: "nowrap",
+                wordBreak: "normal",
+                overflowWrap: "normal",
+              } as const)
+            : undefined
+        }
       >
         {label}
       </Paragraph>

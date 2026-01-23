@@ -194,6 +194,10 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
   return {
     "ui.snapshot.get": async () => buildSnapshot(),
 
+    "ui.attention.openNotification": async () => {
+      return await platform.openNotificationPopup();
+    },
+
     "ui.vault.init": async ({ password }) => {
       const ciphertext = await session.vault.initialize({ password });
       return { ciphertext };

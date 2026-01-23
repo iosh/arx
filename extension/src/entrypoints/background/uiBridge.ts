@@ -1,9 +1,17 @@
-import type { AttentionService, BackgroundSessionServices, HandlerControllers, KeyringService } from "@arx/core";
+import {
+  ArxReasons,
+  type AttentionService,
+  arxError,
+  type BackgroundSessionServices,
+  type HandlerControllers,
+  type KeyringService,
+} from "@arx/core";
 import { isUiMethodName, type UiRequestEnvelope, uiMethods } from "@arx/core/ui";
 import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/runtime";
 
 import type browserDefaultType from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
+import { createPopupActivator } from "./services/popupActivator";
 import { createUiPortHub } from "./ui/portHub";
 
 export { UI_CHANNEL } from "@arx/core/ui";
@@ -85,12 +93,56 @@ export const createUiBridge = ({
     return promise;
   };
 
+  const notificationActivator = createPopupActivator({ browser: runtimeBrowser, popupPath: ENTRYPOINTS.NOTIFICATION });
+
+  /**
+   * Reject all pending approvals with a 4001 userRejectedRequest error.
+   * Used when the confirmation window is closed to prevent hanging dApp requests.
+   */
+  const rejectAllPendingApprovals = (reason: string, details?: Record<string, unknown>) => {
+    const pending = controllers.approvals.getState().pending;
+    if (pending.length === 0) return;
+
+    const snapshot = [...pending];
+    for (const item of snapshot) {
+      controllers.approvals.reject(
+        item.id,
+        arxError({
+          reason: ArxReasons.ApprovalRejected,
+          message: "User rejected the request.",
+          data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
+        }),
+      );
+    }
+  };
+
+  const trackedPopupWindows = new Map<number, (removedId: number) => void>();
+  const attachPopupCloseRejection = (windowId: number) => {
+    if (trackedPopupWindows.has(windowId)) return;
+
+    const onRemoved = (removedId: number) => {
+      if (removedId !== windowId) return;
+      runtimeBrowser.windows.onRemoved.removeListener(onRemoved);
+      trackedPopupWindows.delete(windowId);
+      rejectAllPendingApprovals("windowClosed", { windowId });
+    };
+
+    trackedPopupWindows.set(windowId, onRemoved);
+    runtimeBrowser.windows.onRemoved.addListener(onRemoved);
+  };
+
+  const openNotificationPopup = async () => {
+    const result = await notificationActivator.open();
+    if (result.windowId) attachPopupCloseRejection(result.windowId);
+    return result;
+  };
+
   const dispatcher = createUiDispatcher({
     controllers,
     session,
     keyring,
     attention,
-    platform: { openOnboardingTab },
+    platform: { openOnboardingTab, openNotificationPopup },
   });
 
   let broadcastHold = 0;
@@ -187,6 +239,12 @@ export const createUiBridge = ({
         console.warn("[uiBridge] failed to remove listener", error);
       }
     });
+
+    for (const listener of trackedPopupWindows.values()) {
+      runtimeBrowser.windows.onRemoved.removeListener(listener);
+    }
+    trackedPopupWindows.clear();
+
     portHub.teardown();
   };
 

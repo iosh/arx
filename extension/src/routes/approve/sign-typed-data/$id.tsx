@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { ApprovalDetailScreen, useApprovalSnooze } from "@/ui/approvals";
 import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
@@ -27,12 +26,6 @@ function ApproveSignTypedDataByIdPage() {
   useEffect(() => {
     if (!snapshot) return;
     if (approval && isMatching) return;
-
-    const entryIntent = getEntryIntent();
-    if (entryIntent === "attention_open") {
-      window.close();
-      return;
-    }
 
     router.navigate({ to: ROUTES.APPROVALS, replace: true });
   }, [approval, isMatching, router, snapshot]);

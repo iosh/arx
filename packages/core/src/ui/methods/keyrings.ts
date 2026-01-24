@@ -9,10 +9,6 @@ const KeyringAccountSchema = z.strictObject({
   source: z.enum(["derived", "imported"]),
 });
 
-const GenerateMnemonicResultSchema = z.strictObject({
-  words: z.array(z.string().min(1)).min(12).max(24),
-});
-
 const ExportMnemonicResultSchema = z.strictObject({
   words: z.array(z.string().min(1)).min(12).max(24),
 });
@@ -33,11 +29,6 @@ const ImportPrivateKeyResultSchema = z.strictObject({
 });
 
 export const keyringsMethods = {
-  "ui.keyrings.generateMnemonic": defineMethod(
-    z.strictObject({ wordCount: z.union([z.literal(12), z.literal(24)]).optional() }).optional(),
-    GenerateMnemonicResultSchema,
-  ),
-
   "ui.keyrings.confirmNewMnemonic": defineMethod(
     z.strictObject({
       words: z.array(z.string().min(1)).min(12).max(24),

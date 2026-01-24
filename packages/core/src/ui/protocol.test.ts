@@ -84,18 +84,10 @@ describe("ui protocol registry", () => {
     expect(okPk.privateKey.length).toBe(64);
     expect(() => parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: "0x" + "f".repeat(64) })).toThrow();
 
-    const okVaultInit = parseUiMethodResult("ui.vault.init", {
-      ciphertext: {
-        version: 1,
-        algorithm: "pbkdf2-sha256",
-        salt: "salt",
-        iterations: 10,
-        iv: "iv",
-        cipher: "cipher",
-        createdAt: 1,
-      },
+    const okOnboardingMnemonic = parseUiMethodResult("ui.onboarding.generateMnemonic", {
+      words: Array.from<string>({ length: 12 }).fill("word"),
     });
-    expect(okVaultInit.ciphertext.algorithm).toBe("pbkdf2-sha256");
+    expect(okOnboardingMnemonic.words).toHaveLength(12);
   });
 
   it("validates event payloads (strict)", () => {

@@ -1,7 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { validateMnemonic } from "@scure/bip39";
+import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
+import { keyringErrors } from "../../keyring/errors.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
 import { buildUiSnapshot } from "./snapshot.js";
@@ -46,6 +49,44 @@ const withSensitiveBytes = <T>(secret: Uint8Array, transform: (bytes: Uint8Array
 const toPlainHex = (bytes: Uint8Array): string => {
   const out = Hex.from(bytes);
   return out.startsWith("0x") ? out.slice(2) : out;
+};
+
+const sanitizeMnemonicPhraseFromWords = (words: string[]): string =>
+  words
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boolean => {
+  const accountsState = controllers.accounts.getState();
+  return Object.values(accountsState.namespaces).some((ns) => ns.all.length > 0);
+};
+
+const requireOnboardingPassword = (password: string | undefined): string => {
+  if (!password || password.trim().length === 0) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Password cannot be empty",
+    });
+  }
+  return password;
+};
+
+const validateBip39Mnemonic = (mnemonic: string): void => {
+  if (!validateMnemonic(mnemonic, wordlist)) {
+    throw keyringErrors.invalidMnemonic();
+  }
+};
+
+const parsePrivateKeyHex = (value: string): string => {
+  const trimmed = value.trim();
+  const normalized = trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(normalized)) {
+    throw keyringErrors.invalidPrivateKey();
+  }
+  return normalized;
 };
 
 // Helper to derive chain context from a task (with fallback to active chain).
@@ -197,22 +238,6 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     "ui.attention.openNotification": async () => {
       return await platform.openNotificationPopup();
     },
-
-    "ui.vault.init": async ({ password }) => {
-      const ciphertext = await session.vault.initialize({ password });
-      return { ciphertext };
-    },
-
-    "ui.vault.initAndUnlock": async ({ password }) => {
-      const status = session.vault.getStatus();
-      if (!status.hasCiphertext) {
-        await session.vault.initialize({ password });
-      }
-      await session.unlock.unlock({ password });
-      await keyring.waitForReady();
-      return session.unlock.getState();
-    },
-
     "ui.session.unlock": async ({ password }) => {
       await session.unlock.unlock({ password });
       await keyring.waitForReady();
@@ -247,6 +272,102 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       return await platform.openOnboardingTab(reason);
     },
 
+    "ui.onboarding.generateMnemonic": async (payload) => {
+      const mnemonic = keyring.generateMnemonic(payload?.wordCount ?? 12);
+      return { words: mnemonic.split(" ") };
+    },
+
+    "ui.onboarding.createWalletFromMnemonic": async (params) => {
+      const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+      validateBip39Mnemonic(mnemonic);
+
+      const opts: { alias?: string; skipBackup?: boolean; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+
+      return await session.withVaultMetaPersistHold(async () => {
+        const status = session.vault.getStatus();
+        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+        }
+
+        // Allow resuming "setupIncomplete" (ciphertext exists but no accounts) without re-initializing the vault.
+        if (!status.hasCiphertext) {
+          const password = requireOnboardingPassword(params.password);
+          await session.vault.initialize({ password });
+          await session.unlock.unlock({ password });
+        } else if (!session.unlock.isUnlocked()) {
+          const password = requireOnboardingPassword(params.password);
+          await session.unlock.unlock({ password });
+        }
+
+        await keyring.waitForReady();
+
+        const { keyringId, address } = await keyring.confirmNewMnemonic(mnemonic, opts);
+        return { keyringId, address };
+      });
+    },
+
+    "ui.onboarding.importWalletFromMnemonic": async (params) => {
+      const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+      validateBip39Mnemonic(mnemonic);
+
+      const opts: { alias?: string; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+
+      return await session.withVaultMetaPersistHold(async () => {
+        const status = session.vault.getStatus();
+        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+        }
+
+        if (!status.hasCiphertext) {
+          const password = requireOnboardingPassword(params.password);
+          await session.vault.initialize({ password });
+          await session.unlock.unlock({ password });
+        } else if (!session.unlock.isUnlocked()) {
+          const password = requireOnboardingPassword(params.password);
+          await session.unlock.unlock({ password });
+        }
+
+        await keyring.waitForReady();
+
+        const { keyringId, address } = await keyring.importMnemonic(mnemonic, opts);
+        return { keyringId, address };
+      });
+    },
+
+    "ui.onboarding.importWalletFromPrivateKey": async (params) => {
+      const privateKey = parsePrivateKeyHex(params.privateKey);
+
+      const opts: { alias?: string; namespace?: string } = {};
+      if (params.alias !== undefined) opts.alias = params.alias;
+      if (params.namespace !== undefined) opts.namespace = params.namespace;
+
+      return await session.withVaultMetaPersistHold(async () => {
+        const status = session.vault.getStatus();
+        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+        }
+
+        if (!status.hasCiphertext) {
+          const password = requireOnboardingPassword(params.password);
+          await session.vault.initialize({ password });
+          await session.unlock.unlock({ password });
+        } else if (!session.unlock.isUnlocked()) {
+          const password = requireOnboardingPassword(params.password);
+          await session.unlock.unlock({ password });
+        }
+
+        await keyring.waitForReady();
+
+        const { keyringId, account } = await keyring.importPrivateKey(privateKey, opts);
+        return { keyringId, account };
+      });
+    },
+
     "ui.accounts.switchActive": async ({ chainRef, address }) => {
       await controllers.accounts.switchActive({
         chainRef,
@@ -279,12 +400,6 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       if (!task) throw new Error("Approval not found");
       controllers.approvals.reject(task.id, new Error(reason ?? "User rejected"));
       return { id: task.id };
-    },
-
-    "ui.keyrings.generateMnemonic": async (payload) => {
-      assertUnlocked(session);
-      const mnemonic = keyring.generateMnemonic(payload?.wordCount ?? 12);
-      return { words: mnemonic.split(" ") };
     },
 
     "ui.keyrings.confirmNewMnemonic": async (params) => {

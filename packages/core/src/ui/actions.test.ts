@@ -6,7 +6,7 @@ import { parseUiMethodParams } from "./protocol.js";
 
 describe("ui actions", () => {
   it("invokes all uiMethods keys exactly", () => {
-    const called = new Set<string>();
+    const called = new Set<string | number | symbol>();
 
     const client = {
       call: async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>): Promise<UiMethodResult<M>> => {
@@ -24,8 +24,7 @@ describe("ui actions", () => {
     // Execute all sugar functions once to record which underlying methods are used.
     void actions.snapshot.get();
 
-    void actions.vault.init({ password: "pw" });
-    void actions.vault.initAndUnlock({ password: "pw" });
+    void actions.attention.openNotification();
 
     void actions.session.unlock({ password: "pw" });
     void actions.session.lock();
@@ -34,6 +33,14 @@ describe("ui actions", () => {
     void actions.session.setAutoLockDuration({ durationMs: 60_000 });
 
     void actions.onboarding.openTab({ reason: "reason" });
+    void actions.onboarding.generateMnemonic();
+    void actions.onboarding.createWalletFromMnemonic({
+      words: Array.from<string>({ length: 12 }).fill("word"),
+    });
+    void actions.onboarding.importWalletFromMnemonic({
+      words: Array.from<string>({ length: 12 }).fill("word"),
+    });
+    void actions.onboarding.importWalletFromPrivateKey({ privateKey: "deadbeef" });
 
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
     void actions.accounts.switchActive({ chainRef: "eip155:1", address: null });
@@ -45,8 +52,6 @@ describe("ui actions", () => {
     void actions.approvals.reject({ id: "id" });
     void actions.approvals.reject({ id: "id", reason: "reason" });
 
-    void actions.keyrings.generateMnemonic();
-    void actions.keyrings.generateMnemonic({ wordCount: 12 });
     void actions.keyrings.confirmNewMnemonic({
       words: Array.from<string>({ length: 12 }).fill("word"),
     });
@@ -72,7 +77,7 @@ describe("ui actions", () => {
   it("handles optional parameters correctly", async () => {
     const client = {
       call: async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>) => {
-        if (method === "ui.keyrings.generateMnemonic") {
+        if (method === "ui.onboarding.generateMnemonic") {
           const wordCount = (params as any)?.wordCount ?? 12;
           return { words: Array.from<string>({ length: wordCount }).fill("word") };
         }
@@ -83,11 +88,11 @@ describe("ui actions", () => {
     const actions = uiActions(client as any);
 
     // Call without params
-    const result1 = await actions.keyrings.generateMnemonic();
+    const result1 = await actions.onboarding.generateMnemonic();
     expect(result1.words).toHaveLength(12);
 
     // Call with params
-    const result2 = await actions.keyrings.generateMnemonic({ wordCount: 24 });
+    const result2 = await actions.onboarding.generateMnemonic({ wordCount: 24 });
     expect(result2.words).toHaveLength(24);
   });
 
@@ -123,9 +128,7 @@ describe("ui actions", () => {
 
     // These should all be type-safe
     expect(typeof actions.snapshot.get).toBe("function");
-    expect(typeof actions.vault.init).toBe("function");
     expect(typeof actions.session.unlock).toBe("function");
-    expect(typeof actions.keyrings.generateMnemonic).toBe("function");
     expect(typeof actions.accounts.switchActive).toBe("function");
     expect(typeof actions.networks.switchActive).toBe("function");
     expect(typeof actions.approvals.approve).toBe("function");

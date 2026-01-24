@@ -7,7 +7,6 @@ import { onboardingMethods } from "./methods/onboarding.js";
 import { sessionMethods } from "./methods/session.js";
 import { snapshotMethods } from "./methods/snapshot.js";
 import type { UiMethodDefinition } from "./methods/types.js";
-import { vaultMethods } from "./methods/vault.js";
 
 export const uiMethods = {
   // --- snapshot ---
@@ -16,8 +15,6 @@ export const uiMethods = {
   // --- attention ---
   ...attentionMethods,
 
-  // --- vault ---
-  ...vaultMethods,
   // --- session ---
   ...sessionMethods,
 

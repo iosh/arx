@@ -22,11 +22,6 @@ export const uiActions = (client: UiClient) => {
       openNotification: call("ui.attention.openNotification"),
     },
 
-    vault: {
-      init: call("ui.vault.init"),
-      initAndUnlock: call("ui.vault.initAndUnlock"),
-    },
-
     session: {
       unlock: call("ui.session.unlock"),
       lock: call("ui.session.lock"),
@@ -36,7 +31,12 @@ export const uiActions = (client: UiClient) => {
 
     onboarding: {
       openTab: call("ui.onboarding.openTab"),
+      generateMnemonic: call("ui.onboarding.generateMnemonic"),
+      createWalletFromMnemonic: call("ui.onboarding.createWalletFromMnemonic"),
+      importWalletFromMnemonic: call("ui.onboarding.importWalletFromMnemonic"),
+      importWalletFromPrivateKey: call("ui.onboarding.importWalletFromPrivateKey"),
     },
+
     accounts: {
       switchActive: call("ui.accounts.switchActive"),
     },
@@ -49,8 +49,6 @@ export const uiActions = (client: UiClient) => {
       reject: call("ui.approvals.reject"),
     },
     keyrings: {
-      generateMnemonic: call("ui.keyrings.generateMnemonic"),
-
       confirmNewMnemonic: call("ui.keyrings.confirmNewMnemonic"),
       importMnemonic: call("ui.keyrings.importMnemonic"),
       importPrivateKey: call("ui.keyrings.importPrivateKey"),

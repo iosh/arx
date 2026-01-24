@@ -408,6 +408,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
 
   const session = {
     unlock,
+    withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
     vault: {
       getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext }),
       initialize: async (_params: { password: string }) => {
@@ -498,8 +499,47 @@ describe("uiBridge", () => {
     unlock.setUnlocked(false);
     vault.setUnlocked(false);
 
-    const { envelope } = await send("ui.keyrings.generateMnemonic", { wordCount: 12 });
+    const { envelope } = await send("ui.keyrings.confirmNewMnemonic", {
+      words: Array.from({ length: 12 }, () => "word"),
+      alias: "test",
+    } as any);
+
     expectError(envelope, ArxReasons.SessionLocked);
+  });
+
+  it("onboarding.generateMnemonic works when locked", async () => {
+    unlock.setUnlocked(false);
+    vault.setUnlocked(false);
+
+    const { envelope, id } = await send("ui.onboarding.generateMnemonic", { wordCount: 12 });
+    const res = expectResponse(envelope, id);
+    expect(res.words).toHaveLength(12);
+  });
+
+  it("onboarding.createWalletFromMnemonic supports setupIncomplete and holds snapshot broadcast", async () => {
+    // Default test setup starts with a vault that has ciphertext but no accounts.
+    const id = crypto.randomUUID();
+    const words = TEST_MNEMONIC.split(" ");
+
+    await port.triggerMessage({
+      type: "ui:request",
+      id,
+      method: "ui.onboarding.createWalletFromMnemonic",
+      params: { words, skipBackup: true },
+    } satisfies UiPortEnvelope);
+
+    const responseIndex = port.messages.findIndex((m: any) => m?.type === "ui:response" && m?.id === id);
+    expect(responseIndex).toBeGreaterThanOrEqual(0);
+
+    const snapshotEvents = port.messages
+      .map((m: any, idx: number) => ({ m, idx }))
+      .filter(({ m }) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED);
+    const lastSnapshotEventIndex = snapshotEvents.at(-1)?.idx ?? -1;
+    expect(lastSnapshotEventIndex).toBeGreaterThan(responseIndex);
+
+    const snapshot = latestSnapshotFromMessages(port.messages);
+    expect(snapshot.vault.initialized).toBe(true);
+    expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
   });
 
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
@@ -606,42 +646,6 @@ describe("uiBridge", () => {
 
     const snapshot = latestSnapshotFromMessages(port.messages);
     expect(snapshot.session.isUnlocked).toBe(true);
-  });
-
-  it("vault.initAndUnlock broadcasts only unlocked snapshot", async () => {
-    const ctx = buildBridge({ unlocked: false, hasCiphertext: false });
-    bridge = ctx.bridge;
-    keyring = ctx.keyring;
-    vault = ctx.vault;
-    unlock = ctx.unlock;
-    approvals = ctx.approvals;
-    runtimeBrowser = ctx.browser;
-
-    port = createPort();
-    bridge.attachPort(port as any);
-    bridge.attachListeners();
-    port.messages = []; // drop initial snapshot
-
-    unlock.setUnlocked(false);
-    vault.setUnlocked(false);
-
-    const res = await send("ui.vault.initAndUnlock", { password: PASSWORD });
-    expectResponse(res.envelope, res.id);
-
-    const snapshotEvents = port.messages.filter(
-      (m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED,
-    ) as any[];
-    expect(snapshotEvents.length).toBeGreaterThan(0);
-
-    const hasInitializedButLocked = snapshotEvents.some(
-      (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === false,
-    );
-    expect(hasInitializedButLocked).toBe(false);
-
-    const hasInitializedAndUnlocked = snapshotEvents.some(
-      (evt) => evt?.payload?.vault?.initialized === true && evt?.payload?.session?.isUnlocked === true,
-    );
-    expect(hasInitializedAndUnlocked).toBe(true);
   });
 
   it("onboarding.openTab: creates then debounces within cooldown", async () => {

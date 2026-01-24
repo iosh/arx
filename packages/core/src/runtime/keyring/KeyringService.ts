@@ -7,11 +7,13 @@ import { getAddressKey } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
 import { vaultErrors } from "../../vault/errors.js";
+import { zeroize } from "../../vault/utils.js";
 import { KeyringHydration } from "./KeyringHydration.js";
 import { decodePayload, encodePayload } from "./keyring-utils.js";
 import type {
   AccountMeta,
   KeyringMeta,
+  KeyringPayloadListener,
   KeyringServiceOptions,
   MultiNamespaceAccountsState,
   NamespaceAccountsState,
@@ -27,7 +29,7 @@ export class KeyringService {
   #keyringMetas = new Map<string, KeyringMeta>();
   #accountMetas = new Map<string, AccountMeta>();
   #payload: Payload = { keyrings: [] };
-  #payloadListeners = new Set<(payload: Uint8Array | null) => void>();
+  #payloadListeners = new Set<KeyringPayloadListener>();
   #addressIndex = new Map<string, { namespace: string; keyringId: string }>();
   #hydration: KeyringHydration;
 
@@ -53,7 +55,7 @@ export class KeyringService {
     this.#hydration.detach();
   }
 
-  onPayloadUpdated(handler: (payload: Uint8Array | null) => void): () => void {
+  onPayloadUpdated(handler: KeyringPayloadListener): () => void {
     this.#payloadListeners.add(handler);
     return () => this.#payloadListeners.delete(handler);
   }
@@ -168,7 +170,7 @@ export class KeyringService {
     await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
 
     this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
+    await this.#notifyPayloadUpdated();
     return { ...derived, address: canonical };
   }
 
@@ -198,7 +200,7 @@ export class KeyringService {
     await this.#options.keyringStore.deleteAccountsByKeyring(keyringId);
 
     this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
+    await this.#notifyPayloadUpdated();
   }
 
   renameKeyring(keyringId: string, alias: string): Promise<void> {
@@ -259,7 +261,7 @@ export class KeyringService {
 
     this.#indexAccounts();
     this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
+    await this.#notifyPayloadUpdated();
   }
 
   hasAccount(namespace: string, address: string): boolean {
@@ -323,7 +325,7 @@ export class KeyringService {
     }
     this.#indexAccounts(false);
     this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
+    void this.#notifyPayloadUpdated();
   }
 
   async #waitForHydration(): Promise<void> {
@@ -456,16 +458,19 @@ export class KeyringService {
     await this.#options.keyringStore.putKeyringMetas(this.getKeyrings());
     await this.#options.keyringStore.putAccountMetas(this.getAccounts(true));
     this.#syncAccountsState();
-    this.#notifyPayloadUpdated();
+    await this.#notifyPayloadUpdated();
   }
 
-  #notifyPayloadUpdated() {
+  async #notifyPayloadUpdated(): Promise<void> {
     const encoded = encodePayload(this.#payload);
     for (const listener of this.#payloadListeners) {
+      const payload = encoded.length > 0 ? new Uint8Array(encoded) : null;
       try {
-        listener(encoded.length > 0 ? new Uint8Array(encoded) : null);
+        await listener(payload);
       } catch (error) {
         this.#options.logger?.("keyring: payload listener threw", error);
+      } finally {
+        if (payload) zeroize(payload);
       }
     }
   }

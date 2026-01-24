@@ -38,6 +38,7 @@ export type BackgroundSessionServices = {
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
   persistVaultMeta(): Promise<void>;
+  withVaultMetaPersistHold<T>(fn: () => Promise<T>): Promise<T>;
 };
 
 type SessionLayerParams = {
@@ -100,6 +101,9 @@ export const initSessionLayer = ({
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionListenersAttached = false;
 
+  let vaultMetaPersistHold = 0;
+  let vaultMetaPersistPending = false;
+
   const getOrInitVaultInitializedAt = () => {
     if (vaultInitializedAt === null) {
       vaultInitializedAt = storageNow();
@@ -125,6 +129,11 @@ export const initSessionLayer = ({
 
   const persistVaultMetaImmediate = async (): Promise<void> => {
     if (!storagePort || getIsDestroyed()) {
+      return;
+    }
+
+    if (vaultMetaPersistHold > 0) {
+      vaultMetaPersistPending = true;
       return;
     }
 
@@ -163,6 +172,12 @@ export const initSessionLayer = ({
       return;
     }
 
+    if (vaultMetaPersistHold > 0) {
+      vaultMetaPersistPending = true;
+      cleanupVaultPersistTimer();
+      return;
+    }
+
     if (persistDebounceMs <= 0) {
       void persistVaultMetaImmediate();
       return;
@@ -173,6 +188,30 @@ export const initSessionLayer = ({
       persistTimer = null;
       void persistVaultMetaImmediate();
     }, persistDebounceMs);
+  };
+
+  const withVaultMetaPersistHold = async <T>(fn: () => Promise<T>): Promise<T> => {
+    vaultMetaPersistHold += 1;
+    let succeeded = false;
+
+    try {
+      const result = await fn();
+      succeeded = true;
+      return result;
+    } finally {
+      vaultMetaPersistHold -= 1;
+
+      if (vaultMetaPersistHold === 0) {
+        if (!succeeded) {
+          // Failed atomic section: drop any pending persist work.
+          vaultMetaPersistPending = false;
+          cleanupVaultPersistTimer();
+        } else if (vaultMetaPersistPending) {
+          vaultMetaPersistPending = false;
+          await persistVaultMetaImmediate();
+        }
+      }
+    }
   };
 
   const vaultProxy: VaultService = {
@@ -396,6 +435,7 @@ export const initSessionLayer = ({
     },
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
     persistVaultMeta: () => persistVaultMetaImmediate(),
+    withVaultMetaPersistHold,
   };
 
   return {

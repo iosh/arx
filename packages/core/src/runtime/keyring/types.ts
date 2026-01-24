@@ -31,6 +31,8 @@ export type RuntimeKeyring = {
 // Vault payload structure
 export type Payload = { keyrings: VaultKeyringEntry[] };
 
+export type KeyringPayloadListener = (payload: Uint8Array | null) => void | Promise<void>;
+
 // Centralized runtime state
 export type KeyringRuntimeState = {
   keyrings: Map<string, RuntimeKeyring>;
@@ -38,7 +40,7 @@ export type KeyringRuntimeState = {
   accountMetas: Map<string, AccountMeta>;
   payload: Payload;
   addressIndex: Map<string, { namespace: string; keyringId: string }>;
-  payloadListeners: Set<(payload: Uint8Array | null) => void>;
+  payloadListeners: Set<KeyringPayloadListener>;
 };
 
 export type { AccountMeta, KeyringMeta, VaultKeyringEntry };

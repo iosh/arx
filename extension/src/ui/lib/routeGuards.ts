@@ -2,6 +2,7 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { redirect } from "@tanstack/react-router";
 import type { RouterContext } from "@/routes/__root";
 import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
+import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 import { ROUTES } from "./routes";
 
 /**
@@ -15,8 +16,7 @@ import { ROUTES } from "./routes";
  */
 
 /**
- * check if snapshot has accounts
-
+ * Check if snapshot has accounts.
  */
 const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.totalCount ?? 0) > 0;
 
@@ -25,7 +25,7 @@ const hasAccounts = (snapshot?: UiSnapshot) => (snapshot?.accounts.totalCount ??
  * Does not enforce unlocked state (handled by SessionGate).
  */
 export const requireVaultInitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
@@ -34,7 +34,7 @@ export const requireVaultInitialized = async ({ context }: { context: RouterCont
   }
 };
 export const requireVaultUninitialized = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
@@ -52,7 +52,7 @@ export const requireVaultUninitialized = async ({ context }: { context: RouterCo
  * Used on home page to ensure user completes onboarding.
  */
 export const redirectToSetupIfNoAccounts = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) return;
   if (!snapshot.vault.initialized) return;
   if (!snapshot.session.isUnlocked) return;
@@ -62,19 +62,46 @@ export const redirectToSetupIfNoAccounts = async ({ context }: { context: Router
 };
 
 export const requireSetupIncomplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }
-  if (!snapshot.vault.initialized) {
-    throw redirect({ to: ROUTES.WELCOME });
-  }
+
+  // Setup is considered "complete" once we have at least one account.
   if (hasAccounts(snapshot)) {
     throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
   }
+
+  // Allow:
+  // - vault not initialized yet (atomic onboarding)
+  // - vault initialized but no accounts (legacy/edge state)
 };
+
+export const requireSetupIncompleteOrMnemonicReview = async ({ context }: { context: RouterContext }) => {
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
+  if (!snapshot) {
+    throw redirect({ to: ROUTES.HOME });
+  }
+
+  // Allow entering the phrase screen during the same in-memory onboarding session,
+  // even if the account has already been created (atomic onboarding).
+  if (hasAccounts(snapshot)) {
+    // NOTE: This guard intentionally peeks into an in-memory UI store to support "Back to Phrase"
+    // during onboarding. This is extension-only code (no SSR), and the store is not persisted.
+    const words = useOnboardingStore.getState().mnemonicWords;
+    if (!words || words.length === 0) {
+      throw redirect({ to: ROUTES.ONBOARDING_COMPLETE });
+    }
+  }
+
+  // Allow:
+  // - vault not initialized yet
+  // - vault initialized but no accounts
+  // - vault initialized and accounts exist, as long as mnemonic is still in memory for review
+};
+
 export const requireSetupComplete = async ({ context }: { context: RouterContext }) => {
-  const snapshot = await getOrFetchUiSnapshot(context.queryClient);
+  const snapshot = await getOrFetchUiSnapshot(context.queryClient, { fresh: true });
   if (!snapshot) {
     throw redirect({ to: ROUTES.HOME });
   }

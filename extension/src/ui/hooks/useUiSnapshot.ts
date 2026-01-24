@@ -45,14 +45,6 @@ export const useUiSnapshot = () => {
     mutationFn: (password: string) => uiClient.session.unlock({ password }),
   });
 
-  const vaultInitMutation = useMutation({
-    mutationFn: (password: string) => uiClient.vault.init({ password }),
-  });
-
-  const vaultInitAndUnlockMutation = useMutation({
-    mutationFn: (password: string) => uiClient.vault.initAndUnlock({ password }),
-  });
-
   const lockMutation = useMutation({
     mutationFn: () => uiClient.session.lock(),
   });
@@ -80,37 +72,6 @@ export const useUiSnapshot = () => {
 
   const setAutoLockDurationMutation = useMutation({
     mutationFn: (durationMs: number) => uiClient.session.setAutoLockDuration({ durationMs }),
-  });
-
-  const generateMnemonicMutation = useMutation({
-    mutationFn: (wordCount?: 12 | 24) => uiClient.keyrings.generateMnemonic(wordCount ? { wordCount } : undefined),
-  });
-
-  const confirmNewMnemonicMutation = useMutation({
-    mutationFn: (params: { words: string[]; alias?: string; skipBackup?: boolean; namespace?: string }) =>
-      uiClient.keyrings.confirmNewMnemonic(params),
-    onSuccess: (result) => {
-      invalidateKeyrings();
-      if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
-    },
-  });
-
-  const importMnemonicMutation = useMutation({
-    mutationFn: (params: { words: string[]; alias?: string; namespace?: string }) =>
-      uiClient.keyrings.importMnemonic(params),
-    onSuccess: (result) => {
-      invalidateKeyrings();
-      if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
-    },
-  });
-
-  const importPrivateKeyMutation = useMutation({
-    mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
-      uiClient.keyrings.importPrivateKey(params),
-    onSuccess: (result) => {
-      invalidateKeyrings();
-      if (result?.keyringId) invalidateAccountsByKeyring(result.keyringId);
-    },
   });
 
   const deriveAccountMutation = useMutation({
@@ -189,8 +150,6 @@ export const useUiSnapshot = () => {
     isLoading: snapshotQuery.isLoading,
     error: snapshotQuery.error,
     unlock: unlockMutation.mutateAsync,
-    vaultInit: vaultInitMutation.mutateAsync,
-    vaultInitAndUnlock: vaultInitAndUnlockMutation.mutateAsync,
     lock: lockMutation.mutateAsync,
     resetAutoLockTimer: resetAutoLockMutation.mutate,
     switchAccount: switchAccountMutation.mutateAsync,
@@ -198,10 +157,6 @@ export const useUiSnapshot = () => {
     approveApproval: approveApprovalMutation.mutateAsync,
     rejectApproval: rejectApprovalMutation.mutateAsync,
     setAutoLockDuration: setAutoLockDurationMutation.mutateAsync,
-    generateMnemonic: generateMnemonicMutation.mutateAsync,
-    confirmNewMnemonic: confirmNewMnemonicMutation.mutateAsync,
-    importMnemonic: importMnemonicMutation.mutateAsync,
-    importPrivateKey: importPrivateKeyMutation.mutateAsync,
     deriveAccount: deriveAccountMutation.mutateAsync,
     renameKeyring: renameKeyringMutation.mutateAsync,
     renameAccount: renameAccountMutation.mutateAsync,

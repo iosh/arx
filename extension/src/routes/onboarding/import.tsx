@@ -1,10 +1,12 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { ImportWalletScreen } from "@/ui/screens/onboarding/ImportWalletScreen";
+import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 
 type ImportMode = "mnemonic" | "privateKey";
 
@@ -29,13 +31,27 @@ export const Route = createFileRoute("/onboarding/import")({
 function ImportSetupRoute() {
   const router = useRouter();
   const search = Route.useSearch();
-  const { importMnemonic, importPrivateKey } = useUiSnapshot();
+  const { snapshot } = useUiSnapshot();
+
+  const password = useOnboardingStore((s) => s.password);
+  const clear = useOnboardingStore((s) => s.clear);
 
   const forcedMode = search.mode;
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (password) return;
+    if (!snapshot) return;
+    if (snapshot.vault.initialized) return; // allow resuming setupIncomplete without re-entering password flow
+    router.navigate({ to: ROUTES.ONBOARDING_PASSWORD, search: { intent: "import" }, replace: true });
+  }, [password, router, snapshot]);
+
   const handleImport = async (value: string, alias?: string) => {
+    const vaultInitialized = snapshot?.vault.initialized ?? false;
+    if (!vaultInitialized && !password) return;
+    const passwordParam = password ?? undefined;
+
     if (!value.trim()) {
       setError("Enter a recovery phrase or private key");
       return;
@@ -47,18 +63,28 @@ function ImportSetupRoute() {
     try {
       if (forcedMode === "mnemonic") {
         const words = splitMnemonicWords(value);
-        await importMnemonic({ words, alias });
+        await uiClient.onboarding.importWalletFromMnemonic({ password: passwordParam, words, alias });
       } else if (forcedMode === "privateKey") {
-        await importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias });
+        await uiClient.onboarding.importWalletFromPrivateKey({
+          password: passwordParam,
+          privateKey: sanitizePrivateKeyInput(value),
+          alias,
+        });
       } else {
         const words = splitMnemonicWords(value);
         const looksLikeMnemonic = words.length >= 11;
-        const primary = looksLikeMnemonic
-          ? async () => importMnemonic({ words, alias })
-          : async () => importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias });
-        const secondary = looksLikeMnemonic
-          ? async () => importPrivateKey({ privateKey: sanitizePrivateKeyInput(value), alias })
-          : async () => importMnemonic({ words, alias });
+
+        const importAsMnemonic = async () =>
+          uiClient.onboarding.importWalletFromMnemonic({ password: passwordParam, words, alias });
+        const importAsPrivateKey = async () =>
+          uiClient.onboarding.importWalletFromPrivateKey({
+            password: passwordParam,
+            privateKey: sanitizePrivateKeyInput(value),
+            alias,
+          });
+
+        const primary = looksLikeMnemonic ? importAsMnemonic : importAsPrivateKey;
+        const secondary = looksLikeMnemonic ? importAsPrivateKey : importAsMnemonic;
 
         try {
           await primary();
@@ -77,6 +103,8 @@ function ImportSetupRoute() {
           }
         }
       }
+
+      clear();
       router.navigate({ to: ROUTES.ONBOARDING_COMPLETE });
     } catch (err) {
       setError(getErrorMessage(err));

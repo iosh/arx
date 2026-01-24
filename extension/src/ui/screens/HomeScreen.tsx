@@ -1,13 +1,15 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { Activity, ChevronDown, ChevronRight, Settings, ShieldAlert, Wallet } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Paragraph, Spinner, useTheme, XStack, YStack } from "tamagui";
-import { AddressDisplay, Button, ChainBadge, Screen, Sheet } from "../components";
+import { AddressDisplay, Button, ChainBadge, PasswordInput, Screen, Sheet } from "../components";
+import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
   snapshot: UiSnapshot;
   backupWarnings: Array<{ keyringId: string; alias: string | null }>;
   onMarkBackedUp: (keyringId: string) => Promise<void>;
+  onExportMnemonic: (params: { keyringId: string; password: string }) => Promise<string[]>;
   markingKeyringId: string | null;
   onOpenApprovals: () => void;
   onNavigateAccounts: () => void;
@@ -18,6 +20,7 @@ type HomeScreenProps = {
 export const HomeScreen = ({
   snapshot,
   onMarkBackedUp,
+  onExportMnemonic,
   onOpenApprovals,
   onNavigateAccounts,
   onNavigateNetworks,
@@ -30,12 +33,33 @@ export const HomeScreen = ({
   const approvalsCount = snapshot.approvals.length;
 
   const [confirmKeyringId, setConfirmKeyringId] = useState<string | null>(null);
+  const [exportPassword, setExportPassword] = useState("");
+  const [exportWords, setExportWords] = useState<string[] | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportRequestIdRef = useRef(0);
   const confirmingWarning = useMemo(
     () => (confirmKeyringId ? (backupWarnings.find((w) => w.keyringId === confirmKeyringId) ?? null) : null),
     [backupWarnings, confirmKeyringId],
   );
   const confirmOpen = confirmKeyringId !== null;
   const confirmMarking = confirmKeyringId !== null && markingKeyringId === confirmKeyringId;
+
+  useEffect(() => {
+    return () => {
+      // Prevent any in-flight export from updating state after unmount.
+      exportRequestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Avoid keeping sensitive info around after closing/changing the sheet.
+    exportRequestIdRef.current += 1; // invalidate any in-flight export request
+    setExportPassword("");
+    setExportWords(null);
+    setExportError(null);
+    setExporting(false);
+  }, [confirmKeyringId]);
 
   return (
     <Screen padded={false}>
@@ -175,7 +199,7 @@ export const HomeScreen = ({
         <Sheet
           open={confirmOpen}
           onOpenChange={(open) => {
-            if (!open && confirmMarking) return;
+            if (!open && (confirmMarking || exporting)) return;
             if (!open) setConfirmKeyringId(null);
           }}
           title="Confirm backup"
@@ -186,15 +210,102 @@ export const HomeScreen = ({
             {confirmingWarning?.alias ?? "this wallet"}.
           </Paragraph>
 
+          <YStack gap="$3" marginTop="$4">
+            {exportWords ? (
+              <YStack
+                backgroundColor="$surface"
+                borderWidth={1}
+                borderColor="$border"
+                borderRadius="$md"
+                padding="$3"
+                gap="$3"
+              >
+                <Paragraph fontWeight="700">Recovery phrase</Paragraph>
+                <XStack flexWrap="wrap" gap="$2" justifyContent="center">
+                  {exportWords.map((word, index) => (
+                    <XStack
+                      key={`${index}-${word}`}
+                      backgroundColor="$bg"
+                      borderWidth={1}
+                      borderColor="$border"
+                      borderRadius="$sm"
+                      paddingHorizontal="$3"
+                      paddingVertical="$2"
+                      alignItems="center"
+                      gap="$2"
+                      minWidth={90}
+                    >
+                      <Paragraph color="$mutedText" fontSize="$2" fontWeight="500">
+                        {index + 1}.
+                      </Paragraph>
+                      <Paragraph color="$text" fontWeight="600" fontSize="$3">
+                        {word}
+                      </Paragraph>
+                    </XStack>
+                  ))}
+                </XStack>
+              </YStack>
+            ) : (
+              <>
+                <PasswordInput
+                  label="Password"
+                  value={exportPassword}
+                  onChangeText={setExportPassword}
+                  disabled={!confirmingWarning || exporting || confirmMarking}
+                />
+
+                {exportError ? (
+                  <Paragraph color="$danger" fontSize="$2">
+                    {exportError}
+                  </Paragraph>
+                ) : null}
+
+                <Button
+                  variant="secondary"
+                  disabled={!confirmingWarning || exporting || confirmMarking || exportPassword.trim().length === 0}
+                  loading={exporting}
+                  onPress={() => {
+                    if (!confirmingWarning || exporting) return;
+                    const requestId = exportRequestIdRef.current + 1;
+                    exportRequestIdRef.current = requestId;
+                    setExporting(true);
+                    setExportError(null);
+                    void onExportMnemonic({ keyringId: confirmingWarning.keyringId, password: exportPassword })
+                      .then((words) => {
+                        if (exportRequestIdRef.current !== requestId) return;
+                        setExportPassword("");
+                        setExportWords(words);
+                      })
+                      .catch((err) => {
+                        if (exportRequestIdRef.current !== requestId) return;
+                        setExportError(getErrorMessage(err));
+                      })
+                      .finally(() => {
+                        if (exportRequestIdRef.current !== requestId) return;
+                        setExporting(false);
+                      });
+                  }}
+                >
+                  View recovery phrase
+                </Button>
+              </>
+            )}
+          </YStack>
+
           <XStack gap="$2">
-            <Button flex={1} variant="secondary" onPress={() => setConfirmKeyringId(null)} disabled={confirmMarking}>
+            <Button
+              flex={1}
+              variant="secondary"
+              onPress={() => setConfirmKeyringId(null)}
+              disabled={confirmMarking || exporting}
+            >
               Cancel
             </Button>
             <Button
               flex={1}
               variant="primary"
               loading={confirmMarking}
-              disabled={!confirmingWarning || confirmMarking}
+              disabled={!confirmingWarning || confirmMarking || exporting}
               onPress={() => {
                 if (!confirmingWarning) return;
                 void onMarkBackedUp(confirmingWarning.keyringId)

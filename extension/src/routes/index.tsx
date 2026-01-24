@@ -14,7 +14,7 @@ export const Route = createFileRoute("/")({
 });
 function HomePage() {
   const router = useRouter();
-  const { snapshot, markBackedUp } = useUiSnapshot();
+  const { snapshot, markBackedUp, exportMnemonic } = useUiSnapshot();
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const backupWarnings = useMemo(
@@ -35,6 +35,16 @@ function HomePage() {
     }
   };
 
+  const handleExportMnemonic = async (params: { keyringId: string; password: string }) => {
+    try {
+      const res = await exportMnemonic(params);
+      return res.words;
+    } catch (error) {
+      console.warn("[HomePage] failed to export mnemonic", error);
+      throw error;
+    }
+  };
+
   if (!snapshot) {
     return null;
   }
@@ -44,6 +54,7 @@ function HomePage() {
       snapshot={snapshot}
       backupWarnings={backupWarnings}
       onMarkBackedUp={handleMarkBackedUp}
+      onExportMnemonic={handleExportMnemonic}
       markingKeyringId={markingId}
       onOpenApprovals={() => {
         void uiClient.attention

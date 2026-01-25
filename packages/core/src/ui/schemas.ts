@@ -1,4 +1,17 @@
 import { z } from "zod";
+import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../chains/url.js";
+
+const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
+  message: "Expected a 0x-prefixed hexadecimal string",
+});
+
+const httpUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, HTTP_PROTOCOLS), {
+  message: "URL must use the http or https protocol",
+});
+
+const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PROTOCOLS), {
+  message: "URL must use http, https, ws, or wss protocol",
+});
 
 export const ChainSnapshotSchema = z.object({
   chainRef: z.string().min(1),
@@ -107,6 +120,24 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
           chains: z.array(z.string()),
         }),
       ),
+    }),
+  }),
+  approvalPayloadBase.extend({
+    type: z.literal("addChain"),
+    payload: z.object({
+      chainRef: z.string().min(1),
+      chainId: hexChainIdSchema,
+      displayName: z.string().min(1),
+      rpcUrls: z.array(rpcUrlSchema).min(1),
+      nativeCurrency: z
+        .object({
+          name: z.string().min(1),
+          symbol: z.string().min(1),
+          decimals: z.number().int().nonnegative(),
+        })
+        .optional(),
+      blockExplorerUrl: httpUrlSchema.optional(),
+      isUpdate: z.boolean(),
     }),
   }),
 ]);

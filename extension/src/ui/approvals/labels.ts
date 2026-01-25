@@ -6,6 +6,7 @@ const APPROVAL_TYPE_LABEL = {
   signTypedData: "Sign Typed Data",
   sendTransaction: "Send Transaction",
   requestPermissions: "Permission Request",
+  addChain: "Add Network",
 } satisfies Record<ApprovalSummary["type"], string>;
 
 export function getApprovalTypeLabel(type: ApprovalSummary["type"]): string {

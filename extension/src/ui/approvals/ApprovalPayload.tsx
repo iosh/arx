@@ -1,5 +1,6 @@
 import type { ApprovalSummary } from "@arx/core/ui";
 import { Card, Paragraph } from "tamagui";
+import { AddChainPayload } from "./payloads/AddChainPayload";
 import { RequestAccountsPayload } from "./payloads/RequestAccountsPayload";
 import { RequestPermissionsPayload } from "./payloads/RequestPermissionsPayload";
 import { SendTransactionPayload } from "./payloads/SendTransactionPayload";
@@ -18,6 +19,8 @@ export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
       return <SendTransactionPayload approval={approval} />;
     case "requestPermissions":
       return <RequestPermissionsPayload approval={approval} />;
+    case "addChain":
+      return <AddChainPayload approval={approval} />;
     default:
       return (
         <Card padded bordered>

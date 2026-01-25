@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { chainMetadataSchema } from "../chains/metadata.js";
+import { HTTP_PROTOCOLS, isUrlWithProtocols } from "../chains/url.js";
 import { ApprovalTypes } from "../controllers/index.js";
 import { PermissionScopes } from "../controllers/permission/types.js";
 
@@ -51,8 +52,8 @@ const nativeCurrencySchema = z.strictObject({
 const httpUrlSchema = z
   .string()
   .url()
-  .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
-    error: "URL must use http or https scheme",
+  .refine((value) => isUrlWithProtocols(value, HTTP_PROTOCOLS), {
+    error: "URL must use http or https protocol",
   });
 
 const rpcEndpointInfoSchema = z.strictObject({

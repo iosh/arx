@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type ParsedChainRef, parseChainRef } from "./caip.js";
 import type { ChainRef } from "./ids.js";
+import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
 
 export type ChainFeature = string;
 
@@ -73,8 +74,12 @@ const trimmedString = () =>
     .min(1)
     .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
 
-const httpUrlSchema = z.url().refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
+const httpUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, HTTP_PROTOCOLS), {
   message: "URL must use the http or https protocol",
+});
+
+const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PROTOCOLS), {
+  message: "URL must use http, https, ws, or wss protocol",
 });
 
 const hexQuantitySchema = z.string({ error: "EIP-155 metadata must include a hex chainId" }).regex(/^0x[0-9a-fA-F]+$/, {
@@ -88,7 +93,7 @@ const nativeCurrencySchema: z.ZodType<NativeCurrency> = z.strictObject({
 });
 
 export const rpcEndpointSchema: z.ZodType<RpcEndpoint> = z.strictObject({
-  url: httpUrlSchema,
+  url: rpcUrlSchema,
   type: z.enum(["public", "authenticated", "private"]).optional(),
   weight: z.number().positive().optional(),
   headers: z.record(trimmedString(), z.string()).optional(),

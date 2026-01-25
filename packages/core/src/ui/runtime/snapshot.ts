@@ -1,3 +1,4 @@
+import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ApprovalTask } from "../../controllers/approval/types.js";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import type { RequestPermissionsApprovalPayload } from "../../controllers/permission/types.js";
@@ -93,6 +94,7 @@ type SendTransactionPayload = {
   issues?: unknown[];
   draft?: { summary?: Record<string, unknown> };
 };
+type AddChainPayload = { metadata: ChainMetadata; isUpdate: boolean };
 
 const extractPayload = <T>(payload: unknown): T => payload as T;
 
@@ -181,6 +183,32 @@ const toApprovalSummary = (
           summary: payload.draft?.summary,
           warnings: (payload.warnings ?? []).map(toUiWarning),
           issues: (payload.issues ?? []).map(toUiIssue),
+        },
+      };
+    }
+    case ApprovalTypes.AddChain: {
+      const payload = extractPayload<AddChainPayload>(task.payload);
+      const meta = payload.metadata;
+      const rpcUrls = Array.from(new Set(meta.rpcEndpoints.map((ep) => ep.url.trim()).filter(Boolean)));
+      const blockExplorerUrl =
+        meta.blockExplorers?.find((entry) => entry.type === "default")?.url ?? meta.blockExplorers?.[0]?.url;
+      return {
+        ...base,
+        type: "addChain",
+        payload: {
+          chainRef: meta.chainRef,
+          chainId: meta.chainId,
+          displayName: meta.displayName,
+          rpcUrls,
+          nativeCurrency: meta.nativeCurrency
+            ? {
+                name: meta.nativeCurrency.name,
+                symbol: meta.nativeCurrency.symbol,
+                decimals: meta.nativeCurrency.decimals,
+              }
+            : undefined,
+          blockExplorerUrl,
+          isUpdate: payload.isUpdate,
         },
       };
     }

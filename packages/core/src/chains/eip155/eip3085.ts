@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ChainMetadata } from "../metadata.js";
 import { validateChainMetadata } from "../metadata.js";
+import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
 
 //https://eips.ethereum.org/EIPS/eip-3085
 
@@ -9,8 +10,13 @@ const trimmed = () =>
     .string()
     .min(1)
     .transform((value) => value.trim());
-const httpUrl = z.url().refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
-  error: "URL must use http or https scheme",
+
+const rpcUrl = z.url().refine((url) => isUrlWithProtocols(url, RPC_PROTOCOLS), {
+  message: "URL must use http, https, ws, or wss protocol",
+});
+
+const httpUrl = z.url().refine((url) => isUrlWithProtocols(url, HTTP_PROTOCOLS), {
+  message: "URL must use http or https protocol",
 });
 
 const eip3085Schema = z.object({
@@ -21,7 +27,7 @@ const eip3085Schema = z.object({
     symbol: trimmed(),
     decimals: z.number().int().nonnegative(),
   }),
-  rpcUrls: z.array(httpUrl).min(1),
+  rpcUrls: z.array(rpcUrl).min(1),
   blockExplorerUrls: z.array(httpUrl).optional(),
   // TODO add iconUrls
 });

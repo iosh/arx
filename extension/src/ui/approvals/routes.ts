@@ -6,6 +6,7 @@ const APPROVAL_ROUTE_PREFIX = {
   signMessage: "/approve/sign-message",
   signTypedData: "/approve/sign-typed-data",
   sendTransaction: "/approve/send-transaction",
+  addChain: "/approve/add-chain",
 } satisfies Record<ApprovalSummary["type"], string>;
 
 export function getApprovalRoutePath(approval: ApprovalSummary): string {

@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import { createRpcHarness, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
+import { createRpcHarness, flushAsync, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
 
 const PASSWORD = "secret-pass";
 const MESSAGE = "0x68656c6c6f";
@@ -88,7 +88,15 @@ describe("createBackgroundServices (locked RPC integration)", () => {
   it("enforces lock semantics for eth_accounts and personal_sign", async () => {
     const harness = await createRpcHarness();
     const { services } = harness;
-    const approval = vi.spyOn(services.controllers.approvals, "requestApproval").mockResolvedValue("0xsignedpayload");
+    const approval = vi.spyOn(services.controllers.approvals, "requestApproval");
+    let approvalId: string | null = null;
+    const approvalRequested = new Promise<void>((resolve) => {
+      const unsubscribe = services.controllers.approvals.onRequest((task) => {
+        approvalId = task.id;
+        unsubscribe();
+        resolve();
+      });
+    });
 
     try {
       await initializeSession(services);
@@ -117,15 +125,22 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
       await expect(harness.callRpc({ method: "eth_accounts" })).resolves.toEqual([]);
 
-      await expect(
-        harness.callRpc({
-          method: "personal_sign",
-          params: [MESSAGE, address] as JsonRpcParams,
-        }),
-      ).rejects.toMatchObject({
-        code: 4100,
-        message: "Request personal_sign requires an unlocked session",
+      const pending = harness.callRpc({
+        method: "personal_sign",
+        params: [MESSAGE, address] as JsonRpcParams,
       });
+
+      let settled = false;
+      void pending.finally(() => {
+        settled = true;
+      });
+      await approvalRequested;
+      await flushAsync();
+
+      expect(approval).toHaveBeenCalledTimes(1);
+      // While locked, the request should be pending on the approval (not hard-rejected).
+      expect(settled).toBe(false);
+      expect(approvalId).toBeTruthy();
 
       await services.session.unlock.unlock({ password: PASSWORD });
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, {
@@ -136,12 +151,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       const accounts = (await harness.callRpc({ method: "eth_accounts" })) as string[];
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
-      await expect(
-        harness.callRpc({
-          method: "personal_sign",
-          params: [MESSAGE, address] as JsonRpcParams,
-        }),
-      ).resolves.toBe("0xsignedpayload");
+      await services.controllers.approvals.resolve(approvalId!, async () => "0xsignedpayload");
+      await expect(pending).resolves.toBe("0xsignedpayload");
 
       expect(approval).toHaveBeenCalledTimes(1);
     } finally {

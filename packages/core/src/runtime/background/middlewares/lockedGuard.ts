@@ -1,6 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 import type { Json } from "@metamask/utils";
+import type { MethodDefinition } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import type { AttentionService } from "../../../services/attention/types.js";
 
@@ -12,15 +13,7 @@ import type { AttentionService } from "../../../services/attention/types.js";
  * 4. Default: reject while the session stays locked
  */
 
-type LockedDefinition =
-  | {
-      scope?: unknown;
-      locked?: {
-        allow?: boolean;
-        response?: unknown;
-      };
-    }
-  | undefined;
+type LockedDefinition = Pick<MethodDefinition, "scope" | "approvalRequired" | "locked"> | undefined;
 
 type PassthroughAllowance = {
   isPassthrough: boolean;
@@ -103,15 +96,44 @@ export const createLockedGuardMiddleware = ({
     }
 
     const resolvedPolicy = deriveLockedPolicy(req.method, rpcContext);
-    const locked = resolvedPolicy ?? definition.locked ?? {};
+    const policyActive =
+      resolvedPolicy !== undefined && (resolvedPolicy.allow !== undefined || resolvedPolicy.hasResponse === true);
 
-    if (resolvedPolicy?.allow ?? locked.allow) {
+    // Chain-level locked policy is the highest priority and cannot be bypassed by approvalRequired.
+    if (policyActive) {
+      if (resolvedPolicy.allow === true) {
+        return next();
+      }
+      if (resolvedPolicy.hasResponse) {
+        res.result = resolvedPolicy.response as Json;
+        return;
+      }
+
+      // Explicit deny (allow:false with no response)
+      requestUnlockAttention(req.method, rpcContext);
+      throw arxError({
+        reason: ArxReasons.SessionLocked,
+        message: `Request ${req.method} requires an unlocked session`,
+        data: { origin, method: req.method },
+      });
+    }
+
+    const locked = definition.locked ?? {};
+
+    if (locked.allow === true) {
       return next();
     }
 
-    if (resolvedPolicy?.hasResponse || Object.hasOwn(locked, "response")) {
-      res.result = (resolvedPolicy?.response ?? locked.response) as Json;
+    if (Object.hasOwn(locked, "response")) {
+      res.result = locked.response as Json;
       return;
+    }
+
+    // For approval-based methods, do not hard-reject while locked.
+    // Let the request reach the handler so it can enqueue an approval and keep the dApp RPC pending.
+    // The UI will prompt for unlock before the user can approve.
+    if (definition.approvalRequired) {
+      return next();
     }
 
     requestUnlockAttention(req.method, rpcContext);

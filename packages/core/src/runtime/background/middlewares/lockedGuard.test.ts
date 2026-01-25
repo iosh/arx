@@ -230,4 +230,55 @@ describe("createLockedGuardMiddleware", () => {
       namespace: null,
     });
   });
+
+  it("allows approvalRequired methods while locked (queues approval flow)", async () => {
+    const next = createNextStub();
+    const attention = createAttentionHelpers();
+    const middleware = createLockedGuardMiddleware({
+      isUnlocked: () => false,
+      isInternalOrigin: () => false,
+      findMethodDefinition: () => ({ scope: "accounts", approvalRequired: true }),
+      deriveLockedPolicy: () => undefined,
+      getPassthroughAllowance: defaultPassthroughAllowance,
+      attentionService: attention,
+    });
+
+    const req = { method: "eth_requestAccounts", origin: ORIGIN } as unknown as Parameters<typeof middleware>[0];
+    const res = {} as Parameters<typeof middleware>[1];
+    const end = vi.fn();
+    await middleware(req, res, next, end);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(attention.requestAttention).not.toHaveBeenCalled();
+  });
+
+  it("does not bypass explicit chain locked deny for approvalRequired methods", async () => {
+    const next = createNextStub();
+    const attention = createAttentionHelpers();
+    const middleware = createLockedGuardMiddleware({
+      isUnlocked: () => false,
+      isInternalOrigin: () => false,
+      findMethodDefinition: () => ({ scope: "accounts", approvalRequired: true }),
+      deriveLockedPolicy: () => ({ allow: false, hasResponse: false }),
+      getPassthroughAllowance: defaultPassthroughAllowance,
+      attentionService: attention,
+    });
+
+    const req = { method: "eth_requestAccounts", origin: ORIGIN } as unknown as Parameters<typeof middleware>[0];
+    const res = {} as Parameters<typeof middleware>[1];
+    const end = vi.fn();
+    await middleware(req, res, next, end);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(end).toHaveBeenCalledTimes(1);
+    const [error] = end.mock.calls[0] ?? [];
+    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
+    expect(attention.requestAttention).toHaveBeenCalledWith({
+      reason: "unlock_required",
+      origin: ORIGIN,
+      method: "eth_requestAccounts",
+      chainRef: null,
+      namespace: null,
+    });
+  });
 });

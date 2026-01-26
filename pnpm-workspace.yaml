@@ -8,3 +8,4 @@ catalog:
   webextension-polyfill: 0.12.0
   "@types/webextension-polyfill": 0.12.3
   "eventemitter3": 5.0.1
+  ox: 0.9.14

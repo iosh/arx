@@ -81,6 +81,15 @@ export const useUiSnapshot = () => {
     },
   });
 
+  const importPrivateKeyMutation = useMutation({
+    mutationFn: (params: { privateKey: string; alias?: string; namespace?: string }) =>
+      uiClient.keyrings.importPrivateKey(params),
+    onSuccess: (res) => {
+      invalidateKeyrings();
+      invalidateAccountsByKeyring(res.keyringId);
+    },
+  });
+
   const renameKeyringMutation = useMutation({
     mutationFn: (params: { keyringId: string; alias: string }) => uiClient.keyrings.renameKeyring(params),
     onSuccess: (_res, variables) => {
@@ -158,6 +167,7 @@ export const useUiSnapshot = () => {
     rejectApproval: rejectApprovalMutation.mutateAsync,
     setAutoLockDuration: setAutoLockDurationMutation.mutateAsync,
     deriveAccount: deriveAccountMutation.mutateAsync,
+    importPrivateKey: importPrivateKeyMutation.mutateAsync,
     renameKeyring: renameKeyringMutation.mutateAsync,
     renameAccount: renameAccountMutation.mutateAsync,
     markBackedUp: markBackedUpMutation.mutateAsync,

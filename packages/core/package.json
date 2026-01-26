@@ -24,7 +24,7 @@
     "@noble/hashes": "1.8.0",
     "@scure/bip32": "1.7.0",
     "@scure/bip39": "1.6.0",
-    "ox": "0.9.14",
+    "ox": "catalog:",
     "viem": "2.39.0",
     "zod": "4.1.11",
     "debug": "4.4.3"

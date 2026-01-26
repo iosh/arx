@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
+import { sanitizePrivateKeyInput } from "@/ui/lib/privateKeyInput";
 import { requireSetupIncomplete } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
@@ -15,8 +16,6 @@ const splitMnemonicWords = (value: string) =>
     .trim()
     .split(/[\s,]+/)
     .filter(Boolean);
-
-const sanitizePrivateKeyInput = (value: string) => value.trim().replace(/[\s,]+/g, "");
 
 export const Route = createFileRoute("/onboarding/import")({
   beforeLoad: requireSetupIncomplete,

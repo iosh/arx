@@ -28,7 +28,7 @@
     "@tanstack/react-router": "^1.136.5",
     "events": "3.3.0",
     "lucide-react": "^0.562.0",
-    "ox": "0.9.14",
+    "ox": "catalog:",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "react-native-web": "^0.21.2",

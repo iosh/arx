@@ -1,4 +1,12 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
+import type {
+  AccountRecord,
+  ApprovalRecord,
+  ChainRecord,
+  PermissionRecord,
+  SettingsRecord,
+  TransactionRecord,
+} from "@arx/core/db";
 import {
   type AccountMeta,
   AccountMetaSchema,
@@ -59,27 +67,34 @@ type KeyringMetaRow = KeyringMeta;
 type AccountMetaRow = AccountMeta;
 
 class ArxStorageDatabase extends Dexie {
-  chains!: Table<SnapshotEntity, StorageNamespace>;
-  accounts!: Table<SnapshotEntity, StorageNamespace>;
-  permissions!: Table<SnapshotEntity, StorageNamespace>;
-  approvals!: Table<SnapshotEntity, StorageNamespace>;
-  transactions!: Table<SnapshotEntity, StorageNamespace>;
+  snapshots!: Table<SnapshotEntity, StorageNamespace>;
+
+  settings!: Table<SettingsRecord, string>;
+  chains!: Table<ChainRegistryRow, string>;
+  accounts!: Table<AccountRecord, string>;
+  permissions!: Table<PermissionRecord, string>;
+  approvals!: Table<ApprovalRecord, string>;
+  transactions!: Table<TransactionRecord, string>;
+
   vaultMeta!: Table<VaultMetaEntity, string>;
-  chainRegistry!: Table<ChainRegistryRow, string>;
+
   keyringMetas!: Table<KeyringMetaRow, string>;
   accountMetas!: Table<AccountMetaRow, string>;
-
   constructor(name: string) {
     super(name);
     this.version(DOMAIN_SCHEMA_VERSION)
       .stores({
-        chains: "&namespace",
-        accounts: "&namespace",
-        permissions: "&namespace",
-        approvals: "&namespace",
-        transactions: "&namespace",
+        snapshots: "&namespace",
+
+        settings: "&id",
+        chains: "&chainRef",
+        accounts: "&accountId, namespace, keyringId",
+        permissions: "&id, origin, &[origin+namespace+chainRef]",
+        approvals: "&id, status, type, origin, createdAt",
+        transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
+
         vaultMeta: "&id",
-        chainRegistry: "&chainRef",
+
         keyringMetas: "&id, type, createdAt",
         accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
       })
@@ -174,15 +189,11 @@ class DexieStoragePort implements StoragePort {
   private getTable(namespace: StorageNamespace) {
     switch (namespace) {
       case StorageNamespaces.Network:
-        return this.db.chains;
       case StorageNamespaces.Accounts:
-        return this.db.accounts;
       case StorageNamespaces.Permissions:
-        return this.db.permissions;
       case StorageNamespaces.Approvals:
-        return this.db.approvals;
       case StorageNamespaces.Transactions:
-        return this.db.transactions;
+        return this.db.snapshots;
       default:
         throw new Error(`Unknown storage namespace: ${namespace}`);
     }
@@ -195,7 +206,7 @@ class DexieChainRegistryPort implements ChainRegistryPort {
 
   constructor(private readonly db: ArxStorageDatabase) {
     this.ready = this.db.open();
-    this.table = this.db.chainRegistry;
+    this.table = this.db.chains;
   }
 
   async get(chainRef: ChainRegistryRow["chainRef"]): Promise<ChainRegistryEntity | null> {

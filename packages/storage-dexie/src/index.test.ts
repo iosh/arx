@@ -19,10 +19,25 @@ import {
   type VaultMetaSnapshot,
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieChainRegistryPort, createDexieKeyringStore, createDexieStorage } from "./index.js";
 
 const DB_NAME = "arx-storage-test";
+const TEST_DB_STORES = {
+  snapshots: "&namespace",
+
+  settings: "&id",
+  chains: "&chainRef",
+  accounts: "&accountId, namespace, keyringId",
+  permissions: "&id, origin, &[origin+namespace+chainRef]",
+  approvals: "&id, status, type, origin, createdAt",
+  transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
+
+  vaultMeta: "&id",
+
+  keyringMetas: "&id, type, createdAt",
+  accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
+} as const;
 
 const NETWORK_SNAPSHOT: NetworkSnapshot = {
   version: NETWORK_SNAPSHOT_VERSION,
@@ -70,23 +85,39 @@ const APPROVALS_SNAPSHOT: ApprovalsSnapshot = {
 
 const openTestDexie = async () => {
   const raw = new Dexie(DB_NAME);
-  raw.version(DOMAIN_SCHEMA_VERSION).stores({
-    chains: "&namespace",
-    accounts: "&namespace",
-    permissions: "&namespace",
-    approvals: "&namespace",
-    transactions: "&namespace",
-    vaultMeta: "&id",
-    chainRegistry: "&chainRef",
-    keyringMetas: "&id, type, createdAt",
-    accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
-  });
+  raw.version(DOMAIN_SCHEMA_VERSION).stores(TEST_DB_STORES);
   await raw.open();
   return raw;
 };
 
+const putRawSnapshot = async (raw: Dexie, params: { namespace: string; envelope: unknown }) => {
+  await raw.table("snapshots").put({ namespace: params.namespace, envelope: params.envelope });
+};
+
+const originalWarn = console.warn.bind(console);
+
+const shouldSilenceWarn = (args: unknown[]) => {
+  const first = args[0];
+  if (typeof first !== "string") return false;
+  return (
+    first.startsWith("[storage-dexie]") ||
+    first.includes("Another connection wants to delete database") ||
+    first.includes("Closing db now to resume the delete request")
+  );
+};
+
+let warnSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+    if (shouldSilenceWarn(args)) return;
+    originalWarn(...(args as any[]));
+  });
+});
+
 afterEach(async () => {
   await Dexie.delete(DB_NAME);
+  warnSpy.mockRestore();
 });
 
 describe("DexieStoragePort", () => {
@@ -106,8 +137,7 @@ describe("DexieStoragePort", () => {
 
     const raw = await openTestDexie();
 
-    await raw.open();
-    await raw.table("chains").put({
+    await putRawSnapshot(raw, {
       namespace: StorageNamespaces.Network,
       envelope: { version: 99, updatedAt: 0, payload: {} },
     });
@@ -116,6 +146,10 @@ describe("DexieStoragePort", () => {
 
     const reloaded = await storage.loadSnapshot(StorageNamespaces.Network);
     expect(reloaded).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid snapshot detected for core:network"),
+      expect.anything(),
+    );
   });
 
   it("persists and loads vault meta snapshot", async () => {
@@ -156,7 +190,6 @@ describe("DexieStoragePort", () => {
     });
 
     const raw = await openTestDexie();
-    await raw.open();
     await raw.table("vaultMeta").put({
       id: "vault-meta",
       version: 1,
@@ -166,6 +199,10 @@ describe("DexieStoragePort", () => {
     await raw.close();
 
     expect(await storage.loadVaultMeta()).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid vault meta detected"),
+      expect.anything(),
+    );
   });
 
   it("persists and loads approvals snapshot with metadata", async () => {
@@ -181,7 +218,7 @@ describe("DexieStoragePort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
 
     const raw = await openTestDexie();
-    await raw.table("permissions").put({
+    await putRawSnapshot(raw, {
       namespace: StorageNamespaces.Permissions,
       envelope: {
         version: PERMISSIONS_SNAPSHOT_VERSION,
@@ -201,13 +238,17 @@ describe("DexieStoragePort", () => {
     await raw.close();
 
     expect(await storage.loadSnapshot(StorageNamespaces.Permissions)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid snapshot detected for core:permissions"),
+      expect.anything(),
+    );
   });
 
   it("drops permissions snapshots when a namespace lacks chain metadata", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
 
     const raw = await openTestDexie();
-    await raw.table("permissions").put({
+    await putRawSnapshot(raw, {
       namespace: StorageNamespaces.Permissions,
       envelope: {
         version: PERMISSIONS_SNAPSHOT_VERSION,
@@ -230,6 +271,10 @@ describe("DexieStoragePort", () => {
     await raw.close();
 
     expect(await storage.loadSnapshot(StorageNamespaces.Permissions)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid snapshot detected for core:permissions"),
+      expect.anything(),
+    );
   });
 });
 
@@ -268,19 +313,9 @@ describe("DexieChainRegistryPort", () => {
   });
 
   it("drops invalid entries encountered during reads", async () => {
-    const raw = new Dexie(DB_NAME);
-    raw.version(DOMAIN_SCHEMA_VERSION).stores({
-      chains: "&namespace",
-      accounts: "&namespace",
-      permissions: "&namespace",
-      approvals: "&namespace",
-      transactions: "&namespace",
-      vaultMeta: "&id",
-      chainRegistry: "&chainRef",
-    });
+    const raw = await openTestDexie();
 
-    await raw.open();
-    await raw.table("chainRegistry").put({
+    await raw.table("chains").put({
       chainRef: "eip155:1",
       namespace: "eip155",
       metadata: {
@@ -300,6 +335,10 @@ describe("DexieChainRegistryPort", () => {
 
     expect(await port.get("eip155:1")).toBeNull();
     expect(await port.getAll()).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid chain registry entry detected"),
+      expect.anything(),
+    );
   });
 
   describe("keyring storage schemas", () => {
@@ -394,6 +433,14 @@ describe("DexieChainRegistryPort", () => {
 
       expect(await store.getKeyringMetas()).toEqual([]);
       expect(await store.getAccountMetas()).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[storage-dexie] invalid keyring meta, dropping"),
+        expect.anything(),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[storage-dexie] invalid account meta, dropping"),
+        expect.anything(),
+      );
     });
 
     it("deletes accounts when keyring is deleted", async () => {

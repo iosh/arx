@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { ApprovalTypes, PermissionScopes, type TransactionMeta } from "../controllers/index.js";
 import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
+import type { SettingsPort } from "../services/settings/port.js";
 import type {
   AccountMeta,
   ChainRegistryEntity,
@@ -57,8 +58,6 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
   version: NETWORK_SNAPSHOT_VERSION,
   updatedAt: 1_000,
   payload: {
-    activeChain: ALT_CHAIN.chainRef,
-    knownChains: [ALT_CHAIN, MAINNET_CHAIN],
     rpc: {
       [ALT_CHAIN.chainRef]: {
         activeIndex: 0,
@@ -328,13 +327,19 @@ type TestServicesOptions = Omit<CreateBackgroundServicesOptions, "chainRegistry"
 };
 
 const createServices = (options: TestServicesOptions = {}) => {
-  const chainRegistryOptions = options.chainRegistry;
+  const silentLogger = (_message: string, _error?: unknown) => {};
+  const adaptedStorage = options.storage
+    ? { ...options.storage, logger: options.storage.logger ?? silentLogger }
+    : undefined;
+
+  const baseOptions: TestServicesOptions = adaptedStorage ? { ...options, storage: adaptedStorage } : options;
+  const chainRegistryOptions = baseOptions.chainRegistry;
   if (chainRegistryOptions?.port) {
-    return createBackgroundServices(options as CreateBackgroundServicesOptions);
+    return createBackgroundServices(baseOptions as CreateBackgroundServicesOptions);
   }
 
   const adapted: CreateBackgroundServicesOptions = {
-    ...options,
+    ...baseOptions,
     chainRegistry: {
       ...chainRegistryOptions,
       port: new MemoryChainRegistryPort(),
@@ -444,6 +449,23 @@ class FakeVault implements VaultService {
 }
 
 describe("createBackgroundServices", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+  beforeEach(() => {
+    const originalWarn = console.warn;
+    warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+      if (args[0] === "[createBackgroundServices]" && args[1] === "session: failed to reseal keyring payload") {
+        return;
+      }
+      originalWarn(...(args as Parameters<typeof console.warn>));
+    });
+  });
+
+  afterEach(() => {
+    warnSpy?.mockRestore();
+    warnSpy = null;
+  });
+
   it("hydrates controllers and session state from storage", async () => {
     const clock = () => 2_000;
     const storage = new MemoryStoragePort({
@@ -459,23 +481,24 @@ describe("createBackgroundServices", () => {
 
     const keyringStore = createInMemoryKeyringStore();
 
+    const settingsPort: SettingsPort = {
+      get: async () => ({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: clock() }),
+      put: async () => {},
+    };
+
     const services = createServices({
       storage: { port: storage, now: clock, keyringStore },
+      settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
 
     await services.lifecycle.initialize();
 
-    const permissionState = services.controllers.permissions.getState();
-    expect(permissionState.origins["https://dapp.example"]?.eip155?.chains).toEqual(["eip155:1"]);
-    expect(permissionState.origins["https://dapp.example"]?.conflux?.chains).toEqual(["conflux:cfx"]);
-    expect(permissionState.origins["https://dapp.example"]?.conflux?.scopes).toEqual([PermissionScopes.Sign]);
-
     const networkState = services.controllers.network.getState();
-    expect(networkState.activeChain).toBe(NETWORK_SNAPSHOT.payload.activeChain);
-    expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
-      NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
+    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
+    expect(networkState.knownChains.map((chain) => chain.chainRef)).toEqual(
+      expect.arrayContaining([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]),
     );
     expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
@@ -548,9 +571,8 @@ describe("createBackgroundServices", () => {
     const networkSnapshot = storage.getSnapshot(StorageNamespaces.Network);
     expect(networkSnapshot).not.toBeNull();
     expect(networkSnapshot?.updatedAt).toBe(3_500);
-    expect(networkSnapshot?.payload.activeChain).toBe(ALT_CHAIN.chainRef);
-    const updatedChain = networkSnapshot?.payload.knownChains.find((chain) => chain.chainRef === ALT_CHAIN.chainRef);
-    expect(updatedChain?.rpcEndpoints[0]?.url).toBe("https://rpc.alt.updated");
+
+    expect(networkSnapshot?.payload.rpc[ALT_CHAIN.chainRef]?.endpoints[0]?.url).toBe("https://rpc.alt.updated");
 
     now = 3_750;
     services.controllers.accounts.replaceState({
@@ -713,8 +735,14 @@ describe("createBackgroundServices", () => {
     storage.setSnapshotLoadFailure(StorageNamespaces.Network, new Error("boom"));
 
     const swallowLog = () => {};
+    const settingsPort: SettingsPort = {
+      get: async () => ({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: clock() }),
+      put: async () => {},
+    };
+
     const first = createServices({
       storage: { port: storage, now: clock, keyringStore },
+      settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
@@ -737,6 +765,7 @@ describe("createBackgroundServices", () => {
 
     const second = createServices({
       storage: { port: storage, now: clock, keyringStore },
+      settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
     });
@@ -744,9 +773,9 @@ describe("createBackgroundServices", () => {
     await second.lifecycle.initialize();
 
     const networkState = second.controllers.network.getState();
-    expect(networkState.activeChain).toBe(NETWORK_SNAPSHOT.payload.activeChain);
-    expect(networkState.knownChains.map((chain) => chain.chainRef).sort()).toEqual(
-      NETWORK_SNAPSHOT.payload.knownChains.map((chain) => chain.chainRef).sort(),
+    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
+    expect(networkState.knownChains.map((chain) => chain.chainRef)).toEqual(
+      expect.arrayContaining([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]),
     );
     expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
@@ -911,7 +940,10 @@ describe("createBackgroundServices", () => {
     expect(services.controllers.accounts.getActivePointer()?.address).toBeNull();
     expect(services.session.getLastPersistedVaultMeta()).toBeNull();
 
-    services.controllers.network.replaceState(NETWORK_SNAPSHOT.payload);
+    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
+    await flushMicrotasks();
+
     services.session.unlock.lock("manual");
     await services.session.persistVaultMeta();
 

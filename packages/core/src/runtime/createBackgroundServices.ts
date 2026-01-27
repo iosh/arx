@@ -1,11 +1,14 @@
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { createDefaultChainModuleRegistry } from "../chains/registry.js";
+import type { RpcEndpointState } from "../controllers/network/types.js";
+import type { SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
+import type { SettingsPort } from "../services/settings/port.js";
 import type {
   AccountMeta,
   KeyringMeta,
@@ -14,12 +17,12 @@ import type {
   StoragePort,
   StorageSnapshotMap,
 } from "../storage/index.js";
-import { StorageNamespaces } from "../storage/index.js";
+import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
 import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
 import { cloneTransactionState } from "../transactions/storage/state.js";
-import { DEFAULT_CHAIN } from "./background/constants.js";
+import { buildDefaultEndpointState, DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
 import type { MessengerTopics } from "./background/messenger.js";
@@ -42,6 +45,9 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
     hydrate?: boolean;
     keyringStore: KeyringStorePort;
     logger?: (message: string, error?: unknown) => void;
+  };
+  settings?: {
+    port: SettingsPort;
   };
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
@@ -88,6 +94,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionOptions,
     engine: engineOptions,
     storage: storageOptions,
+    settings: settingsOptions,
     session: sessionOptions,
     chainRegistry: chainRegistryOptions,
     rpcClients: rpcClientOptions,
@@ -140,6 +147,50 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       console.warn("[createBackgroundServices]", message, error);
     });
 
+  const settingsPort = settingsOptions?.port;
+  let cachedSettings: SettingsRecord | null = null;
+  let settingsLoaded = false;
+  // Serialize settings writes to avoid out-of-order completion clobbering newer values.
+  let settingsWriteQueue: Promise<void> = Promise.resolve();
+
+  const persistActiveChainRef = async (chainRef: ChainRef) => {
+    if (!settingsPort) return;
+    if (!settingsLoaded) return;
+    if (cachedSettings?.activeChainRef === chainRef) return;
+
+    settingsWriteQueue = settingsWriteQueue
+      .catch(() => {})
+      .then(async () => {
+        let latest: SettingsRecord | null = null;
+        try {
+          latest = await settingsPort.get();
+        } catch (error) {
+          storageLogger("settings: failed to load before persist", error);
+        }
+
+        if (latest?.activeChainRef === chainRef) {
+          cachedSettings = latest;
+          return;
+        }
+
+        const selectedAccountId = latest?.selectedAccountId ?? cachedSettings?.selectedAccountId;
+        const next: SettingsRecord = {
+          id: "settings",
+          activeChainRef: chainRef,
+          ...(selectedAccountId ? { selectedAccountId } : {}),
+          updatedAt: storageNow(),
+        };
+
+        try {
+          await settingsPort.put(next);
+          cachedSettings = next;
+        } catch (error) {
+          storageLogger("settings: failed to persist activeChainRef", error);
+        }
+      });
+
+    await settingsWriteQueue;
+  };
   let destroyed = false;
   let isHydrating = false;
   let pendingNetworkRegistrySync = false;
@@ -147,6 +198,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   let initializePromise: Promise<void> | null = null;
   let initialized = false;
 
+  let hydratedNetworkRpc: Record<ChainRef, RpcEndpointState> | null = null;
   const sessionLayer = initSessionLayer({
     messenger,
     controllers: controllersBase,
@@ -209,16 +261,17 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     try {
       await controllersBase.accounts.switchActive({ chainRef: chain.chainRef, address: preferred ?? null });
     } catch (error) {
-      console.warn(
-        "[createBackgroundServices] failed to align accounts pointer with active chain",
-        chain.chainRef,
-        error,
-      );
+      storageLogger(`accounts: failed to align pointer with active chain ${chain.chainRef}`, error);
     }
   };
 
   const unsubscribePointerSync = networkController.onChainChanged((chain) => {
     void syncAccountsPointer(chain);
+    // During initialization, the network controller may emit a chain change while we're
+    // still resolving the preferred chain from settings; don't overwrite persisted settings
+    // with the controller's default.
+    if (!initialized) return;
+    void persistActiveChainRef(chain.chainRef);
   });
 
   void syncAccountsPointer(networkController.getActiveChain());
@@ -254,6 +307,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
+
+    const preferred = cachedSettings?.activeChainRef ?? null;
+    if (preferred && available.has(preferred)) {
+      return preferred;
+    }
+
     if (available.has(currentState.activeChain)) {
       return currentState.activeChain;
     }
@@ -273,26 +332,26 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     const currentState = networkController.getState();
-    const existingRefs = new Set(currentState.knownChains.map((chain) => chain.chainRef));
-    const registryRefs = new Set(registryChains.map((chain) => chain.chainRef));
+    const nextActive = selectActiveChainRef(currentState, registryChains);
 
-    for (const chain of registryChains) {
-      if (existingRefs.has(chain.chainRef)) {
-        await networkController.syncChain(chain);
-      } else {
-        await networkController.addChain(chain);
-      }
-    }
+    const rpc = Object.fromEntries(
+      registryChains.map((chain) => {
+        const fromHydrate = hydratedNetworkRpc?.[chain.chainRef];
+        const fromCurrent = currentState.rpc[chain.chainRef];
+        const next = fromHydrate ?? fromCurrent ?? buildDefaultEndpointState(chain);
+        return [chain.chainRef, next] as const;
+      }),
+    ) as Record<ChainRef, RpcEndpointState>;
 
-    for (const chainRef of existingRefs) {
-      if (!registryRefs.has(chainRef)) {
-        await networkController.removeChain(chainRef);
-      }
-    }
+    hydratedNetworkRpc = null;
 
-    const latestState = networkController.getState();
-    const nextActive = selectActiveChainRef(latestState, registryChains);
-    await networkController.switchChain(nextActive);
+    networkController.replaceState({
+      activeChain: nextActive,
+      knownChains: registryChains,
+      rpc,
+    });
+
+    await persistActiveChainRef(nextActive);
 
     pendingNetworkRegistrySync = false;
   };
@@ -336,9 +395,25 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       return;
     }
 
-    await hydrateSnapshot(StorageNamespaces.Network, (payload) => {
-      controllers.network.replaceState(payload);
-    });
+    try {
+      const snapshot = await storagePort.loadSnapshot(StorageNamespaces.Network);
+      if (snapshot) {
+        const loadedVersion = snapshot.version;
+        if (loadedVersion !== NETWORK_SNAPSHOT_VERSION) {
+          await storagePort.clearSnapshot(StorageNamespaces.Network);
+        } else {
+          hydratedNetworkRpc = snapshot.payload.rpc;
+        }
+      }
+    } catch (error) {
+      storageLogger(`storage: failed to hydrate ${StorageNamespaces.Network}`, error);
+      try {
+        await storagePort.clearSnapshot(StorageNamespaces.Network);
+      } catch (clearError) {
+        storageLogger(`storage: failed to clear snapshot ${StorageNamespaces.Network}`, clearError);
+      }
+    }
+
     await hydrateSnapshot(StorageNamespaces.Accounts, (payload) => {
       controllers.accounts.replaceState(payload);
     });
@@ -368,10 +443,14 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     initializePromise = (async () => {
       await chainRegistryController.whenReady();
 
-      if (!storagePort || !hydrationEnabled) {
-        await synchronizeNetworkFromRegistry();
-        initialized = true;
-        return;
+      if (settingsPort) {
+        try {
+          cachedSettings = await settingsPort.get();
+        } catch (error) {
+          storageLogger("settings: failed to load", error);
+          cachedSettings = null;
+        }
+        settingsLoaded = true;
       }
 
       isHydrating = true;
@@ -379,12 +458,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       try {
         await hydrateControllers();
         await sessionLayer.hydrateVaultMeta();
-        initialized = true;
       } finally {
         isHydrating = false;
         if (pendingNetworkRegistrySync) {
           await synchronizeNetworkFromRegistry();
         }
+        initialized = true;
       }
     })();
 

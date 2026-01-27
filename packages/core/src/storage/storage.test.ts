@@ -54,8 +54,6 @@ describe("storage schemas", () => {
       version: NETWORK_SNAPSHOT_VERSION,
       updatedAt: TIMESTAMP,
       payload: {
-        activeChain: mainnet.chainRef,
-        knownChains: [mainnet, goerli],
         rpc: {
           [mainnet.chainRef]: {
             activeIndex: 0,
@@ -88,36 +86,16 @@ describe("storage schemas", () => {
     expect(NetworkSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
   });
 
-  it("rejects network snapshots when the active chain is missing", () => {
-    const goerli = createMetadata({
-      chainRef: "eip155:5",
-      chainId: "0x5",
-      displayName: "Goerli",
-      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
-      rpcUrl: "https://rpc.testnet.example",
-    });
-
+  it("rejects network snapshots when rpc is missing", () => {
     const snapshot = {
       version: NETWORK_SNAPSHOT_VERSION,
       updatedAt: TIMESTAMP,
-      payload: {
-        activeChain: "eip155:1",
-        knownChains: [goerli],
-        rpc: {
-          [goerli.chainRef]: {
-            activeIndex: 0,
-            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
-            health: [{ index: 0, successCount: 0, failureCount: 0, consecutiveFailures: 0 }],
-            strategy: { id: "round-robin" },
-            lastUpdatedAt: TIMESTAMP,
-          },
-        },
-      },
+      payload: {},
     };
 
     const result = NetworkSnapshotSchema.safeParse(snapshot);
     expect(result.success).toBe(false);
-    expect(result?.error?.issues[0]?.path).toEqual(["payload", "knownChains"]);
+    expect(result?.error?.issues[0]?.path).toEqual(["payload", "rpc"]);
   });
 
   it("validates accounts snapshots and enforces primary inclusion", () => {
@@ -272,90 +250,6 @@ describe("storage schemas", () => {
       },
     };
     expect(VaultMetaSnapshotSchema.safeParse(invalid).success).toBe(false);
-  });
-
-  it("accepts a valid network snapshot", () => {
-    const mainnet = createMetadata({
-      chainRef: "eip155:1",
-      chainId: "0x1",
-      displayName: "Ethereum",
-      rpcUrl: "https://rpc.mainnet.example",
-    });
-    const goerli = createMetadata({
-      chainRef: "eip155:5",
-      chainId: "0x5",
-      displayName: "Goerli",
-      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
-      rpcUrl: "https://rpc.testnet.example",
-    });
-
-    const snapshot = {
-      version: NETWORK_SNAPSHOT_VERSION,
-      updatedAt: TIMESTAMP,
-      payload: {
-        activeChain: mainnet.chainRef,
-        knownChains: [mainnet, goerli],
-        rpc: {
-          [mainnet.chainRef]: {
-            activeIndex: 0,
-            endpoints: [{ index: 0, url: mainnet.rpcEndpoints[0]!.url, type: "public" as const }],
-            health: [{ index: 0, successCount: 3, failureCount: 0, consecutiveFailures: 0 }],
-            strategy: { id: "round-robin" },
-            lastUpdatedAt: TIMESTAMP - 100,
-          },
-          [goerli.chainRef]: {
-            activeIndex: 0,
-            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
-            health: [
-              {
-                index: 0,
-                successCount: 0,
-                failureCount: 2,
-                consecutiveFailures: 2,
-                lastError: { message: "unreachable", capturedAt: TIMESTAMP - 50 },
-                lastFailureAt: TIMESTAMP - 50,
-              },
-            ],
-            strategy: { id: "round-robin" },
-            lastUpdatedAt: TIMESTAMP,
-          },
-        },
-      },
-    };
-
-    expect(NetworkSnapshotSchema.parse(snapshot)).toStrictEqual(snapshot);
-  });
-
-  it("rejects network snapshots when the active chain is missing", () => {
-    const goerli = createMetadata({
-      chainRef: "eip155:5",
-      chainId: "0x5",
-      displayName: "Goerli",
-      nativeCurrency: { name: "Goerli Ether", symbol: "gETH", decimals: 18 },
-      rpcUrl: "https://rpc.testnet.example",
-    });
-
-    const snapshot = {
-      version: NETWORK_SNAPSHOT_VERSION,
-      updatedAt: TIMESTAMP,
-      payload: {
-        activeChain: "eip155:1",
-        knownChains: [goerli],
-        rpc: {
-          [goerli.chainRef]: {
-            activeIndex: 0,
-            endpoints: [{ index: 0, url: goerli.rpcEndpoints[0]!.url, type: "public" as const }],
-            health: [{ index: 0, successCount: 0, failureCount: 0, consecutiveFailures: 0 }],
-            strategy: { id: "round-robin" },
-            lastUpdatedAt: TIMESTAMP,
-          },
-        },
-      },
-    };
-
-    const result = NetworkSnapshotSchema.safeParse(snapshot);
-    expect(result.success).toBe(false);
-    expect(result?.error?.issues[0]?.path).toEqual(["payload", "knownChains"]);
   });
 
   it("accepts an approvals snapshot with queue metadata", () => {

@@ -45,8 +45,7 @@ describe("createBackgroundServices (network integration)", () => {
       chainId: "0x406",
       displayName: "Conflux eSpace",
     });
-
-    const context = await setupBackground({ chainSeed: [mainChain] });
+    const context = await setupBackground({ chainSeed: [mainChain], settingsSeed: null });
     const { services, storagePort } = context;
     try {
       await services.session.vault.initialize({ password: "test" });
@@ -103,7 +102,13 @@ describe("createBackgroundServices (network integration)", () => {
 
       const networkSnapshots = storagePort.savedSnapshots.filter(isNetworkSnapshot);
       expect(networkSnapshots.length).toBeGreaterThan(0);
-      expect(networkSnapshots.at(-1)?.envelope.payload.activeChain).toBe(secondaryChain.chainRef);
+
+      const payload = networkSnapshots.at(-1)?.envelope.payload;
+      expect(payload?.rpc[secondaryChain.chainRef]).toBeDefined();
+      expect((payload as any)?.activeChain).toBeUndefined();
+      expect((payload as any)?.knownChains).toBeUndefined();
+
+      expect((await context.settingsPort!.get())?.activeChainRef).toBe(secondaryChain.chainRef);
     } finally {
       context.destroy();
     }
@@ -127,8 +132,6 @@ describe("createBackgroundServices (network integration)", () => {
       version: NETWORK_SNAPSHOT_VERSION,
       updatedAt: 1_000,
       payload: {
-        activeChain: orphanChain.chainRef,
-        knownChains: [orphanChain],
         rpc: {
           [orphanChain.chainRef]: buildRpcSnapshot(orphanChain),
         },
@@ -191,12 +194,12 @@ describe("createBackgroundServices (network integration)", () => {
           {
             id: "tx-storage-1",
             namespace: mainChain.namespace,
-            chainRef: mainChain.chainRef,
+            chainRef: orphanChain.chainRef,
             origin: "https://dapp.example",
             from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             request: {
               namespace: mainChain.namespace,
-              chainRef: mainChain.chainRef,
+              chainRef: orphanChain.chainRef,
               payload: {
                 from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -220,6 +223,7 @@ describe("createBackgroundServices (network integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [mainChain, altChain],
+      settingsSeed: { id: "settings", activeChainRef: orphanChain.chainRef, updatedAt: 1_000 },
       storageSeed: {
         [StorageNamespaces.Network]: networkSnapshot,
         [StorageNamespaces.Accounts]: accountsSnapshot,
@@ -232,34 +236,21 @@ describe("createBackgroundServices (network integration)", () => {
     await flushAsync();
 
     try {
-      const initialNetwork = context.services.controllers.network.getState();
-      expect(initialNetwork.activeChain).toBe(orphanChain.chainRef);
-
-      const waitForSwitch = new Promise<void>((resolve) => {
-        const unsubscribe = context.services.controllers.network.onChainChanged((chain) => {
-          if (chain.chainRef === mainChain.chainRef) {
-            unsubscribe();
-            resolve();
-          }
-        });
-      });
-
-      await context.services.controllers.chainRegistry.upsertChain(mainChain);
-      await context.services.controllers.chainRegistry.upsertChain(altChain);
-      await waitForSwitch;
+      expect((await context.settingsPort!.get())?.activeChainRef).toBe(mainChain.chainRef);
 
       expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
       expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
 
-      await vi.waitFor(
-        () => {
-          const meta = context.services.controllers.transactions.getMeta("tx-storage-1");
-          expect(meta?.status).toBe("failed");
-          expect(meta?.error?.message).toContain("not unlocked");
-        },
-        { timeout: 1_000, interval: 10 },
-      );
+      expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
+      expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
+      expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
+
+      await context.services.controllers.transactions.processTransaction("tx-storage-1");
+
+      const meta = context.services.controllers.transactions.getMeta("tx-storage-1");
+      expect(meta?.status).toBe("failed");
+      expect(meta?.error?.message).toContain("not unlocked");
 
       const transactionsState = context.services.controllers.transactions.getState();
       expect(transactionsState.pending).toHaveLength(0);

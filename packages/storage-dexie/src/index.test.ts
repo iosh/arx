@@ -20,7 +20,12 @@ import {
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDexieChainRegistryPort, createDexieKeyringStore, createDexieStorage } from "./index.js";
+import {
+  createDexieChainRegistryPort,
+  createDexieKeyringStore,
+  createDexieSettingsPort,
+  createDexieStorage,
+} from "./index.js";
 
 const DB_NAME = "arx-storage-test";
 const TEST_DB_STORES = {
@@ -43,17 +48,6 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
   version: NETWORK_SNAPSHOT_VERSION,
   updatedAt: Date.now(),
   payload: {
-    activeChain: "eip155:1",
-    knownChains: [
-      {
-        chainRef: "eip155:1",
-        namespace: "eip155",
-        chainId: "0x1",
-        displayName: "Ethereum",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcEndpoints: [{ url: "https://rpc.example", type: "public" as const }],
-      },
-    ],
     rpc: {
       "eip155:1": {
         activeIndex: 0,
@@ -275,6 +269,45 @@ describe("DexieStoragePort", () => {
       expect.stringContaining("[storage-dexie] invalid snapshot detected for core:permissions"),
       expect.anything(),
     );
+  });
+});
+
+describe("DexieSettingsPort", () => {
+  it("stores and reads the settings row", async () => {
+    const port = createDexieSettingsPort({ databaseName: DB_NAME });
+
+    const record = {
+      id: "settings" as const,
+      activeChainRef: "eip155:1",
+      updatedAt: 1_706_000_000_000,
+    };
+
+    await port.put(record);
+    expect(await port.get()).toEqual(record);
+  });
+
+  it("drops invalid settings rows on read", async () => {
+    const port = createDexieSettingsPort({ databaseName: DB_NAME });
+
+    const raw = await openTestDexie();
+    await raw.table("settings").put({
+      id: "settings",
+      // activeChainRef missing -> invalid
+      updatedAt: 0,
+    });
+    await raw.close();
+
+    const loaded = await port.get();
+    expect(loaded).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("[storage-dexie] invalid settings detected, dropping"),
+      expect.anything(),
+    );
+
+    // Ensure the invalid row is removed.
+    const raw2 = await openTestDexie();
+    expect(await raw2.table("settings").get("settings")).toBeUndefined();
+    await raw2.close();
   });
 });
 

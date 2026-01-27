@@ -26,7 +26,7 @@ export type AccountId = z.infer<typeof AccountIdSchema>;
 export const SettingsRecordSchema = z.strictObject({
   id: z.literal("settings"),
   activeChainRef: chainRefSchema,
-  selectedAccountId: AccountIdSchema,
+  selectedAccountId: AccountIdSchema.optional(),
   updatedAt: epochMillisecondsSchema,
 });
 export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;

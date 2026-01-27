@@ -12,7 +12,12 @@ import {
   type RpcInvocationContext,
 } from "@arx/core";
 import browser from "webextension-polyfill";
-import { getExtensionChainRegistry, getExtensionKeyringStore, getExtensionStorage } from "@/platform/storage";
+import {
+  getExtensionChainRegistry,
+  getExtensionKeyringStore,
+  getExtensionSettingsPort,
+  getExtensionStorage,
+} from "@/platform/storage";
 import { ENTRYPOINTS } from "./constants";
 import { isInternalOrigin } from "./origin";
 import { createPopupActivator } from "./services/popupActivator";
@@ -98,12 +103,14 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const storage = getExtensionStorage();
       const chainRegistry = getExtensionChainRegistry();
       const keyringStore = getExtensionKeyringStore();
+      const settingsPort = getExtensionSettingsPort();
       const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
       const services = createBackgroundServices({
         permissions: {
           scopeResolver: permissionScopeResolver,
         },
         storage: { port: storage, keyringStore },
+        settings: { port: settingsPort },
         chainRegistry: { port: chainRegistry },
       });
       const { controllers, engine, messenger, session, keyring } = services;

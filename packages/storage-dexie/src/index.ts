@@ -7,6 +7,8 @@ import type {
   SettingsRecord,
   TransactionRecord,
 } from "@arx/core/db";
+import { SettingsRecordSchema } from "@arx/core/db";
+import type { SettingsPort } from "@arx/core/services";
 import {
   type AccountMeta,
   AccountMetaSchema,
@@ -200,6 +202,34 @@ class DexieStoragePort implements StoragePort {
   }
 }
 
+class DexieSettingsPort implements SettingsPort {
+  private readonly ready: PromiseExtended<Dexie>;
+
+  constructor(private readonly db: ArxStorageDatabase) {
+    this.ready = this.db.open();
+  }
+
+  async get(): Promise<SettingsRecord | null> {
+    await this.ready;
+    const row = await this.db.settings.get("settings");
+    if (!row) return null;
+
+    const parsed = SettingsRecordSchema.safeParse(row);
+    if (!parsed.success) {
+      console.warn("[storage-dexie] invalid settings detected, dropping", parsed.error);
+      await this.db.settings.delete("settings");
+      return null;
+    }
+    return parsed.data;
+  }
+
+  async put(record: SettingsRecord): Promise<void> {
+    await this.ready;
+    const checked = SettingsRecordSchema.parse(record);
+    await this.db.settings.put(checked);
+  }
+}
+
 class DexieChainRegistryPort implements ChainRegistryPort {
   private readonly ready: PromiseExtended<Dexie>;
   private readonly table: Table<ChainRegistryRow, string>;
@@ -339,6 +369,14 @@ export const createDexieKeyringStore = (options: CreateDexieKeyringStoreOptions 
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
   const db = getOrCreateDatabase(dbName);
   return new DexieKeyringStorePort(db);
+};
+
+export type CreateDexieSettingsPortOptions = { databaseName?: string };
+
+export const createDexieSettingsPort = (options: CreateDexieSettingsPortOptions = {}): SettingsPort => {
+  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
+  const db = getOrCreateDatabase(dbName);
+  return new DexieSettingsPort(db);
 };
 
 export type CreateDexieChainRegistryPortOptions = {

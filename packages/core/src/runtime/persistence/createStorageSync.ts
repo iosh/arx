@@ -104,18 +104,6 @@ export const createStorageSync = ({
         version: NETWORK_SNAPSHOT_VERSION,
         updatedAt: now(),
         payload: {
-          activeChain: state.activeChain,
-          knownChains: state.knownChains.map((chain) => ({
-            ...chain,
-            rpcEndpoints: chain.rpcEndpoints.map((endpoint) => ({ ...endpoint })),
-            blockExplorers: chain.blockExplorers
-              ? chain.blockExplorers.map((explorer) => ({ ...explorer }))
-              : undefined,
-            icon: chain.icon ? { ...chain.icon } : undefined,
-            features: chain.features ? [...chain.features] : undefined,
-            tags: chain.tags ? [...chain.tags] : undefined,
-            extensions: chain.extensions ? { ...chain.extensions } : undefined,
-          })),
           rpc: Object.fromEntries(
             Object.entries(state.rpc).map(([chainRef, endpointState]) => [
               chainRef,

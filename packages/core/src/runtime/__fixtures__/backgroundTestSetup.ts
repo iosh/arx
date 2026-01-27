@@ -5,7 +5,9 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
+import type { SettingsRecord } from "../../db/records.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
+import type { SettingsPort } from "../../services/settings/port.js";
 import type {
   AccountsSnapshot,
   ApprovalsSnapshot,
@@ -57,6 +59,24 @@ export type SnapshotEntry = {
 
 // Utility functions
 export const clone = <T>(value: T): T => structuredClone(value);
+
+export class MemorySettingsPort implements SettingsPort {
+  #record: SettingsRecord | null;
+  public readonly saved: SettingsRecord[] = [];
+
+  constructor(seed: SettingsRecord | null = null) {
+    this.#record = seed ? clone(seed) : null;
+  }
+
+  async get(): Promise<SettingsRecord | null> {
+    return this.#record ? clone(this.#record) : null;
+  }
+
+  async put(record: SettingsRecord): Promise<void> {
+    this.#record = clone(record);
+    this.saved.push(clone(record));
+  }
+}
 
 export const baseChainMetadata = DEFAULT_CHAIN_METADATA[0]! as ChainMetadata;
 
@@ -415,6 +435,7 @@ export type TestBackgroundContext = {
   services: CreateBackgroundServicesResult;
   storagePort: MemoryStoragePort;
   chainRegistryPort: MemoryChainRegistryPort;
+  settingsPort?: MemorySettingsPort;
   destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
 };
@@ -423,6 +444,7 @@ export type TestBackgroundContext = {
 export type SetupBackgroundOptions = {
   chainSeed?: ChainMetadata[];
   storageSeed?: StorageSeed;
+  settingsSeed?: SettingsRecord | null;
   vaultMeta?: VaultMetaSnapshot | null;
   autoLockDuration?: number;
   now?: () => number;
@@ -445,6 +467,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     snapshots: options.storageSeed ?? {},
     vaultMeta: options.vaultMeta ?? null,
   });
+
+  const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
     port: storagePort,
@@ -474,6 +498,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       seed: chainSeed,
     },
     storage: storageOptions,
+    ...(settingsPort ? { settings: { port: settingsPort } } : {}),
     ...(sessionOptions ? { session: sessionOptions } : {}),
     ...(options.transactions ? { transactions: options.transactions } : {}),
   });
@@ -505,6 +530,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     services,
     storagePort,
     chainRegistryPort,
+    ...(settingsPort ? { settingsPort } : {}),
     enableAutoApproval,
     destroy: () => {
       services.lifecycle.destroy();

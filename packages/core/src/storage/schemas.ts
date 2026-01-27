@@ -128,6 +128,9 @@ const networkStateSchema = z
     path: ["rpc"],
   });
 
+const networkRpcSnapshotPayloadSchema = z.strictObject({
+  rpc: z.record(chainRefSchema, rpcEndpointStateSchema),
+});
 const PERMISSION_SCOPE_VALUES = [
   PermissionScopes.Basic,
   PermissionScopes.Accounts,
@@ -355,8 +358,9 @@ export const CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION = 1;
 
 export const NetworkSnapshotSchema = createSnapshotSchema({
   version: NETWORK_SNAPSHOT_VERSION,
-  payload: networkStateSchema,
+  payload: networkRpcSnapshotPayloadSchema,
 });
+
 export const AccountsSnapshotSchema = createSnapshotSchema({
   version: ACCOUNTS_SNAPSHOT_VERSION,
   payload: accountsStateSchema,

@@ -150,6 +150,9 @@ importers:
       debug:
         specifier: 4.4.3
         version: 4.4.3
+      eventemitter3:
+        specifier: 'catalog:'
+        version: 5.0.1
       ox:
         specifier: 'catalog:'
         version: 0.9.14(typescript@5.9.3)(zod@4.1.11)

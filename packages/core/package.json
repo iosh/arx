@@ -29,7 +29,8 @@
     "ox": "catalog:",
     "viem": "2.39.0",
     "zod": "4.1.11",
-    "debug": "4.4.3"
+    "debug": "4.4.3",
+    "eventemitter3": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",

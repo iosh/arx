@@ -1,12 +1,5 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
-import type {
-  AccountRecord,
-  ApprovalRecord,
-  ChainRecord,
-  PermissionRecord,
-  SettingsRecord,
-  TransactionRecord,
-} from "@arx/core/db";
+import type { SettingsRecord } from "@arx/core/db";
 import { SettingsRecordSchema } from "@arx/core/db";
 import type { SettingsPort } from "@arx/core/services";
 import {
@@ -14,7 +7,6 @@ import {
   AccountMetaSchema,
   type ChainRegistryEntity,
   ChainRegistryEntitySchema,
-  DOMAIN_SCHEMA_VERSION,
   type KeyringMeta,
   KeyringMetaSchema,
   type KeyringStorePort,
@@ -29,82 +21,13 @@ import {
   VaultMetaSnapshotSchema,
 } from "@arx/core/storage";
 import { Dexie, type PromiseExtended, type Table } from "dexie";
-import { runMigrations } from "./migrations.js";
+import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
+import { ArxStorageDatabase } from "./db.js";
+
+export * from "./ports/factories.js";
+export * from "./storePorts.js";
 
 type ChainRegistryRow = ChainRegistryEntity;
-const DEFAULT_DB_NAME = "arx-storage";
-type SnapshotEntity = {
-  namespace: StorageNamespace;
-  envelope: unknown;
-};
-
-type VaultMetaEntity = {
-  id: "vault-meta";
-  version: number;
-  updatedAt: number;
-  payload: unknown;
-};
-
-const databaseRegistry = new Map<string, ArxStorageDatabase>();
-
-const getOrCreateDatabase = (dbName: string): ArxStorageDatabase => {
-  const cached = databaseRegistry.get(dbName);
-  if (cached) {
-    return cached;
-  }
-
-  const db = new ArxStorageDatabase(dbName);
-  databaseRegistry.set(dbName, db);
-
-  db.on("close", () => {
-    if (databaseRegistry.get(dbName) === db) {
-      databaseRegistry.delete(dbName);
-    }
-  });
-
-  return db;
-};
-
-type KeyringMetaRow = KeyringMeta;
-type AccountMetaRow = AccountMeta;
-
-class ArxStorageDatabase extends Dexie {
-  snapshots!: Table<SnapshotEntity, StorageNamespace>;
-
-  settings!: Table<SettingsRecord, string>;
-  chains!: Table<ChainRegistryRow, string>;
-  accounts!: Table<AccountRecord, string>;
-  permissions!: Table<PermissionRecord, string>;
-  approvals!: Table<ApprovalRecord, string>;
-  transactions!: Table<TransactionRecord, string>;
-
-  vaultMeta!: Table<VaultMetaEntity, string>;
-
-  keyringMetas!: Table<KeyringMetaRow, string>;
-  accountMetas!: Table<AccountMetaRow, string>;
-  constructor(name: string) {
-    super(name);
-    this.version(DOMAIN_SCHEMA_VERSION)
-      .stores({
-        snapshots: "&namespace",
-
-        settings: "&id",
-        chains: "&chainRef",
-        accounts: "&accountId, namespace, keyringId",
-        permissions: "&id, origin, &[origin+namespace+chainRef]",
-        approvals: "&id, status, type, origin, createdAt",
-        transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
-
-        vaultMeta: "&id",
-
-        keyringMetas: "&id, type, createdAt",
-        accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
-      })
-      .upgrade((transaction) => {
-        return runMigrations({ db: this, transaction });
-      });
-  }
-}
 
 class DexieStoragePort implements StoragePort {
   private readonly ready: PromiseExtended<Dexie>;
@@ -367,7 +290,7 @@ export type CreateDexieKeyringStoreOptions = { databaseName?: string };
 
 export const createDexieKeyringStore = (options: CreateDexieKeyringStoreOptions = {}): KeyringStorePort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName);
+  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
   return new DexieKeyringStorePort(db);
 };
 
@@ -375,7 +298,7 @@ export type CreateDexieSettingsPortOptions = { databaseName?: string };
 
 export const createDexieSettingsPort = (options: CreateDexieSettingsPortOptions = {}): SettingsPort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName);
+  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
   return new DexieSettingsPort(db);
 };
 
@@ -385,7 +308,7 @@ export type CreateDexieChainRegistryPortOptions = {
 
 export const createDexieChainRegistryPort = (options: CreateDexieChainRegistryPortOptions = {}): ChainRegistryPort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName);
+  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
   return new DexieChainRegistryPort(db);
 };
 
@@ -395,6 +318,6 @@ export type CreateDexieStorageOptions = {
 
 export const createDexieStorage = (options: CreateDexieStorageOptions = {}): StoragePort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName);
+  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
   return new DexieStoragePort(db);
 };

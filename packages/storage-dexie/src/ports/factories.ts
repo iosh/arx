@@ -1,11 +1,17 @@
-import type { AccountsPort, ApprovalsPort, KeyringMetasPort, PermissionsPort } from "@arx/core/services";
-
-import { DEFAULT_DB_NAME, getOrCreateDatabase } from "../sharedDb.js";
+import type {
+  AccountsPort,
+  ApprovalsPort,
+  KeyringMetasPort,
+  PermissionsPort,
+  TransactionsPort,
+} from "@arx/core/services";
 import { ArxStorageDatabase } from "../db.js";
+import { DEFAULT_DB_NAME, getOrCreateDatabase } from "../sharedDb.js";
 import { DexieAccountsPort } from "./accountsPort.js";
 import { DexieApprovalsPort } from "./approvalsPort.js";
 import { DexieKeyringMetasPort } from "./keyringMetasPort.js";
 import { DexiePermissionsPort } from "./permissionsPort.js";
+import { DexieTransactionsPort } from "./transactionsPort.js";
 
 const getDb = (dbName: string) => getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
 
@@ -31,4 +37,10 @@ export type CreateDexieKeyringMetasPortOptions = { databaseName?: string };
 export const createDexieKeyringMetasPort = (options: CreateDexieKeyringMetasPortOptions = {}): KeyringMetasPort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
   return new DexieKeyringMetasPort(getDb(dbName));
+};
+
+export type CreateDexieTransactionsPortOptions = { databaseName?: string };
+export const createDexieTransactionsPort = (options: CreateDexieTransactionsPortOptions = {}): TransactionsPort => {
+  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
+  return new DexieTransactionsPort(getDb(dbName));
 };

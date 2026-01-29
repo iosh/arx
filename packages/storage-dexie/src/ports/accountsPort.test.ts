@@ -4,9 +4,8 @@ import { AccountRecordSchema } from "@arx/core/db";
 import { DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { DexieAccountsPort } from "./accountsPort.js";
 import type { ArxStorageDatabase } from "../db.js";
+import { DexieAccountsPort } from "./accountsPort.js";
 
 const DB_NAME = "arx-accounts-port-test";
 let db: ArxStorageDatabase | null = null;

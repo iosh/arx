@@ -20,9 +20,9 @@ import {
   type VaultMetaSnapshot,
   VaultMetaSnapshotSchema,
 } from "@arx/core/storage";
-import { Dexie, type PromiseExtended, type Table } from "dexie";
-import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
+import type { Dexie, PromiseExtended, Table } from "dexie";
 import { ArxStorageDatabase } from "./db.js";
+import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
 
 export * from "./ports/factories.js";
 export * from "./storePorts.js";

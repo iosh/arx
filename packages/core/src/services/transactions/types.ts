@@ -3,25 +3,28 @@ import type { TransactionRecord, TransactionStatus } from "../../db/records.js";
 
 export type TransactionsChangedHandler = () => void;
 
-export type CreateTransactionParams = {
-  namespace: string;
+export type CreatePendingTransactionParams = {
+  namespace: TransactionRecord["namespace"];
   chainRef: ChainRef;
-  origin: string;
-  fromAccountId: string;
-  status: TransactionStatus;
+  origin: TransactionRecord["origin"];
+  fromAccountId: TransactionRecord["fromAccountId"];
   request: TransactionRecord["request"];
-  hash: string | null;
-  receipt?: unknown;
-  error?: unknown;
-  userRejected: boolean;
-  warnings: TransactionRecord["warnings"];
-  issues: TransactionRecord["issues"];
+  warnings?: TransactionRecord["warnings"];
+  issues?: TransactionRecord["issues"];
+};
+
+export type TransitionTransactionParams = {
+  id: TransactionRecord["id"];
+  fromStatus: TransactionStatus;
+  toStatus: TransactionStatus;
+  patch?: Partial<Pick<TransactionRecord, "hash" | "receipt" | "error" | "userRejected" | "warnings" | "issues">>;
 };
 
 export type ListTransactionsParams = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
   limit?: number;
+  beforeCreatedAt?: number;
 };
 
 export type TransactionsService = {
@@ -31,7 +34,9 @@ export type TransactionsService = {
   get(id: TransactionRecord["id"]): Promise<TransactionRecord | null>;
   list(params?: ListTransactionsParams): Promise<TransactionRecord[]>;
 
-  create(params: CreateTransactionParams): Promise<TransactionRecord>;
-  upsert(record: TransactionRecord): Promise<void>;
+  createPending(params: CreatePendingTransactionParams): Promise<TransactionRecord>;
+
+  transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
+
   remove(id: TransactionRecord["id"]): Promise<void>;
 };

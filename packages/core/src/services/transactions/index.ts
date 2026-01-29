@@ -1,6 +1,10 @@
+export type { TransactionsPort } from "./port.js";
+export { createTransactionsService } from "./TransactionsService.js";
+
 export type {
-  CreateTransactionParams,
+  CreatePendingTransactionParams,
   ListTransactionsParams,
   TransactionsChangedHandler,
   TransactionsService,
+  TransitionTransactionParams,
 } from "./types.js";

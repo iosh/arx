@@ -1,8 +1,8 @@
 import type { AccountRecord, ApprovalRecord, PermissionRecord, SettingsRecord, TransactionRecord } from "@arx/core/db";
 import {
-  DOMAIN_SCHEMA_VERSION,
   type AccountMeta,
   type ChainRegistryEntity,
+  DOMAIN_SCHEMA_VERSION,
   type KeyringMeta,
   type StorageNamespace,
 } from "@arx/core/storage";

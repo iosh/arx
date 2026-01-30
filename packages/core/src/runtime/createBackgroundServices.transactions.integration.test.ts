@@ -11,6 +11,14 @@ import {
   TEST_RECEIPT_POLL_INTERVAL,
 } from "./__fixtures__/backgroundTestSetup.js";
 
+const makeRequestContext = (origin: string) => ({
+  transport: "provider" as const,
+  portId: "test-port",
+  sessionId: crypto.randomUUID(),
+  requestId: crypto.randomUUID(),
+  origin,
+});
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -50,6 +58,12 @@ describe("createBackgroundServices (transactions integration)", () => {
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
+    let clock = 1_000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
+      clock += 1;
+      return clock;
+    });
+
     const context = await setupBackground({
       chainSeed: [chain],
       transactions: { registry },
@@ -61,16 +75,20 @@ describe("createBackgroundServices (transactions integration)", () => {
       statusEvents.push(payload);
     });
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        payload: {
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
+      const submission = await context.services.controllers.transactions.submitTransaction(
+        "https://dapp.example",
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
         },
-      });
+        makeRequestContext("https://dapp.example"),
+      );
 
       await flushAsync();
 
@@ -106,6 +124,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
       expect(latest?.status).toBe("confirmed");
     } finally {
+      nowSpy.mockRestore();
       unsubscribeAutoApproval();
       unsubscribeStatus();
       context.destroy();
@@ -138,6 +157,12 @@ describe("createBackgroundServices (transactions integration)", () => {
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
+    let clock = 1_000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
+      clock += 1;
+      return clock;
+    });
+
     const context = await setupBackground({
       chainSeed: [chain],
       transactions: { registry },
@@ -164,16 +189,20 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       const submissions = await Promise.all(
         fromAddresses.map((from, index) =>
-          context.services.controllers.transactions.submitTransaction("https://dapp.example", {
-            namespace: chain.namespace,
-            chainRef: chain.chainRef,
-            payload: {
-              from,
-              to: toAddresses[index],
-              value: "0x0",
-              data: "0x",
+          context.services.controllers.transactions.submitTransaction(
+            "https://dapp.example",
+            {
+              namespace: chain.namespace,
+              chainRef: chain.chainRef,
+              payload: {
+                from,
+                to: toAddresses[index],
+                value: "0x0",
+                data: "0x",
+              },
             },
-          }),
+            makeRequestContext("https://dapp.example"),
+          ),
         ),
       );
 
@@ -208,6 +237,7 @@ describe("createBackgroundServices (transactions integration)", () => {
         ]);
       });
     } finally {
+      nowSpy.mockRestore();
       unsubscribeAutoApproval();
       unsubscribeStatus();
       context.destroy();
@@ -259,16 +289,20 @@ describe("createBackgroundServices (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        payload: {
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
+      const submission = await context.services.controllers.transactions.submitTransaction(
+        "https://dapp.example",
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
         },
-      });
+        makeRequestContext("https://dapp.example"),
+      );
 
       await flushAsync();
 
@@ -331,16 +365,20 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        payload: {
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
+      const submission = await context.services.controllers.transactions.submitTransaction(
+        "https://dapp.example",
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
         },
-      });
+        makeRequestContext("https://dapp.example"),
+      );
 
       await flushAsync();
 
@@ -404,16 +442,20 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction("https://dapp.example", {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        payload: {
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
+      const submission = await context.services.controllers.transactions.submitTransaction(
+        "https://dapp.example",
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
         },
-      });
+        makeRequestContext("https://dapp.example"),
+      );
 
       await flushAsync();
 

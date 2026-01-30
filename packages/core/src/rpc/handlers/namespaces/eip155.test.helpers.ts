@@ -1,7 +1,7 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 import type { ApprovalTask } from "../../../controllers/index.js";
-import { FakeVault } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
+import { FakeVault, MemoryApprovalsPort } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
 import { createMethodExecutor, executeWithAdapters } from "../../index.js";
 
@@ -55,6 +55,11 @@ export const createServices = (overrides?: Parameters<typeof createBackgroundSer
       port: createChainRegistryPort(),
       ...(chainRegistry ?? {}),
     },
+    store: {
+      ports: {
+        approvals: new MemoryApprovalsPort(),
+      },
+    },
     // Use FakeVault by default to avoid encryption overhead and warnings
     session: {
       vault: new FakeVault(() => Date.now()),
@@ -69,6 +74,19 @@ export const createExecutor = (services: ReturnType<typeof createServices>) => {
   const execute = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
   return async (args: Parameters<typeof execute>[0]) => {
     const chainRef = args.context?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
+    const ctx = args.context ?? {};
+    const context = {
+      ...ctx,
+      requestContext:
+        ctx.requestContext ??
+        ({
+          transport: "provider",
+          portId: "test-port",
+          sessionId: crypto.randomUUID(),
+          requestId: "test-request",
+          origin: args.origin,
+        } as const),
+    };
     const result = await executeWithAdapters(
       {
         surface: "dapp",
@@ -77,7 +95,7 @@ export const createExecutor = (services: ReturnType<typeof createServices>) => {
         origin: args.origin,
         method: args.request.method,
       },
-      () => execute(args),
+      () => execute({ ...args, context }),
     );
     if (result.ok) return result.result;
     throw result.error;

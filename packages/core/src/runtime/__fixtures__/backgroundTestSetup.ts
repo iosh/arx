@@ -5,12 +5,12 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import type { SettingsRecord } from "../../db/records.js";
+import type { ApprovalRecord, SettingsRecord } from "../../db/records.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
+import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
 import type {
   AccountsSnapshot,
-  ApprovalsSnapshot,
   ChainRegistryEntity,
   NetworkSnapshot,
   PermissionsSnapshot,
@@ -22,7 +22,6 @@ import type {
 } from "../../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
-  APPROVALS_SNAPSHOT_VERSION,
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
@@ -75,6 +74,25 @@ export class MemorySettingsPort implements SettingsPort {
   async put(record: SettingsRecord): Promise<void> {
     this.#record = clone(record);
     this.saved.push(clone(record));
+  }
+}
+
+export class MemoryApprovalsPort implements ApprovalsPort {
+  #records = new Map<string, ApprovalRecord>();
+
+  async get(id: ApprovalRecord["id"]): Promise<ApprovalRecord | null> {
+    const found = this.#records.get(id);
+    return found ? clone(found) : null;
+  }
+
+  async listPending(): Promise<ApprovalRecord[]> {
+    return Array.from(this.#records.values())
+      .filter((record) => record.status === "pending")
+      .map((record) => clone(record));
+  }
+
+  async upsert(record: ApprovalRecord): Promise<void> {
+    this.#records.set(record.id, clone(record));
   }
 }
 
@@ -467,6 +485,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     snapshots: options.storageSeed ?? {},
     vaultMeta: options.vaultMeta ?? null,
   });
+  const approvalsPort = new MemoryApprovalsPort();
 
   const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
@@ -496,6 +515,11 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     chainRegistry: {
       port: chainRegistryPort,
       seed: chainSeed,
+    },
+    store: {
+      ports: {
+        approvals: approvalsPort,
+      },
     },
     storage: storageOptions,
     ...(settingsPort ? { settings: { port: settingsPort } } : {}),
@@ -579,6 +603,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     return {
       namespace,
       chainRef,
+      ...(overrides?.requestContext !== undefined ? { requestContext: overrides.requestContext } : {}),
       ...(overrides?.meta ? { meta: overrides.meta } : {}),
     };
   };
@@ -590,14 +615,28 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
 
   let nextRequestId = 0;
+  const sessionId = crypto.randomUUID();
+  const portId = "test-port";
   const callRpc = async ({ method, params, origin = externalOrigin, rpcContext }: RpcCallOptions) => {
-    const contextPayload = buildRpcContext(rpcContext);
+    const requestId = `${++nextRequestId}`;
+    const contextPayload = buildRpcContext({
+      ...(rpcContext ?? {}),
+      requestContext:
+        rpcContext?.requestContext ??
+        ({
+          transport: "provider",
+          portId,
+          sessionId,
+          requestId,
+          origin,
+        } as const),
+    });
     const namespace = deriveMethodNamespace(method, contextPayload);
     const resolvedChainRef = contextPayload.chainRef ?? services.controllers.network.getActiveChain().chainRef;
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {
-          id: `${++nextRequestId}`,
+          id: requestId,
           jsonrpc: "2.0",
           method,
           params,

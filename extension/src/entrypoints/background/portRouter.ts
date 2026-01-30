@@ -45,6 +45,13 @@ export const createPortRouter = ({
   const portLog = extendLogger(runtimeLog, "port");
   const sessionByPort = new Map<Runtime.Port, string>();
 
+  const portIdByPort = new Map<Runtime.Port, string>();
+  const createPortId = (): string => {
+    const id = globalThis.crypto?.randomUUID?.();
+    if (id) return id;
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
   const getPendingRequestMap = (port: Runtime.Port) => {
     let requestMap = pendingRequests.get(port);
     if (!requestMap) {
@@ -79,6 +86,24 @@ export const createPortRouter = ({
   };
 
   const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
+    const sessionId = sessionByPort.get(port) ?? null;
+    const portId = portIdByPort.get(port) ?? null;
+    if (sessionId && portId) {
+      void (async () => {
+        try {
+          const { controllers } = await getOrInitContext();
+          await controllers.approvals.expirePendingByRequestContext({
+            portId,
+            sessionId,
+            finalStatusReason: "session_lost",
+          });
+        } catch (expireError) {
+          const origin = getPortOrigin(port, extensionOrigin);
+          portLog("failed to expire approvals on dropStalePort", { origin, ...toErrorDetails(expireError) });
+        }
+      })();
+    }
+
     try {
       port.disconnect();
     } catch {
@@ -88,6 +113,7 @@ export const createPortRouter = ({
     pendingRequests.delete(port);
     portContexts.delete(port);
     sessionByPort.delete(port);
+    portIdByPort.delete(port);
     const origin = getPortOrigin(port, extensionOrigin);
     portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
   };
@@ -301,6 +327,22 @@ export const createPortRouter = ({
     const effectiveChainRef = portContext?.meta?.activeChain ?? portContext?.chainRef ?? null;
     const rpcContext = buildRpcContext(portContext, effectiveChainRef);
 
+    const portId =
+      portIdByPort.get(port) ??
+      (() => {
+        const next = createPortId();
+        portIdByPort.set(port, next);
+        return next;
+      })();
+
+    const requestContext = {
+      transport: "provider" as const,
+      portId,
+      sessionId: envelope.sessionId,
+      requestId: String(rpcId),
+      origin,
+    };
+
     const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
       id: envelope.payload.id,
       jsonrpc: envelope.payload.jsonrpc,
@@ -311,6 +353,7 @@ export const createPortRouter = ({
         arx: {
           chainRef: rpcContext.chainRef,
           namespace: rpcContext.namespace,
+          requestContext,
           meta: rpcContext.meta,
         } satisfies RpcInvocationContext,
       }),
@@ -354,6 +397,9 @@ export const createPortRouter = ({
     if (port.name !== CHANNEL) return;
 
     connections.add(port);
+    if (!portIdByPort.has(port)) {
+      portIdByPort.set(port, createPortId());
+    }
     const origin = getPortOrigin(port, extensionOrigin);
     portLog("connect", { origin, portName: port.name, total: connections.size });
     if (!portContexts.has(port)) {
@@ -378,6 +424,20 @@ export const createPortRouter = ({
             const expectedSessionId = getSessionIdForPort(port);
             if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
               clearPendingForPort(port);
+              const portId = portIdByPort.get(port);
+              if (portId) {
+                try {
+                  const { controllers } = await getOrInitContext();
+                  await controllers.approvals.expirePendingByRequestContext({
+                    portId,
+                    sessionId: expectedSessionId,
+                    finalStatusReason: "session_lost",
+                  });
+                } catch (error) {
+                  const origin = getPortOrigin(port, extensionOrigin);
+                  portLog("failed to expire approvals on session rotation", { origin, ...toErrorDetails(error) });
+                }
+              }
             }
             await getOrInitContext();
             const current = getControllerSnapshot();
@@ -404,6 +464,24 @@ export const createPortRouter = ({
     };
 
     const handleDisconnect = () => {
+      const sessionId = getSessionIdForPort(port);
+      const portId = portIdByPort.get(port) ?? null;
+      if (sessionId && portId) {
+        void (async () => {
+          try {
+            const { controllers } = await getOrInitContext();
+            await controllers.approvals.expirePendingByRequestContext({
+              portId,
+              sessionId,
+              finalStatusReason: "session_lost",
+            });
+          } catch (error) {
+            const origin = getPortOrigin(port, extensionOrigin);
+            portLog("failed to expire approvals on disconnect", { origin, ...toErrorDetails(error) });
+          }
+        })();
+      }
+
       try {
         rejectPendingWithDisconnect(port);
       } catch (error) {
@@ -415,6 +493,7 @@ export const createPortRouter = ({
         pendingRequests.delete(port);
         portContexts.delete(port);
         sessionByPort.delete(port);
+        portIdByPort.delete(port);
       }
 
       port.onMessage.removeListener(handleMessage);
@@ -436,6 +515,7 @@ export const createPortRouter = ({
     pendingRequests.clear();
     portContexts.clear();
     sessionByPort.clear();
+    portIdByPort.clear();
   };
 
   return {

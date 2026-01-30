@@ -6,12 +6,14 @@ import {
   createDexieKeyringStore,
   createDexieSettingsPort,
   createDexieStorage,
+  createDexieStorePorts,
 } from "@arx/storage-dexie";
 
 let storageInstance: StoragePort | null = null;
 let chainRegistryInstance: ChainRegistryPort | null = null;
 let keyringStoreInstance: KeyringStorePort | null = null;
 let settingsPortInstance: SettingsPort | null = null;
+let storePortsInstance: ReturnType<typeof createDexieStorePorts> | null = null;
 
 export const getExtensionStorage = (): StoragePort => {
   if (storageInstance) {
@@ -43,4 +45,12 @@ export const getExtensionSettingsPort = (): SettingsPort => {
   }
   settingsPortInstance = createDexieSettingsPort({ databaseName: "arx-extension" });
   return settingsPortInstance;
+};
+
+export const getExtensionStorePorts = () => {
+  if (storePortsInstance) {
+    return storePortsInstance;
+  }
+  storePortsInstance = createDexieStorePorts({ databaseName: "arx-extension" });
+  return storePortsInstance;
 };

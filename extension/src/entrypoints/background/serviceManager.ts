@@ -17,6 +17,7 @@ import {
   getExtensionKeyringStore,
   getExtensionSettingsPort,
   getExtensionStorage,
+  getExtensionStorePorts,
 } from "@/platform/storage";
 import { ENTRYPOINTS } from "./constants";
 import { isInternalOrigin } from "./origin";
@@ -101,6 +102,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       let getNamespace: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
       const namespaceResolver = (ctx?: RpcInvocationContext) => getNamespace(ctx);
       const storage = getExtensionStorage();
+      const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
       const keyringStore = getExtensionKeyringStore();
       const settingsPort = getExtensionSettingsPort();
@@ -108,6 +110,11 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const services = createBackgroundServices({
         permissions: {
           scopeResolver: permissionScopeResolver,
+        },
+        store: {
+          ports: {
+            approvals: storePorts.approvals,
+          },
         },
         storage: { port: storage, keyringStore },
         settings: { port: settingsPort },

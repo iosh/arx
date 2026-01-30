@@ -422,7 +422,10 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
   };
 
   try {
-    const result = (await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null)) as PermissionApprovalResult;
+    const result = (await controllers.approvals.requestApproval(
+      task,
+      rpcContext?.requestContext ?? null,
+    )) as PermissionApprovalResult;
     const grants = result?.granted ?? [];
 
     for (const descriptor of grants) {
@@ -580,7 +583,11 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
   const txRequest = buildEip155TransactionRequest(paramsArray, activeChain.chainRef);
 
   try {
-    const meta = await controllers.transactions.submitTransaction(origin, txRequest, rpcContext?.requestContext ?? null);
+    const meta = await controllers.transactions.submitTransaction(
+      origin,
+      txRequest,
+      rpcContext?.requestContext ?? null,
+    );
     const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
 
     if (typeof broadcastMeta.hash !== "string") {

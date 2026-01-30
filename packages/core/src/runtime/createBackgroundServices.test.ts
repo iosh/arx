@@ -18,8 +18,6 @@ import type {
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
   type AccountsSnapshot,
-  APPROVALS_SNAPSHOT_VERSION,
-  type ApprovalsSnapshot,
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
   PERMISSIONS_SNAPSHOT_VERSION,
@@ -32,6 +30,7 @@ import {
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
+import { MemoryApprovalsPort } from "./__fixtures__/backgroundTestSetup.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -107,22 +106,6 @@ const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
   },
 };
 
-const APPROVALS_SNAPSHOT: ApprovalsSnapshot = {
-  version: APPROVALS_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    pending: [
-      {
-        id: "approval-1",
-        type: ApprovalTypes.RequestAccounts,
-        origin: "https://dapp.example",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        createdAt: 1_000,
-      },
-    ],
-  },
-};
 const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
   version: TRANSACTIONS_SNAPSHOT_VERSION,
   updatedAt: 1_000,
@@ -333,13 +316,19 @@ const createServices = (options: TestServicesOptions = {}) => {
     : undefined;
 
   const baseOptions: TestServicesOptions = adaptedStorage ? { ...options, storage: adaptedStorage } : options;
+  const withStore: TestServicesOptions = baseOptions.store
+    ? baseOptions
+    : {
+        ...baseOptions,
+        store: { ports: { approvals: new MemoryApprovalsPort() } },
+      };
   const chainRegistryOptions = baseOptions.chainRegistry;
   if (chainRegistryOptions?.port) {
-    return createBackgroundServices(baseOptions as CreateBackgroundServicesOptions);
+    return createBackgroundServices(withStore as CreateBackgroundServicesOptions);
   }
 
   const adapted: CreateBackgroundServicesOptions = {
-    ...baseOptions,
+    ...withStore,
     chainRegistry: {
       ...chainRegistryOptions,
       port: new MemoryChainRegistryPort(),
@@ -473,7 +462,6 @@ describe("createBackgroundServices", () => {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
         [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
         [StorageNamespaces.Permissions]: PERMISSIONS_SNAPSHOT,
-        [StorageNamespaces.Approvals]: APPROVALS_SNAPSHOT,
         [StorageNamespaces.Transactions]: TRANSACTIONS_SNAPSHOT,
       },
       vaultMeta: VAULT_META,

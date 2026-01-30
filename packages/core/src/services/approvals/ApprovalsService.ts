@@ -26,7 +26,7 @@ export const createApprovalsService = ({ port, now = Date.now }: CreateApprovals
     const records = await port.listPending();
     return records
       .map((r) => ApprovalRecordSchema.parse(r))
-      .sort((a, b) => (a.createdAt - b.createdAt) || a.id.localeCompare(b.id));
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
   };
 
   const create = async (params: CreateApprovalParams) => {

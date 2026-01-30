@@ -90,5 +90,9 @@ export type ApprovalController = {
    * Implementations should finalize matching pending approvals as expired(session_lost)
    * and reject any in-memory resolvers.
    */
-  expirePendingByRequestContext(params: { portId: string; sessionId: string; finalStatusReason?: FinalStatusReason }): Promise<number>;
+  expirePendingByRequestContext(params: {
+    portId: string;
+    sessionId: string;
+    finalStatusReason?: FinalStatusReason;
+  }): Promise<number>;
 };

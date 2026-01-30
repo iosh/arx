@@ -7,9 +7,9 @@ import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMess
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
-import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
 import type { ApprovalsPort } from "../services/approvals/port.js";
+import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type {
   AccountMeta,

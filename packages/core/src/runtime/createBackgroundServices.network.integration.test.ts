@@ -1,15 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
-import type {
-  AccountsSnapshot,
-  ApprovalsSnapshot,
-  NetworkSnapshot,
-  PermissionsSnapshot,
-  TransactionsSnapshot,
-} from "../storage/index.js";
+import { PermissionScopes } from "../controllers/index.js";
+import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, TransactionsSnapshot } from "../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
-  APPROVALS_SNAPSHOT_VERSION,
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
@@ -168,23 +161,6 @@ describe("createBackgroundServices (network integration)", () => {
       },
     };
 
-    const approvalsSnapshot: ApprovalsSnapshot = {
-      version: APPROVALS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        pending: [
-          {
-            id: "approval-1",
-            type: ApprovalTypes.RequestAccounts,
-            origin: "https://dapp.example",
-            namespace: mainChain.namespace,
-            chainRef: mainChain.chainRef,
-            createdAt: 1_000,
-          },
-        ],
-      },
-    };
-
     const transactionsSnapshot: TransactionsSnapshot = {
       version: TRANSACTIONS_SNAPSHOT_VERSION,
       updatedAt: 1_000,
@@ -228,7 +204,6 @@ describe("createBackgroundServices (network integration)", () => {
         [StorageNamespaces.Network]: networkSnapshot,
         [StorageNamespaces.Accounts]: accountsSnapshot,
         [StorageNamespaces.Permissions]: permissionsSnapshot,
-        [StorageNamespaces.Approvals]: approvalsSnapshot,
         [StorageNamespaces.Transactions]: transactionsSnapshot,
       },
       now: () => 42_000,
@@ -240,11 +215,7 @@ describe("createBackgroundServices (network integration)", () => {
 
       expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
-      expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
-
-      expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
-      expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
-      expect(context.services.controllers.approvals.getState()).toEqual(approvalsSnapshot.payload);
+      expect(context.services.controllers.approvals.getState().pending).toHaveLength(0);
 
       await context.services.controllers.transactions.processTransaction("tx-storage-1");
 

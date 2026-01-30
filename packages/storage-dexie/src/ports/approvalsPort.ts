@@ -27,7 +27,7 @@ export class DexieApprovalsPort implements ApprovalsPort {
         out.push(parsed);
       }
     }
-    return out;
+    return out.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
   }
 
   async upsert(record: ApprovalRecord): Promise<void> {

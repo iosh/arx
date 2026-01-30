@@ -6,7 +6,9 @@ import type { HandlerControllers, Namespace, RpcInvocationContext } from "../typ
 export const EIP155_NAMESPACE = "eip155";
 
 const randomUuid = (): string => {
-  const cryptoRef = globalThis.crypto as undefined | { randomUUID?: () => string; getRandomValues?: (arr: Uint8Array) => void };
+  const cryptoRef = globalThis.crypto as
+    | undefined
+    | { randomUUID?: () => string; getRandomValues?: (arr: Uint8Array) => void };
   const id = cryptoRef?.randomUUID?.();
   if (id) return id;
 

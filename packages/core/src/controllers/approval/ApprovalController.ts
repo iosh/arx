@@ -1,3 +1,5 @@
+import type { ApprovalRecord, FinalStatusReason, RequestContextRecord } from "../../db/records.js";
+import type { ApprovalsService } from "../../services/approvals/types.js";
 import type {
   ApprovalController,
   ApprovalControllerOptions,
@@ -8,8 +10,6 @@ import type {
   ApprovalTask,
   PendingApproval,
 } from "./types.js";
-import type { ApprovalRecord, FinalStatusReason, RequestContextRecord } from "../../db/records.js";
-import type { ApprovalsService } from "../../services/approvals/types.js";
 
 const APPROVAL_STATE_TOPIC = "approval:stateChanged";
 const APPROVAL_REQUEST_TOPIC = "approval:requested";
@@ -87,7 +87,10 @@ export class InMemoryApprovalController implements ApprovalController {
     return cloneState(this.#state);
   }
 
-  async requestApproval<TInput>(_task: ApprovalTask<TInput>, _requestContext?: RequestContextRecord | null): Promise<unknown> {
+  async requestApproval<TInput>(
+    _task: ApprovalTask<TInput>,
+    _requestContext?: RequestContextRecord | null,
+  ): Promise<unknown> {
     const activeTask = cloneTask(_task);
     this.#enqueue(activeTask);
     this.#publishRequest(activeTask);
@@ -318,7 +321,10 @@ export class StoreApprovalController implements ApprovalController {
     return this.#tasks.get(id);
   }
 
-  async requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext?: RequestContextRecord | null): Promise<unknown> {
+  async requestApproval<TInput>(
+    task: ApprovalTask<TInput>,
+    requestContext?: RequestContextRecord | null,
+  ): Promise<unknown> {
     if (!requestContext) {
       throw new Error("Approval requestContext is required for store-first approvals");
     }

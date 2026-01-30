@@ -8,7 +8,7 @@ import type {
   AccountMessengerTopics,
   MultiNamespaceAccountsState,
 } from "../../controllers/account/types.js";
-import { InMemoryApprovalController } from "../../controllers/approval/ApprovalController.js";
+import { StoreApprovalController } from "../../controllers/approval/ApprovalController.js";
 import type {
   ApprovalController,
   ApprovalMessenger,
@@ -47,6 +47,7 @@ import type {
 } from "../../controllers/transaction/types.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import { createPermissionScopeResolver, type RpcInvocationContext } from "../../rpc/index.js";
+import type { ApprovalsService } from "../../services/approvals/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import {
   DEFAULT_ACCOUNTS_STATE,
@@ -113,10 +114,12 @@ export type ControllersInitResult = {
 export const initControllers = ({
   messenger,
   namespaceResolver,
+  approvalsService,
   options,
 }: {
   messenger: BackgroundMessenger;
   namespaceResolver: NamespaceResolver;
+  approvalsService: ApprovalsService;
   options: ControllerLayerOptions;
 }): ControllersInitResult => {
   const {
@@ -149,8 +152,9 @@ export const initControllers = ({
     initialState: accountOptions?.initialState ?? DEFAULT_ACCOUNTS_STATE,
   });
 
-  const approvalController = new InMemoryApprovalController({
+  const approvalController = new StoreApprovalController({
     messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
+    service: approvalsService,
   });
 
   const permissionController = new InMemoryPermissionController({

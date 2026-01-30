@@ -1,4 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { FinalStatusReason, RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainNamespace } from "../account/types.js";
 
@@ -70,7 +71,7 @@ export type PendingApproval<TInput = unknown> = {
 
 export type ApprovalController = {
   getState(): ApprovalState;
-  requestApproval<TInput>(task: ApprovalTask<TInput>): Promise<unknown>;
+  requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext?: RequestContextRecord | null): Promise<unknown>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onRequest(handler: (task: ApprovalTask<unknown>) => void): () => void;
   onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void;
@@ -83,4 +84,11 @@ export type ApprovalController = {
   resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult>;
 
   reject(id: string, reason?: Error): void;
+
+  /**
+   * Best-effort cleanup for session-bound approvals when the backing transport is lost.
+   * Implementations should finalize matching pending approvals as expired(session_lost)
+   * and reject any in-memory resolvers.
+   */
+  expirePendingByRequestContext(params: { portId: string; sessionId: string; finalStatusReason?: FinalStatusReason }): Promise<number>;
 };

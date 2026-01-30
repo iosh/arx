@@ -10,6 +10,7 @@ import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tr
 import type { AccountAddress, AccountController } from "../account/types.js";
 import { type ApprovalController, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
+import type { RequestContextRecord } from "../../db/records.js";
 import type {
   TransactionApprovalChainMetadata,
   TransactionApprovalDecodedPayload,
@@ -147,7 +148,7 @@ export class InMemoryTransactionController implements TransactionController {
     return this.#state.history.find((meta) => meta.id === id) ?? this.#state.pending.find((meta) => meta.id === id);
   }
 
-  async submitTransaction(origin: string, request: TransactionRequest): Promise<TransactionMeta> {
+  async submitTransaction(origin: string, request: TransactionRequest, requestContext?: RequestContextRecord | null): Promise<TransactionMeta> {
     const activeChain = this.#network.getActiveChain();
     if (!activeChain) {
       throw new Error("Active chain is required for transactions");
@@ -220,7 +221,7 @@ export class InMemoryTransactionController implements TransactionController {
     const activeDraft = this.#drafts.get(meta.id) ?? null;
     const task = this.#createApprovalTask(latestMeta, activeDraft, draftPreview);
 
-    return this.#approvals.requestApproval(task) as Promise<TransactionMeta>;
+    return this.#approvals.requestApproval(task, requestContext ?? null) as Promise<TransactionMeta>;
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {

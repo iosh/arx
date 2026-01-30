@@ -1,32 +1,19 @@
 import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
-import type { ApprovalQueueItem, ApprovalState } from "../../controllers/approval/types.js";
 import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
-  APPROVALS_SNAPSHOT_VERSION,
-  type ApprovalsSnapshot,
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
 } from "../../storage/index.js";
 import { serializeTransactionState } from "../../transactions/storage/state.js";
 
-const cloneApprovalQueueItem = (item: ApprovalQueueItem): ApprovalQueueItem => ({
-  id: item.id,
-  type: item.type,
-  origin: item.origin,
-  ...(item.namespace ? { namespace: item.namespace } : {}),
-  ...(item.chainRef ? { chainRef: item.chainRef } : {}),
-  createdAt: item.createdAt,
-});
-
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
   accounts: { onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void };
   permissions: { onPermissionsChanged(handler: (state: PermissionsState) => void): () => void };
-  approvals: { onStateChanged(handler: (state: ApprovalState) => void): () => void };
   transactions: TransactionController;
 };
 
@@ -160,22 +147,6 @@ export const createStorageSync = ({
     });
 
     subscriptions.push(permissionsUnsub);
-
-    const approvalsUnsub = controllers.approvals.onStateChanged((state) => {
-      const envelope: ApprovalsSnapshot = {
-        version: APPROVALS_SNAPSHOT_VERSION,
-        updatedAt: now(),
-        payload: {
-          pending: state.pending.map((item) => cloneApprovalQueueItem(item)),
-        },
-      };
-
-      void storagePort.saveSnapshot(StorageNamespaces.Approvals, envelope).catch((error) => {
-        logger("[persistence] failed to persist approvals snapshot", error);
-      });
-    });
-
-    subscriptions.push(approvalsUnsub);
 
     const transactionsUnsub = controllers.transactions.onStateChanged((state) => {
       const envelope = serializeTransactionState(state, now());

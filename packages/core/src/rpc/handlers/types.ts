@@ -11,6 +11,7 @@ import type {
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
+import type { RequestContextRecord } from "../../db/records.js";
 
 export type HandlerControllers = {
   network: NetworkController;
@@ -32,6 +33,7 @@ export type RpcRequest = {
 export type RpcInvocationContext = {
   chainRef?: ChainRef | null;
   namespace?: Namespace | null;
+  requestContext?: RequestContextRecord | null;
   meta?: unknown;
 };
 

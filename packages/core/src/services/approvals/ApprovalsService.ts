@@ -24,12 +24,14 @@ export const createApprovalsService = ({ port, now = Date.now }: CreateApprovals
 
   const listPending = async () => {
     const records = await port.listPending();
-    return records.map((r) => ApprovalRecordSchema.parse(r));
+    return records
+      .map((r) => ApprovalRecordSchema.parse(r))
+      .sort((a, b) => (a.createdAt - b.createdAt) || a.id.localeCompare(b.id));
   };
 
   const create = async (params: CreateApprovalParams) => {
     const record: ApprovalRecord = ApprovalRecordSchema.parse({
-      id: crypto.randomUUID(),
+      id: params.id ?? crypto.randomUUID(),
       type: params.type,
       status: "pending",
       origin: params.origin,
@@ -38,7 +40,7 @@ export const createApprovalsService = ({ port, now = Date.now }: CreateApprovals
       payload: params.payload,
       requestContext: params.requestContext,
       expiresAt: params.expiresAt,
-      createdAt: now(),
+      createdAt: params.createdAt ?? now(),
       // finalizedAt/finalStatusReason/result must be omitted for pending
     });
 
@@ -78,7 +80,11 @@ export const createApprovalsService = ({ port, now = Date.now }: CreateApprovals
     let updated = 0;
 
     for (const raw of pending) {
-      const current = ApprovalRecordSchema.parse(raw);
+      // Re-read to avoid clobbering approvals that finalized after listPending().
+      const existing = await port.get(raw.id);
+      if (!existing) continue;
+
+      const current = ApprovalRecordSchema.parse(existing);
       if (current.status !== "pending") continue;
 
       const expired: ApprovalRecord = ApprovalRecordSchema.parse({

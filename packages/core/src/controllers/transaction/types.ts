@@ -5,6 +5,7 @@ import type { TransactionAdapterRegistry } from "../../transactions/adapters/reg
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalTask } from "../approval/types.js";
+import type { RequestContextRecord } from "../../db/records.js";
 import type { NetworkController } from "../network/types.js";
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
@@ -135,7 +136,7 @@ export type TransactionControllerOptions = {
 export type TransactionController = {
   getState(): TransactionState;
   getMeta(id: string): TransactionMeta | undefined;
-  submitTransaction(origin: string, request: TransactionRequest): Promise<TransactionMeta>;
+  submitTransaction(origin: string, request: TransactionRequest, requestContext?: RequestContextRecord | null): Promise<TransactionMeta>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;

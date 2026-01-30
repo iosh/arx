@@ -127,7 +127,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rp
   };
 
   try {
-    return await controllers.approvals.requestApproval(task);
+    return await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
   } catch (error) {
     if (isDomainError(error) || isRpcError(error)) throw error;
     throw arxError({
@@ -325,7 +325,7 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   };
 
   try {
-    await controllers.approvals.requestApproval(task);
+    await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
   } catch (error) {
     if (isDomainError(error) || isRpcError(error)) throw error;
     throw arxError({
@@ -422,7 +422,7 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
   };
 
   try {
-    const result = (await controllers.approvals.requestApproval(task)) as PermissionApprovalResult;
+    const result = (await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null)) as PermissionApprovalResult;
     const grants = result?.granted ?? [];
 
     for (const descriptor of grants) {
@@ -496,7 +496,7 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task);
+    const signature = await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
 
     // Grant Sign permission after successful signature
     await controllers.permissions.grant(origin, PermissionScopes.Sign, {
@@ -545,7 +545,7 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task);
+    const signature = await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
 
     // Grant Sign permission after successful signature
     await controllers.permissions.grant(origin, PermissionScopes.Sign, {
@@ -580,7 +580,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
   const txRequest = buildEip155TransactionRequest(paramsArray, activeChain.chainRef);
 
   try {
-    const meta = await controllers.transactions.submitTransaction(origin, txRequest);
+    const meta = await controllers.transactions.submitTransaction(origin, txRequest, rpcContext?.requestContext ?? null);
     const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
 
     if (typeof broadcastMeta.hash !== "string") {

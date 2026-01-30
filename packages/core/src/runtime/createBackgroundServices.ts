@@ -8,6 +8,8 @@ import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
+import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
+import type { ApprovalsPort } from "../services/approvals/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type {
   AccountMeta,
@@ -45,6 +47,11 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
     hydrate?: boolean;
     keyringStore: KeyringStorePort;
     logger?: (message: string, error?: unknown) => void;
+  };
+  store?: {
+    ports: {
+      approvals: ApprovalsPort;
+    };
   };
   settings?: {
     port: SettingsPort;
@@ -94,6 +101,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     transactions: transactionOptions,
     engine: engineOptions,
     storage: storageOptions,
+    store: storeOptions,
     settings: settingsOptions,
     session: sessionOptions,
     chainRegistry: chainRegistryOptions,
@@ -119,9 +127,19 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
 
+  if (!storeOptions?.ports?.approvals) {
+    throw new Error("createBackgroundServices requires store.ports.approvals");
+  }
+
+  const approvalsService = createApprovalsService({
+    port: storeOptions.ports.approvals,
+    now: storageOptions?.now ?? Date.now,
+  });
+
   const controllersInit = initControllers({
     messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
+    approvalsService,
     options: controllerOptions,
   });
 
@@ -289,7 +307,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
             permissions: {
               onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),
             },
-            approvals: controllersBase.approvals,
             transactions: controllersBase.transactions,
           },
           now: storageNow,
@@ -420,9 +437,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     await hydrateSnapshot(StorageNamespaces.Permissions, (payload) => {
       controllers.permissions.replaceState(payload);
     });
-    await hydrateSnapshot(StorageNamespaces.Approvals, (payload) => {
-      controllers.approvals.replaceState(payload);
-    });
 
     await hydrateSnapshot(StorageNamespaces.Transactions, (payload) => {
       controllers.transactions.replaceState(cloneTransactionState(payload));
@@ -442,6 +456,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
     initializePromise = (async () => {
       await chainRegistryController.whenReady();
+
+      try {
+        await approvalsService.expireAllPending({ finalStatusReason: "session_lost" });
+      } catch (error) {
+        storageLogger("approvals: failed to expire pending on initialize", error);
+      }
 
       if (settingsPort) {
         try {

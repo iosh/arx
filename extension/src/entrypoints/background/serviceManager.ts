@@ -1,4 +1,5 @@
 import {
+  ApprovalTypes,
   ArxReasons,
   arxError,
   type BackgroundSessionServices,
@@ -114,6 +115,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         store: {
           ports: {
             approvals: storePorts.approvals,
+            transactions: storePorts.transactions,
           },
         },
         storage: { port: storage, keyringStore },
@@ -130,20 +132,27 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
        * Reject all pending approvals with a 4001 userRejectedRequest error.
        * Used when the popup is closed or the session is locked to prevent hanging dApp requests.
        */
-      const rejectAllPendingApprovals = (reason: string, details?: Record<string, unknown>) => {
+      const rejectAllPendingApprovals = async (reason: string, details?: Record<string, unknown>) => {
         const pending = controllers.approvals.getState().pending;
         if (pending.length === 0) return;
 
         const snapshot = [...pending];
         for (const item of snapshot) {
-          controllers.approvals.reject(
-            item.id,
-            arxError({
-              reason: ArxReasons.ApprovalRejected,
-              message: "User rejected the request.",
-              data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
-            }),
-          );
+          const err = arxError({
+            reason: ArxReasons.ApprovalRejected,
+            message: "User rejected the request.",
+            data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
+          });
+
+          if (item.type === ApprovalTypes.SendTransaction) {
+            try {
+              await controllers.transactions.rejectTransaction(item.id, err);
+            } catch {
+              // Best-effort; we still want to unblock the pending approval.
+            }
+          }
+
+          controllers.approvals.reject(item.id, err);
         }
       };
 
@@ -160,7 +169,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           if (removedId !== windowId) return;
           browser.windows.onRemoved.removeListener(onRemoved);
           trackedPopupWindows.delete(windowId);
-          rejectAllPendingApprovals("windowClosed", { windowId });
+          void rejectAllPendingApprovals("windowClosed", { windowId });
         };
 
         trackedPopupWindows.set(windowId, onRemoved);
@@ -251,7 +260,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         session.unlock.onLocked((payload) => {
           sessionLog("event:onLocked", { reason: payload.reason, at: payload.at });
           // Auto-reject all pending approvals when session is locked.
-          rejectAllPendingApprovals("sessionLocked", { lockReason: payload.reason });
+          void rejectAllPendingApprovals("sessionLocked", { lockReason: payload.reason });
           callbacks.broadcastEvent("session:locked", [payload]);
           publishAccountsState();
           callbacks.broadcastDisconnect();

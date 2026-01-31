@@ -120,7 +120,6 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.SendTransaction]: async (task, controllers) => {
     const approved = await controllers.transactions.approveTransaction(task.id);
     if (!approved) throw new Error("Transaction not found");
-    await controllers.transactions.processTransaction(task.id);
     return approved;
   },
 
@@ -398,7 +397,22 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     "ui.approvals.reject": async ({ id, reason }) => {
       const task = controllers.approvals.get(id);
       if (!task) throw new Error("Approval not found");
-      controllers.approvals.reject(task.id, new Error(reason ?? "User rejected"));
+
+      const err = arxError({
+        reason: ArxReasons.ApprovalRejected,
+        message: reason ?? "User rejected the request.",
+        data: { id: task.id, origin: task.origin, type: task.type },
+      });
+
+      if (task.type === ApprovalTypes.SendTransaction) {
+        try {
+          await controllers.transactions.rejectTransaction(task.id, err);
+        } catch {
+          // Best-effort; we still want to unblock the pending approval.
+        }
+      }
+
+      controllers.approvals.reject(task.id, err);
       return { id: task.id };
     },
 

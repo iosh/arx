@@ -5,4 +5,7 @@ export interface AccountsPort {
   list(): Promise<AccountRecord[]>;
 
   upsert(record: AccountRecord): Promise<void>;
+
+  remove(accountId: AccountId): Promise<void>;
+  removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
 }

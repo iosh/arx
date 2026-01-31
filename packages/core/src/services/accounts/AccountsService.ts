@@ -37,6 +37,17 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     await port.upsert(checked);
     emitChanged();
   };
+
+  const remove = async (accountId: AccountId) => {
+    await port.remove(accountId);
+    emitChanged();
+  };
+
+  const removeByKeyringId = async (keyringId: AccountRecord["keyringId"]) => {
+    await port.removeByKeyringId(keyringId);
+    emitChanged();
+  };
+
   const setHidden = async (params: { accountId: AccountId; hidden: boolean }) => {
     const existing = await port.get(params.accountId);
     if (!existing) return;
@@ -64,6 +75,8 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     get,
     list,
     upsert,
+    remove,
+    removeByKeyringId,
     setHidden,
   };
 };

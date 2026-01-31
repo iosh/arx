@@ -13,5 +13,7 @@ export type AccountsService = {
   get(accountId: AccountId): Promise<AccountRecord | null>;
   list(params?: ListAccountsParams): Promise<AccountRecord[]>;
   upsert(record: AccountRecord): Promise<void>;
+  remove(accountId: AccountId): Promise<void>;
+  removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
   setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
 };

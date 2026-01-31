@@ -87,6 +87,8 @@ export const KeyringMetaRecordSchema = z.strictObject({
   type: KeyringTypeSchema,
   name: nonEmptyStringSchema.optional(),
   needsBackup: z.boolean().optional(),
+  // HD only: the next derivation index to use (monotonic, even if accounts are removed/hidden).
+  nextDerivationIndex: z.number().int().min(0).optional(),
   createdAt: epochMillisecondsSchema,
 });
 export type KeyringMetaRecord = z.infer<typeof KeyringMetaRecordSchema>;

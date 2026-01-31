@@ -52,6 +52,7 @@ describe("DexieKeyringMetasPort", () => {
       type: "hd",
       name: "Main",
       needsBackup: true,
+      nextDerivationIndex: 3,
       createdAt: 1000,
     });
 

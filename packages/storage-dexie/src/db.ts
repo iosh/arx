@@ -1,18 +1,18 @@
-import type { AccountRecord, ApprovalRecord, PermissionRecord, SettingsRecord, TransactionRecord } from "@arx/core/db";
-import {
-  type AccountMeta,
-  type ChainRegistryEntity,
-  DOMAIN_SCHEMA_VERSION,
-  type KeyringMeta,
-  type StorageNamespace,
-} from "@arx/core/storage";
+import type {
+  AccountRecord,
+  ApprovalRecord,
+  KeyringMetaRecord,
+  PermissionRecord,
+  SettingsRecord,
+  TransactionRecord,
+} from "@arx/core/db";
+import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION, type StorageNamespace } from "@arx/core/storage";
 import { Dexie, type Table } from "dexie";
 import { runMigrations } from "./migrations.js";
 import type { SnapshotEntity, VaultMetaEntity } from "./types.js";
 
 type ChainRegistryRow = ChainRegistryEntity;
-type KeyringMetaRow = KeyringMeta;
-type AccountMetaRow = AccountMeta;
+type KeyringMetaRow = KeyringMetaRecord;
 
 export class ArxStorageDatabase extends Dexie {
   snapshots!: Table<SnapshotEntity, StorageNamespace>;
@@ -27,7 +27,6 @@ export class ArxStorageDatabase extends Dexie {
   vaultMeta!: Table<VaultMetaEntity, string>;
 
   keyringMetas!: Table<KeyringMetaRow, string>;
-  accountMetas!: Table<AccountMetaRow, string>;
 
   constructor(name: string) {
     super(name);
@@ -45,7 +44,6 @@ export class ArxStorageDatabase extends Dexie {
         vaultMeta: "&id",
 
         keyringMetas: "&id, type, createdAt",
-        accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
       })
       .upgrade((transaction) => {
         return runMigrations({ db: this, transaction });

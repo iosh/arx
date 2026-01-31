@@ -110,4 +110,45 @@ describe("DexieAccountsPort", () => {
     const after = await db.table("accounts").get("eip155:dddddddddddddddddddddddddddddddddddddddd");
     expect(after).toBeUndefined();
   });
+
+  it("remove() deletes by accountId; removeByKeyringId() deletes all accounts for a keyring", async () => {
+    const db = await openDb();
+    const port = new DexieAccountsPort(db);
+
+    const keyringA = "11111111-1111-4111-8111-111111111111";
+    const keyringB = "22222222-2222-4222-8222-222222222222";
+
+    const a1 = AccountRecordSchema.parse({
+      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      namespace: "eip155",
+      payloadHex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      keyringId: keyringA,
+      createdAt: 1000,
+    });
+    const a2 = AccountRecordSchema.parse({
+      accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      namespace: "eip155",
+      payloadHex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      keyringId: keyringA,
+      createdAt: 2000,
+    });
+    const b1 = AccountRecordSchema.parse({
+      accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+      namespace: "eip155",
+      payloadHex: "cccccccccccccccccccccccccccccccccccccccc",
+      keyringId: keyringB,
+      createdAt: 3000,
+    });
+
+    await port.upsert(a1);
+    await port.upsert(a2);
+    await port.upsert(b1);
+
+    await port.remove(a1.accountId);
+    expect((await port.get(a1.accountId)) as any).toBeNull();
+
+    await port.removeByKeyringId(keyringA);
+    expect((await port.get(a2.accountId)) as any).toBeNull();
+    expect(await port.get(b1.accountId)).toEqual(b1);
+  });
 });

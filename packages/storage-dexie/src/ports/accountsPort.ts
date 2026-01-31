@@ -33,6 +33,16 @@ export class DexieAccountsPort implements AccountsPort {
     await this.table.put(checked);
   }
 
+  async remove(accountId: AccountId): Promise<void> {
+    await this.ready;
+    await this.table.delete(accountId);
+  }
+
+  async removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void> {
+    await this.ready;
+    await this.table.where("keyringId").equals(keyringId).delete();
+  }
+
   private async parseRow(params: {
     row: AccountRecord | undefined;
     deleteKey: AccountId;

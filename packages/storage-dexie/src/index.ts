@@ -3,13 +3,8 @@ import type { SettingsRecord } from "@arx/core/db";
 import { SettingsRecordSchema } from "@arx/core/db";
 import type { SettingsPort } from "@arx/core/services";
 import {
-  type AccountMeta,
-  AccountMetaSchema,
   type ChainRegistryEntity,
   ChainRegistryEntitySchema,
-  type KeyringMeta,
-  KeyringMetaSchema,
-  type KeyringStorePort,
   type StorageNamespace,
   StorageNamespaces,
   type StoragePort,
@@ -216,83 +211,6 @@ class DexieChainRegistryPort implements ChainRegistryPort {
     return parsed.data;
   }
 }
-
-class DexieKeyringStorePort implements KeyringStorePort {
-  private readonly ready: PromiseExtended<Dexie>;
-  constructor(private readonly db: ArxStorageDatabase) {
-    this.ready = this.db.open();
-  }
-
-  async getKeyringMetas(): Promise<KeyringMeta[]> {
-    await this.ready;
-    const rows = await this.db.keyringMetas.toArray();
-    const result: KeyringMeta[] = [];
-    for (const row of rows) {
-      const parsed = KeyringMetaSchema.safeParse(row);
-      if (parsed.success) {
-        result.push(parsed.data);
-      } else {
-        console.warn("[storage-dexie] invalid keyring meta, dropping", parsed.error);
-        await this.db.keyringMetas.delete(row.id);
-      }
-    }
-    return result;
-  }
-
-  async getAccountMetas(): Promise<AccountMeta[]> {
-    await this.ready;
-    const rows = await this.db.accountMetas.toArray();
-    const result: AccountMeta[] = [];
-    for (const row of rows) {
-      const parsed = AccountMetaSchema.safeParse(row);
-      if (parsed.success) {
-        result.push(parsed.data);
-      } else {
-        console.warn("[storage-dexie] invalid account meta, dropping", parsed.error);
-        await this.db.accountMetas.delete(row.address);
-      }
-    }
-    return result;
-  }
-
-  async putKeyringMetas(metas: KeyringMeta[]): Promise<void> {
-    await this.ready;
-    const checked = metas.map((meta) => KeyringMetaSchema.parse(meta));
-    await this.db.keyringMetas.bulkPut(checked);
-  }
-
-  async putAccountMetas(metas: AccountMeta[]): Promise<void> {
-    await this.ready;
-    const checked = metas.map((meta) => AccountMetaSchema.parse(meta));
-    await this.db.accountMetas.bulkPut(checked);
-  }
-
-  async deleteKeyringMeta(id: string): Promise<void> {
-    await this.ready;
-    await this.db.transaction("rw", this.db.keyringMetas, this.db.accountMetas, async () => {
-      await this.db.keyringMetas.delete(id);
-      await this.db.accountMetas.where("keyringId").equals(id).delete();
-    });
-  }
-
-  async deleteAccount(address: string): Promise<void> {
-    await this.ready;
-    await this.db.accountMetas.delete(address);
-  }
-
-  async deleteAccountsByKeyring(keyringId: string): Promise<void> {
-    await this.ready;
-    await this.db.accountMetas.where("keyringId").equals(keyringId).delete();
-  }
-}
-
-export type CreateDexieKeyringStoreOptions = { databaseName?: string };
-
-export const createDexieKeyringStore = (options: CreateDexieKeyringStoreOptions = {}): KeyringStorePort => {
-  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  const db = getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
-  return new DexieKeyringStorePort(db);
-};
 
 export type CreateDexieSettingsPortOptions = { databaseName?: string };
 

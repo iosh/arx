@@ -19,6 +19,16 @@ const createInMemoryPort = (seed: AccountRecord[] = []) => {
       store.set(checked.accountId, checked);
       writes.push(checked);
     },
+    async remove(accountId) {
+      store.delete(accountId);
+    },
+    async removeByKeyringId(keyringId) {
+      for (const [id, record] of Array.from(store.entries())) {
+        if (record.keyringId === keyringId) {
+          store.delete(id);
+        }
+      }
+    },
   };
 
   return { port, store, writes };

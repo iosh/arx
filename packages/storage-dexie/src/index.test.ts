@@ -2,14 +2,12 @@ import "fake-indexeddb/auto";
 
 import { ApprovalTypes, PermissionScopes } from "@arx/core";
 import {
-  AccountMetaSchema,
   APPROVALS_SNAPSHOT_VERSION,
   type ApprovalsSnapshot,
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
   DOMAIN_SCHEMA_VERSION,
   KEYRING_VAULT_ENTRY_VERSION,
-  KeyringMetaSchema,
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
   PERMISSIONS_SNAPSHOT_VERSION,
@@ -20,12 +18,7 @@ import {
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createDexieChainRegistryPort,
-  createDexieKeyringStore,
-  createDexieSettingsPort,
-  createDexieStorage,
-} from "./index.js";
+import { createDexieChainRegistryPort, createDexieSettingsPort, createDexieStorage } from "./index.js";
 
 const DB_NAME = "arx-storage-test";
 const TEST_DB_STORES = {
@@ -41,7 +34,6 @@ const TEST_DB_STORES = {
   vaultMeta: "&id",
 
   keyringMetas: "&id, type, createdAt",
-  accountMetas: "&address, keyringId, createdAt, [keyringId+hidden]",
 } as const;
 
 const NETWORK_SNAPSHOT: NetworkSnapshot = {
@@ -377,25 +369,11 @@ describe("DexieChainRegistryPort", () => {
   describe("keyring storage schemas", () => {
     const TS = 1_706_000_000_000;
 
-    it("accepts keyring/account meta and vault payload", () => {
-      const keyringMeta = {
-        id: "11111111-2222-4333-8444-555555555555",
-        type: "hd" as const,
-        createdAt: TS,
-        backedUp: false,
-        derivedCount: 1,
-      };
-      const accountMeta = {
-        address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
-        keyringId: keyringMeta.id,
-        derivationIndex: 0,
-        createdAt: TS,
-        namespace: "eip155",
-      };
+    it("accepts a vault payload", () => {
       const payload = {
         keyrings: [
           {
-            keyringId: keyringMeta.id,
+            keyringId: "11111111-2222-4333-8444-555555555555",
             type: "hd" as const,
             createdAt: TS,
             version: KEYRING_VAULT_ENTRY_VERSION,
@@ -411,83 +389,7 @@ describe("DexieChainRegistryPort", () => {
         ],
       };
 
-      expect(KeyringMetaSchema.parse(keyringMeta)).toStrictEqual(keyringMeta);
-      expect(AccountMetaSchema.parse(accountMeta)).toStrictEqual(accountMeta);
       expect(VaultKeyringPayloadSchema.parse(payload)).toStrictEqual(payload);
-    });
-
-    it("rejects non-canonical addresses", () => {
-      const invalid = {
-        address: "0xABCDEFabcdefabcdefabcdefabcdefabcdefabcd",
-        keyringId: "11111111-2222-3333-4444-555555555555",
-        createdAt: TS,
-      };
-      expect(AccountMetaSchema.safeParse(invalid).success).toBe(false);
-    });
-  });
-
-  describe("DexieKeyringStorePort", () => {
-    const TS = 1_706_000_000_123;
-    const keyringMeta = {
-      id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-      type: "hd" as const,
-      createdAt: TS,
-      derivedCount: 2,
-      backedUp: false,
-    };
-    const accountMeta = {
-      address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
-      keyringId: keyringMeta.id,
-      derivationIndex: 1,
-      createdAt: TS,
-      namespace: "eip155",
-    };
-
-    it("stores and loads keyring/account metas", async () => {
-      const store = createDexieKeyringStore({ databaseName: DB_NAME });
-
-      await store.putKeyringMetas([keyringMeta]);
-      await store.putAccountMetas([accountMeta]);
-
-      expect(await store.getKeyringMetas()).toEqual([keyringMeta]);
-      expect(await store.getAccountMetas()).toEqual([accountMeta]);
-    });
-
-    it("drops invalid rows on read", async () => {
-      const store = createDexieKeyringStore({ databaseName: DB_NAME });
-      const raw = await openTestDexie();
-
-      await raw.table("keyringMetas").put({ ...keyringMeta, id: "bad-id" });
-      await raw.table("accountMetas").put({
-        ...accountMeta,
-        address: "0xABCDEFabcdefabcdefabcdefabcdefabcdefabcd",
-      });
-      await raw.close();
-
-      expect(await store.getKeyringMetas()).toEqual([]);
-      expect(await store.getAccountMetas()).toEqual([]);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[storage-dexie] invalid keyring meta, dropping"),
-        expect.anything(),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[storage-dexie] invalid account meta, dropping"),
-        expect.anything(),
-      );
-    });
-
-    it("deletes accounts when keyring is deleted", async () => {
-      const store = createDexieKeyringStore({ databaseName: DB_NAME });
-      await store.putKeyringMetas([keyringMeta]);
-      await store.putAccountMetas([
-        accountMeta,
-        { ...accountMeta, address: "0xffffffffffffffffffffffffffffffffffffffff", derivationIndex: 2 },
-      ]);
-
-      await store.deleteKeyringMeta(keyringMeta.id);
-
-      expect(await store.getKeyringMetas()).toEqual([]);
-      expect(await store.getAccountMetas()).toEqual([]);
     });
   });
 });

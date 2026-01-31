@@ -33,7 +33,7 @@ export class DexieKeyringMetasPort implements KeyringMetasPort {
     await this.table.put(checked);
   }
   async remove(id: KeyringMetaRecord["id"]): Promise<void> {
-    await this.db.open();
+    await this.ready;
     await this.table.delete(id);
   }
   private async parseRow(params: {

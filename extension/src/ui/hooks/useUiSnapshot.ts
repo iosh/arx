@@ -99,7 +99,10 @@ export const useUiSnapshot = () => {
   });
 
   const renameAccountMutation = useMutation({
-    mutationFn: (params: { address: string; alias: string }) => uiClient.keyrings.renameAccount(params),
+    mutationFn: (params: { accountId: string; alias: string }) => uiClient.keyrings.renameAccount(params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+    },
   });
 
   const markBackedUpMutation = useMutation({
@@ -111,11 +114,17 @@ export const useUiSnapshot = () => {
   });
 
   const hideHdAccountMutation = useMutation({
-    mutationFn: (address: string) => uiClient.keyrings.hideHdAccount({ address }),
+    mutationFn: (accountId: string) => uiClient.keyrings.hideHdAccount({ accountId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+    },
   });
 
   const unhideHdAccountMutation = useMutation({
-    mutationFn: (address: string) => uiClient.keyrings.unhideHdAccount({ address }),
+    mutationFn: (accountId: string) => uiClient.keyrings.unhideHdAccount({ accountId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+    },
   });
 
   const removePrivateKeyKeyringMutation = useMutation({

@@ -79,6 +79,10 @@ class FakeVault {
     return new Uint8Array(this.#payload);
   }
 
+  setPayload(next: Uint8Array | null) {
+    this.#payload = next ? new Uint8Array(next) : new Uint8Array();
+  }
+
   isUnlocked() {
     return this.#unlocked;
   }
@@ -167,31 +171,43 @@ class FakeUnlock {
   }
 }
 
-const createMemoryKeyringStore = () => {
-  let keyrings: any[] = [];
-  let accounts: any[] = [];
+const createMemoryKeyringMetasStore = () => {
+  let records: any[] = [];
   return {
-    async getKeyringMetas() {
-      return [...keyrings];
+    async get(id: string) {
+      return records.find((r) => r.id === id) ?? null;
     },
-    async getAccountMetas() {
-      return [...accounts];
+    async list() {
+      return [...records];
     },
-    async putKeyringMetas(metas: any[]) {
-      keyrings = metas.map((m) => ({ ...m }));
+    async upsert(record: any) {
+      const next = { ...record };
+      records = [...records.filter((r) => r.id !== next.id), next];
     },
-    async putAccountMetas(metas: any[]) {
-      accounts = metas.map((m) => ({ ...m }));
+    async remove(id: string) {
+      records = records.filter((r) => r.id !== id);
     },
-    async deleteKeyringMeta(id: string) {
-      keyrings = keyrings.filter((k) => k.id !== id);
-      accounts = accounts.filter((a) => a.keyringId !== id);
+  };
+};
+
+const createMemoryAccountsStore = () => {
+  let records: any[] = [];
+  return {
+    async get(accountId: string) {
+      return records.find((r) => r.accountId === accountId) ?? null;
     },
-    async deleteAccount(address: string) {
-      accounts = accounts.filter((a) => a.address !== address);
+    async list(_params?: { includeHidden?: boolean }) {
+      return [...records];
     },
-    async deleteAccountsByKeyring(keyringId: string) {
-      accounts = accounts.filter((a) => a.keyringId !== keyringId);
+    async upsert(record: any) {
+      const next = { ...record };
+      records = [...records.filter((r) => r.accountId !== next.accountId), next];
+    },
+    async remove(accountId: string) {
+      records = records.filter((r) => r.accountId !== accountId);
+    },
+    async removeByKeyringId(keyringId: string) {
+      records = records.filter((r) => r.keyringId !== keyringId);
     },
   };
 };
@@ -372,7 +388,8 @@ const makeBrowser = (): MockBrowserApi => {
 const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => {
   const vault = new FakeVault(new Uint8Array(), opts?.unlocked ?? true);
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
-  const keyringStore = createMemoryKeyringStore();
+  const keyringMetas = createMemoryKeyringMetasStore();
+  const accountsStore = createMemoryAccountsStore();
   const accountsController = createAccountsController();
   let hasCiphertext = opts?.hasCiphertext ?? true;
 
@@ -383,11 +400,8 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
     unlock,
-    accounts: {
-      getState: () => accountsController.getState(),
-      replaceState: (next) => accountsController.replaceState(next),
-    },
-    keyringStore,
+    accountsStore,
+    keyringMetas,
     namespaces: [
       {
         namespace: CHAIN.namespace,
@@ -398,6 +412,9 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
         },
       },
     ],
+  });
+  keyring.onPayloadUpdated((payload) => {
+    vault.setPayload(payload);
   });
   keyring.attach();
 
@@ -573,10 +590,12 @@ describe("uiBridge", () => {
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 
-    const hideRes = await send("ui.keyrings.hideHdAccount", { address: derived.address });
+    const derivedAccountId = `eip155:${derived.address.slice(2).toLowerCase()}`;
+
+    const hideRes = await send("ui.keyrings.hideHdAccount", { accountId: derivedAccountId });
     expectResponse(hideRes.envelope, hideRes.id);
 
-    const unhideRes = await send("ui.keyrings.unhideHdAccount", { address: derived.address });
+    const unhideRes = await send("ui.keyrings.unhideHdAccount", { accountId: derivedAccountId });
     expectResponse(unhideRes.envelope, unhideRes.id);
 
     const exportMnemonic = await send("ui.keyrings.exportMnemonic", { keyringId, password: PASSWORD });

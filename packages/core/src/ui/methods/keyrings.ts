@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AccountIdSchema } from "../../db/records.js";
 import { UiAccountMetaSchema, UiKeyringMetaSchema } from "../schemas.js";
 import { defineMethod } from "./types.js";
 
@@ -78,7 +79,7 @@ export const keyringsMethods = {
   ),
 
   "ui.keyrings.renameAccount": defineMethod(
-    z.strictObject({ address: z.string().min(1), alias: z.string().min(1) }),
+    z.strictObject({ accountId: AccountIdSchema, alias: z.string().min(1) }),
     z.null(),
     { broadcastSnapshot: true },
   ),
@@ -87,11 +88,11 @@ export const keyringsMethods = {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null(), {
+  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ accountId: AccountIdSchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ address: z.string().min(1) }), z.null(), {
+  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ accountId: AccountIdSchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 

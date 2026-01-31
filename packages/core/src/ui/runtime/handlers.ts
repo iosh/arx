@@ -4,6 +4,7 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
+import type { AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
@@ -88,6 +89,46 @@ const parsePrivateKeyHex = (value: string): string => {
   }
   return normalized;
 };
+
+const resolveChainRefForNamespace = (controllers: UiRuntimeDeps["controllers"], namespace: string): string => {
+  const active = controllers.network.getActiveChain();
+  if (active.namespace === namespace) return active.chainRef;
+
+  const known = controllers.network.getState().knownChains.find((chain) => chain.namespace === namespace);
+  return known?.chainRef ?? active.chainRef;
+};
+
+const addControllerAccount = async (deps: UiRuntimeDeps, params: { namespace: string; address: string }) => {
+  const chainRef = resolveChainRefForNamespace(deps.controllers, params.namespace);
+  const namespaceState = await deps.controllers.accounts.addAccount({
+    chainRef,
+    address: params.address,
+    makePrimary: true,
+  });
+
+  await deps.controllers.accounts.switchActive({
+    chainRef,
+    address: namespaceState.primary === params.address ? params.address : null,
+  });
+};
+
+const toUiAccountMeta = (record: AccountRecord) => ({
+  accountId: record.accountId,
+  address: `0x${record.payloadHex}`,
+  keyringId: record.keyringId,
+  derivationIndex: record.derivationIndex,
+  alias: record.alias,
+  createdAt: record.createdAt,
+  hidden: record.hidden,
+});
+
+const toUiKeyringMeta = (meta: KeyringMetaRecord) => ({
+  id: meta.id,
+  type: meta.type,
+  createdAt: meta.createdAt,
+  alias: meta.name,
+  ...(meta.type === "hd" ? { backedUp: meta.needsBackup !== true, derivedCount: meta.nextDerivationIndex ?? 0 } : {}),
+});
 
 // Helper to derive chain context from a task (with fallback to active chain).
 const deriveChainContext = (
@@ -304,6 +345,10 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, address } = await keyring.confirmNewMnemonic(mnemonic, opts);
+        await addControllerAccount(deps, {
+          namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+          address,
+        });
         return { keyringId, address };
       });
     },
@@ -334,6 +379,10 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, address } = await keyring.importMnemonic(mnemonic, opts);
+        await addControllerAccount(deps, {
+          namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+          address,
+        });
         return { keyringId, address };
       });
     },
@@ -363,6 +412,10 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, account } = await keyring.importPrivateKey(privateKey, opts);
+        await addControllerAccount(deps, {
+          namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+          address: account.address,
+        });
         return { keyringId, account };
       });
     },
@@ -422,7 +475,12 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      return await keyring.confirmNewMnemonic(params.words.join(" "), opts);
+      const result = await keyring.confirmNewMnemonic(params.words.join(" "), opts);
+      await addControllerAccount(deps, {
+        namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+        address: result.address,
+      });
+      return result;
     },
 
     "ui.keyrings.importMnemonic": async (params) => {
@@ -430,7 +488,12 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       const opts: { alias?: string; namespace?: string } = {};
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      return await keyring.importMnemonic(params.words.join(" "), opts);
+      const result = await keyring.importMnemonic(params.words.join(" "), opts);
+      await addControllerAccount(deps, {
+        namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+        address: result.address,
+      });
+      return result;
     },
 
     "ui.keyrings.importPrivateKey": async (params) => {
@@ -438,22 +501,35 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       const opts: { alias?: string; namespace?: string } = {};
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      return await keyring.importPrivateKey(params.privateKey, opts);
+      const result = await keyring.importPrivateKey(params.privateKey, opts);
+      await addControllerAccount(deps, {
+        namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
+        address: result.account.address,
+      });
+      return result;
     },
 
     "ui.keyrings.deriveAccount": async (params) => {
       assertUnlocked(session);
-      return await keyring.deriveAccount(params.keyringId);
+      const account = await keyring.deriveAccount(params.keyringId);
+      const chainRef = controllers.network.getActiveChain().chainRef;
+      const namespaceState = await controllers.accounts.addAccount({ chainRef, address: account.address });
+      if (namespaceState.primary === account.address) {
+        await controllers.accounts.switchActive({ chainRef, address: account.address });
+      }
+      return account;
     },
 
     "ui.keyrings.list": async () => {
       assertUnlocked(session);
-      return keyring.getKeyrings();
+      const metas = keyring.getKeyrings();
+      return metas.map(toUiKeyringMeta);
     },
 
     "ui.keyrings.getAccountsByKeyring": async (params) => {
       assertUnlocked(session);
-      return keyring.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
+      const records = keyring.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
+      return records.map(toUiAccountMeta);
     },
 
     "ui.keyrings.renameKeyring": async (params) => {
@@ -464,7 +540,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
     "ui.keyrings.renameAccount": async (params) => {
       assertUnlocked(session);
-      await keyring.renameAccount(params.address, params.alias);
+      await keyring.renameAccount(params.accountId, params.alias);
       return null;
     },
 
@@ -476,19 +552,28 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
     "ui.keyrings.hideHdAccount": async (params) => {
       assertUnlocked(session);
-      await keyring.hideHdAccount(params.address);
+      await keyring.hideHdAccount(params.accountId);
       return null;
     },
 
     "ui.keyrings.unhideHdAccount": async (params) => {
       assertUnlocked(session);
-      await keyring.unhideHdAccount(params.address);
+      await keyring.unhideHdAccount(params.accountId);
       return null;
     },
 
     "ui.keyrings.removePrivateKeyKeyring": async (params) => {
       assertUnlocked(session);
+      const removed = keyring.getAccountsByKeyring(params.keyringId, true);
       await keyring.removePrivateKeyKeyring(params.keyringId);
+      for (const record of removed) {
+        const chainRef = resolveChainRefForNamespace(controllers, record.namespace);
+        try {
+          await controllers.accounts.removeAccount({ chainRef, address: `0x${record.payloadHex}` });
+        } catch {
+          // Best-effort; controller state will be rebuilt from storage on restart.
+        }
+      }
       return null;
     },
 

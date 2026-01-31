@@ -15,7 +15,6 @@ import {
 import browser from "webextension-polyfill";
 import {
   getExtensionChainRegistry,
-  getExtensionKeyringStore,
   getExtensionSettingsPort,
   getExtensionStorage,
   getExtensionStorePorts,
@@ -105,7 +104,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const storage = getExtensionStorage();
       const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
-      const keyringStore = getExtensionKeyringStore();
       const settingsPort = getExtensionSettingsPort();
       const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
       const services = createBackgroundServices({
@@ -115,10 +113,12 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         store: {
           ports: {
             approvals: storePorts.approvals,
+            accounts: storePorts.accounts,
+            keyringMetas: storePorts.keyringMetas,
             transactions: storePorts.transactions,
           },
         },
-        storage: { port: storage, keyringStore },
+        storage: { port: storage },
         settings: { port: settingsPort },
         chainRegistry: { port: chainRegistry },
       });

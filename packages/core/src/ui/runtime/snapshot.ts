@@ -245,10 +245,10 @@ export const buildUiSnapshot = (deps: {
 
   const keyringWarnings = keyring
     .getKeyrings()
-    .filter((meta) => meta.type === "hd" && !meta.backedUp)
+    .filter((meta) => meta.type === "hd" && meta.needsBackup === true)
     .map((meta) => ({
       keyringId: meta.id,
-      alias: meta.alias ?? null,
+      alias: meta.name ?? null,
     }));
 
   const snapshot: UiSnapshot = {

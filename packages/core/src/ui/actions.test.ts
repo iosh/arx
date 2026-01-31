@@ -63,10 +63,10 @@ describe("ui actions", () => {
     void actions.keyrings.list();
     void actions.keyrings.getAccountsByKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.renameKeyring({ keyringId: "00000000-0000-0000-0000-000000000000", alias: "a" });
-    void actions.keyrings.renameAccount({ address: "0x0", alias: "a" });
+    void actions.keyrings.renameAccount({ accountId: "eip155:0000000000000000000000000000000000000000", alias: "a" });
     void actions.keyrings.markBackedUp({ keyringId: "00000000-0000-0000-0000-000000000000" });
-    void actions.keyrings.hideHdAccount({ address: "0x0" });
-    void actions.keyrings.unhideHdAccount({ address: "0x0" });
+    void actions.keyrings.hideHdAccount({ accountId: "eip155:0000000000000000000000000000000000000000" });
+    void actions.keyrings.unhideHdAccount({ accountId: "eip155:0000000000000000000000000000000000000000" });
     void actions.keyrings.removePrivateKeyKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.exportMnemonic({ keyringId: "00000000-0000-0000-0000-000000000000", password: "pw" });
     void actions.keyrings.exportPrivateKey({ address: "0x0", password: "pw" });

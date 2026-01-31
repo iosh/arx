@@ -1,9 +1,8 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
 import type { SettingsPort } from "@arx/core/services";
-import type { KeyringStorePort, StoragePort } from "@arx/core/storage";
+import type { StoragePort } from "@arx/core/storage";
 import {
   createDexieChainRegistryPort,
-  createDexieKeyringStore,
   createDexieSettingsPort,
   createDexieStorage,
   createDexieStorePorts,
@@ -11,7 +10,6 @@ import {
 
 let storageInstance: StoragePort | null = null;
 let chainRegistryInstance: ChainRegistryPort | null = null;
-let keyringStoreInstance: KeyringStorePort | null = null;
 let settingsPortInstance: SettingsPort | null = null;
 let storePortsInstance: ReturnType<typeof createDexieStorePorts> | null = null;
 
@@ -29,14 +27,6 @@ export const getExtensionChainRegistry = (): ChainRegistryPort => {
   }
   chainRegistryInstance = createDexieChainRegistryPort({ databaseName: "arx-extension" });
   return chainRegistryInstance;
-};
-
-export const getExtensionKeyringStore = (): KeyringStorePort => {
-  if (keyringStoreInstance) {
-    return keyringStoreInstance;
-  }
-  keyringStoreInstance = createDexieKeyringStore({ databaseName: "arx-extension" });
-  return keyringStoreInstance;
 };
 
 export const getExtensionSettingsPort = (): SettingsPort => {

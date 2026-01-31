@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../chains/url.js";
+import { AccountIdSchema } from "../db/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
   message: "Expected a 0x-prefixed hexadecimal string",
@@ -152,6 +153,7 @@ export const UiKeyringMetaSchema = z.object({
 });
 
 export const UiAccountMetaSchema = z.object({
+  accountId: AccountIdSchema,
   address: z.string(),
   keyringId: z.uuid(),
   derivationIndex: z.number().int().nonnegative().optional(),

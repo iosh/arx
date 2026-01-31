@@ -311,7 +311,7 @@ function AccountSwitchPage() {
                 <ListItem
                   key={keyring.id}
                   title={alias}
-                  subtitle={`Derived accounts: ${derivedCount}`}
+                  subtitle={`Next derivation index: ${derivedCount}`}
                   right={selected ? <Check size={18} /> : null}
                   onPress={deriving ? undefined : () => setSelectedHdKeyringId(keyring.id)}
                 />

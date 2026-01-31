@@ -309,8 +309,7 @@ export class StoreApprovalController implements ApprovalController {
   }
 
   replaceState(_state: ApprovalState): void {
-    // Store-first: approvals are driven by the approvals table; snapshot hydrate/persist is disabled in PR5.
-    // Keep method for interface compatibility.
+    // Approvals are store-backed; snapshot hydration is intentionally not supported here.
   }
 
   has(id: string): boolean {
@@ -326,7 +325,7 @@ export class StoreApprovalController implements ApprovalController {
     requestContext?: RequestContextRecord | null,
   ): Promise<unknown> {
     if (!requestContext) {
-      throw new Error("Approval requestContext is required for store-first approvals");
+      throw new Error("Approval requestContext is required for store-backed approvals");
     }
 
     const activeTask = cloneTask(task);

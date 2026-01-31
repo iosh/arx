@@ -44,7 +44,7 @@ export function ToastHost() {
 
   if (visibleToasts.length === 0) return null;
 
-  // Use motion tokens from blueprint (toast: 160ms, fast: 120ms for reduced motion)
+  // Use motion tokens from the design system (toast: 160ms, fast: 120ms for reduced motion)
   // TODO: Consider custom easing (decelerate/accelerate) in future iterations
   const enterStyle = reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 };
   const exitStyle = reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 };

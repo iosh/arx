@@ -5,10 +5,12 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import type { ApprovalRecord, SettingsRecord } from "../../db/records.js";
+import type { ApprovalRecord, SettingsRecord, TransactionRecord } from "../../db/records.js";
+import { TransactionRecordSchema } from "../../db/records.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
 import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
+import type { TransactionsPort } from "../../services/transactions/port.js";
 import type {
   AccountsSnapshot,
   ChainRegistryEntity,
@@ -93,6 +95,74 @@ export class MemoryApprovalsPort implements ApprovalsPort {
 
   async upsert(record: ApprovalRecord): Promise<void> {
     this.#records.set(record.id, clone(record));
+  }
+}
+
+export class MemoryTransactionsPort implements TransactionsPort {
+  #records = new Map<string, TransactionRecord>();
+
+  constructor(seed: TransactionRecord[] = []) {
+    for (const record of seed) {
+      const checked = TransactionRecordSchema.parse(record);
+      this.#records.set(checked.id, clone(checked));
+    }
+  }
+
+  async get(id: TransactionRecord["id"]): Promise<TransactionRecord | null> {
+    const found = this.#records.get(id);
+    return found ? clone(found) : null;
+  }
+
+  async list(query?: {
+    chainRef?: string;
+    status?: TransactionRecord["status"];
+    limit?: number;
+    beforeCreatedAt?: number;
+  }): Promise<TransactionRecord[]> {
+    const chainRef = query?.chainRef;
+    const status = query?.status;
+    const limit = query?.limit ?? 100;
+    const beforeCreatedAt = query?.beforeCreatedAt;
+
+    let all = Array.from(this.#records.values());
+    if (chainRef !== undefined) all = all.filter((r) => r.chainRef === chainRef);
+    if (status !== undefined) all = all.filter((r) => r.status === status);
+    if (beforeCreatedAt !== undefined) all = all.filter((r) => r.createdAt < beforeCreatedAt);
+
+    all.sort((a, b) => b.createdAt - a.createdAt);
+    return all.slice(0, limit).map((r) => clone(r));
+  }
+
+  async findByChainRefAndHash(params: { chainRef: string; hash: string }): Promise<TransactionRecord | null> {
+    for (const record of this.#records.values()) {
+      if (record.chainRef !== params.chainRef) continue;
+      if (record.hash !== params.hash) continue;
+      return clone(record);
+    }
+    return null;
+  }
+
+  async upsert(record: TransactionRecord): Promise<void> {
+    const checked = TransactionRecordSchema.parse(record);
+    this.#records.set(checked.id, clone(checked));
+  }
+
+  async updateIfStatus(params: {
+    id: TransactionRecord["id"];
+    expectedStatus: TransactionRecord["status"];
+    next: TransactionRecord;
+  }): Promise<boolean> {
+    const current = this.#records.get(params.id);
+    if (!current) return false;
+    if (current.status !== params.expectedStatus) return false;
+
+    const checked = TransactionRecordSchema.parse(params.next);
+    this.#records.set(checked.id, clone(checked));
+    return true;
+  }
+
+  async remove(id: TransactionRecord["id"]): Promise<void> {
+    this.#records.delete(id);
   }
 }
 
@@ -453,6 +523,7 @@ export type TestBackgroundContext = {
   services: CreateBackgroundServicesResult;
   storagePort: MemoryStoragePort;
   chainRegistryPort: MemoryChainRegistryPort;
+  transactionsPort: MemoryTransactionsPort;
   settingsPort?: MemorySettingsPort;
   destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
@@ -464,6 +535,7 @@ export type SetupBackgroundOptions = {
   storageSeed?: StorageSeed;
   settingsSeed?: SettingsRecord | null;
   vaultMeta?: VaultMetaSnapshot | null;
+  transactionsSeed?: TransactionRecord[];
   autoLockDuration?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -486,6 +558,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     vaultMeta: options.vaultMeta ?? null,
   });
   const approvalsPort = new MemoryApprovalsPort();
+  const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
 
   const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
@@ -519,6 +592,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     store: {
       ports: {
         approvals: approvalsPort,
+        transactions: transactionsPort,
       },
     },
     storage: storageOptions,
@@ -554,6 +628,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     services,
     storagePort,
     chainRegistryPort,
+    transactionsPort,
     ...(settingsPort ? { settingsPort } : {}),
     enableAutoApproval,
     destroy: () => {

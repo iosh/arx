@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TransactionStatusChange } from "../controllers/index.js";
-import type { TransactionsSnapshot } from "../storage/index.js";
-import { StorageNamespaces, TRANSACTIONS_SNAPSHOT_VERSION } from "../storage/index.js";
+import type { TransactionRecord } from "../db/records.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
-import { createChainMetadata, flushAsync, setupBackground } from "./__fixtures__/backgroundTestSetup.js";
+import {
+  createChainMetadata,
+  flushAsync,
+  setupBackground,
+  TEST_RECEIPT_POLL_INTERVAL,
+} from "./__fixtures__/backgroundTestSetup.js";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -15,99 +18,84 @@ afterEach(() => {
 });
 
 describe("createBackgroundServices (recovery integration)", () => {
-  it("replays approved transactions from storage during initialization", async () => {
+  it("resumes receipt tracking for broadcast transactions during initialization", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
-      warnings: [],
-      issues: [],
-    }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
-      raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => ({
+      status: "success",
+      receipt: { status: "0x1", blockNumber: "0x10" },
     }));
 
     const adapter: TransactionAdapter = {
-      buildDraft,
-      signTransaction,
-      broadcastTransaction,
+      buildDraft: vi.fn(async () => ({ prepared: { raw: "0x" }, summary: {}, warnings: [], issues: [] })),
+      signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
+      broadcastTransaction: vi.fn(async () => ({
+        hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      })),
+      fetchReceipt,
     };
+
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
-    const transactionsSnapshot: TransactionsSnapshot = {
-      version: TRANSACTIONS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        pending: [],
-        history: [
-          {
-            id: "tx-storage-1",
-            namespace: chain.namespace,
-            chainRef: chain.chainRef,
-            origin: "https://dapp.example",
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            request: {
-              namespace: chain.namespace,
-              chainRef: chain.chainRef,
-              payload: {
-                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                value: "0x0",
-                data: "0x",
-              },
-            },
-            status: "approved",
-            hash: null,
-            receipt: null,
-            error: null,
-            userRejected: false,
-            warnings: [],
-            issues: [],
-            createdAt: 1_000,
-            updatedAt: 1_000,
-          },
-        ],
+    const txId = "11111111-1111-4111-8111-111111111111";
+    const seed: TransactionRecord = {
+      id: txId,
+      namespace: "eip155",
+      chainRef: chain.chainRef,
+      origin: "https://dapp.example",
+      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      status: "broadcast",
+      request: {
+        namespace: "eip155",
+        chainRef: chain.chainRef,
+        payload: {
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
       },
+      hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      receipt: undefined,
+      error: undefined,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1_000,
+      updatedAt: 1_000,
     };
 
     const context = await setupBackground({
       chainSeed: [chain],
-      storageSeed: {
-        [StorageNamespaces.Transactions]: transactionsSnapshot,
-      },
-      transactions: {
-        registry,
-        autoApprove: false,
-      },
-      now: () => 2_000,
+      transactionsSeed: [seed],
+      transactions: { registry },
+      persistDebounceMs: 0,
     });
 
     try {
       await flushAsync();
 
-      expect(buildDraft).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      // Tracker polls after the initial delay.
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
+      await flushAsync();
 
-      const resumedMeta = context.services.controllers.transactions.getMeta("tx-storage-1");
-      expect(resumedMeta?.status).toBe("broadcast");
-      expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+      expect(fetchReceipt).toHaveBeenCalledTimes(1);
+
+      const meta = context.services.controllers.transactions.getMeta(txId);
+      expect(meta?.status).toBe("confirmed");
+      expect(meta?.receipt).toMatchObject({ status: "0x1" });
     } finally {
       context.destroy();
     }
   });
 
-  it("resumes approved transactions from storage and emits status events", async () => {
+  it("does not sign approved transactions during initialization", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -132,32 +120,28 @@ describe("createBackgroundServices (recovery integration)", () => {
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
-    const context = await setupBackground({
-      chainSeed: [chain],
-      transactions: { registry, autoApprove: false },
-      persistDebounceMs: 0,
-    });
-
-    const approvedMeta: TransactionsSnapshot["payload"]["pending"][number] = {
-      id: "tx-resume-1",
-      namespace: chain.namespace,
+    const txId = "22222222-2222-4222-8222-222222222222";
+    const seed: TransactionRecord = {
+      id: txId,
+      namespace: "eip155",
       chainRef: chain.chainRef,
       origin: "https://dapp.example",
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      status: "approved",
       request: {
-        namespace: chain.namespace,
+        namespace: "eip155",
         chainRef: chain.chainRef,
         payload: {
+          chainId: "0x1",
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           value: "0x0",
           data: "0x",
         },
       },
-      status: "approved",
       hash: null,
-      receipt: null,
-      error: null,
+      receipt: undefined,
+      error: undefined,
       userRejected: false,
       warnings: [],
       issues: [],
@@ -165,88 +149,32 @@ describe("createBackgroundServices (recovery integration)", () => {
       updatedAt: 1_000,
     };
 
-    context.services.controllers.transactions.replaceState({
-      pending: [],
-      history: [approvedMeta],
-    });
-
-    const statusEvents: TransactionStatusChange[] = [];
-    const queuedEvents: string[] = [];
-
-    const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
-      if (payload.id === "tx-resume-1") {
-        statusEvents.push(payload);
-      }
-    });
-    const unsubscribeQueued = context.services.messenger.subscribe("transaction:queued", (meta) => {
-      queuedEvents.push(meta.id);
-    });
-
-    try {
-      await context.services.controllers.transactions.resumePending();
-      await flushAsync();
-
-      expect(buildDraft).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-
-      const resumedMeta = context.services.controllers.transactions.getMeta("tx-resume-1");
-      expect(resumedMeta?.status).toBe("broadcast");
-      expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
-
-      expect(queuedEvents).toHaveLength(0);
-      expect(statusEvents.map(({ previousStatus, nextStatus }) => [previousStatus, nextStatus])).toEqual([
-        ["approved", "signed"],
-        ["signed", "broadcast"],
-      ]);
-    } finally {
-      unsubscribeStatus();
-      unsubscribeQueued();
-      context.destroy();
-    }
-  });
-
-  it("clears invalid transaction snapshots during hydration", async () => {
-    const chain = createChainMetadata({
-      chainRef: "eip155:1",
-      chainId: "0x1",
-      displayName: "Ethereum Mainnet",
-    });
-
-    const corruptedSnapshot = {
-      version: TRANSACTIONS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        pending: [
-          {
-            id: "broken",
-            namespace: chain.namespace,
-            chainRef: chain.chainRef,
-            origin: "https://dapp.example",
-          },
-        ],
-        history: [],
-      },
-    } as unknown as TransactionsSnapshot;
-
-    const logger = vi.fn();
-
     const context = await setupBackground({
       chainSeed: [chain],
-      storageSeed: { [StorageNamespaces.Transactions]: corruptedSnapshot },
-      storageLogger: logger,
+      transactionsSeed: [seed],
+      transactions: { registry },
+      persistDebounceMs: 0,
     });
 
     try {
-      expect(context.services.controllers.transactions.getState()).toEqual({ pending: [], history: [] });
-      expect(context.storagePort.clearedSnapshots).toContain(StorageNamespaces.Transactions);
-      expect(logger).toHaveBeenCalledWith(
-        expect.stringContaining("storage: failed to hydrate"),
-        expect.objectContaining({
-          name: "TypeError",
-          message: expect.stringContaining("namespace"),
-        }),
-      );
+      await flushAsync();
+
+      expect(buildDraft).toHaveBeenCalledTimes(0);
+      expect(signTransaction).toHaveBeenCalledTimes(0);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+
+      const before = context.services.controllers.transactions.getMeta(txId);
+      expect(before?.status).toBe("approved");
+
+      await context.services.controllers.transactions.resumePending({ includeSigning: true });
+      await flushAsync();
+
+      await vi.waitFor(() => expect(buildDraft).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+
+      const after = context.services.controllers.transactions.getMeta(txId);
+      expect(after?.status).toBe("broadcast");
     } finally {
       context.destroy();
     }

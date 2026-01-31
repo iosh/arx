@@ -1,7 +1,11 @@
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
-import { MemoryApprovalsPort, MemoryChainRegistryPort } from "../__fixtures__/backgroundTestSetup.js";
+import {
+  MemoryApprovalsPort,
+  MemoryChainRegistryPort,
+  MemoryTransactionsPort,
+} from "../__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../createBackgroundServices.js";
 import { createBackgroundRpcMiddlewares, createRpcEngineForBackground } from "./rpcEngineAssembly.js";
 
@@ -79,7 +83,7 @@ describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
-      store: { ports: { approvals: new MemoryApprovalsPort() } },
+      store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
     });
 
     const pushSpy = vi.spyOn(services.engine, "push");
@@ -102,7 +106,7 @@ describe("background rpc engine assembly", () => {
   it("encodes existing res.error (error boundary)", async () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
-      store: { ports: { approvals: new MemoryApprovalsPort() } },
+      store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
     });
 
     const middlewares = createBackgroundRpcMiddlewares(services, {
@@ -133,7 +137,7 @@ describe("background rpc engine assembly", () => {
   it("respects shouldRequestUnlockAttention hook", async () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
-      store: { ports: { approvals: new MemoryApprovalsPort() } },
+      store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
     });
 
     const attentionSpy = vi.spyOn(services.attention, "requestAttention");
@@ -164,7 +168,7 @@ describe("background rpc engine assembly", () => {
   it("respects shouldRequestApprovalAttention hook", async () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
-      store: { ports: { approvals: new MemoryApprovalsPort() } },
+      store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
       session: { vault: createUnlockedVault },
     });
 

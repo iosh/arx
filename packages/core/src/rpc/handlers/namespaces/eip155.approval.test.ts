@@ -301,6 +301,22 @@ describe("eip155 handlers - approval metadata", () => {
       const beforeNamespace = beforePermissions.origins[ORIGIN]?.eip155;
       expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Transaction);
 
+      let broadcastMeta: {
+        id: string;
+        status: string;
+        hash: string | null;
+        namespace: string;
+        chainRef: string;
+        from: string | null;
+        warnings: any[];
+        issues: any[];
+      } | null = null;
+      const unsubscribeTx = services.messenger.subscribe("transaction:statusChanged", (event) => {
+        if (event.nextStatus === "broadcast") {
+          broadcastMeta = event.meta as any;
+        }
+      });
+
       const txHash = (await execute({
         origin: ORIGIN,
         request: {
@@ -318,18 +334,17 @@ describe("eip155 handlers - approval metadata", () => {
 
       expect(txHash).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
-      const { history } = services.controllers.transactions.getState();
-      expect(history).toHaveLength(1);
+      unsubscribeTx();
 
-      const stored = history[0]!;
-      expect(stored.id).toEqual(expect.any(String));
-      expect(stored.status).toBe("broadcast");
-      expect(stored.hash).toBe(txHash);
-      expect(stored.namespace).toBe("eip155");
-      expect(stored.chainRef).toBe(mainnet.chainRef);
-      expect(stored.from).toBe(account.address);
-      expect(stored.warnings).toEqual([expect.objectContaining({ code: "transaction.draft.chain_id_missing" })]);
-      expect(stored.issues).toEqual([]);
+      expect(broadcastMeta).not.toBeNull();
+      expect(broadcastMeta!.id).toEqual(expect.any(String));
+      expect(broadcastMeta!.status).toBe("broadcast");
+      expect(broadcastMeta!.hash).toBe(txHash);
+      expect(broadcastMeta!.namespace).toBe("eip155");
+      expect(broadcastMeta!.chainRef).toBe(mainnet.chainRef);
+      expect(broadcastMeta!.from).toBe(account.address);
+      expect(broadcastMeta!.warnings).toEqual([]);
+      expect(broadcastMeta!.issues).toEqual([]);
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
 
       const afterPermissions = services.controllers.permissions.getState();

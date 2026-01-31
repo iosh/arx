@@ -5,7 +5,6 @@ import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import {
   createChainMetadata,
   flushAsync,
-  isTransactionsSnapshot,
   setupBackground,
   TEST_RECEIPT_MAX_DELAY,
   TEST_RECEIPT_POLL_INTERVAL,
@@ -42,10 +41,15 @@ describe("createBackgroundServices (transactions integration)", () => {
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
-      raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
+    let signedCount = 0;
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => {
+      signedCount += 1;
+      const suffix = signedCount.toString(16).padStart(64, "0");
+      return {
+        raw: "0x1111",
+        hash: `0x${suffix}`,
+      };
+    });
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
@@ -120,9 +124,8 @@ describe("createBackgroundServices (transactions integration)", () => {
       expect(confirmedMeta?.status).toBe("confirmed");
       expect(confirmedMeta?.receipt).toMatchObject(confirmedReceipt);
 
-      const snapshots = context.storagePort.savedSnapshots.filter(isTransactionsSnapshot);
-      const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
-      expect(latest?.status).toBe("confirmed");
+      const stored = await context.transactionsPort.get(submission.id);
+      expect(stored?.status).toBe("confirmed");
     } finally {
       nowSpy.mockRestore();
       unsubscribeAutoApproval();
@@ -144,10 +147,15 @@ describe("createBackgroundServices (transactions integration)", () => {
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
-      raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
+    let signedCount = 0;
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => {
+      signedCount += 1;
+      const suffix = signedCount.toString(16).padStart(64, "0");
+      return {
+        raw: "0x1111",
+        hash: `0x${suffix}`,
+      };
+    });
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
@@ -212,18 +220,11 @@ describe("createBackgroundServices (transactions integration)", () => {
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(3));
 
-      const state = context.services.controllers.transactions.getState();
-      expect(state.pending).toHaveLength(0);
-      expect(state.history).toHaveLength(3);
-
       const submissionIds = submissions.map((submission) => submission.id);
-      expect(new Set(state.history.map((meta) => meta.id))).toEqual(new Set(submissionIds));
-      expect(state.history.every((meta) => meta.status === "broadcast")).toBe(true);
-
-      const snapshots = context.storagePort.savedSnapshots.filter(isTransactionsSnapshot);
-      const storedHistory = snapshots.at(-1)?.envelope.payload.history ?? [];
-      expect(storedHistory.map((meta) => meta.id)).toEqual(expect.arrayContaining(submissionIds));
-      expect(storedHistory.every((meta) => meta.status === "broadcast")).toBe(true);
+      for (const id of submissionIds) {
+        const meta = context.services.controllers.transactions.getMeta(id);
+        expect(meta?.status).toBe("broadcast");
+      }
 
       submissionIds.forEach((id) => {
         const timeline = statusEvents
@@ -321,10 +322,9 @@ describe("createBackgroundServices (transactions integration)", () => {
       expect(replacedMeta?.hash).toBe(replacementHash);
       expect(replacedMeta?.error?.name).toBe("TransactionReplacedError");
 
-      const snapshots = context.storagePort.savedSnapshots.filter(isTransactionsSnapshot);
-      const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
-      expect(latest?.status).toBe("replaced");
-      expect(latest?.hash).toBe(replacementHash);
+      const stored = await context.transactionsPort.get(submission.id);
+      expect(stored?.status).toBe("replaced");
+      expect(stored?.hash).toBe(replacementHash);
     } finally {
       unsubscribeAutoApproval();
       context.destroy();
@@ -394,10 +394,9 @@ describe("createBackgroundServices (transactions integration)", () => {
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.error?.name).toBe("TransactionReceiptTimeoutError");
 
-      const snapshots = context.storagePort.savedSnapshots.filter(isTransactionsSnapshot);
-      const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
-      expect(latest?.status).toBe("failed");
-      expect(latest?.error?.name).toBe("TransactionReceiptTimeoutError");
+      const stored = await context.transactionsPort.get(submission.id);
+      expect(stored?.status).toBe("failed");
+      expect(stored?.error?.name).toBe("TransactionReceiptTimeoutError");
     } finally {
       unsubscribeAutoApproval();
       context.destroy();
@@ -473,10 +472,9 @@ describe("createBackgroundServices (transactions integration)", () => {
       expect(failedMeta?.error?.name).toBe("TransactionExecutionFailed");
       expect(failedMeta?.receipt).toMatchObject(failedReceipt);
 
-      const snapshots = context.storagePort.savedSnapshots.filter(isTransactionsSnapshot);
-      const latest = snapshots.at(-1)?.envelope.payload.history.find((item) => item.id === submission.id);
-      expect(latest?.status).toBe("failed");
-      expect(latest?.error?.name).toBe("TransactionExecutionFailed");
+      const stored = await context.transactionsPort.get(submission.id);
+      expect(stored?.status).toBe("failed");
+      expect(stored?.error?.name).toBe("TransactionExecutionFailed");
     } finally {
       unsubscribeAutoApproval();
       context.destroy();

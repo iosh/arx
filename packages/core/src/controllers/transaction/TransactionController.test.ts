@@ -3,7 +3,6 @@ import type { ChainMetadata } from "../../chains/metadata.js";
 import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../../transactions/adapters/types.js";
-import { cloneTransactionState } from "../../transactions/storage/state.js";
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalTask } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
@@ -65,9 +64,7 @@ type TestHarness = {
   approvals: Pick<ApprovalController, "requestApproval">;
   capturedApprovalTasks: ApprovalTask<unknown>[];
   events: {
-    queued: TransactionMeta[];
     status: Array<{ previous: string; next: string }>;
-    states: TransactionState[];
   };
 };
 
@@ -167,9 +164,7 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
     mock: requestApprovalMock,
   };
   const events = {
-    queued: [] as TransactionMeta[],
     status: [] as Array<{ previous: string; next: string }>,
-    states: [] as TransactionState[],
   };
 
   const controller = new InMemoryTransactionController({
@@ -184,14 +179,8 @@ const createTestHarness = (options?: HarnessOptions): TestHarness => {
   });
   createdController = controller;
 
-  messenger.subscribe("transaction:queued", (meta) => {
-    events.queued.push(meta);
-  });
   messenger.subscribe("transaction:statusChanged", (change) => {
     events.status.push({ previous: change.previousStatus, next: change.nextStatus });
-  });
-  messenger.subscribe("transaction:stateChanged", (state) => {
-    events.states.push(cloneTransactionState(state));
   });
 
   return {
@@ -224,29 +213,19 @@ describe("InMemoryTransactionController", () => {
 
     await flushMicrotasks();
 
-    const finalState = harness.controller.getState();
-    expect(finalState.pending).toHaveLength(0);
-    expect(finalState.history).toHaveLength(1);
-    expect(finalState.history[0]?.status).toBe("broadcast");
-    expect(finalState.history[0]?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+    const finalMeta = harness.controller.getMeta("tx-1");
+    expect(finalMeta?.status).toBe("broadcast");
+    expect(finalMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
 
     expect(harness.adapter.buildDraft).toHaveBeenCalledTimes(1);
     expect(harness.adapter.signTransaction).toHaveBeenCalledTimes(1);
     expect(harness.adapter.broadcastTransaction).toHaveBeenCalledTimes(1);
-
-    expect(harness.events.queued).toHaveLength(1);
-    expect(harness.events.queued[0]?.status).toBe("pending");
 
     expect(harness.events.status).toEqual([
       { previous: "pending", next: "approved" },
       { previous: "approved", next: "signed" },
       { previous: "signed", next: "broadcast" },
     ]);
-
-    const broadcastObserved = harness.events.states.some((snapshot) =>
-      snapshot.history.some((meta) => meta.status === "broadcast"),
-    );
-    expect(broadcastObserved).toBe(true);
   });
 
   it("reprocesses approved entries on resumePending without requeuing", async () => {
@@ -288,16 +267,10 @@ describe("InMemoryTransactionController", () => {
     expect(resumedMeta?.status).toBe("broadcast");
     expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
 
-    expect(harness.events.queued).toHaveLength(0);
     expect(harness.events.status).toEqual([
       { previous: "approved", next: "signed" },
       { previous: "signed", next: "broadcast" },
     ]);
-
-    const resumedBroadcastObserved = harness.events.states.some((snapshot) =>
-      snapshot.history.some((meta) => meta.id === "tx-1" && meta.status === "broadcast"),
-    );
-    expect(resumedBroadcastObserved).toBe(true);
   });
 
   it("persists failure state when auto approval is disabled", async () => {
@@ -305,22 +278,12 @@ describe("InMemoryTransactionController", () => {
 
     await expect(harness.controller.submitTransaction(ORIGIN, REQUEST)).rejects.toThrow("Transaction rejected by stub");
 
-    const finalState = harness.controller.getState();
-    expect(finalState.pending).toHaveLength(0);
-    expect(finalState.history).toHaveLength(1);
-
-    const failedMeta = finalState.history[0];
+    const failedMeta = harness.controller.getMeta("tx-1");
     expect(failedMeta?.status).toBe("failed");
     expect(failedMeta?.error?.message).toBe("Transaction rejected by stub");
     expect(failedMeta?.userRejected).toBe(false);
 
-    expect(harness.events.queued).toHaveLength(1);
     expect(harness.events.status).toEqual([{ previous: "pending", next: "failed" }]);
-
-    const failureObserved = harness.events.states.some((snapshot) =>
-      snapshot.history.some((meta) => meta.status === "failed"),
-    );
-    expect(failureObserved).toBe(true);
   });
 
   it("resumes already signed transactions and finalizes broadcast", async () => {
@@ -362,13 +325,7 @@ describe("InMemoryTransactionController", () => {
     expect(resumedMeta?.status).toBe("broadcast");
     expect(resumedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
 
-    expect(harness.events.queued).toHaveLength(0);
     expect(harness.events.status).toEqual([{ previous: "signed", next: "broadcast" }]);
-
-    const broadcastObserved = harness.events.states.some((snapshot) =>
-      snapshot.history.some((meta) => meta.id === "tx-1" && meta.status === "broadcast"),
-    );
-    expect(broadcastObserved).toBe(true);
   });
 
   it("marks transaction as user rejected when approval rejects with 4001", async () => {
@@ -376,16 +333,11 @@ describe("InMemoryTransactionController", () => {
 
     await expect(harness.controller.submitTransaction(ORIGIN, REQUEST)).rejects.toMatchObject(USER_REJECTION_ERROR);
 
-    const finalState = harness.controller.getState();
-    expect(finalState.pending).toHaveLength(0);
-    expect(finalState.history).toHaveLength(1);
-
-    const rejectedMeta = finalState.history[0];
+    const rejectedMeta = harness.controller.getMeta("tx-1");
     expect(rejectedMeta?.status).toBe("failed");
     expect(rejectedMeta?.userRejected).toBe(true);
     expect(rejectedMeta?.error).toMatchObject(USER_REJECTION_ERROR);
 
-    expect(harness.events.queued).toHaveLength(1);
     expect(harness.events.status).toEqual([{ previous: "pending", next: "failed" }]);
   });
 
@@ -404,11 +356,7 @@ describe("InMemoryTransactionController", () => {
 
     await flushMicrotasks();
 
-    const finalState = harness.controller.getState();
-    expect(finalState.pending).toHaveLength(0);
-    expect(finalState.history).toHaveLength(1);
-
-    const failedMeta = finalState.history[0];
+    const failedMeta = harness.controller.getMeta("tx-1");
     expect(failedMeta?.status).toBe("failed");
     expect(failedMeta?.error?.message).toBe("signing failed");
     expect(failedMeta?.hash).toBeNull();
@@ -437,11 +385,7 @@ describe("InMemoryTransactionController", () => {
 
     await flushMicrotasks();
 
-    const finalState = harness.controller.getState();
-    expect(finalState.pending).toHaveLength(0);
-    expect(finalState.history).toHaveLength(1);
-
-    const failedMeta = finalState.history[0];
+    const failedMeta = harness.controller.getMeta("tx-1");
     expect(failedMeta?.status).toBe("failed");
     expect(failedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
     expect(failedMeta?.error).toMatchObject({ code: -32000, message: "insufficient funds" });

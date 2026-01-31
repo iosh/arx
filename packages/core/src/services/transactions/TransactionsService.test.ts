@@ -62,6 +62,7 @@ describe("TransactionsService", () => {
     });
 
     const created = await service.createPending({
+      id: "11111111-1111-4111-8111-111111111111",
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",

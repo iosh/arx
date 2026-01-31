@@ -1,13 +1,15 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, TransactionsSnapshot } from "../storage/index.js";
+import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot } from "../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
-  TRANSACTIONS_SNAPSHOT_VERSION,
 } from "../storage/index.js";
+import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
+import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import {
   buildRpcSnapshot,
   createChainMetadata,
@@ -161,41 +163,22 @@ describe("createBackgroundServices (network integration)", () => {
       },
     };
 
-    const transactionsSnapshot: TransactionsSnapshot = {
-      version: TRANSACTIONS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        pending: [],
-        history: [
-          {
-            id: "tx-storage-1",
-            namespace: mainChain.namespace,
-            chainRef: orphanChain.chainRef,
-            origin: "https://dapp.example",
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            request: {
-              namespace: mainChain.namespace,
-              chainRef: orphanChain.chainRef,
-              payload: {
-                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                value: "0x0",
-                data: "0x",
-              },
-            },
-            status: "approved",
-            hash: null,
-            receipt: null,
-            error: null,
-            userRejected: false,
-            warnings: [],
-            issues: [],
-            createdAt: 1_000,
-            updatedAt: 1_000,
-          },
-        ],
-      },
-    };
+    const txId = "11111111-1111-4111-8111-111111111111";
+
+    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
+      prepared: {},
+      summary: { kind: "transfer" },
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => {
+      throw arxError({ reason: ArxReasons.SessionLocked, message: "Session is locked." });
+    });
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async () => {
+      throw new Error("Unexpected broadcastTransaction call.");
+    });
+    const registry = new TransactionAdapterRegistry();
+    registry.register(mainChain.namespace, { buildDraft, signTransaction, broadcastTransaction });
 
     const context = await setupBackground({
       chainSeed: [mainChain, altChain],
@@ -204,9 +187,36 @@ describe("createBackgroundServices (network integration)", () => {
         [StorageNamespaces.Network]: networkSnapshot,
         [StorageNamespaces.Accounts]: accountsSnapshot,
         [StorageNamespaces.Permissions]: permissionsSnapshot,
-        [StorageNamespaces.Transactions]: transactionsSnapshot,
       },
+      transactionsSeed: [
+        {
+          id: txId,
+          namespace: "eip155",
+          chainRef: mainChain.chainRef,
+          origin: "https://dapp.example",
+          fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          status: "approved",
+          request: {
+            namespace: "eip155",
+            chainRef: mainChain.chainRef,
+            payload: {
+              chainId: mainChain.chainId,
+              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              value: "0x0",
+              data: "0x",
+            },
+          },
+          hash: null,
+          userRejected: false,
+          warnings: [],
+          issues: [],
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        },
+      ],
       now: () => 42_000,
+      transactions: { registry },
     });
     await flushAsync();
 
@@ -217,18 +227,11 @@ describe("createBackgroundServices (network integration)", () => {
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
       expect(context.services.controllers.approvals.getState().pending).toHaveLength(0);
 
-      await context.services.controllers.transactions.processTransaction("tx-storage-1");
+      await context.services.controllers.transactions.processTransaction(txId);
 
-      const meta = context.services.controllers.transactions.getMeta("tx-storage-1");
-      expect(meta?.status).toBe("failed");
-      expect(meta?.error?.message).toContain("not unlocked");
-
-      const transactionsState = context.services.controllers.transactions.getState();
-      expect(transactionsState.pending).toHaveLength(0);
-      expect(transactionsState.history).toHaveLength(1);
-      expect(transactionsState.history[0]?.id).toBe("tx-storage-1");
-      expect(transactionsState.history[0]?.status).toBe("failed");
-      expect(transactionsState.history[0]?.error?.message).toContain("not unlocked");
+      const meta = context.services.controllers.transactions.getMeta(txId);
+      expect(meta?.status).toBe("approved");
+      expect(meta?.error).toBeNull();
 
       const networkState = context.services.controllers.network.getState();
       expect(networkState.activeChain).toBe(mainChain.chainRef);

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
-import { ApprovalTypes, PermissionScopes, type TransactionMeta } from "../controllers/index.js";
+import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
 import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { SettingsPort } from "../services/settings/port.js";
@@ -23,14 +23,12 @@ import {
   PERMISSIONS_SNAPSHOT_VERSION,
   type PermissionsSnapshot,
   StorageNamespaces,
-  TRANSACTIONS_SNAPSHOT_VERSION,
-  type TransactionsSnapshot,
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import { MemoryApprovalsPort } from "./__fixtures__/backgroundTestSetup.js";
+import { MemoryApprovalsPort, MemoryTransactionsPort } from "./__fixtures__/backgroundTestSetup.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -103,43 +101,6 @@ const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
         },
       },
     },
-  },
-};
-
-const TRANSACTIONS_SNAPSHOT: TransactionsSnapshot = {
-  version: TRANSACTIONS_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    pending: [
-      {
-        id: "tx-1",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        origin: "https://dapp.example",
-        from: "0xabc",
-        request: {
-          namespace: "eip155",
-          chainRef: "eip155:1",
-          payload: {
-            chainId: "0x1",
-            from: "0xabc",
-            to: "0xdef",
-            value: "0x0",
-            data: "0x",
-          },
-        },
-        status: "pending",
-        hash: null,
-        receipt: null,
-        error: null,
-        userRejected: false,
-        warnings: [],
-        issues: [],
-        createdAt: 1_000,
-        updatedAt: 1_000,
-      },
-    ],
-    history: [],
   },
 };
 
@@ -320,7 +281,7 @@ const createServices = (options: TestServicesOptions = {}) => {
     ? baseOptions
     : {
         ...baseOptions,
-        store: { ports: { approvals: new MemoryApprovalsPort() } },
+        store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
       };
   const chainRegistryOptions = baseOptions.chainRegistry;
   if (chainRegistryOptions?.port) {
@@ -462,7 +423,6 @@ describe("createBackgroundServices", () => {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
         [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
         [StorageNamespaces.Permissions]: PERMISSIONS_SNAPSHOT,
-        [StorageNamespaces.Transactions]: TRANSACTIONS_SNAPSHOT,
       },
       vaultMeta: VAULT_META,
     });
@@ -593,44 +553,8 @@ describe("createBackgroundServices", () => {
     ]);
     expect(permissionsSnapshot?.payload.origins["https://dapp.example"]?.conflux?.chains).toEqual(["conflux:cfx"]);
 
-    now = 3_900;
-    const pendingTx = {
-      id: "tx-test-1",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      from: "0x1111111111111111111111111111111111111111",
-      request: {
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        payload: {
-          chainId: "0x1",
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-          value: "0x0",
-          data: "0x",
-        },
-      },
-      status: "pending",
-      hash: null,
-      receipt: null,
-      error: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: now,
-      updatedAt: now,
-    } satisfies TransactionMeta;
-    services.controllers.transactions.replaceState({
-      pending: [pendingTx],
-      history: [],
-    });
-
-    const transactionsSnapshot = storage.getSnapshot(StorageNamespaces.Transactions);
-    expect(transactionsSnapshot).not.toBeNull();
-    expect(transactionsSnapshot?.updatedAt).toBe(3_900);
-    expect(transactionsSnapshot?.payload.pending).toHaveLength(1);
-    expect(transactionsSnapshot?.payload.pending[0]?.id).toBe("tx-test-1");
+    // Transactions are persisted via the store-backed controller; snapshots are intentionally disabled.
+    expect(storage.getSnapshot(StorageNamespaces.Transactions)).toBeNull();
 
     services.lifecycle.destroy();
   });

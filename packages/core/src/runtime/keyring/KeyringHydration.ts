@@ -2,13 +2,20 @@ import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controlle
 import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { decodePayload } from "./keyring-utils.js";
-import type { AccountMeta, KeyringMeta, KeyringServiceOptions, Payload, RuntimeKeyring } from "./types.js";
+import type {
+  AccountId,
+  AccountRecord,
+  KeyringMetaRecord,
+  KeyringServiceOptions,
+  Payload,
+  RuntimeKeyring,
+} from "./types.js";
 
 // State container passed from KeyringService
 type KeyringState = {
   keyrings: Map<string, RuntimeKeyring>;
-  keyringMetas: Map<string, KeyringMeta>;
-  accountMetas: Map<string, AccountMeta>;
+  keyringMetas: Map<string, KeyringMetaRecord>;
+  accounts: Map<AccountId, AccountRecord>;
 };
 
 // Manages keyring lifecycle: hydration on unlock, cleanup on lock
@@ -84,7 +91,7 @@ export class KeyringHydration {
     }
     this.#state.keyrings.clear();
     this.#state.keyringMetas.clear();
-    this.#state.accountMetas.clear();
+    this.#state.accounts.clear();
   }
 
   // Load keyrings from vault on unlock
@@ -106,8 +113,8 @@ export class KeyringHydration {
         }
 
         const [metas, accounts] = await Promise.all([
-          this.#options.keyringStore.getKeyringMetas(),
-          this.#options.keyringStore.getAccountMetas(),
+          this.#options.keyringMetas.list(),
+          this.#options.accountsStore.list({ includeHidden: true }),
         ]);
 
         if (isStale()) return;
@@ -123,9 +130,9 @@ export class KeyringHydration {
           this.#state.keyringMetas.set(m.id, m);
         }
 
-        this.#state.accountMetas.clear();
+        this.#state.accounts.clear();
         for (const a of accounts) {
-          this.#state.accountMetas.set(a.address, a);
+          this.#state.accounts.set(a.accountId, a);
         }
 
         // Decode payload from vault
@@ -157,6 +164,12 @@ export class KeyringHydration {
 
         // Restore keyring instances from payload
         for (const entry of payload.keyrings) {
+          // If metadata is missing, treat the keyring as unavailable (don't hydrate secrets into memory).
+          if (!this.#state.keyringMetas.has(entry.keyringId)) {
+            this.#options.logger?.(`keyring: missing metadata for keyring "${entry.keyringId}", skipping`);
+            continue;
+          }
+
           const namespace = entry.namespace ?? defaultNamespace;
           const config = this.#getNamespaceConfig(namespace);
           const factory =
@@ -186,7 +199,9 @@ export class KeyringHydration {
 
               for (const meta of derived) {
                 const derivedAccount = hd.deriveAccount(meta.derivationIndex ?? 0);
-                if (config.toCanonicalAddress(derivedAccount.address) !== meta.address) {
+                const canonical = config.toCanonicalAddress(derivedAccount.address);
+                const expected = `0x${meta.payloadHex}`;
+                if (canonical !== expected) {
                   throw keyringErrors.secretUnavailable();
                 }
               }
@@ -203,7 +218,7 @@ export class KeyringHydration {
           }
         }
 
-        await this.#reconcileDerivedCounts();
+        await this.#reconcileNextDerivationIndex();
         this.#onHydrated(payload);
       } catch (error) {
         if (isStale()) return;
@@ -226,25 +241,28 @@ export class KeyringHydration {
     return hydration;
   }
 
-  // Reconcile HD keyring derivedCount with stored accounts
-  async #reconcileDerivedCounts() {
-    let patched = false;
+  // Reconcile HD keyring nextDerivationIndex with stored accounts
+  async #reconcileNextDerivationIndex() {
+    const updates: KeyringMetaRecord[] = [];
 
     for (const [keyringId, meta] of this.#state.keyringMetas) {
       if (meta.type !== "hd") continue;
-      const accounts = Array.from(this.#state.accountMetas.values()).filter((a) => a.keyringId === keyringId);
+      const accounts = Array.from(this.#state.accounts.values()).filter((a) => a.keyringId === keyringId);
       const maxIndex = Math.max(-1, ...accounts.map((a) => a.derivationIndex ?? -1));
       const expected = maxIndex + 1;
-      if (meta.derivedCount === undefined || meta.derivedCount < expected) {
-        this.#options.logger?.(`keyring: derivedCount mismatch, fixing ${meta.derivedCount ?? "unset"} -> ${expected}`);
-        this.#state.keyringMetas.set(keyringId, { ...meta, derivedCount: expected });
-        patched = true;
+
+      const current = meta.nextDerivationIndex ?? 0;
+      if (current < expected) {
+        this.#options.logger?.(
+          `keyring: nextDerivationIndex mismatch, fixing ${meta.nextDerivationIndex ?? "unset"} -> ${expected}`,
+        );
+        const next: KeyringMetaRecord = { ...meta, nextDerivationIndex: expected };
+        this.#state.keyringMetas.set(keyringId, next);
+        updates.push(next);
       }
     }
 
-    if (patched) {
-      await this.#options.keyringStore.putKeyringMetas(Array.from(this.#state.keyringMetas.values()));
-    }
+    await Promise.all(updates.map((meta) => this.#options.keyringMetas.upsert(meta)));
   }
 
   #handleUnlocked(_payload: UnlockUnlockedPayload): void {

@@ -5,8 +5,9 @@ import type { AccountMessengerTopics } from "../../controllers/account/types.js"
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import type { KeyringAccount } from "../../keyring/types.js";
 import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
-import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
-import type { KeyringStorePort } from "../../storage/keyringStore.js";
+import { createAccountsService } from "../../services/accounts/AccountsService.js";
+import { createKeyringMetasService } from "../../services/keyringMetas/KeyringMetasService.js";
+import { MemoryAccountsPort, MemoryKeyringMetasPort } from "../__fixtures__/backgroundTestSetup.js";
 import { AccountsKeyringBridge } from "./AccountsKeyringBridge.js";
 import { KeyringService } from "./KeyringService.js";
 
@@ -25,35 +26,6 @@ const createDerivedAccount = (address: string): KeyringAccount<string> => ({
 });
 
 const noopLogger = vi.fn();
-
-const createInMemoryKeyringStore = () => {
-  let keyrings: KeyringMeta[] = [];
-  let accounts: AccountMeta[] = [];
-  return {
-    async getKeyringMetas() {
-      return [...keyrings];
-    },
-    async getAccountMetas() {
-      return [...accounts];
-    },
-    async putKeyringMetas(metas: KeyringMeta[]) {
-      keyrings = metas.map((m) => ({ ...m }));
-    },
-    async putAccountMetas(metas: AccountMeta[]) {
-      accounts = metas.map((m) => ({ ...m }));
-    },
-    async deleteKeyringMeta(id: string) {
-      keyrings = keyrings.filter((k) => k.id !== id);
-      accounts = accounts.filter((a) => a.keyringId !== id);
-    },
-    async deleteAccount(address: string) {
-      accounts = accounts.filter((a) => a.address !== address);
-    },
-    async deleteAccountsByKeyring(keyringId: string) {
-      accounts = accounts.filter((a) => a.keyringId! === keyringId);
-    },
-  } as KeyringStorePort;
-};
 
 describe("AccountsKeyringBridge", () => {
   it("does not switch active when switchActive=false", async () => {
@@ -172,9 +144,11 @@ describe("AccountsKeyringBridge", () => {
       messenger,
     });
 
+    const accountsStore = createAccountsService({ port: new MemoryAccountsPort() });
+    const keyringMetas = createKeyringMetasService({ port: new MemoryKeyringMetasPort() });
+
     const vault = {
       exportKey: () => encoder.encode(JSON.stringify({ keyrings: [] })),
-      getStatus: () => ({ isUnlocked: true, hasCiphertext: true }),
       isUnlocked: () => true,
       verifyPassword: () => Promise.resolve(),
     };
@@ -183,12 +157,11 @@ describe("AccountsKeyringBridge", () => {
       onUnlocked: () => () => {},
       onLocked: () => () => {},
     };
-    const keyringStore = createInMemoryKeyringStore();
     const keyringService = new KeyringService({
       vault,
       unlock,
-      accounts: accountsController,
-      keyringStore,
+      accountsStore,
+      keyringMetas,
       namespaces: [
         {
           namespace,
@@ -198,8 +171,11 @@ describe("AccountsKeyringBridge", () => {
       ],
     });
 
+    await keyringService.attach();
+
     const { keyringId, address: firstAddress } = await keyringService.confirmNewMnemonic(MNEMONIC);
-    expect(accountsController.getState().namespaces[namespace]?.all).toEqual([firstAddress]);
+    await accountsController.addAccount({ chainRef, address: firstAddress, makePrimary: true });
+    await accountsController.switchActive({ chainRef, address: firstAddress });
 
     const bridge = new AccountsKeyringBridge({
       keyring: keyringService,
@@ -218,7 +194,7 @@ describe("AccountsKeyringBridge", () => {
     const stateAfterDerive = accountsController.getState();
     expect(stateAfterDerive.namespaces[namespace]?.all).toContain(derived.address);
     expect(stateAfterDerive.active?.address).toBe(derived.address);
-    expect(keyringService.getAccounts().map((a) => a.address)).toContain(derived.address);
+    expect(keyringService.getAccounts().map((a) => `0x${a.payloadHex}`)).toContain(derived.address);
 
     const { account: imported } = await bridge.importAccount({
       namespace,
@@ -237,6 +213,6 @@ describe("AccountsKeyringBridge", () => {
     expect(stateAfterRemove.namespaces[namespace]?.all).not.toContain(imported.address);
     expect(stateAfterRemove.active?.address).toBe(derived.address);
     expect(keyringService.hasAccount(namespace, imported.address)).toBe(false);
-    expect(keyringService.getAccounts().map((a) => a.address)).not.toContain(imported.address);
+    expect(keyringService.getAccounts().map((a) => `0x${a.payloadHex}`)).not.toContain(imported.address);
   });
 });

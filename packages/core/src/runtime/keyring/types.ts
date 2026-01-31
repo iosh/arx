@@ -1,21 +1,27 @@
-import type {
-  AccountController,
-  MultiNamespaceAccountsState,
-  NamespaceAccountsState,
-} from "../../controllers/account/types.js";
 import type { UnlockController } from "../../controllers/unlock/types.js";
+import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
-import type { AccountMeta, KeyringMeta, VaultKeyringEntry } from "../../storage/keyringSchemas.js";
-import type { KeyringStorePort } from "../../storage/keyringStore.js";
+import type { VaultKeyringEntry } from "../../storage/keyringSchemas.js";
 import type { VaultService } from "../../vault/types.js";
 
 // Service dependencies
 export type KeyringServiceOptions = {
   vault: Pick<VaultService, "exportKey" | "isUnlocked" | "verifyPassword">;
   unlock: Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked">;
-  accounts: Pick<AccountController, "getState" | "replaceState">;
-  keyringStore: KeyringStorePort;
+  keyringMetas: {
+    get(id: KeyringMetaRecord["id"]): Promise<KeyringMetaRecord | null>;
+    list(): Promise<KeyringMetaRecord[]>;
+    upsert(record: KeyringMetaRecord): Promise<void>;
+    remove(id: KeyringMetaRecord["id"]): Promise<void>;
+  };
+  accountsStore: {
+    get(accountId: AccountId): Promise<AccountRecord | null>;
+    list(params?: { includeHidden?: boolean }): Promise<AccountRecord[]>;
+    upsert(record: AccountRecord): Promise<void>;
+    remove(accountId: AccountId): Promise<void>;
+    removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
+  };
   namespaces: NamespaceConfig[];
   logger?: (message: string, error?: unknown) => void;
 };
@@ -36,12 +42,11 @@ export type KeyringPayloadListener = (payload: Uint8Array | null) => void | Prom
 // Centralized runtime state
 export type KeyringRuntimeState = {
   keyrings: Map<string, RuntimeKeyring>;
-  keyringMetas: Map<string, KeyringMeta>;
-  accountMetas: Map<string, AccountMeta>;
+  keyringMetas: Map<string, KeyringMetaRecord>;
+  accounts: Map<AccountId, AccountRecord>;
   payload: Payload;
   addressIndex: Map<string, { namespace: string; keyringId: string }>;
   payloadListeners: Set<KeyringPayloadListener>;
 };
 
-export type { AccountMeta, KeyringMeta, VaultKeyringEntry };
-export type { MultiNamespaceAccountsState, NamespaceAccountsState };
+export type { AccountId, AccountRecord, KeyringMetaRecord, VaultKeyringEntry };

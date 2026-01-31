@@ -5,14 +5,21 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import type { ApprovalRecord, SettingsRecord, TransactionRecord } from "../../db/records.js";
-import { TransactionRecordSchema } from "../../db/records.js";
+import type {
+  AccountRecord,
+  ApprovalRecord,
+  KeyringMetaRecord,
+  SettingsRecord,
+  TransactionRecord,
+} from "../../db/records.js";
+import { AccountRecordSchema, KeyringMetaRecordSchema, TransactionRecordSchema } from "../../db/records.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
+import type { AccountsPort } from "../../services/accounts/port.js";
 import type { ApprovalsPort } from "../../services/approvals/port.js";
+import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
 import type { TransactionsPort } from "../../services/transactions/port.js";
 import type {
-  AccountsSnapshot,
   ChainRegistryEntity,
   NetworkSnapshot,
   PermissionsSnapshot,
@@ -23,15 +30,12 @@ import type {
   VaultMetaSnapshot,
 } from "../../storage/index.js";
 import {
-  ACCOUNTS_SNAPSHOT_VERSION,
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   NETWORK_SNAPSHOT_VERSION,
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
   TRANSACTIONS_SNAPSHOT_VERSION,
 } from "../../storage/index.js";
-import type { AccountMeta, KeyringMeta } from "../../storage/keyringSchemas.js";
-import type { KeyringStorePort } from "../../storage/keyringStore.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";
@@ -166,18 +170,82 @@ export class MemoryTransactionsPort implements TransactionsPort {
   }
 }
 
+export class MemoryAccountsPort implements AccountsPort {
+  #records = new Map<string, AccountRecord>();
+
+  constructor(seed: AccountRecord[] = []) {
+    for (const record of seed) {
+      const checked = AccountRecordSchema.parse(record);
+      this.#records.set(checked.accountId, clone(checked));
+    }
+  }
+
+  async get(accountId: string): Promise<AccountRecord | null> {
+    const found = this.#records.get(accountId);
+    return found ? clone(found) : null;
+  }
+
+  async list(): Promise<AccountRecord[]> {
+    return Array.from(this.#records.values())
+      .map((record) => clone(record))
+      .sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
+  }
+
+  async upsert(record: AccountRecord): Promise<void> {
+    const checked = AccountRecordSchema.parse(record);
+    this.#records.set(checked.accountId, clone(checked));
+  }
+
+  async remove(accountId: string): Promise<void> {
+    this.#records.delete(accountId);
+  }
+
+  async removeByKeyringId(keyringId: string): Promise<void> {
+    for (const [accountId, record] of Array.from(this.#records.entries())) {
+      if (record.keyringId === keyringId) {
+        this.#records.delete(accountId);
+      }
+    }
+  }
+}
+
+export class MemoryKeyringMetasPort implements KeyringMetasPort {
+  #records = new Map<string, KeyringMetaRecord>();
+
+  constructor(seed: KeyringMetaRecord[] = []) {
+    for (const record of seed) {
+      const checked = KeyringMetaRecordSchema.parse(record);
+      this.#records.set(checked.id, clone(checked));
+    }
+  }
+
+  async get(id: string): Promise<KeyringMetaRecord | null> {
+    const found = this.#records.get(id);
+    return found ? clone(found) : null;
+  }
+
+  async list(): Promise<KeyringMetaRecord[]> {
+    return Array.from(this.#records.values())
+      .map((record) => clone(record))
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  }
+
+  async upsert(record: KeyringMetaRecord): Promise<void> {
+    const checked = KeyringMetaRecordSchema.parse(record);
+    this.#records.set(checked.id, clone(checked));
+  }
+
+  async remove(id: string): Promise<void> {
+    this.#records.delete(id);
+  }
+}
+
 export const baseChainMetadata = DEFAULT_CHAIN_METADATA[0]! as ChainMetadata;
 
 export const flushAsync = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
-
-// Type guards
-export const isAccountsSnapshot = (
-  entry: SnapshotEntry,
-): entry is { namespace: typeof StorageNamespaces.Accounts; envelope: AccountsSnapshot } =>
-  entry.namespace === StorageNamespaces.Accounts;
 
 export const isNetworkSnapshot = (
   entry: SnapshotEntry,
@@ -277,36 +345,6 @@ export const toRegistryEntity = (metadata: ChainMetadata, updatedAt = Date.now()
   updatedAt,
   schemaVersion: CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
 });
-
-// Create in-memory keyring store
-export const createInMemoryKeyringStore = (): KeyringStorePort => {
-  let keyrings: KeyringMeta[] = [];
-  let accounts: AccountMeta[] = [];
-  return {
-    async getKeyringMetas() {
-      return [...keyrings];
-    },
-    async getAccountMetas() {
-      return [...accounts];
-    },
-    async putKeyringMetas(metas) {
-      keyrings = metas.map((m) => ({ ...m }));
-    },
-    async putAccountMetas(metas) {
-      accounts = metas.map((m) => ({ ...m }));
-    },
-    async deleteKeyringMeta(id) {
-      keyrings = keyrings.filter((k) => k.id !== id);
-      accounts = accounts.filter((a) => a.keyringId !== id);
-    },
-    async deleteAccount(address) {
-      accounts = accounts.filter((a) => a.address !== address);
-    },
-    async deleteAccountsByKeyring(keyringId) {
-      accounts = accounts.filter((a) => a.keyringId !== keyringId);
-    },
-  };
-};
 
 // Mock chain registry implementation
 export class MemoryChainRegistryPort implements ChainRegistryPort {
@@ -534,6 +572,8 @@ export type SetupBackgroundOptions = {
   chainSeed?: ChainMetadata[];
   storageSeed?: StorageSeed;
   settingsSeed?: SettingsRecord | null;
+  accountsSeed?: AccountRecord[];
+  keyringMetasSeed?: KeyringMetaRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionsSeed?: TransactionRecord[];
   autoLockDuration?: number;
@@ -559,12 +599,13 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   });
   const approvalsPort = new MemoryApprovalsPort();
   const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
+  const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
+  const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
 
   const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
     port: storagePort,
-    keyringStore: createInMemoryKeyringStore(),
     ...(options.now ? { now: options.now } : {}),
     ...(options.storageLogger ? { logger: options.storageLogger } : {}),
   };
@@ -593,6 +634,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       ports: {
         approvals: approvalsPort,
         transactions: transactionsPort,
+        accounts: accountsPort,
+        keyringMetas: keyringMetasPort,
       },
     },
     storage: storageOptions,

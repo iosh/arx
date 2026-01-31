@@ -1,26 +1,24 @@
+import { toCanonicalEvmAddress } from "../chains/address.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { createDefaultChainModuleRegistry } from "../chains/registry.js";
 import type { RpcEndpointState } from "../controllers/network/types.js";
-import type { SettingsRecord } from "../db/records.js";
+import { type AccountId, AccountIdSchema, type SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
+import { createAccountsService } from "../services/accounts/AccountsService.js";
+import type { AccountsPort } from "../services/accounts/port.js";
 import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
 import type { ApprovalsPort } from "../services/approvals/port.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
+import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
+import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
-import type {
-  AccountMeta,
-  KeyringMeta,
-  KeyringStorePort,
-  StorageNamespace,
-  StoragePort,
-  StorageSnapshotMap,
-} from "../storage/index.js";
+import type { StoragePort, StorageSnapshotMap } from "../storage/index.js";
 import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
@@ -47,13 +45,14 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
     port: StoragePort;
     now?: () => number;
     hydrate?: boolean;
-    keyringStore: KeyringStorePort;
     logger?: (message: string, error?: unknown) => void;
   };
   store?: {
     ports: {
       approvals: ApprovalsPort;
       transactions: TransactionsPort;
+      accounts: AccountsPort;
+      keyringMetas: KeyringMetasPort;
     };
   };
   settings?: {
@@ -65,35 +64,6 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
 
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
-
-const createInMemoryKeyringStore = (): KeyringStorePort => {
-  let keyrings: KeyringMeta[] = [];
-  let accounts: AccountMeta[] = [];
-  return {
-    async getKeyringMetas() {
-      return [...keyrings];
-    },
-    async getAccountMetas() {
-      return [...accounts];
-    },
-    async putKeyringMetas(metas) {
-      keyrings = metas.map((m) => ({ ...m }));
-    },
-    async putAccountMetas(metas) {
-      accounts = metas.map((m) => ({ ...m }));
-    },
-    async deleteKeyringMeta(id) {
-      keyrings = keyrings.filter((k) => k.id !== id);
-      accounts = accounts.filter((a) => a.keyringId !== id);
-    },
-    async deleteAccount(address) {
-      accounts = accounts.filter((a) => a.address !== address);
-    },
-    async deleteAccountsByKeyring(keyringId) {
-      accounts = accounts.filter((a) => a.keyringId !== keyringId);
-    },
-  };
-};
 export const createBackgroundServices = (options?: CreateBackgroundServicesOptions) => {
   const {
     messenger: messengerOptions,
@@ -114,7 +84,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
-  const keyringStore = storageOptions?.keyringStore ?? createInMemoryKeyringStore();
 
   if (!chainRegistryOptions?.port) {
     throw new Error("createBackgroundServices requires chainRegistry.port");
@@ -136,6 +105,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   if (!storeOptions?.ports?.transactions) {
     throw new Error("createBackgroundServices requires store.ports.transactions");
   }
+  if (!storeOptions?.ports?.accounts) {
+    throw new Error("createBackgroundServices requires store.ports.accounts");
+  }
+  if (!storeOptions?.ports?.keyringMetas) {
+    throw new Error("createBackgroundServices requires store.ports.keyringMetas");
+  }
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
@@ -146,6 +121,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     port: storeOptions.ports.transactions,
     now: storageOptions?.now ?? Date.now,
   });
+
+  const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
+  const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
 
   const controllersInit = initControllers({
     messenger,
@@ -183,10 +161,20 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   // Serialize settings writes to avoid out-of-order completion clobbering newer values.
   let settingsWriteQueue: Promise<void> = Promise.resolve();
 
-  const persistActiveChainRef = async (chainRef: ChainRef) => {
+  const persistSettings = async (update: { activeChainRef?: ChainRef; selectedAccountId?: AccountId | null }) => {
     if (!settingsPort) return;
     if (!settingsLoaded) return;
-    if (cachedSettings?.activeChainRef === chainRef) return;
+
+    const { activeChainRef, selectedAccountId } = update;
+    if (activeChainRef === undefined && selectedAccountId === undefined) {
+      return;
+    }
+    if (
+      (activeChainRef === undefined || cachedSettings?.activeChainRef === activeChainRef) &&
+      (selectedAccountId === undefined || cachedSettings?.selectedAccountId === selectedAccountId)
+    ) {
+      return;
+    }
 
     settingsWriteQueue = settingsWriteQueue
       .catch(() => {})
@@ -198,29 +186,52 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           storageLogger("settings: failed to load before persist", error);
         }
 
-        if (latest?.activeChainRef === chainRef) {
+        const baseActiveChainRef =
+          activeChainRef ??
+          latest?.activeChainRef ??
+          cachedSettings?.activeChainRef ??
+          // Settings may not exist on fresh installs; fall back to the current controller state.
+          networkController.getActiveChain().chainRef;
+
+        const nextSelected =
+          selectedAccountId === undefined
+            ? (latest?.selectedAccountId ?? cachedSettings?.selectedAccountId)
+            : (selectedAccountId ?? undefined);
+
+        const next: SettingsRecord = {
+          id: "settings",
+          activeChainRef: baseActiveChainRef,
+          ...(nextSelected ? { selectedAccountId: nextSelected } : {}),
+          updatedAt: storageNow(),
+        };
+
+        if (
+          latest?.activeChainRef === next.activeChainRef &&
+          (latest?.selectedAccountId ?? null) === (next.selectedAccountId ?? null)
+        ) {
           cachedSettings = latest;
           return;
         }
-
-        const selectedAccountId = latest?.selectedAccountId ?? cachedSettings?.selectedAccountId;
-        const next: SettingsRecord = {
-          id: "settings",
-          activeChainRef: chainRef,
-          ...(selectedAccountId ? { selectedAccountId } : {}),
-          updatedAt: storageNow(),
-        };
 
         try {
           await settingsPort.put(next);
           cachedSettings = next;
         } catch (error) {
-          storageLogger("settings: failed to persist activeChainRef", error);
+          storageLogger("settings: failed to persist", error);
         }
       });
 
     await settingsWriteQueue;
   };
+
+  const persistActiveChainRef = async (chainRef: ChainRef) => {
+    await persistSettings({ activeChainRef: chainRef });
+  };
+
+  const persistSelectedAccountId = async (accountId: AccountId) => {
+    await persistSettings({ selectedAccountId: accountId });
+  };
+
   let destroyed = false;
   let isHydrating = false;
   let pendingNetworkRegistrySync = false;
@@ -232,7 +243,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const sessionLayer = initSessionLayer({
     messenger,
     controllers: controllersBase,
-    keyringStore,
+    accountsStore,
+    keyringMetas,
     storageLogger,
     storageNow,
     hydrationEnabled,
@@ -313,6 +325,32 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   void syncAccountsPointer(networkController.getActiveChain());
 
+  const resolveSelectedAccountIdForPointer = (pointer: { namespace: string; address: string }): AccountId | null => {
+    if (pointer.namespace !== EIP155_NAMESPACE) return null;
+    try {
+      const canonical = toCanonicalEvmAddress(pointer.address);
+      const parsed = AccountIdSchema.safeParse(`${EIP155_NAMESPACE}:${canonical.slice(2)}`);
+      return parsed.success ? parsed.data : null;
+    } catch (error) {
+      storageLogger("settings: failed to derive accountId from pointer", error);
+      return null;
+    }
+  };
+
+  const unsubscribeSelectedAccountPersist = controllersBase.accounts.onActiveChanged((pointer) => {
+    if (!initialized) return;
+    if (!sessionLayer.session.unlock.isUnlocked()) return;
+
+    if (!pointer?.address) {
+      void persistSettings({ selectedAccountId: null });
+      return;
+    }
+
+    const accountId = resolveSelectedAccountIdForPointer({ namespace: pointer.namespace, address: pointer.address });
+    if (!accountId) return;
+    void persistSelectedAccountId(accountId);
+  });
+
   const storageSync =
     storagePort === undefined
       ? undefined
@@ -320,9 +358,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           storage: storagePort,
           controllers: {
             network: networkController,
-            accounts: {
-              onStateChanged: (handler) => controllersBase.accounts.onStateChanged(handler),
-            },
             permissions: {
               onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),
             },
@@ -403,17 +438,14 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     requestNetworkRegistrySync();
   });
 
-  const hydrateSnapshot = async <Namespace extends StorageNamespace>(
+  const hydrateSnapshot = async <Namespace extends keyof StorageSnapshotMap & string>(
     namespace: Namespace,
     apply: (payload: StorageSnapshotMap[Namespace]["payload"]) => void,
   ) => {
     if (!storagePort) return;
-
     try {
       const snapshot = await storagePort.loadSnapshot(namespace);
-      if (!snapshot) {
-        return;
-      }
+      if (!snapshot) return;
       apply(snapshot.payload);
     } catch (error) {
       storageLogger(`storage: failed to hydrate ${namespace}`, error);
@@ -449,12 +481,43 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       }
     }
 
-    await hydrateSnapshot(StorageNamespaces.Accounts, (payload) => {
-      controllers.accounts.replaceState(payload);
-    });
     await hydrateSnapshot(StorageNamespaces.Permissions, (payload) => {
-      controllers.permissions.replaceState(payload);
+      controllers.permissions.replaceState(
+        payload as unknown as Parameters<typeof controllers.permissions.replaceState>[0],
+      );
     });
+  };
+
+  const hydrateAccountsFromStore = async () => {
+    const activeChainRef = networkController.getActiveChain().chainRef;
+    const records = await accountsStore.list({ includeHidden: false });
+    const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
+
+    const byNamespace = new Map<string, string[]>();
+    for (const record of sorted) {
+      const list = byNamespace.get(record.namespace) ?? [];
+      list.push(`0x${record.payloadHex}`);
+      byNamespace.set(record.namespace, list);
+    }
+
+    const namespaces = Object.fromEntries(
+      Array.from(byNamespace.entries()).map(([namespace, all]) => {
+        const selected = cachedSettings?.selectedAccountId ?? null;
+        const selectedPayload = selected?.startsWith(`${namespace}:`) ? (selected.split(":")[1] ?? null) : null;
+        const selectedAddress = selectedPayload ? `0x${selectedPayload}` : null;
+        const primary = selectedAddress && all.includes(selectedAddress) ? selectedAddress : (all[0] ?? null);
+        return [namespace, { all: [...all], primary }];
+      }),
+    );
+
+    const activeNamespace = controllersBase.accounts.getActivePointer()?.namespace ?? EIP155_NAMESPACE;
+    const active = {
+      namespace: activeNamespace,
+      chainRef: activeChainRef,
+      address: (namespaces[activeNamespace]?.primary as string | null | undefined) ?? null,
+    };
+
+    controllersBase.accounts.replaceState({ namespaces, active });
   };
 
   const initialize = async () => {
@@ -492,6 +555,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       pendingNetworkRegistrySync = true;
       try {
         await hydrateControllers();
+        await hydrateAccountsFromStore();
         await sessionLayer.hydrateVaultMeta();
       } finally {
         isHydrating = false;
@@ -546,6 +610,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       unsubscribePointerSync();
     } catch (error) {
       console.warn("[createBackgroundServices] failed to remove network pointer sync listener", error);
+    }
+    try {
+      unsubscribeSelectedAccountPersist();
+    } catch (error) {
+      console.warn("[createBackgroundServices] failed to remove selectedAccountId listener", error);
     }
 
     if (storageSyncAttached) {

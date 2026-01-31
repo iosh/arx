@@ -5,7 +5,7 @@ export type SettingsChangedHandler = () => void;
 
 export type UpdateSettingsParams = {
   activeChainRef?: ChainRef;
-  selectedAccountId?: AccountId;
+  selectedAccountId?: AccountId | null;
 };
 
 export type SettingsService = {

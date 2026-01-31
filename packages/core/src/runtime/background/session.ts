@@ -7,7 +7,8 @@ import type {
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
-import type { KeyringStorePort, StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
+import type { AccountsService, KeyringMetasService } from "../../services/index.js";
+import type { StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { zeroize } from "../../vault/utils.js";
@@ -45,7 +46,8 @@ type SessionLayerParams = {
   messenger: BackgroundMessenger;
   controllers: ControllersBase;
   storagePort?: StoragePort;
-  keyringStore: KeyringStorePort;
+  accountsStore: AccountsService;
+  keyringMetas: KeyringMetasService;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
   hydrationEnabled: boolean;
@@ -70,7 +72,8 @@ export const initSessionLayer = ({
   messenger,
   controllers,
   storagePort,
-  keyringStore,
+  accountsStore,
+  keyringMetas,
   storageLogger,
   storageNow,
   hydrationEnabled,
@@ -297,8 +300,8 @@ export const initSessionLayer = ({
   const keyringService = new KeyringService({
     vault: vaultProxy,
     unlock,
-    accounts: controllers.accounts,
-    keyringStore,
+    accountsStore,
+    keyringMetas,
     namespaces: [
       {
         namespace: EIP155_NAMESPACE,

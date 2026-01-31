@@ -1,16 +1,9 @@
-import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
-import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
-import {
-  ACCOUNTS_SNAPSHOT_VERSION,
-  NETWORK_SNAPSHOT_VERSION,
-  PERMISSIONS_SNAPSHOT_VERSION,
-  StorageNamespaces,
-} from "../../storage/index.js";
+import type { NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
+import { NETWORK_SNAPSHOT_VERSION, PERMISSIONS_SNAPSHOT_VERSION, StorageNamespaces } from "../../storage/index.js";
 
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
-  accounts: { onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void };
   permissions: { onPermissionsChanged(handler: (state: PermissionsState) => void): () => void };
 };
 
@@ -103,34 +96,6 @@ export const createStorageSync = ({
     });
 
     subscriptions.push(networkUnsub);
-
-    const accountsUnsub = controllers.accounts.onStateChanged((state) => {
-      const envelope: AccountsSnapshot = {
-        version: ACCOUNTS_SNAPSHOT_VERSION,
-        updatedAt: now(),
-        payload: {
-          namespaces: Object.fromEntries(
-            Object.entries(state.namespaces).map(([namespace, snapshot]) => [
-              namespace,
-              { all: [...snapshot.all], primary: snapshot.primary },
-            ]),
-          ),
-          active: state.active
-            ? {
-                namespace: state.active.namespace,
-                chainRef: state.active.chainRef,
-                address: state.active.address,
-              }
-            : null,
-        },
-      };
-
-      void storagePort.saveSnapshot(StorageNamespaces.Accounts, envelope).catch((error) => {
-        logger("[persistence] failed to persist accounts snapshot", error);
-      });
-    });
-
-    subscriptions.push(accountsUnsub);
 
     const permissionsUnsub = controllers.permissions.onPermissionsChanged((state) => {
       const envelope: PermissionsSnapshot = {

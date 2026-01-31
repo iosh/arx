@@ -1,20 +1,14 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot } from "../storage/index.js";
-import {
-  ACCOUNTS_SNAPSHOT_VERSION,
-  NETWORK_SNAPSHOT_VERSION,
-  PERMISSIONS_SNAPSHOT_VERSION,
-  StorageNamespaces,
-} from "../storage/index.js";
+import type { NetworkSnapshot, PermissionsSnapshot } from "../storage/index.js";
+import { NETWORK_SNAPSHOT_VERSION, PERMISSIONS_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import {
   buildRpcSnapshot,
   createChainMetadata,
   flushAsync,
-  isAccountsSnapshot,
   isNetworkSnapshot,
   setupBackground,
   TEST_MNEMONIC,
@@ -91,9 +85,7 @@ describe("createBackgroundServices (network integration)", () => {
         expect.arrayContaining([mainChain.chainRef, secondaryChain.chainRef]),
       );
 
-      const accountsSnapshots = storagePort.savedSnapshots.filter(isAccountsSnapshot);
-      expect(accountsSnapshots.length).toBeGreaterThan(0);
-      expect(accountsSnapshots.at(-1)?.envelope.payload.active?.chainRef).toBe(secondaryChain.chainRef);
+      expect(storagePort.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(false);
 
       const networkSnapshots = storagePort.savedSnapshots.filter(isNetworkSnapshot);
       expect(networkSnapshots.length).toBeGreaterThan(0);
@@ -103,7 +95,20 @@ describe("createBackgroundServices (network integration)", () => {
       expect((payload as any)?.activeChain).toBeUndefined();
       expect((payload as any)?.knownChains).toBeUndefined();
 
-      expect((await context.settingsPort!.get())?.activeChainRef).toBe(secondaryChain.chainRef);
+      const expectedAccountId = `eip155:${accountAddress.slice(2).toLowerCase()}`;
+
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        const saved = context.settingsPort!.saved;
+        const match = saved.some(
+          (entry) => entry.activeChainRef === secondaryChain.chainRef && entry.selectedAccountId === expectedAccountId,
+        );
+        if (match) break;
+        await flushAsync();
+      }
+
+      const settings = await context.settingsPort!.get();
+      expect(settings?.activeChainRef).toBe(secondaryChain.chainRef);
+      expect(settings?.selectedAccountId).toBe(expectedAccountId);
     } finally {
       context.destroy();
     }
@@ -133,20 +138,8 @@ describe("createBackgroundServices (network integration)", () => {
       },
     };
 
-    const accountsSnapshot: AccountsSnapshot = {
-      version: ACCOUNTS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        namespaces: {
-          [mainChain.namespace]: { all: [accountAddress], primary: accountAddress },
-        },
-        active: {
-          namespace: mainChain.namespace,
-          chainRef: mainChain.chainRef,
-          address: accountAddress,
-        },
-      },
-    };
+    const payloadHex = accountAddress.slice(2).toLowerCase();
+    const accountId = `eip155:${payloadHex}`;
 
     const permissionsSnapshot: PermissionsSnapshot = {
       version: PERMISSIONS_SNAPSHOT_VERSION,
@@ -182,10 +175,24 @@ describe("createBackgroundServices (network integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [mainChain, altChain],
-      settingsSeed: { id: "settings", activeChainRef: orphanChain.chainRef, updatedAt: 1_000 },
+      settingsSeed: {
+        id: "settings",
+        activeChainRef: orphanChain.chainRef,
+        selectedAccountId: accountId,
+        updatedAt: 1_000,
+      },
+      accountsSeed: [
+        {
+          accountId,
+          namespace: "eip155",
+          payloadHex,
+          keyringId: "00000000-0000-4000-8000-000000000001",
+          derivationIndex: 0,
+          createdAt: 1_000,
+        },
+      ],
       storageSeed: {
         [StorageNamespaces.Network]: networkSnapshot,
-        [StorageNamespaces.Accounts]: accountsSnapshot,
         [StorageNamespaces.Permissions]: permissionsSnapshot,
       },
       transactionsSeed: [
@@ -194,14 +201,14 @@ describe("createBackgroundServices (network integration)", () => {
           namespace: "eip155",
           chainRef: mainChain.chainRef,
           origin: "https://dapp.example",
-          fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          fromAccountId: accountId,
           status: "approved",
           request: {
             namespace: "eip155",
             chainRef: mainChain.chainRef,
             payload: {
               chainId: mainChain.chainId,
-              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              from: accountAddress,
               to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               value: "0x0",
               data: "0x",
@@ -223,7 +230,9 @@ describe("createBackgroundServices (network integration)", () => {
     try {
       expect((await context.settingsPort!.get())?.activeChainRef).toBe(mainChain.chainRef);
 
-      expect(context.services.controllers.accounts.getState()).toEqual(accountsSnapshot.payload);
+      const accountsState = context.services.controllers.accounts.getState();
+      expect(accountsState.namespaces[mainChain.namespace]?.all).toEqual([accountAddress]);
+      expect(accountsState.namespaces[mainChain.namespace]?.primary).toBe(accountAddress);
       expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
       expect(context.services.controllers.approvals.getState().pending).toHaveLength(0);
 

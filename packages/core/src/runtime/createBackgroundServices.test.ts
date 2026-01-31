@@ -6,18 +6,13 @@ import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type {
-  AccountMeta,
   ChainRegistryEntity,
-  KeyringMeta,
-  KeyringStorePort,
   StorageNamespace,
   StoragePort,
   StorageSnapshotMap,
   VaultMetaSnapshot,
 } from "../storage/index.js";
 import {
-  ACCOUNTS_SNAPSHOT_VERSION,
-  type AccountsSnapshot,
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
   PERMISSIONS_SNAPSHOT_VERSION,
@@ -28,7 +23,12 @@ import {
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import { MemoryApprovalsPort, MemoryTransactionsPort } from "./__fixtures__/backgroundTestSetup.js";
+import {
+  MemoryAccountsPort,
+  MemoryApprovalsPort,
+  MemoryKeyringMetasPort,
+  MemoryTransactionsPort,
+} from "./__fixtures__/backgroundTestSetup.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -74,16 +74,10 @@ const NETWORK_SNAPSHOT: NetworkSnapshot = {
   },
 };
 
-const ACCOUNTS_SNAPSHOT: AccountsSnapshot = {
-  version: ACCOUNTS_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    namespaces: {
-      eip155: { all: ["0xabc", "0xdef"], primary: "0xabc" },
-    },
-    active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
-  },
-};
+const SEEDED_PAYLOAD_HEX = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SEEDED_ADDRESS = `0x${SEEDED_PAYLOAD_HEX}`;
+const SEEDED_ACCOUNT_ID = `eip155:${SEEDED_PAYLOAD_HEX}`;
+const SEEDED_KEYRING_ID = "00000000-0000-4000-8000-000000000001";
 
 const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
   version: PERMISSIONS_SNAPSHOT_VERSION,
@@ -122,35 +116,6 @@ const VAULT_META: VaultMetaSnapshot = {
     autoLockDuration: 120_000,
     initializedAt: 500,
   },
-};
-
-const createInMemoryKeyringStore = (): KeyringStorePort => {
-  let keyrings: KeyringMeta[] = [];
-  let accounts: AccountMeta[] = [];
-  return {
-    async getKeyringMetas() {
-      return [...keyrings];
-    },
-    async getAccountMetas() {
-      return [...accounts];
-    },
-    async putKeyringMetas(metas) {
-      keyrings = metas.map((m) => ({ ...m }));
-    },
-    async putAccountMetas(metas) {
-      accounts = metas.map((m) => ({ ...m }));
-    },
-    async deleteKeyringMeta(id) {
-      keyrings = keyrings.filter((k) => k.id !== id);
-      accounts = accounts.filter((a) => a.keyringId !== id);
-    },
-    async deleteAccount(address) {
-      accounts = accounts.filter((a) => a.address !== address);
-    },
-    async deleteAccountsByKeyring(keyringId) {
-      accounts = accounts.filter((a) => a.keyringId !== keyringId);
-    },
-  };
 };
 
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -281,7 +246,14 @@ const createServices = (options: TestServicesOptions = {}) => {
     ? baseOptions
     : {
         ...baseOptions,
-        store: { ports: { approvals: new MemoryApprovalsPort(), transactions: new MemoryTransactionsPort() } },
+        store: {
+          ports: {
+            approvals: new MemoryApprovalsPort(),
+            transactions: new MemoryTransactionsPort(),
+            accounts: new MemoryAccountsPort(),
+            keyringMetas: new MemoryKeyringMetasPort(),
+          },
+        },
       };
   const chainRegistryOptions = baseOptions.chainRegistry;
   if (chainRegistryOptions?.port) {
@@ -421,21 +393,40 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort({
       snapshots: {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-        [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
         [StorageNamespaces.Permissions]: PERMISSIONS_SNAPSHOT,
       },
       vaultMeta: VAULT_META,
     });
 
-    const keyringStore = createInMemoryKeyringStore();
-
     const settingsPort: SettingsPort = {
-      get: async () => ({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: clock() }),
+      get: async () => ({
+        id: "settings",
+        activeChainRef: ALT_CHAIN.chainRef,
+        selectedAccountId: SEEDED_ACCOUNT_ID,
+        updatedAt: clock(),
+      }),
       put: async () => {},
     };
 
+    const storePorts: NonNullable<CreateBackgroundServicesOptions["store"]>["ports"] = {
+      approvals: new MemoryApprovalsPort(),
+      transactions: new MemoryTransactionsPort(),
+      accounts: new MemoryAccountsPort([
+        {
+          accountId: SEEDED_ACCOUNT_ID,
+          namespace: EIP155_NAMESPACE,
+          payloadHex: SEEDED_PAYLOAD_HEX,
+          keyringId: SEEDED_KEYRING_ID,
+          derivationIndex: 0,
+          createdAt: 1_000,
+        },
+      ]),
+      keyringMetas: new MemoryKeyringMetasPort(),
+    };
+
     const services = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      store: { ports: storePorts },
+      storage: { port: storage, now: clock },
       settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
@@ -450,10 +441,58 @@ describe("createBackgroundServices", () => {
     );
     expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
-    expect(services.controllers.accounts.getActivePointer()?.address).toBe(ACCOUNTS_SNAPSHOT.payload.active?.address);
+    expect(services.controllers.accounts.getActivePointer()?.address).toBe(SEEDED_ADDRESS);
 
     expect(services.session.unlock.getState().timeoutMs).toBe(VAULT_META.payload.autoLockDuration);
     expect(services.session.getLastPersistedVaultMeta()).toStrictEqual(VAULT_META);
+
+    services.lifecycle.destroy();
+  });
+
+  it("persists selectedAccountId even when settings record does not exist yet", async () => {
+    const clock = () => 1_000;
+    const storage = new MemoryStoragePort();
+
+    const saved: SettingsRecord[] = [];
+    let record: SettingsRecord | null = null;
+    const settingsPort: SettingsPort = {
+      get: async () => record,
+      put: async (next) => {
+        record = next;
+        saved.push(next);
+      },
+    };
+
+    const services = createServices({
+      storage: { port: storage, now: clock },
+      settings: { port: settingsPort },
+      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
+      chainRegistry: { seed: [MAINNET_CHAIN] },
+    });
+
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    await services.session.vault.initialize({ password: "secret" });
+    await services.session.unlock.unlock({ password: "secret" });
+
+    const address = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    await services.controllers.accounts.addAccount({
+      chainRef: MAINNET_CHAIN.chainRef,
+      address,
+      makePrimary: true,
+    });
+    await services.controllers.accounts.switchActive({ chainRef: MAINNET_CHAIN.chainRef, address });
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      if (saved.some((entry) => entry.selectedAccountId === `eip155:${address.slice(2)}`)) {
+        break;
+      }
+      await flushMicrotasks();
+    }
+
+    expect(saved.some((entry) => entry.activeChainRef === MAINNET_CHAIN.chainRef)).toBe(true);
+    expect(saved.some((entry) => entry.selectedAccountId === `eip155:${address.slice(2)}`)).toBe(true);
 
     services.lifecycle.destroy();
   });
@@ -497,10 +536,9 @@ describe("createBackgroundServices", () => {
     let now = 3_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const keyringStore = createInMemoryKeyringStore();
 
     const services = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN] },
     });
@@ -530,11 +568,7 @@ describe("createBackgroundServices", () => {
       active: { namespace: "eip155", chainRef: "eip155:1", address: "0x123" },
     });
 
-    const accountsSnapshot = storage.getSnapshot(StorageNamespaces.Accounts);
-    expect(accountsSnapshot).not.toBeNull();
-    expect(accountsSnapshot?.updatedAt).toBe(3_750);
-    expect(accountsSnapshot?.payload.namespaces.eip155?.all).toEqual(["0x123"]);
-    expect(accountsSnapshot?.payload.active?.address).toBe("0x123");
+    expect(storage.getSnapshot(StorageNamespaces.Accounts)).toBeNull();
 
     now = 3_820;
     await services.controllers.permissions.grant("https://dapp.example", PermissionScopes.Basic, {
@@ -563,9 +597,8 @@ describe("createBackgroundServices", () => {
     let now = 4_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const keyringStore = createInMemoryKeyringStore();
     const services = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
@@ -592,11 +625,10 @@ describe("createBackgroundServices", () => {
     let now = 10_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const keyringStore = createInMemoryKeyringStore();
     const swallowLog = () => {};
 
     const first = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
@@ -616,7 +648,7 @@ describe("createBackgroundServices", () => {
     first.lifecycle.destroy();
 
     const second = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
     });
 
@@ -640,20 +672,17 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort({
       snapshots: {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-        [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
       },
     });
-    const keyringStore = createInMemoryKeyringStore();
     storage.setSnapshotLoadFailure(StorageNamespaces.Network, new Error("boom"));
 
-    const swallowLog = () => {};
     const settingsPort: SettingsPort = {
       get: async () => ({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: clock() }),
       put: async () => {},
     };
 
     const first = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
@@ -661,14 +690,7 @@ describe("createBackgroundServices", () => {
     await first.lifecycle.initialize();
     first.lifecycle.start();
 
-    expect(first.controllers.accounts.getAccounts()).toEqual(ACCOUNTS_SNAPSHOT.payload.namespaces?.eip155?.all ?? []);
-    expect(first.controllers.accounts.getActivePointer()?.address).toBe(
-      ACCOUNTS_SNAPSHOT.payload.active?.address ?? null,
-    );
-    first.controllers.accounts.replaceState({
-      namespaces: { eip155: { all: ["0x999"], primary: "0x999" } },
-      active: { namespace: "eip155", chainRef: "eip155:1", address: "0x999" },
-    });
+    expect(storage.clearedSnapshots).toContain(StorageNamespaces.Network);
 
     first.lifecycle.destroy();
 
@@ -676,7 +698,7 @@ describe("createBackgroundServices", () => {
     await storage.saveSnapshot(StorageNamespaces.Network, NETWORK_SNAPSHOT);
 
     const second = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       settings: { port: settingsPort },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
@@ -698,11 +720,9 @@ describe("createBackgroundServices", () => {
     const now = 50_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const keyringStore = createInMemoryKeyringStore();
-    const swallowLog = () => {};
 
     const first = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
     });
 
@@ -722,7 +742,7 @@ describe("createBackgroundServices", () => {
     storage.savedSnapshots.splice(0);
 
     const second = createServices({
-      storage: { port: storage, now: clock, keyringStore },
+      storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN] },
     });
@@ -735,7 +755,7 @@ describe("createBackgroundServices", () => {
       active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
     });
 
-    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(true);
+    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(false);
 
     second.lifecycle.destroy();
   });
@@ -744,7 +764,6 @@ describe("createBackgroundServices", () => {
     let now = 70_000;
     const clock = () => now;
     const storage = new MemoryStoragePort();
-    const keyringStore = createInMemoryKeyringStore();
     const swallowLog = () => {};
 
     let nextTimerId = 1;
@@ -772,7 +791,7 @@ describe("createBackgroundServices", () => {
     };
 
     const services = createServices({
-      storage: { port: storage, now: clock, logger: swallowLog, keyringStore },
+      storage: { port: storage, now: clock, logger: swallowLog },
       session: {
         vault: new FakeVault(clock),
         persistDebounceMs: 100,
@@ -833,15 +852,13 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort({
       snapshots: {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-        [StorageNamespaces.Accounts]: ACCOUNTS_SNAPSHOT,
       },
       vaultMeta: VAULT_META,
     });
-    const keyringStore = createInMemoryKeyringStore();
     const swallowLog = () => {};
 
     const services = createServices({
-      storage: { port: storage, now: clock, logger: swallowLog, hydrate: false, keyringStore },
+      storage: { port: storage, now: clock, logger: swallowLog, hydrate: false },
       session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
     });
 

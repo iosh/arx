@@ -3,7 +3,9 @@ import type { ChainMetadata } from "../../../chains/metadata.js";
 import type { ApprovalTask } from "../../../controllers/index.js";
 import {
   FakeVault,
+  MemoryAccountsPort,
   MemoryApprovalsPort,
+  MemoryKeyringMetasPort,
   MemoryTransactionsPort,
 } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
@@ -63,6 +65,8 @@ export const createServices = (overrides?: Parameters<typeof createBackgroundSer
       ports: {
         approvals: new MemoryApprovalsPort(),
         transactions: new MemoryTransactionsPort(),
+        accounts: new MemoryAccountsPort(),
+        keyringMetas: new MemoryKeyringMetasPort(),
       },
     },
     // Use FakeVault by default to avoid encryption overhead and warnings

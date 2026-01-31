@@ -6,27 +6,6 @@ export const KEYRING_TYPES = ["hd", "private-key"] as const;
 export type KeyringType = (typeof KEYRING_TYPES)[number];
 export const KeyringTypeSchema = z.enum(KEYRING_TYPES);
 
-export const KeyringMetaSchema = z.strictObject({
-  id: z.string().uuid(),
-  type: KeyringTypeSchema,
-  createdAt: epochMillisecondsSchema,
-  alias: z.string().optional(), // user label for keyring
-  backedUp: z.boolean().optional(), // hd only: mnemonic backup flag
-  derivedCount: z.number().int().min(0).optional(), // hd only: next derivation index
-});
-export type KeyringMeta = z.infer<typeof KeyringMetaSchema>;
-
-export const AccountMetaSchema = z.strictObject({
-  address: z.string().regex(/^0x[a-f0-9]{40}$/), // canonical lower-case EVM address
-  keyringId: z.uuid(),
-  derivationIndex: z.number().int().min(0).optional(), // hd only
-  alias: z.string().optional(),
-  createdAt: epochMillisecondsSchema,
-  hidden: z.boolean().optional(), // hd soft-hide
-  namespace: z.string(),
-});
-export type AccountMeta = z.infer<typeof AccountMetaSchema>;
-
 // Vault payload: only sensitive materials, no metadata
 const HdVaultPayloadSchema = z.strictObject({
   mnemonic: z.array(z.string().min(1)).min(12), // word list; detailed check done upstream

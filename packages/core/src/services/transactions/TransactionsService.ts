@@ -49,10 +49,10 @@ export const createTransactionsService = ({
   };
 
   const createPending = async (params: CreatePendingTransactionParams) => {
-    const ts = now();
+    const ts = params.createdAt ?? now();
 
     const record: TransactionRecord = TransactionRecordSchema.parse({
-      id: crypto.randomUUID(),
+      id: params.id ?? crypto.randomUUID(),
       namespace: params.namespace,
       chainRef: params.chainRef,
       origin: params.origin,
@@ -132,6 +132,44 @@ export const createTransactionsService = ({
     emitChanged();
   };
 
+  const failAllPending = async (params?: { reason?: string }) => {
+    const reason = params?.reason ?? "session_restart";
+    let cursor: number | undefined;
+    let transitioned = 0;
+
+    while (true) {
+      const page = await list({
+        status: "pending",
+        limit: 200,
+        ...(cursor !== undefined ? { beforeCreatedAt: cursor } : {}),
+      });
+
+      if (page.length === 0) break;
+
+      for (const record of page) {
+        const next = await transition({
+          id: record.id,
+          fromStatus: "pending",
+          toStatus: "failed",
+          patch: {
+            userRejected: false,
+            error: {
+              name: "TransactionAbandonedError",
+              message: "Transaction was abandoned due to session restart.",
+              data: { reason },
+            },
+          },
+        });
+        if (next) transitioned += 1;
+      }
+
+      cursor = page.at(-1)?.createdAt;
+      if (cursor === undefined) break;
+    }
+
+    return transitioned;
+  };
+
   return {
     on(event, handler) {
       if (event !== "changed") return;
@@ -147,5 +185,6 @@ export const createTransactionsService = ({
     createPending,
     transition,
     remove,
+    failAllPending,
   };
 };

@@ -11,6 +11,8 @@ import { createApprovalsService } from "../services/approvals/ApprovalsService.j
 import type { ApprovalsPort } from "../services/approvals/port.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import type { SettingsPort } from "../services/settings/port.js";
+import type { TransactionsPort } from "../services/transactions/port.js";
+import { createTransactionsService } from "../services/transactions/TransactionsService.js";
 import type {
   AccountMeta,
   KeyringMeta,
@@ -23,7 +25,6 @@ import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
 import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
-import { cloneTransactionState } from "../transactions/storage/state.js";
 import { buildDefaultEndpointState, DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
@@ -31,6 +32,7 @@ import type { MessengerTopics } from "./background/messenger.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
 import type { BackgroundSessionServices } from "./background/session.js";
 import { initSessionLayer, type SessionOptions } from "./background/session.js";
+import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
 import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
 import { createStorageSync } from "./persistence/createStorageSync.js";
 
@@ -51,6 +53,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
   store?: {
     ports: {
       approvals: ApprovalsPort;
+      transactions: TransactionsPort;
     };
   };
   settings?: {
@@ -130,9 +133,17 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   if (!storeOptions?.ports?.approvals) {
     throw new Error("createBackgroundServices requires store.ports.approvals");
   }
+  if (!storeOptions?.ports?.transactions) {
+    throw new Error("createBackgroundServices requires store.ports.transactions");
+  }
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
+    now: storageOptions?.now ?? Date.now,
+  });
+
+  const transactionsService = createTransactionsService({
+    port: storeOptions.ports.transactions,
     now: storageOptions?.now ?? Date.now,
   });
 
@@ -140,6 +151,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
     approvalsService,
+    transactionsService,
     options: controllerOptions,
   });
 
@@ -256,6 +268,13 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   namespaceResolverFn = createNamespaceResolver(controllers);
 
+  const transactionsLifecycle = createTransactionsLifecycle({
+    controller: controllers.transactions,
+    service: transactionsService,
+    unlock: sessionLayer.session.unlock,
+    logger: storageLogger,
+  });
+
   const accountsBridge = new AccountsKeyringBridge({
     keyring: keyringService,
     accounts: {
@@ -307,7 +326,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
             permissions: {
               onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),
             },
-            transactions: controllersBase.transactions,
           },
           now: storageNow,
           logger: storageLogger,
@@ -437,11 +455,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     await hydrateSnapshot(StorageNamespaces.Permissions, (payload) => {
       controllers.permissions.replaceState(payload);
     });
-
-    await hydrateSnapshot(StorageNamespaces.Transactions, (payload) => {
-      controllers.transactions.replaceState(cloneTransactionState(payload));
-    });
-    await controllers.transactions.resumePending();
   };
 
   const initialize = async () => {
@@ -462,6 +475,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       } catch (error) {
         storageLogger("approvals: failed to expire pending on initialize", error);
       }
+
+      await transactionsLifecycle.initialize();
 
       if (settingsPort) {
         try {
@@ -509,6 +524,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     sessionLayer.attachSessionListeners();
+    transactionsLifecycle.start();
   };
 
   const destroy = () => {
@@ -517,6 +533,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     }
 
     destroyed = true;
+    transactionsLifecycle.destroy();
     sessionLayer.cleanupVaultPersistTimer();
     sessionLayer.detachSessionListeners();
     sessionLayer.destroySessionLayer();

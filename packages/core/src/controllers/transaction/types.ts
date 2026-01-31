@@ -93,14 +93,13 @@ export type TransactionMeta = {
   updatedAt: number;
 };
 
+// Internal state shape used by the in-memory transaction controller and tests.
 export type TransactionState = {
   pending: TransactionMeta[];
   history: TransactionMeta[];
 };
 
 export type TransactionMessengerTopics = {
-  "transaction:stateChanged": TransactionState;
-  "transaction:queued": TransactionMeta;
   "transaction:statusChanged": TransactionStatusChange;
 };
 
@@ -134,7 +133,6 @@ export type TransactionControllerOptions = {
 };
 
 export type TransactionController = {
-  getState(): TransactionState;
   getMeta(id: string): TransactionMeta | undefined;
   submitTransaction(
     origin: string,
@@ -144,10 +142,6 @@ export type TransactionController = {
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;
-  resumePending(): Promise<void>;
-  replaceState(state: TransactionState): void;
-  hydrate(state: TransactionState): void;
-  onStateChanged(handler: (state: TransactionState) => void): () => void;
-  onQueued(handler: (meta: TransactionMeta) => void): () => void;
+  resumePending(params?: { includeSigning?: boolean }): Promise<void>;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
 };

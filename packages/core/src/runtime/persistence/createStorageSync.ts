@@ -1,6 +1,5 @@
 import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
-import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { AccountsSnapshot, NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
 import {
   ACCOUNTS_SNAPSHOT_VERSION,
@@ -8,13 +7,11 @@ import {
   PERMISSIONS_SNAPSHOT_VERSION,
   StorageNamespaces,
 } from "../../storage/index.js";
-import { serializeTransactionState } from "../../transactions/storage/state.js";
 
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
   accounts: { onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void };
   permissions: { onPermissionsChanged(handler: (state: PermissionsState) => void): () => void };
-  transactions: TransactionController;
 };
 
 type RegisterStorageSyncOptions = {
@@ -147,16 +144,6 @@ export const createStorageSync = ({
     });
 
     subscriptions.push(permissionsUnsub);
-
-    const transactionsUnsub = controllers.transactions.onStateChanged((state) => {
-      const envelope = serializeTransactionState(state, now());
-
-      void storagePort.saveSnapshot(StorageNamespaces.Transactions, envelope).catch((error) => {
-        logger("[persistence] failed to persist transactions snapshot", error);
-      });
-    });
-
-    subscriptions.push(transactionsUnsub);
   };
 
   const detach = () => {

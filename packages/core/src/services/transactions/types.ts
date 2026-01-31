@@ -4,6 +4,11 @@ import type { TransactionRecord, TransactionStatus } from "../../db/records.js";
 export type TransactionsChangedHandler = () => void;
 
 export type CreatePendingTransactionParams = {
+  /**
+   * Optional caller-provided id to keep controller-level ids stable.
+   * Must be a UUID when provided.
+   */
+  id?: TransactionRecord["id"];
   namespace: TransactionRecord["namespace"];
   chainRef: ChainRef;
   origin: TransactionRecord["origin"];
@@ -11,6 +16,11 @@ export type CreatePendingTransactionParams = {
   request: TransactionRecord["request"];
   warnings?: TransactionRecord["warnings"];
   issues?: TransactionRecord["issues"];
+  /**
+   * Optional caller-provided createdAt for deterministic timestamps in tests.
+   * When provided, updatedAt is initialized to the same value.
+   */
+  createdAt?: number;
 };
 
 export type TransitionTransactionParams = {
@@ -39,4 +49,10 @@ export type TransactionsService = {
   transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
 
   remove(id: TransactionRecord["id"]): Promise<void>;
+
+  /**
+   * Best-effort cleanup for pending items that can't be recovered after restart.
+   * Returns the number of records transitioned to `failed`.
+   */
+  failAllPending(params?: { reason?: string }): Promise<number>;
 };

@@ -19,7 +19,7 @@ export const AccountPayloadHexSchema = z.string().regex(/^[0-9a-f]{40}$/, {
   error: "payloadHex must be 40 lowercase hex chars (no 0x)",
 });
 export const AccountIdSchema = z.string().regex(/^eip155:[0-9a-f]{40}$/, {
-  error: "accountId must be eip155:<40 lowercase hex> in phase 1",
+  error: "accountId must be eip155:<40 lowercase hex>",
 });
 export type AccountId = z.infer<typeof AccountIdSchema>;
 

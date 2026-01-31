@@ -24,16 +24,18 @@ import type {
   TransactionMessenger,
   TransactionMeta,
   TransactionRequest,
-  TransactionState,
   TransactionStatusChange,
   TransactionWarning,
 } from "./types.js";
 
 const TRANSACTION_STATUS_CHANGED_TOPIC = "transaction:statusChanged";
-const TRANSACTION_STATE_TOPIC = "transaction:stateChanged";
-const TRANSACTION_QUEUED_TOPIC = "transaction:queued";
 
 const DEFAULT_REJECTION_MESSAGE = "Transaction rejected by stub";
+
+type TransactionState = {
+  pending: TransactionMeta[];
+  history: TransactionMeta[];
+};
 
 const defaultIdGenerator = () => {
   const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
@@ -65,21 +67,6 @@ const cloneState = (state: TransactionState): TransactionState => ({
   pending: state.pending.map(cloneMeta),
   history: state.history.map(cloneMeta),
 });
-
-const isSameState = (prev?: TransactionState, next?: TransactionState) => {
-  if (!prev || !next) return false;
-  if (prev.pending.length !== next.pending.length) return false;
-  if (prev.history.length !== next.history.length) return false;
-
-  return (
-    prev.pending.every(
-      (meta, index) => meta.id === next.pending[index]?.id && meta.updatedAt === next.pending[index]?.updatedAt,
-    ) &&
-    prev.history.every(
-      (meta, index) => meta.id === next.history[index]?.id && meta.updatedAt === next.history[index]?.updatedAt,
-    )
-  );
-};
 
 export class InMemoryTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
@@ -137,11 +124,6 @@ export class InMemoryTransactionController implements TransactionController {
     };
 
     this.#tracker = tracker ?? createReceiptTracker(trackerDeps);
-    this.#publishState();
-  }
-
-  getState(): TransactionState {
-    return cloneState(this.#state);
   }
 
   getMeta(id: string): TransactionMeta | undefined {
@@ -187,9 +169,6 @@ export class InMemoryTransactionController implements TransactionController {
       pending: [...this.#state.pending, meta],
       history: [...this.#state.history],
     };
-
-    this.#publishState();
-    this.#publishQueued(meta);
 
     let draftPreview: TransactionDraftPreview | null = null;
     let collectedWarnings: TransactionWarning[] = [];
@@ -246,7 +225,6 @@ export class InMemoryTransactionController implements TransactionController {
     const nextHistory = [...this.#state.history, updated];
 
     this.#state = { pending: nextPending, history: nextHistory };
-    this.#publishState();
     this.#publishStatusChange(current, updated);
     this.#enqueue(updated.id);
     return updated;
@@ -328,7 +306,6 @@ export class InMemoryTransactionController implements TransactionController {
       const nextHistory = [...this.#state.history, updated];
 
       this.#state = { pending: nextPending, history: nextHistory };
-      this.#publishState();
       this.#tracker.stop(updated.id);
       this.#publishStatusChange(current, updated);
       return;
@@ -353,31 +330,26 @@ export class InMemoryTransactionController implements TransactionController {
 
     this.#state = { pending: [...this.#state.pending], history: nextHistory };
     this.#tracker.stop(next.id);
-    this.#publishState();
     this.#publishStatusChange(current, next);
 
     this.#drafts.delete(id);
-  }
-
-  onStateChanged(handler: (state: TransactionState) => void): () => void {
-    return this.#messenger.subscribe(TRANSACTION_STATE_TOPIC, handler);
   }
 
   onStatusChanged(handler: (meta: TransactionStatusChange) => void): () => void {
     return this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED_TOPIC, handler);
   }
 
-  onQueued(handler: (meta: TransactionMeta) => void): () => void {
-    return this.#messenger.subscribe(TRANSACTION_QUEUED_TOPIC, handler);
-  }
+  async resumePending(params?: { includeSigning?: boolean }): Promise<void> {
+    const includeSigning = params?.includeSigning ?? true;
 
-  async resumePending(): Promise<void> {
-    // Only resume transactions that already passed approval; fresh submissions stay in pending.
-    const resolvable = [...this.#state.pending, ...this.#state.history].filter((meta) =>
-      ["approved", "signed"].includes(meta.status),
-    );
-    for (const meta of resolvable) {
-      this.#enqueue(meta.id);
+    if (includeSigning) {
+      // Only resume transactions that already passed approval; fresh submissions stay in pending.
+      const resolvable = [...this.#state.pending, ...this.#state.history].filter((meta) =>
+        ["approved", "signed"].includes(meta.status),
+      );
+      for (const meta of resolvable) {
+        this.#enqueue(meta.id);
+      }
     }
 
     const broadcastable = this.#state.history.filter(
@@ -386,15 +358,6 @@ export class InMemoryTransactionController implements TransactionController {
     for (const meta of broadcastable) {
       this.#tracker.resume(meta.id, this.#buildContext(meta), meta.hash as string);
     }
-  }
-
-  hydrate(state: TransactionState): void {
-    this.#state = cloneState(state);
-    this.#publishState();
-  }
-
-  replaceState(state: TransactionState): void {
-    this.hydrate(state);
   }
 
   #createApprovalTask(
@@ -436,18 +399,6 @@ export class InMemoryTransactionController implements TransactionController {
       }
     }
     return null;
-  }
-
-  #publishState() {
-    this.#messenger.publish(TRANSACTION_STATE_TOPIC, cloneState(this.#state), {
-      compare: isSameState,
-    });
-  }
-
-  #publishQueued(meta: TransactionMeta) {
-    this.#messenger.publish(TRANSACTION_QUEUED_TOPIC, cloneMeta(meta), {
-      compare: (prev, next) => prev?.id === next?.id && prev?.updatedAt === next?.updatedAt,
-    });
   }
 
   #enqueue(id: string) {
@@ -524,7 +475,6 @@ export class InMemoryTransactionController implements TransactionController {
       const current = this.#state.pending[inPending]!;
       const next = { ...cloneMeta(current), ...updates, updatedAt: updates.updatedAt ?? now };
       this.#state.pending[inPending] = next;
-      this.#publishState();
       this.#handleTrackerTransition(current, next);
       this.#publishStatusChange(current, next);
       return;
@@ -534,7 +484,6 @@ export class InMemoryTransactionController implements TransactionController {
       const current = this.#state.history[inHistory]!;
       const next = { ...cloneMeta(current), ...updates, updatedAt: updates.updatedAt ?? now };
       this.#state.history[inHistory] = next;
-      this.#publishState();
       this.#handleTrackerTransition(current, next);
       this.#publishStatusChange(current, next);
     }

@@ -38,16 +38,16 @@ import type {
   PermissionScopeResolver,
   PermissionsState,
 } from "../../controllers/permission/types.js";
-import { InMemoryTransactionController } from "../../controllers/transaction/TransactionController.js";
+import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
 import type {
   TransactionController,
   TransactionMessenger,
   TransactionMessengerTopics,
-  TransactionState,
 } from "../../controllers/transaction/types.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import { createPermissionScopeResolver, type RpcInvocationContext } from "../../rpc/index.js";
 import type { ApprovalsService } from "../../services/approvals/types.js";
+import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import {
   DEFAULT_ACCOUNTS_STATE,
@@ -80,9 +80,6 @@ export type ControllerLayerOptions = {
     scopeResolver?: PermissionScopeResolver;
   };
   transactions?: {
-    autoApprove?: boolean;
-    autoRejectMessage?: string;
-    initialState?: TransactionState;
     registry?: TransactionAdapterRegistry;
   };
   chainRegistry?: {
@@ -115,11 +112,13 @@ export const initControllers = ({
   messenger,
   namespaceResolver,
   approvalsService,
+  transactionsService,
   options,
 }: {
   messenger: BackgroundMessenger;
   namespaceResolver: NamespaceResolver;
   approvalsService: ApprovalsService;
+  transactionsService: TransactionsService;
   options: ControllerLayerOptions;
 }): ControllersInitResult => {
   const {
@@ -165,7 +164,7 @@ export const initControllers = ({
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
 
-  const transactionController = new InMemoryTransactionController({
+  const transactionController = new StoreTransactionController({
     messenger: castMessenger<TransactionMessengerTopics>(messenger) as TransactionMessenger,
     network: {
       getActiveChain: () => networkController.getActiveChain(),
@@ -178,8 +177,8 @@ export const initControllers = ({
       requestApproval: (...args) => approvalController.requestApproval(...args),
     },
     registry: transactionRegistry,
-
-    ...(transactionOptions?.initialState !== undefined ? { initialState: transactionOptions.initialState } : {}),
+    service: transactionsService,
+    ...(networkOptions?.now ? { now: networkOptions.now } : {}),
   });
 
   const seedSource = chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA;

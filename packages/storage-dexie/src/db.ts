@@ -2,23 +2,23 @@ import type {
   AccountRecord,
   ApprovalRecord,
   KeyringMetaRecord,
+  NetworkRpcPreferenceRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
 } from "@arx/core/db";
-import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION, type StorageNamespace } from "@arx/core/storage";
+import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie, type Table } from "dexie";
 import { runMigrations } from "./migrations.js";
-import type { SnapshotEntity, VaultMetaEntity } from "./types.js";
+import type { VaultMetaEntity } from "./types.js";
 
 type ChainRegistryRow = ChainRegistryEntity;
 type KeyringMetaRow = KeyringMetaRecord;
 
 export class ArxStorageDatabase extends Dexie {
-  snapshots!: Table<SnapshotEntity, StorageNamespace>;
-
   settings!: Table<SettingsRecord, string>;
   chains!: Table<ChainRegistryRow, string>;
+  networkRpc!: Table<NetworkRpcPreferenceRecord, string>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, string>;
   approvals!: Table<ApprovalRecord, string>;
@@ -32,10 +32,9 @@ export class ArxStorageDatabase extends Dexie {
     super(name);
     this.version(DOMAIN_SCHEMA_VERSION)
       .stores({
-        snapshots: "&namespace",
-
         settings: "&id",
         chains: "&chainRef",
+        networkRpc: "&chainRef, updatedAt",
         accounts: "&accountId, namespace, keyringId",
         permissions: "&id, origin, &[origin+namespace+chainRef]",
         approvals: "&id, status, type, origin, createdAt",

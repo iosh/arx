@@ -5,13 +5,16 @@ import type {
   PermissionsPort,
   TransactionsPort,
 } from "@arx/core/services";
+import type { NetworkRpcPort, VaultMetaPort } from "@arx/core/storage";
 import { ArxStorageDatabase } from "../db.js";
 import { DEFAULT_DB_NAME, getOrCreateDatabase } from "../sharedDb.js";
 import { DexieAccountsPort } from "./accountsPort.js";
 import { DexieApprovalsPort } from "./approvalsPort.js";
 import { DexieKeyringMetasPort } from "./keyringMetasPort.js";
+import { DexieNetworkRpcPort } from "./networkRpcPort.js";
 import { DexiePermissionsPort } from "./permissionsPort.js";
 import { DexieTransactionsPort } from "./transactionsPort.js";
+import { DexieVaultMetaPort } from "./vaultMetaPort.js";
 
 const getDb = (dbName: string) => getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
 
@@ -43,4 +46,16 @@ export type CreateDexieTransactionsPortOptions = { databaseName?: string };
 export const createDexieTransactionsPort = (options: CreateDexieTransactionsPortOptions = {}): TransactionsPort => {
   const dbName = options.databaseName ?? DEFAULT_DB_NAME;
   return new DexieTransactionsPort(getDb(dbName));
+};
+
+export type CreateDexieNetworkRpcPortOptions = { databaseName?: string };
+export const createDexieNetworkRpcPort = (options: CreateDexieNetworkRpcPortOptions = {}): NetworkRpcPort => {
+  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
+  return new DexieNetworkRpcPort(getDb(dbName));
+};
+
+export type CreateDexieVaultMetaPortOptions = { databaseName?: string };
+export const createDexieVaultMetaPort = (options: CreateDexieVaultMetaPortOptions = {}): VaultMetaPort => {
+  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
+  return new DexieVaultMetaPort(getDb(dbName));
 };

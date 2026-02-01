@@ -2,11 +2,8 @@ import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../../chains/ids.js";
 import type { RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
-import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import type { AccountAddress, AccountController } from "../account/types.js";
-import type { ApprovalController, ApprovalTask } from "../approval/types.js";
-import type { NetworkController } from "../network/types.js";
+import type { AccountAddress } from "../account/types.js";
+import type { ApprovalTask } from "../approval/types.js";
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
 export type TransactionWarning = {
@@ -93,12 +90,6 @@ export type TransactionMeta = {
   updatedAt: number;
 };
 
-// Internal state shape used by the in-memory transaction controller and tests.
-export type TransactionState = {
-  pending: TransactionMeta[];
-  history: TransactionMeta[];
-};
-
 export type TransactionMessengerTopics = {
   "transaction:statusChanged": TransactionStatusChange;
 };
@@ -119,18 +110,6 @@ export type TransactionApprovalTaskPayload = {
 };
 
 export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayload>;
-
-export type TransactionControllerOptions = {
-  messenger: TransactionMessenger;
-  network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  accounts: Pick<AccountController, "getActivePointer">;
-  approvals: Pick<ApprovalController, "requestApproval">;
-  registry: TransactionAdapterRegistry;
-  idGenerator?: () => string;
-  now?: () => number;
-  initialState?: TransactionState;
-  tracker?: ReceiptTracker;
-};
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;

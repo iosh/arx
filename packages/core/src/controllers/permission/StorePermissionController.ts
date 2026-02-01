@@ -9,7 +9,6 @@ import {
   type OriginPermissionState,
   type OriginPermissions,
   type PermissionController,
-  type PermissionControllerOptions,
   type PermissionGrant,
   type PermissionMessenger,
   type PermissionScope,

@@ -51,12 +51,6 @@ export type PermissionMessenger = ControllerMessenger<PermissionMessengerTopics>
 
 export type PermissionScopeResolver = (method: string, context?: RpcInvocationContext) => PermissionScope | undefined;
 
-export type PermissionControllerOptions = {
-  messenger: PermissionMessenger;
-  scopeResolver: PermissionScopeResolver;
-  initialState?: PermissionsState;
-};
-
 export type PermissionRequestDescriptor = {
   scope: PermissionScope;
   capability: string;

@@ -52,12 +52,6 @@ export type ApprovalMessengerTopics = {
 
 export type ApprovalMessenger = ControllerMessenger<ApprovalMessengerTopics>;
 
-export type ApprovalControllerOptions = {
-  messenger: ApprovalMessenger;
-  autoRejectMessage?: string;
-  initialState?: ApprovalState;
-};
-
 export type ApprovalExecutor<TResult> = () => Promise<TResult>;
 
 /**

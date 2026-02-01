@@ -325,8 +325,13 @@ const createControllers = () => {
       return () => void fn;
     },
   };
+  const permissionListeners = new Set<(state: unknown) => void>();
   const permissions = {
     getState: () => ({ origins: {} }),
+    onPermissionsChanged: (fn: (state: unknown) => void) => {
+      permissionListeners.add(fn);
+      return () => permissionListeners.delete(fn);
+    },
   };
   const networkListeners = new Set<() => void>();
   const network = {

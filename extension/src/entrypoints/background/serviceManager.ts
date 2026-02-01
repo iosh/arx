@@ -115,6 +115,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             approvals: storePorts.approvals,
             accounts: storePorts.accounts,
             keyringMetas: storePorts.keyringMetas,
+            permissions: storePorts.permissions,
             transactions: storePorts.transactions,
           },
         },

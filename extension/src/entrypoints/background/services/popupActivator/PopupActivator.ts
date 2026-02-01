@@ -8,6 +8,11 @@ export type PopupOpenContext = {
   method?: string;
   chainRef?: string | null;
   namespace?: string | null;
+  /**
+   * Optional query params to include when creating a new popup window.
+   * Window reuse ignores search/hash to avoid duplicates.
+   */
+  urlSearchParams?: Record<string, string>;
 };
 
 export type PopupOpenResult = { activationPath: "create" | "focus" | "debounced" } & (
@@ -67,7 +72,25 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
         }
       };
 
-      const popupUrl = browser.runtime.getURL(popupPath);
+      const baseUrl = new URL(browser.runtime.getURL(popupPath));
+      const isSamePopup = (raw?: string) => {
+        if (!raw) return false;
+        try {
+          const u = new URL(raw);
+          return u.origin === baseUrl.origin && u.pathname === baseUrl.pathname;
+        } catch {
+          return false;
+        }
+      };
+
+      const popupUrl = (() => {
+        if (!ctx.urlSearchParams) return baseUrl.toString();
+        const u = new URL(baseUrl);
+        for (const [key, value] of Object.entries(ctx.urlSearchParams)) {
+          u.searchParams.set(key, value);
+        }
+        return u.toString();
+      })();
 
       if (cachedWindowId !== null && (await focusWindow(cachedWindowId))) {
         log("open focused (cached)", { windowId: cachedWindowId, ...ctx });
@@ -81,7 +104,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
           windowTypes: ["popup"],
         });
         for (const win of windows ?? []) {
-          if (win?.tabs?.some((tab) => tab?.url === popupUrl) && win?.id) {
+          if (win?.tabs?.some((tab) => isSamePopup(tab?.url)) && win?.id) {
             cachedWindowId = win.id;
             await browser.windows.update(win.id, { focused: true });
             log("open focused (scanned)", { windowId: win.id, ...ctx });

@@ -15,8 +15,16 @@ export function ApprovalsOrchestrator({
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const entryIntent = useMemo(() => getEntryIntent(), []);
+  const requestedApprovalId = useMemo(() => {
+    try {
+      return new URL(window.location.href).searchParams.get("approvalId");
+    } catch {
+      return null;
+    }
+  }, []);
   const hadApprovalsSinceUnlockRef = useRef(false);
   const waitingForApprovalsRef = useRef(false);
+  const waitingForRequestedApprovalRef = useRef(false);
 
   const isUnlocked = snapshot?.session.isUnlocked ?? false;
   const approvalsHead = snapshot?.approvals[0] ?? null;
@@ -31,6 +39,7 @@ export function ApprovalsOrchestrator({
     if (!isUnlocked) {
       hadApprovalsSinceUnlockRef.current = false;
       waitingForApprovalsRef.current = false;
+      waitingForRequestedApprovalRef.current = false;
       return;
     }
 
@@ -43,6 +52,37 @@ export function ApprovalsOrchestrator({
       if (hadApprovalsSinceUnlockRef.current) {
         window.close();
         return;
+      }
+
+      // If this window was opened for a specific approval, wait for that id (do not auto-close).
+      if (requestedApprovalId) {
+        if (waitingForRequestedApprovalRef.current) return;
+        waitingForRequestedApprovalRef.current = true;
+
+        let cancelled = false;
+        void uiClient
+          .waitForSnapshot({
+            timeoutMs: 2_000,
+            predicate: (s) => s.session.isUnlocked && s.approvals.some((item) => item.id === requestedApprovalId),
+          })
+          .then((s) => {
+            if (cancelled) return;
+            const next = s.approvals.find((item) => item.id === requestedApprovalId);
+            if (!next) return;
+            const target = getApprovalRoutePath(next);
+            if (pathname !== target) router.navigate({ to: target, replace: true });
+          })
+          .catch(() => {
+            // Keep the window open; the approval may arrive later.
+          })
+          .finally(() => {
+            if (cancelled) return;
+            waitingForRequestedApprovalRef.current = false;
+          });
+
+        return () => {
+          cancelled = true;
+        };
       }
 
       // Otherwise, give a brief window for approvals to arrive after unlock to avoid premature close.
@@ -72,11 +112,38 @@ export function ApprovalsOrchestrator({
     // Ensure any pending "post-unlock wait" doesn't block queue navigation later.
     waitingForApprovalsRef.current = false;
 
+    // If the user is already looking at a pending approval, don't auto-navigate.
+    const pathMatch = /^\/approve\/[^/]+\/([^/]+)$/.exec(pathname);
+    const currentApprovalId = pathMatch?.[1] ?? null;
+    if (currentApprovalId && snapshot.approvals.some((item) => item.id === currentApprovalId)) {
+      return;
+    }
+
+    // If the window was opened for a specific approvalId, prefer routing to it.
+    if (requestedApprovalId) {
+      const requested = snapshot.approvals.find((item) => item.id === requestedApprovalId) ?? null;
+      if (requested) {
+        const target = getApprovalRoutePath(requested);
+        if (pathname !== target) router.navigate({ to: target, replace: true });
+        return;
+      }
+    }
+
     if (!approvalsHead) return;
 
     const target = getApprovalRoutePath(approvalsHead);
     if (pathname !== target) router.navigate({ to: target, replace: true });
-  }, [approvalsCount, approvalsHead, entryIntent, isLoading, isUnlocked, pathname, router, snapshot]);
+  }, [
+    approvalsCount,
+    approvalsHead,
+    entryIntent,
+    isLoading,
+    isUnlocked,
+    pathname,
+    requestedApprovalId,
+    router,
+    snapshot,
+  ]);
 
   return null;
 }

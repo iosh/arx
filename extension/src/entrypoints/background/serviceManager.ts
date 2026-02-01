@@ -207,6 +207,11 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             namespace: request.namespace,
           });
 
+          // Only unlock-required requests open the confirmation window via attention.
+          if (request.reason !== "unlock_required") {
+            return;
+          }
+
           const vaultInitialized = session.vault.getStatus().hasCiphertext;
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
@@ -240,6 +245,52 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
                 method: request.method,
                 chainRef: request.chainRef,
                 namespace: request.namespace,
+              });
+            });
+        }),
+      );
+
+      // Open/focus the confirmation window when a provider-originated approval is enqueued.
+      unsubscribeControllerEvents.push(
+        controllers.approvals.onRequest(({ task, requestContext }) => {
+          if (requestContext.transport !== "provider") {
+            return;
+          }
+
+          const vaultInitialized = session.vault.getStatus().hasCiphertext;
+          if (!vaultInitialized) {
+            popupLog("skip notification window (vault uninitialized)", {
+              reason: "approval_required",
+              origin: task.origin,
+              method: task.type,
+              chainRef: task.chainRef,
+              namespace: task.namespace,
+            });
+            return;
+          }
+
+          void notificationActivator
+            .open({
+              reason: "approval_required",
+              origin: task.origin,
+              method: task.type,
+              chainRef: task.chainRef ?? null,
+              namespace: task.namespace ?? null,
+              urlSearchParams: { approvalId: task.id },
+            })
+            .then((result) => {
+              if (result.windowId) {
+                attachPopupCloseRejection(result.windowId);
+              }
+            })
+            .catch((error) => {
+              popupLog("failed to open notification window", {
+                error,
+                reason: "approval_required",
+                origin: task.origin,
+                method: task.type,
+                chainRef: task.chainRef,
+                namespace: task.namespace,
               });
             });
         }),
@@ -292,7 +343,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       createRpcEngineForBackground(services, {
         isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
         shouldRequestUnlockAttention: () => true,
-        shouldRequestApprovalAttention: () => true,
       });
 
       unsubscribeControllerEvents.push(

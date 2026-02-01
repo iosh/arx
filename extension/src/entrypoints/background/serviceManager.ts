@@ -15,9 +15,10 @@ import {
 import browser from "webextension-polyfill";
 import {
   getExtensionChainRegistry,
+  getExtensionNetworkRpcPort,
   getExtensionSettingsPort,
-  getExtensionStorage,
   getExtensionStorePorts,
+  getExtensionVaultMetaPort,
 } from "@/platform/storage";
 import { ENTRYPOINTS } from "./constants";
 import { isInternalOrigin } from "./origin";
@@ -101,7 +102,8 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     contextPromise = (async () => {
       let getNamespace: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
       const namespaceResolver = (ctx?: RpcInvocationContext) => getNamespace(ctx);
-      const storage = getExtensionStorage();
+      const networkRpcPort = getExtensionNetworkRpcPort();
+      const vaultMetaPort = getExtensionVaultMetaPort();
       const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
       const settingsPort = getExtensionSettingsPort();
@@ -119,7 +121,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             transactions: storePorts.transactions,
           },
         },
-        storage: { port: storage },
+        storage: { networkRpcPort, vaultMetaPort },
         settings: { port: settingsPort },
         chainRegistry: { port: chainRegistry },
       });

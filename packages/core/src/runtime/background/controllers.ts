@@ -8,7 +8,7 @@ import type {
   AccountMessengerTopics,
   MultiNamespaceAccountsState,
 } from "../../controllers/account/types.js";
-import { StoreApprovalController } from "../../controllers/approval/ApprovalController.js";
+import { StoreApprovalController } from "../../controllers/approval/StoreApprovalController.js";
 import type {
   ApprovalController,
   ApprovalMessenger,

@@ -1,25 +1,19 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
 import type { SettingsPort } from "@arx/core/services";
-import type { StoragePort } from "@arx/core/storage";
+import type { NetworkRpcPort, VaultMetaPort } from "@arx/core/storage";
 import {
   createDexieChainRegistryPort,
+  createDexieNetworkRpcPort,
   createDexieSettingsPort,
-  createDexieStorage,
   createDexieStorePorts,
+  createDexieVaultMetaPort,
 } from "@arx/storage-dexie";
 
-let storageInstance: StoragePort | null = null;
 let chainRegistryInstance: ChainRegistryPort | null = null;
 let settingsPortInstance: SettingsPort | null = null;
 let storePortsInstance: ReturnType<typeof createDexieStorePorts> | null = null;
-
-export const getExtensionStorage = (): StoragePort => {
-  if (storageInstance) {
-    return storageInstance;
-  }
-  storageInstance = createDexieStorage({ databaseName: "arx-extension" });
-  return storageInstance;
-};
+let networkRpcPortInstance: NetworkRpcPort | null = null;
+let vaultMetaPortInstance: VaultMetaPort | null = null;
 
 export const getExtensionChainRegistry = (): ChainRegistryPort => {
   if (chainRegistryInstance) {
@@ -35,6 +29,22 @@ export const getExtensionSettingsPort = (): SettingsPort => {
   }
   settingsPortInstance = createDexieSettingsPort({ databaseName: "arx-extension" });
   return settingsPortInstance;
+};
+
+export const getExtensionNetworkRpcPort = (): NetworkRpcPort => {
+  if (networkRpcPortInstance) {
+    return networkRpcPortInstance;
+  }
+  networkRpcPortInstance = createDexieNetworkRpcPort({ databaseName: "arx-extension" });
+  return networkRpcPortInstance;
+};
+
+export const getExtensionVaultMetaPort = (): VaultMetaPort => {
+  if (vaultMetaPortInstance) {
+    return vaultMetaPortInstance;
+  }
+  vaultMetaPortInstance = createDexieVaultMetaPort({ databaseName: "arx-extension" });
+  return vaultMetaPortInstance;
 };
 
 export const getExtensionStorePorts = () => {

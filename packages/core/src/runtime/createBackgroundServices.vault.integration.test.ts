@@ -42,7 +42,7 @@ describe("createBackgroundServices (vault integration)", () => {
       currentTime += 200;
       await first.services.session.persistVaultMeta();
 
-      persistedMeta = first.storagePort.savedVaultMeta ?? null;
+      persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       expect(persistedMeta).not.toBeNull();
       expect(persistedMeta?.payload.unlockState?.isUnlocked).toBe(true);
       expect(persistedMeta?.payload.unlockState?.nextAutoLockAt).toBe(unlockedState.nextAutoLockAt);
@@ -66,7 +66,7 @@ describe("createBackgroundServices (vault integration)", () => {
       const unlockState = second.services.session.unlock.getState();
       expect(unlockState.isUnlocked).toBe(false);
       expect(unlockState.timeoutMs).toBe(TEST_AUTO_LOCK_DURATION);
-      expect(second.storagePort.savedVaultMeta).toBeNull();
+      expect(second.vaultMetaPort.savedVaultMeta).toBeNull();
     } finally {
       second.destroy();
     }

@@ -9,6 +9,7 @@ import type {
   AccountRecord,
   ApprovalRecord,
   KeyringMetaRecord,
+  NetworkRpcPreferenceRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
@@ -16,6 +17,7 @@ import type {
 import {
   AccountRecordSchema,
   KeyringMetaRecordSchema,
+  NetworkRpcPreferenceRecordSchema,
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../db/records.js";
@@ -26,23 +28,8 @@ import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
 import type { TransactionsPort } from "../../services/transactions/port.js";
-import type {
-  ChainRegistryEntity,
-  NetworkSnapshot,
-  PermissionsSnapshot,
-  StorageNamespace,
-  StoragePort,
-  StorageSnapshotMap,
-  TransactionsSnapshot,
-  VaultMetaSnapshot,
-} from "../../storage/index.js";
-import {
-  CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
-  NETWORK_SNAPSHOT_VERSION,
-  PERMISSIONS_SNAPSHOT_VERSION,
-  StorageNamespaces,
-  TRANSACTIONS_SNAPSHOT_VERSION,
-} from "../../storage/index.js";
+import type { ChainRegistryEntity, NetworkRpcPort, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
+import { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";
@@ -61,13 +48,6 @@ export type RpcTimers = {
 };
 
 export type CreateBackgroundServicesResult = ReturnType<typeof createBackgroundServices>;
-
-export type StorageSeed = Partial<Record<StorageNamespace, StorageSnapshotMap[StorageNamespace]>>;
-
-export type SnapshotEntry = {
-  namespace: StorageNamespace;
-  envelope: StorageSnapshotMap[StorageNamespace];
-};
 
 // Utility functions
 export const clone = <T>(value: T): T => structuredClone(value);
@@ -307,16 +287,6 @@ export const flushAsync = async () => {
   await Promise.resolve();
 };
 
-export const isNetworkSnapshot = (
-  entry: SnapshotEntry,
-): entry is { namespace: typeof StorageNamespaces.Network; envelope: NetworkSnapshot } =>
-  entry.namespace === StorageNamespaces.Network;
-
-export const isTransactionsSnapshot = (
-  entry: SnapshotEntry,
-): entry is { namespace: typeof StorageNamespaces.Transactions; envelope: TransactionsSnapshot } =>
-  entry.namespace === StorageNamespaces.Transactions;
-
 export const buildRpcSnapshot = (metadata: ChainMetadata) => ({
   activeIndex: 0,
   endpoints: metadata.rpcEndpoints.map((endpoint, index) => ({
@@ -398,6 +368,75 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
   return metadata;
 };
 
+export class MemoryNetworkRpcPort implements NetworkRpcPort {
+  #records = new Map<string, NetworkRpcPreferenceRecord>();
+  public readonly upserts: NetworkRpcPreferenceRecord[] = [];
+  public readonly removes: string[] = [];
+
+  constructor(seed: NetworkRpcPreferenceRecord[] = []) {
+    for (const record of seed) {
+      const checked = NetworkRpcPreferenceRecordSchema.parse(record);
+      this.#records.set(checked.chainRef, clone(checked));
+    }
+  }
+
+  async get(chainRef: string): Promise<NetworkRpcPreferenceRecord | null> {
+    const found = this.#records.get(chainRef);
+    return found ? clone(found) : null;
+  }
+
+  async getAll(): Promise<NetworkRpcPreferenceRecord[]> {
+    return Array.from(this.#records.values())
+      .map((record) => clone(record))
+      .sort((a, b) => a.chainRef.localeCompare(b.chainRef));
+  }
+
+  async upsert(record: NetworkRpcPreferenceRecord): Promise<void> {
+    const checked = NetworkRpcPreferenceRecordSchema.parse(record);
+    this.#records.set(checked.chainRef, clone(checked));
+    this.upserts.push(clone(checked));
+  }
+
+  async upsertMany(records: NetworkRpcPreferenceRecord[]): Promise<void> {
+    for (const record of records) {
+      await this.upsert(record);
+    }
+  }
+
+  async remove(chainRef: string): Promise<void> {
+    this.#records.delete(chainRef);
+    this.removes.push(chainRef);
+  }
+
+  async clear(): Promise<void> {
+    this.#records.clear();
+  }
+}
+
+export class MemoryVaultMetaPort implements VaultMetaPort {
+  #vaultMeta: VaultMetaSnapshot | null;
+  public savedVaultMeta: VaultMetaSnapshot | null = null;
+  public clearedVaultMeta = false;
+
+  constructor(seed: VaultMetaSnapshot | null = null) {
+    this.#vaultMeta = seed ? clone(seed) : null;
+  }
+
+  async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
+    return this.#vaultMeta ? clone(this.#vaultMeta) : null;
+  }
+
+  async saveVaultMeta(envelope: VaultMetaSnapshot): Promise<void> {
+    this.#vaultMeta = clone(envelope);
+    this.savedVaultMeta = clone(envelope);
+  }
+
+  async clearVaultMeta(): Promise<void> {
+    this.#vaultMeta = null;
+    this.clearedVaultMeta = true;
+  }
+}
+
 export const toRegistryEntity = (metadata: ChainMetadata, updatedAt = Date.now()): ChainRegistryEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
@@ -441,64 +480,6 @@ export class MemoryChainRegistryPort implements ChainRegistryPort {
 
   async clear(): Promise<void> {
     this.entities.clear();
-  }
-}
-
-// Mock storage port implementation
-export class MemoryStoragePort implements StoragePort {
-  private snapshots = new Map<StorageNamespace, StorageSnapshotMap[StorageNamespace]>();
-  private vaultMeta: VaultMetaSnapshot | null;
-  public readonly savedSnapshots: Array<{
-    namespace: StorageNamespace;
-    envelope: StorageSnapshotMap[StorageNamespace];
-  }> = [];
-  public readonly clearedSnapshots: StorageNamespace[] = [];
-  public savedVaultMeta: VaultMetaSnapshot | null = null;
-  public clearedVaultMeta = false;
-
-  constructor(seed?: { snapshots?: StorageSeed; vaultMeta?: VaultMetaSnapshot | null }) {
-    this.vaultMeta = seed?.vaultMeta ?? null;
-    if (seed?.snapshots) {
-      for (const [namespace, envelope] of Object.entries(seed.snapshots) as Array<
-        [StorageNamespace, StorageSnapshotMap[StorageNamespace]]
-      >) {
-        this.snapshots.set(namespace, clone(envelope));
-      }
-    }
-  }
-
-  async loadSnapshot<Namespace extends StorageNamespace>(
-    namespace: Namespace,
-  ): Promise<StorageSnapshotMap[Namespace] | null> {
-    const snapshot = this.snapshots.get(namespace);
-    return snapshot ? (clone(snapshot) as StorageSnapshotMap[Namespace]) : null;
-  }
-
-  async saveSnapshot<Namespace extends StorageNamespace>(
-    namespace: Namespace,
-    envelope: StorageSnapshotMap[Namespace],
-  ): Promise<void> {
-    this.snapshots.set(namespace, clone(envelope));
-    this.savedSnapshots.push({ namespace, envelope: clone(envelope) });
-  }
-
-  async clearSnapshot(namespace: StorageNamespace): Promise<void> {
-    this.snapshots.delete(namespace);
-    this.clearedSnapshots.push(namespace);
-  }
-
-  async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
-    return this.vaultMeta ? clone(this.vaultMeta) : null;
-  }
-
-  async saveVaultMeta(snapshot: VaultMetaSnapshot): Promise<void> {
-    this.vaultMeta = clone(snapshot);
-    this.savedVaultMeta = clone(snapshot);
-  }
-
-  async clearVaultMeta(): Promise<void> {
-    this.vaultMeta = null;
-    this.clearedVaultMeta = true;
   }
 }
 
@@ -619,7 +600,8 @@ export class FakeVault implements VaultService {
 // Test context type
 export type TestBackgroundContext = {
   services: CreateBackgroundServicesResult;
-  storagePort: MemoryStoragePort;
+  networkRpcPort: MemoryNetworkRpcPort;
+  vaultMetaPort: MemoryVaultMetaPort;
   chainRegistryPort: MemoryChainRegistryPort;
   transactionsPort: MemoryTransactionsPort;
   settingsPort?: MemorySettingsPort;
@@ -630,7 +612,7 @@ export type TestBackgroundContext = {
 // Setup options type
 export type SetupBackgroundOptions = {
   chainSeed?: ChainMetadata[];
-  storageSeed?: StorageSeed;
+  networkRpcSeed?: NetworkRpcPreferenceRecord[];
   settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
   keyringMetasSeed?: KeyringMetaRecord[];
@@ -654,10 +636,8 @@ export type SetupBackgroundOptions = {
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
   const chainRegistryPort = new MemoryChainRegistryPort(chainSeed.map((metadata) => toRegistryEntity(metadata, 0)));
-  const storagePort = new MemoryStoragePort({
-    snapshots: options.storageSeed ?? {},
-    vaultMeta: options.vaultMeta ?? null,
-  });
+  const networkRpcPort = new MemoryNetworkRpcPort(options.networkRpcSeed ?? []);
+  const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const approvalsPort = new MemoryApprovalsPort();
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
@@ -667,7 +647,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
-    port: storagePort,
+    networkRpcPort,
+    vaultMetaPort,
     ...(options.now ? { now: options.now } : {}),
     ...(options.storageLogger ? { logger: options.storageLogger } : {}),
   };
@@ -732,7 +713,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   return {
     services,
-    storagePort,
+    networkRpcPort,
+    vaultMetaPort,
     chainRegistryPort,
     transactionsPort,
     ...(settingsPort ? { settingsPort } : {}),

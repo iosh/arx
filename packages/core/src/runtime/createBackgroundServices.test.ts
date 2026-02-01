@@ -1,37 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
-import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
-import type { SettingsRecord } from "../db/records.js";
-import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
-import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
-import type { SettingsPort } from "../services/settings/port.js";
-import type {
-  ChainRegistryEntity,
-  StorageNamespace,
-  StoragePort,
-  StorageSnapshotMap,
-  VaultMetaSnapshot,
-} from "../storage/index.js";
+import type { ChainRegistryEntity } from "../storage/index.js";
 import {
-  NETWORK_SNAPSHOT_VERSION,
-  type NetworkSnapshot,
-  StorageNamespaces,
-  VAULT_META_SNAPSHOT_VERSION,
-} from "../storage/index.js";
-import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { TransactionAdapter } from "../transactions/adapters/types.js";
-import type { VaultCiphertext, VaultService } from "../vault/types.js";
-import {
+  flushAsync,
   MemoryAccountsPort,
   MemoryApprovalsPort,
+  MemoryChainRegistryPort,
   MemoryKeyringMetasPort,
+  MemoryNetworkRpcPort,
   MemoryPermissionsPort,
+  MemorySettingsPort,
   MemoryTransactionsPort,
 } from "./__fixtures__/backgroundTestSetup.js";
-import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
-
-const TEST_MNEMONIC = "test test test test test test test test test test test junk";
+import { createBackgroundServices } from "./createBackgroundServices.js";
 
 const MAINNET_CHAIN: ChainMetadata = {
   chainRef: "eip155:1",
@@ -51,925 +33,120 @@ const ALT_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
-const NETWORK_SNAPSHOT: NetworkSnapshot = {
-  version: NETWORK_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    rpc: {
-      [ALT_CHAIN.chainRef]: {
-        activeIndex: 0,
-        endpoints: [{ index: 0, url: ALT_CHAIN.rpcEndpoints[0]!.url, type: "public" as const }],
-        health: [{ index: 0, successCount: 4, failureCount: 0, consecutiveFailures: 0 }],
-        strategy: { id: "round-robin" },
-        lastUpdatedAt: 900,
-      },
-      [MAINNET_CHAIN.chainRef]: {
-        activeIndex: 0,
-        endpoints: [{ index: 0, url: MAINNET_CHAIN.rpcEndpoints[0]!.url, type: "public" as const }],
-        health: [{ index: 0, successCount: 2, failureCount: 1, consecutiveFailures: 0 }],
-        strategy: { id: "round-robin" },
-        lastUpdatedAt: 850,
-      },
-    },
-  },
-};
-
-const SEEDED_PAYLOAD_HEX = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const SEEDED_ADDRESS = `0x${SEEDED_PAYLOAD_HEX}`;
-const SEEDED_ACCOUNT_ID = `eip155:${SEEDED_PAYLOAD_HEX}`;
-const SEEDED_KEYRING_ID = "00000000-0000-4000-8000-000000000001";
-
-const FAKE_CIPHERTEXT: VaultCiphertext = {
-  version: 1,
-  algorithm: "pbkdf2-sha256",
-  salt: "salt-base64",
-  iterations: 1,
-  iv: "iv-base64",
-  cipher: "cipher-payload",
-  createdAt: 500,
-};
-
-const VAULT_META: VaultMetaSnapshot = {
-  version: VAULT_META_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    ciphertext: FAKE_CIPHERTEXT,
-    autoLockDuration: 120_000,
-    initializedAt: 500,
-  },
-};
-
-const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-class MemoryStoragePort implements StoragePort {
-  private readonly snapshots = new Map<StorageNamespace, StorageSnapshotMap[StorageNamespace]>();
-  private readonly snapshotLoadFailures = new Map<StorageNamespace, unknown>();
-  private vaultMeta: VaultMetaSnapshot | null;
-  public readonly savedSnapshots: Array<{
-    namespace: StorageNamespace;
-    envelope: StorageSnapshotMap[StorageNamespace];
-  }> = [];
-  public readonly clearedSnapshots: StorageNamespace[] = [];
-  public savedVaultMeta: VaultMetaSnapshot | null = null;
-  public clearedVaultMeta = false;
-
-  constructor(seed?: {
-    snapshots?: Partial<Record<StorageNamespace, StorageSnapshotMap[StorageNamespace]>>;
-    vaultMeta?: VaultMetaSnapshot | null;
-  }) {
-    if (seed?.snapshots) {
-      for (const [namespace, envelope] of Object.entries(seed.snapshots) as Array<
-        [StorageNamespace, StorageSnapshotMap[StorageNamespace]]
-      >) {
-        this.snapshots.set(namespace, envelope);
-      }
-    }
-    this.vaultMeta = seed?.vaultMeta ?? null;
-  }
-
-  setSnapshotLoadFailure(namespace: StorageNamespace, error: unknown) {
-    this.snapshotLoadFailures.set(namespace, error);
-  }
-
-  clearSnapshotLoadFailure(namespace: StorageNamespace) {
-    this.snapshotLoadFailures.delete(namespace);
-  }
-
-  getSnapshot<TNamespace extends StorageNamespace>(namespace: TNamespace): StorageSnapshotMap[TNamespace] | null {
-    return (this.snapshots.get(namespace) as StorageSnapshotMap[TNamespace]) ?? null;
-  }
-
-  getVaultMeta() {
-    return this.vaultMeta;
-  }
-
-  async loadSnapshot<TNamespace extends StorageNamespace>(
-    namespace: TNamespace,
-  ): Promise<StorageSnapshotMap[TNamespace] | null> {
-    if (this.snapshotLoadFailures.has(namespace)) {
-      throw this.snapshotLoadFailures.get(namespace);
-    }
-    return this.getSnapshot(namespace);
-  }
-
-  async saveSnapshot<TNamespace extends StorageNamespace>(
-    namespace: TNamespace,
-    envelope: StorageSnapshotMap[TNamespace],
-  ): Promise<void> {
-    this.snapshots.set(namespace, envelope);
-    this.savedSnapshots.push({ namespace, envelope: envelope as StorageSnapshotMap[StorageNamespace] });
-  }
-
-  async clearSnapshot(namespace: StorageNamespace): Promise<void> {
-    this.snapshots.delete(namespace);
-    this.clearedSnapshots.push(namespace);
-  }
-
-  async loadVaultMeta(): Promise<VaultMetaSnapshot | null> {
-    return this.vaultMeta;
-  }
-
-  async saveVaultMeta(envelope: VaultMetaSnapshot): Promise<void> {
-    this.vaultMeta = envelope;
-    this.savedVaultMeta = envelope;
-  }
-
-  async clearVaultMeta(): Promise<void> {
-    this.vaultMeta = null;
-    this.clearedVaultMeta = true;
-  }
-}
-
-class MemoryChainRegistryPort implements ChainRegistryPort {
-  private readonly entries = new Map<string, ChainRegistryEntity>();
-
-  async get(chainRef: string): Promise<ChainRegistryEntity | null> {
-    return this.entries.get(chainRef) ?? null;
-  }
-
-  async getAll(): Promise<ChainRegistryEntity[]> {
-    return Array.from(this.entries.values());
-  }
-
-  async put(entity: ChainRegistryEntity): Promise<void> {
-    this.entries.set(entity.chainRef, entity);
-  }
-
-  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
-    for (const entity of entities) {
-      this.entries.set(entity.chainRef, entity);
-    }
-  }
-
-  async delete(chainRef: string): Promise<void> {
-    this.entries.delete(chainRef);
-  }
-
-  async clear(): Promise<void> {
-    this.entries.clear();
-  }
-}
-
-type TestServicesOptions = Omit<CreateBackgroundServicesOptions, "chainRegistry"> & {
-  chainRegistry?: Omit<NonNullable<CreateBackgroundServicesOptions["chainRegistry"]>, "port"> & {
-    port?: ChainRegistryPort;
-  };
-};
-
-const createServices = (options: TestServicesOptions = {}) => {
-  const silentLogger = (_message: string, _error?: unknown) => {};
-  const adaptedStorage = options.storage
-    ? { ...options.storage, logger: options.storage.logger ?? silentLogger }
-    : undefined;
-
-  const baseOptions: TestServicesOptions = adaptedStorage ? { ...options, storage: adaptedStorage } : options;
-  const withStore: TestServicesOptions = baseOptions.store
-    ? baseOptions
-    : {
-        ...baseOptions,
-        store: {
-          ports: {
-            approvals: new MemoryApprovalsPort(),
-            transactions: new MemoryTransactionsPort(),
-            accounts: new MemoryAccountsPort(),
-            keyringMetas: new MemoryKeyringMetasPort(),
-            permissions: new MemoryPermissionsPort(),
-          },
-        },
-      };
-  const chainRegistryOptions = baseOptions.chainRegistry;
-  if (chainRegistryOptions?.port) {
-    return createBackgroundServices(withStore as CreateBackgroundServicesOptions);
-  }
-
-  const adapted: CreateBackgroundServicesOptions = {
-    ...withStore,
-    chainRegistry: {
-      ...chainRegistryOptions,
-      port: new MemoryChainRegistryPort(),
-    },
-  };
-
-  return createBackgroundServices(adapted);
-};
-
-const makeAdapter = (tag: string): TransactionAdapter => ({
-  buildDraft: async () => ({ prepared: { tag }, summary: {}, warnings: [], issues: [] }),
-  signTransaction: async () => ({ raw: "0x", hash: `0x${tag}` }),
-  broadcastTransaction: async () => ({ hash: `0x${tag}` }),
+const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainRegistryEntity => ({
+  chainRef: metadata.chainRef,
+  namespace: metadata.namespace,
+  metadata,
+  schemaVersion: 1,
+  updatedAt: now,
 });
 
-class FakeVault implements VaultService {
-  #ciphertext: VaultCiphertext | null;
-  #unlocked = false;
-  #counter = 0;
-  #secret: Uint8Array | null = null;
-
-  constructor(
-    private readonly clock: () => number,
-    initialCiphertext: VaultCiphertext | null = null,
-  ) {
-    this.#ciphertext = initialCiphertext ? { ...initialCiphertext } : null;
-  }
-
-  private createCiphertext(): VaultCiphertext {
-    const createdAt = this.clock();
-    this.#counter += 1;
-    return {
-      version: 1,
-      algorithm: "pbkdf2-sha256",
-      salt: "salt-base64",
-      iterations: 1,
-      iv: "iv-base64",
-      cipher: `cipher-${this.#counter}`,
-      createdAt,
-    };
-  }
-
-  async initialize(params: { password: string; secret?: Uint8Array }): Promise<VaultCiphertext> {
-    this.#ciphertext = this.createCiphertext();
-    this.#unlocked = true;
-    this.#secret = params.secret ? new Uint8Array(params.secret) : new Uint8Array([1, 2, 3]);
-    return { ...this.#ciphertext };
-  }
-
-  async unlock(params: { password: string; ciphertext?: VaultCiphertext }): Promise<Uint8Array> {
-    if (params.ciphertext) {
-      this.#ciphertext = { ...params.ciphertext };
-    }
-    this.#unlocked = true;
-    if (!this.#secret) {
-      this.#secret = new Uint8Array([1, 2, 3]);
-    }
-    return new Uint8Array(this.#secret);
-  }
-
-  lock(): void {
-    this.#unlocked = false;
-  }
-
-  exportKey(): Uint8Array {
-    if (!this.#unlocked || !this.#secret) {
-      throw new Error("locked");
-    }
-    return new Uint8Array(this.#secret);
-  }
-
-  async seal(params: { password: string; secret: Uint8Array }): Promise<VaultCiphertext> {
-    this.#ciphertext = this.createCiphertext();
-    this.#unlocked = true;
-    this.#secret = new Uint8Array(params.secret);
-    return { ...this.#ciphertext };
-  }
-
-  async reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext> {
-    this.#ciphertext = this.createCiphertext();
-    this.#secret = new Uint8Array(params.secret);
-    return { ...this.#ciphertext };
-  }
-
-  verifyPassword(password: string): Promise<void> {
-    return Promise.resolve();
-  }
-
-  importCiphertext(ciphertext: VaultCiphertext): void {
-    this.#ciphertext = { ...ciphertext };
-  }
-
-  getCiphertext(): VaultCiphertext | null {
-    return this.#ciphertext ? { ...this.#ciphertext } : null;
-  }
-
-  getStatus() {
-    return {
-      isUnlocked: this.#unlocked,
-      hasCiphertext: this.#ciphertext !== null,
-    };
-  }
-
-  isUnlocked(): boolean {
-    return this.#unlocked;
-  }
-}
-
-describe("createBackgroundServices", () => {
-  let warnSpy: ReturnType<typeof vi.spyOn> | null = null;
-
-  beforeEach(() => {
-    const originalWarn = console.warn;
-    warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
-      if (args[0] === "[createBackgroundServices]" && args[1] === "session: failed to reseal keyring payload") {
-        return;
-      }
-      originalWarn(...(args as Parameters<typeof console.warn>));
-    });
-  });
-
-  afterEach(() => {
-    warnSpy?.mockRestore();
-    warnSpy = null;
-  });
-
-  it("hydrates controllers and session state from storage", async () => {
-    const clock = () => 2_000;
-    const storage = new MemoryStoragePort({
-      snapshots: {
-        [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-      },
-      vaultMeta: VAULT_META,
-    });
-
-    const settingsPort: SettingsPort = {
-      get: async () => ({
-        id: "settings",
-        activeChainRef: ALT_CHAIN.chainRef,
-        selectedAccountId: SEEDED_ACCOUNT_ID,
-        updatedAt: clock(),
-      }),
-      put: async () => {},
-    };
-
-    const storePorts: NonNullable<CreateBackgroundServicesOptions["store"]>["ports"] = {
-      approvals: new MemoryApprovalsPort(),
-      transactions: new MemoryTransactionsPort(),
-      accounts: new MemoryAccountsPort([
-        {
-          accountId: SEEDED_ACCOUNT_ID,
-          namespace: EIP155_NAMESPACE,
-          payloadHex: SEEDED_PAYLOAD_HEX,
-          keyringId: SEEDED_KEYRING_ID,
-          derivationIndex: 0,
-          createdAt: 1_000,
-        },
-      ]),
-      keyringMetas: new MemoryKeyringMetasPort(),
-      permissions: new MemoryPermissionsPort(),
-    };
-
-    const services = createServices({
-      store: { ports: storePorts },
-      storage: { port: storage, now: clock },
-      settings: { port: settingsPort },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
-    });
-
-    await services.lifecycle.initialize();
-
-    const networkState = services.controllers.network.getState();
-    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
-    expect(networkState.knownChains.map((chain) => chain.chainRef)).toEqual(
-      expect.arrayContaining([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]),
+describe("createBackgroundServices (no snapshots)", () => {
+  it("hydrates network rpc preferences from NetworkRpcPort", async () => {
+    const now = () => 1_000;
+    const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
+    const chainRegistryPort: ChainRegistryPort = new MemoryChainRegistryPort(
+      chainSeed.map((c) => toRegistryEntity(c, 0)),
     );
-    expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
-    expect(services.controllers.accounts.getActivePointer()?.address).toBe(SEEDED_ADDRESS);
-
-    expect(services.session.unlock.getState().timeoutMs).toBe(VAULT_META.payload.autoLockDuration);
-    expect(services.session.getLastPersistedVaultMeta()).toStrictEqual(VAULT_META);
-
-    services.lifecycle.destroy();
-  });
-
-  it("persists selectedAccountId even when settings record does not exist yet", async () => {
-    const clock = () => 1_000;
-    const storage = new MemoryStoragePort();
-
-    const saved: SettingsRecord[] = [];
-    let record: SettingsRecord | null = null;
-    const settingsPort: SettingsPort = {
-      get: async () => record,
-      put: async (next) => {
-        record = next;
-        saved.push(next);
+    const networkRpcPort = new MemoryNetworkRpcPort([
+      {
+        chainRef: ALT_CHAIN.chainRef,
+        activeIndex: 0,
+        strategy: { id: "sticky" },
+        updatedAt: now(),
       },
-    };
+    ]);
 
-    const services = createServices({
-      storage: { port: storage, now: clock },
-      settings: { port: settingsPort },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN] },
-    });
-
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
-
-    await services.session.vault.initialize({ password: "secret" });
-    await services.session.unlock.unlock({ password: "secret" });
-
-    const address = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    await services.controllers.accounts.addAccount({
-      chainRef: MAINNET_CHAIN.chainRef,
-      address,
-      makePrimary: true,
-    });
-    await services.controllers.accounts.switchActive({ chainRef: MAINNET_CHAIN.chainRef, address });
-
-    for (let attempt = 0; attempt < 25; attempt += 1) {
-      if (saved.some((entry) => entry.selectedAccountId === `eip155:${address.slice(2)}`)) {
-        break;
-      }
-      await flushMicrotasks();
-    }
-
-    expect(saved.some((entry) => entry.activeChainRef === MAINNET_CHAIN.chainRef)).toBe(true);
-    expect(saved.some((entry) => entry.selectedAccountId === `eip155:${address.slice(2)}`)).toBe(true);
-
-    services.lifecycle.destroy();
-  });
-
-  it("aligns the active account pointer with network chain changes", async () => {
-    const services = createServices({
-      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
-    });
-
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
-
-    await services.controllers.network.addChain(ALT_CHAIN);
-
-    const address = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    await services.controllers.accounts.addAccount({
-      chainRef: MAINNET_CHAIN.chainRef,
-      address,
-      makePrimary: true,
-    });
-    await services.controllers.accounts.switchActive({ chainRef: MAINNET_CHAIN.chainRef, address });
-
-    expect(services.controllers.accounts.getActivePointer()).toMatchObject({
-      chainRef: MAINNET_CHAIN.chainRef,
-      address,
-    });
-
-    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
-    await flushMicrotasks();
-
-    expect(services.controllers.accounts.getActivePointer()).toMatchObject({
-      chainRef: ALT_CHAIN.chainRef,
-      address,
-      namespace: "eip155",
-    });
-
-    services.lifecycle.destroy();
-  });
-
-  it("persists controller snapshots when state changes", async () => {
-    let now = 3_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort();
-
-    const permissionsPort = new MemoryPermissionsPort();
-
-    const services = createServices({
+    const services = createBackgroundServices({
+      chainRegistry: { port: chainRegistryPort, seed: chainSeed },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),
+          permissions: new MemoryPermissionsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: permissionsPort,
         },
       },
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN] },
+      storage: {
+        networkRpcPort,
+        vaultMetaPort: {
+          loadVaultMeta: async () => null,
+          saveVaultMeta: async () => {},
+          clearVaultMeta: async () => {},
+        },
+        now,
+        networkRpcDebounceMs: 0,
+      },
+      settings: { port: new MemorySettingsPort(null) },
     });
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    now = 3_500;
-    await services.controllers.chainRegistry.upsertChain({
-      ...ALT_CHAIN,
-      rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
-    });
-    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
-    await flushMicrotasks();
-
-    const networkSnapshot = storage.getSnapshot(StorageNamespaces.Network);
-    expect(networkSnapshot).not.toBeNull();
-    expect(networkSnapshot?.updatedAt).toBe(3_500);
-
-    expect(networkSnapshot?.payload.rpc[ALT_CHAIN.chainRef]?.endpoints[0]?.url).toBe("https://rpc.alt.updated");
-
-    now = 3_750;
-    services.controllers.accounts.replaceState({
-      namespaces: {
-        eip155: { all: ["0x123"], primary: "0x123" },
-      },
-      active: { namespace: "eip155", chainRef: "eip155:1", address: "0x123" },
-    });
-
-    expect(storage.getSnapshot(StorageNamespaces.Accounts)).toBeNull();
-
-    now = 3_820;
-    await services.controllers.permissions.grant("https://dapp.example", PermissionScopes.Basic, {
-      chainRef: MAINNET_CHAIN.chainRef,
-    });
-    await services.controllers.permissions.grant("https://dapp.example", PermissionScopes.Sign, {
-      namespace: "conflux",
-      chainRef: "conflux:cfx",
-    });
-
-    const eip155Record = await permissionsPort.getByOrigin({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      chainRef: MAINNET_CHAIN.chainRef,
-    });
-    expect(eip155Record?.updatedAt).toBe(3_820);
-    expect(eip155Record?.scopes).toEqual(expect.arrayContaining([PermissionScopes.Basic]));
-
-    const confluxRecord = await permissionsPort.getByOrigin({
-      origin: "https://dapp.example",
-      namespace: "conflux",
-      chainRef: "conflux:cfx",
-    });
-    expect(confluxRecord?.updatedAt).toBe(3_820);
-    expect(confluxRecord?.scopes).toEqual(expect.arrayContaining([PermissionScopes.Sign]));
-
-    expect(storage.getSnapshot(StorageNamespaces.Permissions)).toBeNull();
-
-    // Transactions are persisted via the store-backed controller; snapshots are intentionally disabled.
-    expect(storage.getSnapshot(StorageNamespaces.Transactions)).toBeNull();
+    const networkState = services.controllers.network.getState();
+    expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
     services.lifecycle.destroy();
   });
 
-  it("persists vault meta when session changes", async () => {
-    let now = 4_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort();
-    const services = createServices({
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-    });
+  it("persists network rpc preferences only when preferences change", async () => {
+    vi.useFakeTimers();
 
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
-
-    now = 4_100;
-    await services.session.vault.initialize({ password: "secret" });
-
-    expect(storage.savedVaultMeta).not.toBeNull();
-    expect(storage.savedVaultMeta?.payload.ciphertext).not.toBeNull();
-    expect(storage.savedVaultMeta?.payload.initializedAt).toBe(4_100);
-
-    now = 4_200;
-    services.session.unlock.lock("manual");
-    await services.session.persistVaultMeta();
-
-    expect(storage.savedVaultMeta?.updatedAt).toBe(4_200);
-    services.lifecycle.destroy();
-  });
-
-  it("restores unlock snapshot and schedules auto lock after re-initialize", async () => {
-    const autoLockMs = 1_000;
-    let now = 10_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort();
-    const swallowLog = () => {};
-
-    const first = createServices({
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
-    });
-
-    await first.lifecycle.initialize();
-    first.lifecycle.start();
-
-    await first.session.vault.initialize({ password: "secret" });
-    await first.session.unlock.unlock({ password: "secret" });
-
-    const unlockedState = first.session.unlock.getState();
-    expect(unlockedState.isUnlocked).toBe(true);
-    expect(unlockedState.nextAutoLockAt).not.toBeNull();
-    const expectedDeadline = unlockedState.nextAutoLockAt as number;
-
-    now = 10_200;
-    await first.session.persistVaultMeta();
-    first.lifecycle.destroy();
-
-    const second = createServices({
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0, autoLockDuration: autoLockMs },
-    });
-
-    await second.lifecycle.initialize();
-    second.lifecycle.start();
-
-    const restoredState = second.session.unlock.getState();
-    expect(restoredState.isUnlocked).toBe(false);
-    expect(restoredState.timeoutMs).toBe(autoLockMs);
-
-    const persistedUnlock = second.session.getLastPersistedVaultMeta()?.payload.unlockState;
-    expect(persistedUnlock).toBeDefined();
-    expect(persistedUnlock?.isUnlocked).toBe(true);
-    expect(persistedUnlock?.lastUnlockedAt).toBe(unlockedState.lastUnlockedAt);
-    expect(persistedUnlock?.nextAutoLockAt).toBe(expectedDeadline);
-    second.lifecycle.destroy();
-  });
-
-  it("clears corrupted snapshots and continues hydration", async () => {
-    const clock = () => 42_000;
-    const storage = new MemoryStoragePort({
-      snapshots: {
-        [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-      },
-    });
-    storage.setSnapshotLoadFailure(StorageNamespaces.Network, new Error("boom"));
-
-    const settingsPort: SettingsPort = {
-      get: async () => ({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: clock() }),
-      put: async () => {},
-    };
-
-    const first = createServices({
-      storage: { port: storage, now: clock },
-      settings: { port: settingsPort },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
-    });
-    await first.lifecycle.initialize();
-    first.lifecycle.start();
-
-    expect(storage.clearedSnapshots).toContain(StorageNamespaces.Network);
-
-    first.lifecycle.destroy();
-
-    storage.clearSnapshotLoadFailure(StorageNamespaces.Network);
-    await storage.saveSnapshot(StorageNamespaces.Network, NETWORK_SNAPSHOT);
-
-    const second = createServices({
-      storage: { port: storage, now: clock },
-      settings: { port: settingsPort },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN, ALT_CHAIN] },
-    });
-
-    await second.lifecycle.initialize();
-
-    const networkState = second.controllers.network.getState();
-    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
-    expect(networkState.knownChains.map((chain) => chain.chainRef)).toEqual(
-      expect.arrayContaining([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]),
+    const now = () => 10_000;
+    const chainSeed = [MAINNET_CHAIN];
+    const chainRegistryPort: ChainRegistryPort = new MemoryChainRegistryPort(
+      chainSeed.map((c) => toRegistryEntity(c, 0)),
     );
-    expect(networkState.rpc).toEqual(NETWORK_SNAPSHOT.payload.rpc);
 
-    second.lifecycle.destroy();
-  });
+    const networkRpcPort = new MemoryNetworkRpcPort();
 
-  it("replays storage listeners after restart", async () => {
-    const now = 50_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort();
-
-    const first = createServices({
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-    });
-
-    await first.lifecycle.initialize();
-    first.lifecycle.start();
-
-    await first.controllers.chainRegistry.upsertChain({
-      ...ALT_CHAIN,
-      rpcEndpoints: [{ url: "https://rpc.alt.updated", type: "public" }],
-    });
-    await first.controllers.network.switchChain(ALT_CHAIN.chainRef);
-    await flushMicrotasks();
-
-    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
-
-    first.lifecycle.destroy();
-    storage.savedSnapshots.splice(0);
-
-    const second = createServices({
-      storage: { port: storage, now: clock },
-      session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
-      chainRegistry: { seed: [MAINNET_CHAIN] },
-    });
-
-    await second.lifecycle.initialize();
-    second.lifecycle.start();
-
-    second.controllers.accounts.replaceState({
-      namespaces: { eip155: { all: ["0xabc"], primary: "0xabc" } },
-      active: { namespace: "eip155", chainRef: "eip155:1", address: "0xabc" },
-    });
-
-    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Accounts)).toBe(false);
-
-    second.lifecycle.destroy();
-  });
-
-  it("debounces vault meta persistence before writing", async () => {
-    let now = 70_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort();
-    const swallowLog = () => {};
-
-    let nextTimerId = 1;
-    const scheduled = new Map<number, { timeout: number; handler: () => void }>();
-
-    const setTimeoutStub = vi.fn<(handler: () => void, timeout: number) => ReturnType<typeof setTimeout>>(
-      (handler, timeout) => {
-        const id = nextTimerId++;
-        scheduled.set(id, { timeout, handler });
-        return id as unknown as ReturnType<typeof setTimeout>;
-      },
-    );
-    const clearTimeoutStub = vi.fn<(id: ReturnType<typeof setTimeout>) => void>((id) => {
-      scheduled.delete(Number(id));
-    });
-
-    const runTimer = (timeout: number) => {
-      for (const [id, entry] of scheduled) {
-        if (entry.timeout === timeout) {
-          scheduled.delete(id);
-          entry.handler();
-          break;
-        }
-      }
-    };
-
-    const services = createServices({
-      storage: { port: storage, now: clock, logger: swallowLog },
-      session: {
-        vault: new FakeVault(clock),
-        persistDebounceMs: 100,
-        timers: {
-          setTimeout: setTimeoutStub as unknown as typeof setTimeout,
-          clearTimeout: clearTimeoutStub as unknown as typeof clearTimeout,
+    const services = createBackgroundServices({
+      chainRegistry: { port: chainRegistryPort, seed: chainSeed },
+      store: {
+        ports: {
+          approvals: new MemoryApprovalsPort(),
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
         },
       },
-    });
-
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
-
-    await services.session.vault.initialize({ password: "secret" });
-    await services.session.unlock.unlock({ password: "secret" });
-    runTimer(100);
-
-    const beforeUpdate = storage.savedVaultMeta?.updatedAt ?? null;
-
-    now = 70_500;
-    services.session.unlock.lock("manual");
-
-    expect(Array.from(scheduled.values()).some((entry) => entry.timeout === 100)).toBe(true);
-    expect(storage.savedVaultMeta?.updatedAt ?? null).toBe(beforeUpdate);
-
-    now = 70_600;
-    runTimer(100);
-    await Promise.resolve();
-
-    expect(storage.savedVaultMeta?.updatedAt).toBe(70_600);
-    expect(storage.savedVaultMeta?.payload.unlockState?.isUnlocked).toBe(false);
-
-    services.lifecycle.destroy();
-  });
-
-  it("operates lifecycle without a storage port", async () => {
-    const now = 90_000;
-    const clock = () => now;
-
-    const services = createServices({
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0, autoLockDuration: 500 },
-    });
-
-    await expect(services.lifecycle.initialize()).resolves.toBeUndefined();
-    services.lifecycle.start();
-
-    await services.session.vault.initialize({ password: "secret" });
-    await services.session.unlock.unlock({ password: "secret" });
-
-    expect(services.session.getLastPersistedVaultMeta()).toBeNull();
-
-    services.lifecycle.destroy();
-  });
-
-  it("skips hydration when hydrate flag is false", async () => {
-    const now = 100_000;
-    const clock = () => now;
-    const storage = new MemoryStoragePort({
-      snapshots: {
-        [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
+      storage: {
+        networkRpcPort,
+        vaultMetaPort: {
+          loadVaultMeta: async () => null,
+          saveVaultMeta: async () => {},
+          clearVaultMeta: async () => {},
+        },
+        now,
+        networkRpcDebounceMs: 0,
       },
-      vaultMeta: VAULT_META,
-    });
-    const swallowLog = () => {};
-
-    const services = createServices({
-      storage: { port: storage, now: clock, logger: swallowLog, hydrate: false },
-      session: { vault: new FakeVault(clock), persistDebounceMs: 0 },
     });
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
-    expect(services.controllers.network.getActiveChain().chainRef).toBe(MAINNET_CHAIN.chainRef);
-    expect(services.controllers.accounts.getActivePointer()?.address).toBeNull();
-    expect(services.session.getLastPersistedVaultMeta()).toBeNull();
+    // Health updates should not persist preferences.
+    services.controllers.network.reportRpcOutcome(MAINNET_CHAIN.chainRef, { success: true });
+    await flushAsync();
+    expect(networkRpcPort.upserts.length).toBe(0);
 
-    await services.controllers.network.addChain(ALT_CHAIN);
-    await services.controllers.network.switchChain(ALT_CHAIN.chainRef);
-    await flushMicrotasks();
+    // A strategy change is a preference change and should be persisted.
+    // NetworkController dedupes state change events using lastUpdatedAt, which is Date.now()-driven.
+    // When using fake timers, we must advance time to ensure the state change is published.
+    vi.advanceTimersByTime(1);
+    services.controllers.network.setStrategy(MAINNET_CHAIN.chainRef, { id: "failover", options: { order: "strict" } });
+    await vi.runAllTimersAsync();
+    await flushAsync();
 
-    services.session.unlock.lock("manual");
-    await services.session.persistVaultMeta();
-
-    expect(storage.savedSnapshots.some((entry) => entry.namespace === StorageNamespaces.Network)).toBe(true);
-    expect(storage.savedVaultMeta).not.toBeNull();
-
-    services.lifecycle.destroy();
-  });
-
-  it("derives and removes accounts through accountsRuntime bridge", async () => {
-    const services = createServices();
-
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
-
-    try {
-      await services.session.vault.initialize({ password: "test" });
-      await services.session.unlock.unlock({ password: "test" });
-
-      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
-
-      const chain = services.controllers.network.getActiveChain();
-      const { account, namespaceState } = await services.accountsRuntime.deriveAccount({
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        keyringId,
-        makePrimary: true,
-        switchActive: true,
-      });
-
-      await flushMicrotasks();
-
-      expect(namespaceState.all).toContain(account.address);
-      expect(services.controllers.accounts.getActivePointer()).toMatchObject({
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        address: account.address,
-      });
-
-      await services.accountsRuntime.removeAccount({
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        address: account.address,
-      });
-
-      await flushMicrotasks();
-
-      const afterRemoval = services.controllers.accounts.getState().namespaces[chain.namespace];
-      expect(afterRemoval?.all ?? []).not.toContain(account.address);
-    } finally {
-      services.lifecycle.destroy();
-    }
-  });
-
-  it("keeps provided registry entries and adds default eip155 when missing", async () => {
-    const registry = new TransactionAdapterRegistry();
-    const confluxAdapter = makeAdapter("cfx");
-    registry.register("conflux", confluxAdapter);
-
-    const services = createServices({ transactions: { registry } });
-
-    await services.lifecycle.initialize();
-    expect(registry.get("conflux")).toBe(confluxAdapter);
-    expect(registry.get(EIP155_NAMESPACE)).toBeDefined();
+    expect(networkRpcPort.upserts.length).toBeGreaterThan(0);
+    const last = networkRpcPort.upserts.at(-1);
+    expect(last?.chainRef).toBe(MAINNET_CHAIN.chainRef);
+    expect(last?.strategy.id).toBe("failover");
 
     services.lifecycle.destroy();
-  });
-
-  it("does not override a provided eip155 adapter", async () => {
-    const registry = new TransactionAdapterRegistry();
-    const customEip155 = makeAdapter("custom");
-    registry.register(EIP155_NAMESPACE, customEip155);
-
-    const services = createServices({ transactions: { registry } });
-
-    await services.lifecycle.initialize();
-    expect(registry.get(EIP155_NAMESPACE)).toBe(customEip155);
-
-    services.lifecycle.destroy();
-  });
-
-  it("exposes rpc client registry with default eip155 client", async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ result: "0x1" }), { status: 200 }));
-    const services = createServices({
-      rpcClients: { options: { fetch } },
-      chainRegistry: { seed: [MAINNET_CHAIN] },
-    });
-
-    await services.lifecycle.initialize();
-
-    const client = services.rpcClients.getClient<Eip155RpcCapabilities>("eip155", MAINNET_CHAIN.chainRef);
-    await expect(client.request({ method: "eth_chainId" })).resolves.toBe("0x1");
-    expect(fetch).toHaveBeenCalledTimes(1);
-
-    services.lifecycle.destroy();
+    vi.useRealTimers();
   });
 });

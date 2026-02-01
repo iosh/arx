@@ -24,11 +24,12 @@ describe("InMemoryPermissionController", () => {
   it("tracks scopes and chains per namespace without duplicates", async () => {
     const { controller } = createController();
 
-    await controller.grant(ORIGIN, PermissionScopes.Basic);
-    await controller.grant(ORIGIN, PermissionScopes.Basic); // duplicate scope ignored
     await controller.grant(ORIGIN, PermissionScopes.Basic, { chainRef: "eip155:1" });
     await controller.grant(ORIGIN, PermissionScopes.Basic, { chainRef: "eip155:1" }); // duplicate chain ignored
-    await controller.grant(ORIGIN, PermissionScopes.Accounts, { chainRef: "eip155:137" });
+    await controller.setPermittedAccounts(ORIGIN, {
+      chainRef: "eip155:137",
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
     expect(controller.getState()).toEqual({
       origins: {
@@ -36,6 +37,9 @@ describe("InMemoryPermissionController", () => {
           eip155: {
             scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
             chains: ["eip155:1", "eip155:137"],
+            accountsByChain: {
+              "eip155:137": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+            },
           },
         },
       },
@@ -68,18 +72,21 @@ describe("InMemoryPermissionController", () => {
 
     const { controller } = createController({ scopeResolver });
 
-    await controller.grant(ORIGIN, PermissionScopes.Accounts, { chainRef: "eip155:137" });
+    await controller.setPermittedAccounts(ORIGIN, {
+      chainRef: "eip155:137",
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
     await expect(
       controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "eip155:137" }),
     ).resolves.toBeUndefined();
 
     await expect(controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "eip155:1" })).rejects.toThrow(
-      /lacks chain permission for "eip155:1"/,
+      /on chain "eip155:1"/,
     );
 
     await expect(controller.assertPermission(ORIGIN, "eth_accounts", { chainRef: "conflux:cfx" })).rejects.toThrow(
-      /lacks scope/,
+      /on chain "conflux:cfx"/,
     );
   });
 
@@ -87,7 +94,7 @@ describe("InMemoryPermissionController", () => {
     const scopeResolver: PermissionScopeResolver = vi.fn(() => PermissionScopes.Basic);
     const { controller } = createController({ scopeResolver });
 
-    await controller.grant(ORIGIN, PermissionScopes.Basic);
+    await controller.grant(ORIGIN, PermissionScopes.Basic, { chainRef: "eip155:1" });
 
     await expect(
       controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "malformed" }),
@@ -133,15 +140,10 @@ describe("InMemoryPermissionController", () => {
       expect(state?.chains).toEqual(["eip155:1"]);
     });
 
-    it("allows granting scopes without specifying chains", async () => {
+    it("requires chainRef for grant()", async () => {
       const { controller } = createController();
 
-      await controller.grant(ORIGIN, PermissionScopes.Basic);
-
-      const state = controller.getState().origins[ORIGIN]?.eip155;
-
-      expect(state?.scopes).toEqual([PermissionScopes.Basic]);
-      expect(state?.chains).toEqual([]);
+      await expect(controller.grant(ORIGIN, PermissionScopes.Basic)).rejects.toThrow(/requires a chainRef/);
     });
   });
 
@@ -174,7 +176,7 @@ describe("InMemoryPermissionController", () => {
 
       await expect(
         controller.assertPermission(ORIGIN, "wallet_switchEthereumChain", { chainRef: "eip155:10" }),
-      ).rejects.toThrow(/lacks chain permission for "eip155:10"/);
+      ).rejects.toThrow(/on chain "eip155:10"/);
     });
 
     it("allows methods without scope requirements", async () => {

@@ -16,13 +16,24 @@ export class DexiePermissionsPort implements PermissionsPort {
     return await this.parseRow({ row, deleteKey: id });
   }
 
+  async listAll(): Promise<PermissionRecord[]> {
+    await this.ready;
+    const rows = await this.table.toArray();
+    const out: PermissionRecord[] = [];
+    for (const row of rows) {
+      const parsed = await this.parseRow({ row, deleteKey: row.id });
+      if (parsed) out.push(parsed);
+    }
+    return out;
+  }
+
   async getByOrigin(params: {
     origin: string;
     namespace: string;
     chainRef: ChainRef;
   }): Promise<PermissionRecord | null> {
     await this.ready;
-    const row = await (this.table as any)
+    const row = await this.table
       .where("[origin+namespace+chainRef]")
       .equals([params.origin, params.namespace, params.chainRef])
       .first();

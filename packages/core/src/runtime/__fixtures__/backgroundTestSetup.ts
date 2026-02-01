@@ -9,14 +9,21 @@ import type {
   AccountRecord,
   ApprovalRecord,
   KeyringMetaRecord,
+  PermissionRecord,
   SettingsRecord,
   TransactionRecord,
 } from "../../db/records.js";
-import { AccountRecordSchema, KeyringMetaRecordSchema, TransactionRecordSchema } from "../../db/records.js";
+import {
+  AccountRecordSchema,
+  KeyringMetaRecordSchema,
+  PermissionRecordSchema,
+  TransactionRecordSchema,
+} from "../../db/records.js";
 import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/accounts/port.js";
 import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
+import type { PermissionsPort } from "../../services/permissions/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
 import type { TransactionsPort } from "../../services/transactions/port.js";
 import type {
@@ -99,6 +106,59 @@ export class MemoryApprovalsPort implements ApprovalsPort {
 
   async upsert(record: ApprovalRecord): Promise<void> {
     this.#records.set(record.id, clone(record));
+  }
+}
+
+export class MemoryPermissionsPort implements PermissionsPort {
+  #records = new Map<string, PermissionRecord>();
+
+  constructor(seed: PermissionRecord[] = []) {
+    for (const record of seed) {
+      const checked = PermissionRecordSchema.parse(record);
+      this.#records.set(checked.id, clone(checked));
+    }
+  }
+
+  async get(id: PermissionRecord["id"]): Promise<PermissionRecord | null> {
+    const found = this.#records.get(id);
+    return found ? clone(found) : null;
+  }
+
+  async listAll(): Promise<PermissionRecord[]> {
+    return Array.from(this.#records.values()).map((record) => clone(record));
+  }
+
+  async getByOrigin(params: { origin: string; namespace: string; chainRef: string }): Promise<PermissionRecord | null> {
+    for (const record of this.#records.values()) {
+      if (record.origin !== params.origin) continue;
+      if (record.namespace !== params.namespace) continue;
+      if (record.chainRef !== params.chainRef) continue;
+      return clone(record);
+    }
+    return null;
+  }
+
+  async listByOrigin(origin: string): Promise<PermissionRecord[]> {
+    return Array.from(this.#records.values())
+      .filter((record) => record.origin === origin)
+      .map((record) => clone(record));
+  }
+
+  async upsert(record: PermissionRecord): Promise<void> {
+    const checked = PermissionRecordSchema.parse(record);
+    this.#records.set(checked.id, clone(checked));
+  }
+
+  async remove(id: PermissionRecord["id"]): Promise<void> {
+    this.#records.delete(id);
+  }
+
+  async clearOrigin(origin: string): Promise<void> {
+    for (const [id, record] of this.#records.entries()) {
+      if (record.origin === origin) {
+        this.#records.delete(id);
+      }
+    }
   }
 }
 
@@ -574,6 +634,7 @@ export type SetupBackgroundOptions = {
   settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
   keyringMetasSeed?: KeyringMetaRecord[];
+  permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionsSeed?: TransactionRecord[];
   autoLockDuration?: number;
@@ -598,6 +659,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     vaultMeta: options.vaultMeta ?? null,
   });
   const approvalsPort = new MemoryApprovalsPort();
+  const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
   const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
@@ -633,6 +695,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     store: {
       ports: {
         approvals: approvalsPort,
+        permissions: permissionsPort,
         transactions: transactionsPort,
         accounts: accountsPort,
         keyringMetas: keyringMetasPort,

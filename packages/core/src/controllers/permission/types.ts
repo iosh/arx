@@ -29,6 +29,14 @@ export type PermissionsState = {
   origins: Record<string, OriginPermissionState>;
 };
 
+export type PermissionGrant = {
+  origin: string;
+  namespace: ChainNamespace;
+  chainRef: ChainRef;
+  scopes: PermissionScope[];
+  accounts?: string[];
+};
+
 export type GrantPermissionOptions = {
   namespace?: ChainNamespace | null;
   chainRef?: ChainRef | null;
@@ -64,6 +72,9 @@ export type PermissionApprovalResult = {
 };
 
 export type PermissionController = {
+  whenReady(): Promise<void>;
+  listGrants(origin: string): PermissionGrant[];
+
   getState(): PermissionsState;
 
   getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[];

@@ -1,5 +1,10 @@
 import type { ChainRef } from "../chains/ids.js";
-import { type OriginPermissionState, type PermissionScope, PermissionScopes } from "../controllers/permission/types.js";
+import {
+  type OriginPermissionState,
+  type PermissionGrant,
+  type PermissionScope,
+  PermissionScopes,
+} from "../controllers/permission/types.js";
 
 export type WalletPermissionCaveat = {
   type: string;
@@ -14,6 +19,7 @@ export type WalletPermissionDescriptor = {
 
 export type BuildWalletPermissionsOptions = {
   origin: string;
+  grants?: readonly PermissionGrant[];
   permissions?: OriginPermissionState;
   getAccounts?: (chainRef: ChainRef) => readonly string[] | undefined;
 };
@@ -28,6 +34,13 @@ export const PERMISSION_SCOPE_CAPABILITIES: Record<PermissionScope, string> = {
 
 const ACCOUNTS_CAPABILITY = PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Accounts];
 
+const SCOPE_ORDER: readonly PermissionScope[] = [
+  PermissionScopes.Basic,
+  PermissionScopes.Accounts,
+  PermissionScopes.Sign,
+  PermissionScopes.Transaction,
+];
+
 // Keep simple helpers local to avoid re-export churn.
 const unique = <T>(values: readonly T[]): T[] => {
   return [...new Set(values)];
@@ -40,40 +53,71 @@ const sanitizeAccounts = (values: readonly unknown[]): string[] => {
 
 export const buildWalletPermissions = ({
   origin,
+  grants,
   permissions,
   getAccounts,
 }: BuildWalletPermissionsOptions): WalletPermissionDescriptor[] => {
-  if (!permissions) return [];
+  const effectiveGrants: PermissionGrant[] =
+    grants ??
+    (permissions
+      ? Object.entries(permissions).flatMap(([namespace, namespaceState]) =>
+          unique(namespaceState.chains).map((chainRef) => ({
+            origin,
+            namespace: namespace as PermissionGrant["namespace"],
+            chainRef,
+            scopes: [...namespaceState.scopes],
+          })),
+        )
+      : []);
+
+  if (effectiveGrants.length === 0) return [];
+
+  const scopeChains = new Map<PermissionScope, Set<ChainRef>>();
+  const accountsByChain = new Map<ChainRef, string[]>();
+
+  for (const grant of effectiveGrants) {
+    if (grant.accounts) {
+      accountsByChain.set(grant.chainRef, [...grant.accounts]);
+    }
+
+    for (const scope of grant.scopes) {
+      const chains = scopeChains.get(scope) ?? new Set<ChainRef>();
+      chains.add(grant.chainRef);
+      scopeChains.set(scope, chains);
+    }
+  }
 
   const descriptors: WalletPermissionDescriptor[] = [];
 
-  for (const namespaceState of Object.values(permissions)) {
-    if (!namespaceState) continue;
+  for (const scope of SCOPE_ORDER) {
+    const chains = scopeChains.get(scope);
+    if (!chains || chains.size === 0) continue;
 
-    const chains = namespaceState.chains.length ? unique(namespaceState.chains) : [];
-    for (const scope of namespaceState.scopes) {
-      const parentCapability = PERMISSION_SCOPE_CAPABILITIES[scope];
-      if (!parentCapability) continue;
+    const parentCapability = PERMISSION_SCOPE_CAPABILITIES[scope];
+    if (!parentCapability) continue;
 
-      const caveats: WalletPermissionCaveat[] = [];
-      if (chains.length > 0) {
-        caveats.push({ type: "arx:permittedChains", value: chains });
-      }
+    const chainList = [...chains].sort((a, b) => a.localeCompare(b));
 
-      if (parentCapability === ACCOUNTS_CAPABILITY && chains.length > 0 && getAccounts) {
-        const addresses = sanitizeAccounts(chains.flatMap((chainRef) => getAccounts(chainRef) ?? []));
-        if (addresses.length > 0) {
-          caveats.push({
-            type: "restrictReturnedAccounts",
-            value: unique(addresses),
-          });
-        }
-      }
+    const caveats: WalletPermissionCaveat[] = [{ type: "arx:permittedChains", value: chainList }];
 
-      descriptors.push(
-        caveats.length > 0 ? { invoker: origin, parentCapability, caveats } : { invoker: origin, parentCapability },
+    if (parentCapability === ACCOUNTS_CAPABILITY) {
+      const addresses = sanitizeAccounts(
+        chainList.flatMap((chainRef) => {
+          if (getAccounts) return getAccounts(chainRef) ?? [];
+          return accountsByChain.get(chainRef) ?? [];
+        }),
       );
+
+      const uniqueAddresses = unique(addresses);
+      if (uniqueAddresses.length > 0) {
+        caveats.push({
+          type: "restrictReturnedAccounts",
+          value: uniqueAddresses,
+        });
+      }
     }
+
+    descriptors.push({ invoker: origin, parentCapability, caveats });
   }
 
   return descriptors;

@@ -1,9 +1,11 @@
 import { EventEmitter } from "eventemitter3";
 import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
 import type { PermissionsPort } from "./port.js";
-import type { GetPermissionByOriginParams, PermissionsService } from "./types.js";
+import type { GetPermissionByOriginParams, PermissionsChangedEvent, PermissionsService } from "./types.js";
 
-type ChangedEvent = "changed";
+type ServiceEvents = {
+  changed: PermissionsChangedEvent;
+};
 
 export type CreatePermissionsServiceOptions = {
   port: PermissionsPort;
@@ -14,10 +16,10 @@ export const createPermissionsService = ({
   port,
   now = Date.now,
 }: CreatePermissionsServiceOptions): PermissionsService => {
-  const emitter = new EventEmitter<ChangedEvent>();
+  const emitter = new EventEmitter<ServiceEvents>();
 
-  const emitChanged = () => {
-    emitter.emit("changed");
+  const emitChanged = (event: PermissionsChangedEvent) => {
+    emitter.emit("changed", event);
   };
 
   const get = async (id: PermissionRecord["id"]) => {
@@ -29,13 +31,20 @@ export const createPermissionsService = ({
     const record = await port.getByOrigin(params);
     return record ? PermissionRecordSchema.parse(record) : null;
   };
+
+  const listAll = async () => {
+    const records = await port.listAll();
+    return records.map((r) => PermissionRecordSchema.parse(r));
+  };
   const listByOrigin = async (origin: string) => {
     const records = await port.listByOrigin(origin);
     return records.map((r) => PermissionRecordSchema.parse(r));
   };
 
   const upsert = async (record: PermissionRecord) => {
-    // Enforce uniqueness at (origin, namespace, chainRef) even if callers supply a random id.
+    // Reuse the same id for the same (origin, namespace, chainRef) so callers can treat the record as stable.
+    // This also keeps in-memory ports (and other implementations without composite uniqueness enforcement)
+    // from accumulating duplicate rows.
     const existing = await port.getByOrigin({
       origin: record.origin,
       namespace: record.namespace,
@@ -49,16 +58,18 @@ export const createPermissionsService = ({
     });
 
     await port.upsert(checked);
-    emitChanged();
+    emitChanged({ origin: checked.origin });
   };
 
   const remove = async (id: PermissionRecord["id"]) => {
     await port.remove(id);
-    emitChanged();
+    // Removing by id doesn't provide the unique (origin, namespace, chainRef) key.
+    // Fall back to a full resync for correctness.
+    emitChanged({ origin: null });
   };
   const clearOrigin = async (origin: string) => {
     await port.clearOrigin(origin);
-    emitChanged();
+    emitChanged({ origin });
   };
 
   return {
@@ -73,6 +84,7 @@ export const createPermissionsService = ({
 
     get,
     getByOrigin,
+    listAll,
     listByOrigin,
     upsert,
     remove,

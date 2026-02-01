@@ -6,6 +6,7 @@ import {
   MemoryApprovalsPort,
   MemoryChainRegistryPort,
   MemoryKeyringMetasPort,
+  MemoryPermissionsPort,
   MemoryTransactionsPort,
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../createBackgroundServices.js";
@@ -91,6 +92,7 @@ describe("background rpc engine assembly", () => {
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
         },
       },
     });
@@ -121,6 +123,7 @@ describe("background rpc engine assembly", () => {
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
         },
       },
     });
@@ -159,6 +162,7 @@ describe("background rpc engine assembly", () => {
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
         },
       },
     });
@@ -197,6 +201,7 @@ describe("background rpc engine assembly", () => {
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
         },
       },
       session: { vault: createUnlockedVault },

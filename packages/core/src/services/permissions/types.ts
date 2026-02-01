@@ -1,7 +1,11 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionRecord } from "../../db/records.js";
 
-export type PermissionsChangedHandler = () => void;
+export type PermissionsChangedEvent = {
+  origin: string | null;
+};
+
+export type PermissionsChangedHandler = (event: PermissionsChangedEvent) => void;
 
 export type GetPermissionByOriginParams = {
   origin: string;
@@ -15,6 +19,8 @@ export type PermissionsService = {
 
   get(id: PermissionRecord["id"]): Promise<PermissionRecord | null>;
   getByOrigin(params: GetPermissionByOriginParams): Promise<PermissionRecord | null>;
+
+  listAll(): Promise<PermissionRecord[]>;
 
   listByOrigin(origin: string): Promise<PermissionRecord[]>;
   upsert(record: PermissionRecord): Promise<void>;

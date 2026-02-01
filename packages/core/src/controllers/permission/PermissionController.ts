@@ -8,11 +8,13 @@ import type {
   OriginPermissions,
   PermissionController,
   PermissionControllerOptions,
+  PermissionGrant,
   PermissionMessenger,
   PermissionScope,
   PermissionScopeResolver,
   PermissionsState,
 } from "./types.js";
+import { PermissionScopes } from "./types.js";
 
 const PERMISSION_STATE_TOPIC = "permission:stateChanged";
 const PERMISSION_ORIGIN_TOPIC = "permission:originChanged";
@@ -66,8 +68,8 @@ const isSameNamespaceState = (prev: NamespacePermissionState, next: NamespacePer
 };
 
 const isSameOriginState = (prev: OriginPermissionState, next: OriginPermissionState) => {
-  const prevNamespaces = Object.keys(prev);
-  const nextNamespaces = Object.keys(next);
+  const prevNamespaces = Object.keys(prev).sort();
+  const nextNamespaces = Object.keys(next).sort();
   if (prevNamespaces.length !== nextNamespaces.length) return false;
 
   return prevNamespaces.every((namespace) => {
@@ -81,8 +83,8 @@ const isSameOriginState = (prev: OriginPermissionState, next: OriginPermissionSt
 const isSameState = (prev?: PermissionsState, next?: PermissionsState) => {
   if (!prev || !next) return false;
 
-  const prevOrigins = Object.keys(prev.origins);
-  const nextOrigins = Object.keys(next.origins);
+  const prevOrigins = Object.keys(prev.origins).sort();
+  const nextOrigins = Object.keys(next.origins).sort();
   if (prevOrigins.length !== nextOrigins.length) return false;
 
   return prevOrigins.every((origin) => {
@@ -140,18 +142,36 @@ const findNamespaceState = (
   return state.origins[origin]?.[namespace];
 };
 
+const keyForGrant = (origin: string, namespace: string, chainRef: string) => `${origin}::${namespace}::${chainRef}`;
+
 export class InMemoryPermissionController implements PermissionController {
   #messenger: PermissionMessenger;
   #scopeResolver: PermissionScopeResolver;
   #state: PermissionsState;
   #chains: ChainModuleRegistry;
+  #grants: Map<string, PermissionGrant> = new Map();
 
   constructor({ messenger, scopeResolver, initialState }: PermissionControllerOptions) {
     this.#messenger = messenger;
     this.#scopeResolver = scopeResolver;
     this.#chains = createDefaultChainModuleRegistry();
     this.#state = cloneState(initialState ?? { origins: {} });
+    this.#rebuildGrantsFromState();
     this.#publishState();
+  }
+
+  whenReady(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  listGrants(origin: string): PermissionGrant[] {
+    const result: PermissionGrant[] = [];
+    for (const grant of this.#grants.values()) {
+      if (grant.origin !== origin) continue;
+      result.push(structuredClone(grant));
+    }
+    result.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.chainRef.localeCompare(b.chainRef));
+    return result;
   }
 
   getState(): PermissionsState {
@@ -193,6 +213,10 @@ export class InMemoryPermissionController implements PermissionController {
       uniqueAccounts.push(canonical);
     }
 
+    if (uniqueAccounts.length === 0) {
+      throw new Error("setPermittedAccounts requires at least one account");
+    }
+
     const currentOrigin = this.#state.origins[origin] ?? {};
     const currentNamespace = currentOrigin[namespace] ?? { scopes: [], chains: [] };
 
@@ -202,8 +226,26 @@ export class InMemoryPermissionController implements PermissionController {
     }
 
     const nextNamespace = cloneNamespaceState(currentNamespace);
+    if (!nextNamespace.scopes.includes(PermissionScopes.Accounts)) {
+      nextNamespace.scopes.push(PermissionScopes.Accounts);
+    }
+    if (!nextNamespace.chains.includes(chainRef)) {
+      nextNamespace.chains.push(chainRef);
+    }
     const nextAccountsByChain = { ...(nextNamespace.accountsByChain ?? {}) };
     nextAccountsByChain[chainRef] = uniqueAccounts;
+
+    const grantKey = keyForGrant(origin, namespace, chainRef);
+    const currentGrant = this.#grants.get(grantKey);
+    const mergedScopes = new Set<PermissionScope>(currentGrant?.scopes ?? []);
+    mergedScopes.add(PermissionScopes.Accounts);
+    this.#grants.set(grantKey, {
+      origin,
+      namespace,
+      chainRef,
+      scopes: [...mergedScopes],
+      accounts: [...uniqueAccounts],
+    });
 
     const nextOrigin: OriginPermissionState = {
       ...currentOrigin,
@@ -236,20 +278,23 @@ export class InMemoryPermissionController implements PermissionController {
     if (!scope) return;
 
     const namespace = deriveNamespaceFromContext(context);
-    const namespaceState = findNamespaceState(this.#state, origin, namespace);
-    const scopes = namespaceState?.scopes ?? [];
-
-    if (!scopes.includes(scope)) {
-      throw new Error(`Origin "${origin}" lacks scope "${scope}" for namespace "${namespace}"`);
-    }
 
     const parsedChain = parseChainRef(context?.chainRef ?? null);
-    const permittedChains = namespaceState?.chains ?? [];
-    if (parsedChain && !permittedChains.includes(parsedChain.value)) {
-      throw new Error(
-        `Origin "${origin}" lacks chain permission for "${parsedChain.value}" in namespace "${namespace}"`,
-      );
+    if (parsedChain) {
+      const grant = this.#grants.get(keyForGrant(origin, namespace, parsedChain.value));
+      if (!grant || !grant.scopes.includes(scope)) {
+        throw new Error(`Origin "${origin}" lacks scope "${scope}" for ${namespace} on chain "${parsedChain.value}"`);
+      }
+      return;
     }
+
+    // Context has no chainRef: accept if any chain grant in the namespace includes the scope.
+    for (const grant of this.#grants.values()) {
+      if (grant.origin !== origin) continue;
+      if (grant.namespace !== namespace) continue;
+      if (grant.scopes.includes(scope)) return;
+    }
+    throw new Error(`Origin "${origin}" lacks scope "${scope}" for namespace "${namespace}"`);
   }
 
   async grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void> {
@@ -263,13 +308,21 @@ export class InMemoryPermissionController implements PermissionController {
       );
     }
 
+    if (!normalizedChainRef) {
+      throw new Error("InMemoryPermissionController.grant requires a chainRef");
+    }
+
+    if (scope === PermissionScopes.Accounts) {
+      throw new Error("Accounts permission must be granted via setPermittedAccounts");
+    }
+
     const currentOrigin = this.#state.origins[origin] ?? {};
     const currentNamespace = currentOrigin[namespace] ?? { scopes: [], chains: [] };
 
     const hasScope = currentNamespace.scopes.includes(scope);
-    const hasChain = normalizedChainRef ? currentNamespace.chains.includes(normalizedChainRef) : false;
+    const hasChain = currentNamespace.chains.includes(normalizedChainRef);
 
-    if (hasScope && (!normalizedChainRef || hasChain)) {
+    if (hasScope && hasChain) {
       return;
     }
 
@@ -277,9 +330,19 @@ export class InMemoryPermissionController implements PermissionController {
     if (!hasScope) {
       nextNamespace.scopes.push(scope);
     }
-    if (normalizedChainRef && !hasChain) {
-      nextNamespace.chains.push(normalizedChainRef);
-    }
+    if (!hasChain) nextNamespace.chains.push(normalizedChainRef);
+
+    const grantKey = keyForGrant(origin, namespace, normalizedChainRef);
+    const currentGrant = this.#grants.get(grantKey);
+    const mergedScopes = new Set<PermissionScope>(currentGrant?.scopes ?? []);
+    mergedScopes.add(scope);
+    this.#grants.set(grantKey, {
+      origin,
+      namespace,
+      chainRef: normalizedChainRef as ChainRef,
+      scopes: [...mergedScopes],
+      ...(currentGrant?.accounts ? { accounts: [...currentGrant.accounts] } : {}),
+    });
 
     const nextOrigin: OriginPermissionState = {
       ...currentOrigin,
@@ -303,6 +366,12 @@ export class InMemoryPermissionController implements PermissionController {
   async clear(origin: string): Promise<void> {
     if (!this.#state.origins[origin]) {
       return;
+    }
+
+    for (const key of [...this.#grants.keys()]) {
+      if (key.startsWith(`${origin}::`)) {
+        this.#grants.delete(key);
+      }
     }
 
     const { [origin]: _removed, ...rest } = this.#state.origins;
@@ -333,6 +402,7 @@ export class InMemoryPermissionController implements PermissionController {
     }
 
     this.#state = cloneState(state);
+    this.#rebuildGrantsFromState();
     this.#publishState();
   }
 
@@ -353,5 +423,34 @@ export class InMemoryPermissionController implements PermissionController {
         },
       },
     );
+  }
+
+  #rebuildGrantsFromState() {
+    this.#grants.clear();
+
+    for (const [origin, originState] of Object.entries(this.#state.origins)) {
+      for (const [namespace, namespaceState] of Object.entries(originState)) {
+        const chainRefs = new Set<string>([
+          ...namespaceState.chains,
+          ...Object.keys(namespaceState.accountsByChain ?? {}),
+        ]);
+
+        for (const chainRef of chainRefs) {
+          const accounts = namespaceState.accountsByChain?.[chainRef as ChainRef];
+          const scopes =
+            accounts && !namespaceState.scopes.includes(PermissionScopes.Accounts)
+              ? [...namespaceState.scopes, PermissionScopes.Accounts]
+              : [...namespaceState.scopes];
+
+          this.#grants.set(keyForGrant(origin, namespace, chainRef), {
+            origin,
+            namespace: namespace as ChainNamespace,
+            chainRef: chainRef as ChainRef,
+            scopes,
+            ...(accounts ? { accounts: [...accounts] } : {}),
+          });
+        }
+      }
+    }
   }
 }

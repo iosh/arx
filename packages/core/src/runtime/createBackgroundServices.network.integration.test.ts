@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionScopes } from "../controllers/index.js";
-import type { NetworkSnapshot, PermissionsSnapshot } from "../storage/index.js";
-import { NETWORK_SNAPSHOT_VERSION, PERMISSIONS_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
+import type { NetworkSnapshot } from "../storage/index.js";
+import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import {
@@ -141,21 +141,6 @@ describe("createBackgroundServices (network integration)", () => {
     const payloadHex = accountAddress.slice(2).toLowerCase();
     const accountId = `eip155:${payloadHex}`;
 
-    const permissionsSnapshot: PermissionsSnapshot = {
-      version: PERMISSIONS_SNAPSHOT_VERSION,
-      updatedAt: 1_000,
-      payload: {
-        origins: {
-          "https://dapp.example": {
-            [mainChain.namespace]: {
-              scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
-              chains: [mainChain.chainRef],
-            },
-          },
-        },
-      },
-    };
-
     const txId = "11111111-1111-4111-8111-111111111111";
 
     const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
@@ -193,8 +178,18 @@ describe("createBackgroundServices (network integration)", () => {
       ],
       storageSeed: {
         [StorageNamespaces.Network]: networkSnapshot,
-        [StorageNamespaces.Permissions]: permissionsSnapshot,
       },
+      permissionsSeed: [
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          origin: "https://dapp.example",
+          namespace: mainChain.namespace,
+          chainRef: mainChain.chainRef,
+          scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
+          accountIds: [accountId],
+          updatedAt: 1_000,
+        },
+      ],
       transactionsSeed: [
         {
           id: txId,
@@ -233,7 +228,19 @@ describe("createBackgroundServices (network integration)", () => {
       const accountsState = context.services.controllers.accounts.getState();
       expect(accountsState.namespaces[mainChain.namespace]?.all).toEqual([accountAddress]);
       expect(accountsState.namespaces[mainChain.namespace]?.primary).toBe(accountAddress);
-      expect(context.services.controllers.permissions.getState()).toEqual(permissionsSnapshot.payload);
+      expect(context.services.controllers.permissions.getState()).toMatchObject({
+        origins: {
+          "https://dapp.example": {
+            eip155: {
+              chains: [mainChain.chainRef],
+              scopes: expect.arrayContaining([PermissionScopes.Basic, PermissionScopes.Accounts]),
+              accountsByChain: {
+                [mainChain.chainRef]: [accountAddress],
+              },
+            },
+          },
+        },
+      });
       expect(context.services.controllers.approvals.getState().pending).toHaveLength(0);
 
       await context.services.controllers.transactions.processTransaction(txId);

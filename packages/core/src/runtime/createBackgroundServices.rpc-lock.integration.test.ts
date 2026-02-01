@@ -106,10 +106,6 @@ describe("createBackgroundServices (locked RPC integration)", () => {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Accounts, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      });
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
@@ -172,10 +168,6 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
       // Simulate a connected origin (accountsByChain present), but do NOT grant Sign scope.
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      });
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Accounts, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });

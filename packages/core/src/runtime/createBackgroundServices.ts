@@ -15,6 +15,8 @@ import type { ApprovalsPort } from "../services/approvals/port.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
+import { createPermissionsService } from "../services/permissions/PermissionsService.js";
+import type { PermissionsPort } from "../services/permissions/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
@@ -53,6 +55,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
       transactions: TransactionsPort;
       accounts: AccountsPort;
       keyringMetas: KeyringMetasPort;
+      permissions: PermissionsPort;
     };
   };
   settings?: {
@@ -111,6 +114,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   if (!storeOptions?.ports?.keyringMetas) {
     throw new Error("createBackgroundServices requires store.ports.keyringMetas");
   }
+  if (!storeOptions?.ports?.permissions) {
+    throw new Error("createBackgroundServices requires store.ports.permissions");
+  }
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
@@ -122,6 +128,11 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     now: storageOptions?.now ?? Date.now,
   });
 
+  const permissionsService = createPermissionsService({
+    port: storeOptions.ports.permissions,
+    now: storageOptions?.now ?? Date.now,
+  });
+
   const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
 
@@ -129,12 +140,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
     approvalsService,
+    permissionsService,
     transactionsService,
     options: controllerOptions,
   });
 
-  const { controllersBase, transactionRegistry, networkController, chainRegistryController, permissionController } =
-    controllersInit;
+  const { controllersBase, transactionRegistry, networkController, chainRegistryController } = controllersInit;
 
   const rpcClientRegistry = initRpcLayer({
     controllers: controllersBase,
@@ -358,9 +369,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           storage: storagePort,
           controllers: {
             network: networkController,
-            permissions: {
-              onPermissionsChanged: (handler) => permissionController.onPermissionsChanged(handler),
-            },
           },
           now: storageNow,
           logger: storageLogger,
@@ -481,11 +489,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       }
     }
 
-    await hydrateSnapshot(StorageNamespaces.Permissions, (payload) => {
-      controllers.permissions.replaceState(
-        payload as unknown as Parameters<typeof controllers.permissions.replaceState>[0],
-      );
-    });
+    // Permissions are store-backed (PR5 Step 4): snapshot hydration intentionally disabled.
   };
 
   const hydrateAccountsFromStore = async () => {
@@ -532,6 +536,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
     initializePromise = (async () => {
       await chainRegistryController.whenReady();
+      await controllersBase.permissions.whenReady();
 
       try {
         await approvalsService.expireAllPending({ finalStatusReason: "session_lost" });

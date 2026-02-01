@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import { ApprovalTypes, PermissionScopes } from "../controllers/index.js";
+import type { SettingsRecord } from "../db/records.js";
 import type { Eip155RpcCapabilities } from "../rpc/clients/eip155/eip155.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { SettingsPort } from "../services/settings/port.js";
@@ -15,8 +16,6 @@ import type {
 import {
   NETWORK_SNAPSHOT_VERSION,
   type NetworkSnapshot,
-  PERMISSIONS_SNAPSHOT_VERSION,
-  type PermissionsSnapshot,
   StorageNamespaces,
   VAULT_META_SNAPSHOT_VERSION,
 } from "../storage/index.js";
@@ -27,6 +26,7 @@ import {
   MemoryAccountsPort,
   MemoryApprovalsPort,
   MemoryKeyringMetasPort,
+  MemoryPermissionsPort,
   MemoryTransactionsPort,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "./createBackgroundServices.js";
@@ -78,25 +78,6 @@ const SEEDED_PAYLOAD_HEX = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SEEDED_ADDRESS = `0x${SEEDED_PAYLOAD_HEX}`;
 const SEEDED_ACCOUNT_ID = `eip155:${SEEDED_PAYLOAD_HEX}`;
 const SEEDED_KEYRING_ID = "00000000-0000-4000-8000-000000000001";
-
-const PERMISSIONS_SNAPSHOT: PermissionsSnapshot = {
-  version: PERMISSIONS_SNAPSHOT_VERSION,
-  updatedAt: 1_000,
-  payload: {
-    origins: {
-      "https://dapp.example": {
-        eip155: {
-          scopes: [PermissionScopes.Basic, PermissionScopes.Accounts],
-          chains: ["eip155:1"],
-        },
-        conflux: {
-          scopes: [PermissionScopes.Sign],
-          chains: ["conflux:cfx"],
-        },
-      },
-    },
-  },
-};
 
 const FAKE_CIPHERTEXT: VaultCiphertext = {
   version: 1,
@@ -252,6 +233,7 @@ const createServices = (options: TestServicesOptions = {}) => {
             transactions: new MemoryTransactionsPort(),
             accounts: new MemoryAccountsPort(),
             keyringMetas: new MemoryKeyringMetasPort(),
+            permissions: new MemoryPermissionsPort(),
           },
         },
       };
@@ -393,7 +375,6 @@ describe("createBackgroundServices", () => {
     const storage = new MemoryStoragePort({
       snapshots: {
         [StorageNamespaces.Network]: NETWORK_SNAPSHOT,
-        [StorageNamespaces.Permissions]: PERMISSIONS_SNAPSHOT,
       },
       vaultMeta: VAULT_META,
     });
@@ -422,6 +403,7 @@ describe("createBackgroundServices", () => {
         },
       ]),
       keyringMetas: new MemoryKeyringMetasPort(),
+      permissions: new MemoryPermissionsPort(),
     };
 
     const services = createServices({
@@ -537,7 +519,18 @@ describe("createBackgroundServices", () => {
     const clock = () => now;
     const storage = new MemoryStoragePort();
 
+    const permissionsPort = new MemoryPermissionsPort();
+
     const services = createServices({
+      store: {
+        ports: {
+          approvals: new MemoryApprovalsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: permissionsPort,
+        },
+      },
       storage: { port: storage, now: clock },
       session: { vault: new FakeVault(clock, FAKE_CIPHERTEXT), persistDebounceMs: 0 },
       chainRegistry: { seed: [MAINNET_CHAIN] },
@@ -579,13 +572,23 @@ describe("createBackgroundServices", () => {
       chainRef: "conflux:cfx",
     });
 
-    const permissionsSnapshot = storage.getSnapshot(StorageNamespaces.Permissions);
-    expect(permissionsSnapshot).not.toBeNull();
-    expect(permissionsSnapshot?.updatedAt).toBe(3_820);
-    expect(permissionsSnapshot?.payload.origins["https://dapp.example"]?.eip155?.chains).toEqual([
-      MAINNET_CHAIN.chainRef,
-    ]);
-    expect(permissionsSnapshot?.payload.origins["https://dapp.example"]?.conflux?.chains).toEqual(["conflux:cfx"]);
+    const eip155Record = await permissionsPort.getByOrigin({
+      origin: "https://dapp.example",
+      namespace: "eip155",
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    expect(eip155Record?.updatedAt).toBe(3_820);
+    expect(eip155Record?.scopes).toEqual(expect.arrayContaining([PermissionScopes.Basic]));
+
+    const confluxRecord = await permissionsPort.getByOrigin({
+      origin: "https://dapp.example",
+      namespace: "conflux",
+      chainRef: "conflux:cfx",
+    });
+    expect(confluxRecord?.updatedAt).toBe(3_820);
+    expect(confluxRecord?.scopes).toEqual(expect.arrayContaining([PermissionScopes.Sign]));
+
+    expect(storage.getSnapshot(StorageNamespaces.Permissions)).toBeNull();
 
     // Transactions are persisted via the store-backed controller; snapshots are intentionally disabled.
     expect(storage.getSnapshot(StorageNamespaces.Transactions)).toBeNull();

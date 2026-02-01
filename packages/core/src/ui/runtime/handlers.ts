@@ -180,12 +180,21 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
         data: { origin: task.origin, reason: "no_accounts" },
       });
     }
+    const pointer = controllers.accounts.getActivePointer();
+    const preferred =
+      pointer?.chainRef === chainRef && pointer.address && uniqueAccounts.includes(pointer.address)
+        ? pointer.address
+        : null;
+    const selectedAccount = preferred ?? uniqueAccounts[0] ?? null;
+    if (!selectedAccount) {
+      throw arxError({
+        reason: ArxReasons.PermissionDenied,
+        message: "No selectable account available for connection request",
+        data: { origin: task.origin, reason: "no_selection" },
+      });
+    }
 
     await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
-      namespace,
-      chainRef,
-    });
-    await controllers.permissions.grant(task.origin, PermissionScopes.Accounts, {
       namespace,
       chainRef,
     });
@@ -193,10 +202,10 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     await controllers.permissions.setPermittedAccounts(task.origin, {
       namespace,
       chainRef,
-      accounts: uniqueAccounts,
+      accounts: [selectedAccount],
     });
 
-    return uniqueAccounts;
+    return [selectedAccount];
   },
 
   [ApprovalTypes.SignMessage]: async (task, controllers) => {

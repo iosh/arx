@@ -30,7 +30,7 @@ import type {
   RpcEventLogger,
   RpcStrategyConfig,
 } from "../../controllers/network/types.js";
-import { InMemoryPermissionController } from "../../controllers/permission/PermissionController.js";
+import { StorePermissionController } from "../../controllers/permission/StorePermissionController.js";
 import type {
   PermissionController,
   PermissionMessenger,
@@ -47,6 +47,7 @@ import type {
 import type { Namespace } from "../../rpc/handlers/types.js";
 import { createPermissionScopeResolver, type RpcInvocationContext } from "../../rpc/index.js";
 import type { ApprovalsService } from "../../services/approvals/types.js";
+import type { PermissionsService } from "../../services/permissions/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import {
@@ -112,12 +113,14 @@ export const initControllers = ({
   messenger,
   namespaceResolver,
   approvalsService,
+  permissionsService,
   transactionsService,
   options,
 }: {
   messenger: BackgroundMessenger;
   namespaceResolver: NamespaceResolver;
   approvalsService: ApprovalsService;
+  permissionsService: PermissionsService;
   transactionsService: TransactionsService;
   options: ControllerLayerOptions;
 }): ControllersInitResult => {
@@ -156,10 +159,10 @@ export const initControllers = ({
     service: approvalsService,
   });
 
-  const permissionController = new InMemoryPermissionController({
+  const permissionController = new StorePermissionController({
     messenger: castMessenger<PermissionMessengerTopics>(messenger) as PermissionMessenger,
-    initialState: permissionOptions?.initialState ?? DEFAULT_PERMISSIONS_STATE,
     scopeResolver: permissionScopeResolver,
+    service: permissionsService,
   });
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();

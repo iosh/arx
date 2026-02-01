@@ -582,7 +582,10 @@ describe("eip155 handlers - core error paths", () => {
       makePrimary: true,
     });
     await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: chain.chainRef });
-    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Accounts, { chainRef: chain.chainRef });
+    await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      chainRef: chain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
     const execute = createExecutor(services);
     try {
@@ -606,6 +609,42 @@ describe("eip155 handlers - core error paths", () => {
           ],
         },
       ]);
+    } finally {
+      services.lifecycle.destroy();
+    }
+  });
+
+  it("does not leak scope chains across different grants", async () => {
+    const services = createServices();
+    await services.lifecycle.initialize();
+    services.lifecycle.start();
+
+    const main = services.controllers.network.getActiveChain();
+    await services.controllers.network.addChain(ALT_CHAIN);
+
+    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: main.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: ALT_CHAIN.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, { chainRef: ALT_CHAIN.chainRef });
+
+    const execute = createExecutor(services);
+    try {
+      const result = await execute({
+        origin: ORIGIN,
+        request: { method: "wallet_getPermissions", params: [] as JsonRpcParams },
+      });
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            parentCapability: "wallet_basic",
+            caveats: [{ type: "arx:permittedChains", value: [main.chainRef, ALT_CHAIN.chainRef] }],
+          }),
+          expect.objectContaining({
+            parentCapability: "wallet_sign",
+            caveats: [{ type: "arx:permittedChains", value: [ALT_CHAIN.chainRef] }],
+          }),
+        ]),
+      );
     } finally {
       services.lifecycle.destroy();
     }

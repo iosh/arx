@@ -6,6 +6,7 @@ import {
   MemoryAccountsPort,
   MemoryApprovalsPort,
   MemoryKeyringMetasPort,
+  MemoryPermissionsPort,
   MemoryTransactionsPort,
 } from "../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../runtime/createBackgroundServices.js";
@@ -64,6 +65,7 @@ export const createServices = (overrides?: Parameters<typeof createBackgroundSer
     store: {
       ports: {
         approvals: new MemoryApprovalsPort(),
+        permissions: new MemoryPermissionsPort(),
         transactions: new MemoryTransactionsPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),

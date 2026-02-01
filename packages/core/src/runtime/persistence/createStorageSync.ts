@@ -1,10 +1,9 @@
-import type { NetworkState, PermissionsState, RpcEndpointState } from "../../controllers/index.js";
-import type { NetworkSnapshot, PermissionsSnapshot, StoragePort } from "../../storage/index.js";
-import { NETWORK_SNAPSHOT_VERSION, PERMISSIONS_SNAPSHOT_VERSION, StorageNamespaces } from "../../storage/index.js";
+import type { NetworkState, RpcEndpointState } from "../../controllers/index.js";
+import type { NetworkSnapshot, StoragePort } from "../../storage/index.js";
+import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../../storage/index.js";
 
 type ControllersForSync = {
   network: { onStateChanged(handler: (state: NetworkState) => void): () => void };
-  permissions: { onPermissionsChanged(handler: (state: PermissionsState) => void): () => void };
 };
 
 type RegisterStorageSyncOptions = {
@@ -45,33 +44,6 @@ export const createStorageSync = ({
     lastUpdatedAt: state.lastUpdatedAt,
   });
 
-  const clonePermissionsState = (state: PermissionsState): PermissionsState => ({
-    origins: Object.fromEntries(
-      Object.entries(state.origins).map(([origin, originState]) => [
-        origin,
-        Object.fromEntries(
-          Object.entries(originState).map(([namespace, namespaceState]) => [
-            namespace,
-            {
-              scopes: [...namespaceState.scopes],
-              chains: [...namespaceState.chains],
-              ...(namespaceState.accountsByChain
-                ? {
-                    accountsByChain: Object.fromEntries(
-                      Object.entries(namespaceState.accountsByChain).map(([chainRef, accounts]) => [
-                        chainRef,
-                        [...accounts],
-                      ]),
-                    ),
-                  }
-                : {}),
-            },
-          ]),
-        ),
-      ]),
-    ),
-  });
-
   const subscriptions: Array<() => void> = [];
 
   const attach = () => {
@@ -96,19 +68,6 @@ export const createStorageSync = ({
     });
 
     subscriptions.push(networkUnsub);
-
-    const permissionsUnsub = controllers.permissions.onPermissionsChanged((state) => {
-      const envelope: PermissionsSnapshot = {
-        version: PERMISSIONS_SNAPSHOT_VERSION,
-        updatedAt: now(),
-        payload: clonePermissionsState(state),
-      };
-      void storagePort.saveSnapshot(StorageNamespaces.Permissions, envelope).catch((error) => {
-        logger("[persistence] failed to persist permissions snapshot", error);
-      });
-    });
-
-    subscriptions.push(permissionsUnsub);
   };
 
   const detach = () => {

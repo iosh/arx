@@ -19,11 +19,7 @@ import {
   type TransactionController,
   type TransactionMeta,
 } from "../../../controllers/index.js";
-import {
-  type BuildWalletPermissionsOptions,
-  buildWalletPermissions,
-  PERMISSION_SCOPE_CAPABILITIES,
-} from "../../permissions.js";
+import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../permissions.js";
 import { lockedAllow, lockedResponse } from "../locked.js";
 import type { MethodDefinition, MethodHandler } from "../types.js";
 import type { NamespaceAdapter } from "./adapter.js";
@@ -339,19 +335,14 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   return null;
 };
 const handleWalletGetPermissions: MethodHandler = ({ origin, controllers }) => {
-  const permissions = controllers.permissions.getPermissions(origin);
-  const getAccounts = (chainRef: string) => controllers.accounts.getAccounts({ chainRef });
+  const grants = controllers.permissions.listGrants(origin);
+  const getAccounts = (chainRef: string) =>
+    controllers.permissions.getPermittedAccounts(origin, {
+      namespace: EIP155_NAMESPACE,
+      chainRef: chainRef as ChainRef,
+    });
 
-  const options: BuildWalletPermissionsOptions = {
-    origin,
-    getAccounts,
-  };
-
-  if (permissions) {
-    options.permissions = permissions;
-  }
-
-  return buildWalletPermissions(options);
+  return buildWalletPermissions({ origin, grants, getAccounts });
 };
 const parsePermissionRequests = (
   params: JsonRpcParams | undefined,
@@ -431,6 +422,28 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
     for (const descriptor of grants) {
       const targetChains = descriptor.chains.length ? descriptor.chains : [activeChain.chainRef];
       for (const chainRef of targetChains) {
+        if (descriptor.scope === PermissionScopes.Accounts) {
+          const all = controllers.accounts.getAccounts({ chainRef });
+          const pointer = controllers.accounts.getActivePointer();
+          const preferred =
+            pointer?.chainRef === chainRef && pointer.address && all.includes(pointer.address) ? pointer.address : null;
+          const selected = preferred ?? all[0] ?? null;
+          if (!selected) {
+            throw arxError({
+              reason: ArxReasons.PermissionDenied,
+              message: "No selectable account available for permission request",
+              data: { origin, chainRef, capability: descriptor.capability },
+            });
+          }
+
+          await controllers.permissions.setPermittedAccounts(origin, {
+            namespace: activeChain.namespace,
+            chainRef,
+            accounts: [selected],
+          });
+          continue;
+        }
+
         await controllers.permissions.grant(origin, descriptor.scope, {
           namespace: activeChain.namespace,
           chainRef,
@@ -447,10 +460,13 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
     });
   }
 
-  const permissions = controllers.permissions.getPermissions(origin);
-  const getAccounts = (chainRef: string) => controllers.accounts.getAccounts({ chainRef });
-  const descriptorInput = permissions ? { origin, permissions, getAccounts } : { origin, getAccounts };
-  return buildWalletPermissions(descriptorInput);
+  const grants = controllers.permissions.listGrants(origin);
+  const getAccounts = (chainRef: string) =>
+    controllers.permissions.getPermittedAccounts(origin, {
+      namespace: EIP155_NAMESPACE,
+      chainRef: chainRef as ChainRef,
+    });
+  return buildWalletPermissions({ origin, grants, getAccounts });
 };
 
 const handlePersonalSign: MethodHandler = async ({ origin, request, controllers, rpcContext }) => {

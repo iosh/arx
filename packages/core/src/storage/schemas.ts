@@ -2,8 +2,6 @@ import type { ZodType } from "zod";
 import { z } from "zod";
 import { chainMetadataSchema } from "../chains/metadata.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols } from "../chains/url.js";
-import { ApprovalTypes } from "../controllers/index.js";
-import { PermissionScopes } from "../controllers/permission/types.js";
 
 const CHAIN_REF_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
 const HEX_CHAIN_ID_REGEX = /^0x[0-9a-fA-F]+$/;
@@ -103,119 +101,6 @@ const rpcEndpointStateSchema = z
     path: ["activeIndex"],
   });
 
-const networkStateSchema = z
-  .strictObject({
-    activeChain: chainRefSchema,
-    knownChains: z.array(chainMetadataSchema).min(1),
-    rpc: z.record(chainRefSchema, rpcEndpointStateSchema),
-  })
-  .refine((value) => value.knownChains.some((chain) => chain.chainRef === value.activeChain), {
-    error: "Active chain must appear in knownChains",
-    path: ["knownChains"],
-  })
-  .refine(
-    (value) => {
-      const ids = value.knownChains.map((chain) => chain.chainRef);
-      return new Set(ids).size === ids.length;
-    },
-    {
-      error: "Duplicate CAIP-2 identifiers are not allowed",
-      path: ["knownChains"],
-    },
-  )
-  .refine((value) => value.knownChains.every((chain) => value.rpc[chain.chainRef] !== undefined), {
-    error: "RPC state must be provided for each known chain",
-    path: ["rpc"],
-  });
-
-const networkRpcSnapshotPayloadSchema = z.strictObject({
-  rpc: z.record(chainRefSchema, rpcEndpointStateSchema),
-});
-const PERMISSION_SCOPE_VALUES = [
-  PermissionScopes.Basic,
-  PermissionScopes.Accounts,
-  PermissionScopes.Sign,
-  PermissionScopes.Transaction,
-] as const;
-
-const APPROVAL_TYPE_VALUES = [
-  ApprovalTypes.RequestAccounts,
-  ApprovalTypes.RequestPermissions,
-  ApprovalTypes.SignMessage,
-  ApprovalTypes.SignTypedData,
-  ApprovalTypes.SendTransaction,
-  ApprovalTypes.AddChain,
-] as const;
-
-const namespaceAccountsStateSchema = z
-  .strictObject({
-    all: z.array(accountAddressSchema),
-    primary: accountAddressSchema.nullable(),
-  })
-  .refine((value) => !value.primary || value.all.includes(value.primary), {
-    error: "Primary account must be included in the all list",
-    path: ["primary"],
-  });
-
-const activePointerSchema = z
-  .strictObject({
-    namespace: z.string().min(1),
-    chainRef: chainRefSchema,
-    address: accountAddressSchema.nullable(),
-  })
-  .nullable();
-
-const accountsStateSchema = z
-  .strictObject({
-    namespaces: z.record(z.string().min(1), namespaceAccountsStateSchema),
-    active: activePointerSchema,
-  })
-  .refine(
-    (value) => {
-      if (!value.active) return true;
-      const namespaceState = value.namespaces[value.active.namespace];
-      if (!namespaceState) {
-        return false;
-      }
-      if (!value.active.address) {
-        return true;
-      }
-      return namespaceState.all.includes(value.active.address);
-    },
-    {
-      error: "Active pointer must reference a registered namespace and account",
-      path: ["active"],
-    },
-  );
-
-const permissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
-const chainNamespaceSchema = z.string().min(1);
-
-const namespacePermissionStateSchema = z.strictObject({
-  scopes: z.array(permissionScopeSchema),
-  chains: z.array(chainRefSchema),
-  accountsByChain: z.record(chainRefSchema, z.array(accountAddressSchema)).optional(),
-});
-
-const originPermissionStateSchema = z.record(chainNamespaceSchema, namespacePermissionStateSchema);
-
-const permissionsStateSchema = z.strictObject({
-  origins: z.record(originStringSchema, originPermissionStateSchema),
-});
-
-const approvalQueueItemSchema = z.strictObject({
-  id: nonEmptyStringSchema,
-  type: z.enum(APPROVAL_TYPE_VALUES),
-  origin: originStringSchema,
-  namespace: chainNamespaceSchema.optional(),
-  chainRef: chainRefSchema.optional(),
-  createdAt: epochMillisecondsSchema,
-});
-
-const approvalStateSchema = z.strictObject({
-  pending: z.array(approvalQueueItemSchema),
-});
-
 const hexQuantitySchema = z.string().regex(HEX_QUANTITY_REGEX, {
   error: "Expected a 0x-prefixed hexadecimal quantity",
 });
@@ -273,43 +158,6 @@ const transactionErrorSchema = z.strictObject({
 
 const transactionReceiptSchema = z.record(z.string(), z.unknown());
 
-const transactionStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "signed",
-  "broadcast",
-  "confirmed",
-  "failed",
-  "replaced",
-]);
-const transactionMetaSchema = z.strictObject({
-  id: nonEmptyStringSchema,
-  namespace: nonEmptyStringSchema,
-  chainRef: chainRefSchema,
-  origin: originStringSchema,
-  from: accountAddressSchema.nullable(),
-  request: transactionRequestSchema,
-  status: transactionStatusSchema,
-  hash: z
-    .string()
-    .regex(/^0x[0-9a-fA-F]{64}$/, { message: "Transaction hash must be 0x-prefixed 32-byte hex" })
-    .nullable(),
-  receipt: transactionReceiptSchema.nullable(),
-  error: transactionErrorSchema.nullable(),
-  userRejected: z.boolean(),
-  warnings: z.array(transactionWarningSchema),
-  issues: z.array(transactionWarningSchema),
-  createdAt: epochMillisecondsSchema,
-  updatedAt: epochMillisecondsSchema,
-});
-
-const transactionStatePayloadSchema = z.strictObject({
-  pending: z.array(transactionMetaSchema),
-  history: z.array(transactionMetaSchema),
-});
-
-const transactionStateSchema = transactionStatePayloadSchema;
-
 const createSnapshotSchema = <TPayload extends ZodType, TVersion extends number>(config: {
   version: TVersion;
   payload: TPayload;
@@ -337,52 +185,8 @@ const chainRegistryEntitySchema = z
     path: ["metadata", "namespace"],
   });
 
-export const StorageNamespaces = {
-  Network: "core:network",
-  Accounts: "core:accounts",
-  Permissions: "core:permissions",
-  Approvals: "core:approvals",
-  Transactions: "core:transactions",
-  VaultMeta: "core:vaultMeta",
-} as const;
-
-export type StorageNamespace = (typeof StorageNamespaces)[keyof typeof StorageNamespaces];
-
 export const DOMAIN_SCHEMA_VERSION = 1;
-export const NETWORK_SNAPSHOT_VERSION = 1;
-export const ACCOUNTS_SNAPSHOT_VERSION = 1;
-export const PERMISSIONS_SNAPSHOT_VERSION = 1;
-export const APPROVALS_SNAPSHOT_VERSION = 1;
-export const TRANSACTIONS_SNAPSHOT_VERSION = 1;
 export const CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION = 1;
-
-export const NetworkSnapshotSchema = createSnapshotSchema({
-  version: NETWORK_SNAPSHOT_VERSION,
-  payload: networkRpcSnapshotPayloadSchema,
-});
-
-export const AccountsSnapshotSchema = createSnapshotSchema({
-  version: ACCOUNTS_SNAPSHOT_VERSION,
-  payload: accountsStateSchema,
-});
-export const PermissionsSnapshotSchema = createSnapshotSchema({
-  version: PERMISSIONS_SNAPSHOT_VERSION,
-  payload: permissionsStateSchema,
-});
-export const ApprovalsSnapshotSchema = createSnapshotSchema({
-  version: APPROVALS_SNAPSHOT_VERSION,
-  payload: approvalStateSchema,
-});
-export const TransactionsSnapshotSchema = createSnapshotSchema({
-  version: TRANSACTIONS_SNAPSHOT_VERSION,
-  payload: transactionStateSchema,
-});
-
-export type NetworkSnapshot = z.infer<typeof NetworkSnapshotSchema>;
-export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
-export type PermissionsSnapshot = z.infer<typeof PermissionsSnapshotSchema>;
-export type ApprovalsSnapshot = z.infer<typeof ApprovalsSnapshotSchema>;
-export type TransactionsSnapshot = z.infer<typeof TransactionsSnapshotSchema>;
 export const ChainRegistryEntitySchema = chainRegistryEntitySchema;
 export type ChainRegistryEntity = z.infer<typeof ChainRegistryEntitySchema>;
 
@@ -417,31 +221,10 @@ export const VaultMetaSnapshotSchema = createSnapshotSchema({
 
 export type VaultMetaSnapshot = z.infer<typeof VaultMetaSnapshotSchema>;
 
-export const StorageSnapshotSchemas = {
-  [StorageNamespaces.Network]: NetworkSnapshotSchema,
-  [StorageNamespaces.Accounts]: AccountsSnapshotSchema,
-  [StorageNamespaces.Permissions]: PermissionsSnapshotSchema,
-  [StorageNamespaces.Approvals]: ApprovalsSnapshotSchema,
-  [StorageNamespaces.Transactions]: TransactionsSnapshotSchema,
-  [StorageNamespaces.VaultMeta]: VaultMetaSnapshotSchema,
-} as const satisfies Record<StorageNamespace, ZodType>;
-
-export type StorageSnapshotSchemaMap = typeof StorageSnapshotSchemas;
-
-export type StorageSnapshotMap = {
-  [K in keyof StorageSnapshotSchemaMap]: z.infer<StorageSnapshotSchemaMap[K]>;
-};
-
 export {
-  accountsStateSchema as AccountsStateSchema,
-  approvalStateSchema as ApprovalStateSchema,
   eip155TransactionPayloadSchema as Eip155TransactionPayloadSchema,
   genericTransactionRequestSchema as GenericTransactionRequestSchema,
-  networkStateSchema as NetworkStateSchema,
-  permissionsStateSchema as PermissionsStateSchema,
-  transactionMetaSchema as TransactionMetaSchema,
   transactionRequestSchema as TransactionRequestSchema,
-  transactionStateSchema as TransactionStateSchema,
   rpcEndpointInfoSchema as RpcEndpointInfoSchema,
   rpcEndpointHealthSchema as RpcEndpointHealthSchema,
   rpcEndpointStateSchema as RpcEndpointStateSchema,

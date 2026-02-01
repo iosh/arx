@@ -1,20 +1,17 @@
-import type { StorageNamespace, StorageSnapshotMap, VaultMetaSnapshot } from "./schemas.js";
-export type SnapshotEnvelope<TPayload, TVersion extends number = number> = {
-  version: TVersion;
-  updatedAt: number;
-  payload: TPayload;
-};
+import type { ChainRef } from "../chains/ids.js";
+import type { NetworkRpcPreferenceRecord } from "../db/records.js";
+import type { VaultMetaSnapshot } from "./schemas.js";
 
-export interface StoragePort {
-  loadSnapshot<TNamespace extends StorageNamespace>(
-    namespace: TNamespace,
-  ): Promise<StorageSnapshotMap[TNamespace] | null>;
-  saveSnapshot<TNamespace extends StorageNamespace>(
-    namespace: TNamespace,
-    envelope: StorageSnapshotMap[TNamespace],
-  ): Promise<void>;
-  clearSnapshot(namespace: StorageNamespace): Promise<void>;
+export interface NetworkRpcPort {
+  get(chainRef: ChainRef): Promise<NetworkRpcPreferenceRecord | null>;
+  getAll(): Promise<NetworkRpcPreferenceRecord[]>;
+  upsert(record: NetworkRpcPreferenceRecord): Promise<void>;
+  upsertMany(records: NetworkRpcPreferenceRecord[]): Promise<void>;
+  remove(chainRef: ChainRef): Promise<void>;
+  clear(): Promise<void>;
+}
 
+export interface VaultMetaPort {
   loadVaultMeta(): Promise<VaultMetaSnapshot | null>;
   saveVaultMeta(envelope: VaultMetaSnapshot): Promise<void>;
   clearVaultMeta(): Promise<void>;

@@ -8,7 +8,7 @@ import { InMemoryUnlockController } from "../../controllers/unlock/UnlockControl
 import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
-import type { StoragePort, VaultMetaSnapshot } from "../../storage/index.js";
+import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { zeroize } from "../../vault/utils.js";
@@ -45,7 +45,7 @@ export type BackgroundSessionServices = {
 type SessionLayerParams = {
   messenger: BackgroundMessenger;
   controllers: ControllersBase;
-  storagePort?: StoragePort;
+  vaultMetaPort?: VaultMetaPort;
   accountsStore: AccountsService;
   keyringMetas: KeyringMetasService;
   storageLogger: (message: string, error?: unknown) => void;
@@ -71,7 +71,7 @@ export type SessionLayerResult = {
 export const initSessionLayer = ({
   messenger,
   controllers,
-  storagePort,
+  vaultMetaPort,
   accountsStore,
   keyringMetas,
   storageLogger,
@@ -131,7 +131,7 @@ export const initSessionLayer = ({
   };
 
   const persistVaultMetaImmediate = async (): Promise<void> => {
-    if (!storagePort || getIsDestroyed()) {
+    if (!vaultMetaPort || getIsDestroyed()) {
       return;
     }
 
@@ -163,7 +163,7 @@ export const initSessionLayer = ({
     };
 
     try {
-      await storagePort.saveVaultMeta(envelope);
+      await vaultMetaPort.saveVaultMeta(envelope);
       lastPersistedVaultMeta = envelope;
     } catch (error) {
       storageLogger("session: failed to persist vault meta", error);
@@ -171,7 +171,7 @@ export const initSessionLayer = ({
   };
 
   const scheduleVaultMetaPersist = () => {
-    if (!storagePort || getIsDestroyed() || getIsHydrating()) {
+    if (!vaultMetaPort || getIsDestroyed() || getIsHydrating()) {
       return;
     }
 
@@ -372,12 +372,12 @@ export const initSessionLayer = ({
   };
 
   const hydrateVaultMeta = async () => {
-    if (!storagePort || !hydrationEnabled) {
+    if (!vaultMetaPort || !hydrationEnabled) {
       return;
     }
 
     try {
-      const meta = await storagePort.loadVaultMeta();
+      const meta = await vaultMetaPort.loadVaultMeta();
       if (!meta) {
         vaultInitializedAt = null;
         lastPersistedVaultMeta = null;
@@ -395,7 +395,7 @@ export const initSessionLayer = ({
         } catch (error) {
           storageLogger("session: failed to import vault ciphertext", error);
           try {
-            await storagePort.clearVaultMeta();
+            await vaultMetaPort.clearVaultMeta();
           } catch (clearError) {
             storageLogger("session: failed to clear vault meta", clearError);
           }

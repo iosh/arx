@@ -20,8 +20,7 @@ import type { PermissionsPort } from "../services/permissions/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
-import type { StoragePort, StorageSnapshotMap } from "../storage/index.js";
-import { NETWORK_SNAPSHOT_VERSION, StorageNamespaces } from "../storage/index.js";
+import type { NetworkRpcPort, VaultMetaPort } from "../storage/index.js";
 import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
 import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
@@ -34,7 +33,7 @@ import type { BackgroundSessionServices } from "./background/session.js";
 import { initSessionLayer, type SessionOptions } from "./background/session.js";
 import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
 import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
-import { createStorageSync } from "./persistence/createStorageSync.js";
+import { createNetworkRpcSync } from "./persistence/createNetworkRpcSync.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
@@ -44,10 +43,12 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
   };
   engine?: EngineOptions;
   storage?: {
-    port: StoragePort;
+    networkRpcPort?: NetworkRpcPort;
+    vaultMetaPort?: VaultMetaPort;
     now?: () => number;
     hydrate?: boolean;
     logger?: (message: string, error?: unknown) => void;
+    networkRpcDebounceMs?: number;
   };
   store?: {
     ports: {
@@ -152,7 +153,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
-  const storagePort = storageOptions?.port;
+  const networkRpcPort = storageOptions?.networkRpcPort;
+  const vaultMetaPort = storageOptions?.vaultMetaPort;
   const storageNow = storageOptions?.now ?? Date.now;
   const attention = createAttentionService({
     messenger: castMessenger<AttentionServiceMessengerTopics>(messenger),
@@ -246,11 +248,14 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   let destroyed = false;
   let isHydrating = false;
   let pendingNetworkRegistrySync = false;
-  let storageSyncAttached = false;
+  let networkRpcSyncAttached = false;
   let initializePromise: Promise<void> | null = null;
   let initialized = false;
 
-  let hydratedNetworkRpc: Record<ChainRef, RpcEndpointState> | null = null;
+  let hydratedNetworkRpcPreferences: Map<
+    ChainRef,
+    { activeIndex: number; strategy: RpcEndpointState["strategy"] }
+  > | null = null;
   const sessionLayer = initSessionLayer({
     messenger,
     controllers: controllersBase,
@@ -261,7 +266,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     hydrationEnabled,
     getIsHydrating: () => isHydrating,
     getIsDestroyed: () => destroyed,
-    ...(storagePort ? { storagePort } : {}),
+    ...(vaultMetaPort ? { vaultMetaPort } : {}),
     ...(sessionOptions ? { sessionOptions } : {}),
   });
 
@@ -362,16 +367,17 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     void persistSelectedAccountId(accountId);
   });
 
-  const storageSync =
-    storagePort === undefined
+  const networkRpcSync =
+    networkRpcPort === undefined
       ? undefined
-      : createStorageSync({
-          storage: storagePort,
-          controllers: {
-            network: networkController,
-          },
+      : createNetworkRpcSync({
+          port: networkRpcPort,
+          network: networkController,
           now: storageNow,
           logger: storageLogger,
+          ...(storageOptions?.networkRpcDebounceMs !== undefined
+            ? { debounceMs: storageOptions.networkRpcDebounceMs }
+            : {}),
         });
 
   const readRegistryChains = (): ChainMetadata[] => chainRegistryController.getChains().map((entry) => entry.metadata);
@@ -414,14 +420,33 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
     const rpc = Object.fromEntries(
       registryChains.map((chain) => {
-        const fromHydrate = hydratedNetworkRpc?.[chain.chainRef];
         const fromCurrent = currentState.rpc[chain.chainRef];
-        const next = fromHydrate ?? fromCurrent ?? buildDefaultEndpointState(chain);
+        const base = fromCurrent ?? buildDefaultEndpointState(chain);
+
+        const pref = hydratedNetworkRpcPreferences?.get(chain.chainRef) ?? null;
+        if (!pref) {
+          return [chain.chainRef, base] as const;
+        }
+
+        // Apply the hydrated preference only once per chainRef so later registry syncs
+        // don't keep overriding live controller state. Keep other keys for chains that
+        // may appear later (e.g. wallet_addEthereumChain / delayed registry load).
+        hydratedNetworkRpcPreferences?.delete(chain.chainRef);
+
+        const safeIndex = Math.min(pref.activeIndex, Math.max(0, base.endpoints.length - 1));
+        const next: RpcEndpointState = {
+          ...base,
+          activeIndex: safeIndex,
+          strategy: pref.strategy,
+        };
+
         return [chain.chainRef, next] as const;
       }),
     ) as Record<ChainRef, RpcEndpointState>;
 
-    hydratedNetworkRpc = null;
+    if (hydratedNetworkRpcPreferences?.size === 0) {
+      hydratedNetworkRpcPreferences = null;
+    }
 
     networkController.replaceState({
       activeChain: nextActive,
@@ -446,50 +471,23 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     requestNetworkRegistrySync();
   });
 
-  const hydrateSnapshot = async <Namespace extends keyof StorageSnapshotMap & string>(
-    namespace: Namespace,
-    apply: (payload: StorageSnapshotMap[Namespace]["payload"]) => void,
-  ) => {
-    if (!storagePort) return;
-    try {
-      const snapshot = await storagePort.loadSnapshot(namespace);
-      if (!snapshot) return;
-      apply(snapshot.payload);
-    } catch (error) {
-      storageLogger(`storage: failed to hydrate ${namespace}`, error);
-      try {
-        await storagePort.clearSnapshot(namespace);
-      } catch (clearError) {
-        storageLogger(`storage: failed to clear snapshot ${namespace}`, clearError);
-      }
-    }
-  };
-
   const hydrateControllers = async () => {
-    if (!storagePort || !hydrationEnabled) {
+    if (!networkRpcPort || !hydrationEnabled) {
       return;
     }
 
     try {
-      const snapshot = await storagePort.loadSnapshot(StorageNamespaces.Network);
-      if (snapshot) {
-        const loadedVersion = snapshot.version;
-        if (loadedVersion !== NETWORK_SNAPSHOT_VERSION) {
-          await storagePort.clearSnapshot(StorageNamespaces.Network);
-        } else {
-          hydratedNetworkRpc = snapshot.payload.rpc;
-        }
+      const rows = await networkRpcPort.getAll();
+      const next = new Map<ChainRef, { activeIndex: number; strategy: RpcEndpointState["strategy"] }>();
+      for (const row of rows) {
+        next.set(row.chainRef, { activeIndex: row.activeIndex, strategy: row.strategy });
       }
+      hydratedNetworkRpcPreferences = next;
     } catch (error) {
-      storageLogger(`storage: failed to hydrate ${StorageNamespaces.Network}`, error);
-      try {
-        await storagePort.clearSnapshot(StorageNamespaces.Network);
-      } catch (clearError) {
-        storageLogger(`storage: failed to clear snapshot ${StorageNamespaces.Network}`, clearError);
-      }
+      storageLogger("storage: failed to hydrate network rpc preferences", error);
     }
 
-    // Permissions are store-backed (PR5 Step 4): snapshot hydration intentionally disabled.
+    // Permissions are store-backed (PR5 Step 4): no snapshot hydration.
   };
 
   const hydrateAccountsFromStore = async () => {
@@ -587,9 +585,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       throw new Error("createBackgroundServices.lifecycle.initialize() must complete before start()");
     }
 
-    if (storageSync && !storageSyncAttached) {
-      storageSync.attach();
-      storageSyncAttached = true;
+    if (networkRpcSync && !networkRpcSyncAttached) {
+      networkRpcSync.attach();
+      networkRpcSyncAttached = true;
     }
 
     sessionLayer.attachSessionListeners();
@@ -622,9 +620,9 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       console.warn("[createBackgroundServices] failed to remove selectedAccountId listener", error);
     }
 
-    if (storageSyncAttached) {
-      storageSync?.detach();
-      storageSyncAttached = false;
+    if (networkRpcSyncAttached) {
+      networkRpcSync?.detach();
+      networkRpcSyncAttached = false;
     }
 
     rpcClientRegistry.destroy();

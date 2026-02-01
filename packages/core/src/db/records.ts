@@ -7,6 +7,7 @@ import {
   epochMillisecondsSchema,
   nonEmptyStringSchema,
   originStringSchema,
+  RpcStrategySchema,
   TransactionErrorSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,
@@ -79,6 +80,15 @@ export const ChainRecordSchema = z
     path: ["metadata", "namespace"],
   });
 export type ChainRecord = z.infer<typeof ChainRecordSchema>;
+
+// Network RPC persistence is "preferences only": it stores stable selections, not transient health.
+export const NetworkRpcPreferenceRecordSchema = z.strictObject({
+  chainRef: chainRefSchema,
+  activeIndex: z.number().int().min(0),
+  strategy: RpcStrategySchema,
+  updatedAt: epochMillisecondsSchema,
+});
+export type NetworkRpcPreferenceRecord = z.infer<typeof NetworkRpcPreferenceRecordSchema>;
 
 export const KeyringTypeSchema = z.enum(["hd", "private-key"]);
 export type KeyringType = z.infer<typeof KeyringTypeSchema>;

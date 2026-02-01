@@ -91,7 +91,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
     const approval = vi.spyOn(services.controllers.approvals, "requestApproval");
     let approvalId: string | null = null;
     const approvalRequested = new Promise<void>((resolve) => {
-      const unsubscribe = services.controllers.approvals.onRequest((task) => {
+      const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
         approvalId = task.id;
         unsubscribe();
         resolve();

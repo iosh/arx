@@ -38,10 +38,11 @@ const isSamePreference = (a: NetworkRpcPreference, b: NetworkRpcPreference): boo
 
 const buildPreferences = (network: NetworkController): Map<ChainRef, NetworkRpcPreference> => {
   const state = network.getState();
-  const entries = Object.entries(state.rpc).map(([chainRef, endpointState]) => [
-    chainRef as ChainRef,
-    { activeIndex: endpointState.activeIndex, strategy: endpointState.strategy },
-  ]);
+  const entries: Array<[ChainRef, NetworkRpcPreference]> = Object.entries(state.rpc).map(
+    ([chainRef, endpointState]) => {
+      return [chainRef as ChainRef, { activeIndex: endpointState.activeIndex, strategy: endpointState.strategy }];
+    },
+  );
   entries.sort((a, b) => a[0].localeCompare(b[0]));
   return new Map(entries);
 };

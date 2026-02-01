@@ -164,7 +164,7 @@ export const setupApprovalResponder = (
   services: ReturnType<typeof createServices>,
   responder: (task: ApprovalTask<unknown>) => Promise<boolean | void> | boolean | void,
 ) => {
-  const unsubscribe = services.controllers.approvals.onRequest((task) => {
+  const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
     void (async () => {
       try {
         // Wait a microtask to let requestApproval() complete its setup

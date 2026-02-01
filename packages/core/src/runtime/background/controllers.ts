@@ -177,7 +177,7 @@ export const initControllers = ({
       getActivePointer: () => accountController.getActivePointer(),
     },
     approvals: {
-      requestApproval: (...args) => approvalController.requestApproval(...args),
+      requestApproval: (task, requestContext) => approvalController.requestApproval(task, requestContext),
     },
     registry: transactionRegistry,
     service: transactionsService,

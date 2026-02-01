@@ -267,7 +267,7 @@ describe("eip155 handlers - approval metadata", () => {
     await services.session.unlock.unlock({ password: "test" });
 
     // Setup auto-approval for transactions
-    const unsubscribe = services.controllers.approvals.onRequest(async (task) => {
+    const unsubscribe = services.controllers.approvals.onRequest(async ({ task }) => {
       try {
         if (task.type === "wallet_sendTransaction") {
           const result = await services.controllers.transactions.approveTransaction(task.id);

@@ -21,7 +21,7 @@ import {
 } from "../../../controllers/index.js";
 import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../permissions.js";
 import { lockedAllow, lockedResponse } from "../locked.js";
-import type { MethodDefinition, MethodHandler } from "../types.js";
+import type { MethodDefinition, MethodHandler, RpcInvocationContext } from "../types.js";
 import type { NamespaceAdapter } from "./adapter.js";
 import {
   buildEip155TransactionRequest,
@@ -54,6 +54,18 @@ const FAILED_STATUSES = new Set<TransactionMeta["status"]>(["failed", "replaced"
 
 const isResolved = (meta: TransactionMeta) => RESOLVED_STATUSES.has(meta.status) && typeof meta.hash === "string";
 const isFailed = (meta: TransactionMeta) => FAILED_STATUSES.has(meta.status);
+
+const requireRequestContext = (rpcContext: RpcInvocationContext | undefined, method: string) => {
+  const requestContext = rpcContext?.requestContext;
+  if (!requestContext) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `Missing request context for ${method}.`,
+      data: { method },
+    });
+  }
+  return requestContext;
+};
 
 const waitForTransactionBroadcast = async (
   controller: Pick<TransactionController, "getMeta" | "onStatusChanged">,
@@ -123,7 +135,7 @@ const handleEthRequestAccounts: MethodHandler = async ({ origin, controllers, rp
   };
 
   try {
-    return await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
+    return await controllers.approvals.requestApproval(task, requireRequestContext(rpcContext, "eth_requestAccounts"));
   } catch (error) {
     if (isDomainError(error) || isRpcError(error)) throw error;
     throw arxError({
@@ -321,7 +333,7 @@ const handleWalletAddEthereumChain: MethodHandler = async ({ origin, request, co
   };
 
   try {
-    await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
+    await controllers.approvals.requestApproval(task, requireRequestContext(rpcContext, "wallet_addEthereumChain"));
   } catch (error) {
     if (isDomainError(error) || isRpcError(error)) throw error;
     throw arxError({
@@ -415,7 +427,7 @@ const handleWalletRequestPermissions: MethodHandler = async ({ origin, request, 
   try {
     const result = (await controllers.approvals.requestApproval(
       task,
-      rpcContext?.requestContext ?? null,
+      requireRequestContext(rpcContext, "wallet_requestPermissions"),
     )) as PermissionApprovalResult;
     const grants = result?.granted ?? [];
 
@@ -515,7 +527,10 @@ const handlePersonalSign: MethodHandler = async ({ origin, request, controllers,
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
+    const signature = await controllers.approvals.requestApproval(
+      task,
+      requireRequestContext(rpcContext, "personal_sign"),
+    );
 
     // Grant Sign permission after successful signature
     await controllers.permissions.grant(origin, PermissionScopes.Sign, {
@@ -564,7 +579,10 @@ const handleEthSignTypedDataV4: MethodHandler = async ({ origin, request, contro
   };
 
   try {
-    const signature = await controllers.approvals.requestApproval(task, rpcContext?.requestContext ?? null);
+    const signature = await controllers.approvals.requestApproval(
+      task,
+      requireRequestContext(rpcContext, "eth_signTypedData_v4"),
+    );
 
     // Grant Sign permission after successful signature
     await controllers.permissions.grant(origin, PermissionScopes.Sign, {
@@ -602,7 +620,7 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
     const meta = await controllers.transactions.submitTransaction(
       origin,
       txRequest,
-      rpcContext?.requestContext ?? null,
+      requireRequestContext(rpcContext, "eth_sendTransaction"),
     );
     const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
 

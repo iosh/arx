@@ -58,7 +58,7 @@ export const buildWalletPermissions = ({
   getAccounts,
 }: BuildWalletPermissionsOptions): WalletPermissionDescriptor[] => {
   const effectiveGrants: PermissionGrant[] =
-    grants ??
+    (grants ? [...grants] : undefined) ??
     (permissions
       ? Object.entries(permissions).flatMap(([namespace, namespaceState]) =>
           unique(namespaceState.chains).map((chainRef) => ({

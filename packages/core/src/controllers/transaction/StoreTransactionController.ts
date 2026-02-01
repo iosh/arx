@@ -176,7 +176,7 @@ export class StoreTransactionController implements TransactionController {
   async submitTransaction(
     origin: string,
     request: TransactionRequest,
-    requestContext?: RequestContextRecord | null,
+    requestContext: RequestContextRecord,
   ): Promise<TransactionMeta> {
     if (request.namespace !== "eip155") {
       throw new Error(`Unsupported transaction namespace: ${request.namespace}`);
@@ -264,7 +264,7 @@ export class StoreTransactionController implements TransactionController {
     const activeDraft = this.#drafts.get(id) ?? null;
     const task = this.#createApprovalTask(storedMeta, activeDraft, draftPreview);
 
-    return this.#approvals.requestApproval(task, requestContext ?? null) as Promise<TransactionMeta>;
+    return this.#approvals.requestApproval(task, requestContext) as Promise<TransactionMeta>;
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {

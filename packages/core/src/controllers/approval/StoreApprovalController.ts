@@ -4,6 +4,7 @@ import type {
   ApprovalController,
   ApprovalExecutor,
   ApprovalMessenger,
+  ApprovalRequestedEvent,
   ApprovalResult,
   ApprovalState,
   ApprovalTask,
@@ -58,6 +59,11 @@ const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
   chainRef: task.chainRef,
   payload: task.payload,
   createdAt: task.createdAt,
+});
+
+const cloneRequestEvent = (event: ApprovalRequestedEvent): ApprovalRequestedEvent => ({
+  task: cloneTask(event.task),
+  requestContext: { ...event.requestContext },
 });
 
 const cloneResult = <T>(result: ApprovalResult<T>): ApprovalResult<T> => ({
@@ -135,7 +141,7 @@ export class StoreApprovalController implements ApprovalController {
     return this.#messenger.subscribe(APPROVAL_STATE_TOPIC, handler);
   }
 
-  onRequest(handler: (task: ApprovalTask<unknown>) => void): () => void {
+  onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_REQUEST_TOPIC, handler);
   }
 
@@ -155,15 +161,14 @@ export class StoreApprovalController implements ApprovalController {
     return this.#tasks.get(id);
   }
 
-  async requestApproval<TInput>(
-    task: ApprovalTask<TInput>,
-    requestContext?: RequestContextRecord | null,
-  ): Promise<unknown> {
-    if (!requestContext) {
-      throw new Error("Approval requestContext is required for store-backed approvals");
-    }
+  async requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext: RequestContextRecord): Promise<unknown> {
+    if (!requestContext) throw new Error("Approval requestContext is required");
 
     const activeTask = cloneTask(task);
+
+    if (activeTask.origin !== requestContext.origin) {
+      throw new Error("Approval origin mismatch between task and requestContext");
+    }
     const expiresAt = this.#now() + this.#ttlMs;
 
     await this.#service.create({
@@ -181,7 +186,7 @@ export class StoreApprovalController implements ApprovalController {
     // Update cache eagerly so UI snapshot (sync) can resolve task payload without awaiting store sync.
     this.#tasks.set(activeTask.id, activeTask);
     this.#enqueue(activeTask);
-    this.#publishRequest(activeTask);
+    this.#publishRequest({ task: activeTask, requestContext });
 
     return new Promise((resolve, reject) => {
       this.#pending.set(activeTask.id, {
@@ -347,9 +352,9 @@ export class StoreApprovalController implements ApprovalController {
     });
   }
 
-  #publishRequest(task: ApprovalTask<unknown>) {
-    this.#messenger.publish(APPROVAL_REQUEST_TOPIC, cloneTask(task), {
-      compare: (prev, next) => prev?.id === next?.id && prev?.type === next?.type,
+  #publishRequest(event: ApprovalRequestedEvent) {
+    this.#messenger.publish(APPROVAL_REQUEST_TOPIC, cloneRequestEvent(event), {
+      compare: (prev, next) => prev?.task.id === next?.task.id && prev?.task.type === next?.task.type,
     });
   }
 

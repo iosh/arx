@@ -44,9 +44,14 @@ export type ApprovalState = {
   pending: ApprovalQueueItem[];
 };
 
+export type ApprovalRequestedEvent = {
+  task: ApprovalTask<unknown>;
+  requestContext: RequestContextRecord;
+};
+
 export type ApprovalMessengerTopics = {
   "approval:stateChanged": ApprovalState;
-  "approval:requested": ApprovalTask<unknown>;
+  "approval:requested": ApprovalRequestedEvent;
   "approval:finished": ApprovalResult<unknown>;
 };
 
@@ -65,9 +70,9 @@ export type PendingApproval<TInput = unknown> = {
 
 export type ApprovalController = {
   getState(): ApprovalState;
-  requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext?: RequestContextRecord | null): Promise<unknown>;
+  requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext: RequestContextRecord): Promise<unknown>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
-  onRequest(handler: (task: ApprovalTask<unknown>) => void): () => void;
+  onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void;
   onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void;
   replaceState(state: ApprovalState): void;
 

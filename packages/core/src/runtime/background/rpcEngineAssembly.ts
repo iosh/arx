@@ -25,13 +25,6 @@ export type BackgroundRpcEnvHooks = {
     chainRef: string | null;
     namespace: string | null;
   }) => boolean;
-
-  shouldRequestApprovalAttention?: (ctx: {
-    origin: string;
-    method: string;
-    chainRef: string | null;
-    namespace: string | null;
-  }) => boolean;
 };
 
 const BACKGROUND_RPC_ENGINE_ASSEMBLED = Symbol.for("@arx/core/backgroundRpcEngineAssembled");
@@ -61,26 +54,12 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
 
 const wrapAttentionService = (service: AttentionService, envHooks: BackgroundRpcEnvHooks) => {
   const shouldRequestUnlock = envHooks.shouldRequestUnlockAttention ?? (() => true);
-  const shouldRequestApproval = envHooks.shouldRequestApprovalAttention ?? (() => true);
 
   const wrapped: Pick<AttentionService, "requestAttention"> = {
     requestAttention: (params) => {
       // Check unlock attention hook
       if (params.reason === "unlock_required") {
         const ok = shouldRequestUnlock({
-          origin: params.origin,
-          method: params.method,
-          chainRef: params.chainRef ?? null,
-          namespace: params.namespace ?? null,
-        });
-        if (!ok) {
-          return { enqueued: false, request: null, state: safeGetAttentionSnapshot(service) };
-        }
-      }
-
-      // Check approval attention hook
-      if (params.reason === "approval_required") {
-        const ok = shouldRequestApproval({
           origin: params.origin,
           method: params.method,
           chainRef: params.chainRef ?? null,
@@ -204,28 +183,6 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     findMethodDefinition,
   });
 
-  const approvalAttention: Middleware = createAsyncMiddleware(async (req, _res, next) => {
-    const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
-    const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
-    const definition = findMethodDefinition(req.method, rpcContext ?? undefined);
-
-    if (!definition?.approvalRequired) {
-      return next();
-    }
-
-    if (!envHooks.isInternalOrigin(origin)) {
-      wrappedAttentionService.requestAttention({
-        reason: "approval_required",
-        origin,
-        method: req.method,
-        chainRef: rpcContext?.chainRef ?? null,
-        namespace: rpcContext?.namespace ?? null,
-      });
-    }
-
-    return next();
-  });
-
   const executor: Middleware = createAsyncMiddleware(async (req, res) => {
     const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
     const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
@@ -240,7 +197,7 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     res.result = result as Json;
   });
 
-  return [errorBoundary, lockedGuard, permissionGuard, approvalAttention, executor];
+  return [errorBoundary, lockedGuard, permissionGuard, executor];
 };
 
 export const createRpcEngineForBackground = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {

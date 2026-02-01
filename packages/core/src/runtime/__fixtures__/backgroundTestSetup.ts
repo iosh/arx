@@ -693,7 +693,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   // Helper function to enable auto-approval for testing
   const enableAutoApproval = () => {
-    const unsubscribe = services.controllers.approvals.onRequest(async (task) => {
+    const unsubscribe = services.controllers.approvals.onRequest(async ({ task }) => {
       // Automatically resolve approval requests
       try {
         if (task.type === "wallet_sendTransaction") {
@@ -774,7 +774,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   createRpcEngineForBackground(services, {
     isInternalOrigin: (origin) => origin === internalOrigin,
     shouldRequestUnlockAttention: () => false,
-    shouldRequestApprovalAttention: () => false,
   });
 
   let nextRequestId = 0;

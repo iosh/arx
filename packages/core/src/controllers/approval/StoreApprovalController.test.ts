@@ -51,6 +51,7 @@ describe("StoreApprovalController", () => {
       createdAt: 1000,
     };
 
+    // @ts-expect-error - requestContext is required
     await expect(controller.requestApproval(task, null)).rejects.toThrow(/requestContext/i);
   });
 

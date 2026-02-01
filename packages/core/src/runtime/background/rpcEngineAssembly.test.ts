@@ -103,15 +103,15 @@ describe("background rpc engine assembly", () => {
       isInternalOrigin: () => false,
     });
 
-    // Should push 5 middlewares: errorBoundary, lockedGuard, permissionGuard, approvalAttention, executor
-    expect(pushSpy).toHaveBeenCalledTimes(5);
+    // Should push 4 middlewares: errorBoundary, lockedGuard, permissionGuard, executor
+    expect(pushSpy).toHaveBeenCalledTimes(4);
 
     createRpcEngineForBackground(services, {
       isInternalOrigin: () => false,
     });
 
     // Repeated call should not push again (idempotency via symbol flag)
-    expect(pushSpy).toHaveBeenCalledTimes(5);
+    expect(pushSpy).toHaveBeenCalledTimes(4);
   });
 
   it("encodes existing res.error (error boundary)", async () => {
@@ -189,42 +189,6 @@ describe("background rpc engine assembly", () => {
     expect(end).toHaveBeenCalledTimes(1);
     const [error] = end.mock.calls[0] ?? [];
     expect(error).toBeTruthy();
-    expect(attentionSpy).not.toHaveBeenCalled();
-  });
-
-  it("respects shouldRequestApprovalAttention hook", async () => {
-    const services = createBackgroundServices({
-      chainRegistry: { port: new MemoryChainRegistryPort() },
-      store: {
-        ports: {
-          approvals: new MemoryApprovalsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-      session: { vault: createUnlockedVault },
-    });
-
-    const attentionSpy = vi.spyOn(services.attention, "requestAttention");
-    const middlewares = createBackgroundRpcMiddlewares(services, {
-      isInternalOrigin: () => false,
-      shouldRequestApprovalAttention: () => false,
-    });
-
-    const approvalAttention = middlewares[3]!;
-    const chainRef = services.controllers.network.getActiveChain().chainRef;
-
-    const req = {
-      method: "eth_requestAccounts",
-      origin: "https://dapp.example",
-      arx: { namespace: "eip155", chainRef },
-    } as any;
-
-    const res = createPendingRes();
-
-    await approvalAttention(req, res as any, createNextStub() as any, vi.fn() as any);
     expect(attentionSpy).not.toHaveBeenCalled();
   });
 });

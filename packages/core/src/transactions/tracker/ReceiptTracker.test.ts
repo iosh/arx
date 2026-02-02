@@ -35,6 +35,7 @@ const BASE_CONTEXT: TransactionAdapterContext = {
         data: "0x",
       },
     },
+    prepared: null,
     status: "broadcast",
     hash: "0xhash",
     receipt: null,

@@ -282,9 +282,12 @@ export class MemoryKeyringMetasPort implements KeyringMetasPort {
 
 export const baseChainMetadata = DEFAULT_CHAIN_METADATA[0]! as ChainMetadata;
 
-export const flushAsync = async () => {
-  await Promise.resolve();
-  await Promise.resolve();
+const DEFAULT_FLUSH_TURNS = 8;
+
+export const flushAsync = async (turns = DEFAULT_FLUSH_TURNS) => {
+  for (let i = 0; i < turns; i += 1) {
+    await Promise.resolve();
+  }
 };
 
 export const buildRpcSnapshot = (metadata: ChainMetadata) => ({

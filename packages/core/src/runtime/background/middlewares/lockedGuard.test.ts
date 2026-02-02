@@ -1,5 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
+import { PermissionScopes } from "../../../controllers/permission/types.js";
 import { createLockedGuardMiddleware } from "./lockedGuard.js";
 
 const ORIGIN = "https://dapp.example";
@@ -115,7 +116,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "accounts", locked: { allow: true } }),
+      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { allow: true } }),
       deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
@@ -135,7 +136,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "accounts", locked: { response: ["0x123"] } }),
+      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { response: ["0x123"] } }),
       deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
@@ -207,7 +208,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "accounts" }),
+      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts }),
       deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
@@ -237,7 +238,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "accounts", approvalRequired: true }),
+      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, approvalRequired: true }),
       deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
@@ -258,7 +259,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "accounts", approvalRequired: true }),
+      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, approvalRequired: true }),
       deriveLockedPolicy: () => ({ allow: false, hasResponse: false }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,

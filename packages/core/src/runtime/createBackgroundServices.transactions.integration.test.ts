@@ -35,9 +35,8 @@ describe("createBackgroundServices (transactions integration)", () => {
     });
     const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
@@ -58,7 +57,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       receipt: confirmedReceipt,
     }));
 
-    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -79,7 +78,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       statusEvents.push(payload);
     });
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction(
+      const submission = await context.services.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -96,7 +95,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       await flushAsync();
 
-      expect(buildDraft).toHaveBeenCalledTimes(1);
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(1);
       expect(fetchReceipt).not.toHaveBeenCalled();
@@ -141,9 +140,8 @@ describe("createBackgroundServices (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
@@ -161,7 +159,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     }));
     const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => null);
 
-    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -197,7 +195,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       const submissions = await Promise.all(
         fromAddresses.map((from, index) =>
-          context.services.controllers.transactions.submitTransaction(
+          context.services.controllers.transactions.requestTransactionApproval(
             "https://dapp.example",
             {
               namespace: chain.namespace,
@@ -216,7 +214,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       await flushAsync();
 
-      await vi.waitFor(() => expect(buildDraft).toHaveBeenCalledTimes(3));
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(3));
 
@@ -253,9 +251,8 @@ describe("createBackgroundServices (transactions integration)", () => {
     });
     const replacementHash = "0x2222222222222222222222222222222222222222222222222222222222222222";
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
@@ -273,7 +270,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     }));
 
     const adapter: TransactionAdapter = {
-      buildDraft,
+      prepareTransaction,
       signTransaction,
       broadcastTransaction,
       fetchReceipt,
@@ -290,7 +287,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction(
+      const submission = await context.services.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -307,7 +304,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       await flushAsync();
 
-      expect(buildDraft).toHaveBeenCalledTimes(1);
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(1);
 
@@ -338,9 +335,8 @@ describe("createBackgroundServices (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
@@ -353,7 +349,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     }));
     const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => null);
 
-    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -365,7 +361,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction(
+      const submission = await context.services.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -411,9 +407,8 @@ describe("createBackgroundServices (transactions integration)", () => {
     });
     const failedReceipt = { status: "0x0", blockNumber: "0x20" };
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
@@ -429,7 +424,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       receipt: failedReceipt,
     }));
 
-    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -441,7 +436,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.submitTransaction(
+      const submission = await context.services.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -458,7 +453,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       await flushAsync();
 
-      expect(buildDraft).toHaveBeenCalledTimes(1);
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(1);
 

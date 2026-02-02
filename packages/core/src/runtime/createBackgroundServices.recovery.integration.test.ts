@@ -31,8 +31,8 @@ describe("createBackgroundServices (recovery integration)", () => {
     }));
 
     const adapter: TransactionAdapter = {
-      buildDraft: vi.fn(async () => ({ prepared: { raw: "0x" }, summary: {}, warnings: [], issues: [] })),
-      signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
+      prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
+      signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x", hash: null })),
       broadcastTransaction: vi.fn(async () => ({
         hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       })),
@@ -61,6 +61,7 @@ describe("createBackgroundServices (recovery integration)", () => {
           data: "0x",
         },
       },
+      prepared: null,
       hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       receipt: undefined,
       error: undefined,
@@ -102,13 +103,12 @@ describe("createBackgroundServices (recovery integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const buildDraft = vi.fn<TransactionAdapter["buildDraft"]>(async () => ({
-      prepared: { raw: "0x" },
-      summary: { kind: "transfer" },
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async (_ctx, _prepared) => ({
       raw: "0x1111",
       hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
@@ -116,7 +116,7 @@ describe("createBackgroundServices (recovery integration)", () => {
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
 
-    const adapter: TransactionAdapter = { buildDraft, signTransaction, broadcastTransaction };
+    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -159,7 +159,7 @@ describe("createBackgroundServices (recovery integration)", () => {
     try {
       await flushAsync();
 
-      expect(buildDraft).toHaveBeenCalledTimes(0);
+      expect(prepareTransaction).toHaveBeenCalledTimes(0);
       expect(signTransaction).toHaveBeenCalledTimes(0);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
 
@@ -169,7 +169,7 @@ describe("createBackgroundServices (recovery integration)", () => {
       await context.services.controllers.transactions.resumePending({ includeSigning: true });
       await flushAsync();
 
-      await vi.waitFor(() => expect(buildDraft).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 

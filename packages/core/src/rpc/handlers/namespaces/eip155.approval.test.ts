@@ -178,14 +178,13 @@ describe("eip155 handlers - approval metadata", () => {
   it("includes namespace metadata for eth_sendTransaction approvals", async () => {
     const registry = new TransactionAdapterRegistry();
     registry.register("eip155", {
-      buildDraft: vi.fn(async () => ({
+      prepareTransaction: vi.fn(async () => ({
         prepared: {},
-        summary: {},
         warnings: [],
         issues: [],
       })),
-      signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
-      broadcastTransaction: vi.fn(async () => ({ hash: "0x1111" })),
+      signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x", hash: null })),
+      broadcastTransaction: vi.fn(async (_ctx, _signed) => ({ hash: "0x1111" })),
     });
     const services = createServices({
       transactions: { registry },

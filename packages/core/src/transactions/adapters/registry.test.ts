@@ -3,8 +3,8 @@ import { TransactionAdapterRegistry } from "./registry.js";
 import type { TransactionAdapter } from "./types.js";
 
 const dummy = (): TransactionAdapter => ({
-  buildDraft: async () => ({ prepared: {}, summary: {}, warnings: [], issues: [] }),
-  signTransaction: async () => ({ raw: "0x", hash: "0xhash" }),
+  prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
+  signTransaction: async (_ctx, _prepared) => ({ raw: "0x", hash: "0xhash" }),
   broadcastTransaction: async () => ({ hash: "0xhash" }),
 });
 

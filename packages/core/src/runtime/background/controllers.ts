@@ -175,6 +175,7 @@ export const initControllers = ({
     },
     accounts: {
       getActivePointer: () => accountController.getActivePointer(),
+      getAccounts: (params) => accountController.getAccounts(params),
     },
     approvals: {
       requestApproval: (task, requestContext) => approvalController.requestApproval(task, requestContext),

@@ -27,7 +27,14 @@ export type TransitionTransactionParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<Pick<TransactionRecord, "hash" | "receipt" | "error" | "userRejected" | "warnings" | "issues">>;
+  patch?: Partial<
+    Pick<TransactionRecord, "hash" | "receipt" | "error" | "userRejected" | "warnings" | "issues" | "prepared">
+  >;
+};
+
+export type PatchTransactionParams = {
+  id: TransactionRecord["id"];
+  patch: Partial<Pick<TransactionRecord, "prepared" | "warnings" | "issues" | "error">>;
 };
 
 export type ListTransactionsParams = {
@@ -47,6 +54,12 @@ export type TransactionsService = {
   createPending(params: CreatePendingTransactionParams): Promise<TransactionRecord>;
 
   transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
+
+  /**
+   * Patch a transaction record without changing status.
+   * Intended for background enrichment (prepared params, warnings/issues).
+   */
+  patch(params: PatchTransactionParams): Promise<TransactionRecord | null>;
 
   remove(id: TransactionRecord["id"]): Promise<void>;
 

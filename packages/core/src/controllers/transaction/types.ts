@@ -23,11 +23,8 @@ export type TransactionError = {
 
 export type TransactionReceipt = Record<string, unknown>;
 
-export type TransactionDraftPreview = {
-  summary: Record<string, unknown>;
-  issues: TransactionIssue[];
-  warnings: TransactionWarning[];
-};
+export type TransactionPrepared = Record<string, unknown>;
+
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
   namespace: string;
@@ -60,8 +57,6 @@ export type Eip155TransactionPayload = {
   nonce?: Hex;
 };
 
-export type TransactionApprovalDecodedPayload = Record<string, unknown>;
-
 export type TransactionPayloadMap = {
   eip155: Eip155TransactionPayload;
 };
@@ -79,6 +74,7 @@ export type TransactionMeta = {
   origin: string;
   from: AccountAddress | null;
   request: TransactionRequest;
+  prepared: TransactionPrepared | null;
   status: TransactionStatus;
   hash: string | null;
   receipt: TransactionReceipt | null;
@@ -102,9 +98,6 @@ export type TransactionApprovalTaskPayload = {
   chain?: TransactionApprovalChainMetadata | null;
   from: AccountAddress | null;
   request: TransactionRequest;
-  draft?: TransactionDraftPreview | null;
-  prepared?: Record<string, unknown> | null;
-  decoded?: TransactionApprovalDecodedPayload | null;
   warnings: TransactionWarning[];
   issues: TransactionIssue[];
 };
@@ -113,7 +106,7 @@ export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayloa
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
-  submitTransaction(
+  requestTransactionApproval(
     origin: string,
     request: TransactionRequest,
     requestContext: RequestContextRecord,

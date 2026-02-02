@@ -7,7 +7,6 @@ import type {
   ReceiptResolution,
   ReplacementResolution,
   TransactionAdapterContext,
-  TransactionDraft,
 } from "../../transactions/adapters/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
@@ -15,15 +14,14 @@ import { type ApprovalController, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import type {
   TransactionApprovalChainMetadata,
-  TransactionApprovalDecodedPayload,
   TransactionApprovalTask,
   TransactionApprovalTaskPayload,
   TransactionController,
-  TransactionDraftPreview,
   TransactionError,
   TransactionIssue,
   TransactionMessenger,
   TransactionMeta,
+  TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
   TransactionStatus,
@@ -32,6 +30,7 @@ import type {
 } from "./types.js";
 
 const TRANSACTION_STATUS_CHANGED_TOPIC = "transaction:statusChanged";
+const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 const cloneRequest = (request: TransactionRequest): TransactionRequest => {
   if (request.namespace === "eip155") {
@@ -49,6 +48,7 @@ const cloneRequest = (request: TransactionRequest): TransactionRequest => {
 const cloneMeta = (meta: TransactionMeta): TransactionMeta => ({
   ...meta,
   request: cloneRequest(meta.request),
+  prepared: meta.prepared ? { ...meta.prepared } : null,
 });
 
 const toAccountIdFromEip155Address = (address: string): string => {
@@ -70,6 +70,7 @@ const toTransactionMeta = (record: TransactionRecord): TransactionMeta => ({
   origin: record.origin,
   from: toEip155AddressFromAccountId(record.fromAccountId) as AccountAddress,
   request: cloneRequest(record.request),
+  prepared: (record.prepared ?? null) as TransactionPrepared | null,
   status: record.status,
   hash: record.hash,
   receipt: (record.receipt ?? null) as TransactionReceipt | null,
@@ -84,7 +85,7 @@ const toTransactionMeta = (record: TransactionRecord): TransactionMeta => ({
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  accounts: Pick<AccountController, "getActivePointer">;
+  accounts: Pick<AccountController, "getActivePointer" | "getAccounts">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
@@ -106,7 +107,7 @@ export type StoreTransactionControllerOptions = {
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  #accounts: Pick<AccountController, "getActivePointer">;
+  #accounts: Pick<AccountController, "getActivePointer" | "getAccounts">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
@@ -119,7 +120,7 @@ export class StoreTransactionController implements TransactionController {
   #queue: string[] = [];
   #processing: Set<string> = new Set();
   #scheduled = false;
-  #drafts: Map<string, TransactionDraft> = new Map();
+  #prepareInFlight: Map<string, Promise<void>> = new Map();
   #tracker: ReceiptTracker;
 
   constructor({
@@ -173,7 +174,7 @@ export class StoreTransactionController implements TransactionController {
     return existing ? cloneMeta(existing) : undefined;
   }
 
-  async submitTransaction(
+  async requestTransactionApproval(
     origin: string,
     request: TransactionRequest,
     requestContext: RequestContextRecord,
@@ -188,7 +189,6 @@ export class StoreTransactionController implements TransactionController {
     }
 
     const chainRef = request.chainRef ?? activeChain.chainRef;
-    const adapter = this.#registry.get(request.namespace);
 
     const id = crypto.randomUUID();
     const timestamp = this.#nextTimestamp();
@@ -200,48 +200,28 @@ export class StoreTransactionController implements TransactionController {
 
     const normalizedRequest = this.#normalizeRequest(request, chainRef);
 
-    // Precompute warnings/issues/draft preview before persisting the pending record.
-    let draftPreview: TransactionDraftPreview | null = null;
-    let collectedWarnings: TransactionWarning[] = [];
-    let collectedIssues: TransactionIssue[] = [];
+    // Avoid RPC/slow work before the approval is enqueued.
+    const adapter = this.#registry.get(request.namespace);
+    const collectedWarnings: TransactionWarning[] = [];
+    const collectedIssues: TransactionIssue[] = adapter ? [] : [this.#missingAdapterIssue(request.namespace)];
 
-    const metaCandidate: TransactionMeta = {
-      id,
-      namespace: request.namespace,
-      chainRef,
-      origin,
-      from: fromAddress,
-      request: cloneRequest(normalizedRequest),
-      status: "pending",
-      hash: null,
-      receipt: null,
-      error: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    if (adapter) {
-      try {
-        const draftContext = this.#buildContext(metaCandidate);
-        const draft = await adapter.buildDraft(draftContext);
-        collectedWarnings = this.#cloneWarnings(draft.warnings);
-        collectedIssues = this.#cloneIssues(draft.issues);
-        draftPreview = this.#buildPreviewFromDraft(draft);
-        this.#drafts.set(id, draft);
-      } catch (error) {
-        const issue = this.#issueFromDraftError(error);
-        collectedIssues = [issue];
-        draftPreview = this.#buildPreviewFromIssue(issue, { stage: "draft" });
-        this.#drafts.delete(id);
-      }
+    const ownedAccounts = this.#accounts.getAccounts({ chainRef });
+    if (ownedAccounts.length === 0) {
+      collectedIssues.push({
+        code: "transaction.request.no_accounts",
+        message: "No accounts are available to sign this transaction.",
+        data: { chainRef },
+      });
     } else {
-      const issue = this.#missingAdapterIssue(request.namespace);
-      collectedIssues = [issue];
-      draftPreview = this.#buildPreviewFromIssue(issue, { namespace: request.namespace });
-      this.#drafts.delete(id);
+      const requestedFrom = toCanonicalEvmAddress(fromAddress);
+      const ownedCanonical = new Set(ownedAccounts.map((addr) => toCanonicalEvmAddress(addr)));
+      if (!ownedCanonical.has(requestedFrom)) {
+        collectedIssues.push({
+          code: "transaction.request.from_not_owned",
+          message: "Requested from address is not available in this wallet.",
+          data: { from: fromAddress, chainRef },
+        });
+      }
     }
 
     const fromAccountId = toAccountIdFromEip155Address(fromAddress);
@@ -261,10 +241,13 @@ export class StoreTransactionController implements TransactionController {
     const storedMeta = toTransactionMeta(created);
     this.#upsertCache(storedMeta);
 
-    const activeDraft = this.#drafts.get(id) ?? null;
-    const task = this.#createApprovalTask(storedMeta, activeDraft, draftPreview);
+    const task = this.#createApprovalTask(storedMeta);
+    const approvalPromise = this.#approvals.requestApproval(task, requestContext) as Promise<TransactionMeta>;
 
-    return this.#approvals.requestApproval(task, requestContext) as Promise<TransactionMeta>;
+    // Prepare in background to improve confirmation UX and reduce execution latency.
+    this.#queuePrepare(id);
+
+    return approvalPromise;
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {
@@ -319,7 +302,6 @@ export class StoreTransactionController implements TransactionController {
     const next = toTransactionMeta(updated);
     this.#upsertCache(next);
     this.#tracker.stop(id);
-    this.#drafts.delete(id);
     this.#publishStatusChange(meta, next);
   }
 
@@ -342,13 +324,20 @@ export class StoreTransactionController implements TransactionController {
     let context = this.#buildContext(meta);
 
     try {
-      let draft = this.#drafts.get(id);
-      if (!draft) {
-        draft = await adapter.buildDraft(context);
-        this.#drafts.set(id, draft);
+      let prepared = meta.prepared;
+      if (!prepared) {
+        // Prepare on-demand for execution (may be slow; must be bounded).
+        const next = await this.#ensurePrepared(id, { timeoutMs: DEFAULT_PREPARE_TIMEOUT_MS });
+        if (!next?.prepared) {
+          await this.rejectTransaction(id, new Error("Transaction preparation did not produce prepared parameters"));
+          return;
+        }
+        prepared = next.prepared;
+        meta = next;
+        context = this.#buildContext(meta);
       }
 
-      const signed = await adapter.signTransaction(context, draft);
+      const signed = await adapter.signTransaction(context, prepared);
       // Persist the approved -> signed transition only when we are actually in the approved state.
       // When resuming a previously-signed transaction we may re-sign (raw tx bytes are not persisted),
       // but we keep the status as "signed" until broadcast succeeds.
@@ -397,7 +386,6 @@ export class StoreTransactionController implements TransactionController {
         if (!latest) return;
         const latestMeta = toTransactionMeta(latest);
         this.#upsertCache(latestMeta);
-        this.#drafts.delete(id);
         this.#publishStatusChange(signedMeta, latestMeta);
         this.#handleTrackerTransition(signedMeta, latestMeta);
         return;
@@ -405,17 +393,14 @@ export class StoreTransactionController implements TransactionController {
 
       const afterBroadcastMeta = toTransactionMeta(afterBroadcast);
       this.#upsertCache(afterBroadcastMeta);
-      this.#drafts.delete(id);
       this.#publishStatusChange(signedMeta, afterBroadcastMeta);
       this.#handleTrackerTransition(signedMeta, afterBroadcastMeta);
     } catch (err) {
       // Treat locked sessions as a recoverable pause (retry after unlock).
       if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
-        this.#drafts.delete(id);
         return;
       }
 
-      this.#drafts.delete(id);
       await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
     }
   }
@@ -559,6 +544,138 @@ export class StoreTransactionController implements TransactionController {
     };
   }
 
+  #queuePrepare(id: string) {
+    void this.#ensurePrepared(id).catch((error) => {
+      // Best-effort background preparation; failures are surfaced via issues on the transaction record.
+      console.warn("[StoreTransactionController] prepareTransaction failed", {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  async #ensurePrepared(id: string, opts?: { timeoutMs?: number }): Promise<TransactionMeta | null> {
+    const existing = this.#prepareInFlight.get(id);
+    if (existing) {
+      await existing;
+      return this.getMeta(id) ?? null;
+    }
+
+    const run = this.#prepareAndPersistInternal(id, opts);
+    const tracked = run
+      .then(() => undefined)
+      .finally(() => {
+        this.#prepareInFlight.delete(id);
+      });
+
+    this.#prepareInFlight.set(id, tracked);
+    return run;
+  }
+
+  async #prepareAndPersistInternal(id: string, opts?: { timeoutMs?: number }): Promise<TransactionMeta | null> {
+    const timeoutMs = opts?.timeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
+
+    let meta = this.getMeta(id);
+    if (!meta) {
+      const record = await this.#service.get(id);
+      if (!record) return null;
+      meta = toTransactionMeta(record);
+      this.#upsertCache(meta);
+    }
+
+    if (meta.prepared) {
+      return meta;
+    }
+
+    const adapter = this.#registry.get(meta.namespace);
+    if (!adapter) {
+      const patched = await this.#service.patch({
+        id,
+        patch: {
+          prepared: null,
+          warnings: meta.warnings,
+          issues: this.#cloneIssues([...meta.issues, this.#missingAdapterIssue(meta.namespace)]),
+        },
+      });
+      if (!patched) return meta;
+      const next = toTransactionMeta(patched);
+      this.#upsertCache(next);
+      return next;
+    }
+
+    try {
+      const context = this.#buildContext(meta);
+      const result = await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
+
+      const patched = await this.#service.patch({
+        id,
+        patch: {
+          prepared: result.prepared,
+          warnings: this.#cloneWarnings(this.#mergeWarnings(meta.warnings, result.warnings)),
+          issues: this.#cloneIssues(this.#mergeIssues(meta.issues, result.issues)),
+        },
+      });
+
+      if (!patched) {
+        const latest = await this.#service.get(id);
+        if (!latest) return meta;
+        const latestMeta = toTransactionMeta(latest);
+        this.#upsertCache(latestMeta);
+        return latestMeta;
+      }
+
+      const next = toTransactionMeta(patched);
+      this.#upsertCache(next);
+      return next;
+    } catch (error) {
+      const issue = this.#issueFromPrepareError(error);
+      const patched = await this.#service.patch({
+        id,
+        patch: {
+          prepared: null,
+          warnings: meta.warnings,
+          issues: this.#cloneIssues(this.#mergeIssues(meta.issues, [issue])),
+        },
+      });
+      if (!patched) return meta;
+      const next = toTransactionMeta(patched);
+      this.#upsertCache(next);
+      return next;
+    }
+  }
+
+  async #withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      // Simple timeout guard for slow/unresponsive RPC nodes.
+      timer = setTimeout(() => {
+        const error = new Error("Transaction preparation timed out.");
+        error.name = "TransactionPrepareTimeoutError";
+        reject(error);
+      }, timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  #issueFromPrepareError(error: unknown): TransactionIssue {
+    if (error instanceof Error) {
+      return {
+        code: "transaction.prepare_failed",
+        message: error.message,
+        data: { name: error.name },
+      };
+    }
+    return {
+      code: "transaction.prepare_failed",
+      message: String(error),
+    };
+  }
+
   #findFromAddress(request: TransactionRequest): AccountAddress | null {
     const payload = request.payload;
     if (payload && typeof payload === "object") {
@@ -601,34 +718,32 @@ export class StoreTransactionController implements TransactionController {
     return list.map((issue) => ({ ...issue }));
   }
 
-  #buildPreviewFromDraft(draft: TransactionDraft): TransactionDraftPreview {
-    return {
-      summary: { ...draft.summary },
-      warnings: this.#cloneWarnings(draft.warnings),
-      issues: this.#cloneIssues(draft.issues),
-    };
-  }
+  #mergeWarnings(base: TransactionWarning[], next: TransactionWarning[]): TransactionWarning[] {
+    const out: TransactionWarning[] = [];
+    const seen = new Set<string>();
 
-  #buildPreviewFromIssue(issue: TransactionIssue, extras?: Record<string, unknown>): TransactionDraftPreview {
-    return {
-      summary: { code: issue.code, message: issue.message, ...(extras ?? {}) },
-      warnings: [],
-      issues: this.#cloneIssues([issue]),
-    };
-  }
-
-  #issueFromDraftError(error: unknown): TransactionIssue {
-    if (error instanceof Error) {
-      return {
-        code: "transaction.draft_failed",
-        message: error.message,
-        data: { name: error.name },
-      };
+    for (const item of [...base, ...next]) {
+      const key = `${item.code}:${item.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
     }
-    return {
-      code: "transaction.draft_failed",
-      message: String(error),
-    };
+
+    return out;
+  }
+
+  #mergeIssues(base: TransactionIssue[], next: TransactionIssue[]): TransactionIssue[] {
+    const out: TransactionIssue[] = [];
+    const seen = new Set<string>();
+
+    for (const item of [...base, ...next]) {
+      const key = `${item.code}:${item.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+
+    return out;
   }
 
   #missingAdapterIssue(namespace: string): TransactionIssue {
@@ -639,14 +754,7 @@ export class StoreTransactionController implements TransactionController {
     };
   }
 
-  #createApprovalTask(
-    meta: TransactionMeta,
-    draft: TransactionDraft | null,
-    preview: TransactionDraftPreview | null,
-  ): TransactionApprovalTask {
-    const warningsSource = preview?.warnings ?? meta.warnings;
-    const issuesSource = preview?.issues ?? meta.issues;
-
+  #createApprovalTask(meta: TransactionMeta): TransactionApprovalTask {
     return {
       id: meta.id,
       type: ApprovalTypes.SendTransaction,
@@ -660,11 +768,8 @@ export class StoreTransactionController implements TransactionController {
         chain: this.#buildChainMetadata(meta),
         from: meta.from,
         request: cloneRequest(meta.request),
-        draft: preview ? this.#cloneDraftPreview(preview) : null,
-        prepared: draft ? this.#clonePrepared(draft.prepared) : null,
-        decoded: this.#buildDecodedPayload(meta),
-        warnings: this.#cloneWarnings(warningsSource),
-        issues: this.#cloneIssues(issuesSource),
+        warnings: this.#cloneWarnings(meta.warnings),
+        issues: this.#cloneIssues(meta.issues),
       } satisfies TransactionApprovalTaskPayload,
     };
   }
@@ -686,26 +791,6 @@ export class StoreTransactionController implements TransactionController {
       nativeCurrency: resolved.nativeCurrency
         ? { symbol: resolved.nativeCurrency.symbol, decimals: resolved.nativeCurrency.decimals }
         : null,
-    };
-  }
-
-  #clonePrepared(prepared: Record<string, unknown>): Record<string, unknown> {
-    return { ...prepared };
-  }
-
-  #buildDecodedPayload(meta: TransactionMeta): TransactionApprovalDecodedPayload | null {
-    const payload = meta.request.payload;
-    if (!payload || typeof payload !== "object") {
-      return null;
-    }
-    return { ...(payload as Record<string, unknown>) };
-  }
-
-  #cloneDraftPreview(preview: TransactionDraftPreview): TransactionDraftPreview {
-    return {
-      summary: { ...preview.summary },
-      warnings: this.#cloneWarnings(preview.warnings),
-      issues: this.#cloneIssues(preview.issues),
     };
   }
 

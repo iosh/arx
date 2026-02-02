@@ -5,6 +5,7 @@ import { assertTransactionStatusTransition } from "./stateMachine.js";
 import type {
   CreatePendingTransactionParams,
   ListTransactionsParams,
+  PatchTransactionParams,
   TransactionsService,
   TransitionTransactionParams,
 } from "./types.js";
@@ -59,6 +60,7 @@ export const createTransactionsService = ({
       fromAccountId: params.fromAccountId,
       status: "pending",
       request: params.request,
+      prepared: null,
       hash: null,
       userRejected: false,
       warnings: params.warnings ?? [],
@@ -70,6 +72,36 @@ export const createTransactionsService = ({
     await port.upsert(record);
     emitChanged();
     return record;
+  };
+
+  const patch = async (params: PatchTransactionParams) => {
+    const existing = await port.get(params.id);
+    if (!existing) return null;
+
+    const current = TransactionRecordSchema.parse(existing);
+    const patchFields =
+      params.patch === undefined
+        ? undefined
+        : (Object.fromEntries(Object.entries(params.patch).filter(([, v]) => v !== undefined)) as typeof params.patch);
+
+    const nextCandidate: TransactionRecord = {
+      ...current,
+      ...(patchFields ?? {}),
+      updatedAt: now(),
+    };
+
+    const checked = TransactionRecordSchema.parse(nextCandidate);
+
+    const updated = await port.updateIfStatus({
+      id: checked.id,
+      expectedStatus: current.status,
+      next: checked,
+    });
+
+    if (!updated) return null;
+
+    emitChanged();
+    return checked;
   };
 
   const transition = async (params: TransitionTransactionParams) => {
@@ -184,6 +216,7 @@ export const createTransactionsService = ({
     list,
     createPending,
     transition,
+    patch,
     remove,
     failAllPending,
   };

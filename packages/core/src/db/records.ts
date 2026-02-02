@@ -275,6 +275,7 @@ export const TransactionRecordSchema = z.strictObject({
   fromAccountId: AccountIdSchema,
   status: TransactionStatusSchema,
   request: TransactionRequestSchema,
+  prepared: z.unknown().nullable().optional(),
   hash: z.string().nullable(),
   receipt: z.unknown().optional(),
   error: TransactionErrorSchema.optional(),

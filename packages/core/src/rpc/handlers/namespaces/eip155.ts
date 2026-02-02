@@ -614,10 +614,35 @@ const handleEthSendTransaction: MethodHandler = async ({ origin, request, contro
   }
 
   const activeChain = controllers.network.getActiveChain();
-  const txRequest = buildEip155TransactionRequest(paramsArray, activeChain.chainRef);
+  let chainRef = activeChain.chainRef;
+
+  const ctxChainRef = rpcContext?.chainRef ?? null;
+  if (ctxChainRef) {
+    try {
+      const parsed = parseChainRef(ctxChainRef);
+      if (parsed.namespace !== "eip155") {
+        throw arxError({
+          reason: ArxReasons.ChainNotCompatible,
+          message: "Requested chain is not compatible with eth_sendTransaction",
+          data: { chainRef: ctxChainRef },
+        });
+      }
+      chainRef = `${parsed.namespace}:${parsed.reference}`;
+    } catch (error) {
+      if (isDomainError(error) || isRpcError(error)) throw error;
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "eth_sendTransaction received an invalid chainRef identifier",
+        data: { chainRef: ctxChainRef },
+        cause: error,
+      });
+    }
+  }
+
+  const txRequest = buildEip155TransactionRequest(paramsArray, chainRef);
 
   try {
-    const meta = await controllers.transactions.submitTransaction(
+    const meta = await controllers.transactions.requestTransactionApproval(
       origin,
       txRequest,
       requireRequestContext(rpcContext, "eth_sendTransaction"),

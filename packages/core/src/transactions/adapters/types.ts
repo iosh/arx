@@ -8,9 +8,8 @@ import type {
   TransactionWarning,
 } from "../../controllers/transaction/types.js";
 
-export type TransactionDraft<TPrepared = Record<string, unknown>, TSummary = Record<string, unknown>> = {
+export type PreparedTransactionResult<TPrepared = Record<string, unknown>> = {
   prepared: TPrepared;
-  summary: TSummary;
   warnings: TransactionWarning[];
   issues: TransactionIssue[];
 };
@@ -38,8 +37,11 @@ export type ReplacementResolution = {
   status: "replaced";
 };
 export type TransactionAdapter = {
-  buildDraft(context: TransactionAdapterContext): Promise<TransactionDraft>;
-  signTransaction(context: TransactionAdapterContext, draft: TransactionDraft): Promise<SignedTransactionPayload>;
+  prepareTransaction(context: TransactionAdapterContext): Promise<PreparedTransactionResult>;
+  signTransaction(
+    context: TransactionAdapterContext,
+    prepared: PreparedTransactionResult["prepared"],
+  ): Promise<SignedTransactionPayload>;
   broadcastTransaction(context: TransactionAdapterContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
   fetchReceipt?(context: TransactionAdapterContext, hash: string): Promise<ReceiptResolution | null>;
   detectReplacement?(context: TransactionAdapterContext): Promise<ReplacementResolution | null>;

@@ -13,7 +13,14 @@ import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip15
  * // ... use client in test
  * expect(estimateGas).toHaveBeenCalledWith(...);
  */
-export const createEip155RpcMock = () => {
+export const createEip155RpcMock = (): {
+  client: Eip155RpcCapabilities;
+  estimateGas: any;
+  getTransactionCount: any;
+  getFeeData: any;
+  getTransactionReceipt: any;
+  sendRawTransaction: any;
+} => {
   const estimateGas = vi.fn();
   const getTransactionCount = vi.fn();
   const getFeeData = vi.fn();
@@ -63,11 +70,11 @@ export const createEip155RpcClient = (overrides: Partial<Eip155RpcCapabilities> 
  * @param sendRawTransactionImpl - Custom implementation for sendRawTransaction
  */
 export const createEip155BroadcasterFactory = (sendRawTransactionImpl: (raw: string) => Promise<string>) => {
-  return vi.fn(() => ({
+  return vi.fn((_chainRef: string) => ({
     estimateGas: vi.fn(),
     getTransactionCount: vi.fn(),
     getFeeData: vi.fn(),
     getTransactionReceipt: vi.fn(),
     sendRawTransaction: vi.fn(sendRawTransactionImpl),
-  }));
+  })) as unknown as (chainRef: string) => Eip155RpcCapabilities;
 };

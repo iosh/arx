@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES, TEST_VALUES } from "./__fixtures__/constants.js";
 import { createAdapterContext } from "./__fixtures__/contexts.js";
-import { createTestDraftBuilder } from "./__fixtures__/draftBuilder.js";
+import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
-describe("draftBuilder - RPC interaction", () => {
+describe("prepareTransaction - RPC interaction", () => {
   describe("RPC data fetching", () => {
     it("fills nonce, gas, and EIP-1559 fees from RPC responses", async () => {
       const rpc = createEip155RpcMock();
@@ -15,33 +15,20 @@ describe("draftBuilder - RPC interaction", () => {
         maxPriorityFeePerGas: "0x3b9aca00",
       });
 
-      const builder = createTestDraftBuilder({
+      const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => rpc.client),
-        now: () => 5_000,
       });
 
       const ctx = createAdapterContext();
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.prepared.nonce).toBe("0xa");
-      expect(draft.prepared.gas).toBe("0x5208");
-      expect(draft.prepared.maxFeePerGas).toBe("0x59682f00");
-      expect(draft.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
-      expect(draft.summary.feeMode).toBe("eip1559");
-
-      const gasCost = BigInt("0x5208") * BigInt("0x59682f00");
-      const valueWei = BigInt(TEST_VALUES.ONE_ETH);
-      const expectedMaxCost = (gasCost + valueWei).toString(10);
-
-      expect(draft.summary.maxCostWei).toBe(expectedMaxCost);
-      expect(draft.summary.rpcAvailable).toBe(true);
-      expect(draft.summary.callParams).toMatchObject({
-        from: TEST_ADDRESSES.FROM_A,
-        to: TEST_ADDRESSES.TO_B,
-      });
+      expect(prepared.prepared.nonce).toBe("0xa");
+      expect(prepared.prepared.gas).toBe("0x5208");
+      expect(prepared.prepared.maxFeePerGas).toBe("0x59682f00");
+      expect(prepared.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
     });
 
-    it("passes derived nonce to gas estimation when fetched from RPC", async () => {
+    it("fetches nonce from RPC when it is missing", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0xb");
       rpc.estimateGas.mockResolvedValue("0x5208");
@@ -50,34 +37,29 @@ describe("draftBuilder - RPC interaction", () => {
         maxPriorityFeePerGas: "0x3b9aca00",
       });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
       expect(rpc.getTransactionCount).toHaveBeenCalledWith(TEST_ADDRESSES.FROM_A, "pending");
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
-        expect.objectContaining({
-          nonce: "0xb",
-        }),
-      ]);
-      expect(draft.summary.nonce).toBe("0xb");
+      expect(prepared.prepared.nonce).toBe("0xb");
     });
 
     it("skips nonce/gas RPC calls when values already provided", async () => {
       const rpc = createEip155RpcMock();
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       ctx.request.payload.nonce = "0xa";
       ctx.request.payload.gas = "0x5208";
       ctx.request.payload.gasPrice = "0x3b9aca00";
 
-      await builder(ctx);
+      await prepareTransaction(ctx);
 
       expect(rpc.getTransactionCount).not.toHaveBeenCalled();
       expect(rpc.estimateGas).not.toHaveBeenCalled();
@@ -88,16 +70,16 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext({ from: null });
       Reflect.deleteProperty(ctx.request.payload, "from");
       ctx.meta.from = null;
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.from_missing");
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.from_missing");
       expect(rpc.getTransactionCount).not.toHaveBeenCalled();
       expect(rpc.estimateGas).toHaveBeenCalledWith([
         {
@@ -106,7 +88,6 @@ describe("draftBuilder - RPC interaction", () => {
           data: TEST_VALUES.EMPTY_DATA,
         },
       ]);
-      expect(draft.summary.callParams).not.toHaveProperty("from");
     });
   });
 
@@ -117,19 +98,18 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.estimateGas.mockRejectedValue(new Error("estimate error"));
       rpc.getFeeData.mockRejectedValue(new Error("fee error"));
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toEqual(
+      expect(prepared.issues.map((item) => item.code)).toEqual(
         expect.arrayContaining([
-          "transaction.draft.nonce_failed",
-          "transaction.draft.gas_estimation_failed",
-          "transaction.draft.fee_estimation_failed",
+          "transaction.prepare.nonce_failed",
+          "transaction.prepare.gas_estimation_failed",
+          "transaction.prepare.fee_estimation_failed",
         ]),
       );
-      expect(draft.summary.rpcAvailable).toBe(true);
     });
 
     it("attaches rpc error metadata when nonce fetch fails", async () => {
@@ -138,13 +118,13 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
-      const draft = await builder(ctx);
-      const nonceIssue = draft.issues.find((item) => item.code === "transaction.draft.nonce_failed");
+      const prepared = await prepareTransaction(ctx);
+      const nonceIssue = prepared.issues.find((item) => item.code === "transaction.prepare.nonce_failed");
 
       expect(nonceIssue).toBeTruthy();
       expect(nonceIssue?.data).toMatchObject({
@@ -153,42 +133,37 @@ describe("draftBuilder - RPC interaction", () => {
       });
     });
 
-    it("records estimate input even when gas estimation throws", async () => {
+    it("attaches rpc error metadata when gas estimation fails", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x5");
       rpc.estimateGas.mockRejectedValue(new Error("boom"));
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const draft = await builder(ctx);
-      const gasIssue = draft.issues.find((item) => item.code === "transaction.draft.gas_estimation_failed");
+      const prepared = await prepareTransaction(ctx);
+      const gasIssue = prepared.issues.find((item) => item.code === "transaction.prepare.gas_estimation_failed");
 
       expect(gasIssue?.data).toMatchObject({
         method: "eth_estimateGas",
         error: "boom",
       });
-      expect(draft.summary.estimateInput).toMatchObject({
-        from: TEST_ADDRESSES.FROM_A,
-        to: TEST_ADDRESSES.TO_B,
-      });
     });
 
     it("flags rpc_unavailable when client factory throws", async () => {
-      const builder = createTestDraftBuilder({
+      const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => {
           throw new Error("boom");
         }),
       });
 
       const ctx = createAdapterContext();
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.rpc_unavailable");
-      expect(draft.summary.rpcAvailable).toBe(false);
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.rpc_unavailable");
     });
 
     it("reports invalid hex when RPC nonce response is malformed", async () => {
@@ -196,15 +171,15 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.invalid_hex");
-      expect(draft.summary.nonce).toBeUndefined();
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.invalid_hex");
+      expect(prepared.prepared.nonce).toBeUndefined();
     });
 
     it("reports invalid hex when RPC gas response is malformed", async () => {
@@ -212,15 +187,15 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("21000");
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.invalid_hex");
-      expect(draft.summary.gas).toBeUndefined();
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.invalid_hex");
+      expect(prepared.prepared.gas).toBeUndefined();
     });
 
     it("records invalid_hex when RPC fee data is malformed", async () => {
@@ -232,14 +207,12 @@ describe("draftBuilder - RPC interaction", () => {
         maxPriorityFeePerGas: "0xGG",
       });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const draft = await builder(createAdapterContext());
+      const prepared = await prepareTransaction(createAdapterContext());
 
-      const issueCodes = draft.issues.map((item) => item.code);
-      expect(issueCodes).toContain("transaction.draft.invalid_hex");
-      expect(draft.summary.feeMode).toBe("unknown");
-      expect(draft.summary.fee).toBeUndefined();
+      const issueCodes = prepared.issues.map((item) => item.code);
+      expect(issueCodes).toContain("transaction.prepare.invalid_hex");
     });
   });
 
@@ -253,18 +226,19 @@ describe("draftBuilder - RPC interaction", () => {
         maxPriorityFeePerGas: "0x3b9aca00",
       });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
-      const draft = await builder(ctx);
+      await prepareTransaction(ctx);
 
-      expect(draft.summary.estimateInput).toEqual({
-        from: TEST_ADDRESSES.FROM_A,
-        to: TEST_ADDRESSES.TO_B,
-        value: TEST_VALUES.ONE_ETH,
-        data: TEST_VALUES.EMPTY_DATA,
-        nonce: "0xa",
-      });
+      expect(rpc.estimateGas).toHaveBeenCalledWith([
+        {
+          from: TEST_ADDRESSES.FROM_A,
+          to: TEST_ADDRESSES.TO_B,
+          value: TEST_VALUES.ONE_ETH,
+          data: TEST_VALUES.EMPTY_DATA,
+        },
+      ]);
     });
 
     it("flags zero gas estimate from RPC", async () => {
@@ -272,15 +246,15 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x0");
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.gas_zero");
-      expect(draft.summary.gas).toBe("0x0");
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.gas_zero");
+      expect(prepared.prepared.gas).toBe("0x0");
     });
 
     it("warns when gas estimate is suspiciously high", async () => {
@@ -288,16 +262,16 @@ describe("draftBuilder - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5f5e100");
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const draft = await builder(ctx);
+      const prepared = await prepareTransaction(ctx);
 
-      expect(draft.warnings.map((item) => item.code)).toContain("transaction.draft.gas_suspicious");
-      expect(draft.summary.gas).toBe("0x5f5e100");
-      const warning = draft.warnings.find((item) => item.code === "transaction.draft.gas_suspicious");
+      expect(prepared.warnings.map((item) => item.code)).toContain("transaction.prepare.gas_suspicious");
+      expect(prepared.prepared.gas).toBe("0x5f5e100");
+      const warning = prepared.warnings.find((item) => item.code === "transaction.prepare.gas_suspicious");
       expect(warning?.data).toEqual({ estimate: "0x5f5e100" });
     });
   });

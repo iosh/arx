@@ -10,8 +10,8 @@ import * as TypedData from "ox/TypedData";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import { zeroize } from "../../../vault/utils.js";
-import type { SignedTransactionPayload, TransactionAdapterContext, TransactionDraft } from "../types.js";
-import type { Eip155DraftPrepared, Eip155TransactionDraft } from "./types.js";
+import type { SignedTransactionPayload, TransactionAdapterContext } from "../types.js";
+import type { Eip155PreparedTransaction } from "./types.js";
 
 const textEncoder = new TextEncoder();
 
@@ -20,7 +20,10 @@ type SignerDeps = {
 };
 
 export type Eip155Signer = {
-  signTransaction: (context: TransactionAdapterContext, draft: TransactionDraft) => Promise<SignedTransactionPayload>;
+  signTransaction: (
+    context: TransactionAdapterContext,
+    prepared: Record<string, unknown>,
+  ) => Promise<SignedTransactionPayload>;
   signPersonalMessage: (params: { address: string; message: HexType | string }) => Promise<HexType>;
   signTypedData: (params: { address: string; typedData: string }) => Promise<HexType>;
 };
@@ -94,7 +97,7 @@ const deriveChainId = (context: TransactionAdapterContext, prepared: Record<stri
 };
 
 const buildEnvelope = (
-  prepared: Eip155DraftPrepared,
+  prepared: Eip155PreparedTransaction,
   chainId: number,
 ):
   | { type: "eip1559"; value: TransactionEnvelopeEip1559.TransactionEnvelopeEip1559 }
@@ -218,21 +221,13 @@ const parseTypedDataPayload = (raw: string) => {
   return parsed as TypedData.Definition<Record<string, unknown>, string>;
 };
 
-const assertEip155Draft = (draft: TransactionDraft): draft is Eip155TransactionDraft => {
-  return typeof draft.prepared === "object" && draft.prepared !== null && "callParams" in draft.prepared;
-};
-
 export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
-  const signTransaction: Eip155Signer["signTransaction"] = async (context, draft) => {
+  const signTransaction: Eip155Signer["signTransaction"] = async (context, preparedInput) => {
     if (context.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `EIP-155 signer cannot handle namespace "${context.namespace}".`,
       });
-    }
-
-    if (!assertEip155Draft(draft)) {
-      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Signer expected an EIP-155 draft payload." });
     }
 
     const requestFrom = context.meta.from;
@@ -256,8 +251,9 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     const from = requestFrom;
 
     assertUnlockedAccount(deps.keyring, from);
-    const chainId = deriveChainId(context, draft.prepared);
-    const envelope = buildEnvelope(draft.prepared, chainId);
+    const prepared = preparedInput as Eip155PreparedTransaction;
+    const chainId = deriveChainId(context, preparedInput);
+    const envelope = buildEnvelope(prepared, chainId);
 
     const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", from);
     try {

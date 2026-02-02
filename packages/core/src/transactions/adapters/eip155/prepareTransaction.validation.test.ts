@@ -1,22 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES, TEST_CHAINS } from "./__fixtures__/constants.js";
 import { createAdapterContext, createEip155Request, createTransactionMeta } from "./__fixtures__/contexts.js";
-import { createTestDraftBuilder } from "./__fixtures__/draftBuilder.js";
-import { createEip155RpcMock } from "./__mocks__/rpc.js";
+import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
+import { createEip155RpcClient, createEip155RpcMock } from "./__mocks__/rpc.js";
 
-describe("draftBuilder - validation", () => {
+describe("prepareTransaction - validation", () => {
   describe("namespace validation", () => {
     it("rejects requests from non-eip155 namespace", async () => {
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn() });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn() });
       const ctx = createAdapterContext({ namespace: "conflux" });
 
-      await expect(builder(ctx)).rejects.toThrow(/eip155/);
+      await expect(prepareTransaction(ctx)).rejects.toThrow(/eip155/);
     });
   });
 
   describe("from address validation", () => {
     it("reports issue when from is missing", async () => {
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => createEip155RpcMock().client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => createEip155RpcClient()),
+      });
 
       const request = createEip155Request();
       Reflect.deleteProperty(request.payload, "from");
@@ -26,20 +28,22 @@ describe("draftBuilder - validation", () => {
         from: undefined as unknown as string,
       });
 
-      const draft = await builder(ctx);
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.from_missing");
+      const result = await prepareTransaction(ctx);
+      expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.from_missing");
     });
 
     it("reports issue when from address is invalid", async () => {
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => createEip155RpcMock().client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => createEip155RpcClient()),
+      });
 
       const ctx = createAdapterContext();
       ctx.request.payload.from = "0xINVALID" as unknown as `0x${string}`;
       ctx.from = "0xINVALID" as unknown as string;
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.from_invalid");
+      const result = await prepareTransaction(ctx);
+      expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.from_invalid");
     });
 
     it("records mismatch detail when payload from differs from active account", async () => {
@@ -48,13 +52,13 @@ describe("draftBuilder - validation", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
       const ctx = createAdapterContext();
       ctx.request.payload.from = TEST_ADDRESSES.TO_B;
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
-      const mismatch = draft.issues.find((item) => item.code === "transaction.draft.from_mismatch");
+      const result = await prepareTransaction(ctx);
+      const mismatch = result.issues.find((item) => item.code === "transaction.prepare.from_mismatch");
 
       expect(mismatch?.data).toEqual({
         payloadFrom: TEST_ADDRESSES.TO_B,
@@ -68,7 +72,7 @@ describe("draftBuilder - validation", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const request = createEip155Request();
       Reflect.deleteProperty(request.payload, "from");
@@ -80,11 +84,10 @@ describe("draftBuilder - validation", () => {
       });
       ctx.meta.from = TEST_ADDRESSES.MIXED_CASE;
 
-      const draft = await builder(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(draft.issues).toHaveLength(0);
-      expect(draft.prepared.from).toBe(TEST_ADDRESSES.MIXED_CASE.toLowerCase());
-      expect(draft.summary.from).toBe(TEST_ADDRESSES.MIXED_CASE);
+      expect(result.issues).toHaveLength(0);
+      expect(result.prepared.from).toBe(TEST_ADDRESSES.MIXED_CASE.toLowerCase());
       expect(rpc.getTransactionCount).toHaveBeenCalledWith(TEST_ADDRESSES.MIXED_CASE.toLowerCase(), "pending");
     });
   });
@@ -92,14 +95,14 @@ describe("draftBuilder - validation", () => {
   describe("to address validation", () => {
     it("reports issue when to address is invalid", async () => {
       const rpc = createEip155RpcMock();
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       ctx.request.payload.to = "0x123" as unknown as `0x${string}`;
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
-      expect(draft.issues.map((item) => item.code)).toContain("transaction.draft.to_invalid");
+      const result = await prepareTransaction(ctx);
+      expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.to_invalid");
     });
   });
 
@@ -110,9 +113,8 @@ describe("draftBuilder - validation", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({
+      const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => rpc.client),
-        now: () => 2_000,
       });
 
       const ctx = createAdapterContext({
@@ -124,42 +126,45 @@ describe("draftBuilder - validation", () => {
       ctx.request.payload.chainId = "0x2";
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
-      expect(draft.issues.map((item) => item.code)).toEqual(
-        expect.arrayContaining(["transaction.draft.from_mismatch", "transaction.draft.chain_id_mismatch"]),
+      const result = await prepareTransaction(ctx);
+      expect(result.issues.map((item) => item.code)).toEqual(
+        expect.arrayContaining(["transaction.prepare.from_mismatch", "transaction.prepare.chain_id_mismatch"]),
       );
-      expect(draft.summary.expectedChainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
+
+      const chainIssue = result.issues.find((item) => item.code === "transaction.prepare.chain_id_mismatch");
+      expect(chainIssue?.data).toMatchObject({
+        payloadChainId: "0x2",
+        expectedChainId: TEST_CHAINS.MAINNET_CHAIN_ID,
+      });
     });
 
     it("warns when chainId is missing", async () => {
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => createEip155RpcMock().client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => createEip155RpcClient()),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "chainId");
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(draft.warnings.map((item) => item.code)).toContain("transaction.draft.chain_id_missing");
-      expect(draft.summary.expectedChainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
-      expect(draft.summary.chainId).toBeUndefined();
+      expect(result.warnings.map((item) => item.code)).toContain("transaction.prepare.chain_id_missing");
     });
 
     it("retains normalized chainId when payload matches expected chain", async () => {
-      const builder = createTestDraftBuilder({
-        rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
-        now: () => 42_000,
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => createEip155RpcClient()),
       });
 
       const ctx = createAdapterContext();
       ctx.request.payload.chainId = TEST_CHAINS.MAINNET_CHAIN_ID;
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(draft.summary.chainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
-      expect(draft.summary.generatedAt).toBe(42_000);
-      expect(draft.summary.expectedChainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
+      expect(result.prepared.chainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
+      expect(result.issues.map((item) => item.code)).not.toContain("transaction.prepare.chain_id_mismatch");
     });
 
     it("omits expectedChainId when chain reference is non-numeric", async () => {
@@ -168,10 +173,7 @@ describe("draftBuilder - validation", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
-      const builder = createTestDraftBuilder({
-        rpcClientFactory: vi.fn(() => rpc.client),
-        now: () => 123_456,
-      });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const request = createEip155Request();
       request.chainRef = "eip155:mainnet";
@@ -183,19 +185,17 @@ describe("draftBuilder - validation", () => {
         meta: createTransactionMeta(request),
       });
 
-      const draft = await builder(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(draft.summary.namespace).toBe("eip155");
-      expect(draft.summary.chainRef).toBe("eip155:mainnet");
-      expect(draft.summary.expectedChainId).toBeUndefined();
-      expect(draft.summary.generatedAt).toBe(123_456);
+      expect(result.prepared.chainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
+      expect(result.issues.map((item) => item.code)).not.toContain("transaction.prepare.chain_id_mismatch");
     });
   });
 
   describe("hex field validation", () => {
     it("flags invalid hex quantities and data", async () => {
       const rpc = createEip155RpcMock();
-      const builder = createTestDraftBuilder({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       (ctx.request.payload as Record<string, unknown>).value = "1000";
@@ -204,11 +204,11 @@ describe("draftBuilder - validation", () => {
       (ctx.request.payload as Record<string, unknown>).data = "0x123";
       ctx.meta.request = ctx.request;
 
-      const draft = await builder(ctx);
-      const issueCodes = draft.issues.map((item) => item.code);
+      const result = await prepareTransaction(ctx);
+      const issueCodes = result.issues.map((item) => item.code);
 
-      expect(issueCodes.filter((code) => code === "transaction.draft.invalid_hex")).toHaveLength(3);
-      expect(issueCodes).toContain("transaction.draft.invalid_data");
+      expect(issueCodes.filter((code) => code === "transaction.prepare.invalid_hex")).toHaveLength(3);
+      expect(issueCodes).toContain("transaction.prepare.invalid_data");
     });
   });
 });

@@ -34,6 +34,7 @@ export const createTransactionMeta = (
   origin: "https://dapp.example",
   from: TEST_ADDRESSES.FROM_A,
   request,
+  prepared: null,
   status: "pending",
   hash: null,
   receipt: null,

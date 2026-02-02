@@ -7,41 +7,31 @@ import { createAddressResolver } from "./resolvers/addressResolver.js";
 import { deriveFees } from "./resolvers/feeResolver.js";
 import { deriveFields } from "./resolvers/fieldResolver.js";
 import { deriveGas } from "./resolvers/gasResolver.js";
-import type { Eip155DraftPrepared, Eip155DraftSummary, Eip155TransactionDraft } from "./types.js";
+import type { Eip155CallParams, Eip155PreparedTransaction, Eip155PreparedTransactionResult } from "./types.js";
 import { pickDefined } from "./utils/helpers.js";
 import { pushIssue, readErrorMessage } from "./utils/validation.js";
 
-type DraftBuilderDeps = {
+type PrepareTransactionDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
   chains?: ChainModuleRegistry;
-  now?: () => number;
 };
 
-export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
+export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
   const chains = deps.chains ?? createDefaultChainModuleRegistry();
-  const readNow = deps.now ?? Date.now;
   const deriveAddresses = createAddressResolver({ chains });
 
-  return async (ctx: TransactionAdapterContext): Promise<Eip155TransactionDraft> => {
+  return async (ctx: TransactionAdapterContext): Promise<Eip155PreparedTransactionResult> => {
     if (ctx.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
-        message: `Draft builder expects namespace "eip155" but received "${ctx.namespace}"`,
+        message: `Transaction preparer expects namespace "eip155" but received "${ctx.namespace}"`,
       });
     }
 
     const payload = ctx.request.payload as Eip155TransactionPayload;
-    const warnings: Eip155TransactionDraft["warnings"] = [];
-    const issues: Eip155TransactionDraft["issues"] = [];
-    const prepared = { callParams: {} } as Eip155DraftPrepared;
-    const summary: Eip155DraftSummary = {
-      generatedAt: readNow(),
-      namespace: ctx.namespace,
-      chainRef: ctx.chainRef,
-      rpcAvailable: false,
-      feeMode: "unknown",
-      callParams: {},
-    };
+    const warnings: Eip155PreparedTransactionResult["warnings"] = [];
+    const issues: Eip155PreparedTransactionResult["issues"] = [];
+    const prepared: Eip155PreparedTransaction = {};
 
     const addresses = deriveAddresses(
       ctx,
@@ -49,44 +39,30 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
       issues,
     );
     Object.assign(prepared, addresses.prepared);
-    Object.assign(summary, addresses.summary);
 
     const fields = deriveFields(ctx, payload, issues, warnings);
     Object.assign(prepared, fields.prepared);
-    Object.assign(summary, fields.summary);
 
     let rpc: Eip155RpcCapabilities | null = null;
     try {
       rpc = deps.rpcClientFactory(ctx.chainRef);
     } catch (error) {
-      pushIssue(issues, "transaction.draft.rpc_unavailable", "Failed to create RPC client.", {
+      pushIssue(issues, "transaction.prepare.rpc_unavailable", "Failed to create RPC client.", {
         error: readErrorMessage(error),
       });
     }
 
-    summary.rpcAvailable = rpc !== null;
-
     // Assemble callParams for gas estimation (exclude null values)
-    const callParams: Eip155DraftPrepared["callParams"] = {};
+    const callParams: Eip155CallParams = {};
     if (prepared.from) callParams.from = prepared.from;
-    if (prepared.to) callParams.to = prepared.to;
+    if (prepared.to !== undefined && prepared.to !== null) callParams.to = prepared.to;
     if (prepared.value) callParams.value = prepared.value;
     if (prepared.data) callParams.data = prepared.data;
-    prepared.callParams = callParams;
-    summary.callParams = callParams;
-
-    const gasPreparedInputs = pickDefined(prepared, [
-      "gasPrice",
-      "maxFeePerGas",
-      "maxPriorityFeePerGas",
-      "nonce",
-    ] as const);
 
     const gasResolution = await deriveGas(
       {
         rpc,
-        callParams: prepared.callParams,
-        prepared: gasPreparedInputs,
+        callParams,
         gasProvided: fields.payloadValues.gas ?? null,
         nonceProvided: fields.payloadValues.nonce ?? null,
       },
@@ -94,7 +70,6 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
       warnings,
     );
     Object.assign(prepared, gasResolution.prepared);
-    Object.assign(summary, gasResolution.summary);
 
     // Assemble fee parameters
     const feeValueInputs = pickDefined(prepared, ["gasPrice", "maxFeePerGas", "maxPriorityFeePerGas"] as const);
@@ -114,10 +89,9 @@ export const createEip155DraftBuilder = (deps: DraftBuilderDeps) => {
 
     const feeResolution = await deriveFees(feeParams, issues);
     Object.assign(prepared, feeResolution.prepared);
-    Object.assign(summary, feeResolution.summary);
 
-    return { prepared, summary, warnings, issues };
+    return { prepared, warnings, issues };
   };
 };
 
-export type Eip155DraftBuilder = ReturnType<typeof createEip155DraftBuilder>;
+export type Eip155PrepareTransaction = ReturnType<typeof createEip155PrepareTransaction>;

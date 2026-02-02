@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { Eip155TransactionDraft } from "../types.js";
+import type { Eip155PreparedTransactionResult } from "../types.js";
 
 export const readErrorMessage = (value: unknown): string => {
   if (value instanceof Error && typeof value.message === "string") {
@@ -9,29 +9,29 @@ export const readErrorMessage = (value: unknown): string => {
 };
 
 export const pushIssue = (
-  issues: Eip155TransactionDraft["issues"],
+  issues: Eip155PreparedTransactionResult["issues"],
   code: string,
   message: string,
   data?: Record<string, unknown>,
 ) => {
-  const entry: Eip155TransactionDraft["issues"][number] = { code, message };
+  const entry: Eip155PreparedTransactionResult["issues"][number] = { code, message };
   if (data) entry.data = data;
   issues.push(entry);
 };
 
 export const pushWarning = (
-  warnings: Eip155TransactionDraft["warnings"],
+  warnings: Eip155PreparedTransactionResult["warnings"],
   code: string,
   message: string,
   data?: Record<string, unknown>,
 ) => {
-  const entry: Eip155TransactionDraft["warnings"][number] = { code, message };
+  const entry: Eip155PreparedTransactionResult["warnings"][number] = { code, message };
   if (data) entry.data = data;
   warnings.push(entry);
 };
 
 export const parseHexQuantity = (
-  issues: Eip155TransactionDraft["issues"],
+  issues: Eip155PreparedTransactionResult["issues"],
   value: string | undefined,
   label: string,
 ): Hex.Hex | null => {
@@ -42,7 +42,7 @@ export const parseHexQuantity = (
     Hex.toBigInt(trimmed as Hex.Hex); // ensure all digits are valid
     return trimmed as Hex.Hex;
   } catch (error) {
-    pushIssue(issues, "transaction.draft.invalid_hex", `${label} must be a 0x-prefixed hex quantity.`, {
+    pushIssue(issues, "transaction.prepare.invalid_hex", `${label} must be a 0x-prefixed hex quantity.`, {
       value,
       error: readErrorMessage(error),
     });
@@ -50,7 +50,10 @@ export const parseHexQuantity = (
   }
 };
 
-export const parseHexData = (issues: Eip155TransactionDraft["issues"], value: string | undefined): Hex.Hex | null => {
+export const parseHexData = (
+  issues: Eip155PreparedTransactionResult["issues"],
+  value: string | undefined,
+): Hex.Hex | null => {
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
   try {
@@ -61,7 +64,7 @@ export const parseHexData = (issues: Eip155TransactionDraft["issues"], value: st
     Hex.toBytes(trimmed as Hex.Hex); // validate character set
     return trimmed as Hex.Hex;
   } catch (error) {
-    pushIssue(issues, "transaction.draft.invalid_data", "data must be 0x-prefixed even-length hex.", {
+    pushIssue(issues, "transaction.prepare.invalid_data", "data must be 0x-prefixed even-length hex.", {
       value,
       error: readErrorMessage(error),
     });

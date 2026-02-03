@@ -6,13 +6,23 @@ import type { AccountAddress } from "../account/types.js";
 import type { ApprovalTask } from "../approval/types.js";
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
-export type TransactionWarning = {
+export type TransactionDiagnosticSeverity = "low" | "medium" | "high";
+
+export type TransactionDiagnostic = {
+  kind: "warning" | "issue";
   code: string;
   message: string;
+  /**
+   * Optional severity hint for UI treatment and decision-making.
+   * - "warning" diagnostics may still be treated as blocking by the UI.
+   * - "issue" diagnostics are blocking candidates by default.
+   */
+  severity?: TransactionDiagnosticSeverity;
   data?: unknown;
 };
 
-export type TransactionIssue = TransactionWarning;
+export type TransactionWarning = TransactionDiagnostic & { kind: "warning" };
+export type TransactionIssue = TransactionDiagnostic & { kind: "issue" };
 
 export type TransactionError = {
   name: string;
@@ -42,6 +52,10 @@ export type TransactionStatusChange = {
   previousStatus: TransactionStatus;
   nextStatus: TransactionStatus;
   meta: TransactionMeta;
+};
+
+export type TransactionStateChange = {
+  revision: number;
 };
 
 export type Eip155TransactionPayload = {
@@ -88,6 +102,7 @@ export type TransactionMeta = {
 
 export type TransactionMessengerTopics = {
   "transaction:statusChanged": TransactionStatusChange;
+  "transaction:stateChanged": TransactionStateChange;
 };
 
 export type TransactionMessenger = ControllerMessenger<TransactionMessengerTopics>;
@@ -116,4 +131,5 @@ export type TransactionController = {
   processTransaction(id: string): Promise<void>;
   resumePending(params?: { includeSigning?: boolean }): Promise<void>;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
+  onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };

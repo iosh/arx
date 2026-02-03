@@ -227,6 +227,7 @@ export const createUiBridge = ({
       controllers.network.onStateChanged(() => requestBroadcast()),
       controllers.approvals.onStateChanged(() => requestBroadcast()),
       controllers.permissions.onPermissionsChanged(() => requestBroadcast()),
+      controllers.transactions.onStateChanged(() => requestBroadcast()),
       // Ensure UI stays in sync even when the session lock state changes outside UI-initiated calls.
       session.unlock.onStateChanged(() => requestBroadcast()),
     );

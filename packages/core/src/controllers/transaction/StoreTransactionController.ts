@@ -24,13 +24,16 @@ import type {
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
+  TransactionStateChange,
   TransactionStatus,
   TransactionStatusChange,
   TransactionWarning,
 } from "./types.js";
 
 const TRANSACTION_STATUS_CHANGED_TOPIC = "transaction:statusChanged";
+const TRANSACTION_STATE_CHANGED_TOPIC = "transaction:stateChanged";
 const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
+const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 const cloneRequest = (request: TransactionRequest): TransactionRequest => {
   if (request.namespace === "eip155") {
@@ -76,8 +79,20 @@ const toTransactionMeta = (record: TransactionRecord): TransactionMeta => ({
   receipt: (record.receipt ?? null) as TransactionReceipt | null,
   error: record.error ?? null,
   userRejected: record.userRejected,
-  warnings: record.warnings.map((w) => ({ ...w })),
-  issues: record.issues.map((i) => ({ ...i })),
+  warnings: record.warnings.map((w) => ({
+    kind: "warning",
+    code: w.code,
+    message: w.message,
+    ...(w.severity !== undefined ? { severity: w.severity } : {}),
+    ...(w.data !== undefined ? { data: w.data } : {}),
+  })),
+  issues: record.issues.map((i) => ({
+    kind: "issue",
+    code: i.code,
+    message: i.message,
+    ...(i.severity !== undefined ? { severity: i.severity } : {}),
+    ...(i.data !== undefined ? { data: i.data } : {}),
+  })),
   createdAt: record.createdAt,
   updatedAt: record.updatedAt,
 });
@@ -122,6 +137,13 @@ export class StoreTransactionController implements TransactionController {
   #scheduled = false;
   #prepareInFlight: Map<string, Promise<void>> = new Map();
   #tracker: ReceiptTracker;
+
+  #stateRevision = 0;
+  #statePublishScheduled = false;
+
+  #prepareConcurrencyLimit = DEFAULT_BACKGROUND_PREPARE_CONCURRENCY;
+  #prepareConcurrencyInUse = 0;
+  #prepareConcurrencyWaiters: Array<() => void> = [];
 
   constructor({
     messenger,
@@ -208,8 +230,10 @@ export class StoreTransactionController implements TransactionController {
     const ownedAccounts = this.#accounts.getAccounts({ chainRef });
     if (ownedAccounts.length === 0) {
       collectedIssues.push({
+        kind: "issue",
         code: "transaction.request.no_accounts",
         message: "No accounts are available to sign this transaction.",
+        severity: "high",
         data: { chainRef },
       });
     } else {
@@ -217,8 +241,10 @@ export class StoreTransactionController implements TransactionController {
       const ownedCanonical = new Set(ownedAccounts.map((addr) => toCanonicalEvmAddress(addr)));
       if (!ownedCanonical.has(requestedFrom)) {
         collectedIssues.push({
+          kind: "issue",
           code: "transaction.request.from_not_owned",
           message: "Requested from address is not available in this wallet.",
+          severity: "high",
           data: { from: fromAddress, chainRef },
         });
       }
@@ -327,7 +353,7 @@ export class StoreTransactionController implements TransactionController {
       let prepared = meta.prepared;
       if (!prepared) {
         // Prepare on-demand for execution (may be slow; must be bounded).
-        const next = await this.#ensurePrepared(id, { timeoutMs: DEFAULT_PREPARE_TIMEOUT_MS });
+        const next = await this.#ensurePrepared(id, { timeoutMs: DEFAULT_PREPARE_TIMEOUT_MS, source: "execution" });
         if (!next?.prepared) {
           await this.rejectTransaction(id, new Error("Transaction preparation did not produce prepared parameters"));
           return;
@@ -436,6 +462,10 @@ export class StoreTransactionController implements TransactionController {
     return this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED_TOPIC, handler);
   }
 
+  onStateChanged(handler: (change: TransactionStateChange) => void): () => void {
+    return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED_TOPIC, handler);
+  }
+
   #publishStatusChange(previous: TransactionMeta, next: TransactionMeta) {
     if (previous.status === next.status) return;
     this.#messenger.publish(TRANSACTION_STATUS_CHANGED_TOPIC, {
@@ -443,6 +473,17 @@ export class StoreTransactionController implements TransactionController {
       previousStatus: previous.status,
       nextStatus: next.status,
       meta: cloneMeta(next),
+    });
+  }
+
+  #scheduleStateChanged() {
+    if (this.#statePublishScheduled) return;
+    this.#statePublishScheduled = true;
+
+    queueMicrotask(() => {
+      this.#statePublishScheduled = false;
+      this.#stateRevision += 1;
+      this.#messenger.publish(TRANSACTION_STATE_CHANGED_TOPIC, { revision: this.#stateRevision });
     });
   }
 
@@ -484,6 +525,8 @@ export class StoreTransactionController implements TransactionController {
       if (!oldest) break;
       this.#records.delete(oldest);
     }
+
+    this.#scheduleStateChanged();
   }
 
   #touchCache(id: string): TransactionMeta | undefined {
@@ -545,7 +588,7 @@ export class StoreTransactionController implements TransactionController {
   }
 
   #queuePrepare(id: string) {
-    void this.#ensurePrepared(id).catch((error) => {
+    void this.#ensurePrepared(id, { source: "background" }).catch((error) => {
       // Best-effort background preparation; failures are surfaced via issues on the transaction record.
       console.warn("[StoreTransactionController] prepareTransaction failed", {
         id,
@@ -554,7 +597,10 @@ export class StoreTransactionController implements TransactionController {
     });
   }
 
-  async #ensurePrepared(id: string, opts?: { timeoutMs?: number }): Promise<TransactionMeta | null> {
+  async #ensurePrepared(
+    id: string,
+    opts?: { timeoutMs?: number; source?: "background" | "execution" },
+  ): Promise<TransactionMeta | null> {
     const existing = this.#prepareInFlight.get(id);
     if (existing) {
       await existing;
@@ -572,7 +618,10 @@ export class StoreTransactionController implements TransactionController {
     return run;
   }
 
-  async #prepareAndPersistInternal(id: string, opts?: { timeoutMs?: number }): Promise<TransactionMeta | null> {
+  async #prepareAndPersistInternal(
+    id: string,
+    opts?: { timeoutMs?: number; source?: "background" | "execution" },
+  ): Promise<TransactionMeta | null> {
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
 
     let meta = this.getMeta(id);
@@ -605,7 +654,8 @@ export class StoreTransactionController implements TransactionController {
 
     try {
       const context = this.#buildContext(meta);
-      const result = await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
+      const runPrepare = async () => await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
+      const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
 
       const patched = await this.#service.patch({
         id,
@@ -644,6 +694,28 @@ export class StoreTransactionController implements TransactionController {
     }
   }
 
+  async #withPrepareSlot<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.#prepareConcurrencyInUse >= this.#prepareConcurrencyLimit) {
+      // Wait for a slot to be handed off by a releasing task.
+      await new Promise<void>((resolve) => {
+        this.#prepareConcurrencyWaiters.push(resolve);
+      });
+    } else {
+      this.#prepareConcurrencyInUse += 1;
+    }
+    try {
+      return await fn();
+    } finally {
+      const waiter = this.#prepareConcurrencyWaiters.shift();
+      if (waiter) {
+        // Hand off the slot directly to the next waiter (keep inUse unchanged).
+        waiter();
+      } else {
+        this.#prepareConcurrencyInUse = Math.max(0, this.#prepareConcurrencyInUse - 1);
+      }
+    }
+  }
+
   async #withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const timeout = new Promise<never>((_, reject) => {
@@ -665,14 +737,18 @@ export class StoreTransactionController implements TransactionController {
   #issueFromPrepareError(error: unknown): TransactionIssue {
     if (error instanceof Error) {
       return {
+        kind: "issue",
         code: "transaction.prepare_failed",
         message: error.message,
+        severity: "high",
         data: { name: error.name },
       };
     }
     return {
+      kind: "issue",
       code: "transaction.prepare_failed",
       message: String(error),
+      severity: "high",
     };
   }
 
@@ -748,8 +824,10 @@ export class StoreTransactionController implements TransactionController {
 
   #missingAdapterIssue(namespace: string): TransactionIssue {
     return {
+      kind: "issue",
       code: "transaction.adapter_missing",
       message: `No transaction adapter registered for namespace ${namespace}`,
+      severity: "high",
       data: { namespace },
     };
   }

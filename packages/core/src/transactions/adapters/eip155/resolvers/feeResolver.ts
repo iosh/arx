@@ -9,6 +9,11 @@ type FeeResolverParams = {
   value?: Hex.Hex;
   feeValues: Partial<Pick<Eip155PreparedTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">>;
   payloadFees: Partial<Pick<Eip155PreparedTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">>;
+  /**
+   * Only validate payload fee fields (no RPC lookups, no suggested fee patching).
+   * Useful for early short-circuiting on malformed requests.
+   */
+  validateOnly?: boolean;
 };
 
 export const deriveFees = async (
@@ -22,11 +27,17 @@ export const deriveFees = async (
   const payloadPriorityFee = params.payloadFees.maxPriorityFeePerGas ?? null;
 
   if (payloadGasPrice && (payloadMaxFee || payloadPriorityFee)) {
-    pushIssue(issues, "transaction.prepare.fee_conflict", "Cannot mix legacy gasPrice with EIP-1559 fields.", {
-      gasPrice: payloadGasPrice,
-      maxFeePerGas: payloadMaxFee,
-      maxPriorityFeePerGas: payloadPriorityFee,
-    });
+    pushIssue(
+      issues,
+      "transaction.prepare.fee_conflict",
+      "Cannot mix legacy gasPrice with EIP-1559 fields.",
+      {
+        gasPrice: payloadGasPrice,
+        maxFeePerGas: payloadMaxFee,
+        maxPriorityFeePerGas: payloadPriorityFee,
+      },
+      { severity: "high" },
+    );
   }
 
   if ((payloadMaxFee && !payloadPriorityFee) || (!payloadMaxFee && payloadPriorityFee)) {
@@ -35,7 +46,12 @@ export const deriveFees = async (
       "transaction.prepare.fee_pair_incomplete",
       "EIP-1559 requires both maxFeePerGas and maxPriorityFeePerGas.",
       { maxFeePerGas: payloadMaxFee, maxPriorityFeePerGas: payloadPriorityFee },
+      { severity: "high" },
     );
+  }
+
+  if (params.validateOnly) {
+    return { prepared: preparedPatch };
   }
 
   const hasPayloadFeeFields = Boolean(payloadGasPrice || payloadMaxFee || payloadPriorityFee);

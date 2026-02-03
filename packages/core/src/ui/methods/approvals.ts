@@ -11,9 +11,11 @@ const PermissionApprovalResultSchema = z.strictObject({
   granted: z.array(PermissionRequestDescriptorSchema),
 });
 
-const TransactionWarningSchema = z.strictObject({
+const TransactionDiagnosticSchema = z.strictObject({
+  kind: z.enum(["warning", "issue"]).optional(),
   code: z.string().min(1),
   message: z.string().min(1),
+  severity: z.enum(["low", "medium", "high"]).optional(),
   data: z.unknown().optional(),
 });
 
@@ -42,8 +44,8 @@ const TransactionMetaSchema = z.strictObject({
   receipt: z.record(z.string(), z.unknown()).nullable(),
   error: TransactionErrorSchema.nullable(),
   userRejected: z.boolean(),
-  warnings: z.array(TransactionWarningSchema),
-  issues: z.array(TransactionWarningSchema),
+  warnings: z.array(TransactionDiagnosticSchema),
+  issues: z.array(TransactionDiagnosticSchema),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });

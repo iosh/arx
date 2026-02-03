@@ -235,6 +235,7 @@ describe("eip155 handlers - approval metadata", () => {
   it("returns a submission summary when eth_sendTransaction auto-approves", async () => {
     const rpcMocks = {
       estimateGas: vi.fn(async () => "0x5208"),
+      getBalance: vi.fn(async () => "0xffffffffffffffff"),
       getTransactionCount: vi.fn(async () => "0x1"),
       getFeeData: vi.fn(async () => ({
         maxFeePerGas: "0x59682f00",
@@ -246,6 +247,7 @@ describe("eip155 handlers - approval metadata", () => {
     const rpcFactory = vi.fn(() => ({
       request: vi.fn(),
       estimateGas: rpcMocks.estimateGas,
+      getBalance: rpcMocks.getBalance,
       getTransactionCount: rpcMocks.getTransactionCount,
       getFeeData: rpcMocks.getFeeData,
       sendRawTransaction: rpcMocks.sendRawTransaction,

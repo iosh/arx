@@ -13,8 +13,14 @@ export const pushIssue = (
   code: string,
   message: string,
   data?: Record<string, unknown>,
+  opts?: { severity?: "low" | "medium" | "high" },
 ) => {
-  const entry: Eip155PreparedTransactionResult["issues"][number] = { code, message };
+  const entry: Eip155PreparedTransactionResult["issues"][number] = {
+    kind: "issue",
+    code,
+    message,
+    ...(opts?.severity ? { severity: opts.severity } : {}),
+  };
   if (data) entry.data = data;
   issues.push(entry);
 };
@@ -24,8 +30,14 @@ export const pushWarning = (
   code: string,
   message: string,
   data?: Record<string, unknown>,
+  opts?: { severity?: "low" | "medium" | "high" },
 ) => {
-  const entry: Eip155PreparedTransactionResult["warnings"][number] = { code, message };
+  const entry: Eip155PreparedTransactionResult["warnings"][number] = {
+    kind: "warning",
+    code,
+    message,
+    ...(opts?.severity ? { severity: opts.severity } : {}),
+  };
   if (data) entry.data = data;
   warnings.push(entry);
 };

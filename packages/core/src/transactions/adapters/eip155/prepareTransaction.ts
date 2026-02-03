@@ -4,12 +4,26 @@ import type { Eip155TransactionPayload } from "../../../controllers/transaction/
 import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
+import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
 import { deriveFees } from "./resolvers/feeResolver.js";
 import { deriveFields } from "./resolvers/fieldResolver.js";
 import { deriveGas } from "./resolvers/gasResolver.js";
 import type { Eip155CallParams, Eip155PreparedTransaction, Eip155PreparedTransactionResult } from "./types.js";
 import { pickDefined } from "./utils/helpers.js";
 import { pushIssue, readErrorMessage } from "./utils/validation.js";
+
+const hasFatalIssues = (issues: Eip155PreparedTransactionResult["issues"]): boolean => {
+  // Fatal issues indicate the request is malformed or internally inconsistent.
+  // Continuing with RPC-based enrichment would add noise and increase latency.
+  const fatal = new Set([
+    "transaction.prepare.invalid_hex",
+    "transaction.prepare.invalid_data",
+    "transaction.prepare.fee_conflict",
+    "transaction.prepare.fee_pair_incomplete",
+  ]);
+
+  return issues.some((issue) => fatal.has(issue.code));
+};
 
 type PrepareTransactionDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
@@ -43,13 +57,33 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     const fields = deriveFields(ctx, payload, issues, warnings);
     Object.assign(prepared, fields.prepared);
 
+    // Validate fee fields early so malformed requests short-circuit before any RPC work.
+    const payloadFeeInputs = pickDefined(fields.payloadValues, [
+      "gasPrice",
+      "maxFeePerGas",
+      "maxPriorityFeePerGas",
+    ] as const);
+    await deriveFees({ rpc: null, feeValues: {}, payloadFees: payloadFeeInputs, validateOnly: true }, issues);
+
+    if (hasFatalIssues(issues)) {
+      return { prepared, warnings, issues };
+    }
+
     let rpc: Eip155RpcCapabilities | null = null;
     try {
       rpc = deps.rpcClientFactory(ctx.chainRef);
     } catch (error) {
-      pushIssue(issues, "transaction.prepare.rpc_unavailable", "Failed to create RPC client.", {
-        error: readErrorMessage(error),
-      });
+      pushIssue(
+        issues,
+        "transaction.prepare.rpc_unavailable",
+        "Failed to create RPC client.",
+        { error: readErrorMessage(error) },
+        { severity: "high" },
+      );
+    }
+
+    if (!rpc) {
+      return { prepared, warnings, issues };
     }
 
     // Assemble callParams for gas estimation (exclude null values)
@@ -73,11 +107,6 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
 
     // Assemble fee parameters
     const feeValueInputs = pickDefined(prepared, ["gasPrice", "maxFeePerGas", "maxPriorityFeePerGas"] as const);
-    const payloadFeeInputs = pickDefined(fields.payloadValues, [
-      "gasPrice",
-      "maxFeePerGas",
-      "maxPriorityFeePerGas",
-    ] as const);
 
     const feeParams: Parameters<typeof deriveFees>[0] = {
       rpc,
@@ -89,6 +118,8 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
 
     const feeResolution = await deriveFees(feeParams, issues);
     Object.assign(prepared, feeResolution.prepared);
+
+    await checkBalanceForMaxCost({ rpc, prepared, issues, warnings });
 
     return { prepared, warnings, issues };
   };

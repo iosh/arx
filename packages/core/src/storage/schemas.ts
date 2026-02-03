@@ -144,8 +144,10 @@ const genericTransactionRequestSchema = z
 const transactionRequestSchema = z.union([eip155TransactionRequestSchema, genericTransactionRequestSchema]);
 
 const transactionWarningSchema = z.strictObject({
+  kind: z.enum(["warning", "issue"]),
   code: nonEmptyStringSchema,
   message: z.string(),
+  severity: z.enum(["low", "medium", "high"]).optional(),
   data: z.unknown().optional(),
 });
 

@@ -21,67 +21,63 @@ type UiIssue = {
   details?: Record<string, unknown>;
 };
 
-type DiagnosticEntry<T extends string> = {
-  code: string;
-  message: string;
-  level?: T;
-  details?: Record<string, unknown>;
-};
-
-const toDiagnostic = <T extends string>(
-  value: unknown,
-  levelKey: "level" | "severity",
-  validLevels: readonly T[],
-  defaultCode: string,
-  defaultMessage: string,
-): DiagnosticEntry<T> => {
-  if (value && typeof value === "object") {
-    const entry = value as {
-      code?: string;
-      message?: string;
-      level?: string;
-      severity?: string;
-      details?: Record<string, unknown>;
-      data?: unknown;
-    };
-
-    const levelValue = levelKey === "level" ? entry.level : entry.severity;
-    const validLevel = validLevels.includes(levelValue as T) ? (levelValue as T) : undefined;
-
-    return {
-      code: entry.code ?? defaultCode,
-      message: entry.message ?? defaultMessage,
-      [levelKey]: validLevel,
-      details:
-        entry.details ??
-        (entry.data && typeof entry.data === "object" ? (entry.data as Record<string, unknown>) : undefined),
-    } as DiagnosticEntry<T>;
-  }
-
-  return {
-    code: defaultCode,
-    message: String(value ?? defaultMessage),
-  } as DiagnosticEntry<T>;
+const toDetails = (entry: { details?: unknown; data?: unknown }): Record<string, unknown> | undefined => {
+  if (entry.details && typeof entry.details === "object") return entry.details as Record<string, unknown>;
+  if (entry.data && typeof entry.data === "object") return entry.data as Record<string, unknown>;
+  return undefined;
 };
 
 const toUiWarning = (value: unknown): UiWarning => {
-  return toDiagnostic(
-    value,
-    "level",
-    ["info", "warning", "error"] as const,
-    "UNKNOWN_WARNING",
-    "Unknown warning",
-  ) as UiWarning;
+  if (value && typeof value === "object") {
+    const entry = value as {
+      code?: unknown;
+      message?: unknown;
+      severity?: unknown;
+      details?: unknown;
+      data?: unknown;
+    };
+
+    const level =
+      entry.severity === "low"
+        ? "info"
+        : entry.severity === "medium"
+          ? "warning"
+          : entry.severity === "high"
+            ? "error"
+            : undefined;
+
+    const out: UiWarning = {
+      code: typeof entry.code === "string" ? entry.code : "UNKNOWN_WARNING",
+      message: typeof entry.message === "string" ? entry.message : "Unknown warning",
+    };
+    if (level) out.level = level;
+    const details = toDetails(entry);
+    if (details) out.details = details;
+    return out;
+  }
+
+  return { code: "UNKNOWN_WARNING", message: String(value ?? "Unknown warning") };
 };
 
 const toUiIssue = (value: unknown): UiIssue => {
-  return toDiagnostic(
-    value,
-    "severity",
-    ["low", "medium", "high"] as const,
-    "UNKNOWN_ISSUE",
-    "Unknown issue",
-  ) as UiIssue;
+  if (value && typeof value === "object") {
+    const entry = value as { code?: unknown; message?: unknown; severity?: unknown; details?: unknown; data?: unknown };
+    const severity =
+      entry.severity === "low" || entry.severity === "medium" || entry.severity === "high"
+        ? (entry.severity as UiIssue["severity"])
+        : undefined;
+
+    const out: UiIssue = {
+      code: typeof entry.code === "string" ? entry.code : "UNKNOWN_ISSUE",
+      message: typeof entry.message === "string" ? entry.message : "Unknown issue",
+    };
+    if (severity) out.severity = severity;
+    const details = toDetails(entry);
+    if (details) out.details = details;
+    return out;
+  }
+
+  return { code: "UNKNOWN_ISSUE", message: String(value ?? "Unknown issue") };
 };
 
 type RequestAccountsPayload = { suggestedAccounts?: string[] };

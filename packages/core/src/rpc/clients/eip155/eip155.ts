@@ -7,6 +7,7 @@ import type {
   Client,
   EIP1193RequestFn,
   EstimateGasParameters,
+  GetBalanceParameters,
   GetTransactionCountParameters,
   GetTransactionReceiptParameters,
   Hash,
@@ -16,6 +17,7 @@ import { createClient, createTransport, TransactionReceiptNotFoundError } from "
 import {
   estimateFeesPerGas as viemEstimateFeesPerGas,
   estimateGas as viemEstimateGas,
+  getBalance as viemGetBalance,
   getGasPrice as viemGetGasPrice,
   getTransactionCount as viemGetTransactionCount,
   getTransactionReceipt as viemGetTransactionReceipt,
@@ -31,6 +33,7 @@ export type Eip155FeeData = {
 
 export type Eip155RpcCapabilities = {
   estimateGas(params: JsonRpcParams, overrides?: { timeoutMs?: number }): Promise<string>;
+  getBalance(address: string, blockTag?: string, overrides?: { timeoutMs?: number }): Promise<string>;
   getTransactionCount(address: string, blockTag?: string, overrides?: { timeoutMs?: number }): Promise<string>;
   getFeeData(overrides?: { timeoutMs?: number }): Promise<Eip155FeeData>;
   getTransactionReceipt(hash: string, overrides?: { timeoutMs?: number }): Promise<Record<string, unknown> | null>;
@@ -189,6 +192,23 @@ export const createEip155RpcClientFactory = (): RpcClientFactory<Eip155RpcCapabi
 
         const count = await viemGetTransactionCount(client as Client, params as GetTransactionCountParameters);
         return Hex.fromNumber(count);
+      },
+
+      async getBalance(address, blockTag = "latest", overrides) {
+        const timeoutMs = overrides?.timeoutMs;
+        const client = createViemClient(transport, timeoutMs);
+
+        const selector = parseBlockSelector(blockTag);
+
+        const params: GetBalanceParameters = {
+          address: address as Address,
+          ...(selector.blockNumber !== undefined
+            ? { blockNumber: selector.blockNumber }
+            : { blockTag: selector.blockTag ?? ("latest" as BlockTag) }),
+        };
+
+        const balance = await viemGetBalance(client as Client, params as GetBalanceParameters);
+        return Hex.fromNumber(balance);
       },
       async getFeeData(overrides) {
         const timeoutMs = overrides?.timeoutMs;

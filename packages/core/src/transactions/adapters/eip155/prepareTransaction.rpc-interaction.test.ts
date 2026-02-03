@@ -6,6 +6,27 @@ import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - RPC interaction", () => {
   describe("RPC data fetching", () => {
+    it("adds insufficient_funds issue when balance is lower than max cost", async () => {
+      const rpc = createEip155RpcMock();
+      rpc.getBalance.mockResolvedValue("0x0");
+
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+      });
+
+      const ctx = createAdapterContext();
+      // Provide values so preparation can check balance without extra RPC lookups.
+      ctx.request.payload.nonce = "0x1";
+      ctx.request.payload.gas = "0x5208";
+      ctx.request.payload.gasPrice = "0x1";
+      ctx.request.payload.value = "0x0";
+
+      const prepared = await prepareTransaction(ctx);
+
+      expect(rpc.getBalance).toHaveBeenCalledWith(TEST_ADDRESSES.FROM_A, "latest");
+      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.insufficient_funds");
+    });
+
     it("fills nonce, gas, and EIP-1559 fees from RPC responses", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0xa");
@@ -14,6 +35,7 @@ describe("prepareTransaction - RPC interaction", () => {
         maxFeePerGas: "0x59682f00",
         maxPriorityFeePerGas: "0x3b9aca00",
       });
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => rpc.client),
@@ -36,6 +58,7 @@ describe("prepareTransaction - RPC interaction", () => {
         maxFeePerGas: "0x59682f00",
         maxPriorityFeePerGas: "0x3b9aca00",
       });
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -51,6 +74,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
     it("skips nonce/gas RPC calls when values already provided", async () => {
       const rpc = createEip155RpcMock();
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -69,6 +93,7 @@ describe("prepareTransaction - RPC interaction", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -97,6 +122,7 @@ describe("prepareTransaction - RPC interaction", () => {
       rpc.getTransactionCount.mockRejectedValue(new Error("nonce error"));
       rpc.estimateGas.mockRejectedValue(new Error("estimate error"));
       rpc.getFeeData.mockRejectedValue(new Error("fee error"));
+      rpc.getBalance.mockRejectedValue(new Error("balance error"));
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -117,6 +143,7 @@ describe("prepareTransaction - RPC interaction", () => {
       rpc.getTransactionCount.mockRejectedValue(new Error("RPC nonce failure"));
       rpc.estimateGas.mockResolvedValue("0x5208");
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -138,6 +165,7 @@ describe("prepareTransaction - RPC interaction", () => {
       rpc.getTransactionCount.mockResolvedValue("0x5");
       rpc.estimateGas.mockRejectedValue(new Error("boom"));
       rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -170,6 +198,7 @@ describe("prepareTransaction - RPC interaction", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("1");
       rpc.estimateGas.mockResolvedValue("0x5208");
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -186,6 +215,7 @@ describe("prepareTransaction - RPC interaction", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("21000");
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -206,6 +236,7 @@ describe("prepareTransaction - RPC interaction", () => {
         maxFeePerGas: "123",
         maxPriorityFeePerGas: "0xGG",
       });
+      rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 

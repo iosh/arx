@@ -16,12 +16,14 @@ import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip15
 export const createEip155RpcMock = (): {
   client: Eip155RpcCapabilities;
   estimateGas: any;
+  getBalance: any;
   getTransactionCount: any;
   getFeeData: any;
   getTransactionReceipt: any;
   sendRawTransaction: any;
 } => {
   const estimateGas = vi.fn();
+  const getBalance = vi.fn();
   const getTransactionCount = vi.fn();
   const getFeeData = vi.fn();
   const getTransactionReceipt = vi.fn();
@@ -29,13 +31,22 @@ export const createEip155RpcMock = (): {
 
   const client: Eip155RpcCapabilities = {
     estimateGas: estimateGas as unknown as Eip155RpcCapabilities["estimateGas"],
+    getBalance: getBalance as unknown as Eip155RpcCapabilities["getBalance"],
     getTransactionCount: getTransactionCount as unknown as Eip155RpcCapabilities["getTransactionCount"],
     getFeeData: getFeeData as unknown as Eip155RpcCapabilities["getFeeData"],
     getTransactionReceipt: getTransactionReceipt as unknown as Eip155RpcCapabilities["getTransactionReceipt"],
     sendRawTransaction: sendRawTransaction as unknown as Eip155RpcCapabilities["sendRawTransaction"],
   };
 
-  return { client, estimateGas, getTransactionCount, getFeeData, getTransactionReceipt, sendRawTransaction };
+  return {
+    client,
+    estimateGas,
+    getBalance,
+    getTransactionCount,
+    getFeeData,
+    getTransactionReceipt,
+    sendRawTransaction,
+  };
 };
 
 /**
@@ -53,6 +64,7 @@ export const createEip155RpcMock = (): {
 export const createEip155RpcClient = (overrides: Partial<Eip155RpcCapabilities> = {}): Eip155RpcCapabilities => {
   return {
     estimateGas: vi.fn(async () => "0x0"),
+    getBalance: vi.fn(async () => "0x0"),
     getTransactionCount: vi.fn(async () => "0x0"),
     getFeeData: vi.fn(async () => ({})),
     getTransactionReceipt: vi.fn(async () => null),
@@ -72,6 +84,7 @@ export const createEip155RpcClient = (overrides: Partial<Eip155RpcCapabilities> 
 export const createEip155BroadcasterFactory = (sendRawTransactionImpl: (raw: string) => Promise<string>) => {
   return vi.fn((_chainRef: string) => ({
     estimateGas: vi.fn(),
+    getBalance: vi.fn(),
     getTransactionCount: vi.fn(),
     getFeeData: vi.fn(),
     getTransactionReceipt: vi.fn(),

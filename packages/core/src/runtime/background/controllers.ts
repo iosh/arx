@@ -1,7 +1,7 @@
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import { InMemoryMultiNamespaceAccountsController } from "../../controllers/account/MultiNamespaceAccountsController.js";
+import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
 import type {
   AccountController,
   AccountMessenger,
@@ -46,16 +46,13 @@ import type {
 } from "../../controllers/transaction/types.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import { createPermissionScopeResolver, type RpcInvocationContext } from "../../rpc/index.js";
+import type { AccountsService } from "../../services/accounts/types.js";
 import type { ApprovalsService } from "../../services/approvals/types.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
+import type { SettingsService } from "../../services/settings/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import {
-  DEFAULT_ACCOUNTS_STATE,
-  DEFAULT_NETWORK_STATE,
-  DEFAULT_PERMISSIONS_STATE,
-  DEFAULT_STRATEGY,
-} from "./constants.js";
+import { DEFAULT_NETWORK_STATE, DEFAULT_PERMISSIONS_STATE, DEFAULT_STRATEGY } from "./constants.js";
 import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
 
@@ -112,6 +109,8 @@ export type ControllersInitResult = {
 export const initControllers = ({
   messenger,
   namespaceResolver,
+  accountsService,
+  settingsService,
   approvalsService,
   permissionsService,
   transactionsService,
@@ -119,6 +118,8 @@ export const initControllers = ({
 }: {
   messenger: BackgroundMessenger;
   namespaceResolver: NamespaceResolver;
+  accountsService: AccountsService;
+  settingsService?: SettingsService | null;
   approvalsService: ApprovalsService;
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
@@ -126,7 +127,6 @@ export const initControllers = ({
 }): ControllersInitResult => {
   const {
     network: networkOptions,
-    accounts: accountOptions,
     approvals: approvalOptions,
     permissions: permissionOptions,
     transactions: transactionOptions,
@@ -149,9 +149,14 @@ export const initControllers = ({
   const permissionScopeResolver =
     permissionOptions?.scopeResolver ?? createPermissionScopeResolver((ctx) => namespaceResolver(ctx));
 
-  const accountController = new InMemoryMultiNamespaceAccountsController({
+  const accountController: AccountController = new StoreAccountsController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
-    initialState: accountOptions?.initialState ?? DEFAULT_ACCOUNTS_STATE,
+    accounts: accountsService,
+    settings: settingsService ?? null,
+    network: {
+      getActiveChain: () => networkController.getActiveChain(),
+      onChainChanged: (handler) => networkController.onChainChanged(handler),
+    },
   });
 
   const approvalController = new StoreApprovalController({

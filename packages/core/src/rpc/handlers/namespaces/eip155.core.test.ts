@@ -576,11 +576,6 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const chain = services.controllers.network.getActiveChain();
-    await services.controllers.accounts.addAccount({
-      chainRef: chain.chainRef,
-      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      makePrimary: true,
-    });
     await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: chain.chainRef });
     await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
       chainRef: chain.chainRef,
@@ -656,11 +651,11 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const chain = services.controllers.network.getActiveChain();
-    await services.controllers.accounts.addAccount({
-      chainRef: chain.chainRef,
-      address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      makePrimary: true,
-    });
+    await services.session.vault.initialize({ password: "test" });
+    await services.session.unlock.unlock({ password: "test" });
+    await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+
+    await (services.controllers.accounts as any).refresh?.();
 
     const teardown = setupApprovalResponder(services, async (task) => {
       if (task.type !== ApprovalTypes.RequestPermissions) return false;
@@ -711,11 +706,6 @@ describe("eip155 handlers - core error paths", () => {
     await services.session.unlock.unlock({ password: "test" });
 
     const chain = services.controllers.network.getActiveChain();
-    await services.controllers.accounts.addAccount({
-      chainRef: chain.chainRef,
-      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      makePrimary: true,
-    });
 
     const execute = createExecutor(services);
     try {
@@ -741,9 +731,6 @@ describe("eip155 handlers - core error paths", () => {
     const chain = services.controllers.network.getActiveChain();
     const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
     const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
-
-    await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a1, makePrimary: true });
-    await services.controllers.accounts.addAccount({ chainRef: chain.chainRef, address: a2 });
 
     await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",

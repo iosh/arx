@@ -98,18 +98,9 @@ const resolveChainRefForNamespace = (controllers: UiRuntimeDeps["controllers"], 
   return known?.chainRef ?? active.chainRef;
 };
 
-const addControllerAccount = async (deps: UiRuntimeDeps, params: { namespace: string; address: string }) => {
+const selectControllerAccount = async (deps: UiRuntimeDeps, params: { namespace: string; address: string }) => {
   const chainRef = resolveChainRefForNamespace(deps.controllers, params.namespace);
-  const namespaceState = await deps.controllers.accounts.addAccount({
-    chainRef,
-    address: params.address,
-    makePrimary: true,
-  });
-
-  await deps.controllers.accounts.switchActive({
-    chainRef,
-    address: namespaceState.primary === params.address ? params.address : null,
-  });
+  await deps.controllers.accounts.switchActive({ chainRef, address: params.address });
 };
 
 const toUiAccountMeta = (record: AccountRecord) => ({
@@ -354,7 +345,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, address } = await keyring.confirmNewMnemonic(mnemonic, opts);
-        await addControllerAccount(deps, {
+        await selectControllerAccount(deps, {
           namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
           address,
         });
@@ -388,7 +379,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, address } = await keyring.importMnemonic(mnemonic, opts);
-        await addControllerAccount(deps, {
+        await selectControllerAccount(deps, {
           namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
           address,
         });
@@ -421,7 +412,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
         await keyring.waitForReady();
 
         const { keyringId, account } = await keyring.importPrivateKey(privateKey, opts);
-        await addControllerAccount(deps, {
+        await selectControllerAccount(deps, {
           namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
           address: account.address,
         });
@@ -485,7 +476,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await keyring.confirmNewMnemonic(params.words.join(" "), opts);
-      await addControllerAccount(deps, {
+      await selectControllerAccount(deps, {
         namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
         address: result.address,
       });
@@ -498,7 +489,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await keyring.importMnemonic(params.words.join(" "), opts);
-      await addControllerAccount(deps, {
+      await selectControllerAccount(deps, {
         namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
         address: result.address,
       });
@@ -511,7 +502,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await keyring.importPrivateKey(params.privateKey, opts);
-      await addControllerAccount(deps, {
+      await selectControllerAccount(deps, {
         namespace: opts.namespace ?? controllers.network.getActiveChain().namespace,
         address: result.account.address,
       });
@@ -521,11 +512,6 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     "ui.keyrings.deriveAccount": async (params) => {
       assertUnlocked(session);
       const account = await keyring.deriveAccount(params.keyringId);
-      const chainRef = controllers.network.getActiveChain().chainRef;
-      const namespaceState = await controllers.accounts.addAccount({ chainRef, address: account.address });
-      if (namespaceState.primary === account.address) {
-        await controllers.accounts.switchActive({ chainRef, address: account.address });
-      }
       return account;
     },
 
@@ -573,16 +559,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
     "ui.keyrings.removePrivateKeyKeyring": async (params) => {
       assertUnlocked(session);
-      const removed = keyring.getAccountsByKeyring(params.keyringId, true);
       await keyring.removePrivateKeyKeyring(params.keyringId);
-      for (const record of removed) {
-        const chainRef = resolveChainRefForNamespace(controllers, record.namespace);
-        try {
-          await controllers.accounts.removeAccount({ chainRef, address: `0x${record.payloadHex}` });
-        } catch {
-          // Best-effort; controller state will be rebuilt from storage on restart.
-        }
-      }
       return null;
     },
 

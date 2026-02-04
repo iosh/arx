@@ -212,6 +212,86 @@ const createMemoryAccountsStore = () => {
   };
 };
 
+const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
+  let state = {
+    namespaces: { [CHAIN.namespace]: { all: [] as string[], primary: null as string | null } },
+    active: null as { namespace: string; chainRef: string; address: string | null } | null,
+  };
+  const listeners = new Set<(s: typeof state) => void>();
+
+  const emit = () => {
+    for (const fn of listeners) fn({ ...state, namespaces: { ...state.namespaces } });
+  };
+
+  const refresh = async () => {
+    const rows = await deps.accountsStore.list({ includeHidden: true });
+    const all = rows
+      .filter((r: any) => r?.namespace === CHAIN.namespace)
+      .map((r: any) => `0x${String(r.payloadHex ?? "").toLowerCase()}`)
+      .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
+
+    const uniq = Array.from(new Set(all));
+    const primary = uniq[0] ?? null;
+
+    // If active address was removed, clear it.
+    if (state.active?.address && !uniq.includes(state.active.address)) {
+      state = { namespaces: { [CHAIN.namespace]: { all: uniq, primary } }, active: null };
+    } else {
+      state = { namespaces: { [CHAIN.namespace]: { all: uniq, primary } }, active: state.active };
+    }
+
+    emit();
+  };
+
+  // Wrap store writers so controller state stays in sync for unit tests.
+  const wrap = <T extends (...args: any[]) => Promise<any>>(fn: T) => {
+    return (async (...args: Parameters<T>) => {
+      const res = await fn(...args);
+      await refresh();
+      return res;
+    }) as T;
+  };
+  deps.accountsStore.upsert = wrap(deps.accountsStore.upsert);
+  deps.accountsStore.remove = wrap(deps.accountsStore.remove);
+  deps.accountsStore.removeByKeyringId = wrap(deps.accountsStore.removeByKeyringId);
+
+  // Initial refresh so snapshot sees stored state.
+  void refresh();
+
+  return {
+    refresh,
+    getState: () => ({
+      namespaces: structuredClone(state.namespaces),
+      active: state.active ? { ...state.active } : null,
+    }),
+    replaceState: (_next: typeof state) => {},
+    getAccounts: (_params?: { chainRef?: string }) => state.namespaces[CHAIN.namespace]?.all ?? [],
+    getActivePointer: () => state.active,
+    addAccount: async (_params: any) => {
+      throw new Error("addAccount is not supported in store-backed test controller");
+    },
+    switchActive: async (params: { chainRef: string; address?: string | null }) => {
+      state = {
+        ...state,
+        active: params.address
+          ? { namespace: CHAIN.namespace, chainRef: params.chainRef, address: params.address }
+          : null,
+      };
+      emit();
+      return state.active;
+    },
+    removeAccount: async (_params: any) => {
+      throw new Error("removeAccount is not supported in store-backed test controller");
+    },
+    onStateChanged: (fn: (s: any) => void) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    onActiveChanged: (_fn: any) => () => {},
+    onNamespaceChanged: (_fn: any) => () => {},
+  };
+};
+
 const createAccountsController = () => {
   let state = {
     namespaces: { [CHAIN.namespace]: { all: [] as string[], primary: null as string | null } },
@@ -395,7 +475,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
   const keyringMetas = createMemoryKeyringMetasStore();
   const accountsStore = createMemoryAccountsStore();
-  const accountsController = createAccountsController();
+  const accountsController = createStoreBackedAccountsController({ accountsStore });
   let hasCiphertext = opts?.hasCiphertext ?? true;
 
   const keyring = new KeyringService({

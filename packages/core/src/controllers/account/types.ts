@@ -59,6 +59,7 @@ export type MultiNamespaceAccountController<T extends string = string> = {
   onStateChanged(handler: (state: MultiNamespaceAccountsState<T>) => void): () => void;
   onNamespaceChanged(handler: (payload: NamespaceStateChange<T>) => void): () => void;
   onActiveChanged(handler: (pointer: ActivePointer<T> | null) => void): () => void;
+  destroy?: () => void;
 };
 
 export type AccountController<T extends string = string> = MultiNamespaceAccountController<T>;

@@ -4,10 +4,7 @@ import type { AccountController, NamespaceAccountsState } from "../../controller
 import type { KeyringAccount } from "../../keyring/types.js";
 import type { KeyringService } from "./KeyringService.js";
 
-type AccountsPort = Pick<
-  AccountController,
-  "addAccount" | "removeAccount" | "switchActive" | "getState" | "getActivePointer"
->;
+type AccountsPort = Pick<AccountController, "switchActive" | "getState" | "getActivePointer">;
 
 type BridgeOptions = {
   keyring: KeyringService;
@@ -59,41 +56,29 @@ export class AccountsKeyringBridge {
     const keyringId = options.keyringId ?? this.#pickDefaultHdKeyringId();
     const account = await this.#keyring.deriveAccount(keyringId);
 
-    let namespaceState: NamespaceAccountsState<string> | null = null;
-
-    try {
-      namespaceState = await this.#accounts.addAccount({
-        chainRef: options.chainRef,
-        address: account.address,
-        ...(options.makePrimary !== undefined ? { makePrimary: options.makePrimary } : {}),
-      });
-
-      await this.#maybeSwitchActive(options, account.address, namespaceState);
-      return { account, namespaceState };
-    } catch (error) {
-      await this.#rollbackAccountAddition(options, account.address, namespaceState);
-      throw error;
-    }
+    const namespaceState = this.#computeNamespaceStateAfterUpsert(
+      options.namespace,
+      account.address,
+      options.makePrimary,
+    );
+    await this.#maybeSwitchActive(options, account.address, namespaceState);
+    return { account, namespaceState };
   }
 
   async importAccount(options: ImportAccountOptions): Promise<BridgeAccountResult> {
     this.#assertNamespace(options.namespace, options.chainRef);
-    const { keyringId, account } = await this.#keyring.importPrivateKey(options.privateKey, {
+    const { account } = await this.#keyring.importPrivateKey(options.privateKey, {
       namespace: options.namespace,
     });
     let namespaceState: NamespaceAccountsState<string> | null = null;
 
     try {
-      namespaceState = await this.#accounts.addAccount({
-        chainRef: options.chainRef,
-        address: account.address,
-        ...(options.makePrimary !== undefined ? { makePrimary: options.makePrimary } : {}),
-      });
-
+      namespaceState = this.#computeNamespaceStateAfterUpsert(options.namespace, account.address, options.makePrimary);
       await this.#maybeSwitchActive(options, account.address, namespaceState);
       return { account, namespaceState };
     } catch (error) {
-      await this.#rollbackAccountAddition(options, account.address, namespaceState);
+      this.#logger?.("bridge: importAccount failed after keyring write", error);
+
       throw error;
     }
   }
@@ -101,24 +86,22 @@ export class AccountsKeyringBridge {
   async removeAccount(options: RemoveAccountOptions): Promise<NamespaceAccountsState<string>> {
     this.#assertNamespace(options.namespace, options.chainRef);
 
-    const snapshot = this.#accounts.getState();
-    const previousNamespace = snapshot.namespaces[options.namespace];
-    const previousPointer = this.#accounts.getActivePointer();
+    const before = this.#accounts.getState().namespaces[options.namespace] ?? { all: [], primary: null };
 
-    const namespaceState = await this.#accounts.removeAccount({
-      chainRef: options.chainRef,
-      address: options.address,
-    });
+    await this.#keyring.removeAccount(options.namespace, options.address);
 
-    try {
-      await this.#keyring.removeAccount(options.namespace, options.address);
-    } catch (error) {
-      this.#logger?.("bridge: failed to remove account from keyring", error);
-      await this.#restoreAccountAfterKeyringFailure(options, previousNamespace, previousPointer);
-      throw error;
-    }
+    const normalize = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return "";
+      return (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`).toLowerCase();
+    };
 
-    return namespaceState;
+    const target = normalize(options.address);
+    const all = before.all.filter((a) => normalize(a) !== target);
+    const primary =
+      before.primary && normalize(before.primary) === target ? (all[0] ?? null) : (before.primary ?? null);
+
+    return { all, primary };
   }
 
   async setPrimaryAccount(options: SetPrimaryOptions): Promise<NamespaceAccountsState<string>> {
@@ -128,12 +111,7 @@ export class AccountsKeyringBridge {
       throw new Error(`Address ${options.address} is not managed by namespace "${options.namespace}"`);
     }
 
-    const namespaceState = await this.#accounts.addAccount({
-      chainRef: options.chainRef,
-      address: options.address,
-      makePrimary: true,
-    });
-
+    const namespaceState = this.#computeNamespaceStateAfterUpsert(options.namespace, options.address, true);
     await this.#accounts.switchActive({ chainRef: options.chainRef, address: options.address });
     return namespaceState;
   }
@@ -158,47 +136,12 @@ export class AccountsKeyringBridge {
     await this.#accounts.switchActive({ chainRef: options.chainRef, address });
   }
 
-  async #rollbackAccountAddition(
-    options: DeriveAccountOptions,
-    address: string,
-    namespaceState: NamespaceAccountsState<string> | null,
-  ): Promise<void> {
-    if (namespaceState) {
-      try {
-        await this.#accounts.removeAccount({ chainRef: options.chainRef, address });
-      } catch (error) {
-        this.#logger?.("bridge: failed to rollback account controller state", error);
-      }
-    }
-    try {
-      await this.#keyring.removeAccount(options.namespace, address);
-    } catch (error) {
-      this.#logger?.("bridge: failed to rollback keyring state", error);
-    }
-  }
-
-  async #restoreAccountAfterKeyringFailure(
-    options: RemoveAccountOptions,
-    previousState: NamespaceAccountsState<string> | undefined,
-    previousPointer: ReturnType<AccountsPort["getActivePointer"]>,
-  ): Promise<void> {
-    const shouldRestorePrimary = previousState?.primary === options.address;
-    try {
-      await this.#accounts.addAccount({
-        chainRef: options.chainRef,
-        address: options.address,
-        ...(shouldRestorePrimary ? { makePrimary: true } : {}),
-      });
-      if (
-        previousPointer &&
-        previousPointer.chainRef === options.chainRef &&
-        previousPointer.address === options.address
-      ) {
-        await this.#accounts.switchActive({ chainRef: options.chainRef, address: options.address });
-      }
-    } catch (error) {
-      this.#logger?.("bridge: failed to restore controller state after keyring removal failure", error);
-    }
+  #computeNamespaceStateAfterUpsert(namespace: string, address: string, makePrimary?: boolean) {
+    const state = this.#accounts.getState();
+    const current = state.namespaces[namespace] ?? { all: [], primary: null };
+    const all = current.all.includes(address) ? [...current.all] : [...current.all, address];
+    const primary = makePrimary === true ? address : (current.primary ?? (all.length > 0 ? all[0]! : null));
+    return { all, primary };
   }
 
   #pickDefaultHdKeyringId(): string {

@@ -1,9 +1,8 @@
-import { toCanonicalEvmAddress } from "../chains/address.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { createDefaultChainModuleRegistry } from "../chains/registry.js";
 import type { RpcEndpointState } from "../controllers/network/types.js";
-import { type AccountId, AccountIdSchema, type SettingsRecord } from "../db/records.js";
+import type { SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
@@ -18,6 +17,7 @@ import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
 import { createPermissionsService } from "../services/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../services/permissions/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
+import { createSettingsService } from "../services/settings/SettingsService.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
 import type { NetworkRpcPort, VaultMetaPort } from "../storage/index.js";
@@ -103,6 +103,25 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
 
+  const storageNow = storageOptions?.now ?? Date.now;
+  const hydrationEnabled = storageOptions?.hydrate ?? true;
+  const storageLogger =
+    storageOptions?.logger ??
+    ((message: string, error?: unknown) => {
+      console.warn("[createBackgroundServices]", message, error);
+    });
+
+  const settingsPort = settingsOptions?.port;
+  const settingsService =
+    settingsPort === undefined
+      ? null
+      : createSettingsService({
+          port: settingsPort,
+          defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
+          now: storageNow,
+        });
+  let cachedSettings: SettingsRecord | null = null;
+
   if (!storeOptions?.ports?.approvals) {
     throw new Error("createBackgroundServices requires store.ports.approvals");
   }
@@ -121,17 +140,17 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
-    now: storageOptions?.now ?? Date.now,
+    now: storageNow,
   });
 
   const transactionsService = createTransactionsService({
     port: storeOptions.ports.transactions,
-    now: storageOptions?.now ?? Date.now,
+    now: storageNow,
   });
 
   const permissionsService = createPermissionsService({
     port: storeOptions.ports.permissions,
-    now: storageOptions?.now ?? Date.now,
+    now: storageNow,
   });
 
   const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
@@ -140,6 +159,8 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const controllersInit = initControllers({
     messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
+    accountsService: accountsStore,
+    settingsService,
     approvalsService,
     permissionsService,
     transactionsService,
@@ -155,95 +176,10 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
   const networkRpcPort = storageOptions?.networkRpcPort;
   const vaultMetaPort = storageOptions?.vaultMetaPort;
-  const storageNow = storageOptions?.now ?? Date.now;
   const attention = createAttentionService({
     messenger: castMessenger<AttentionServiceMessengerTopics>(messenger),
     now: storageNow,
   });
-
-  const hydrationEnabled = storageOptions?.hydrate ?? true;
-  const storageLogger =
-    storageOptions?.logger ??
-    ((message: string, error?: unknown) => {
-      console.warn("[createBackgroundServices]", message, error);
-    });
-
-  const settingsPort = settingsOptions?.port;
-  let cachedSettings: SettingsRecord | null = null;
-  let settingsLoaded = false;
-  // Serialize settings writes to avoid out-of-order completion clobbering newer values.
-  let settingsWriteQueue: Promise<void> = Promise.resolve();
-
-  const persistSettings = async (update: { activeChainRef?: ChainRef; selectedAccountId?: AccountId | null }) => {
-    if (!settingsPort) return;
-    if (!settingsLoaded) return;
-
-    const { activeChainRef, selectedAccountId } = update;
-    if (activeChainRef === undefined && selectedAccountId === undefined) {
-      return;
-    }
-    if (
-      (activeChainRef === undefined || cachedSettings?.activeChainRef === activeChainRef) &&
-      (selectedAccountId === undefined || cachedSettings?.selectedAccountId === selectedAccountId)
-    ) {
-      return;
-    }
-
-    settingsWriteQueue = settingsWriteQueue
-      .catch(() => {})
-      .then(async () => {
-        let latest: SettingsRecord | null = null;
-        try {
-          latest = await settingsPort.get();
-        } catch (error) {
-          storageLogger("settings: failed to load before persist", error);
-        }
-
-        const baseActiveChainRef =
-          activeChainRef ??
-          latest?.activeChainRef ??
-          cachedSettings?.activeChainRef ??
-          // Settings may not exist on fresh installs; fall back to the current controller state.
-          networkController.getActiveChain().chainRef;
-
-        const nextSelected =
-          selectedAccountId === undefined
-            ? (latest?.selectedAccountId ?? cachedSettings?.selectedAccountId)
-            : (selectedAccountId ?? undefined);
-
-        const next: SettingsRecord = {
-          id: "settings",
-          activeChainRef: baseActiveChainRef,
-          ...(nextSelected ? { selectedAccountId: nextSelected } : {}),
-          updatedAt: storageNow(),
-        };
-
-        if (
-          latest?.activeChainRef === next.activeChainRef &&
-          (latest?.selectedAccountId ?? null) === (next.selectedAccountId ?? null)
-        ) {
-          cachedSettings = latest;
-          return;
-        }
-
-        try {
-          await settingsPort.put(next);
-          cachedSettings = next;
-        } catch (error) {
-          storageLogger("settings: failed to persist", error);
-        }
-      });
-
-    await settingsWriteQueue;
-  };
-
-  const persistActiveChainRef = async (chainRef: ChainRef) => {
-    await persistSettings({ activeChainRef: chainRef });
-  };
-
-  const persistSelectedAccountId = async (accountId: AccountId) => {
-    await persistSettings({ selectedAccountId: accountId });
-  };
 
   let destroyed = false;
   let isHydrating = false;
@@ -306,65 +242,24 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
   const accountsBridge = new AccountsKeyringBridge({
     keyring: keyringService,
     accounts: {
-      addAccount: (params) => controllersBase.accounts.addAccount(params),
-      removeAccount: (params) => controllersBase.accounts.removeAccount(params),
       switchActive: (params) => controllersBase.accounts.switchActive(params),
       getState: () => controllersBase.accounts.getState(),
       getActivePointer: () => controllersBase.accounts.getActivePointer(),
     },
     logger: storageLogger,
   });
-
-  const syncAccountsPointer = async (chain: ChainMetadata) => {
-    const pointer = controllersBase.accounts.getActivePointer();
-    const available = controllersBase.accounts.getAccounts({ chainRef: chain.chainRef });
-    const preferred =
-      pointer?.namespace === chain.namespace && pointer.address && available.includes(pointer.address)
-        ? pointer.address
-        : null;
-
-    try {
-      await controllersBase.accounts.switchActive({ chainRef: chain.chainRef, address: preferred ?? null });
-    } catch (error) {
-      storageLogger(`accounts: failed to align pointer with active chain ${chain.chainRef}`, error);
-    }
-  };
-
-  const unsubscribePointerSync = networkController.onChainChanged((chain) => {
-    void syncAccountsPointer(chain);
-    // During initialization, the network controller may emit a chain change while we're
-    // still resolving the preferred chain from settings; don't overwrite persisted settings
-    // with the controller's default.
-    if (!initialized) return;
-    void persistActiveChainRef(chain.chainRef);
-  });
-
-  void syncAccountsPointer(networkController.getActiveChain());
-
-  const resolveSelectedAccountIdForPointer = (pointer: { namespace: string; address: string }): AccountId | null => {
-    if (pointer.namespace !== EIP155_NAMESPACE) return null;
-    try {
-      const canonical = toCanonicalEvmAddress(pointer.address);
-      const parsed = AccountIdSchema.safeParse(`${EIP155_NAMESPACE}:${canonical.slice(2)}`);
-      return parsed.success ? parsed.data : null;
-    } catch (error) {
-      storageLogger("settings: failed to derive accountId from pointer", error);
-      return null;
-    }
-  };
-
-  const unsubscribeSelectedAccountPersist = controllersBase.accounts.onActiveChanged((pointer) => {
-    if (!initialized) return;
-    if (!sessionLayer.session.unlock.isUnlocked()) return;
-
-    if (!pointer?.address) {
-      void persistSettings({ selectedAccountId: null });
-      return;
-    }
-
-    const accountId = resolveSelectedAccountIdForPointer({ namespace: pointer.namespace, address: pointer.address });
-    if (!accountId) return;
-    void persistSelectedAccountId(accountId);
+  const unsubscribeActiveChainPersist = networkController.onChainChanged((chain) => {
+    if (destroyed) return;
+    if (!settingsService) return;
+    if (isHydrating) return;
+    void settingsService
+      .upsert({ activeChainRef: chain.chainRef })
+      .then((next) => {
+        cachedSettings = next;
+      })
+      .catch((error) => {
+        storageLogger("settings: failed to persist activeChainRef", error);
+      });
   });
 
   const networkRpcSync =
@@ -417,6 +312,7 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
     const currentState = networkController.getState();
     const nextActive = selectActiveChainRef(currentState, registryChains);
+    const didChange = currentState.activeChain !== nextActive;
 
     const rpc = Object.fromEntries(
       registryChains.map((chain) => {
@@ -454,7 +350,14 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
       rpc,
     });
 
-    await persistActiveChainRef(nextActive);
+    // Persist any corrections even when the active chain didn't change (e.g. stale settings fallback).
+    if (!didChange && settingsService && !isHydrating && cachedSettings?.activeChainRef !== nextActive) {
+      try {
+        cachedSettings = await settingsService.upsert({ activeChainRef: nextActive });
+      } catch (error) {
+        storageLogger("settings: failed to persist corrected activeChainRef", error);
+      }
+    }
 
     pendingNetworkRegistrySync = false;
   };
@@ -490,38 +393,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     // Permissions are store-backed (PR5 Step 4): no snapshot hydration.
   };
 
-  const hydrateAccountsFromStore = async () => {
-    const activeChainRef = networkController.getActiveChain().chainRef;
-    const records = await accountsStore.list({ includeHidden: false });
-    const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
-
-    const byNamespace = new Map<string, string[]>();
-    for (const record of sorted) {
-      const list = byNamespace.get(record.namespace) ?? [];
-      list.push(`0x${record.payloadHex}`);
-      byNamespace.set(record.namespace, list);
-    }
-
-    const namespaces = Object.fromEntries(
-      Array.from(byNamespace.entries()).map(([namespace, all]) => {
-        const selected = cachedSettings?.selectedAccountId ?? null;
-        const selectedPayload = selected?.startsWith(`${namespace}:`) ? (selected.split(":")[1] ?? null) : null;
-        const selectedAddress = selectedPayload ? `0x${selectedPayload}` : null;
-        const primary = selectedAddress && all.includes(selectedAddress) ? selectedAddress : (all[0] ?? null);
-        return [namespace, { all: [...all], primary }];
-      }),
-    );
-
-    const activeNamespace = controllersBase.accounts.getActivePointer()?.namespace ?? EIP155_NAMESPACE;
-    const active = {
-      namespace: activeNamespace,
-      chainRef: activeChainRef,
-      address: (namespaces[activeNamespace]?.primary as string | null | undefined) ?? null,
-    };
-
-    controllersBase.accounts.replaceState({ namespaces, active });
-  };
-
   const initialize = async () => {
     if (initialized || destroyed) {
       return;
@@ -544,21 +415,19 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
 
       await transactionsLifecycle.initialize();
 
-      if (settingsPort) {
+      if (settingsService) {
         try {
-          cachedSettings = await settingsPort.get();
+          cachedSettings = await settingsService.get();
         } catch (error) {
           storageLogger("settings: failed to load", error);
           cachedSettings = null;
         }
-        settingsLoaded = true;
       }
 
       isHydrating = true;
       pendingNetworkRegistrySync = true;
       try {
         await hydrateControllers();
-        await hydrateAccountsFromStore();
         await sessionLayer.hydrateVaultMeta();
       } finally {
         isHydrating = false;
@@ -605,19 +474,19 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     sessionLayer.detachSessionListeners();
     sessionLayer.destroySessionLayer();
     try {
+      controllersBase.accounts.destroy?.();
+    } catch (error) {
+      storageLogger("lifecycle: failed to destroy accounts controller", error);
+    }
+    try {
       unsubscribeRegistry();
     } catch (error) {
       storageLogger("lifecycle: failed to remove chain registry listener", error);
     }
     try {
-      unsubscribePointerSync();
+      unsubscribeActiveChainPersist();
     } catch (error) {
-      console.warn("[createBackgroundServices] failed to remove network pointer sync listener", error);
-    }
-    try {
-      unsubscribeSelectedAccountPersist();
-    } catch (error) {
-      console.warn("[createBackgroundServices] failed to remove selectedAccountId listener", error);
+      console.warn("[createBackgroundServices] failed to remove activeChain persist listener", error);
     }
 
     if (networkRpcSyncAttached) {

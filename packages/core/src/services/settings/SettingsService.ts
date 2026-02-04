@@ -19,6 +19,10 @@ export const createSettingsService = ({ port, defaults, now }: CreateSettingsSer
   const emitter = new EventEmitter<ChangedEvent>();
   const clock = now ?? Date.now;
 
+  let writeQueue: Promise<SettingsRecord> = Promise.resolve(
+    SettingsRecordSchema.parse({ id: "settings", activeChainRef: defaults.activeChainRef, updatedAt: 0 }),
+  );
+
   const emitChanged = () => {
     emitter.emit("changed");
   };
@@ -29,22 +33,30 @@ export const createSettingsService = ({ port, defaults, now }: CreateSettingsSer
   };
 
   const upsert = async (params: UpdateSettingsParams): Promise<SettingsRecord> => {
-    const current = await port.get();
-    const base = current ? SettingsRecordSchema.parse(current) : null;
+    writeQueue = writeQueue
+      .catch(() => {
+        return SettingsRecordSchema.parse({ id: "settings", activeChainRef: defaults.activeChainRef, updatedAt: 0 });
+      })
+      .then(async () => {
+        const current = await port.get();
+        const base = current ? SettingsRecordSchema.parse(current) : null;
 
-    const selectedAccountId =
-      params.selectedAccountId === undefined ? base?.selectedAccountId : (params.selectedAccountId ?? undefined);
+        const selectedAccountId =
+          params.selectedAccountId === undefined ? base?.selectedAccountId : (params.selectedAccountId ?? undefined);
 
-    const next: SettingsRecord = SettingsRecordSchema.parse({
-      id: "settings",
-      activeChainRef: params.activeChainRef ?? base?.activeChainRef ?? defaults.activeChainRef,
-      ...(selectedAccountId ? { selectedAccountId } : {}),
-      updatedAt: clock(),
-    });
+        const next: SettingsRecord = SettingsRecordSchema.parse({
+          id: "settings",
+          activeChainRef: params.activeChainRef ?? base?.activeChainRef ?? defaults.activeChainRef,
+          ...(selectedAccountId ? { selectedAccountId } : {}),
+          updatedAt: clock(),
+        });
 
-    await port.put(next);
-    emitChanged();
-    return next;
+        await port.put(next);
+        emitChanged();
+        return next;
+      });
+
+    return await writeQueue;
   };
 
   return {

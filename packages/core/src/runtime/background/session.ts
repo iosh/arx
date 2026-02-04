@@ -331,12 +331,6 @@ export const initSessionLayer = ({
     }),
   );
 
-  sessionSubscriptions.push(
-    keyringService.onPayloadUpdated(() => {
-      scheduleVaultMetaPersist();
-    }),
-  );
-
   const attachSessionListeners = () => {
     if (sessionListenersAttached) return;
 

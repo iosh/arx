@@ -162,6 +162,51 @@ export class KeyringHydration {
 
         const defaultNamespace = this.#getDefaultNamespace();
 
+        try {
+          const payloadKeyringIds = new Set(payload.keyrings.map((k) => k.keyringId));
+
+          for (const meta of metas) {
+            if (payloadKeyringIds.has(meta.id)) continue;
+            try {
+              await Promise.all([
+                this.#options.keyringMetas.remove(meta.id),
+                this.#options.accountsStore.removeByKeyringId(meta.id),
+              ]);
+            } catch (error) {
+              this.#options.logger?.(`keyring: failed to remove orphaned store entries for ${meta.id}`, error);
+            } finally {
+              this.#state.keyringMetas.delete(meta.id);
+              for (const [accountId, record] of Array.from(this.#state.accounts.entries())) {
+                if (record.keyringId === meta.id) {
+                  this.#state.accounts.delete(accountId);
+                }
+              }
+            }
+          }
+
+          for (const entry of payload.keyrings) {
+            if (this.#state.keyringMetas.has(entry.keyringId)) continue;
+            try {
+              await this.#options.keyringMetas.upsert({
+                id: entry.keyringId,
+                type: entry.type,
+                createdAt: entry.createdAt,
+                ...(entry.type === "hd" ? { needsBackup: true } : {}),
+              });
+              this.#state.keyringMetas.set(entry.keyringId, {
+                id: entry.keyringId,
+                type: entry.type,
+                createdAt: entry.createdAt,
+                ...(entry.type === "hd" ? { needsBackup: true } : {}),
+              });
+            } catch (error) {
+              this.#options.logger?.(`keyring: failed to recreate meta for ${entry.keyringId}`, error);
+            }
+          }
+        } catch (error) {
+          this.#options.logger?.("keyring: reconciliation failed", error);
+        }
+
         // Restore keyring instances from payload
         for (const entry of payload.keyrings) {
           // If metadata is missing, treat the keyring as unavailable (don't hydrate secrets into memory).

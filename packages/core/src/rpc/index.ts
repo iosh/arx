@@ -304,10 +304,12 @@ export const createDomainChainService = (): DomainChainService => ({
   },
 });
 
-const EIP155_ADAPTER = createEip155Adapter();
-registerNamespaceAdapter(EIP155_ADAPTER);
+export const registerBuiltinRpcAdapters = (): void => {
+  if (!namespaceAdapters.has(EIP155_NAMESPACE)) {
+    registerNamespaceAdapter(createEip155Adapter());
+  }
 
-const EIP155_PROTOCOL_ADAPTER = createEip155ProtocolAdapter();
-registerNamespaceProtocolAdapter(EIP155_NAMESPACE, EIP155_PROTOCOL_ADAPTER);
+  registerNamespaceProtocolAdapter(EIP155_NAMESPACE, createEip155ProtocolAdapter());
+};
 
 export type { RpcInvocationContext };

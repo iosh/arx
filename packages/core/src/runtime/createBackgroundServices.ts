@@ -6,7 +6,7 @@ import type { SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import { createNamespaceResolver, type RpcInvocationContext } from "../rpc/index.js";
+import { createNamespaceResolver, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
 import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
@@ -69,6 +69,8 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
 export const createBackgroundServices = (options?: CreateBackgroundServicesOptions) => {
+  registerBuiltinRpcAdapters();
+
   const {
     messenger: messengerOptions,
     network: networkOptions,

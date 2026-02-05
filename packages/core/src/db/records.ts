@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { chainMetadataSchema } from "../chains/metadata.js";
-import { ApprovalTypes } from "../controllers/approval/types.js";
-import { PermissionScopes } from "../controllers/permission/types.js";
 import {
   chainRefSchema,
   epochMillisecondsSchema,
@@ -12,6 +10,7 @@ import {
   TransactionRequestSchema,
   TransactionWarningSchema,
 } from "../storage/schemas.js";
+import { APPROVAL_TYPE_VALUES, PERMISSION_SCOPE_VALUES, PermissionScopes } from "./constants.js";
 
 export const AccountNamespaceSchema = z.literal("eip155");
 export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
@@ -126,13 +125,6 @@ export const AccountRecordSchema = z
   });
 export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 
-const PERMISSION_SCOPE_VALUES = [
-  PermissionScopes.Basic,
-  PermissionScopes.Accounts,
-  PermissionScopes.Sign,
-  PermissionScopes.Transaction,
-] as const;
-
 export const PermissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
 export type PermissionScope = z.infer<typeof PermissionScopeSchema>;
 
@@ -164,15 +156,6 @@ export const PermissionRecordSchema = z
     }
   });
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
-
-const APPROVAL_TYPE_VALUES = [
-  ApprovalTypes.RequestAccounts,
-  ApprovalTypes.RequestPermissions,
-  ApprovalTypes.SignMessage,
-  ApprovalTypes.SignTypedData,
-  ApprovalTypes.SendTransaction,
-  ApprovalTypes.AddChain,
-] as const;
 
 export const ApprovalTypeSchema = z.enum(APPROVAL_TYPE_VALUES);
 export type ApprovalType = z.infer<typeof ApprovalTypeSchema>;

@@ -1,15 +1,10 @@
 import type { ChainRef } from "../../chains/ids.js";
+import { PermissionScopes } from "../../db/constants.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { ChainNamespace } from "../account/types.js";
 
-export const PermissionScopes = {
-  Basic: "wallet_basic",
-  Accounts: "wallet_accounts",
-  Sign: "wallet_sign",
-  Transaction: "wallet_transaction",
-} as const;
-
+export { PermissionScopes };
 export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionScopes];
 
 export type NamespacePermissionState = {

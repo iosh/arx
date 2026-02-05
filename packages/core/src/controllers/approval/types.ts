@@ -1,16 +1,11 @@
 import type { ChainRef } from "../../chains/ids.js";
+import { ApprovalTypes } from "../../db/constants.js";
 import type { FinalStatusReason, RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainNamespace } from "../account/types.js";
 
-export const ApprovalTypes = {
-  RequestAccounts: "wallet_requestAccounts",
-  RequestPermissions: "wallet_requestPermissions",
-  SignMessage: "wallet_signMessage",
-  SignTypedData: "wallet_signTypedData",
-  SendTransaction: "wallet_sendTransaction",
-  AddChain: "wallet_addEthereumChain",
-} as const;
+export { ApprovalTypes };
+export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
 
 export type ApprovalQueueItem = {
   id: string;
@@ -20,8 +15,6 @@ export type ApprovalQueueItem = {
   chainRef?: ChainRef | undefined;
   createdAt: number;
 };
-
-export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
 
 export type ApprovalTask<T> = {
   id: string;

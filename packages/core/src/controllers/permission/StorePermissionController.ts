@@ -1,3 +1,4 @@
+import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../chains/registry.js";
 import type { PermissionRecord } from "../../db/records.js";
@@ -115,24 +116,27 @@ const isSameState = (prev?: PermissionsState, next?: PermissionsState) => {
   });
 };
 
-type ParsedChainRef = {
+type ParsedPermissionChainRef = {
   namespace: ChainNamespace;
-  value: string;
+  value: ChainRef;
 };
 
-const parseChainRef = (chainRef: string | null | undefined): ParsedChainRef | null => {
+const tryParseChainRef = (chainRef: string | null | undefined): ParsedPermissionChainRef | null => {
   if (!chainRef || typeof chainRef !== "string") return null;
-  const [namespace, reference] = chainRef.split(":");
-  if (!namespace || !reference) return null;
-  return {
-    namespace: namespace as ChainNamespace,
-    value: `${namespace}:${reference}`,
-  };
+  try {
+    const parsed = parseCaipChainRef(chainRef as ChainRef);
+    return {
+      namespace: parsed.namespace as ChainNamespace,
+      value: `${parsed.namespace}:${parsed.reference}` as ChainRef,
+    };
+  } catch {
+    return null;
+  }
 };
 
 const deriveNamespaceFromContext = (context?: Parameters<PermissionScopeResolver>[1]): ChainNamespace => {
   if (context?.namespace) return context.namespace as ChainNamespace;
-  const parsed = parseChainRef(context?.chainRef ?? null);
+  const parsed = tryParseChainRef(context?.chainRef ?? null);
   return parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
 };
 
@@ -140,9 +144,9 @@ const deriveNamespaceFromOptions = (options: {
   namespace?: ChainNamespace | null;
   chainRef: ChainRef;
 }): { namespace: ChainNamespace; chainRef: ChainRef } => {
-  const parsed = parseChainRef(options.chainRef);
+  const parsed = tryParseChainRef(options.chainRef);
   const namespace = (options.namespace ?? parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE) as ChainNamespace;
-  const normalized = (parsed?.value ?? options.chainRef) as ChainRef;
+  const normalized = parsed?.value ?? options.chainRef;
 
   if (options.namespace && parsed && parsed.namespace !== options.namespace) {
     throw new Error(
@@ -358,7 +362,7 @@ export class StorePermissionController implements PermissionController {
     if (!scope) return;
 
     const namespace = deriveNamespaceFromContext(context);
-    const parsedChain = parseChainRef(context?.chainRef ?? null);
+    const parsedChain = tryParseChainRef(context?.chainRef ?? null);
 
     if (parsedChain) {
       const record = this.#records.get(keyForQuery(origin, namespace, parsedChain.value));
@@ -376,7 +380,7 @@ export class StorePermissionController implements PermissionController {
   }
 
   async grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void> {
-    const parsedChain = parseChainRef(options?.chainRef ?? null);
+    const parsedChain = tryParseChainRef(options?.chainRef ?? null);
     const namespace = options?.namespace ?? parsedChain?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
     const normalizedChainRef = parsedChain?.value ?? null;
 

@@ -1,4 +1,3 @@
-export * from "./account/MultiNamespaceAccountsController.js";
 export * from "./account/types.js";
 
 export * from "./approval/index.js";

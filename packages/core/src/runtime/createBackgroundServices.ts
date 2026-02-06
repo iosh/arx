@@ -37,7 +37,7 @@ import { createNetworkRpcSync } from "./persistence/createNetworkRpcSync.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
-export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
+export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chainRegistry"> & {
   messenger?: {
     compare?: CompareFn<unknown>;
   };
@@ -50,7 +50,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
     logger?: (message: string, error?: unknown) => void;
     networkRpcDebounceMs?: number;
   };
-  store?: {
+  store: {
     ports: {
       approvals: ApprovalsPort;
       transactions: TransactionsPort;
@@ -59,6 +59,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
       permissions: PermissionsPort;
     };
   };
+  chainRegistry: NonNullable<ControllerLayerOptions["chainRegistry"]>;
   settings?: {
     port: SettingsPort;
   };
@@ -68,7 +69,7 @@ export type CreateBackgroundServicesOptions = ControllerLayerOptions & {
 
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
-export const createBackgroundServices = (options?: CreateBackgroundServicesOptions) => {
+export const createBackgroundServices = (options: CreateBackgroundServicesOptions) => {
   registerBuiltinRpcAdapters();
 
   const {
@@ -85,15 +86,12 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
     session: sessionOptions,
     chainRegistry: chainRegistryOptions,
     rpcClients: rpcClientOptions,
-  } = options ?? {};
+  } = options;
 
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
 
-  if (!chainRegistryOptions?.port) {
-    throw new Error("createBackgroundServices requires chainRegistry.port");
-  }
   const controllerOptions: ControllerLayerOptions = {
     ...(networkOptions ? { network: networkOptions } : {}),
     ...(accountOptions ? { accounts: accountOptions } : {}),
@@ -123,22 +121,6 @@ export const createBackgroundServices = (options?: CreateBackgroundServicesOptio
           now: storageNow,
         });
   let cachedSettings: SettingsRecord | null = null;
-
-  if (!storeOptions?.ports?.approvals) {
-    throw new Error("createBackgroundServices requires store.ports.approvals");
-  }
-  if (!storeOptions?.ports?.transactions) {
-    throw new Error("createBackgroundServices requires store.ports.transactions");
-  }
-  if (!storeOptions?.ports?.accounts) {
-    throw new Error("createBackgroundServices requires store.ports.accounts");
-  }
-  if (!storeOptions?.ports?.keyringMetas) {
-    throw new Error("createBackgroundServices requires store.ports.keyringMetas");
-  }
-  if (!storeOptions?.ports?.permissions) {
-    throw new Error("createBackgroundServices requires store.ports.permissions");
-  }
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,

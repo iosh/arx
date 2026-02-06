@@ -1,6 +1,7 @@
+import { getAccountCodec } from "../../accounts/codec.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry, parseChainRef } from "../../chains/index.js";
-import { type AccountId, AccountIdSchema } from "../../db/records.js";
+import type { AccountId } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountsService } from "../../services/accounts/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
@@ -67,20 +68,29 @@ const isSameState = <T extends string>(
   return isSamePointer(prev.active, next.active);
 };
 
-const toSelectedAddress = (accountId: AccountId | null, namespace: string): string | null => {
+const toSelectedAddress = (
+  accountId: AccountId | null,
+  params: { chainRef: ChainRef; chains: ChainModuleRegistry },
+): string | null => {
   if (!accountId) return null;
+  const { namespace } = parseChainRef(params.chainRef);
   if (!accountId.startsWith(`${namespace}:`)) return null;
-  const payloadHex = accountId.split(":")[1] ?? "";
-  if (!payloadHex) return null;
-  return `0x${payloadHex.toLowerCase()}`;
+
+  try {
+    const codec = getAccountCodec(namespace);
+    const canonical = codec.fromAccountId(accountId);
+    if (canonical.namespace !== namespace) return null;
+    const display = codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
+    return params.chains.toCanonicalAddress({ chainRef: params.chainRef, value: display }).canonical;
+  } catch {
+    return null;
+  }
 };
 
-const toAccountId = (namespace: string, address: string): AccountId => {
-  // For now accounts are only persisted for eip155.
-  if (namespace !== "eip155") throw new Error(`Unsupported namespace "${namespace}" for accountId encoding`);
-  const trimmed = address.trim();
-  const payloadHex = (trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed).toLowerCase();
-  return AccountIdSchema.parse(`${namespace}:${payloadHex}`);
+const toAccountId = (params: { namespace: string; chainRef: ChainRef; address: string }): AccountId => {
+  const codec = getAccountCodec(params.namespace);
+  const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
+  return codec.toAccountId(canonical);
 };
 
 type Options<T extends string> = {
@@ -178,14 +188,16 @@ export class StoreAccountsController<T extends string = string> implements Accou
     const address = (params.address ?? null) as string | null;
 
     const current = this.#state.active;
-    const requested = address ? (`0x${toAccountId(namespace, address).split(":")[1]}` as const) : null;
+    const requested = address
+      ? (this.#chains.toCanonicalAddress({ chainRef, value: address }).canonical as AccountAddress<T>)
+      : null;
     if (current?.chainRef === chainRef && (current.address ?? null) === requested) {
       return clonePointer(current)!;
     }
 
     let nextSelected: AccountId | null = null;
     if (address) {
-      const candidate = toAccountId(namespace, address);
+      const candidate = toAccountId({ namespace, chainRef, address });
       const record = await this.#accounts.get(candidate);
       if (!record || record.hidden) {
         throw new Error(`Unknown account "${address}" for namespace "${namespace}"`);
@@ -255,7 +267,10 @@ export class StoreAccountsController<T extends string = string> implements Accou
         selectedAccountId = this.#selectedOverride;
       }
 
-      const selectedAddress = toSelectedAddress(selectedAccountId, namespace);
+      const selectedAddress = toSelectedAddress(selectedAccountId, {
+        chainRef: activeChain.chainRef,
+        chains: this.#chains,
+      });
 
       const records = await this.#accounts.list({ includeHidden: false });
       const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
@@ -292,9 +307,10 @@ export class StoreAccountsController<T extends string = string> implements Accou
         }),
       ) as Record<ChainNamespace, NamespaceAccountsState<T>>;
 
+      const selectedAddressForNamespace = (selectedAddress as AccountAddress<T> | null) ?? null;
       const activeAddress =
-        selectedAddress && (namespaces[namespace]?.all ?? []).includes(selectedAddress)
-          ? selectedAddress
+        selectedAddressForNamespace && (namespaces[namespace]?.all ?? []).includes(selectedAddressForNamespace)
+          ? selectedAddressForNamespace
           : ((namespaces[namespace]?.primary as string | null | undefined) ?? null);
 
       const activePointer: ActivePointer<T> = {

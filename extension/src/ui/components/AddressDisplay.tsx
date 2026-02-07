@@ -12,6 +12,8 @@ export type AddressDisplayProps = {
   chainRef?: string | null;
   copyable?: boolean;
   toastOnCopied?: boolean;
+
+  interactive?: boolean;
   fontSize?: TextProps["fontSize"];
   expandedFontSize?: TextProps["fontSize"];
   fontWeight?: TextProps["fontWeight"];
@@ -82,6 +84,7 @@ export function AddressDisplay({
   chainRef,
   copyable = true,
   toastOnCopied = false,
+  interactive = true,
   fontSize = "$3",
   expandedFontSize,
   fontWeight,
@@ -103,19 +106,20 @@ export function AddressDisplay({
   const label = expanded ? full : short;
   const resolvedFontSize = expanded ? (expandedFontSize ?? deriveExpandedFontSize(fontSize)) : fontSize;
 
+  const pressableProps = interactive
+    ? {
+        role: "button" as const,
+        "aria-label": `Address: ${short}. Click to ${expanded ? "collapse" : "expand"}`,
+        tabIndex: 0,
+        cursor: "pointer",
+        hoverStyle: { opacity: 0.9 },
+        pressStyle: { opacity: 0.85 },
+        onPress: () => setExpanded((v) => !v),
+      }
+    : {};
+
   return (
-    <XStack
-      role="button"
-      aria-label={`Address: ${short}. Click to ${expanded ? "collapse" : "expand"}`}
-      tabIndex={0}
-      alignItems="center"
-      gap="$2"
-      minWidth={0}
-      onPress={() => setExpanded((v) => !v)}
-      cursor="pointer"
-      hoverStyle={{ opacity: 0.9 }}
-      pressStyle={{ opacity: 0.85 }}
-    >
+    <XStack alignItems="center" gap="$2" minWidth={0} {...pressableProps}>
       <Paragraph
         flex={1}
         minWidth={0}
@@ -147,8 +151,8 @@ export function AddressDisplay({
           aria-label={copied ? "Copied" : "Copy address"}
           icon={copied ? <Check size={18} /> : <Copy size={18} />}
           onPress={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e?.preventDefault?.();
+            e?.stopPropagation?.();
 
             copyToClipboard(full)
               .then(() => {

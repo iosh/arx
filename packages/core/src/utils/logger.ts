@@ -17,3 +17,11 @@ export const createLogger = (namespace: string, options?: { prefix?: string }): 
 export const extendLogger = (logger: Debugger, suffix: string): Debugger => {
   return typeof logger.extend === "function" ? logger.extend(suffix) : createLogger(`${logger.namespace}:${suffix}`);
 };
+
+/**
+ * Enable/disable debug namespaces programmatically.
+ * Note: MV3 backgrounds don't reliably expose localStorage, so env-driven enablement
+ * should happen at runtime via these helpers.
+ */
+export const enableDebugNamespaces = (namespaces: string) => debug.enable(namespaces);
+export const disableDebugNamespaces = () => debug.disable();

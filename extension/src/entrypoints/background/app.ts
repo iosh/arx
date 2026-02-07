@@ -1,3 +1,4 @@
+import { disableDebugNamespaces, enableDebugNamespaces } from "@arx/core";
 import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
@@ -69,7 +70,20 @@ export const createBackgroundApp = () => {
     });
   };
 
+  const applyDebugNamespacesFromEnv = () => {
+    const raw: unknown = import.meta.env.VITE_ARX_DEBUG_NAMESPACES;
+    const namespaces = typeof raw === "string" ? raw.trim() : "";
+
+    if (!namespaces) {
+      disableDebugNamespaces();
+      return;
+    }
+
+    enableDebugNamespaces(namespaces);
+  };
+
   const start = () => {
+    applyDebugNamespacesFromEnv();
     void serviceManager.getOrInitContext();
     browser.runtime.onConnect.addListener(portRouter.handleConnect);
     browser.runtime.onMessage.addListener(runtimeMessageProxy);

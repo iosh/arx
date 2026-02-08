@@ -125,6 +125,7 @@ export type TransactionController = {
     origin: string,
     request: TransactionRequest,
     requestContext: RequestContextRecord,
+    opts?: { id?: string },
   ): Promise<TransactionMeta>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;

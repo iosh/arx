@@ -48,6 +48,9 @@ export const uiActions = (client: UiClient) => {
       approve: call("ui.approvals.approve"),
       reject: call("ui.approvals.reject"),
     },
+    transactions: {
+      requestSendTransactionApproval: call("ui.transactions.requestSendTransactionApproval"),
+    },
     keyrings: {
       confirmNewMnemonic: call("ui.keyrings.confirmNewMnemonic"),
       importMnemonic: call("ui.keyrings.importMnemonic"),

@@ -48,6 +48,12 @@ describe("ui actions", () => {
 
     void actions.networks.switchActive({ chainRef: "eip155:1" });
 
+    void actions.transactions.requestSendTransactionApproval({
+      to: "0x0000000000000000000000000000000000000000",
+      valueEther: "0.01",
+      chainRef: "eip155:1",
+    });
+
     void actions.approvals.approve({ id: "id" });
     void actions.approvals.reject({ id: "id" });
     void actions.approvals.reject({ id: "id", reason: "reason" });

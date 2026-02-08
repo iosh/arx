@@ -23,6 +23,7 @@ type HomeScreenProps = {
   onOpenApprovals: () => void;
   onNavigateAccounts: () => void;
   onNavigateNetworks: () => void;
+  onNavigateSend: () => void;
   onNavigateSettings: () => void;
 };
 
@@ -65,6 +66,7 @@ export const HomeScreen = ({
   onOpenApprovals,
   onNavigateAccounts,
   onNavigateNetworks,
+  onNavigateSend,
   onNavigateSettings,
   backupWarnings,
   markingKeyringId,
@@ -183,7 +185,8 @@ export const HomeScreen = ({
           <QuickAction
             icon={<ArrowUpRight size={24} color={theme.text.get()} />}
             label="Send"
-            onPress={() => {}} // TODO: Implement Send
+            onPress={accounts.active ? onNavigateSend : undefined}
+            disabled={!accounts.active}
           />
           <QuickAction
             icon={<History size={24} color={theme.text.get()} />}

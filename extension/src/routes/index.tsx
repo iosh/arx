@@ -67,6 +67,7 @@ function HomePage() {
       }}
       onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
       onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
+      onNavigateSend={() => router.navigate({ to: ROUTES.SEND })}
       onNavigateSettings={() => router.navigate({ to: ROUTES.SETTINGS })}
     />
   );

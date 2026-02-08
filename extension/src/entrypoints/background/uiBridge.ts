@@ -137,11 +137,14 @@ export const createUiBridge = ({
     return result;
   };
 
+  const uiOrigin = new URL(runtimeBrowser.runtime.getURL("")).origin;
+
   const dispatcher = createUiDispatcher({
     controllers,
     session,
     keyring,
     attention,
+    uiOrigin,
     platform: { openOnboardingTab, openNotificationPopup },
   });
 

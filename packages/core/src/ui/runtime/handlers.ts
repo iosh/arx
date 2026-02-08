@@ -2,8 +2,10 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
+import * as Value from "ox/Value";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
+import type { TransactionRequest } from "../../controllers/transaction/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
@@ -250,7 +252,9 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 };
 
 export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
-  const { controllers, session, keyring, attention, platform } = deps;
+  const { controllers, session, keyring, attention, platform, uiOrigin } = deps;
+  // Stable session id for UI-initiated approval request contexts within this background lifetime.
+  const uiSessionId = crypto.randomUUID();
 
   const buildSnapshot = () =>
     buildUiSnapshot({
@@ -431,6 +435,47 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     "ui.networks.switchActive": async ({ chainRef }) => {
       await controllers.network.switchChain(chainRef);
       return toChainSnapshot();
+    },
+
+    "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
+      assertUnlocked(session);
+
+      const resolvedChainRef = chainRef ?? controllers.network.getActiveChain().chainRef;
+
+      const trimmedValue = valueEther.trim();
+      let wei: bigint;
+      try {
+        wei = Value.fromEther(trimmedValue);
+      } catch (error) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "Invalid amount",
+          data: { valueEther: trimmedValue, error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+
+      const approvalId = crypto.randomUUID();
+      const requestContext = {
+        transport: "ui" as const,
+        portId: "ui",
+        sessionId: uiSessionId,
+        requestId: approvalId,
+        origin: uiOrigin,
+      };
+
+      const request: TransactionRequest = {
+        namespace: "eip155",
+        chainRef: resolvedChainRef,
+        payload: {
+          to,
+          value: Hex.fromNumber(wei),
+        },
+      };
+      void controllers.transactions
+        .requestTransactionApproval(uiOrigin, request, requestContext, { id: approvalId })
+        .catch(() => {});
+
+      return { approvalId };
     },
 
     "ui.approvals.approve": async ({ id }) => {

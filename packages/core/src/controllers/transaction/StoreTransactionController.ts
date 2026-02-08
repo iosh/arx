@@ -200,6 +200,7 @@ export class StoreTransactionController implements TransactionController {
     origin: string,
     request: TransactionRequest,
     requestContext: RequestContextRecord,
+    opts?: { id?: string },
   ): Promise<TransactionMeta> {
     if (request.namespace !== "eip155") {
       throw new Error(`Unsupported transaction namespace: ${request.namespace}`);
@@ -212,7 +213,7 @@ export class StoreTransactionController implements TransactionController {
 
     const chainRef = request.chainRef ?? activeChain.chainRef;
 
-    const id = crypto.randomUUID();
+    const id = opts?.id ?? crypto.randomUUID();
     const timestamp = this.#nextTimestamp();
     const fromAddress = this.#findFromAddress(request) ?? this.#accounts.getActivePointer()?.address ?? null;
 

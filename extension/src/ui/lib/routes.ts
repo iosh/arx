@@ -8,6 +8,7 @@ export const ROUTES = {
   ONBOARDING_COMPLETE: "/onboarding/complete",
   ACCOUNTS: "/accounts",
   NETWORKS: "/networks",
+  SEND: "/send",
   APPROVALS: "/approvals",
   SETTINGS: "/settings",
 } as const;

@@ -6,6 +6,7 @@ import { networksMethods } from "./methods/networks.js";
 import { onboardingMethods } from "./methods/onboarding.js";
 import { sessionMethods } from "./methods/session.js";
 import { snapshotMethods } from "./methods/snapshot.js";
+import { transactionsMethods } from "./methods/transactions.js";
 import type { UiMethodDefinition } from "./methods/types.js";
 
 export const uiMethods = {
@@ -32,4 +33,7 @@ export const uiMethods = {
 
   // --- keyrings ---
   ...keyringsMethods,
+
+  // --- transactions ---
+  ...transactionsMethods,
 } as const satisfies Record<string, UiMethodDefinition>;

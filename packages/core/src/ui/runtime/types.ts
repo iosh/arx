@@ -45,5 +45,10 @@ export type UiRuntimeDeps = {
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
+  /**
+   * Origin used for UI-initiated requests (e.g. creating approvals from the wallet UI).
+   * Must be a valid URL origin string (e.g. "chrome-extension://<id>").
+   */
+  uiOrigin: string;
   platform: UiPlatformAdapter;
 };

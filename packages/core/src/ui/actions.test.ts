@@ -24,6 +24,8 @@ describe("ui actions", () => {
     // Execute all sugar functions once to record which underlying methods are used.
     void actions.snapshot.get();
 
+    void actions.balances.getNative({ chainRef: "eip155:1", address: "0x0" });
+
     void actions.attention.openNotification();
 
     void actions.session.unlock({ password: "pw" });

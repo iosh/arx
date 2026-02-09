@@ -74,7 +74,6 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
       persistVaultMeta: methodMeta.effects?.persistVaultMeta ?? false,
       holdBroadcast: methodMeta.effects?.holdBroadcast ?? false,
     };
-
     try {
       const params = parseUiMethodParams(method, raw.params);
 

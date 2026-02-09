@@ -280,6 +280,11 @@ export const buildUiSnapshot = (deps: {
       displayName: chain.displayName,
       shortName: chain.shortName ?? null,
       icon: chain.icon?.url ?? null,
+      nativeCurrency: {
+        name: chain.nativeCurrency.name,
+        symbol: chain.nativeCurrency.symbol,
+        decimals: chain.nativeCurrency.decimals,
+      },
     },
     networks: {
       active: networkState.activeChain,
@@ -290,6 +295,11 @@ export const buildUiSnapshot = (deps: {
         displayName: metadata.displayName,
         shortName: metadata.shortName ?? null,
         icon: metadata.icon?.url ?? null,
+        nativeCurrency: {
+          name: metadata.nativeCurrency.name,
+          symbol: metadata.nativeCurrency.symbol,
+          decimals: metadata.nativeCurrency.decimals,
+        },
       })),
     },
     accounts: {

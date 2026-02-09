@@ -1,6 +1,7 @@
 import { accountsMethods } from "./methods/accounts.js";
 import { approvalsMethods } from "./methods/approvals.js";
 import { attentionMethods } from "./methods/attention.js";
+import { balancesMethods } from "./methods/balances.js";
 import { keyringsMethods } from "./methods/keyrings.js";
 import { networksMethods } from "./methods/networks.js";
 import { onboardingMethods } from "./methods/onboarding.js";
@@ -15,6 +16,9 @@ export const uiMethods = {
 
   // --- attention ---
   ...attentionMethods,
+
+  // --- balances ---
+  ...balancesMethods,
 
   // --- session ---
   ...sessionMethods,

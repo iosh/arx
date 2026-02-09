@@ -21,6 +21,11 @@ export const ChainSnapshotSchema = z.object({
   displayName: z.string().min(1),
   shortName: z.string().nullable(),
   icon: z.string().url().nullable(),
+  nativeCurrency: z.strictObject({
+    name: z.string().min(1),
+    symbol: z.string().min(1),
+    decimals: z.number().int().nonnegative(),
+  }),
 });
 
 export const AccountsSnapshotSchema = z.object({

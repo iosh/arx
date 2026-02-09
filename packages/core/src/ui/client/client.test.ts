@@ -10,6 +10,7 @@ const SNAPSHOT_FIXTURE = {
     displayName: "Ethereum",
     shortName: "eth",
     icon: null,
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
   networks: {
     active: "eip155:1",
@@ -21,6 +22,7 @@ const SNAPSHOT_FIXTURE = {
         displayName: "Ethereum",
         shortName: "eth",
         icon: null,
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       },
     ],
   },

@@ -18,6 +18,10 @@ export const uiActions = (client: UiClient) => {
       get: call("ui.snapshot.get"),
     },
 
+    balances: {
+      getNative: call("ui.balances.getNative"),
+    },
+
     attention: {
       openNotification: call("ui.attention.openNotification"),
     },

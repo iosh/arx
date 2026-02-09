@@ -8,6 +8,7 @@ import { PermissionScopes } from "../../controllers/permission/types.js";
 import type { TransactionRequest } from "../../controllers/transaction/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
+import type { Eip155RpcCapabilities } from "../../rpc/clients/eip155/eip155.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
 import { buildUiSnapshot } from "./snapshot.js";
@@ -252,7 +253,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 };
 
 export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
-  const { controllers, session, keyring, attention, platform, uiOrigin } = deps;
+  const { controllers, session, keyring, attention, platform, uiOrigin, rpcClients } = deps;
   // Stable session id for UI-initiated approval request contexts within this background lifetime.
   const uiSessionId = crypto.randomUUID();
 
@@ -273,11 +274,39 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       displayName: chain.displayName,
       shortName: chain.shortName ?? null,
       icon: chain.icon?.url ?? null,
+      nativeCurrency: {
+        name: chain.nativeCurrency.name,
+        symbol: chain.nativeCurrency.symbol,
+        decimals: chain.nativeCurrency.decimals,
+      },
     };
   };
 
   return {
     "ui.snapshot.get": async () => buildSnapshot(),
+
+    "ui.balances.getNative": async ({ chainRef, address }) => {
+      assertUnlocked(session);
+      const chain = controllers.network.getChain(chainRef);
+      if (!chain) {
+        throw arxError({ reason: ArxReasons.ChainNotFound, message: `Unknown chain: ${chainRef}` });
+      }
+
+      if (chain.namespace !== "eip155") {
+        throw arxError({
+          reason: ArxReasons.ChainNotSupported,
+          message: `Native balance is not supported for namespace "${chain.namespace}" yet.`,
+          data: { chainRef, namespace: chain.namespace },
+        });
+      }
+
+      const rpc = rpcClients.getClient<Eip155RpcCapabilities>("eip155", chainRef);
+      const balanceHex = await rpc.getBalance(address, "latest", { timeoutMs: 15_000 });
+      Hex.assert(balanceHex as Hex.Hex, { strict: false });
+      const amountWei = Hex.toBigInt(balanceHex as Hex.Hex);
+
+      return { chainRef, address, amountWei: amountWei.toString(10), fetchedAt: Date.now() };
+    },
 
     "ui.attention.openNotification": async () => {
       return await platform.openNotificationPopup();

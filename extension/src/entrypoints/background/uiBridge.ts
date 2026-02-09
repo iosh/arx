@@ -5,6 +5,7 @@ import {
   type BackgroundSessionServices,
   type HandlerControllers,
   type KeyringService,
+  type RpcClientRegistry,
 } from "@arx/core";
 import { isUiMethodName, type UiRequestEnvelope, uiMethods } from "@arx/core/ui";
 import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/runtime";
@@ -20,6 +21,7 @@ type BridgeDeps = {
   browser: typeof browserDefaultType;
   controllers: HandlerControllers;
   session: BackgroundSessionServices;
+  rpcClients: Pick<RpcClientRegistry, "getClient">;
   persistVaultMeta: () => Promise<void>;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
@@ -29,6 +31,7 @@ export const createUiBridge = ({
   browser: runtimeBrowser,
   controllers,
   session,
+  rpcClients,
   persistVaultMeta,
   keyring,
   attention,
@@ -144,6 +147,7 @@ export const createUiBridge = ({
     session,
     keyring,
     attention,
+    rpcClients,
     uiOrigin,
     platform: { openOnboardingTab, openNotificationPopup },
   });

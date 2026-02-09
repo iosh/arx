@@ -5,7 +5,7 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "@arx/core";
-import { ApprovalTypes, ArxReasons, arxError, KeyringService } from "@arx/core";
+import { ApprovalTypes, ArxReasons, arxError, KeyringService, registerBuiltinRpcAdapters } from "@arx/core";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import {
   UI_CHANNEL,
@@ -18,6 +18,8 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUiBridge } from "./uiBridge";
 
+registerBuiltinRpcAdapters();
+
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
 const CHAIN = {
@@ -27,6 +29,7 @@ const CHAIN = {
   displayName: "Ethereum",
   shortName: "eth",
   icon: null,
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
 type Listener = (msg: unknown) => void;
@@ -535,6 +538,12 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
     browser: browserApi as any,
     controllers,
     session,
+    rpcClients: {
+      getClient: () =>
+        ({
+          getBalance: vi.fn(async () => "0x0"),
+        }) as any,
+    },
     persistVaultMeta,
     keyring,
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) },

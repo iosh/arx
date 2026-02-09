@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useNativeBalanceQuery } from "@/ui/hooks/useNativeBalanceQuery";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
@@ -45,6 +46,8 @@ function HomePage() {
     }
   };
 
+  const nativeBalance = useNativeBalanceQuery(snapshot);
+
   if (!snapshot) {
     return null;
   }
@@ -53,6 +56,11 @@ function HomePage() {
     <HomeScreen
       snapshot={snapshot}
       backupWarnings={backupWarnings}
+      nativeBalanceWei={nativeBalance.balanceWei}
+      nativeBalanceLoading={nativeBalance.isInitialLoading}
+      nativeBalanceRefreshing={nativeBalance.isRefreshing}
+      nativeBalanceError={nativeBalance.error ? "Failed to load balance" : null}
+      onRefreshNativeBalance={() => void nativeBalance.refresh()}
       onMarkBackedUp={handleMarkBackedUp}
       onExportMnemonic={handleExportMnemonic}
       markingKeyringId={markingId}

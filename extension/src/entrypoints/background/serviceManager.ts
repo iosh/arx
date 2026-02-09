@@ -371,6 +371,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         browser,
         controllers,
         session,
+        rpcClients: services.rpcClients,
         persistVaultMeta,
         keyring,
         attention: services.attention,

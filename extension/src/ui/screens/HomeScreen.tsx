@@ -1,22 +1,29 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import {
   Activity,
-  ArrowDownToLine,
   ArrowUpRight,
   ChevronDown,
   ChevronRight,
+  Eye,
+  EyeOff,
   History,
+  RefreshCw,
   Settings,
   ShieldAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Paragraph, Spinner, useTheme, XStack, YStack } from "tamagui";
-import { AddressDisplay, Button, ChainBadge, PasswordInput, Screen, Sheet } from "../components";
+import { Paragraph, Spinner, Text, useTheme, XStack, YStack } from "tamagui";
+import { AddressDisplay, BalanceDisplay, Button, ChainBadge, PasswordInput, Screen, Sheet } from "../components";
 import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
   snapshot: UiSnapshot;
   backupWarnings: Array<{ keyringId: string; alias: string | null }>;
+  nativeBalanceWei: string | null;
+  nativeBalanceLoading: boolean;
+  nativeBalanceRefreshing: boolean;
+  nativeBalanceError: string | null;
+  onRefreshNativeBalance: () => void;
   onMarkBackedUp: (keyringId: string) => Promise<void>;
   onExportMnemonic: (params: { keyringId: string; password: string }) => Promise<string[]>;
   markingKeyringId: string | null;
@@ -61,6 +68,11 @@ const QuickAction = ({
 
 export const HomeScreen = ({
   snapshot,
+  nativeBalanceWei,
+  nativeBalanceLoading,
+  nativeBalanceRefreshing,
+  nativeBalanceError,
+  onRefreshNativeBalance,
   onMarkBackedUp,
   onExportMnemonic,
   onOpenApprovals,
@@ -75,6 +87,7 @@ export const HomeScreen = ({
   const { chain, accounts } = snapshot;
   const approvalsCount = snapshot.approvals.length;
 
+  const [hideBalance, setHideBalance] = useState(false);
   const [confirmKeyringId, setConfirmKeyringId] = useState<string | null>(null);
   const [exportPassword, setExportPassword] = useState("");
   const [exportWords, setExportWords] = useState<string[] | null>(null);
@@ -146,6 +159,142 @@ export const HomeScreen = ({
       <YStack gap="$6" paddingBottom="$8">
         {/* Hero Section */}
         <YStack alignItems="center" gap="$2" paddingHorizontal="$4" paddingTop="$6" paddingBottom="$4">
+          {/* Balance */}
+          <YStack alignItems="center" gap="$1">
+            <Paragraph color="$mutedText" fontSize="$2" fontWeight="600">
+              Balance
+            </Paragraph>
+
+            {accounts.active ? (
+              hideBalance ? (
+                <XStack alignItems="baseline" gap="$2">
+                  <Paragraph color="$text" fontSize="$5" fontWeight="600">
+                    ••••
+                  </Paragraph>
+                  <Paragraph color="$mutedText" fontSize="$3">
+                    {chain.nativeCurrency.symbol}
+                  </Paragraph>
+                  <XStack gap="$1">
+                    <Button
+                      size="$2"
+                      variant="ghost"
+                      circular
+                      aria-label="Show balance"
+                      icon={<Eye size={16} color={theme.text.get()} />}
+                      onPress={() => setHideBalance(false)}
+                    />
+                    <Button
+                      size="$2"
+                      variant="ghost"
+                      circular
+                      aria-label="Refresh balance"
+                      icon={<RefreshCw size={16} color={theme.text.get()} />}
+                      onPress={onRefreshNativeBalance}
+                      loading={nativeBalanceRefreshing}
+                      spinnerPosition="replace"
+                      disabled={nativeBalanceLoading}
+                    />
+                  </XStack>
+                </XStack>
+              ) : nativeBalanceLoading ? (
+                <BalanceDisplay
+                  amount="0"
+                  symbol={chain.nativeCurrency.symbol}
+                  decimals={chain.nativeCurrency.decimals}
+                  loading
+                  right={
+                    <XStack gap="$1">
+                      <Button
+                        size="$2"
+                        variant="ghost"
+                        circular
+                        aria-label="Hide balance"
+                        icon={<EyeOff size={16} color={theme.text.get()} />}
+                        onPress={() => setHideBalance(true)}
+                      />
+                      <Button
+                        size="$2"
+                        variant="ghost"
+                        circular
+                        aria-label="Refresh balance"
+                        icon={<RefreshCw size={16} color={theme.text.get()} />}
+                        onPress={onRefreshNativeBalance}
+                        disabled
+                      />
+                    </XStack>
+                  }
+                />
+              ) : nativeBalanceWei !== null ? (
+                <BalanceDisplay
+                  amount={nativeBalanceWei}
+                  symbol={chain.nativeCurrency.symbol}
+                  decimals={chain.nativeCurrency.decimals}
+                  right={
+                    <XStack gap="$1">
+                      <Button
+                        size="$2"
+                        variant="ghost"
+                        circular
+                        aria-label="Hide balance"
+                        icon={<EyeOff size={16} color={theme.text.get()} />}
+                        onPress={() => setHideBalance(true)}
+                      />
+                      <Button
+                        size="$2"
+                        variant="ghost"
+                        circular
+                        aria-label="Refresh balance"
+                        icon={<RefreshCw size={16} color={theme.text.get()} />}
+                        onPress={onRefreshNativeBalance}
+                        loading={nativeBalanceRefreshing}
+                        spinnerPosition="replace"
+                      />
+                    </XStack>
+                  }
+                />
+              ) : (
+                <XStack alignItems="baseline" gap="$2">
+                  <Paragraph color="$text" fontSize="$5" fontWeight="600">
+                    —
+                  </Paragraph>
+                  <Paragraph color="$mutedText" fontSize="$3">
+                    {chain.nativeCurrency.symbol}
+                  </Paragraph>
+                  <XStack gap="$1">
+                    <Button
+                      size="$2"
+                      variant="ghost"
+                      circular
+                      aria-label="Hide balance"
+                      icon={<EyeOff size={16} color={theme.text.get()} />}
+                      onPress={() => setHideBalance(true)}
+                    />
+                    <Button
+                      size="$2"
+                      variant="ghost"
+                      circular
+                      aria-label="Refresh balance"
+                      icon={<RefreshCw size={16} color={theme.text.get()} />}
+                      onPress={onRefreshNativeBalance}
+                      loading={nativeBalanceRefreshing}
+                      spinnerPosition="replace"
+                    />
+                  </XStack>
+                </XStack>
+              )
+            ) : (
+              <Paragraph color="$mutedText" fontSize="$3">
+                Select Account
+              </Paragraph>
+            )}
+
+            {nativeBalanceError ? (
+              <Paragraph color="$danger" fontSize="$2">
+                {nativeBalanceError}
+              </Paragraph>
+            ) : null}
+          </YStack>
+
           {/* Address */}
           <YStack alignItems="center" gap="$2">
             {accounts.active ? (
@@ -277,9 +426,9 @@ export const HomeScreen = ({
       >
         <Paragraph color="$mutedText" fontSize="$3" lineHeight="$4">
           Only mark this as backed up if you have securely saved the recovery phrase for{" "}
-          <Paragraph fontWeight="700" color="$text">
+          <Text fontWeight="700" color="$text">
             {confirmingWarning?.alias ?? "this wallet"}
-          </Paragraph>
+          </Text>
           .
         </Paragraph>
 

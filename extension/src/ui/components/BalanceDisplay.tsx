@@ -23,7 +23,7 @@ export function BalanceDisplay({
     return (
       <XStack alignItems="center" gap="$2" minWidth={0}>
         <YStack
-          width="60%"
+          width={120}
           minWidth={80}
           maxWidth={140}
           height={18}

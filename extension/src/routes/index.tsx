@@ -58,9 +58,7 @@ function HomePage() {
       backupWarnings={backupWarnings}
       nativeBalanceWei={nativeBalance.balanceWei}
       nativeBalanceLoading={nativeBalance.isInitialLoading}
-      nativeBalanceRefreshing={nativeBalance.isRefreshing}
       nativeBalanceError={nativeBalance.error ? "Failed to load balance" : null}
-      onRefreshNativeBalance={() => void nativeBalance.refresh()}
       onMarkBackedUp={handleMarkBackedUp}
       onExportMnemonic={handleExportMnemonic}
       markingKeyringId={markingId}

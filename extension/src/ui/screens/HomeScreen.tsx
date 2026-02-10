@@ -1,19 +1,29 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import {
   Activity,
+  ArrowDownLeft,
   ArrowUpRight,
   ChevronDown,
   ChevronRight,
-  Eye,
-  EyeOff,
-  History,
-  RefreshCw,
+  MoreHorizontal,
+  RefreshCcw,
   Settings,
   ShieldAlert,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Paragraph, Spinner, Text, useTheme, XStack, YStack } from "tamagui";
-import { AddressDisplay, BalanceDisplay, Button, ChainBadge, PasswordInput, Screen, Sheet } from "../components";
+import { Paragraph, SizableText, Spinner, Text, useTheme, XStack, YStack } from "tamagui";
+import { pushToast } from "@/ui/lib/toast";
+import {
+  AccountCard,
+  Button,
+  Card,
+  ChainBadge,
+  PasswordInput,
+  Screen,
+  Sheet,
+  Tabs,
+  TokenListItem,
+} from "../components";
 import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
@@ -21,9 +31,7 @@ type HomeScreenProps = {
   backupWarnings: Array<{ keyringId: string; alias: string | null }>;
   nativeBalanceWei: string | null;
   nativeBalanceLoading: boolean;
-  nativeBalanceRefreshing: boolean;
   nativeBalanceError: string | null;
-  onRefreshNativeBalance: () => void;
   onMarkBackedUp: (keyringId: string) => Promise<void>;
   onExportMnemonic: (params: { keyringId: string; password: string }) => Promise<string[]>;
   markingKeyringId: string | null;
@@ -34,19 +42,16 @@ type HomeScreenProps = {
   onNavigateSettings: () => void;
 };
 
-const QuickAction = ({
-  icon,
-  label,
-  onPress,
-  disabled,
-}: {
+type QuickActionProps = {
   icon: React.ReactElement;
   label: string;
   onPress?: () => void;
   disabled?: boolean;
-}) => {
+};
+
+const QuickAction = ({ icon, label, onPress, disabled }: QuickActionProps) => {
   return (
-    <YStack alignItems="center" gap="$2" opacity={disabled ? 0.5 : 1}>
+    <YStack alignItems="center" gap="$2" opacity={disabled ? 0.4 : 1}>
       <Button
         size="$5"
         circular
@@ -56,23 +61,28 @@ const QuickAction = ({
         icon={icon}
         aria-label={label}
         backgroundColor="$surface"
-        hoverStyle={{ backgroundColor: "$cardBg" }}
-        pressStyle={{ backgroundColor: "$border" }}
+        hoverStyle={{ backgroundColor: disabled ? "$surface" : "$cardBg" }}
+        pressStyle={{ backgroundColor: disabled ? "$surface" : "$border" }}
       />
-      <Paragraph fontSize="$2" fontWeight="600" color="$mutedText">
+      <Paragraph fontSize="$2" fontWeight="500" color={disabled ? "$mutedText" : "$text"}>
         {label}
       </Paragraph>
     </YStack>
   );
 };
 
+const HOME_TABS = [
+  { value: "tokens", label: "Tokens" },
+  { value: "activity", label: "Activity" },
+] as const;
+
+type HomeTab = (typeof HOME_TABS)[number]["value"];
+
 export const HomeScreen = ({
   snapshot,
   nativeBalanceWei,
   nativeBalanceLoading,
-  nativeBalanceRefreshing,
   nativeBalanceError,
-  onRefreshNativeBalance,
   onMarkBackedUp,
   onExportMnemonic,
   onOpenApprovals,
@@ -87,13 +97,16 @@ export const HomeScreen = ({
   const { chain, accounts } = snapshot;
   const approvalsCount = snapshot.approvals.length;
 
-  const [hideBalance, setHideBalance] = useState(false);
+  const [activeTab, setActiveTab] = useState<HomeTab>("tokens");
+
+  // Backup sheet state
   const [confirmKeyringId, setConfirmKeyringId] = useState<string | null>(null);
   const [exportPassword, setExportPassword] = useState("");
   const [exportWords, setExportWords] = useState<string[] | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const exportRequestIdRef = useRef(0);
+
   const confirmingWarning = useMemo(
     () => (confirmKeyringId ? (backupWarnings.find((w) => w.keyringId === confirmKeyringId) ?? null) : null),
     [backupWarnings, confirmKeyringId],
@@ -103,24 +116,24 @@ export const HomeScreen = ({
 
   useEffect(() => {
     return () => {
-      // Prevent any in-flight export from updating state after unmount.
       exportRequestIdRef.current += 1;
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset export state when sheet keyring changes/closes
   useEffect(() => {
-    // Avoid keeping sensitive info around after closing/changing the sheet.
-
-    exportRequestIdRef.current += 1; // invalidate any in-flight export request
+    exportRequestIdRef.current += 1;
     setExportPassword("");
     setExportWords(null);
     setExportError(null);
     setExporting(false);
   }, [confirmKeyringId]);
 
+  const hasAlerts = approvalsCount > 0 || backupWarnings.length > 0;
+
   return (
     <Screen padded={false} scroll>
-      {/* Header Section */}
+      {/* Header */}
       <XStack paddingHorizontal="$4" paddingVertical="$2" alignItems="center" justifyContent="space-between">
         <Button
           size="$3"
@@ -134,283 +147,202 @@ export const HomeScreen = ({
           iconAfter={<ChevronDown size={16} color={theme.mutedText.get()} />}
         />
 
-        <XStack gap="$2">
-          {approvalsCount > 0 && (
-            <Button
-              size="$3"
-              circular
-              variant="danger"
-              onPress={onOpenApprovals}
-              icon={<Activity size={18} />}
-              aria-label="Open pending requests"
-            />
-          )}
-          <Button
-            size="$3"
-            variant="ghost"
-            circular
-            onPress={onNavigateSettings}
-            icon={<Settings size={20} color={theme.text.get()} />}
-            aria-label="Settings"
-          />
-        </XStack>
+        <Button
+          size="$3"
+          variant="ghost"
+          circular
+          onPress={onNavigateSettings}
+          icon={<Settings size={20} color={theme.text.get()} />}
+          aria-label="Settings"
+        />
       </XStack>
 
-      <YStack gap="$6" paddingBottom="$8">
-        {/* Hero Section */}
-        <YStack alignItems="center" gap="$2" paddingHorizontal="$4" paddingTop="$6" paddingBottom="$4">
-          {/* Balance */}
-          <YStack alignItems="center" gap="$1">
-            <Paragraph color="$mutedText" fontSize="$2" fontWeight="600">
-              Balance
-            </Paragraph>
-
-            {accounts.active ? (
-              hideBalance ? (
-                <XStack alignItems="baseline" gap="$2">
-                  <Paragraph color="$text" fontSize="$5" fontWeight="600">
-                    ••••
-                  </Paragraph>
-                  <Paragraph color="$mutedText" fontSize="$3">
-                    {chain.nativeCurrency.symbol}
-                  </Paragraph>
-                  <XStack gap="$1">
-                    <Button
-                      size="$2"
-                      variant="ghost"
-                      circular
-                      aria-label="Show balance"
-                      icon={<Eye size={16} color={theme.text.get()} />}
-                      onPress={() => setHideBalance(false)}
-                    />
-                    <Button
-                      size="$2"
-                      variant="ghost"
-                      circular
-                      aria-label="Refresh balance"
-                      icon={<RefreshCw size={16} color={theme.text.get()} />}
-                      onPress={onRefreshNativeBalance}
-                      loading={nativeBalanceRefreshing}
-                      spinnerPosition="replace"
-                      disabled={nativeBalanceLoading}
-                    />
-                  </XStack>
-                </XStack>
-              ) : nativeBalanceLoading ? (
-                <BalanceDisplay
-                  amount="0"
-                  symbol={chain.nativeCurrency.symbol}
-                  decimals={chain.nativeCurrency.decimals}
-                  loading
-                  right={
-                    <XStack gap="$1">
-                      <Button
-                        size="$2"
-                        variant="ghost"
-                        circular
-                        aria-label="Hide balance"
-                        icon={<EyeOff size={16} color={theme.text.get()} />}
-                        onPress={() => setHideBalance(true)}
-                      />
-                      <Button
-                        size="$2"
-                        variant="ghost"
-                        circular
-                        aria-label="Refresh balance"
-                        icon={<RefreshCw size={16} color={theme.text.get()} />}
-                        onPress={onRefreshNativeBalance}
-                        disabled
-                      />
-                    </XStack>
-                  }
-                />
-              ) : nativeBalanceWei !== null ? (
-                <BalanceDisplay
-                  amount={nativeBalanceWei}
-                  symbol={chain.nativeCurrency.symbol}
-                  decimals={chain.nativeCurrency.decimals}
-                  right={
-                    <XStack gap="$1">
-                      <Button
-                        size="$2"
-                        variant="ghost"
-                        circular
-                        aria-label="Hide balance"
-                        icon={<EyeOff size={16} color={theme.text.get()} />}
-                        onPress={() => setHideBalance(true)}
-                      />
-                      <Button
-                        size="$2"
-                        variant="ghost"
-                        circular
-                        aria-label="Refresh balance"
-                        icon={<RefreshCw size={16} color={theme.text.get()} />}
-                        onPress={onRefreshNativeBalance}
-                        loading={nativeBalanceRefreshing}
-                        spinnerPosition="replace"
-                      />
-                    </XStack>
-                  }
-                />
-              ) : (
-                <XStack alignItems="baseline" gap="$2">
-                  <Paragraph color="$text" fontSize="$5" fontWeight="600">
-                    —
-                  </Paragraph>
-                  <Paragraph color="$mutedText" fontSize="$3">
-                    {chain.nativeCurrency.symbol}
-                  </Paragraph>
-                  <XStack gap="$1">
-                    <Button
-                      size="$2"
-                      variant="ghost"
-                      circular
-                      aria-label="Hide balance"
-                      icon={<EyeOff size={16} color={theme.text.get()} />}
-                      onPress={() => setHideBalance(true)}
-                    />
-                    <Button
-                      size="$2"
-                      variant="ghost"
-                      circular
-                      aria-label="Refresh balance"
-                      icon={<RefreshCw size={16} color={theme.text.get()} />}
-                      onPress={onRefreshNativeBalance}
-                      loading={nativeBalanceRefreshing}
-                      spinnerPosition="replace"
-                    />
-                  </XStack>
-                </XStack>
-              )
-            ) : (
-              <Paragraph color="$mutedText" fontSize="$3">
-                Select Account
-              </Paragraph>
-            )}
-
-            {nativeBalanceError ? (
-              <Paragraph color="$danger" fontSize="$2">
-                {nativeBalanceError}
-              </Paragraph>
-            ) : null}
-          </YStack>
-
-          {/* Address */}
-          <YStack alignItems="center" gap="$2">
-            {accounts.active ? (
-              <Button
-                size="$3"
-                variant="ghost"
-                borderRadius="$full"
-                paddingHorizontal="$2"
-                hoverStyle={{ backgroundColor: "$surface" }}
-                pressStyle={{ opacity: 0.7 }}
-                onPress={onNavigateAccounts}
-              >
-                <XStack alignItems="center" gap="$2">
-                  <AddressDisplay
-                    address={accounts.active}
-                    namespace={chain.namespace}
-                    chainRef={chain.chainRef}
-                    fontSize="$3"
-                    fontWeight="500"
-                    color="$mutedText"
-                    copyable={false}
-                    interactive={false}
-                  />
-                  <ChevronDown size={14} color={theme.mutedText.get()} />
-                </XStack>
-              </Button>
-            ) : (
-              <Button size="$2" variant="secondary" borderRadius="$full" onPress={onNavigateAccounts}>
-                Select Account
-              </Button>
-            )}
-          </YStack>
+      <YStack gap="$2" paddingBottom="$4">
+        {/* Account Card */}
+        <YStack paddingHorizontal="$4">
+          <AccountCard
+            address={accounts.active}
+            chainRef={chain.chainRef}
+            balanceWei={nativeBalanceWei}
+            balanceLoading={nativeBalanceLoading}
+            balanceError={nativeBalanceError}
+            nativeSymbol={chain.nativeCurrency.symbol}
+            nativeDecimals={chain.nativeCurrency.decimals}
+            onPressAccount={onNavigateAccounts}
+          />
         </YStack>
 
-        {/* Action Buttons */}
-        <XStack justifyContent="space-evenly" paddingHorizontal="$4">
+        {/* Quick Actions */}
+        <XStack justifyContent="space-around" paddingHorizontal="$4">
           <QuickAction
             icon={<ArrowUpRight size={24} color={theme.text.get()} />}
             label="Send"
             onPress={accounts.active ? onNavigateSend : undefined}
             disabled={!accounts.active}
           />
-          <QuickAction
-            icon={<History size={24} color={theme.text.get()} />}
-            label="Activity"
-            onPress={() => {}} // TODO: Implement Activity
-          />
+          <QuickAction icon={<ArrowDownLeft size={24} color={theme.mutedText.get()} />} label="Receive" disabled />
+          <QuickAction icon={<RefreshCcw size={24} color={theme.mutedText.get()} />} label="Swap" disabled />
+          <QuickAction icon={<MoreHorizontal size={24} color={theme.mutedText.get()} />} label="More" disabled />
         </XStack>
 
-        {/* Alerts & Tasks Section */}
-        <YStack paddingHorizontal="$4" gap="$3">
-          {approvalsCount > 0 && (
-            <Button
-              variant="secondary"
-              backgroundColor="$cardBg"
-              borderColor="$accent"
-              borderRadius="$lg"
-              padding="$4"
-              onPress={onOpenApprovals}
-              icon={<Activity size={20} color={theme.accent.get()} />}
-              iconAfter={<ChevronRight size={20} color={theme.mutedText.get()} />}
-              justifyContent="space-between"
-            >
-              <YStack gap="$1" alignItems="flex-start">
-                <Paragraph fontWeight="600" fontSize="$4">
-                  Pending Requests
-                </Paragraph>
-                <Paragraph color="$mutedText" fontSize="$3">
-                  {approvalsCount} request{approvalsCount !== 1 ? "s" : ""} waiting
-                </Paragraph>
-              </YStack>
-            </Button>
-          )}
-
-          {backupWarnings.map((warning) => {
-            const alias = warning.alias ?? "Wallet";
-            const markingThis = markingKeyringId === warning.keyringId;
-
-            return (
-              <Button
-                key={warning.keyringId}
-                variant="secondary"
-                backgroundColor="$dangerBackground"
-                borderColor="$danger"
-                borderRadius="$lg"
-                padding="$4"
-                onPress={() => setConfirmKeyringId(warning.keyringId)}
+        {/* Alerts Section */}
+        {hasAlerts && (
+          <YStack paddingHorizontal="$4" gap="$2">
+            {approvalsCount > 0 && (
+              <Card
+                padded
+                bordered
+                borderColor="$accent"
+                backgroundColor="$cardBg"
+                pressStyle={{ opacity: 0.9 }}
+                onPress={onOpenApprovals}
+                cursor="pointer"
               >
-                <XStack gap="$3" alignItems="center" width="100%">
-                  <YStack
-                    width={40}
-                    height={40}
-                    borderRadius="$full"
-                    backgroundColor="$danger"
+                <XStack alignItems="center" justifyContent="space-between">
+                  <XStack alignItems="center" gap="$3">
+                    <YStack
+                      width={36}
+                      height={36}
+                      borderRadius="$full"
+                      backgroundColor="$accent"
+                      alignItems="center"
+                      justifyContent="center"
+                      opacity={0.15}
+                    >
+                      <Activity size={18} color={theme.accent.get()} />
+                    </YStack>
+                    <YStack gap="$0.5">
+                      <Paragraph fontWeight="600" fontSize="$3" color="$text">
+                        Pending Requests
+                      </Paragraph>
+                      <Paragraph color="$mutedText" fontSize="$2">
+                        {approvalsCount} request{approvalsCount !== 1 ? "s" : ""} waiting
+                      </Paragraph>
+                    </YStack>
+                  </XStack>
+                  <ChevronRight size={18} color={theme.mutedText.get()} />
+                </XStack>
+              </Card>
+            )}
+
+            {backupWarnings.map((warning) => {
+              const alias = warning.alias ?? "Wallet";
+              const markingThis = markingKeyringId === warning.keyringId;
+
+              return (
+                <Card
+                  key={warning.keyringId}
+                  padded
+                  bordered
+                  borderColor="$danger"
+                  backgroundColor="$dangerBackground"
+                  pressStyle={{ opacity: 0.9 }}
+                  onPress={() => setConfirmKeyringId(warning.keyringId)}
+                  cursor="pointer"
+                >
+                  <XStack alignItems="center" justifyContent="space-between">
+                    <XStack alignItems="center" gap="$3">
+                      <YStack
+                        width={36}
+                        height={36}
+                        borderRadius="$full"
+                        backgroundColor="$danger"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <ShieldAlert size={18} color={theme.dangerText.get()} />
+                      </YStack>
+                      <YStack gap="$0.5">
+                        <Paragraph fontWeight="600" fontSize="$3" color="$text">
+                          Backup Required
+                        </Paragraph>
+                        <Paragraph color="$mutedText" fontSize="$2">
+                          {alias} needs backup
+                        </Paragraph>
+                      </YStack>
+                    </XStack>
+                    {markingThis ? (
+                      <Spinner size="small" color="$mutedText" />
+                    ) : (
+                      <ChevronRight size={18} color={theme.mutedText.get()} />
+                    )}
+                  </XStack>
+                </Card>
+              );
+            })}
+          </YStack>
+        )}
+
+        {/* Tabs */}
+        <YStack flex={1}>
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as HomeTab)}
+            orientation="horizontal"
+            width="100%"
+            flexDirection="column"
+          >
+            <Tabs.List width="100%" borderBottomWidth={1} borderColor="$border" paddingHorizontal="$4">
+              {HOME_TABS.map((tab) => {
+                const isActive = tab.value === activeTab;
+
+                return (
+                  <Tabs.Tab
+                    key={tab.value}
+                    value={tab.value}
+                    flex={1}
                     alignItems="center"
                     justifyContent="center"
+                    disableActiveTheme
+                    paddingVertical="$3"
+                    paddingHorizontal="$2"
+                    borderBottomWidth={2}
+                    borderColor={isActive ? "$primary" : "transparent"}
+                    borderWidth={0}
+                    borderRadius={0}
+                    backgroundColor="transparent"
+                    outlineWidth={0}
+                    outlineColor="transparent"
+                    marginBottom={-1}
+                    hoverStyle={{ backgroundColor: "transparent", borderColor: isActive ? "$primary" : "$border" }}
+                    pressStyle={{ backgroundColor: "transparent", opacity: 0.7 }}
+                    focusStyle={{ backgroundColor: "transparent" }}
+                    focusVisibleStyle={{ outlineWidth: 0 }}
                   >
-                    <ShieldAlert size={20} color={theme.dangerText.get()} />
-                  </YStack>
-                  <YStack flex={1} gap="$0.5">
-                    <Paragraph fontWeight="700" fontSize="$4">
-                      Backup Required
-                    </Paragraph>
-                    <Paragraph color="$mutedText" fontSize="$3">
-                      {alias} needs backup
-                    </Paragraph>
-                  </YStack>
-                  {markingThis ? (
-                    <Spinner size="small" color="$mutedText" />
-                  ) : (
-                    <ChevronRight size={20} color={theme.mutedText.get()} />
-                  )}
-                </XStack>
-              </Button>
-            );
-          })}
+                    <SizableText
+                      size="$3"
+                      color={isActive ? "$primary" : "$mutedText"}
+                      fontWeight={isActive ? "600" : "500"}
+                    >
+                      {tab.label}
+                    </SizableText>
+                  </Tabs.Tab>
+                );
+              })}
+            </Tabs.List>
+
+            <Tabs.Content value="tokens">
+              <YStack paddingVertical="$2">
+                <TokenListItem
+                  symbol={chain.nativeCurrency.symbol}
+                  name={chain.nativeCurrency.name}
+                  balanceRaw={nativeBalanceWei}
+                  decimals={chain.nativeCurrency.decimals}
+                  loading={nativeBalanceLoading}
+                />
+              </YStack>
+            </Tabs.Content>
+
+            <Tabs.Content value="activity">
+              <YStack paddingVertical="$2">
+                <YStack padding="$8" alignItems="center" justifyContent="center">
+                  <Paragraph color="$mutedText" fontSize="$3">
+                    No recent activity
+                  </Paragraph>
+                </YStack>
+              </YStack>
+            </Tabs.Content>
+          </Tabs>
         </YStack>
       </YStack>
 
@@ -446,7 +378,8 @@ export const HomeScreen = ({
               <XStack flexWrap="wrap" gap="$2" justifyContent="center">
                 {exportWords.map((word, index) => (
                   <XStack
-                    key={`${index}-${word}`}
+                    // biome-ignore lint/suspicious/noArrayIndexKey: mnemonic word list is fixed order and never re-sorted
+                    key={index}
                     backgroundColor="$bg"
                     borderWidth={1}
                     borderColor="$border"
@@ -531,7 +464,14 @@ export const HomeScreen = ({
                 if (!confirmingWarning) return;
                 void onMarkBackedUp(confirmingWarning.keyringId)
                   .then(() => setConfirmKeyringId(null))
-                  .catch(() => {});
+                  .catch((err) => {
+                    console.warn("[HomeScreen] failed to mark backed up", err);
+                    pushToast({
+                      kind: "error",
+                      message: "Failed to update backup status",
+                      dedupeKey: "backup-status-failed",
+                    });
+                  });
               }}
             >
               Mark backed up

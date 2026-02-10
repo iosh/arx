@@ -35,7 +35,6 @@ export function Screen({ title, subtitle, scroll = true, padded = true, footer, 
             alignSelf="center"
             padding={padding}
             paddingBottom={contentPaddingBottom}
-            gap="$3"
             minWidth={0}
           >
             {children}
@@ -49,7 +48,6 @@ export function Screen({ title, subtitle, scroll = true, padded = true, footer, 
           alignSelf="center"
           padding={padding}
           paddingBottom={contentPaddingBottom}
-          gap="$3"
           minWidth={0}
         >
           {children}

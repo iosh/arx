@@ -51,6 +51,11 @@ export type MethodDefinition = {
     allow?: boolean;
     response?: unknown;
   };
+  /**
+   * Optional fast-fail validator for JSON-RPC params.
+   * Throw ArxReasons.RpcInvalidParams when params are malformed.
+   */
+  validateParams?: (params: JsonRpcParams | undefined, context?: RpcInvocationContext) => void;
   handler: MethodHandler;
   /**
    * Whether this method is a "bootstrap" method that can run before permissions are granted.

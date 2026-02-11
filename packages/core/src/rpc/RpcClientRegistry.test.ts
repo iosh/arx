@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
 import { createEip155RpcClientFactory, type Eip155RpcCapabilities } from "./clients/eip155/eip155.js";
@@ -69,6 +69,10 @@ const createNetworkStub = () => {
 };
 
 describe("RpcClientRegistry", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("merges endpoint headers into transport requests", async () => {
     const network = createNetworkStub();
     const fetch = vi.fn(async (_input: string, _init?: RequestInit) => {
@@ -118,7 +122,7 @@ describe("RpcClientRegistry", () => {
     const network = createNetworkStub();
     const responses = [
       new Response(JSON.stringify({ result: "0x1" }), { status: 200 }),
-      new Response(JSON.stringify({ error: { message: "boom", code: -32000 } }), { status: 200 }),
+      new Response("Internal error", { status: 500, statusText: "boom" }),
     ];
     const fetch = vi.fn(async () => responses.shift() ?? new Response("{}", { status: 500 }));
 
@@ -128,7 +132,7 @@ describe("RpcClientRegistry", () => {
     const client = registry.getClient<Eip155RpcCapabilities>("eip155", "eip155:1");
 
     await expect(client.request({ method: "eth_chainId" })).resolves.toBe("0x1");
-    await expect(client.request({ method: "eth_fail" })).rejects.toThrow(/boom/);
+    await expect(client.request({ method: "eth_fail" })).rejects.toThrow(/HTTP 500/);
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(network.outcomes.length).toBeGreaterThanOrEqual(2);
@@ -142,7 +146,24 @@ describe("RpcClientRegistry", () => {
     if (!lastFailure || lastFailure.outcome.success !== false) {
       throw new Error("Expected failure outcome");
     }
-    expect(lastFailure.outcome.error.message).toContain("boom");
+    expect(lastFailure.outcome.error.message).toContain("HTTP 500");
+  });
+
+  it("does not retry or penalize endpoint health on JSON-RPC node errors", async () => {
+    const network = createNetworkStub();
+    const fetch = vi.fn(async () => {
+      return new Response(JSON.stringify({ error: { message: "boom", code: -32000 } }), { status: 200 });
+    });
+
+    const registry = new RpcClientRegistry({ network: network.stub, fetch, maxAttempts: 3, retryBackoffMs: 300 });
+    registry.registerFactory("eip155", createEip155RpcClientFactory());
+
+    const client = registry.getClient<Eip155RpcCapabilities>("eip155", "eip155:1");
+
+    await expect(client.request({ method: "eth_fail" })).rejects.toMatchObject({ code: -32000, message: "boom" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(network.outcomes.at(-1)?.outcome.success).toBe(true);
+    expect(network.outcomes.some((entry) => entry.outcome.success === false)).toBe(false);
   });
 
   it("retries failed requests with exponential backoff", async () => {
@@ -153,7 +174,7 @@ describe("RpcClientRegistry", () => {
     const fetch = vi.fn(async () => {
       attempts += 1;
       if (attempts < 3) {
-        return new Response(JSON.stringify({ error: { message: "fail", code: -32000 } }), { status: 200 });
+        return new Response("Internal error", { status: 500, statusText: "fail" });
       }
       return new Response(JSON.stringify({ result: "0x1" }), { status: 200 });
     });
@@ -182,7 +203,7 @@ describe("RpcClientRegistry", () => {
     const fetch = vi.fn(async () => {
       attempts += 1;
       if (attempts === 1) {
-        await new Promise((_, reject) => reject(new DOMException("timeout", "AbortError")));
+        throw new DOMException("timeout", "AbortError");
       }
       return new Response(JSON.stringify({ result: "0x1" }), { status: 200 });
     });

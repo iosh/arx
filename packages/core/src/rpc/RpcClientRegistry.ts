@@ -155,6 +155,17 @@ class RpcTransportFailure extends Error {
   }
 }
 
+type JsonRpcErrorLike = { code: number; message: string; data?: unknown };
+
+const isJsonRpcErrorLike = (value: unknown): value is JsonRpcErrorLike => {
+  if (!value || typeof value !== "object") return false;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return false;
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.code === "number" && typeof candidate.message === "string";
+};
+
 const createJsonRpcTransport = (
   namespace: string,
   chainRef: string,
@@ -272,8 +283,12 @@ const createJsonRpcTransport = (
           const envelope = json as { result?: T; error?: unknown };
           if (envelope.error !== undefined) {
             const outcome = toOutcomeError(envelope.error, "RPC node returned an error");
-            network.reportRpcOutcome(chainRef, { success: false, endpointIndex: endpoint.index, error: outcome });
-            throw new RpcTransportFailure(outcome.message, outcome, endpoint);
+            // Preserve node error details for upper layers.
+            throw {
+              code: typeof outcome.code === "number" ? outcome.code : -32603,
+              message: outcome.message,
+              ...(outcome.data !== undefined ? { data: outcome.data } : {}),
+            } satisfies JsonRpcErrorLike;
           }
           if (envelope.result !== undefined) {
             network.reportRpcOutcome(chainRef, { success: true, endpointIndex: endpoint.index });
@@ -291,6 +306,18 @@ const createJsonRpcTransport = (
       } catch (error) {
         if (timer) {
           clearTimeout(timer);
+        }
+
+        // Node returned a JSON-RPC error envelope (application-level failure).
+        // - Don't retry: the node responded deterministically.
+        // - Don't penalize endpoint health: this is not a transport failure.
+        if (isJsonRpcErrorLike(error)) {
+          if (endpoint) {
+            network.reportRpcOutcome(chainRef, { success: true, endpointIndex: endpoint.index });
+          } else {
+            network.reportRpcOutcome(chainRef, { success: true });
+          }
+          throw error;
         }
 
         const outcome =

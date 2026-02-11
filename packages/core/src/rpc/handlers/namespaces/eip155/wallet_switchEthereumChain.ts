@@ -1,0 +1,158 @@
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
+import { parseChainRef } from "../../../../chains/index.js";
+import { PermissionScopes } from "../../../../controllers/index.js";
+import type { MethodDefinition } from "../../types.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+
+export const walletSwitchEthereumChainDefinition: MethodDefinition = {
+  scope: PermissionScopes.Basic,
+  validateParams: (params) => {
+    const value = toParamsArray(params)[0];
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain expects a single object parameter",
+        data: { params },
+      });
+    }
+    const payload = value as Record<string, unknown>;
+    const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
+    const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
+    if (!rawChainId && !rawChainRef) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain requires a chainId or chainRef value",
+        data: { params },
+      });
+    }
+    if (rawChainId && !/^0x[0-9a-f]+$/i.test(rawChainId)) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain received an invalid hex chainId",
+        data: { chainId: rawChainId },
+      });
+    }
+  },
+  handler: async ({ request, controllers, rpcContext }) => {
+    const [first] = toParamsArray(request.params);
+    const params = request.params;
+
+    if (!first || typeof first !== "object" || Array.isArray(first)) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain expects a single object parameter",
+        data: { params },
+      });
+    }
+
+    const payload = first as Record<string, unknown>;
+    const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
+    const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
+
+    if (!rawChainId && !rawChainRef) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain requires a chainId or chainRef value",
+        data: { params },
+      });
+    }
+
+    const normalizedChainId = rawChainId?.toLowerCase();
+    if (normalizedChainId && !/^0x[0-9a-f]+$/i.test(normalizedChainId)) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_switchEthereumChain received an invalid hex chainId",
+        data: { chainId: rawChainId },
+      });
+    }
+
+    let normalizedChainRef: string | undefined;
+    if (rawChainRef) {
+      try {
+        const parsed = parseChainRef(rawChainRef);
+        if (parsed.namespace !== "eip155") {
+          throw arxError({
+            reason: ArxReasons.ChainNotCompatible,
+            message: "Requested chain is not compatible with wallet_switchEthereumChain",
+            data: { chainRef: rawChainRef },
+          });
+        }
+        if (normalizedChainId) {
+          const decimal = BigInt(normalizedChainId).toString(10);
+          if (decimal !== parsed.reference) {
+            throw arxError({
+              reason: ArxReasons.RpcInvalidParams,
+              message: "wallet_switchEthereumChain chainId does not match chainRef reference",
+              data: { chainId: rawChainId, chainRef: rawChainRef },
+            });
+          }
+        }
+        normalizedChainRef = `${parsed.namespace}:${parsed.reference}`;
+      } catch (error) {
+        if (isDomainError(error) || isRpcError(error)) throw error;
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "wallet_switchEthereumChain received an invalid chainRef identifier",
+          data: { chainRef: rawChainRef },
+          cause: error,
+        });
+      }
+    }
+
+    const state = controllers.network.getState();
+    const target = state.knownChains.find((item) => {
+      if (normalizedChainRef && item.chainRef === normalizedChainRef) return true;
+      if (normalizedChainId) {
+        const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
+        if (candidateChainId && candidateChainId === normalizedChainId) return true;
+      }
+      return false;
+    });
+
+    if (!target) {
+      throw arxError({
+        reason: ArxReasons.ChainNotFound,
+        message: "Requested chain is not registered with ARX",
+        data: { chainId: rawChainId, chainRef: rawChainRef },
+      });
+    }
+
+    if (target.namespace !== "eip155") {
+      throw arxError({
+        reason: ArxReasons.ChainNotCompatible,
+        message: "Requested chain is not compatible with wallet_switchEthereumChain",
+        data: { chainRef: target.chainRef },
+      });
+    }
+
+    const supportsFeature = target.features?.includes("wallet_switchEthereumChain") ?? false;
+    if (!supportsFeature) {
+      throw arxError({
+        reason: ArxReasons.ChainNotSupported,
+        message: "Requested chain does not support wallet_switchEthereumChain",
+        data: { chainRef: target.chainRef },
+      });
+    }
+
+    try {
+      await controllers.network.switchChain(target.chainRef);
+      return null;
+    } catch (error) {
+      if (error instanceof Error && /unknown chain/i.test(error.message)) {
+        throw arxError({
+          reason: ArxReasons.ChainNotFound,
+          message: error.message,
+          data: { chainId: rawChainId ?? target.chainId, chainRef: normalizedChainRef ?? target.chainRef },
+          cause: error,
+        });
+      }
+      if (isArxError(error)) throw error;
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
+        message: error instanceof Error ? error.message : "Failed to switch chain",
+        data: { chainRef: target.chainRef },
+        cause: error,
+      });
+    }
+  },
+};

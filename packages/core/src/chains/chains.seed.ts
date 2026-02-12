@@ -118,7 +118,7 @@ export const EIP155_MAINNETS = [
       url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
       format: "png",
     },
-    features: ["eip155", "wallet_switchEthereumChain"],
+    features: ["eip155", "eip1559", "wallet_switchEthereumChain"],
     tags: ["mainnet", "production", "conflux"],
     extensions: {
       coingeckoId: "conflux-espace",
@@ -149,6 +149,33 @@ export const EIP155_TESTNETS = [
     tags: ["testnet", "ethereum"],
     extensions: {
       faucet: "https://sepoliafaucet.com",
+    },
+  },
+  {
+    chainRef: "eip155:71",
+    namespace: "eip155",
+    chainId: "0x47",
+    displayName: "Conflux eSpace Testnet",
+    shortName: "cfxe-test",
+    description: "Conflux eSpace public test network",
+    nativeCurrency: { name: "Test Conflux", symbol: "CFX", decimals: 18 },
+    rpcEndpoints: [
+      { url: "https://evmtestnet.confluxrpc.com", type: "public" },
+      { url: "https://evmtest.confluxrpc.com", type: "public" },
+    ],
+    blockExplorers: [
+      { type: "default", url: "https://evmtestnet.confluxscan.net", title: "ConfluxScan eSpace Testnet" },
+    ],
+    icon: {
+      url: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/conflux-evm/info/logo.png",
+      format: "png",
+    },
+    features: ["eip155", "eip1559", "wallet_switchEthereumChain"],
+    tags: ["testnet", "conflux"],
+    extensions: {
+      networkId: 71,
+      faucet: "https://efaucet.confluxnetwork.org",
+      documentation: "https://doc.confluxnetwork.org/docs/espace/network-endpoints",
     },
   },
 ] as const satisfies readonly ChainMetadata[];
@@ -208,5 +235,5 @@ export const CONFLUX_NETWORKS = [
 export const DEFAULT_CHAIN_METADATA = [
   ...EIP155_MAINNETS,
   ...EIP155_TESTNETS,
-  ...CONFLUX_NETWORKS,
+  // ...CONFLUX_NETWORKS,
 ] as const satisfies readonly ChainMetadata[];

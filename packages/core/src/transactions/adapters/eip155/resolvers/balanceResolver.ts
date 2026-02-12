@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
 import type { Eip155PreparedTransaction, Eip155PreparedTransactionResult } from "../types.js";
 import { parseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
 
@@ -49,7 +49,7 @@ export const checkBalanceForMaxCost = async ({
 
   let balanceHex: string | null = null;
   try {
-    balanceHex = await rpc.getBalance(prepared.from as string, "latest");
+    balanceHex = await rpc.getBalance(prepared.from as string, { blockTag: "latest" });
   } catch (error) {
     pushWarning(
       warnings,

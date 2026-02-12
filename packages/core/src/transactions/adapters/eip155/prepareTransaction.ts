@@ -1,8 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../../chains/registry.js";
 import type { Eip155TransactionPayload } from "../../../controllers/transaction/types.js";
-import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
+import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
 import { deriveFees } from "./resolvers/feeResolver.js";
@@ -26,13 +27,15 @@ const hasFatalIssues = (issues: Eip155PreparedTransactionResult["issues"]): bool
 };
 
 type PrepareTransactionDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
+  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
   chains?: ChainModuleRegistry;
+  feeOracleFactory?: (rpc: Eip155RpcClient) => Eip155FeeOracle;
 };
 
 export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
   const chains = deps.chains ?? createDefaultChainModuleRegistry();
   const deriveAddresses = createAddressResolver({ chains });
+  const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 
   return async (ctx: TransactionAdapterContext): Promise<Eip155PreparedTransactionResult> => {
     if (ctx.namespace !== "eip155") {
@@ -63,13 +66,13 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
       "maxFeePerGas",
       "maxPriorityFeePerGas",
     ] as const);
-    await deriveFees({ rpc: null, feeValues: {}, payloadFees: payloadFeeInputs, validateOnly: true }, issues);
+    await deriveFees({ feeOracle: null, payloadFees: payloadFeeInputs, validateOnly: true }, issues);
 
     if (hasFatalIssues(issues)) {
       return { prepared, warnings, issues };
     }
 
-    let rpc: Eip155RpcCapabilities | null = null;
+    let rpc: Eip155RpcClient | null = null;
     try {
       rpc = deps.rpcClientFactory(ctx.chainRef);
     } catch (error) {
@@ -85,6 +88,8 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     if (!rpc) {
       return { prepared, warnings, issues };
     }
+
+    const feeOracle = feeOracleFactory(rpc);
 
     // Assemble callParams for gas estimation (exclude null values)
     const callParams: Eip155CallParams = {};
@@ -105,18 +110,7 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     );
     Object.assign(prepared, gasResolution.prepared);
 
-    // Assemble fee parameters
-    const feeValueInputs = pickDefined(prepared, ["gasPrice", "maxFeePerGas", "maxPriorityFeePerGas"] as const);
-
-    const feeParams: Parameters<typeof deriveFees>[0] = {
-      rpc,
-      feeValues: feeValueInputs,
-      payloadFees: payloadFeeInputs,
-    };
-    if (prepared.gas) feeParams.gas = prepared.gas;
-    if (prepared.value) feeParams.value = prepared.value;
-
-    const feeResolution = await deriveFees(feeParams, issues);
+    const feeResolution = await deriveFees({ feeOracle, payloadFees: payloadFeeInputs }, issues);
     Object.assign(prepared, feeResolution.prepared);
 
     await checkBalanceForMaxCost({ rpc, prepared, issues, warnings });

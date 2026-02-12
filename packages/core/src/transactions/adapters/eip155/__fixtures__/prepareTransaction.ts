@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { createDefaultChainModuleRegistry } from "../../../../chains/registry.js";
+import type { Eip155FeeOracle, Eip155FeeSuggestion } from "../feeOracle.js";
 import { createEip155PrepareTransaction } from "../prepareTransaction.js";
 
 /**
@@ -17,6 +18,19 @@ export const createTestPrepareTransaction = (
   return createEip155PrepareTransaction({
     chains: createDefaultChainModuleRegistry(),
     rpcClientFactory: vi.fn(),
+    feeOracleFactory: (_rpc) => {
+      const suggestion = {
+        mode: "legacy",
+        gasPrice: "0x3b9aca00",
+        source: "eth_gasPrice",
+      } as const satisfies Eip155FeeSuggestion;
+
+      const oracle: Eip155FeeOracle = {
+        suggestFees: vi.fn(async () => suggestion) as unknown as Eip155FeeOracle["suggestFees"],
+      };
+
+      return oracle;
+    },
     ...overrides,
   });
 };

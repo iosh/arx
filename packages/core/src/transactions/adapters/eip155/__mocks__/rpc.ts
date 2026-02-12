@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcClient } from "../../../../rpc/namespaceClients/eip155.js";
 
 /**
  * Creates a mock EIP-155 RPC client with spy functions
@@ -14,36 +14,52 @@ import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip15
  * expect(estimateGas).toHaveBeenCalledWith(...);
  */
 export const createEip155RpcMock = (): {
-  client: Eip155RpcCapabilities;
+  client: Eip155RpcClient;
+  request: any;
   estimateGas: any;
   getBalance: any;
   getTransactionCount: any;
-  getFeeData: any;
+  getGasPrice: any;
+  getMaxPriorityFeePerGas: any;
+  getFeeHistory: any;
+  getBlockByNumber: any;
   getTransactionReceipt: any;
   sendRawTransaction: any;
 } => {
+  const request = vi.fn();
   const estimateGas = vi.fn();
   const getBalance = vi.fn();
   const getTransactionCount = vi.fn();
-  const getFeeData = vi.fn();
+  const getGasPrice = vi.fn();
+  const getMaxPriorityFeePerGas = vi.fn();
+  const getFeeHistory = vi.fn();
+  const getBlockByNumber = vi.fn();
   const getTransactionReceipt = vi.fn();
   const sendRawTransaction = vi.fn();
 
-  const client: Eip155RpcCapabilities = {
-    estimateGas: estimateGas as unknown as Eip155RpcCapabilities["estimateGas"],
-    getBalance: getBalance as unknown as Eip155RpcCapabilities["getBalance"],
-    getTransactionCount: getTransactionCount as unknown as Eip155RpcCapabilities["getTransactionCount"],
-    getFeeData: getFeeData as unknown as Eip155RpcCapabilities["getFeeData"],
-    getTransactionReceipt: getTransactionReceipt as unknown as Eip155RpcCapabilities["getTransactionReceipt"],
-    sendRawTransaction: sendRawTransaction as unknown as Eip155RpcCapabilities["sendRawTransaction"],
-  };
-
-  return {
-    client,
+  const client = {
+    request,
     estimateGas,
     getBalance,
     getTransactionCount,
-    getFeeData,
+    getGasPrice,
+    getMaxPriorityFeePerGas,
+    getFeeHistory,
+    getBlockByNumber,
+    getTransactionReceipt,
+    sendRawTransaction,
+  } as unknown as Eip155RpcClient;
+
+  return {
+    client,
+    request,
+    estimateGas,
+    getBalance,
+    getTransactionCount,
+    getGasPrice,
+    getMaxPriorityFeePerGas,
+    getFeeHistory,
+    getBlockByNumber,
     getTransactionReceipt,
     sendRawTransaction,
   };
@@ -61,16 +77,20 @@ export const createEip155RpcMock = (): {
  *   estimateGas: vi.fn(async () => "0x5208"),
  * });
  */
-export const createEip155RpcClient = (overrides: Partial<Eip155RpcCapabilities> = {}): Eip155RpcCapabilities => {
+export const createEip155RpcClient = (overrides: Partial<Eip155RpcClient> = {}): Eip155RpcClient => {
   return {
+    request: vi.fn(async () => null),
     estimateGas: vi.fn(async () => "0x0"),
     getBalance: vi.fn(async () => "0x0"),
     getTransactionCount: vi.fn(async () => "0x0"),
-    getFeeData: vi.fn(async () => ({})),
+    getGasPrice: vi.fn(async () => "0x0"),
+    getMaxPriorityFeePerGas: vi.fn(async () => "0x0"),
+    getFeeHistory: vi.fn(async () => ({ baseFeePerGas: [], gasUsedRatio: [], oldestBlock: "0x0" })),
+    getBlockByNumber: vi.fn(async () => ({})),
     getTransactionReceipt: vi.fn(async () => null),
     sendRawTransaction: vi.fn(async () => "0x0"),
     ...overrides,
-  };
+  } as unknown as Eip155RpcClient;
 };
 
 /**
@@ -83,11 +103,15 @@ export const createEip155RpcClient = (overrides: Partial<Eip155RpcCapabilities> 
  */
 export const createEip155BroadcasterFactory = (sendRawTransactionImpl: (raw: string) => Promise<string>) => {
   return vi.fn((_chainRef: string) => ({
+    request: vi.fn(async () => null),
     estimateGas: vi.fn(),
     getBalance: vi.fn(),
     getTransactionCount: vi.fn(),
-    getFeeData: vi.fn(),
+    getGasPrice: vi.fn(),
+    getMaxPriorityFeePerGas: vi.fn(),
+    getFeeHistory: vi.fn(),
+    getBlockByNumber: vi.fn(),
     getTransactionReceipt: vi.fn(),
     sendRawTransaction: vi.fn(sendRawTransactionImpl),
-  })) as unknown as (chainRef: string) => Eip155RpcCapabilities;
+  })) as unknown as (chainRef: string) => Eip155RpcClient;
 };

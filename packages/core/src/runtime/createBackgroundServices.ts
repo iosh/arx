@@ -7,6 +7,7 @@ import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMess
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createNamespaceResolver, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
+import type { Eip155RpcCapabilities, Eip155RpcClient } from "../rpc/namespaceClients/eip155.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
 import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
@@ -196,12 +197,15 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const eip155Signer = createEip155Signer({ keyring: keyringService });
 
   if (!transactionRegistry.get(EIP155_NAMESPACE)) {
+    const rpcClientFactory = (chainRef: string) =>
+      rpcClientRegistry.getClient<Eip155RpcCapabilities>("eip155", chainRef) as Eip155RpcClient;
+
     const broadcaster = createEip155Broadcaster({
-      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
+      rpcClientFactory,
     });
 
     const adapter = createEip155TransactionAdapter({
-      rpcClientFactory: (chainRef) => rpcClientRegistry.getClient("eip155", chainRef),
+      rpcClientFactory,
       signer: eip155Signer,
       broadcaster,
       chains: createDefaultChainModuleRegistry(),

@@ -50,7 +50,6 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
       const ctx = createAdapterContext();
@@ -70,7 +69,6 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -88,7 +86,10 @@ describe("prepareTransaction - validation", () => {
 
       expect(result.issues).toHaveLength(0);
       expect(result.prepared.from).toBe(TEST_ADDRESSES.MIXED_CASE.toLowerCase());
-      expect(rpc.getTransactionCount).toHaveBeenCalledWith(TEST_ADDRESSES.MIXED_CASE.toLowerCase(), "pending");
+      expect(rpc.getTransactionCount).toHaveBeenCalledWith(
+        TEST_ADDRESSES.MIXED_CASE.toLowerCase(),
+        expect.objectContaining({ blockTag: "pending" }),
+      );
     });
   });
 
@@ -111,7 +112,6 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => rpc.client),
@@ -171,7 +171,6 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 

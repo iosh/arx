@@ -30,7 +30,6 @@ describe("prepareTransaction - field handling", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -40,7 +39,7 @@ describe("prepareTransaction - field handling", () => {
       const result = await prepareTransaction(ctx);
 
       expect(result.prepared.data).toBe("0xabcd");
-      expect(rpc.estimateGas).toHaveBeenCalledWith([expect.objectContaining({ data: "0xabcd" })]);
+      expect(rpc.estimateGas).toHaveBeenCalledWith(expect.objectContaining({ data: "0xabcd" }));
     });
   });
 
@@ -49,7 +48,6 @@ describe("prepareTransaction - field handling", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -71,7 +69,6 @@ describe("prepareTransaction - field handling", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x30000");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -88,7 +85,6 @@ describe("prepareTransaction - field handling", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x35000");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -98,15 +94,15 @@ describe("prepareTransaction - field handling", () => {
 
       await prepareTransaction(ctx);
 
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect(rpc.estimateGas).toHaveBeenCalledWith(
         expect.objectContaining({
           from: TEST_ADDRESSES.FROM_A,
           data: "0x60006000",
           value: "0xde0b6b3a7640000",
         }),
-      ]);
+      );
 
-      const firstCallArgs = rpc.estimateGas.mock.calls[0]?.[0]?.[0];
+      const firstCallArgs = rpc.estimateGas.mock.calls[0]?.[0];
       expect(firstCallArgs).not.toHaveProperty("to");
     });
   });

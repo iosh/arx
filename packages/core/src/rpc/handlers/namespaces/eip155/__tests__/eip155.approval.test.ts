@@ -237,10 +237,9 @@ describe("eip155 handlers - approval metadata", () => {
       estimateGas: vi.fn(async () => "0x5208"),
       getBalance: vi.fn(async () => "0xffffffffffffffff"),
       getTransactionCount: vi.fn(async () => "0x1"),
-      getFeeData: vi.fn(async () => ({
-        maxFeePerGas: "0x59682f00",
-        maxPriorityFeePerGas: "0x3b9aca00",
-      })),
+      getGasPrice: vi.fn(async () => "0x3b9aca00"),
+      getMaxPriorityFeePerGas: vi.fn(async () => "0x1"),
+      getBlockByNumber: vi.fn(async () => ({ baseFeePerGas: "0x1" })),
       sendRawTransaction: vi.fn(async () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
       getTransactionReceipt: vi.fn(async () => null),
     };
@@ -249,7 +248,9 @@ describe("eip155 handlers - approval metadata", () => {
       estimateGas: rpcMocks.estimateGas,
       getBalance: rpcMocks.getBalance,
       getTransactionCount: rpcMocks.getTransactionCount,
-      getFeeData: rpcMocks.getFeeData,
+      getGasPrice: rpcMocks.getGasPrice,
+      getMaxPriorityFeePerGas: rpcMocks.getMaxPriorityFeePerGas,
+      getBlockByNumber: rpcMocks.getBlockByNumber,
       sendRawTransaction: rpcMocks.sendRawTransaction,
       getTransactionReceipt: rpcMocks.getTransactionReceipt,
     }));

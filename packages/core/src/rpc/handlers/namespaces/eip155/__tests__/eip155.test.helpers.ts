@@ -55,7 +55,7 @@ export const createChainRegistryPort = () => ({
 });
 
 // Create test services with optional overrides
-export const createServices = (overrides?: Parameters<typeof createBackgroundServices>[0]) => {
+export const createServices = (overrides?: Partial<Parameters<typeof createBackgroundServices>[0]>) => {
   const { chainRegistry, session, ...rest } = overrides ?? {};
   return createBackgroundServices({
     chainRegistry: {

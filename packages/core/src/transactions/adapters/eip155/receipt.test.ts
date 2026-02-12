@@ -1,5 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
+import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
 import { createReceiptContext } from "./__fixtures__/contexts.js";
@@ -14,7 +15,7 @@ describe("createEip155ReceiptService", () => {
       getTransactionReceipt: vi.fn(async () => ({
         transactionHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         status: "0x1",
-      })),
+      })) as unknown as Eip155RpcClient["getTransactionReceipt"],
     });
 
     const service = createEip155ReceiptService({
@@ -31,7 +32,7 @@ describe("createEip155ReceiptService", () => {
     const client = createEip155RpcClient({
       getTransactionReceipt: vi.fn(async () => ({
         blockNumber: "0x123",
-      })),
+      })) as unknown as Eip155RpcClient["getTransactionReceipt"],
     });
 
     const service = createEip155ReceiptService({
@@ -45,7 +46,7 @@ describe("createEip155ReceiptService", () => {
 
   it("detects replacement when nonce is already consumed", async () => {
     const client = createEip155RpcClient({
-      getTransactionCount: vi.fn(async () => "0x5"),
+      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
     });
 
     const service = createEip155ReceiptService({

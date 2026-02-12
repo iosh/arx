@@ -7,10 +7,14 @@ describe("prepareTransaction - fees", () => {
   describe("legacy fees", () => {
     it("uses legacy gasPrice when provided", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       ctx.request.payload.gasPrice = "0x3b9aca00";
@@ -18,14 +22,13 @@ describe("prepareTransaction - fees", () => {
       const prepared = await prepareTransaction(ctx);
 
       expect(prepared.prepared.gasPrice).toBe("0x3b9aca00");
-      expect(rpc.getFeeData).not.toHaveBeenCalled();
+      expect(feeOracle.suggestFees).not.toHaveBeenCalled();
     });
 
     it("forwards gasPrice to RPC gas estimation when provided", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x2");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -35,21 +38,25 @@ describe("prepareTransaction - fees", () => {
 
       await prepareTransaction(ctx);
 
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect(rpc.estimateGas).toHaveBeenCalledWith(
         expect.objectContaining({
           from: "0x1111111111111111111111111111111111111111",
           to: "0x2222222222222222222222222222222222222222",
         }),
-      ]);
+      );
     });
 
     it("falls back to legacy fee data when RPC only returns gasPrice", async () => {
       const rpc = createEip155RpcMock();
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+      const feeOracle = { suggestFees: vi.fn() };
+      feeOracle.suggestFees.mockResolvedValue({ mode: "legacy", gasPrice: "0x3b9aca00", source: "eth_gasPrice" });
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
@@ -67,10 +74,6 @@ describe("prepareTransaction - fees", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x3");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({
-        maxFeePerGas: "0x59682f00",
-        maxPriorityFeePerGas: "0x3b9aca00",
-      });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
@@ -82,12 +85,12 @@ describe("prepareTransaction - fees", () => {
 
       await prepareTransaction(ctx);
 
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
+      expect(rpc.estimateGas).toHaveBeenCalledWith(
         expect.objectContaining({
           from: "0x1111111111111111111111111111111111111111",
           to: "0x2222222222222222222222222222222222222222",
         }),
-      ]);
+      );
     });
 
     it("uses eip1559 fee fields provided in payload", async () => {
@@ -155,52 +158,17 @@ describe("prepareTransaction - fees", () => {
   });
 
   describe("fee estimation errors", () => {
-    it("reports fee_estimation_empty when RPC returns no fee data", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getFeeData.mockResolvedValue({});
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createAdapterContext();
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
-      Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
-
-      const prepared = await prepareTransaction(ctx);
-
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.fee_estimation_empty");
-    });
-
-    it("includes rpc metadata on fee_estimation_empty issue", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getFeeData.mockResolvedValue({});
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5208");
-
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createAdapterContext();
-      Reflect.deleteProperty(ctx.request.payload, "gasPrice");
-      Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
-      Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
-
-      const prepared = await prepareTransaction(ctx);
-      const issue = prepared.issues.find((item) => item.code === "transaction.prepare.fee_estimation_empty");
-
-      expect(issue?.data).toEqual({
-        method: "eth_getBlockByNumber | eth_gasPrice",
-      });
-    });
-
     it("attaches rpc error details when fee estimation fails", async () => {
       const rpc = createEip155RpcMock();
-      rpc.getFeeData.mockRejectedValue(new Error("fee rpc down"));
+      const feeOracle = { suggestFees: vi.fn() };
+      feeOracle.suggestFees.mockRejectedValue(new Error("fee rpc down"));
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
@@ -211,7 +179,7 @@ describe("prepareTransaction - fees", () => {
       const issue = prepared.issues.find((item) => item.code === "transaction.prepare.fee_estimation_failed");
 
       expect(issue?.data).toMatchObject({
-        method: "eth_feeHistory | eth_gasPrice",
+        method: "feeOracle.suggestFees",
         error: "fee rpc down",
       });
     });

@@ -1,4 +1,4 @@
-import { createEip155RpcClientFactory } from "../../rpc/clients/eip155/eip155.js";
+import { createEip155RpcClientFactory } from "../../rpc/namespaceClients/eip155.js";
 import {
   type RpcClientFactory,
   RpcClientRegistry,

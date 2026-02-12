@@ -8,7 +8,7 @@ import { PermissionScopes } from "../../controllers/permission/types.js";
 import type { TransactionRequest } from "../../controllers/transaction/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
-import type { Eip155RpcCapabilities } from "../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcCapabilities } from "../../rpc/namespaceClients/eip155.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
 import { buildUiSnapshot } from "./snapshot.js";
@@ -301,7 +301,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       }
 
       const rpc = rpcClients.getClient<Eip155RpcCapabilities>("eip155", chainRef);
-      const balanceHex = await rpc.getBalance(address, "latest", { timeoutMs: 15_000 });
+      const balanceHex = await rpc.getBalance(address, { blockTag: "latest", timeoutMs: 15_000 });
       Hex.assert(balanceHex as Hex.Hex, { strict: false });
       const amountWei = Hex.toBigInt(balanceHex as Hex.Hex);
 

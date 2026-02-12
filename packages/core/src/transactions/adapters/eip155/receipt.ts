@@ -1,10 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionAdapterContext } from "../types.js";
 
 type ReceiptDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
+  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
 };
 
 type RawReceipt = {
@@ -42,14 +42,6 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   if (typeof status === "string") {
     const normalized = status.toLowerCase();
 
-    // viem formatted receipt
-    if (normalized === "success") {
-      return "success";
-    }
-    if (normalized === "reverted") {
-      return "failed";
-    }
-
     // raw JSON-RPC: 0x1 / 0x0 / ...
     if (normalized === SUCCESS_STATUS) {
       return "success";
@@ -64,11 +56,6 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
 
   // JSON-RPC: blockNumber is hex string when included in a block
   if (typeof blockNumber === "string" && HEX_PATTERN.test(blockNumber)) {
-    return "success";
-  }
-
-  // viem: blockNumber is bigint or number when included
-  if (typeof blockNumber === "bigint" || typeof blockNumber === "number") {
     return "success";
   }
 
@@ -146,7 +133,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       if (!originalNonceHex) return null;
 
       const client = getClient(context.chainRef);
-      const latestNonceHex = await client.getTransactionCount(from, "latest");
+      const latestNonceHex = await client.getTransactionCount(from, { blockTag: "latest" });
       if (typeof latestNonceHex !== "string") {
         return null;
       }

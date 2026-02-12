@@ -1,11 +1,11 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
-import type { Eip155RpcCapabilities } from "../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { SignedTransactionPayload, TransactionAdapterContext } from "../types.js";
 
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 
 type BroadcasterDeps = {
-  rpcClientFactory: (chainRef: string) => Eip155RpcCapabilities;
+  rpcClientFactory: (chainRef: string) => Eip155RpcClient;
 };
 
 export type Eip155Broadcaster = {
@@ -33,7 +33,7 @@ const toCanonicalTransactionHash = (value: unknown): string => {
 export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaster => {
   return {
     async broadcast(context, signed) {
-      let client: Eip155RpcCapabilities;
+      let client: Eip155RpcClient;
       try {
         client = deps.rpcClientFactory(context.chainRef);
       } catch (error) {

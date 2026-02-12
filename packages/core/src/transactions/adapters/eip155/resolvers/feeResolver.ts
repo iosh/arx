@@ -1,13 +1,9 @@
-import type * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
+import type { Eip155FeeOracle } from "../feeOracle.js";
 import type { Eip155PreparedTransaction, Eip155PreparedTransactionResult, FeeResolutionResult } from "../types.js";
 import { parseHexQuantity, pushIssue, readErrorMessage } from "../utils/validation.js";
 
 type FeeResolverParams = {
-  rpc: Eip155RpcCapabilities | null;
-  gas?: Hex.Hex;
-  value?: Hex.Hex;
-  feeValues: Partial<Pick<Eip155PreparedTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">>;
+  feeOracle: Eip155FeeOracle | null;
   payloadFees: Partial<Pick<Eip155PreparedTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">>;
   /**
    * Only validate payload fee fields (no RPC lookups, no suggested fee patching).
@@ -55,29 +51,25 @@ export const deriveFees = async (
   }
 
   const hasPayloadFeeFields = Boolean(payloadGasPrice || payloadMaxFee || payloadPriorityFee);
-  if (!hasPayloadFeeFields && params.rpc) {
+  if (!hasPayloadFeeFields && params.feeOracle) {
     try {
-      const feeData = await params.rpc.getFeeData();
-      if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-        const fetchedMaxFee = parseHexQuantity(issues, feeData.maxFeePerGas, "maxFeePerGas");
-        const fetchedPriorityFee = parseHexQuantity(issues, feeData.maxPriorityFeePerGas, "maxPriorityFeePerGas");
+      const suggestion = await params.feeOracle.suggestFees();
+      if (suggestion.mode === "eip1559") {
+        const fetchedMaxFee = parseHexQuantity(issues, suggestion.maxFeePerGas, "maxFeePerGas");
+        const fetchedPriorityFee = parseHexQuantity(issues, suggestion.maxPriorityFeePerGas, "maxPriorityFeePerGas");
         if (fetchedMaxFee && fetchedPriorityFee) {
           preparedPatch.maxFeePerGas = fetchedMaxFee;
           preparedPatch.maxPriorityFeePerGas = fetchedPriorityFee;
         }
-      } else if (feeData.gasPrice) {
-        const fetchedGasPrice = parseHexQuantity(issues, feeData.gasPrice, "gasPrice");
+      } else {
+        const fetchedGasPrice = parseHexQuantity(issues, suggestion.gasPrice, "gasPrice");
         if (fetchedGasPrice) {
           preparedPatch.gasPrice = fetchedGasPrice;
         }
-      } else {
-        pushIssue(issues, "transaction.prepare.fee_estimation_empty", "RPC fee data response is empty.", {
-          method: "eth_getBlockByNumber | eth_gasPrice",
-        });
       }
     } catch (error) {
       pushIssue(issues, "transaction.prepare.fee_estimation_failed", "Failed to fetch fee data.", {
-        method: "eth_feeHistory | eth_gasPrice",
+        method: "feeOracle.suggestFees",
         error: readErrorMessage(error),
       });
     }

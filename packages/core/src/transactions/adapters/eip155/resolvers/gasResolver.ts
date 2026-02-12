@@ -1,5 +1,5 @@
 import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../../rpc/clients/eip155/eip155.js";
+import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
 import type { Eip155CallParams, Eip155PreparedTransactionResult, GasResolutionResult } from "../types.js";
 import { parseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
 
@@ -19,7 +19,7 @@ export const deriveGas = async (
 
   if (!params.nonceProvided && params.rpc && params.callParams.from) {
     try {
-      const fetchedNonce = await params.rpc.getTransactionCount(params.callParams.from, "pending");
+      const fetchedNonce = await params.rpc.getTransactionCount(params.callParams.from, { blockTag: "pending" });
       const nonceHex = parseHexQuantity(issues, fetchedNonce, "nonce");
       if (nonceHex) {
         prepared.nonce = nonceHex;
@@ -40,7 +40,7 @@ export const deriveGas = async (
       if (params.callParams.value) estimateArgs.value = params.callParams.value;
       if (params.callParams.data) estimateArgs.data = params.callParams.data;
 
-      const estimatedGas = await params.rpc.estimateGas([estimateArgs]);
+      const estimatedGas = await params.rpc.estimateGas(estimateArgs);
       const gasHex = parseHexQuantity(issues, estimatedGas, "gas");
       if (gasHex) {
         const gasValue = Hex.toBigInt(gasHex);

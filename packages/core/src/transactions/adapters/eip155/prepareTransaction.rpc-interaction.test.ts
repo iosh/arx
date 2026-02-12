@@ -23,22 +23,29 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepared = await prepareTransaction(ctx);
 
-      expect(rpc.getBalance).toHaveBeenCalledWith(TEST_ADDRESSES.FROM_A, "latest");
+      expect(rpc.getBalance).toHaveBeenCalledWith(
+        TEST_ADDRESSES.FROM_A,
+        expect.objectContaining({ blockTag: "latest" }),
+      );
       expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.insufficient_funds");
     });
 
     it("fills nonce, gas, and EIP-1559 fees from RPC responses", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockResolvedValue("0xa");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({
+      feeOracle.suggestFees.mockResolvedValue({
+        mode: "eip1559",
         maxFeePerGas: "0x59682f00",
         maxPriorityFeePerGas: "0x3b9aca00",
+        source: "eth_maxPriorityFeePerGas+eth_getBlockByNumber",
       });
       rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
       const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
       const ctx = createAdapterContext();
@@ -52,15 +59,21 @@ describe("prepareTransaction - RPC interaction", () => {
 
     it("fetches nonce from RPC when it is missing", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockResolvedValue("0xb");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({
+      feeOracle.suggestFees.mockResolvedValue({
+        mode: "eip1559",
         maxFeePerGas: "0x59682f00",
         maxPriorityFeePerGas: "0x3b9aca00",
+        source: "eth_maxPriorityFeePerGas+eth_getBlockByNumber",
       });
       rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
@@ -68,7 +81,10 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepared = await prepareTransaction(ctx);
 
-      expect(rpc.getTransactionCount).toHaveBeenCalledWith(TEST_ADDRESSES.FROM_A, "pending");
+      expect(rpc.getTransactionCount).toHaveBeenCalledWith(
+        TEST_ADDRESSES.FROM_A,
+        expect.objectContaining({ blockTag: "pending" }),
+      );
       expect(prepared.prepared.nonce).toBe("0xb");
     });
 
@@ -106,25 +122,27 @@ describe("prepareTransaction - RPC interaction", () => {
 
       expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.from_missing");
       expect(rpc.getTransactionCount).not.toHaveBeenCalled();
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
-        {
-          to: TEST_ADDRESSES.TO_B,
-          value: TEST_VALUES.ONE_ETH,
-          data: TEST_VALUES.EMPTY_DATA,
-        },
-      ]);
+      expect(rpc.estimateGas).toHaveBeenCalledWith({
+        to: TEST_ADDRESSES.TO_B,
+        value: TEST_VALUES.ONE_ETH,
+        data: TEST_VALUES.EMPTY_DATA,
+      });
     });
   });
 
   describe("RPC error handling", () => {
     it("records issues when RPC estimation fails", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockRejectedValue(new Error("nonce error"));
       rpc.estimateGas.mockRejectedValue(new Error("estimate error"));
-      rpc.getFeeData.mockRejectedValue(new Error("fee error"));
+      feeOracle.suggestFees.mockRejectedValue(new Error("fee error"));
       rpc.getBalance.mockRejectedValue(new Error("balance error"));
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       const prepared = await prepareTransaction(ctx);
@@ -140,12 +158,16 @@ describe("prepareTransaction - RPC interaction", () => {
 
     it("attaches rpc error metadata when nonce fetch fails", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockRejectedValue(new Error("RPC nonce failure"));
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+      feeOracle.suggestFees.mockResolvedValue({ mode: "legacy", gasPrice: "0x3b9aca00", source: "eth_gasPrice" });
       rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
@@ -162,12 +184,16 @@ describe("prepareTransaction - RPC interaction", () => {
 
     it("attaches rpc error metadata when gas estimation fails", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockResolvedValue("0x5");
       rpc.estimateGas.mockRejectedValue(new Error("boom"));
-      rpc.getFeeData.mockResolvedValue({ gasPrice: "0x3b9aca00" });
+      feeOracle.suggestFees.mockResolvedValue({ mode: "legacy", gasPrice: "0x3b9aca00", source: "eth_gasPrice" });
       rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const ctx = createAdapterContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
@@ -230,15 +256,21 @@ describe("prepareTransaction - RPC interaction", () => {
 
     it("records invalid_hex when RPC fee data is malformed", async () => {
       const rpc = createEip155RpcMock();
+      const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({
+      feeOracle.suggestFees.mockResolvedValue({
+        mode: "eip1559",
         maxFeePerGas: "123",
         maxPriorityFeePerGas: "0xGG",
+        source: "eth_maxPriorityFeePerGas+eth_getBlockByNumber",
       });
       rpc.getBalance.mockResolvedValue("0xffffffffffffffff");
 
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
+      const prepareTransaction = createTestPrepareTransaction({
+        rpcClientFactory: vi.fn(() => rpc.client),
+        feeOracleFactory: vi.fn((_rpc) => feeOracle),
+      });
 
       const prepared = await prepareTransaction(createAdapterContext());
 
@@ -252,24 +284,18 @@ describe("prepareTransaction - RPC interaction", () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0xa");
       rpc.estimateGas.mockResolvedValue("0x5208");
-      rpc.getFeeData.mockResolvedValue({
-        maxFeePerGas: "0x59682f00",
-        maxPriorityFeePerGas: "0x3b9aca00",
-      });
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
       const ctx = createAdapterContext();
       await prepareTransaction(ctx);
 
-      expect(rpc.estimateGas).toHaveBeenCalledWith([
-        {
-          from: TEST_ADDRESSES.FROM_A,
-          to: TEST_ADDRESSES.TO_B,
-          value: TEST_VALUES.ONE_ETH,
-          data: TEST_VALUES.EMPTY_DATA,
-        },
-      ]);
+      expect(rpc.estimateGas).toHaveBeenCalledWith({
+        from: TEST_ADDRESSES.FROM_A,
+        to: TEST_ADDRESSES.TO_B,
+        value: TEST_VALUES.ONE_ETH,
+        data: TEST_VALUES.EMPTY_DATA,
+      });
     });
 
     it("flags zero gas estimate from RPC", async () => {

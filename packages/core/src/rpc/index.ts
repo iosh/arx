@@ -16,14 +16,13 @@ import type {
 import { registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
 import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
 
-export type {
-  Eip155FeeData,
-  Eip155RpcCapabilities,
-  Eip155RpcClient,
-} from "./clients/eip155/eip155.js";
-export { createEip155RpcClientFactory } from "./clients/eip155/eip155.js";
 export { encodeErrorWithAdapters, executeWithAdapters } from "./executeWithAdapters.js";
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
+export type {
+  Eip155RpcCapabilities,
+  Eip155RpcClient,
+} from "./namespaceClients/eip155.js";
+export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
 export * from "./permissions.js";
 export { getNamespaceProtocolAdapter, registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
 export {

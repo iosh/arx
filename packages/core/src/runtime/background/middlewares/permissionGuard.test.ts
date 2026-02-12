@@ -63,6 +63,21 @@ describe("createPermissionGuardMiddleware", () => {
     await expect(runMiddleware(middleware, { origin: UNKNOWN_ORIGIN, method: "eth_chainId" })).resolves.toBeUndefined();
   });
 
+  it("allows methods with definition but without permission check", async () => {
+    const assertPermission = vi.fn(() => Promise.reject(new Error("should not run")));
+    const middleware = createPermissionGuardMiddleware({
+      assertPermission,
+      isInternalOrigin: () => false,
+      findMethodDefinition: () => ({ handler: vi.fn(), permissionCheck: "none" }),
+      isConnected: vi.fn(() => false),
+    });
+
+    await expect(
+      runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_accounts" }),
+    ).resolves.toBeUndefined();
+    expect(assertPermission).not.toHaveBeenCalled();
+  });
+
   it("enforces permission when scope is present", async () => {
     const assertPermission = vi.fn(() => Promise.reject(new Error("denied")));
     const middleware = createPermissionGuardMiddleware({
@@ -79,20 +94,39 @@ describe("createPermissionGuardMiddleware", () => {
     });
     expect(assertPermission).toHaveBeenCalledWith("https://dapp.example", "eth_accounts", undefined);
   });
-  it("skips permission check for scoped bootstrap methods", async () => {
-    const assertPermission = vi.fn(() => Promise.reject(new Error("should not run")));
+
+  it("enforces connected check when permissionCheck is connected", async () => {
+    const isConnected = vi.fn(() => false);
     const middleware = createPermissionGuardMiddleware({
-      assertPermission,
+      assertPermission: vi.fn(),
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: "wallet_accounts", handler: vi.fn(), isBootstrap: true }),
-      isConnected: vi.fn(() => false),
+      findMethodDefinition: () => ({ scope: "wallet_sign", handler: vi.fn(), permissionCheck: "connected" }),
+      isConnected,
     });
 
+    const rpcContext: RpcInvocationContext = { namespace: "eip155", chainRef: "eip155:1" };
     await expect(
-      runMiddleware(middleware, { origin: "https://dapp.example", method: "eth_requestAccounts" }),
-    ).resolves.toBeUndefined();
-    expect(assertPermission).not.toHaveBeenCalled();
+      runMiddleware(middleware, { origin: "https://dapp.example", method: "personal_sign", context: rpcContext }),
+    ).rejects.toMatchObject({ reason: ArxReasons.PermissionNotConnected });
+    expect(isConnected).toHaveBeenCalled();
   });
+
+  it("allows connected requests when permissionCheck is connected", async () => {
+    const isConnected = vi.fn(() => true);
+    const middleware = createPermissionGuardMiddleware({
+      assertPermission: vi.fn(),
+      isInternalOrigin: () => false,
+      findMethodDefinition: () => ({ scope: "wallet_sign", handler: vi.fn(), permissionCheck: "connected" }),
+      isConnected,
+    });
+
+    const rpcContext: RpcInvocationContext = { namespace: "eip155", chainRef: "eip155:1" };
+    await expect(
+      runMiddleware(middleware, { origin: "https://dapp.example", method: "personal_sign", context: rpcContext }),
+    ).resolves.toBeUndefined();
+    expect(isConnected).toHaveBeenCalled();
+  });
+
   it("passes rpcContext to assertPermission", async () => {
     const assertPermission = vi.fn(() => Promise.reject(new Error("denied")));
     const rpcContext: RpcInvocationContext = { namespace: "eip155", chainRef: "eip155:1" };

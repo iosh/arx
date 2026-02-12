@@ -13,6 +13,7 @@ import type { createBackgroundServices } from "../createBackgroundServices.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
 import { createLockedGuardMiddleware } from "./middlewares/lockedGuard.js";
 import { createPermissionGuardMiddleware } from "./middlewares/permissionGuard.js";
+import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
 import { type ArxInvocation, createResolveInvocationMiddleware } from "./middlewares/resolveInvocation.js";
 import { createValidateParamsMiddleware } from "./middlewares/validateParams.js";
 
@@ -89,43 +90,6 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
 
   // Wrap attention service with hook-aware behavior (unified handling for all attention types)
   const wrappedAttentionService = wrapAttentionService(services.attention, envHooks);
-
-  const readLockedPoliciesForChain = (chainRef: string | null | undefined) => {
-    if (!chainRef) return null;
-
-    const networkChain = controllers.network.getChain(chainRef);
-
-    if (networkChain?.providerPolicies?.locked) {
-      return networkChain.providerPolicies.locked;
-    }
-
-    const registryEntity = controllers.chainRegistry.getChain(chainRef);
-    return registryEntity?.metadata.providerPolicies?.locked ?? null;
-  };
-
-  const deriveLockedPolicy = (method: string, rpcContext?: RpcInvocationContext) => {
-    const chainRef = rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
-    const policies = readLockedPoliciesForChain(chainRef);
-    if (!policies) return undefined;
-
-    const pick = (key: string) => (Object.hasOwn(policies, key) ? policies[key] : undefined);
-    const selected = pick(method);
-    const fallback = selected === undefined ? pick("*") : undefined;
-    const value = selected ?? fallback;
-
-    if (value === undefined || value === null) return undefined;
-
-    const result: { allow?: boolean; response?: unknown; hasResponse?: boolean } = {
-      hasResponse: Object.hasOwn(value, "response"),
-    };
-    if (value.allow !== undefined) {
-      result.allow = value.allow;
-    }
-    if (result.hasResponse) {
-      result.response = value.response;
-    }
-    return result;
-  };
   const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
     const namespace = deriveMethodNamespace(method, rpcContext);
     const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
@@ -145,9 +109,10 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   }) as unknown as Middleware;
 
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
-    const invocation = (req as { arxInvocation?: ArxInvocation }).arxInvocation;
-    const rpcContext = invocation?.rpcContext ?? (req as { arx?: RpcInvocationContext }).arx;
-    const origin = invocation?.origin ?? (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
+    const reqWithArx = req as typeof req & ArxMiddlewareRequest;
+    const invocation = reqWithArx.arxInvocation;
+    const rpcContext = invocation?.rpcContext ?? reqWithArx.arx;
+    const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
     const namespace = invocation?.namespace ?? deriveMethodNamespace(req.method, rpcContext ?? undefined);
     const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
 
@@ -179,7 +144,6 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     isUnlocked: () => services.session.unlock.isUnlocked(),
     isInternalOrigin: envHooks.isInternalOrigin,
     findMethodDefinition,
-    deriveLockedPolicy,
     getPassthroughAllowance,
     attentionService: wrappedAttentionService,
   }) as unknown as Middleware;
@@ -194,9 +158,10 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   const validateParams: Middleware = createValidateParamsMiddleware({ findMethodDefinition }) as unknown as Middleware;
 
   const executor: Middleware = createAsyncMiddleware(async (req, res) => {
-    const arxInvocation = (req as { arxInvocation?: ArxInvocation }).arxInvocation;
-    const origin = arxInvocation?.origin ?? (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
-    const rpcContext = arxInvocation?.rpcContext ?? (req as { arx?: RpcInvocationContext }).arx;
+    const reqWithArx = req as typeof req & ArxMiddlewareRequest;
+    const arxInvocation = reqWithArx.arxInvocation;
+    const origin = arxInvocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
+    const rpcContext = arxInvocation?.rpcContext ?? reqWithArx.arx;
 
     const rpcInvocation = {
       origin,

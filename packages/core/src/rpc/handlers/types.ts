@@ -1,4 +1,4 @@
-import type { JsonRpcParams } from "@metamask/utils";
+import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
@@ -44,25 +44,37 @@ export type MethodHandler = (context: {
   rpcContext?: RpcInvocationContext;
 }) => Promise<unknown> | unknown;
 
+export const PermissionChecks = {
+  None: "none",
+  Connected: "connected",
+  Scope: "scope",
+} as const;
+export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionChecks];
+
+export type LockedPolicy = { allow: true } | { allow: false } | { response: Json };
+
 export type MethodDefinition = {
   scope?: PermissionScope;
+  /**
+   * Permission guard mode.
+   *
+   * - "none": no permission check; the method must self-filter (e.g. return []).
+   * - "connected": require Accounts connection for namespace+chainRef.
+   * - "scope": require the method's scope via permissions.assertPermission.
+   *
+   * Default:
+   * - if `scope` is present => "scope"
+   * - otherwise => "none"
+   */
+  permissionCheck?: PermissionCheck;
   approvalRequired?: boolean;
-  locked?: {
-    allow?: boolean;
-    response?: unknown;
-  };
+  locked?: LockedPolicy;
   /**
    * Optional fast-fail validator for JSON-RPC params.
    * Throw ArxReasons.RpcInvalidParams when params are malformed.
    */
   validateParams?: (params: JsonRpcParams | undefined, context?: RpcInvocationContext) => void;
   handler: MethodHandler;
-  /**
-   * Whether this method is a "bootstrap" method that can run before permissions are granted.
-   * Examples: eth_requestAccounts, wallet_requestPermissions
-   * Default: false (requires permission if scope is present)
-   */
-  isBootstrap?: boolean;
 };
 
 export type Namespace = string;

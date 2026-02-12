@@ -2,13 +2,13 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { createDefaultChainModuleRegistry } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { lockedResponse } from "../../locked.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE, toParamsArray } from "../utils.js";
 
 export const ethAccountsDefinition: MethodDefinition = {
   scope: PermissionScopes.Accounts,
+  permissionCheck: PermissionChecks.None,
   locked: lockedResponse([]),
-  isBootstrap: true,
   validateParams: (params) => {
     const arr = toParamsArray(params);
     if (arr.length !== 0) {

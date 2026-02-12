@@ -362,12 +362,6 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
     metadata.extensions = clone(baseChainMetadata.extensions);
   }
 
-  if (overrides.providerPolicies) {
-    metadata.providerPolicies = clone(overrides.providerPolicies);
-  } else if (baseChainMetadata.providerPolicies) {
-    metadata.providerPolicies = clone(baseChainMetadata.providerPolicies);
-  }
-
   return metadata;
 };
 

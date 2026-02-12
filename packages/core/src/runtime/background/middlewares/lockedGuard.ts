@@ -1,16 +1,16 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
-import type { Json } from "@metamask/utils";
 import type { MethodDefinition } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import type { AttentionService } from "../../../services/attention/types.js";
+import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
 /**
  * Lock policy priority (highest to lowest):
- * 1. Chain providerPolicies.locked entry for the exact method
- * 2. Chain providerPolicies.locked wildcard "*" entry
- * 3. Method definition's own `locked` configuration
- * 4. Default: reject while the session stays locked
+ * 1. Method definition's own `locked` configuration
+ * 2. Default: reject while the session stays locked
+ *
+ * Note: Chain-level locked policies have been removed; all locked behavior is method-level.
  */
 
 type LockedDefinition = Pick<MethodDefinition, "scope" | "approvalRequired" | "locked"> | undefined;
@@ -23,10 +23,6 @@ type LockedGuardDeps = {
   isUnlocked(): boolean;
   isInternalOrigin(origin: string): boolean;
   findMethodDefinition(method: string, context?: RpcInvocationContext): LockedDefinition;
-  deriveLockedPolicy(
-    method: string,
-    context?: RpcInvocationContext,
-  ): { allow?: boolean; response?: unknown; hasResponse?: boolean } | undefined;
   getPassthroughAllowance(method: string, context?: RpcInvocationContext): PassthroughAllowance;
   attentionService: Pick<AttentionService, "requestAttention">;
 };
@@ -34,7 +30,7 @@ type LockedGuardDeps = {
  * Guard RPC calls while the session is locked.
  * Internal origins or unlocked sessions pass through.
  * If a method is not registered, throw unsupportedMethod.
- * Public methods without scope still run.
+ * Public methods without scope still run (unless an explicit locked policy is configured).
  * locked.allow lets a method run; locked.response sends a fixed result.
  * Everything else throws unauthorized until the user unlocks.
  */
@@ -42,12 +38,12 @@ export const createLockedGuardMiddleware = ({
   isUnlocked,
   isInternalOrigin,
   findMethodDefinition,
-  deriveLockedPolicy,
   getPassthroughAllowance,
   attentionService,
 }: LockedGuardDeps) => {
   return createAsyncMiddleware(async (req, res, next) => {
-    const origin = (req as { origin?: string }).origin ?? "unknown://";
+    const reqWithArx = req as typeof req & ArxMiddlewareRequest;
+    const origin = reqWithArx.origin ?? "unknown://";
 
     const requestUnlockAttention = (method: string, rpcContext?: RpcInvocationContext) => {
       try {
@@ -67,7 +63,7 @@ export const createLockedGuardMiddleware = ({
       return next();
     }
 
-    const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+    const rpcContext = reqWithArx.arx;
     const definition = findMethodDefinition(req.method, rpcContext);
     const passthrough = getPassthroughAllowance(req.method, rpcContext);
 
@@ -91,25 +87,16 @@ export const createLockedGuardMiddleware = ({
       });
     }
 
-    if (!definition.scope) {
-      return next();
-    }
-
-    const resolvedPolicy = deriveLockedPolicy(req.method, rpcContext);
-    const policyActive =
-      resolvedPolicy !== undefined && (resolvedPolicy.allow !== undefined || resolvedPolicy.hasResponse === true);
-
-    // Chain-level locked policy is the highest priority and cannot be bypassed by approvalRequired.
-    if (policyActive) {
-      if (resolvedPolicy.allow === true) {
-        return next();
-      }
-      if (resolvedPolicy.hasResponse) {
-        res.result = resolvedPolicy.response as Json;
+    const locked = definition.locked;
+    if (locked) {
+      if ("response" in locked) {
+        res.result = locked.response;
         return;
       }
-
-      // Explicit deny (allow:false with no response)
+      if (locked.allow === true) {
+        return next();
+      }
+      // allow:false
       requestUnlockAttention(req.method, rpcContext);
       throw arxError({
         reason: ArxReasons.SessionLocked,
@@ -118,15 +105,9 @@ export const createLockedGuardMiddleware = ({
       });
     }
 
-    const locked = definition.locked ?? {};
-
-    if (locked.allow === true) {
+    // No locked policy configured for this method: public methods without scope still run.
+    if (!definition.scope) {
       return next();
-    }
-
-    if (Object.hasOwn(locked, "response")) {
-      res.result = locked.response as Json;
-      return;
     }
 
     // For approval-based methods, do not hard-reject while locked.

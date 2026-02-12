@@ -1,11 +1,12 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
 export const personalSignDefinition: MethodDefinition = {
   scope: PermissionScopes.Sign,
+  permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
   validateParams: (params) => {
     const paramsArray = toParamsArray(params);

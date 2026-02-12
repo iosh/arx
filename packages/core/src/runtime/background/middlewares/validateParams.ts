@@ -3,13 +3,11 @@ import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { MethodDefinition } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
-import type { ArxInvocation } from "./resolveInvocation.js";
+import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
-type ReqLike = {
+type ValidateParamsRequest = ArxMiddlewareRequest & {
   method: string;
   params?: JsonRpcParams;
-  arx?: RpcInvocationContext;
-  arxInvocation?: ArxInvocation;
 };
 
 /**
@@ -21,7 +19,7 @@ type ReqLike = {
 export const createValidateParamsMiddleware = (deps: {
   findMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
 }) => {
-  return createAsyncMiddleware<JsonRpcParams, Json>(async (req: ReqLike, _res, next) => {
+  return createAsyncMiddleware<JsonRpcParams, Json>(async (req: ValidateParamsRequest, _res, next) => {
     const method = req.method;
 
     // Prefer pre-resolved invocation context if present.

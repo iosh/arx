@@ -2,10 +2,11 @@ import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../chains/ids.js";
-import { type ChainNamespace, PermissionScopes } from "../../../controllers/index.js";
-import type { MethodDefinition } from "../../../rpc/handlers/types.js";
+import type { ChainNamespace } from "../../../controllers/index.js";
+import { type MethodDefinition, type PermissionCheck, PermissionChecks } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
+import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
 type PermissionGuardDeps = {
   assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
@@ -15,6 +16,10 @@ type PermissionGuardDeps = {
   findMethodDefinition(method: string, context?: RpcInvocationContext): MethodDefinition | undefined;
 };
 
+const assertNever = (value: never): never => {
+  throw new Error(`Unexpected permissionCheck: ${String(value)}`);
+};
+
 export const createPermissionGuardMiddleware = ({
   assertPermission,
   isConnected,
@@ -22,68 +27,88 @@ export const createPermissionGuardMiddleware = ({
   findMethodDefinition,
 }: PermissionGuardDeps): JsonRpcMiddleware<JsonRpcParams, Json> => {
   return createAsyncMiddleware(async (req, _res, next) => {
-    const origin = (req as { origin?: string }).origin ?? UNKNOWN_ORIGIN;
+    const reqWithArx = req as typeof req & ArxMiddlewareRequest;
+
+    const origin = reqWithArx.origin ?? UNKNOWN_ORIGIN;
     if (isInternalOrigin(origin)) {
       await next();
       return;
     }
 
-    const rpcContext = (req as { arx?: RpcInvocationContext }).arx;
+    const rpcContext = reqWithArx.arx;
     const definition = findMethodDefinition(req.method, rpcContext);
 
-    const isApprovalScopedSignOrTx =
-      definition?.approvalRequired === true &&
-      !(definition?.isBootstrap ?? false) &&
-      (definition.scope === PermissionScopes.Sign || definition.scope === PermissionScopes.Transaction);
-
-    if (isApprovalScopedSignOrTx) {
-      const chainRef = rpcContext?.chainRef;
-      const namespace = rpcContext?.namespace;
-
-      const connected =
-        origin !== UNKNOWN_ORIGIN &&
-        typeof chainRef === "string" &&
-        chainRef.length > 0 &&
-        isConnected(origin, {
-          namespace: (namespace ?? null) as ChainNamespace | null,
-          chainRef: chainRef as ChainRef,
-        });
-
-      if (!connected) {
-        throw arxError({
-          reason: ArxReasons.PermissionNotConnected,
-          message: `Origin "${origin}" is not connected`,
-          data: { origin, method: req.method, chainRef: chainRef ?? null, namespace: namespace ?? null },
-        });
-      }
-
+    // No definition => no permission gating (e.g. passthrough methods).
+    if (!definition) {
       await next();
       return;
     }
 
-    const shouldEnforce = Boolean(definition?.scope) && !(definition?.isBootstrap ?? false);
-    if (!shouldEnforce) {
-      await next();
-      return;
-    }
-    if (!assertPermission) {
-      throw new Error("Permission guard misconfigured: missing assertPermission");
-    }
+    const mode: PermissionCheck =
+      definition.permissionCheck ?? (definition.scope ? PermissionChecks.Scope : PermissionChecks.None);
 
-    try {
-      await assertPermission(origin, req.method, rpcContext);
-    } catch (error) {
-      if (isArxError(error)) {
-        throw error;
+    switch (mode) {
+      case PermissionChecks.None: {
+        await next();
+        return;
       }
-      throw arxError({
-        reason: ArxReasons.PermissionDenied,
-        message: (error as Error)?.message ?? `Origin lacks permission for ${req.method}`,
-        data: { origin, method: req.method },
-        cause: error,
-      });
+      case PermissionChecks.Connected: {
+        const invocation = reqWithArx.arxInvocation;
+        const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? null;
+        // Only used for error payload/debugging. The permission controller derives the effective
+        // namespace from chainRef; passing a namespace here can cause mismatch throws.
+        const namespaceForDebug =
+          (invocation?.namespace ?? rpcContext?.namespace ?? (chainRef ? chainRef.split(":")[0] : null)) || null;
+
+        const connected =
+          origin !== UNKNOWN_ORIGIN &&
+          chainRef !== null &&
+          chainRef.length > 0 &&
+          isConnected(origin, {
+            // Avoid mismatch throws by letting the permission controller derive namespace from chainRef.
+            namespace: null,
+            chainRef: chainRef as ChainRef,
+          });
+
+        if (!connected) {
+          throw arxError({
+            reason: ArxReasons.PermissionNotConnected,
+            message: `Origin "${origin}" is not connected`,
+            data: {
+              origin,
+              method: req.method,
+              chainRef,
+              namespace: namespaceForDebug,
+            },
+          });
+        }
+
+        await next();
+        return;
+      }
+      case PermissionChecks.Scope: {
+        if (!assertPermission) {
+          throw new Error("Permission guard misconfigured: missing assertPermission");
+        }
+
+        try {
+          await assertPermission(origin, req.method, rpcContext);
+        } catch (error) {
+          if (isArxError(error)) throw error;
+          throw arxError({
+            reason: ArxReasons.PermissionDenied,
+            message: (error as Error)?.message ?? `Origin lacks permission for ${req.method}`,
+            data: { origin, method: req.method },
+            cause: error,
+          });
+        }
+
+        await next();
+        return;
+      }
     }
 
-    await next();
+    // Exhaustive check (keeps compiler honest when PermissionCheck evolves).
+    return assertNever(mode);
   });
 };

@@ -45,16 +45,6 @@ export interface ChainMetadata {
   features?: readonly ChainFeature[] | undefined;
   tags?: readonly string[] | undefined;
   extensions?: Record<string, unknown> | undefined;
-  providerPolicies?: ChainProviderPolicies | undefined;
-}
-
-export interface ChainLockedPolicy {
-  allow?: boolean | undefined;
-  response?: unknown | undefined;
-}
-
-export interface ChainProviderPolicies {
-  locked?: Record<string, ChainLockedPolicy | null | undefined> | undefined;
 }
 
 export type NamespaceMetadataValidator = (params: {
@@ -97,15 +87,6 @@ export const rpcEndpointSchema: z.ZodType<RpcEndpoint> = z.strictObject({
   type: z.enum(["public", "authenticated", "private"]).optional(),
   weight: z.number().positive().optional(),
   headers: z.record(trimmedString(), z.string()).optional(),
-});
-
-const chainLockedPolicySchema: z.ZodType<ChainLockedPolicy> = z.strictObject({
-  allow: z.boolean().optional(),
-  response: z.unknown().optional(),
-});
-
-const chainProviderPoliciesSchema: z.ZodType<ChainProviderPolicies> = z.strictObject({
-  locked: z.record(trimmedString(), chainLockedPolicySchema.nullable()).optional(),
 });
 
 export const explorerLinkSchema: z.ZodType<ExplorerLink> = z.strictObject({
@@ -153,7 +134,6 @@ const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
   features: z.array(trimmedString()).optional(),
   tags: z.array(trimmedString()).optional(),
   extensions: z.record(z.string(), z.unknown()).optional(),
-  providerPolicies: chainProviderPoliciesSchema.optional(),
 });
 
 const defaultNamespaceValidators: Record<string, NamespaceMetadataValidator> = {

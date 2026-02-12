@@ -3,13 +3,13 @@ import type { ChainRef } from "../../../../chains/ids.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedAllow } from "../../locked.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE, toParamsArray } from "../utils.js";
 
 export const walletGetPermissionsDefinition: MethodDefinition = {
   scope: PermissionScopes.Basic,
+  permissionCheck: PermissionChecks.None,
   locked: lockedAllow(),
-  isBootstrap: true,
   validateParams: (params) => {
     const arr = toParamsArray(params);
     if (arr.length !== 0) {

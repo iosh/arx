@@ -11,7 +11,7 @@ import {
   type RequestPermissionsApprovalPayload,
 } from "../../../../controllers/index.js";
 import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../../permissions.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
@@ -75,8 +75,8 @@ const parsePermissionRequests = (
 
 export const walletRequestPermissionsDefinition: MethodDefinition = {
   scope: PermissionScopes.Basic,
+  permissionCheck: PermissionChecks.None,
   approvalRequired: true,
-  isBootstrap: true,
   validateParams: (params, rpcContext) => {
     // We validate only the request shape here; chain selection is handled by the handler.
     // Default chain fallback uses activeChain in the handler, so avoid relying on it here.

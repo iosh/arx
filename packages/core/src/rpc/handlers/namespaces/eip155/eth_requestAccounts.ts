@@ -1,13 +1,13 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
 export const ethRequestAccountsDefinition: MethodDefinition = {
   scope: PermissionScopes.Accounts,
+  permissionCheck: PermissionChecks.None,
   approvalRequired: true,
-  isBootstrap: true,
   validateParams: (params) => {
     const arr = toParamsArray(params);
     if (arr.length !== 0) {

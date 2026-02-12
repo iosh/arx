@@ -31,7 +31,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: (origin) => origin === ORIGIN,
       findMethodDefinition: () => undefined,
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -51,7 +50,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => true,
       isInternalOrigin: () => false,
       findMethodDefinition: () => undefined,
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -73,7 +71,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition,
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -97,7 +94,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({}),
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -117,7 +113,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { allow: true } }),
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -137,7 +132,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { response: ["0x123"] } }),
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -158,7 +152,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => undefined,
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: true }),
       attentionService: attention,
     });
@@ -178,7 +171,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => undefined,
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: () => ({ isPassthrough: true, allowWhenLocked: false }),
       attentionService: attention,
     });
@@ -209,7 +201,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({ scope: PermissionScopes.Accounts }),
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -239,7 +230,6 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, approvalRequired: true }),
-      deriveLockedPolicy: () => undefined,
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -253,14 +243,17 @@ describe("createLockedGuardMiddleware", () => {
     expect(attention.requestAttention).not.toHaveBeenCalled();
   });
 
-  it("does not bypass explicit chain locked deny for approvalRequired methods", async () => {
+  it("does not bypass explicit locked deny for approvalRequired methods", async () => {
     const next = createNextStub();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, approvalRequired: true }),
-      deriveLockedPolicy: () => ({ allow: false, hasResponse: false }),
+      findMethodDefinition: () => ({
+        scope: PermissionScopes.Accounts,
+        approvalRequired: true,
+        locked: { allow: false },
+      }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });

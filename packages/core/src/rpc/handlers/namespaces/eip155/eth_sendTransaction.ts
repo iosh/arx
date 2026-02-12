@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { parseChainRef } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
-import type { MethodDefinition } from "../../types.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
   isTransactionResolutionError,
@@ -15,6 +15,7 @@ type RpcLikeError = Error & { code: number; data?: unknown };
 
 export const ethSendTransactionDefinition: MethodDefinition = {
   scope: PermissionScopes.Transaction,
+  permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
   validateParams: (params, rpcContext) => {
     const chainRef = rpcContext?.chainRef;

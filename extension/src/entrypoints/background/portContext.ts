@@ -1,18 +1,21 @@
-import { DEFAULT_NAMESPACE, getRegisteredNamespaceAdapters } from "@arx/core";
+import { DEFAULT_NAMESPACE } from "@arx/core";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import type { ControllerSnapshot, PortContext } from "./types";
 
-const isNamespaceRegistered = (namespace: string | null | undefined) => {
-  if (!namespace || namespace.length === 0) {
-    return false;
-  }
-  return getRegisteredNamespaceAdapters().some((adapter) => adapter.namespace === namespace);
+const isNamespaceRegistered = (namespace: string | null | undefined, registered?: ReadonlySet<string>) => {
+  if (!namespace || namespace.length === 0) return false;
+  if (!registered) return namespace === DEFAULT_NAMESPACE;
+  return registered.has(namespace);
 };
 
-export const deriveNamespace = (chainRef: string | null, metaNamespace?: string): string => {
+export const deriveNamespace = (
+  chainRef: string | null,
+  metaNamespace?: string,
+  registeredNamespaces?: ReadonlySet<string>,
+): string => {
   if (metaNamespace) {
-    if (isNamespaceRegistered(metaNamespace)) {
+    if (isNamespaceRegistered(metaNamespace, registeredNamespaces)) {
       return metaNamespace;
     }
     console.warn(
@@ -22,7 +25,7 @@ export const deriveNamespace = (chainRef: string | null, metaNamespace?: string)
   }
   if (chainRef) {
     const [namespace] = chainRef.split(":");
-    if (namespace && isNamespaceRegistered(namespace)) {
+    if (namespace && isNamespaceRegistered(namespace, registeredNamespaces)) {
       return namespace;
     }
   }
@@ -34,6 +37,7 @@ export const syncPortContext = (
   snapshot: ControllerSnapshot,
   portContexts: Map<Runtime.Port, PortContext>,
   extensionOrigin: string,
+  registeredNamespaces?: ReadonlySet<string>,
 ) => {
   const existing = portContexts.get(port);
   const resolvedOrigin = getPortOrigin(port, extensionOrigin);
@@ -41,7 +45,7 @@ export const syncPortContext = (
 
   // meta.activeChain and chain.chainRef come from the same source; meta is checked first for future per-port overrides;
   const chainRef = snapshot.meta?.activeChain ?? snapshot.chain.chainRef ?? null;
-  const namespace = deriveNamespace(chainRef, snapshot.meta?.activeNamespace);
+  const namespace = deriveNamespace(chainRef, snapshot.meta?.activeNamespace, registeredNamespaces);
 
   portContexts.set(port, {
     origin,
@@ -57,8 +61,9 @@ export const syncAllPortContexts = (
   snapshot: ControllerSnapshot,
   portContexts: Map<Runtime.Port, PortContext>,
   extensionOrigin: string,
+  registeredNamespaces?: ReadonlySet<string>,
 ) => {
   for (const port of connections) {
-    syncPortContext(port, snapshot, portContexts, extensionOrigin);
+    syncPortContext(port, snapshot, portContexts, extensionOrigin, registeredNamespaces);
   }
 };

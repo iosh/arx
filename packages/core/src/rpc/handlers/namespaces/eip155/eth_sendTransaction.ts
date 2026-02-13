@@ -13,32 +13,26 @@ import {
 
 type RpcLikeError = Error & { code: number; data?: unknown };
 
-export const ethSendTransactionDefinition: MethodDefinition = {
+type EthSendTransactionParams = readonly [unknown, ...unknown[]];
+
+export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionParams> = {
   scope: PermissionScopes.Transaction,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
-  validateParams: (params, rpcContext) => {
-    const chainRef = rpcContext?.chainRef;
-    if (!chainRef) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "Missing chainRef for eth_sendTransaction",
-        data: { method: "eth_sendTransaction" },
-      });
-    }
-    buildEip155TransactionRequest(toParamsArray(params), chainRef as ChainRef);
-  },
-  handler: async ({ origin, request, controllers, rpcContext }) => {
-    const paramsArray = toParamsArray(request.params);
+  parseParams: (params) => {
+    const paramsArray = toParamsArray(params);
 
     if (paramsArray.length === 0) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
         message: "eth_sendTransaction requires at least one transaction parameter",
-        data: { params: request.params },
+        data: { params },
       });
     }
 
+    return paramsArray as unknown as EthSendTransactionParams;
+  },
+  handler: async ({ origin, params, controllers, rpcContext }) => {
     const activeChain = controllers.network.getActiveChain();
     let chainRef = activeChain.chainRef;
 
@@ -65,7 +59,7 @@ export const ethSendTransactionDefinition: MethodDefinition = {
       }
     }
 
-    const txRequest = buildEip155TransactionRequest(paramsArray, chainRef);
+    const txRequest = buildEip155TransactionRequest(params, chainRef);
 
     try {
       const meta = await controllers.transactions.requestTransactionApproval(

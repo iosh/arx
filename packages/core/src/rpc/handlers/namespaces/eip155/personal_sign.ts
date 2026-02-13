@@ -4,11 +4,13 @@ import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-export const personalSignDefinition: MethodDefinition = {
+type PersonalSignParams = { address: string; message: string };
+
+export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
   scope: PermissionScopes.Sign,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
-  validateParams: (params) => {
+  parseParams: (params) => {
     const paramsArray = toParamsArray(params);
     if (paramsArray.length < 2) {
       throw arxError({
@@ -35,20 +37,11 @@ export const personalSignDefinition: MethodDefinition = {
         data: { params },
       });
     }
+
+    return { address, message };
   },
-  handler: async ({ origin, request, controllers, rpcContext }) => {
-    const paramsArray = toParamsArray(request.params);
-    const { address, message } = deriveSigningInputs(paramsArray);
-
-    if (!address || !message) {
-      // validateParams should have caught this; keep a defensive fallback.
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "personal_sign expects a message and an account address",
-        data: { params: request.params },
-      });
-    }
-
+  handler: async ({ origin, params, controllers, rpcContext }) => {
+    const { address, message } = params;
     const activeChain = controllers.network.getActiveChain();
 
     const task = {

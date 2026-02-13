@@ -6,10 +6,10 @@ import type { MethodDefinition } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-export const walletAddEthereumChainDefinition: MethodDefinition = {
+export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
   scope: PermissionScopes.Basic,
   approvalRequired: true,
-  validateParams: (params) => {
+  parseParams: (params) => {
     const [raw] = toParamsArray(params);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       throw arxError({
@@ -19,7 +19,7 @@ export const walletAddEthereumChainDefinition: MethodDefinition = {
       });
     }
     try {
-      createEip155MetadataFromEip3085(raw);
+      return createEip155MetadataFromEip3085(raw);
     } catch (error) {
       const message =
         error instanceof ZodError
@@ -35,37 +35,7 @@ export const walletAddEthereumChainDefinition: MethodDefinition = {
       });
     }
   },
-  handler: async ({ origin, request, controllers, rpcContext }) => {
-    const paramsArray = toParamsArray(request.params);
-    const [raw] = paramsArray;
-
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_addEthereumChain expects a single object parameter",
-        data: { params: request.params },
-      });
-    }
-
-    let metadata: ChainMetadata;
-    try {
-      metadata = createEip155MetadataFromEip3085(raw);
-    } catch (error) {
-      const message =
-        error instanceof ZodError
-          ? "wallet_addEthereumChain received invalid chain parameters"
-          : error instanceof Error
-            ? error.message
-            : "Invalid chain parameters";
-
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message,
-        data: { params: request.params },
-        cause: error,
-      });
-    }
-
+  handler: async ({ origin, params: metadata, controllers, rpcContext }) => {
     if (metadata.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,

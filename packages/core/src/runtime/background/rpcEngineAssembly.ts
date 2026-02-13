@@ -8,7 +8,6 @@ import { createLockedGuardMiddleware } from "./middlewares/lockedGuard.js";
 import { createPermissionGuardMiddleware } from "./middlewares/permissionGuard.js";
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
 import { type ArxInvocation, createResolveInvocationMiddleware } from "./middlewares/resolveInvocation.js";
-import { createValidateParamsMiddleware } from "./middlewares/validateParams.js";
 
 export type BackgroundServices = ReturnType<typeof createBackgroundServices>;
 
@@ -139,25 +138,26 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     findMethodDefinition,
   });
 
-  const validateParams: Middleware = createValidateParamsMiddleware({ findMethodDefinition }) as unknown as Middleware;
-
   const executor: Middleware = createAsyncMiddleware(async (req, res) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
     const arxInvocation = reqWithArx.arxInvocation;
     const origin = arxInvocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
     const rpcContext = arxInvocation?.rpcContext ?? reqWithArx.arx;
 
-    const rpcInvocation = {
-      origin,
-      request: { method: req.method, params: req.params as JsonRpcParams },
-      ...(rpcContext ? { context: rpcContext } : {}),
-    };
+	    const rpcInvocation = {
+	      origin,
+	      request: {
+	        method: req.method,
+	        ...(req.params !== undefined ? { params: req.params } : {}),
+	      },
+	      ...(rpcContext ? { context: rpcContext } : {}),
+	    };
 
     const result = await executeMethod(rpcInvocation);
     res.result = result as Json;
   });
 
-  return [resolveInvocation, errorBoundary, lockedGuard, permissionGuard, validateParams, executor];
+  return [resolveInvocation, errorBoundary, lockedGuard, permissionGuard, executor];
 };
 
 export const createRpcEngineForBackground = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {

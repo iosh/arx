@@ -1,25 +1,16 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../../../chains/ids.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedAllow } from "../../locked.js";
+import { NoParamsSchema } from "../../params.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { EIP155_NAMESPACE, toParamsArray } from "../utils.js";
+import { EIP155_NAMESPACE } from "../utils.js";
 
-export const walletGetPermissionsDefinition: MethodDefinition = {
+export const walletGetPermissionsDefinition: MethodDefinition<undefined> = {
   scope: PermissionScopes.Basic,
   permissionCheck: PermissionChecks.None,
   locked: lockedAllow(),
-  validateParams: (params) => {
-    const arr = toParamsArray(params);
-    if (arr.length !== 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_getPermissions does not accept parameters",
-        data: { params },
-      });
-    }
-  },
+  paramsSchema: NoParamsSchema,
   handler: ({ origin, controllers }) => {
     const grants = controllers.permissions.listGrants(origin);
     const getAccounts = (chainRef: string) =>

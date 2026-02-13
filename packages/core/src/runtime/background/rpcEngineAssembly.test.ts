@@ -103,15 +103,15 @@ describe("background rpc engine assembly", () => {
       isInternalOrigin: () => false,
     });
 
-    // Should push 6 middlewares: resolveInvocation, errorBoundary, lockedGuard, permissionGuard, validateParams, executor
-    expect(pushSpy).toHaveBeenCalledTimes(6);
+    // Should push 5 middlewares: resolveInvocation, errorBoundary, lockedGuard, permissionGuard, executor
+    expect(pushSpy).toHaveBeenCalledTimes(5);
 
     createRpcEngineForBackground(services, {
       isInternalOrigin: () => false,
     });
 
     // Repeated call should not push again (idempotency via symbol flag)
-    expect(pushSpy).toHaveBeenCalledTimes(6);
+    expect(pushSpy).toHaveBeenCalledTimes(5);
   });
 
   it("encodes existing res.error (error boundary)", async () => {

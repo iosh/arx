@@ -4,25 +4,15 @@ import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-export const ethSignTypedDataV4Definition: MethodDefinition = {
+type EthSignTypedDataV4Params = { address: string; typedData: string };
+
+export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Params> = {
   scope: PermissionScopes.Sign,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
-  validateParams: (params) => {
-    parseTypedDataParams(toParamsArray(params));
-  },
-  handler: async ({ origin, request, controllers, rpcContext }) => {
-    const paramsArray = toParamsArray(request.params);
-
-    if (paramsArray.length < 2) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "eth_signTypedData_v4 requires address and typed data parameters",
-        data: { params: request.params },
-      });
-    }
-
-    const { address, typedData } = parseTypedDataParams(paramsArray);
+  parseParams: (params) => parseTypedDataParams(toParamsArray(params)),
+  handler: async ({ origin, params, controllers, rpcContext }) => {
+    const { address, typedData } = params;
     const activeChain = controllers.network.getActiveChain();
 
     const task = {

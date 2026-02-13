@@ -10,7 +10,7 @@ import { walletGetPermissionsDefinition } from "./wallet_getPermissions.js";
 import { walletRequestPermissionsDefinition } from "./wallet_requestPermissions.js";
 import { walletSwitchEthereumChainDefinition } from "./wallet_switchEthereumChain.js";
 
-export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
+export const EIP155_DEFINITIONS = {
   eth_chainId: ethChainIdDefinition,
   eth_accounts: ethAccountsDefinition,
   eth_requestAccounts: ethRequestAccountsDefinition,
@@ -21,4 +21,8 @@ export const buildEip155Definitions = (): Record<string, MethodDefinition> => ({
   wallet_addEthereumChain: walletAddEthereumChainDefinition,
   wallet_getPermissions: walletGetPermissionsDefinition,
   wallet_requestPermissions: walletRequestPermissionsDefinition,
-});
+} as const satisfies Record<string, MethodDefinition>;
+
+export type Eip155Method = keyof typeof EIP155_DEFINITIONS;
+
+export const buildEip155Definitions = () => EIP155_DEFINITIONS;

@@ -4,9 +4,15 @@ import { PermissionScopes } from "../../../../controllers/index.js";
 import type { MethodDefinition } from "../../types.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 
-export const walletSwitchEthereumChainDefinition: MethodDefinition = {
+type WalletSwitchEthereumChainParams = {
+  chainId?: string;
+  chainRef?: string;
+  normalizedChainId?: string;
+};
+
+export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
   scope: PermissionScopes.Basic,
-  validateParams: (params) => {
+  parseParams: (params) => {
     const value = toParamsArray(params)[0];
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw arxError({
@@ -32,39 +38,18 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition = {
         data: { chainId: rawChainId },
       });
     }
+
+    // With `exactOptionalPropertyTypes`, optional fields should be omitted
+    // when absent instead of being set to `undefined`.
+    return {
+      ...(rawChainId ? { chainId: rawChainId, normalizedChainId: rawChainId.toLowerCase() } : {}),
+      ...(rawChainRef ? { chainRef: rawChainRef } : {}),
+    };
   },
-  handler: async ({ request, controllers, rpcContext }) => {
-    const [first] = toParamsArray(request.params);
-    const params = request.params;
-
-    if (!first || typeof first !== "object" || Array.isArray(first)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain expects a single object parameter",
-        data: { params },
-      });
-    }
-
-    const payload = first as Record<string, unknown>;
-    const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
-    const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
-
-    if (!rawChainId && !rawChainRef) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain requires a chainId or chainRef value",
-        data: { params },
-      });
-    }
-
-    const normalizedChainId = rawChainId?.toLowerCase();
-    if (normalizedChainId && !/^0x[0-9a-f]+$/i.test(normalizedChainId)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain received an invalid hex chainId",
-        data: { chainId: rawChainId },
-      });
-    }
+  handler: async ({ params, controllers, rpcContext }) => {
+    const rawChainId = params.chainId;
+    const rawChainRef = params.chainRef;
+    const normalizedChainId = params.normalizedChainId;
 
     let normalizedChainRef: string | undefined;
     if (rawChainRef) {

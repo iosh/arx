@@ -1,23 +1,15 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { NoParamsSchema } from "../../params.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createTaskId, isDomainError, isRpcError } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-export const ethRequestAccountsDefinition: MethodDefinition = {
+export const ethRequestAccountsDefinition: MethodDefinition<undefined> = {
   scope: PermissionScopes.Accounts,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
-  validateParams: (params) => {
-    const arr = toParamsArray(params);
-    if (arr.length !== 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "eth_requestAccounts does not accept parameters",
-        data: { params },
-      });
-    }
-  },
+  paramsSchema: NoParamsSchema,
   handler: async ({ origin, controllers, rpcContext }) => {
     const activeChain = controllers.network.getActiveChain();
     const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });

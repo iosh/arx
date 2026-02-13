@@ -1,4 +1,5 @@
 import type { Json, JsonRpcParams } from "@metamask/utils";
+import type { ZodType } from "zod";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
@@ -37,12 +38,20 @@ export type RpcInvocationContext = {
   meta?: unknown;
 };
 
-export type MethodHandler = (context: {
+type MethodHandlerContext<P> = {
   origin: string;
   request: RpcRequest;
+  params: P;
   controllers: HandlerControllers;
   rpcContext?: RpcInvocationContext;
-}) => Promise<unknown> | unknown;
+};
+
+// Bivariant callback so narrower param types (e.g. `undefined`) can still be stored
+// in registries typed as `MethodHandler<unknown>`. Params are validated/parsed
+// before invocation, so this is safe in practice.
+type BivariantCallback<Args extends unknown[], R> = { bivarianceHack(...args: Args): R }["bivarianceHack"];
+
+export type MethodHandler<P = unknown> = BivariantCallback<[context: MethodHandlerContext<P>], Promise<unknown> | unknown>;
 
 export const PermissionChecks = {
   None: "none",
@@ -53,7 +62,7 @@ export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionC
 
 export type LockedPolicy = { allow: true } | { allow: false } | { response: Json };
 
-export type MethodDefinition = {
+export type MethodDefinition<P = unknown> = {
   scope?: PermissionScope;
   /**
    * Permission guard mode.
@@ -70,11 +79,18 @@ export type MethodDefinition = {
   approvalRequired?: boolean;
   locked?: LockedPolicy;
   /**
-   * Optional fast-fail validator for JSON-RPC params.
-   * Throw ArxReasons.RpcInvalidParams when params are malformed.
+   * Optional zod schema for JSON-RPC params.
+   *
+   * If provided, it will be parsed once before handler execution and the
+   * parsed value will be passed to the handler as `params`.
    */
-  validateParams?: (params: JsonRpcParams | undefined, context?: RpcInvocationContext) => void;
-  handler: MethodHandler;
+  paramsSchema?: ZodType<P>;
+  /**
+   * Optional custom parser for params (useful when validation depends on rpcContext).
+   * Prefer `paramsSchema` when possible.
+   */
+  parseParams?: (params: JsonRpcParams | undefined, context?: RpcInvocationContext) => P;
+  handler: MethodHandler<P>;
 };
 
 export type Namespace = string;

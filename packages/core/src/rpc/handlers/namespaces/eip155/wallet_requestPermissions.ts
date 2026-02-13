@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalTask,
@@ -19,29 +18,9 @@ const CAPABILITY_TO_SCOPE = new Map(
   Object.entries(PERMISSION_SCOPE_CAPABILITIES).map(([scope, capability]) => [capability, scope as PermissionScope]),
 );
 
-const parsePermissionRequests = (
-  params: JsonRpcParams | undefined,
-  defaultChain: ChainRef,
-): PermissionRequestDescriptor[] => {
-  const [raw] = toParamsArray(params);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "wallet_requestPermissions expects a single object parameter",
-      data: { params },
-    });
-  }
-
-  const entries = Object.keys(raw);
-  if (entries.length === 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "wallet_requestPermissions requires at least one capability",
-      data: { params },
-    });
-  }
-
+const toRequestDescriptors = (capabilities: readonly string[], defaultChain: ChainRef): PermissionRequestDescriptor[] => {
   const requests = new Map<string, PermissionRequestDescriptor>();
+
   const addCapability = (capability: string) => {
     const scope = CAPABILITY_TO_SCOPE.get(capability);
     if (!scope) {
@@ -52,34 +31,25 @@ const parsePermissionRequests = (
       });
     }
     const existing = requests.get(capability);
-    if (existing) {
-      if (!existing.chains.includes(defaultChain)) {
-        existing.chains.push(defaultChain);
-      }
-      return;
-    }
-    requests.set(capability, {
-      scope,
-      capability,
-      chains: [defaultChain],
-    });
+    if (existing) return;
+
+    requests.set(capability, { scope, capability, chains: [defaultChain] });
   };
 
-  for (const capability of entries) {
+  for (const capability of capabilities) {
     addCapability(capability);
   }
-  addCapability(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
 
   return [...requests.values()];
 };
 
-export const walletRequestPermissionsDefinition: MethodDefinition = {
+type WalletRequestPermissionsParams = readonly string[];
+
+export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
   scope: PermissionScopes.Basic,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
-  validateParams: (params, rpcContext) => {
-    // We validate only the request shape here; chain selection is handled by the handler.
-    // Default chain fallback uses activeChain in the handler, so avoid relying on it here.
+  parseParams: (params, rpcContext) => {
     const [raw] = toParamsArray(params);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       throw arxError({
@@ -88,6 +58,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition = {
         data: { params },
       });
     }
+
     const entries = Object.keys(raw);
     if (entries.length === 0) {
       throw arxError({
@@ -96,6 +67,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition = {
         data: { params },
       });
     }
+
     // If caller provides rpcContext.chainRef, ensure it looks like a CAIP-2-ish id.
     if (rpcContext?.chainRef && typeof rpcContext.chainRef === "string" && !rpcContext.chainRef.includes(":")) {
       throw arxError({
@@ -104,11 +76,16 @@ export const walletRequestPermissionsDefinition: MethodDefinition = {
         data: { chainRef: rpcContext.chainRef },
       });
     }
+
+    const capabilities = new Set<string>(entries);
+    capabilities.add(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
+
+    return [...capabilities];
   },
-  handler: async ({ origin, request, controllers, rpcContext }) => {
+  handler: async ({ origin, params, controllers, rpcContext }) => {
     const activeChain = controllers.network.getActiveChain();
 
-    const requested = parsePermissionRequests(request.params, activeChain.chainRef);
+    const requested = toRequestDescriptors(params, activeChain.chainRef);
     const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
       id: createTaskId("wallet_requestPermissions"),
       type: ApprovalTypes.RequestPermissions,

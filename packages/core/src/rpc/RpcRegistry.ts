@@ -1,6 +1,6 @@
 import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter, UiErrorPayload } from "@arx/errors";
 import { type ArxError, ArxReasons, arxError, isArxError } from "@arx/errors";
-import type { Json, JsonRpcParams } from "@metamask/utils";
+import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
 import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
@@ -344,22 +344,52 @@ export class RpcRegistry {
   }
 
   createMethodExecutor(controllers: HandlerControllers, deps: MethodExecutorDependencies) {
-    return async ({
-      origin,
-      request,
-      context,
-    }: {
+    return async (args: {
       origin: string;
       request: RpcRequest;
       context?: RpcInvocationContext;
     }) => {
+      const { origin, request, context } = args;
+
       const namespace = this.selectNamespace(controllers, request.method, context);
       const definition = this.getDefinitionsForNamespace(namespace)?.[request.method];
       if (definition) {
+        let params: unknown = request.params;
+        if (definition.parseParams || definition.paramsSchema) {
+          try {
+            params = definition.parseParams
+              ? definition.parseParams(request.params, context)
+              : definition.paramsSchema!.parse(request.params);
+          } catch (error) {
+            if (isArxError(error)) throw error;
+            // Only treat known validation failures as "invalid params".
+            // Unknown exceptions likely indicate a bug and should surface as internal errors.
+            if (error instanceof ZodError) {
+              throw arxError({
+                reason: ArxReasons.RpcInvalidParams,
+                message: "Invalid params",
+                data: { namespace, method: request.method },
+                cause: error,
+              });
+            }
+
+            throw arxError({
+              reason: ArxReasons.RpcInternal,
+              message: `Failed to parse params for "${request.method}"`,
+              data: {
+                namespace,
+                method: request.method,
+                errorName: error instanceof Error ? error.name : typeof error,
+              },
+              cause: error,
+            });
+          }
+        }
+
         const handlerArgs =
           context === undefined
-            ? { origin, request, controllers }
-            : { origin, request, controllers, rpcContext: context };
+            ? { origin, request, params, controllers }
+            : { origin, request, params, controllers, rpcContext: context };
         return definition.handler(handlerArgs);
       }
 

@@ -84,18 +84,8 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
 
   // Wrap attention service with hook-aware behavior (unified handling for all attention types)
   const wrappedAttentionService = wrapAttentionService(services.attention, envHooks);
-  const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
-    const namespace = deriveMethodNamespace(method, rpcContext);
-    const adapter = rpcRegistry.getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
-    if (!adapter?.passthrough) {
-      return { isPassthrough: false, allowWhenLocked: false };
-    }
-    const isPassthrough = adapter.passthrough.allowedMethods.includes(method);
-    return {
-      isPassthrough,
-      allowWhenLocked: isPassthrough && (adapter.passthrough.allowWhenLocked?.includes(method) ?? false),
-    };
-  };
+  const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) =>
+    rpcRegistry.getPassthroughAllowance(controllers, method, rpcContext);
 
   const resolveInvocation: Middleware = createResolveInvocationMiddleware({
     deriveNamespace: (method, ctx) => deriveMethodNamespace(method, ctx),

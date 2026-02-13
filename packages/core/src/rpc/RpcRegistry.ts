@@ -26,6 +26,11 @@ type MethodExecutorDependencies = {
   rpcClientRegistry: RpcClientRegistry;
 };
 
+type PassthroughPolicy = {
+  allowedMethods: ReadonlySet<string>;
+  allowWhenLocked: ReadonlySet<string>;
+};
+
 const rpcLogger = createLogger("core:rpc");
 const passthroughLogger = extendLogger(rpcLogger, "passthrough");
 
@@ -71,6 +76,7 @@ export class RpcRegistry {
   private readonly namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
   private readonly namespacePrefixes = new Map<string, Namespace>();
   private readonly namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
+  private readonly passthroughByNamespace = new Map<Namespace, PassthroughPolicy>();
   private readonly protocolAdapters = new Map<string, NamespaceProtocolAdapter>();
 
   getRegisteredNamespaceAdapters(): NamespaceAdapter[] {
@@ -84,27 +90,61 @@ export class RpcRegistry {
     });
 
     this.namespaceAdapters.set(adapter.namespace, adapter);
+
+    if (adapter.passthrough) {
+      const allowedMethods = new Set(adapter.passthrough.allowedMethods);
+      const allowWhenLocked = new Set(adapter.passthrough.allowWhenLocked ?? []);
+
+      for (const method of allowWhenLocked) {
+        if (!allowedMethods.has(method)) {
+          throw arxError({
+            reason: ArxReasons.RpcInternal,
+            message: `[rpc] invalid passthrough config for namespace "${adapter.namespace}": allowWhenLocked contains "${method}" but it is not listed in allowedMethods`,
+            data: { namespace: adapter.namespace, method },
+          });
+        }
+      }
+
+      this.passthroughByNamespace.set(adapter.namespace, { allowedMethods, allowWhenLocked });
+    } else {
+      this.passthroughByNamespace.delete(adapter.namespace);
+    }
   }
 
   unregisterNamespaceAdapter(namespace: Namespace): void {
     this.namespaceAdapters.delete(namespace);
+    this.passthroughByNamespace.delete(namespace);
     this.unregisterNamespaceDefinitions(namespace);
   }
 
   registerNamespaceProtocolAdapter(namespace: string, adapter: NamespaceProtocolAdapter): void {
-    if (!namespace) throw new Error('[rpc] registerNamespaceProtocolAdapter requires a non-empty "namespace"');
+    if (!namespace) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: '[rpc] registerNamespaceProtocolAdapter requires a non-empty "namespace"',
+      });
+    }
     this.protocolAdapters.set(namespace, adapter);
   }
 
   getNamespaceProtocolAdapter(namespace: string): NamespaceProtocolAdapter {
-    if (!namespace) throw new Error('[rpc] getNamespaceProtocolAdapter requires a non-empty "namespace"');
+    if (!namespace) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: '[rpc] getNamespaceProtocolAdapter requires a non-empty "namespace"',
+      });
+    }
 
     if (this.protocolAdapters.has(namespace)) return this.protocolAdapters.get(namespace)!;
 
     const [prefix] = namespace.split(":");
     if (prefix && this.protocolAdapters.has(prefix)) return this.protocolAdapters.get(prefix)!;
 
-    throw new Error(`[rpc] protocol adapter not registered for namespace "${namespace}"`);
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
+      message: `[rpc] protocol adapter not registered for namespace "${namespace}"`,
+      data: { namespace },
+    });
   }
 
   encodeErrorWithAdapters(error: unknown, ctx: ExecuteWithAdaptersContext): unknown {
@@ -212,6 +252,23 @@ export class RpcRegistry {
     return [...this.namespaceDefinitions.keys()];
   }
 
+  getPassthroughAllowance(
+    controllers: HandlerControllers,
+    method: string,
+    context?: RpcInvocationContext,
+  ): { isPassthrough: boolean; allowWhenLocked: boolean } {
+    const namespace = this.selectNamespace(controllers, method, context);
+    const passthrough = this.passthroughByNamespace.get(namespace);
+    if (!passthrough) {
+      return { isPassthrough: false, allowWhenLocked: false };
+    }
+    const isPassthrough = passthrough.allowedMethods.has(method);
+    return {
+      isPassthrough,
+      allowWhenLocked: isPassthrough && passthrough.allowWhenLocked.has(method),
+    };
+  }
+
   private namespaceFromChainRef(chainRef: string | null | undefined): Namespace | null {
     if (!chainRef) {
       return null;
@@ -306,9 +363,8 @@ export class RpcRegistry {
         return definition.handler(handlerArgs);
       }
 
-      const adapter = this.namespaceAdapters.get(namespace);
-      const passthrough = adapter?.passthrough;
-      if (!passthrough || !passthrough.allowedMethods.includes(request.method)) {
+      const passthrough = this.passthroughByNamespace.get(namespace);
+      if (!passthrough || !passthrough.allowedMethods.has(request.method)) {
         throw arxError({
           reason: ArxReasons.RpcMethodNotFound,
           message: `Method "${request.method}" is not implemented`,
@@ -383,9 +439,9 @@ export type DomainChainService = {
 
 export const createDomainChainService = (): DomainChainService => ({
   async setDomainChain() {
-    throw new Error("Not implemented yet");
+    throw arxError({ reason: ArxReasons.RpcInternal, message: "Not implemented yet" });
   },
   async getDomainChain() {
-    throw new Error("Not implemented yet");
+    throw arxError({ reason: ArxReasons.RpcInternal, message: "Not implemented yet" });
   },
 });

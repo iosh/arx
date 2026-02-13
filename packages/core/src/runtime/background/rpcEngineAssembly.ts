@@ -1,13 +1,6 @@
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
-import {
-  createMethodDefinitionResolver,
-  createMethodExecutor,
-  createMethodNamespaceResolver,
-  encodeErrorWithAdapters,
-  getRegisteredNamespaceAdapters,
-  type RpcInvocationContext,
-} from "../../rpc/index.js";
+import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AttentionService, RequestAttentionParams } from "../../services/attention/index.js";
 import type { createBackgroundServices } from "../createBackgroundServices.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
@@ -82,17 +75,18 @@ const wrapAttentionService = (service: AttentionService, envHooks: BackgroundRpc
 
 export const createBackgroundRpcMiddlewares = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = services.controllers;
+  const rpcRegistry = services.rpcRegistry;
 
-  const findMethodDefinition = createMethodDefinitionResolver(controllers);
-  const deriveMethodNamespace = createMethodNamespaceResolver(controllers);
+  const findMethodDefinition = rpcRegistry.createMethodDefinitionResolver(controllers);
+  const deriveMethodNamespace = rpcRegistry.createMethodNamespaceResolver(controllers);
 
-  const executeMethod = createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
+  const executeMethod = rpcRegistry.createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
 
   // Wrap attention service with hook-aware behavior (unified handling for all attention types)
   const wrappedAttentionService = wrapAttentionService(services.attention, envHooks);
   const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) => {
     const namespace = deriveMethodNamespace(method, rpcContext);
-    const adapter = getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
+    const adapter = rpcRegistry.getRegisteredNamespaceAdapters().find((entry) => entry.namespace === namespace);
     if (!adapter?.passthrough) {
       return { isPassthrough: false, allowWhenLocked: false };
     }
@@ -119,7 +113,7 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     try {
       await next();
     } catch (error) {
-      res.error = encodeErrorWithAdapters(error, {
+      res.error = rpcRegistry.encodeErrorWithAdapters(error, {
         surface: "dapp",
         namespace,
         chainRef,
@@ -130,7 +124,7 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     }
 
     if (res.error) {
-      res.error = encodeErrorWithAdapters(res.error, {
+      res.error = rpcRegistry.encodeErrorWithAdapters(res.error, {
         surface: "dapp",
         namespace,
         chainRef,

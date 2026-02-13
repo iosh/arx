@@ -1,6 +1,6 @@
 import { ArxReasons, type NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import { getNamespaceProtocolAdapter, registerNamespaceProtocolAdapter } from "./protocolAdapterRegistry.js";
+import { RpcRegistry } from "./RpcRegistry.js";
 
 const makeAdapter = (id: string): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: -32603, message: `adapter:${id}` }),
@@ -9,27 +9,31 @@ const makeAdapter = (id: string): NamespaceProtocolAdapter => ({
 
 describe("protocolAdapterRegistry", () => {
   it("throws on empty namespace", () => {
-    expect(() => getNamespaceProtocolAdapter("")).toThrow(/non-empty "namespace"/);
-    expect(() => registerNamespaceProtocolAdapter("", makeAdapter("x"))).toThrow(/non-empty "namespace"/);
+    const registry = new RpcRegistry();
+    expect(() => registry.getNamespaceProtocolAdapter("")).toThrow(/non-empty "namespace"/);
+    expect(() => registry.registerNamespaceProtocolAdapter("", makeAdapter("x"))).toThrow(/non-empty "namespace"/);
   });
 
   it("throws when namespace is not registered", () => {
-    expect(() => getNamespaceProtocolAdapter("__unregistered__")).toThrow(/not registered/);
+    const registry = new RpcRegistry();
+    expect(() => registry.getNamespaceProtocolAdapter("__unregistered__")).toThrow(/not registered/);
   });
 
   it("falls back from CAIP-2 to prefix namespace", () => {
+    const registry = new RpcRegistry();
     const base = "__registry_test_eip155__";
     const adapter = makeAdapter("eip155");
-    registerNamespaceProtocolAdapter(base, adapter);
-    expect(getNamespaceProtocolAdapter(`${base}:1`)).toBe(adapter);
+    registry.registerNamespaceProtocolAdapter(base, adapter);
+    expect(registry.getNamespaceProtocolAdapter(`${base}:1`)).toBe(adapter);
   });
 
   it("overwrites adapters when registering the same namespace", () => {
+    const registry = new RpcRegistry();
     const ns = "__registry_test_overwrite__";
     const a1 = makeAdapter("1");
     const a2 = makeAdapter("2");
-    registerNamespaceProtocolAdapter(ns, a1);
-    registerNamespaceProtocolAdapter(ns, a2);
-    expect(getNamespaceProtocolAdapter(ns)).toBe(a2);
+    registry.registerNamespaceProtocolAdapter(ns, a1);
+    registry.registerNamespaceProtocolAdapter(ns, a2);
+    expect(registry.getNamespaceProtocolAdapter(ns)).toBe(a2);
   });
 });

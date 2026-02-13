@@ -45,7 +45,7 @@ import type {
   TransactionMessengerTopics,
 } from "../../controllers/transaction/types.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
-import { createPermissionScopeResolver, type RpcInvocationContext } from "../../rpc/index.js";
+import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/accounts/types.js";
 import type { ApprovalsService } from "../../services/approvals/types.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
@@ -109,6 +109,7 @@ export type ControllersInitResult = {
 export const initControllers = ({
   messenger,
   namespaceResolver,
+  rpcRegistry,
   accountsService,
   settingsService,
   approvalsService,
@@ -118,6 +119,7 @@ export const initControllers = ({
 }: {
   messenger: BackgroundMessenger;
   namespaceResolver: NamespaceResolver;
+  rpcRegistry: RpcRegistry;
   accountsService: AccountsService;
   settingsService?: SettingsService | null;
   approvalsService: ApprovalsService;
@@ -147,7 +149,7 @@ export const initControllers = ({
   });
 
   const permissionScopeResolver =
-    permissionOptions?.scopeResolver ?? createPermissionScopeResolver((ctx) => namespaceResolver(ctx));
+    permissionOptions?.scopeResolver ?? rpcRegistry.createPermissionScopeResolver((ctx) => namespaceResolver(ctx));
 
   const accountController: AccountController = new StoreAccountsController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,

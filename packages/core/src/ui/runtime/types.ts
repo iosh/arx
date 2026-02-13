@@ -1,4 +1,5 @@
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
+import type { RpcRegistry } from "../../rpc/index.js";
 import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
@@ -47,6 +48,7 @@ export type UiRuntimeDeps = {
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
+  rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   /**
    * Origin used for UI-initiated requests (e.g. creating approvals from the wallet UI).
    * Must be a valid URL origin string (e.g. "chrome-extension://<id>").

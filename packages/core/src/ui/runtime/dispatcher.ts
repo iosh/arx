@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { encodeErrorWithAdapters } from "../../rpc/index.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../events.js";
 import type { UiEventEnvelope, UiPortEnvelope, UiRequestEnvelope } from "../messages.js";
 import { uiMethods } from "../methods.js";
@@ -57,7 +56,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
     const ctx = getUiContext(deps);
 
     if (!isUiMethodName(raw.method)) {
-      const encoded = encodeErrorWithAdapters(
+      const encoded = deps.rpcRegistry.encodeErrorWithAdapters(
         arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Unknown UI method: ${raw.method}` }),
         { surface: "ui", namespace: ctx.namespace, chainRef: ctx.chainRef, method: raw.method },
       );
@@ -84,7 +83,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
         effects,
       };
     } catch (error) {
-      const encoded = encodeErrorWithAdapters(error, {
+      const encoded = deps.rpcRegistry.encodeErrorWithAdapters(error, {
         surface: "ui",
         namespace: ctx.namespace,
         chainRef: ctx.chainRef,

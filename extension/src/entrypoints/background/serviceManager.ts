@@ -5,8 +5,6 @@ import {
   type BackgroundSessionServices,
   createBackgroundServices,
   createLogger,
-  createNamespaceResolver,
-  createPermissionScopeResolver,
   createRpcEngineForBackground,
   DEFAULT_NAMESPACE,
   extendLogger,
@@ -107,11 +105,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
       const settingsPort = getExtensionSettingsPort();
-      const permissionScopeResolver = createPermissionScopeResolver(namespaceResolver);
       const services = createBackgroundServices({
-        permissions: {
-          scopeResolver: permissionScopeResolver,
-        },
         store: {
           ports: {
             approvals: storePorts.approvals,
@@ -301,7 +295,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
 
-      getNamespace = createNamespaceResolver(controllers);
+      getNamespace = services.rpcRegistry.createNamespaceResolver(controllers);
 
       unsubscribeControllerEvents.push(
         session.unlock.onUnlocked((payload) => {
@@ -372,6 +366,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         controllers,
         session,
         rpcClients: services.rpcClients,
+        rpcRegistry: services.rpcRegistry,
         persistVaultMeta,
         keyring,
         attention: services.attention,

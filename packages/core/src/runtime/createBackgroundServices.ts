@@ -6,7 +6,7 @@ import type { SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import { createNamespaceResolver, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
+import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import type { Eip155RpcCapabilities, Eip155RpcClient } from "../rpc/namespaceClients/eip155.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
@@ -71,7 +71,8 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
 const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
   messenger as unknown as ControllerMessenger<Topics>;
 export const createBackgroundServices = (options: CreateBackgroundServicesOptions) => {
-  registerBuiltinRpcAdapters();
+  const rpcRegistry = createRpcRegistry();
+  registerBuiltinRpcAdapters(rpcRegistry);
 
   const {
     messenger: messengerOptions,
@@ -144,6 +145,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const controllersInit = initControllers({
     messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
+    rpcRegistry,
     accountsService: accountsStore,
     settingsService,
     approvalsService,
@@ -218,7 +220,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     signers: { eip155: eip155Signer },
   };
 
-  namespaceResolverFn = createNamespaceResolver(controllers);
+  namespaceResolverFn = rpcRegistry.createNamespaceResolver(controllers);
 
   const transactionsLifecycle = createTransactionsLifecycle({
     controller: controllers.transactions,
@@ -494,6 +496,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     controllers,
     session: sessionLayer.session,
     rpcClients: rpcClientRegistry,
+    rpcRegistry,
     getActiveNamespace: namespaceResolverFn,
     lifecycle: {
       initialize,

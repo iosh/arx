@@ -10,7 +10,6 @@ import {
   MemoryTransactionsPort,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../../../runtime/createBackgroundServices.js";
-import { createMethodExecutor, executeWithAdapters } from "../../../../index.js";
 
 // Shared test constants
 export const ORIGIN = "https://dapp.example";
@@ -82,7 +81,9 @@ export const createServices = (overrides?: Partial<Parameters<typeof createBackg
 
 // Create method executor from services
 export const createExecutor = (services: ReturnType<typeof createServices>) => {
-  const execute = createMethodExecutor(services.controllers, { rpcClientRegistry: services.rpcClients });
+  const execute = services.rpcRegistry.createMethodExecutor(services.controllers, {
+    rpcClientRegistry: services.rpcClients,
+  });
   return async (args: Parameters<typeof execute>[0]) => {
     const chainRef = args.context?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
     const ctx = args.context ?? {};
@@ -98,7 +99,7 @@ export const createExecutor = (services: ReturnType<typeof createServices>) => {
           origin: args.origin,
         } as const),
     };
-    const result = await executeWithAdapters(
+    const result = await services.rpcRegistry.executeWithAdapters(
       {
         surface: "dapp",
         namespace: "eip155",

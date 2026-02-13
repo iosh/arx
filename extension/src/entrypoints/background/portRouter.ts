@@ -4,11 +4,11 @@ import {
   arxError,
   createLogger,
   DEFAULT_NAMESPACE,
-  encodeErrorWithAdapters,
   extendLogger,
   type JsonRpcError,
   type JsonRpcParams,
   type JsonRpcRequest,
+  type RpcRegistry,
 } from "@arx/core";
 import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
@@ -44,6 +44,19 @@ export const createPortRouter = ({
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
   const sessionByPort = new Map<Runtime.Port, string>();
+  let rpcRegistry: RpcRegistry | null = null;
+  let registeredNamespaces: ReadonlySet<string> | undefined;
+
+  const getContext = async () => {
+    const ctx = await getOrInitContext();
+    // Tests may stub getOrInitContext with a partial context; keep this best-effort.
+    const registry = (ctx as unknown as { services?: { rpcRegistry?: RpcRegistry } }).services?.rpcRegistry;
+    if (registry) {
+      rpcRegistry = registry;
+      registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
+    }
+    return ctx;
+  };
 
   const portIdByPort = new Map<Runtime.Port, string>();
   const createPortId = (): string => {
@@ -70,7 +83,7 @@ export const createPortRouter = ({
     const origin = getPortOrigin(port, extensionOrigin);
     if (origin === "unknown://") return [];
 
-    const { controllers } = await getOrInitContext();
+    const { controllers } = await getContext();
     const portContext = portContexts.get(port);
 
     const chainRef = portContext?.meta?.activeChain ?? portContext?.chainRef ?? snapshot.chain.chainRef;
@@ -91,7 +104,7 @@ export const createPortRouter = ({
     if (sessionId && portId) {
       void (async () => {
         try {
-          const { controllers } = await getOrInitContext();
+          const { controllers } = await getContext();
           await controllers.approvals.expirePendingByRequestContext({
             portId,
             sessionId,
@@ -192,13 +205,12 @@ export const createPortRouter = ({
     const chainRef = rpcContext?.chainRef ?? null;
     const error =
       overrideError ??
-      (encodeErrorWithAdapters(arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }), {
-        surface: "dapp",
-        namespace,
-        chainRef,
-        origin,
-        method: "disconnect",
-      }) as JsonRpcError);
+      ((rpcRegistry?.encodeErrorWithAdapters(
+        arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
+        { surface: "dapp", namespace, chainRef, origin, method: "disconnect" },
+      ) ??
+        // Fallback when the background context is not initialized yet.
+        ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError);
 
     for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
       sendReply(port, messageId, {
@@ -257,7 +269,7 @@ export const createPortRouter = ({
     envelope: Extract<Envelope, { type: "handshake" }>,
     snapshot: ControllerSnapshot,
   ) => {
-    syncPortContext(port, snapshot, portContexts, extensionOrigin);
+    syncPortContext(port, snapshot, portContexts, extensionOrigin, registeredNamespaces);
     sessionByPort.set(port, envelope.sessionId);
 
     const accounts = await getPermittedAccountsForPort(port, snapshot);
@@ -291,7 +303,7 @@ export const createPortRouter = ({
       const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
       const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
       const chainRef = rpcContext?.chainRef ?? null;
-      const error = encodeErrorWithAdapters(
+      const error = (rpcRegistry?.encodeErrorWithAdapters(
         arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
         {
           surface: "dapp",
@@ -300,7 +312,7 @@ export const createPortRouter = ({
           origin,
           method: "disconnect",
         },
-      ) as JsonRpcError;
+      ) ?? ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError;
       rejectPendingWithDisconnect(port, error);
       const success = postEnvelope(port, {
         channel: CHANNEL,
@@ -317,7 +329,7 @@ export const createPortRouter = ({
   };
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { engine } = await getOrInitContext();
+    const { engine } = await getContext();
     const { id: rpcId, jsonrpc, method } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
     pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
@@ -375,13 +387,13 @@ export const createPortRouter = ({
       sendReply(port, envelope.id, {
         id: rpcId,
         jsonrpc,
-        error: encodeErrorWithAdapters(error, {
+        error: (rpcRegistry?.encodeErrorWithAdapters(error, {
           surface: "dapp",
           namespace: rpcContext?.namespace ?? DEFAULT_NAMESPACE,
           chainRef: rpcContext?.chainRef ?? null,
           origin,
           method,
-        }) as JsonRpcError,
+        }) ?? ({ code: -32603, message: "Internal error" } as const)) as JsonRpcError,
       });
     } finally {
       pendingRequestMap.delete(envelope.id);
@@ -427,7 +439,7 @@ export const createPortRouter = ({
               const portId = portIdByPort.get(port);
               if (portId) {
                 try {
-                  const { controllers } = await getOrInitContext();
+                  const { controllers } = await getContext();
                   await controllers.approvals.expirePendingByRequestContext({
                     portId,
                     sessionId: expectedSessionId,
@@ -439,7 +451,7 @@ export const createPortRouter = ({
                 }
               }
             }
-            await getOrInitContext();
+            await getContext();
             const current = getControllerSnapshot();
             await sendHandshakeAck(port, envelope, current);
           })();
@@ -469,7 +481,7 @@ export const createPortRouter = ({
       if (sessionId && portId) {
         void (async () => {
           try {
-            const { controllers } = await getOrInitContext();
+            const { controllers } = await getContext();
             await controllers.approvals.expirePendingByRequestContext({
               portId,
               sessionId,
@@ -507,7 +519,7 @@ export const createPortRouter = ({
   };
 
   const syncAllPortContextsForSnapshot = (snapshot: ControllerSnapshot) => {
-    syncAllPortContexts(connections, snapshot, portContexts, extensionOrigin);
+    syncAllPortContexts(connections, snapshot, portContexts, extensionOrigin, registeredNamespaces);
   };
 
   const destroy = () => {

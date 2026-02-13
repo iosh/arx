@@ -21,7 +21,7 @@ import {
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../db/records.js";
-import { createMethodNamespaceResolver, encodeErrorWithAdapters, type RpcInvocationContext } from "../../rpc/index.js";
+import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/accounts/port.js";
 import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
@@ -753,7 +753,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
   const { services } = background;
 
-  const deriveMethodNamespace = createMethodNamespaceResolver(services.controllers);
+  const deriveMethodNamespace = services.rpcRegistry.createMethodNamespaceResolver(services.controllers);
   const engine = services.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
@@ -805,7 +805,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         (error, response) => {
           if (error) {
             reject(
-              encodeErrorWithAdapters(error, {
+              services.rpcRegistry.encodeErrorWithAdapters(error, {
                 surface: "dapp",
                 namespace,
                 chainRef: resolvedChainRef,

@@ -5,7 +5,14 @@ import type {
   UnlockReason,
   UnlockUnlockedPayload,
 } from "@arx/core";
-import { ApprovalTypes, ArxReasons, arxError, KeyringService, registerBuiltinRpcAdapters } from "@arx/core";
+import {
+  ApprovalTypes,
+  ArxReasons,
+  arxError,
+  createRpcRegistry,
+  KeyringService,
+  registerBuiltinRpcAdapters,
+} from "@arx/core";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import {
   UI_CHANNEL,
@@ -18,7 +25,8 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUiBridge } from "./uiBridge";
 
-registerBuiltinRpcAdapters();
+const rpcRegistry = createRpcRegistry();
+registerBuiltinRpcAdapters(rpcRegistry);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
@@ -544,6 +552,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
           getBalance: vi.fn(async () => "0x0"),
         }) as any,
     },
+    rpcRegistry,
     persistVaultMeta,
     keyring,
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) },

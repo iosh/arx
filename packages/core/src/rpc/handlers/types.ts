@@ -13,6 +13,7 @@ import type {
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { RequestContextRecord } from "../../db/records.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
+import { NoParamsSchema } from "./params.js";
 
 export type HandlerControllers = {
   network: NetworkController;
@@ -51,7 +52,10 @@ type MethodHandlerContext<P> = {
 // before invocation, so this is safe in practice.
 type BivariantCallback<Args extends unknown[], R> = { bivarianceHack(...args: Args): R }["bivarianceHack"];
 
-export type MethodHandler<P = unknown> = BivariantCallback<[context: MethodHandlerContext<P>], Promise<unknown> | unknown>;
+export type MethodHandler<P = unknown> = BivariantCallback<
+  [context: MethodHandlerContext<P>],
+  Promise<unknown> | unknown
+>;
 
 export const PermissionChecks = {
   None: "none",
@@ -96,3 +100,12 @@ export type MethodDefinition<P = unknown> = {
 export type Namespace = string;
 
 export type { PermissionScopeResolver };
+
+export const defineMethod = <P>(definition: MethodDefinition<P>): MethodDefinition<P> => definition;
+
+export const defineNoParamsMethod = (
+  definition: Omit<MethodDefinition<undefined>, "paramsSchema" | "parseParams"> & {
+    paramsSchema?: never;
+    parseParams?: never;
+  },
+): MethodDefinition<undefined> => ({ ...definition, paramsSchema: NoParamsSchema });

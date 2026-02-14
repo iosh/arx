@@ -1,4 +1,5 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
+import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import type { MethodDefinition } from "../../types.js";
@@ -10,41 +11,87 @@ type WalletSwitchEthereumChainParams = {
   normalizedChainId?: string;
 };
 
+type WalletSwitchEthereumChainPayload = {
+  chainId?: unknown;
+  chainRef?: unknown;
+};
+
+const HEX_CHAIN_ID_PATTERN = /^0x[0-9a-f]+$/i;
+
+const normalizeWalletSwitchEthereumChainParams = (
+  payload: WalletSwitchEthereumChainPayload,
+): WalletSwitchEthereumChainParams => {
+  if (payload.chainId !== undefined && typeof payload.chainId !== "string") {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "wallet_switchEthereumChain expects chainId to be a hex string",
+      data: { chainId: payload.chainId },
+    });
+  }
+
+  if (payload.chainRef !== undefined && typeof payload.chainRef !== "string") {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "wallet_switchEthereumChain expects chainRef to be a string",
+      data: { chainRef: payload.chainRef },
+    });
+  }
+
+  const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
+  const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
+
+  if (!rawChainId && !rawChainRef) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "wallet_switchEthereumChain requires a chainId or chainRef value",
+      data: { payload },
+    });
+  }
+
+  if (rawChainId && !HEX_CHAIN_ID_PATTERN.test(rawChainId)) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "wallet_switchEthereumChain received an invalid hex chainId",
+      data: { chainId: rawChainId },
+    });
+  }
+
+  // With `exactOptionalPropertyTypes`, optional fields should be omitted
+  // when absent instead of being set to `undefined`.
+  return {
+    ...(rawChainId ? { chainId: rawChainId, normalizedChainId: rawChainId.toLowerCase() } : {}),
+    ...(rawChainRef ? { chainRef: rawChainRef } : {}),
+  };
+};
+
+const WalletSwitchEthereumChainParamsSchema = z
+  .any()
+  .transform((params): unknown => toParamsArray(params)[0])
+  .pipe(
+    z.looseObject({
+      chainId: z.unknown().optional(),
+      chainRef: z.unknown().optional(),
+    }),
+  )
+  .transform(normalizeWalletSwitchEthereumChainParams);
+
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
   scope: PermissionScopes.Basic,
   parseParams: (params) => {
-    const value = toParamsArray(params)[0];
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain expects a single object parameter",
-        data: { params },
-      });
+    try {
+      return WalletSwitchEthereumChainParamsSchema.parse(params);
+    } catch (error) {
+      if (isArxError(error)) throw error;
+      if (error instanceof ZodError) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "wallet_switchEthereumChain expects a single object parameter",
+          data: { params },
+          cause: error,
+        });
+      }
+      throw error;
     }
-    const payload = value as Record<string, unknown>;
-    const rawChainId = typeof payload.chainId === "string" ? payload.chainId.trim() : undefined;
-    const rawChainRef = typeof payload.chainRef === "string" ? payload.chainRef.trim() : undefined;
-    if (!rawChainId && !rawChainRef) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain requires a chainId or chainRef value",
-        data: { params },
-      });
-    }
-    if (rawChainId && !/^0x[0-9a-f]+$/i.test(rawChainId)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_switchEthereumChain received an invalid hex chainId",
-        data: { chainId: rawChainId },
-      });
-    }
-
-    // With `exactOptionalPropertyTypes`, optional fields should be omitted
-    // when absent instead of being set to `undefined`.
-    return {
-      ...(rawChainId ? { chainId: rawChainId, normalizedChainId: rawChainId.toLowerCase() } : {}),
-      ...(rawChainRef ? { chainRef: rawChainRef } : {}),
-    };
   },
   handler: async ({ params, controllers, rpcContext }) => {
     const rawChainId = params.chainId;

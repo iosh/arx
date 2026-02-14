@@ -344,120 +344,186 @@ export class RpcRegistry {
   }
 
   createMethodExecutor(controllers: HandlerControllers, deps: MethodExecutorDependencies) {
-    return async (args: {
-      origin: string;
-      request: RpcRequest;
-      context?: RpcInvocationContext;
-    }) => {
-      const { origin, request, context } = args;
+    const resolveNamespace = (method: string, context?: RpcInvocationContext): Namespace =>
+      this.selectNamespace(controllers, method, context);
 
-      const namespace = this.selectNamespace(controllers, request.method, context);
-      const definition = this.getDefinitionsForNamespace(namespace)?.[request.method];
-      if (definition) {
-        let params: unknown = request.params;
-        if (definition.parseParams || definition.paramsSchema) {
-          try {
-            params = definition.parseParams
-              ? definition.parseParams(request.params, context)
-              : definition.paramsSchema!.parse(request.params);
-          } catch (error) {
-            if (isArxError(error)) throw error;
-            // Only treat known validation failures as "invalid params".
-            // Unknown exceptions likely indicate a bug and should surface as internal errors.
-            if (error instanceof ZodError) {
-              throw arxError({
-                reason: ArxReasons.RpcInvalidParams,
-                message: "Invalid params",
-                data: { namespace, method: request.method },
-                cause: error,
-              });
-            }
+    const resolveDefinition = (namespace: Namespace, method: string): MethodDefinition | undefined =>
+      this.getDefinitionsForNamespace(namespace)?.[method];
 
-            throw arxError({
-              reason: ArxReasons.RpcInternal,
-              message: `Failed to parse params for "${request.method}"`,
-              data: {
-                namespace,
-                method: request.method,
-                errorName: error instanceof Error ? error.name : typeof error,
-              },
-              cause: error,
-            });
-          }
+    const parseDefinitionParams = (
+      definition: MethodDefinition,
+      args: { namespace: Namespace; method: string; params: RpcRequest["params"]; context?: RpcInvocationContext },
+    ): unknown => {
+      if (!definition.parseParams && !definition.paramsSchema) return args.params;
+
+      try {
+        return definition.parseParams
+          ? definition.parseParams(args.params, args.context)
+          : definition.paramsSchema!.parse(args.params);
+      } catch (error) {
+        if (isArxError(error)) throw error;
+
+        // Only treat known validation failures as "invalid params".
+        // Unknown exceptions likely indicate a bug and should surface as internal errors.
+        if (error instanceof ZodError) {
+          throw arxError({
+            reason: ArxReasons.RpcInvalidParams,
+            message: "Invalid params",
+            data: { namespace: args.namespace, method: args.method },
+            cause: error,
+          });
         }
 
-        const handlerArgs =
-          context === undefined
-            ? { origin, request, params, controllers }
-            : { origin, request, params, controllers, rpcContext: context };
-        return definition.handler(handlerArgs);
-      }
-
-      const passthrough = this.passthroughByNamespace.get(namespace);
-      if (!passthrough || !passthrough.allowedMethods.has(request.method)) {
         throw arxError({
-          reason: ArxReasons.RpcMethodNotFound,
-          message: `Method "${request.method}" is not implemented`,
-          data: { namespace, method: request.method },
+          reason: ArxReasons.RpcInternal,
+          message: `Failed to parse params for "${args.method}"`,
+          data: {
+            namespace: args.namespace,
+            method: args.method,
+            errorName: error instanceof Error ? error.name : typeof error,
+          },
+          cause: error,
         });
       }
+    };
 
-      const chainRef = context?.chainRef ?? controllers.network.getActiveChain().chainRef;
+    const executeLocal = async (args: {
+      origin: string;
+      request: RpcRequest;
+      namespace: Namespace;
+      definition: MethodDefinition;
+      context?: RpcInvocationContext;
+    }) => {
+      const params = parseDefinitionParams(args.definition, {
+        namespace: args.namespace,
+        method: args.request.method,
+        params: args.request.params,
+        ...(args.context !== undefined ? { context: args.context } : {}),
+      });
+
+      const handlerArgs =
+        args.context === undefined
+          ? { origin: args.origin, request: args.request, params, controllers }
+          : { origin: args.origin, request: args.request, params, controllers, rpcContext: args.context };
+      return args.definition.handler(handlerArgs);
+    };
+
+    const assertPassthroughAllowed = (namespace: Namespace, method: string): void => {
+      const passthrough = this.passthroughByNamespace.get(namespace);
+      if (!passthrough || !passthrough.allowedMethods.has(method)) {
+        throw arxError({
+          reason: ArxReasons.RpcMethodNotFound,
+          message: `Method "${method}" is not implemented`,
+          data: { namespace, method },
+        });
+      }
+    };
+
+    const resolveChainRef = (context?: RpcInvocationContext): ChainRef => {
+      return (context?.chainRef ?? controllers.network.getActiveChain().chainRef) as ChainRef;
+    };
+
+    const assertNamespaceMatchesChainRef = (namespace: Namespace, chainRef: ChainRef, method: string) => {
       const [chainNamespace] = chainRef.split(":");
       if (chainNamespace && chainNamespace !== namespace) {
         throw arxError({
           reason: ArxReasons.RpcInvalidRequest,
-          message: `Namespace mismatch for "${request.method}"`,
+          message: `Namespace mismatch for "${method}"`,
           data: { namespace, chainRef },
         });
       }
+    };
 
+    const sanitizeNodeRpcError = (error: unknown) => {
+      if (!isJsonRpcErrorLike(error)) return null;
+      const rpcError = error as { code: number; message?: unknown; data?: unknown };
+
+      const message =
+        typeof rpcError.message === "string" && rpcError.message.length > 0 ? rpcError.message : "Unknown error";
+
+      if (!rpcError.data || typeof rpcError.data !== "object") {
+        return {
+          code: rpcError.code,
+          message,
+          ...(rpcError.data !== undefined ? { data: rpcError.data } : {}),
+        };
+      }
+
+      // Sanitize error.data to remove internal fields like stack, path.
+      const sanitized = { ...(rpcError.data as Record<string, unknown>) };
+      delete sanitized.stack;
+      delete sanitized.path;
+      return { code: rpcError.code, message, data: sanitized };
+    };
+
+    const executePassthrough = async (args: {
+      origin: string;
+      request: RpcRequest;
+      namespace: Namespace;
+      chainRef: ChainRef;
+    }) => {
       const logMeta = {
-        namespace,
-        chainRef,
-        method: request.method,
-        origin: origin ?? "unknown://",
+        namespace: args.namespace,
+        chainRef: args.chainRef,
+        method: args.request.method,
+        origin: args.origin ?? "unknown://",
       };
 
       try {
-        const client = deps.rpcClientRegistry.getClient(namespace, chainRef);
-        const rpcPayload: RpcTransportRequest = { method: request.method };
-        if (request.params !== undefined) {
-          rpcPayload.params = request.params;
+        const client = deps.rpcClientRegistry.getClient(args.namespace, args.chainRef);
+        const rpcPayload: RpcTransportRequest = { method: args.request.method };
+        if (args.request.params !== undefined) {
+          rpcPayload.params = args.request.params;
         }
-        passthroughLogger("request", { ...logMeta, params: request.params ?? [] });
+        passthroughLogger("request", { ...logMeta, params: args.request.params ?? [] });
         const result = await client.request(rpcPayload);
         passthroughLogger("response", { ...logMeta });
         return result;
       } catch (error) {
-        const errorSummary =
-          error && typeof error === "object" && "code" in error
-            ? {
-                code: (error as { code?: number | string }).code,
-                message: (error as { message?: string }).message ?? "RPC error",
-              }
-            : { message: (error as Error)?.message ?? String(error) };
+        const errorSummary = isJsonRpcErrorLike(error)
+          ? {
+              code: (error as { code?: number | string }).code,
+              message: (error as { message?: string }).message ?? "RPC error",
+            }
+          : { message: (error as Error)?.message ?? String(error) };
         passthroughLogger("error", { ...logMeta, error: errorSummary });
-        // If it's already a properly formatted RPC error from the node
-        if (error && typeof error === "object" && "code" in error) {
-          const rpcError = error as { code: number; message?: string; data?: unknown };
-          // Sanitize error.data to remove internal fields like stack, path
-          if (rpcError.data && typeof rpcError.data === "object") {
-            const sanitized = { ...rpcError.data } as Record<string, unknown>;
-            delete sanitized.stack;
-            delete sanitized.path;
-            throw { ...rpcError, data: sanitized };
-          }
-          throw error;
-        }
+
+        const sanitized = sanitizeNodeRpcError(error);
+        if (sanitized) throw sanitized;
         if (isArxError(error)) throw error;
+
         throw arxError({
           reason: ArxReasons.RpcInternal,
-          message: `Failed to execute "${request.method}"`,
-          data: { namespace, chainRef },
+          message: `Failed to execute "${args.request.method}"`,
+          data: { namespace: args.namespace, chainRef: args.chainRef },
           cause: error,
         });
       }
+    };
+
+    return async (args: { origin: string; request: RpcRequest; context?: RpcInvocationContext }) => {
+      const namespace = resolveNamespace(args.request.method, args.context);
+
+      const definition = resolveDefinition(namespace, args.request.method);
+      if (definition) {
+        return executeLocal(
+          args.context === undefined
+            ? { origin: args.origin, request: args.request, namespace, definition }
+            : { origin: args.origin, request: args.request, namespace, definition, context: args.context },
+        );
+      }
+
+      assertPassthroughAllowed(namespace, args.request.method);
+
+      const chainRef = resolveChainRef(args.context);
+      assertNamespaceMatchesChainRef(namespace, chainRef, args.request.method);
+
+      return executePassthrough({
+        origin: args.origin,
+        request: args.request,
+        namespace,
+        chainRef,
+      });
     };
   }
 }

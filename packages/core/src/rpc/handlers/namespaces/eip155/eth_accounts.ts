@@ -1,15 +1,15 @@
 import { createDefaultChainModuleRegistry } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { lockedResponse } from "../../locked.js";
-import { NoParamsSchema } from "../../params.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
 
-export const ethAccountsDefinition: MethodDefinition<undefined> = {
+const chains = createDefaultChainModuleRegistry();
+
+export const ethAccountsDefinition = defineNoParamsMethod({
   scope: PermissionScopes.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedResponse([]),
-  paramsSchema: NoParamsSchema,
   handler: ({ origin, controllers }) => {
     const active = controllers.network.getActiveChain();
     const accounts = controllers.permissions.getPermittedAccounts(origin, {
@@ -17,7 +17,6 @@ export const ethAccountsDefinition: MethodDefinition<undefined> = {
       chainRef: active.chainRef,
     });
 
-    const chains = createDefaultChainModuleRegistry();
     return accounts.map((canonical) => chains.formatAddress({ chainRef: active.chainRef, canonical }));
   },
-};
+});

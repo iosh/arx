@@ -1,15 +1,13 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
-import { NoParamsSchema } from "../../params.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-export const ethRequestAccountsDefinition: MethodDefinition<undefined> = {
+export const ethRequestAccountsDefinition = defineNoParamsMethod({
   scope: PermissionScopes.Accounts,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
-  paramsSchema: NoParamsSchema,
   handler: async ({ origin, controllers, rpcContext }) => {
     const activeChain = controllers.network.getActiveChain();
     const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });
@@ -42,4 +40,4 @@ export const ethRequestAccountsDefinition: MethodDefinition<undefined> = {
       });
     }
   },
-};
+});

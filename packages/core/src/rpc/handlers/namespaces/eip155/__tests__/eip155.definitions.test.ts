@@ -7,10 +7,7 @@ describe("eip155 definitions", () => {
 
     for (const [method, def] of Object.entries(definitions)) {
       expect(def.handler, `${method}: missing handler`).toBeTypeOf("function");
-      expect(
-        def.parseParams ?? def.paramsSchema,
-        `${method}: missing parseParams/paramsSchema`,
-      ).toBeTruthy();
+      expect(def.parseParams ?? def.paramsSchema, `${method}: missing parseParams/paramsSchema`).toBeTruthy();
     }
   });
 });

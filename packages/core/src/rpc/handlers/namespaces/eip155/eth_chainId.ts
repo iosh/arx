@@ -1,7 +1,5 @@
-import type { MethodDefinition } from "../../types.js";
-import { NoParamsSchema } from "../../params.js";
+import { defineNoParamsMethod } from "../../types.js";
 
-export const ethChainIdDefinition: MethodDefinition<undefined> = {
-  paramsSchema: NoParamsSchema,
+export const ethChainIdDefinition = defineNoParamsMethod({
   handler: ({ controllers }) => controllers.network.getActiveChain().chainId,
-};
+});

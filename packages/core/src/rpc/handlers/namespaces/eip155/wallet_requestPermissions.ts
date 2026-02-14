@@ -1,4 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { ZodError, z } from "zod";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalTask,
@@ -11,14 +12,17 @@ import {
 } from "../../../../controllers/index.js";
 import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../../permissions.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createTaskId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
 const CAPABILITY_TO_SCOPE = new Map(
   Object.entries(PERMISSION_SCOPE_CAPABILITIES).map(([scope, capability]) => [capability, scope as PermissionScope]),
 );
 
-const toRequestDescriptors = (capabilities: readonly string[], defaultChain: ChainRef): PermissionRequestDescriptor[] => {
+const toRequestDescriptors = (
+  capabilities: readonly string[],
+  defaultChain: ChainRef,
+): PermissionRequestDescriptor[] => {
   const requests = new Map<string, PermissionRequestDescriptor>();
 
   const addCapability = (capability: string) => {
@@ -45,29 +49,29 @@ const toRequestDescriptors = (capabilities: readonly string[], defaultChain: Cha
 
 type WalletRequestPermissionsParams = readonly string[];
 
+const WalletRequestPermissionsParamsSchema = z
+  .any()
+  .transform((params): unknown => toParamsArray(params)[0])
+  .pipe(z.looseObject({}))
+  .transform((value): WalletRequestPermissionsParams => {
+    const entries = Object.keys(value);
+    if (entries.length === 0) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "wallet_requestPermissions requires at least one capability",
+      });
+    }
+
+    const capabilities = new Set<string>(entries);
+    capabilities.add(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
+    return [...capabilities];
+  });
+
 export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
   scope: PermissionScopes.Basic,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
   parseParams: (params, rpcContext) => {
-    const [raw] = toParamsArray(params);
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_requestPermissions expects a single object parameter",
-        data: { params },
-      });
-    }
-
-    const entries = Object.keys(raw);
-    if (entries.length === 0) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: "wallet_requestPermissions requires at least one capability",
-        data: { params },
-      });
-    }
-
     // If caller provides rpcContext.chainRef, ensure it looks like a CAIP-2-ish id.
     if (rpcContext?.chainRef && typeof rpcContext.chainRef === "string" && !rpcContext.chainRef.includes(":")) {
       throw arxError({
@@ -77,20 +81,30 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       });
     }
 
-    const capabilities = new Set<string>(entries);
-    capabilities.add(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
-
-    return [...capabilities];
+    try {
+      return WalletRequestPermissionsParamsSchema.parse(params);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "wallet_requestPermissions expects a single object parameter",
+          data: { params },
+          cause: error,
+        });
+      }
+      throw error;
+    }
   },
   handler: async ({ origin, params, controllers, rpcContext }) => {
     const activeChain = controllers.network.getActiveChain();
+    const namespace = EIP155_NAMESPACE;
 
     const requested = toRequestDescriptors(params, activeChain.chainRef);
     const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
       id: createTaskId("wallet_requestPermissions"),
       type: ApprovalTypes.RequestPermissions,
       origin,
-      namespace: activeChain.namespace,
+      namespace,
       chainRef: activeChain.chainRef,
       createdAt: Date.now(),
       payload: { requested },
@@ -123,7 +137,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
             }
 
             await controllers.permissions.setPermittedAccounts(origin, {
-              namespace: activeChain.namespace,
+              namespace,
               chainRef,
               accounts: [selected],
             });
@@ -131,7 +145,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
           }
 
           await controllers.permissions.grant(origin, descriptor.scope, {
-            namespace: activeChain.namespace,
+            namespace,
             chainRef,
           });
         }
@@ -149,7 +163,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
     const grants = controllers.permissions.listGrants(origin);
     const getAccounts = (chainRef: string) =>
       controllers.permissions.getPermittedAccounts(origin, {
-        namespace: activeChain.namespace,
+        namespace,
         chainRef: chainRef as ChainRef,
       });
     return buildWalletPermissions({ origin, grants, getAccounts });

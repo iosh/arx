@@ -144,14 +144,14 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     const origin = arxInvocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
     const rpcContext = arxInvocation?.rpcContext ?? reqWithArx.arx;
 
-	    const rpcInvocation = {
-	      origin,
-	      request: {
-	        method: req.method,
-	        ...(req.params !== undefined ? { params: req.params } : {}),
-	      },
-	      ...(rpcContext ? { context: rpcContext } : {}),
-	    };
+    const rpcInvocation = {
+      origin,
+      request: {
+        method: req.method,
+        ...(req.params !== undefined ? { params: req.params } : {}),
+      },
+      ...(rpcContext ? { context: rpcContext } : {}),
+    };
 
     const result = await executeMethod(rpcInvocation);
     res.result = result as Json;

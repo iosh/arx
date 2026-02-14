@@ -24,10 +24,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
 
 const defaultCreateRequestId = () => {
-  const c: unknown = (globalThis as { crypto?: unknown }).crypto;
-  const cryptoObj = c as { randomUUID?: unknown } | undefined;
-  if (typeof cryptoObj?.randomUUID === "function") return (cryptoObj.randomUUID as () => string)();
-  return `ui_${Date.now().toString(16)}_${Math.random().toString(16).slice(2)}`;
+  return globalThis.crypto.randomUUID();
 };
 
 const calcBackoffMs = (attempt: number) => Math.min(5_000, 200 * 2 ** attempt);

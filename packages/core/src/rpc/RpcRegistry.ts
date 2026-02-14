@@ -205,14 +205,17 @@ export class RpcRegistry {
     }
 
     for (const prefix of prefixes) {
-      if (!prefix || this.namespacePrefixes.has(prefix)) {
-        if (this.namespacePrefixes.has(prefix)) {
-          console.warn(
-            `[rpc] method prefix "${prefix}" already registered for namespace "${this.namespacePrefixes.get(prefix)}", skipping duplicate entry for "${namespace}"`,
-          );
-        }
-        continue;
+      if (!prefix) continue;
+
+      const existing = this.namespacePrefixes.get(prefix);
+      if (existing && existing !== namespace) {
+        throw arxError({
+          reason: ArxReasons.RpcInternal,
+          message: `[rpc] method prefix "${prefix}" already registered for namespace "${existing}"`,
+          data: { prefix, existingNamespace: existing, namespace },
+        });
       }
+
       this.namespacePrefixes.set(prefix, namespace);
     }
   }
@@ -287,8 +290,13 @@ export class RpcRegistry {
   }
 
   private selectNamespace(controllers: HandlerControllers, method: string, context?: RpcInvocationContext): Namespace {
-    if (context?.namespace && this.namespaceDefinitions.has(context.namespace)) {
-      return context.namespace;
+    if (context?.namespace) {
+      // Normalize "eip155:1" -> "eip155" (defensive: context is still evolving).
+      const [candidate] = context.namespace.split(":");
+      const normalized = (candidate || context.namespace) as Namespace;
+      if (this.namespaceDefinitions.has(normalized)) {
+        return normalized;
+      }
     }
 
     const fromChain = this.namespaceFromChainRef(context?.chainRef ?? null);
@@ -527,17 +535,3 @@ export class RpcRegistry {
     };
   }
 }
-
-export type DomainChainService = {
-  setDomainChain(origin: string, chainRef: ChainRef): Promise<void>;
-  getDomainChain(origin: string): Promise<ChainRef | null>;
-};
-
-export const createDomainChainService = (): DomainChainService => ({
-  async setDomainChain() {
-    throw arxError({ reason: ArxReasons.RpcInternal, message: "Not implemented yet" });
-  },
-  async getDomainChain() {
-    throw arxError({ reason: ArxReasons.RpcInternal, message: "Not implemented yet" });
-  },
-});

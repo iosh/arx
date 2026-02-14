@@ -1,37 +1,12 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
-import type { HandlerControllers, Namespace, RpcInvocationContext } from "../types.js";
+import type { Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";
 
-const randomUuid = (): string => {
-  const cryptoRef = globalThis.crypto as
-    | undefined
-    | { randomUUID?: () => string; getRandomValues?: (arr: Uint8Array) => void };
-  const id = cryptoRef?.randomUUID?.();
-  if (id) return id;
-
-  const bytes = new Uint8Array(16);
-  if (cryptoRef?.getRandomValues) {
-    cryptoRef.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  // RFC 4122 v4
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
-  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
-};
-
 export const createTaskId = (_prefix: string) => {
-  // Store-first approvals require UUID ids (ApprovalRecord.id).
-  return randomUuid();
+  return globalThis.crypto.randomUUID();
 };
 
 export const isRpcError = (value: unknown): value is { code: number } =>
@@ -45,7 +20,11 @@ export const isDomainError = isArxError;
  */
 export const namespaceFromContext = (context?: RpcInvocationContext | null): Namespace | undefined => {
   if (!context) return undefined;
-  if (context.namespace) return context.namespace;
+  if (context.namespace) {
+    // Normalize "eip155:1" -> "eip155" so call sites don't need to care.
+    const [candidate] = context.namespace.split(":");
+    return (candidate || context.namespace) as Namespace;
+  }
   if (context.chainRef) {
     const [candidate] = context.chainRef.split(":");
     return candidate as Namespace | undefined;

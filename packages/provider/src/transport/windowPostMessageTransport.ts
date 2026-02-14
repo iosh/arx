@@ -41,9 +41,7 @@ const isConnectPayload = (value: unknown): value is ConnectPayload => {
 };
 
 const createId = (): string => {
-  const random = globalThis.crypto?.randomUUID?.();
-  if (random) return random;
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return globalThis.crypto.randomUUID();
 };
 
 export class WindowPostMessageTransport extends EventEmitter implements Transport {

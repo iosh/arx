@@ -65,11 +65,7 @@ function emit() {
   for (const listener of listeners) listener();
 }
 function safeRandomId() {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
+  return crypto.randomUUID();
 }
 
 function getVisibleIds(nextToasts: Toast[]) {

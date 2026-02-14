@@ -224,7 +224,7 @@ const createJsonRpcTransport = (
 
         const payload: Record<string, unknown> = {
           jsonrpc: "2.0",
-          id: request.id ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`,
+          id: request.id ?? globalThis.crypto.randomUUID(),
           method: request.method,
         };
         if (request.params !== undefined) {

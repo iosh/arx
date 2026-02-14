@@ -60,9 +60,7 @@ export const createPortRouter = ({
 
   const portIdByPort = new Map<Runtime.Port, string>();
   const createPortId = (): string => {
-    const id = globalThis.crypto?.randomUUID?.();
-    if (id) return id;
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return globalThis.crypto.randomUUID();
   };
 
   const getPendingRequestMap = (port: Runtime.Port) => {

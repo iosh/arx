@@ -25,7 +25,7 @@ export {
   type RpcTransportRequest,
 } from "./RpcClientRegistry.js";
 export type { ExecuteWithAdaptersContext, ExecuteWithAdaptersResult } from "./RpcRegistry.js";
-export { createDomainChainService, type DomainChainService, RpcRegistry } from "./RpcRegistry.js";
+export { RpcRegistry } from "./RpcRegistry.js";
 
 export const DEFAULT_NAMESPACE = RpcRegistry.DEFAULT_NAMESPACE;
 

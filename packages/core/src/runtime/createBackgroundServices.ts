@@ -1,13 +1,7 @@
-import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata } from "../chains/metadata.js";
-import { createDefaultChainModuleRegistry } from "../chains/registry.js";
-import type { RpcEndpointState } from "../controllers/network/types.js";
-import type { SettingsRecord } from "../db/records.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
-import type { Eip155RpcCapabilities, Eip155RpcClient } from "../rpc/namespaceClients/eip155.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
 import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
@@ -22,19 +16,17 @@ import { createSettingsService } from "../services/settings/SettingsService.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
 import type { NetworkRpcPort, VaultMetaPort } from "../storage/index.js";
-import { createEip155TransactionAdapter } from "../transactions/adapters/eip155/adapter.js";
-import { createEip155Broadcaster } from "../transactions/adapters/eip155/broadcaster.js";
-import { createEip155Signer } from "../transactions/adapters/eip155/signer.js";
-import { buildDefaultEndpointState, DEFAULT_CHAIN } from "./background/constants.js";
+import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
 import type { MessengerTopics } from "./background/messenger.js";
+import { createNetworkBootstrap } from "./background/networkBootstrap.js";
+import { registerDefaultTransactionAdapters } from "./background/registerDefaultTransactionAdapters.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
-import type { BackgroundSessionServices } from "./background/session.js";
+import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
 import { initSessionLayer, type SessionOptions } from "./background/session.js";
 import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
 import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
-import { createNetworkRpcSync } from "./persistence/createNetworkRpcSync.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
@@ -122,7 +114,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
           defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
           now: storageNow,
         });
-  let cachedSettings: SettingsRecord | null = null;
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
@@ -168,17 +159,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     now: storageNow,
   });
 
-  let destroyed = false;
-  let isHydrating = true;
-  let pendingNetworkRegistrySync = false;
-  let networkRpcSyncAttached = false;
-  let initializePromise: Promise<void> | null = null;
-  let initialized = false;
-
-  let hydratedNetworkRpcPreferences: Map<
-    ChainRef,
-    { activeIndex: number; strategy: RpcEndpointState["strategy"] }
-  > | null = null;
+  const runtimeLifecycle = createRuntimeLifecycle("createBackgroundServices");
   const sessionLayer = initSessionLayer({
     messenger,
     controllers: controllersBase,
@@ -187,8 +168,8 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     storageLogger,
     storageNow,
     hydrationEnabled,
-    getIsHydrating: () => isHydrating,
-    getIsDestroyed: () => destroyed,
+    getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
+    getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
     ...(sessionOptions ? { sessionOptions } : {}),
   });
@@ -196,28 +177,15 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const engine = initEngine(engineOptions);
 
   const keyringService = sessionLayer.keyringService;
-  const eip155Signer = createEip155Signer({ keyring: keyringService });
-
-  if (!transactionRegistry.get(EIP155_NAMESPACE)) {
-    const rpcClientFactory = (chainRef: string) =>
-      rpcClientRegistry.getClient<Eip155RpcCapabilities>("eip155", chainRef) as Eip155RpcClient;
-
-    const broadcaster = createEip155Broadcaster({
-      rpcClientFactory,
-    });
-
-    const adapter = createEip155TransactionAdapter({
-      rpcClientFactory,
-      signer: eip155Signer,
-      broadcaster,
-      chains: createDefaultChainModuleRegistry(),
-    });
-    transactionRegistry.register(EIP155_NAMESPACE, adapter);
-  }
+  const { signers } = registerDefaultTransactionAdapters({
+    transactionRegistry,
+    rpcClients: rpcClientRegistry,
+    keyring: keyringService,
+  });
 
   const controllers: HandlerControllers = {
     ...controllersBase,
-    signers: { eip155: eip155Signer },
+    signers,
   };
 
   namespaceResolverFn = rpcRegistry.createNamespaceResolver(controllers);
@@ -238,162 +206,23 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     },
     logger: storageLogger,
   });
-  const unsubscribeActiveChainPersist = networkController.onChainChanged((chain) => {
-    if (destroyed) return;
-    if (!settingsService) return;
-    if (isHydrating) return;
-    void settingsService
-      .upsert({ activeChainRef: chain.chainRef })
-      .then((next) => {
-        cachedSettings = next;
-      })
-      .catch((error) => {
-        storageLogger("settings: failed to persist activeChainRef", error);
-      });
+  const networkBootstrap = createNetworkBootstrap({
+    network: networkController,
+    chainRegistry: chainRegistryController,
+    settings: settingsService,
+    ...(networkRpcPort ? { networkRpcPort } : {}),
+    hydrationEnabled,
+    now: storageNow,
+    logger: storageLogger,
+    getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
+    getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
+    ...(storageOptions?.networkRpcDebounceMs !== undefined
+      ? { networkRpcDebounceMs: storageOptions.networkRpcDebounceMs }
+      : {}),
   });
 
-  const networkRpcSync =
-    networkRpcPort === undefined
-      ? undefined
-      : createNetworkRpcSync({
-          port: networkRpcPort,
-          network: networkController,
-          now: storageNow,
-          logger: storageLogger,
-          ...(storageOptions?.networkRpcDebounceMs !== undefined
-            ? { debounceMs: storageOptions.networkRpcDebounceMs }
-            : {}),
-        });
-
-  const readRegistryChains = (): ChainMetadata[] => chainRegistryController.getChains().map((entry) => entry.metadata);
-
-  const selectActiveChainRef = (
-    currentState: ReturnType<typeof networkController.getState>,
-    registryChains: ChainMetadata[],
-  ): ChainRef => {
-    if (registryChains.length === 0) {
-      return currentState.activeChain;
-    }
-
-    const available = new Set(registryChains.map((chain) => chain.chainRef));
-
-    const preferred = cachedSettings?.activeChainRef ?? null;
-    if (preferred && available.has(preferred)) {
-      return preferred;
-    }
-
-    if (available.has(currentState.activeChain)) {
-      return currentState.activeChain;
-    }
-
-    if (available.has(DEFAULT_CHAIN.chainRef)) {
-      return DEFAULT_CHAIN.chainRef;
-    }
-
-    return registryChains[0]!.chainRef;
-  };
-
-  const synchronizeNetworkFromRegistry = async () => {
-    const registryChains = readRegistryChains();
-    if (registryChains.length === 0) {
-      pendingNetworkRegistrySync = false;
-      return;
-    }
-
-    const currentState = networkController.getState();
-    const nextActive = selectActiveChainRef(currentState, registryChains);
-    const didChange = currentState.activeChain !== nextActive;
-
-    const rpc = Object.fromEntries(
-      registryChains.map((chain) => {
-        const fromCurrent = currentState.rpc[chain.chainRef];
-        const base = fromCurrent ?? buildDefaultEndpointState(chain);
-
-        const pref = hydratedNetworkRpcPreferences?.get(chain.chainRef) ?? null;
-        if (!pref) {
-          return [chain.chainRef, base] as const;
-        }
-
-        // Apply the hydrated preference only once per chainRef so later registry syncs
-        // don't keep overriding live controller state. Keep other keys for chains that
-        // may appear later (e.g. wallet_addEthereumChain / delayed registry load).
-        hydratedNetworkRpcPreferences?.delete(chain.chainRef);
-
-        const safeIndex = Math.min(pref.activeIndex, Math.max(0, base.endpoints.length - 1));
-        const next: RpcEndpointState = {
-          ...base,
-          activeIndex: safeIndex,
-          strategy: pref.strategy,
-        };
-
-        return [chain.chainRef, next] as const;
-      }),
-    ) as Record<ChainRef, RpcEndpointState>;
-
-    if (hydratedNetworkRpcPreferences?.size === 0) {
-      hydratedNetworkRpcPreferences = null;
-    }
-
-    networkController.replaceState({
-      activeChain: nextActive,
-      knownChains: registryChains,
-      rpc,
-    });
-
-    // Persist any corrections even when the active chain didn't change (e.g. stale settings fallback).
-    if (!didChange && settingsService && !isHydrating && cachedSettings?.activeChainRef !== nextActive) {
-      try {
-        cachedSettings = await settingsService.upsert({ activeChainRef: nextActive });
-      } catch (error) {
-        storageLogger("settings: failed to persist corrected activeChainRef", error);
-      }
-    }
-
-    pendingNetworkRegistrySync = false;
-  };
-
-  const requestNetworkRegistrySync = () => {
-    if (isHydrating) {
-      pendingNetworkRegistrySync = true;
-      return;
-    }
-    void synchronizeNetworkFromRegistry();
-  };
-
-  const unsubscribeRegistry = chainRegistryController.onStateChanged(() => {
-    requestNetworkRegistrySync();
-  });
-
-  const hydrateControllers = async () => {
-    if (!networkRpcPort || !hydrationEnabled) {
-      return;
-    }
-
-    try {
-      const rows = await networkRpcPort.getAll();
-      const next = new Map<ChainRef, { activeIndex: number; strategy: RpcEndpointState["strategy"] }>();
-      for (const row of rows) {
-        next.set(row.chainRef, { activeIndex: row.activeIndex, strategy: row.strategy });
-      }
-      hydratedNetworkRpcPreferences = next;
-    } catch (error) {
-      storageLogger("storage: failed to hydrate network rpc preferences", error);
-    }
-
-    // Permissions are store-backed (PR5 Step 4): no snapshot hydration.
-  };
-
-  const initialize = async () => {
-    if (initialized || destroyed) {
-      return;
-    }
-
-    if (initializePromise) {
-      await initializePromise;
-      return;
-    }
-
-    initializePromise = (async () => {
+  const initialize = async () =>
+    runtimeLifecycle.initialize(async () => {
       await chainRegistryController.whenReady();
       await controllersBase.permissions.whenReady();
 
@@ -405,89 +234,41 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
 
       await transactionsLifecycle.initialize();
 
-      if (settingsService) {
-        try {
-          cachedSettings = await settingsService.get();
-        } catch (error) {
-          storageLogger("settings: failed to load", error);
-          cachedSettings = null;
-        }
-      }
+      await networkBootstrap.loadSettings();
 
-      isHydrating = true;
-      pendingNetworkRegistrySync = true;
-      try {
-        await hydrateControllers();
+      await runtimeLifecycle.withHydration(async () => {
+        networkBootstrap.requestSync();
+        await networkBootstrap.hydrateRpcPreferences();
         await sessionLayer.hydrateVaultMeta();
-      } finally {
-        isHydrating = false;
-        if (pendingNetworkRegistrySync) {
-          await synchronizeNetworkFromRegistry();
-        }
-        initialized = true;
+      });
+
+      await networkBootstrap.flushPendingSync();
+    });
+
+  const start = () =>
+    runtimeLifecycle.start(() => {
+      networkBootstrap.start();
+      sessionLayer.attachSessionListeners();
+      transactionsLifecycle.start();
+    });
+
+  const destroy = () =>
+    runtimeLifecycle.destroy(() => {
+      transactionsLifecycle.destroy();
+      sessionLayer.cleanupVaultPersistTimer();
+      sessionLayer.detachSessionListeners();
+      sessionLayer.destroySessionLayer();
+      try {
+        controllersBase.accounts.destroy?.();
+      } catch (error) {
+        storageLogger("lifecycle: failed to destroy accounts controller", error);
       }
-    })();
+      networkBootstrap.destroy();
 
-    try {
-      await initializePromise;
-    } finally {
-      initializePromise = null;
-    }
-  };
-
-  const start = () => {
-    if (destroyed) {
-      throw new Error("createBackgroundServices lifecycle cannot start after destroy()");
-    }
-
-    if (!initialized) {
-      throw new Error("createBackgroundServices.lifecycle.initialize() must complete before start()");
-    }
-
-    if (networkRpcSync && !networkRpcSyncAttached) {
-      networkRpcSync.attach();
-      networkRpcSyncAttached = true;
-    }
-
-    sessionLayer.attachSessionListeners();
-    transactionsLifecycle.start();
-  };
-
-  const destroy = () => {
-    if (destroyed) {
-      return;
-    }
-
-    destroyed = true;
-    transactionsLifecycle.destroy();
-    sessionLayer.cleanupVaultPersistTimer();
-    sessionLayer.detachSessionListeners();
-    sessionLayer.destroySessionLayer();
-    try {
-      controllersBase.accounts.destroy?.();
-    } catch (error) {
-      storageLogger("lifecycle: failed to destroy accounts controller", error);
-    }
-    try {
-      unsubscribeRegistry();
-    } catch (error) {
-      storageLogger("lifecycle: failed to remove chain registry listener", error);
-    }
-    try {
-      unsubscribeActiveChainPersist();
-    } catch (error) {
-      console.warn("[createBackgroundServices] failed to remove activeChain persist listener", error);
-    }
-
-    if (networkRpcSyncAttached) {
-      networkRpcSync?.detach();
-      networkRpcSyncAttached = false;
-    }
-
-    rpcClientRegistry.destroy();
-    engine.destroy();
-    messenger.clear();
-  };
+      rpcClientRegistry.destroy();
+      engine.destroy();
+      messenger.clear();
+    });
 
   return {
     messenger,

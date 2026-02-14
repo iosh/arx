@@ -169,7 +169,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   });
 
   let destroyed = false;
-  let isHydrating = false;
+  let isHydrating = true;
   let pendingNetworkRegistrySync = false;
   let networkRpcSyncAttached = false;
   let initializePromise: Promise<void> | null = null;

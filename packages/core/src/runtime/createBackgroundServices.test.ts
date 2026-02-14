@@ -58,6 +58,8 @@ describe("createBackgroundServices (no snapshots)", () => {
       },
     ]);
 
+    const settingsPort = new MemorySettingsPort({ id: "settings", activeChainRef: ALT_CHAIN.chainRef, updatedAt: 0 });
+
     const services = createBackgroundServices({
       chainRegistry: { port: chainRegistryPort, seed: chainSeed },
       store: {
@@ -79,13 +81,18 @@ describe("createBackgroundServices (no snapshots)", () => {
         now,
         networkRpcDebounceMs: 0,
       },
-      settings: { port: new MemorySettingsPort(null) },
+      settings: { port: settingsPort },
     });
+
+    await flushAsync();
+    expect(settingsPort.saved.length).toBe(0);
+    await expect(settingsPort.get()).resolves.toMatchObject({ activeChainRef: ALT_CHAIN.chainRef });
 
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
     const networkState = services.controllers.network.getState();
+    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
     services.lifecycle.destroy();

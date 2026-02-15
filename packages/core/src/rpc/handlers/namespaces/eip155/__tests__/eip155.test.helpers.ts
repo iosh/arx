@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import type { ApprovalTask } from "../../../../../controllers/index.js";
+import { ApprovalTypes, type ApprovalTask } from "../../../../../controllers/index.js";
 import {
   FakeVault,
   MemoryAccountsPort,
@@ -192,4 +192,28 @@ export const setupApprovalResponder = (
   });
 
   return unsubscribe;
+};
+
+export const setupSwitchChainApprovalResponder = (services: ReturnType<typeof createServices>) => {
+  return setupApprovalResponder(services, async (task) => {
+    if (task.type !== ApprovalTypes.SwitchChain) {
+      return false;
+    }
+
+    const payload = task.payload as { chainRef?: string };
+    const chainRef = payload.chainRef ?? task.chainRef;
+    if (!chainRef) {
+      throw new Error("Switch chain approval is missing chainRef");
+    }
+
+    await services.controllers.approvals.resolve(task.id, async () => {
+      await services.controllers.network.switchChain(chainRef);
+      await services.controllers.networkPreferences.setActiveChainRef(
+        chainRef as Parameters<typeof services.controllers.networkPreferences.setActiveChainRef>[0],
+      );
+      return null;
+    });
+
+    return true;
+  });
 };

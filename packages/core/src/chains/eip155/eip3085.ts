@@ -28,7 +28,7 @@ const eip3085Schema = z.object({
     decimals: z.number().int().nonnegative(),
   }),
   rpcUrls: z.array(rpcUrl).min(1),
-  blockExplorerUrls: z.array(httpUrl).optional(),
+  blockExplorerUrls: z.preprocess((value) => (value === null ? undefined : value), z.array(httpUrl).optional()),
   // TODO add iconUrls
 });
 

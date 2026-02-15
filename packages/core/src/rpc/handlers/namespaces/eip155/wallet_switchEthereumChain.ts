@@ -1,9 +1,10 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/index.js";
-import { PermissionScopes } from "../../../../controllers/index.js";
-import type { MethodDefinition } from "../../types.js";
-import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { requireRequestContext } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
   chainId?: string;
@@ -56,8 +57,6 @@ const normalizeWalletSwitchEthereumChainParams = (
     });
   }
 
-  // With `exactOptionalPropertyTypes`, optional fields should be omitted
-  // when absent instead of being set to `undefined`.
   return {
     ...(rawChainId ? { chainId: rawChainId, normalizedChainId: rawChainId.toLowerCase() } : {}),
     ...(rawChainRef ? { chainRef: rawChainRef } : {}),
@@ -77,6 +76,10 @@ const WalletSwitchEthereumChainParamsSchema = z
 
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
   scope: PermissionScopes.Basic,
+  // Require an existing connection so unrelated pages cannot spam chain switch prompts.
+  // User still approves the switch explicitly via the approval flow.
+  permissionCheck: PermissionChecks.Connected,
+  approvalRequired: true,
   parseParams: (params) => {
     try {
       return WalletSwitchEthereumChainParamsSchema.parse(params);
@@ -93,7 +96,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       throw error;
     }
   },
-  handler: async ({ params, controllers }) => {
+  handler: async ({ origin, params, controllers, rpcContext }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;
@@ -166,28 +169,23 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       });
     }
 
-    try {
-      await controllers.network.switchChain(target.chainRef);
-
-      await controllers.networkPreferences.setActiveChainRef(target.chainRef);
-
+    const active = controllers.network.getActiveChain();
+    if (active.chainRef === target.chainRef) {
       return null;
-    } catch (error) {
-      if (error instanceof Error && /unknown chain/i.test(error.message)) {
-        throw arxError({
-          reason: ArxReasons.ChainNotFound,
-          message: error.message,
-          data: { chainId: rawChainId ?? target.chainId, chainRef: normalizedChainRef ?? target.chainRef },
-          cause: error,
-        });
-      }
-      if (isArxError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
-        message: error instanceof Error ? error.message : "Failed to switch chain",
-        data: { chainRef: target.chainRef },
-        cause: error,
-      });
     }
+
+    const task = {
+      id: createTaskId("wallet_switchEthereumChain"),
+      type: ApprovalTypes.SwitchChain,
+      origin,
+      namespace: "eip155",
+      chainRef: target.chainRef,
+      createdAt: Date.now(),
+      payload: {
+        chainRef: target.chainRef,
+      },
+    };
+
+    return await controllers.approvals.requestApproval(task, requireRequestContext(rpcContext, "wallet_switchEthereumChain"));
   },
 };

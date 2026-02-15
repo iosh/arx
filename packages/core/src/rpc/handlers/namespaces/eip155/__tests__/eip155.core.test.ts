@@ -14,6 +14,7 @@ import {
   createServices,
   ORIGIN,
   setupApprovalResponder,
+  setupSwitchChainApprovalResponder,
   TEST_MNEMONIC,
   waitForChainInNetwork,
 } from "./eip155.test.helpers.js";
@@ -58,6 +59,8 @@ describe("eip155 handlers - core error paths", () => {
 
     await services.controllers.network.addChain(ALT_CHAIN);
 
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
+
     const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
     const { account } = await services.accountsRuntime.deriveAccount({
@@ -87,6 +90,7 @@ describe("eip155 handlers - core error paths", () => {
         namespace: "eip155",
       });
     } finally {
+      teardownApprovalResponder();
       services.lifecycle.destroy();
     }
   });
@@ -98,6 +102,8 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createExecutor(services);
     await services.controllers.network.addChain(ALT_CHAIN);
+
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
 
     try {
       await expect(
@@ -112,6 +118,7 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(services.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
+      teardownApprovalResponder();
       services.lifecycle.destroy();
     }
   });
@@ -273,6 +280,8 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(services);
     await services.controllers.network.addChain(ALT_CHAIN);
 
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
+
     const changes: string[] = [];
     const unsubscribe = services.controllers.network.onChainChanged((chain) => {
       changes.push(chain.chainRef);
@@ -289,6 +298,7 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(changes).toContain(ALT_CHAIN.chainRef);
     } finally {
+      teardownApprovalResponder();
       unsubscribe();
       services.lifecycle.destroy();
     }

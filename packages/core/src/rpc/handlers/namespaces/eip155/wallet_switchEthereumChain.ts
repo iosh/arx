@@ -93,7 +93,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       throw error;
     }
   },
-  handler: async ({ params, controllers, rpcContext }) => {
+  handler: async ({ params, controllers }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;
@@ -168,6 +168,9 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
 
     try {
       await controllers.network.switchChain(target.chainRef);
+
+      await controllers.networkPreferences.setActiveChainRef(target.chainRef);
+
       return null;
     } catch (error) {
       if (error instanceof Error && /unknown chain/i.test(error.message)) {

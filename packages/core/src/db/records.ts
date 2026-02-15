@@ -25,11 +25,25 @@ export type AccountId = z.infer<typeof AccountIdSchema>;
 
 export const SettingsRecordSchema = z.strictObject({
   id: z.literal("settings"),
-  activeChainRef: chainRefSchema,
   selectedAccountId: AccountIdSchema.optional(),
   updatedAt: epochMillisecondsSchema,
 });
 export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;
+
+export const NetworkRpcPreferenceSchema = z.strictObject({
+  activeIndex: z.number().int().min(0),
+  strategy: RpcStrategySchema,
+});
+export type NetworkRpcPreference = z.infer<typeof NetworkRpcPreferenceSchema>;
+
+export const NetworkPreferencesRecordSchema = z.strictObject({
+  id: z.literal("network-preferences"),
+  activeChainRef: chainRefSchema,
+  // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
+  rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
+  updatedAt: epochMillisecondsSchema,
+});
+export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
 
 export const VaultCiphertextSchema = z.strictObject({
   version: z.number().int().positive(),
@@ -79,15 +93,6 @@ export const ChainRecordSchema = z
     path: ["metadata", "namespace"],
   });
 export type ChainRecord = z.infer<typeof ChainRecordSchema>;
-
-// Network RPC persistence is "preferences only": it stores stable selections, not transient health.
-export const NetworkRpcPreferenceRecordSchema = z.strictObject({
-  chainRef: chainRefSchema,
-  activeIndex: z.number().int().min(0),
-  strategy: RpcStrategySchema,
-  updatedAt: epochMillisecondsSchema,
-});
-export type NetworkRpcPreferenceRecord = z.infer<typeof NetworkRpcPreferenceRecordSchema>;
 
 export const KeyringTypeSchema = z.enum(["hd", "private-key"]);
 export type KeyringType = z.infer<typeof KeyringTypeSchema>;

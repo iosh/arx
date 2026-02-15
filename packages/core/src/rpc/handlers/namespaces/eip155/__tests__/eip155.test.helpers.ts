@@ -6,6 +6,7 @@ import {
   MemoryAccountsPort,
   MemoryApprovalsPort,
   MemoryKeyringMetasPort,
+  MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
   MemoryTransactionsPort,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
@@ -55,12 +56,13 @@ export const createChainRegistryPort = () => ({
 
 // Create test services with optional overrides
 export const createServices = (overrides?: Partial<Parameters<typeof createBackgroundServices>[0]>) => {
-  const { chainRegistry, session, ...rest } = overrides ?? {};
+  const { chainRegistry, session, networkPreferences, ...rest } = overrides ?? {};
   return createBackgroundServices({
     chainRegistry: {
       port: createChainRegistryPort(),
       ...(chainRegistry ?? {}),
     },
+    networkPreferences: networkPreferences ?? { port: new MemoryNetworkPreferencesPort() },
     store: {
       ports: {
         approvals: new MemoryApprovalsPort(),

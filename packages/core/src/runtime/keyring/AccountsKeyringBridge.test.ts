@@ -144,7 +144,6 @@ describe("AccountsKeyringBridge", () => {
     };
     const settings = createSettingsService({
       port: settingsPort,
-      defaults: { activeChainRef: chainRef },
       now: () => 1,
     });
 

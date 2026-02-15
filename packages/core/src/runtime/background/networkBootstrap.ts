@@ -2,31 +2,21 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
 import type { NetworkController, RpcEndpointState } from "../../controllers/network/types.js";
-import type { SettingsRecord } from "../../db/records.js";
-import type { SettingsService } from "../../services/settings/types.js";
-import type { NetworkRpcPort } from "../../storage/types.js";
-import { createNetworkRpcSync } from "../persistence/createNetworkRpcSync.js";
+import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../db/records.js";
+import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
 import { buildDefaultEndpointState, DEFAULT_CHAIN } from "./constants.js";
-
-type HydratedPreference = { activeIndex: number; strategy: RpcEndpointState["strategy"] };
 
 export type CreateNetworkBootstrapOptions = {
   network: NetworkController;
   chainRegistry: ChainRegistryController;
-  settings: SettingsService | null;
-
-  networkRpcPort?: NetworkRpcPort;
+  preferences: NetworkPreferencesService;
   hydrationEnabled: boolean;
-  now: () => number;
   logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
-  getIsDestroyed: () => boolean;
-  networkRpcDebounceMs?: number;
 };
 
 export type NetworkBootstrap = {
-  loadSettings(): Promise<void>;
-  hydrateRpcPreferences(): Promise<void>;
+  loadPreferences(): Promise<void>;
   requestSync(): void;
   flushPendingSync(): Promise<void>;
   start(): void;
@@ -34,60 +24,35 @@ export type NetworkBootstrap = {
 };
 
 export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
-  const {
-    network,
-    chainRegistry,
-    settings,
-    networkRpcPort,
-    hydrationEnabled,
-    now,
-    logger,
-    getIsHydrating,
-    getIsDestroyed,
-    networkRpcDebounceMs,
-  } = opts;
+  const { network, chainRegistry, preferences, hydrationEnabled, logger, getIsHydrating } = opts;
 
-  let cachedSettings: SettingsRecord | null = null;
-  let hydratedPrefs: Map<ChainRef, HydratedPreference> | null = null;
+  let cachedPreferences: NetworkPreferencesRecord | null = null;
   let pendingSync = false;
 
   let listenersAttached = false;
   let unsubscribeRegistry: (() => void) | null = null;
-  let unsubscribeActiveChainPersist: (() => void) | null = null;
-
-  const networkRpcSync =
-    networkRpcPort === undefined
-      ? undefined
-      : createNetworkRpcSync({
-          port: networkRpcPort,
-          network,
-          now,
-          logger: (message, error) => logger(message, error),
-          ...(networkRpcDebounceMs !== undefined ? { debounceMs: networkRpcDebounceMs } : {}),
-        });
-
-  let networkRpcSyncAttached = false;
 
   const readRegistryChains = (): ChainMetadata[] => chainRegistry.getChains().map((entry) => entry.metadata);
 
-  const computeRpcState = (
-    registryChains: ChainMetadata[],
-    current: ReturnType<typeof network.getState>,
-  ): Record<ChainRef, RpcEndpointState> => {
-    return Object.fromEntries(
+  const computeRpcState = (registryChains: ChainMetadata[], current: ReturnType<typeof network.getState>) => {
+    const corrections: Record<ChainRef, NetworkRpcPreference> = {};
+
+    const rpc = Object.fromEntries(
       registryChains.map((chain) => {
         const fromCurrent = current.rpc[chain.chainRef];
         const base = fromCurrent ?? buildDefaultEndpointState(chain);
 
-        const pref = hydratedPrefs?.get(chain.chainRef) ?? null;
+        const pref = cachedPreferences?.rpc?.[chain.chainRef] ?? null;
         if (!pref) {
           return [chain.chainRef, base] as const;
         }
 
-        // Apply hydrated preference only once per chainRef.
-        hydratedPrefs?.delete(chain.chainRef);
+        // Clamp against registry metadata (the source of truth), not the current runtime snapshot.
+        const safeIndex = Math.min(pref.activeIndex, Math.max(0, chain.rpcEndpoints.length - 1));
+        if (safeIndex !== pref.activeIndex) {
+          corrections[chain.chainRef] = { ...pref, activeIndex: safeIndex };
+        }
 
-        const safeIndex = Math.min(pref.activeIndex, Math.max(0, base.endpoints.length - 1));
         const next: RpcEndpointState = {
           ...base,
           activeIndex: safeIndex,
@@ -97,6 +62,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         return [chain.chainRef, next] as const;
       }),
     ) as Record<ChainRef, RpcEndpointState>;
+
+    return { rpc, corrections };
   };
 
   const selectActiveChainRef = (
@@ -109,7 +76,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
 
-    const preferred = cachedSettings?.activeChainRef ?? null;
+    const preferred = cachedPreferences?.activeChainRef ?? null;
     if (preferred && available.has(preferred)) {
       return preferred;
     }
@@ -129,6 +96,19 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return first.chainRef;
   };
 
+  const pruneRpcPreferences = (available: Set<ChainRef>) => {
+    const base = cachedPreferences?.rpc ?? null;
+    if (!base) return {};
+
+    const patch: Record<ChainRef, NetworkRpcPreference | null> = {};
+    for (const chainRef of Object.keys(base) as ChainRef[]) {
+      if (!available.has(chainRef)) {
+        patch[chainRef] = null;
+      }
+    }
+    return patch;
+  };
+
   const syncFromRegistry = async () => {
     const registryChains = readRegistryChains();
     if (registryChains.length === 0) {
@@ -136,15 +116,21 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       return;
     }
 
+    if (hydrationEnabled) {
+      try {
+        cachedPreferences = await preferences.get();
+      } catch (error) {
+        logger("preferences: failed to load", error);
+        cachedPreferences = null;
+      }
+    }
+
     const current = network.getState();
     const nextActive = selectActiveChainRef(current, registryChains);
-    const didChange = current.activeChain !== nextActive;
 
-    const rpc = computeRpcState(registryChains, current);
-
-    if (hydratedPrefs?.size === 0) {
-      hydratedPrefs = null;
-    }
+    const available = new Set(registryChains.map((chain) => chain.chainRef));
+    const { rpc, corrections } = computeRpcState(registryChains, current);
+    const prunePatch = pruneRpcPreferences(available);
 
     network.replaceState({
       activeChain: nextActive,
@@ -152,12 +138,26 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       rpc,
     });
 
-    // Persist any corrections even when the active chain didn't change (e.g. stale settings fallback).
-    if (!didChange && settings && !getIsHydrating() && cachedSettings?.activeChainRef !== nextActive) {
-      try {
-        cachedSettings = await settings.upsert({ activeChainRef: nextActive });
-      } catch (error) {
-        logger("settings: failed to persist corrected activeChainRef", error);
+    // Persist any corrections even when the active chain didn't change (e.g. stale preferences fallback).
+    if (!getIsHydrating()) {
+      const nextPatch: Record<ChainRef, NetworkRpcPreference | null> = {};
+      Object.assign(nextPatch, prunePatch);
+      for (const [chainRef, pref] of Object.entries(corrections) as Array<[ChainRef, NetworkRpcPreference]>) {
+        nextPatch[chainRef] = pref;
+      }
+
+      const shouldPersistActive = cachedPreferences?.activeChainRef !== nextActive;
+      const shouldPersistRpc = Object.keys(nextPatch).length > 0;
+
+      if (shouldPersistActive || shouldPersistRpc) {
+        try {
+          cachedPreferences = await preferences.upsert({
+            ...(shouldPersistActive ? { activeChainRef: nextActive } : {}),
+            ...(shouldPersistRpc ? { rpcPatch: nextPatch } : {}),
+          });
+        } catch (error) {
+          logger("preferences: failed to persist corrected network preferences", error);
+        }
       }
     }
 
@@ -179,21 +179,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     listenersAttached = true;
 
     unsubscribeRegistry = chainRegistry.onStateChanged(() => requestSync());
-
-    unsubscribeActiveChainPersist = network.onChainChanged((chain) => {
-      if (getIsDestroyed()) return;
-      if (!settings) return;
-      if (getIsHydrating()) return;
-
-      void settings
-        .upsert({ activeChainRef: chain.chainRef })
-        .then((next) => {
-          cachedSettings = next;
-        })
-        .catch((error) => {
-          logger("settings: failed to persist activeChainRef", error);
-        });
-    });
   };
 
   const detachListeners = () => {
@@ -210,45 +195,19 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
       unsubscribeRegistry = null;
     }
-
-    if (unsubscribeActiveChainPersist) {
-      try {
-        unsubscribeActiveChainPersist();
-      } catch (error) {
-        logger("lifecycle: failed to remove activeChain persist listener", error);
-      }
-      unsubscribeActiveChainPersist = null;
-    }
   };
 
-  const loadSettings = async () => {
-    if (!settings) {
-      cachedSettings = null;
+  const loadPreferences = async () => {
+    if (!hydrationEnabled) {
+      cachedPreferences = null;
       return;
     }
 
     try {
-      cachedSettings = await settings.get();
+      cachedPreferences = await preferences.get();
     } catch (error) {
-      logger("settings: failed to load", error);
-      cachedSettings = null;
-    }
-  };
-
-  const hydrateRpcPreferences = async () => {
-    if (!networkRpcPort || !hydrationEnabled) {
-      return;
-    }
-
-    try {
-      const rows = await networkRpcPort.getAll();
-      const next = new Map<ChainRef, HydratedPreference>();
-      for (const row of rows) {
-        next.set(row.chainRef, { activeIndex: row.activeIndex, strategy: row.strategy });
-      }
-      hydratedPrefs = next;
-    } catch (error) {
-      logger("storage: failed to hydrate network rpc preferences", error);
+      logger("preferences: failed to load", error);
+      cachedPreferences = null;
     }
   };
 
@@ -261,26 +220,14 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
   const start = () => {
     attachListeners();
-    requestSync();
-
-    if (networkRpcSync && !networkRpcSyncAttached) {
-      networkRpcSync.attach();
-      networkRpcSyncAttached = true;
-    }
   };
 
   const destroy = () => {
     detachListeners();
-
-    if (networkRpcSyncAttached) {
-      networkRpcSync?.detach();
-      networkRpcSyncAttached = false;
-    }
   };
 
   return {
-    loadSettings,
-    hydrateRpcPreferences,
+    loadPreferences,
     requestSync,
     flushPendingSync,
     start,

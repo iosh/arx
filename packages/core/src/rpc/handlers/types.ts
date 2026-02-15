@@ -12,11 +12,13 @@ import type {
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { RequestContextRecord } from "../../db/records.js";
+import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import { NoParamsSchema } from "./params.js";
 
 export type HandlerControllers = {
   network: NetworkController;
+  networkPreferences: NetworkPreferencesService;
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionController;

@@ -6,6 +6,7 @@ import {
   MemoryApprovalsPort,
   MemoryChainRegistryPort,
   MemoryKeyringMetasPort,
+  MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
   MemoryTransactionsPort,
 } from "../__fixtures__/backgroundTestSetup.js";
@@ -86,6 +87,7 @@ describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),
@@ -117,6 +119,7 @@ describe("background rpc engine assembly", () => {
   it("encodes existing res.error (error boundary)", async () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),
@@ -156,6 +159,7 @@ describe("background rpc engine assembly", () => {
   it("respects shouldRequestUnlockAttention hook", async () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),

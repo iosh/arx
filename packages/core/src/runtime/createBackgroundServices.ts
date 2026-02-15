@@ -9,13 +9,15 @@ import type { ApprovalsPort } from "../services/approvals/port.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
+import { createNetworkPreferencesService } from "../services/networkPreferences/NetworkPreferencesService.js";
+import type { NetworkPreferencesPort } from "../services/networkPreferences/port.js";
 import { createPermissionsService } from "../services/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../services/permissions/port.js";
 import type { SettingsPort } from "../services/settings/port.js";
 import { createSettingsService } from "../services/settings/SettingsService.js";
 import type { TransactionsPort } from "../services/transactions/port.js";
 import { createTransactionsService } from "../services/transactions/TransactionsService.js";
-import type { NetworkRpcPort, VaultMetaPort } from "../storage/index.js";
+import type { VaultMetaPort } from "../storage/index.js";
 import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
@@ -35,13 +37,14 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
     compare?: CompareFn<unknown>;
   };
   engine?: EngineOptions;
+  networkPreferences: {
+    port: NetworkPreferencesPort;
+  };
   storage?: {
-    networkRpcPort?: NetworkRpcPort;
     vaultMetaPort?: VaultMetaPort;
     now?: () => number;
     hydrate?: boolean;
     logger?: (message: string, error?: unknown) => void;
-    networkRpcDebounceMs?: number;
   };
   store: {
     ports: {
@@ -74,6 +77,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     permissions: permissionOptions,
     transactions: transactionOptions,
     engine: engineOptions,
+    networkPreferences: networkPreferencesOptions,
     storage: storageOptions,
     store: storeOptions,
     settings: settingsOptions,
@@ -111,9 +115,14 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
       ? null
       : createSettingsService({
           port: settingsPort,
-          defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
           now: storageNow,
         });
+
+  const networkPreferences = createNetworkPreferencesService({
+    port: networkPreferencesOptions.port,
+    defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
+    now: storageNow,
+  });
 
   const approvalsService = createApprovalsService({
     port: storeOptions.ports.approvals,
@@ -152,7 +161,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
-  const networkRpcPort = storageOptions?.networkRpcPort;
   const vaultMetaPort = storageOptions?.vaultMetaPort;
   const attention = createAttentionService({
     messenger: castMessenger<AttentionServiceMessengerTopics>(messenger),
@@ -185,6 +193,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
 
   const controllers: HandlerControllers = {
     ...controllersBase,
+    networkPreferences,
     signers,
   };
 
@@ -209,16 +218,10 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const networkBootstrap = createNetworkBootstrap({
     network: networkController,
     chainRegistry: chainRegistryController,
-    settings: settingsService,
-    ...(networkRpcPort ? { networkRpcPort } : {}),
+    preferences: networkPreferences,
     hydrationEnabled,
-    now: storageNow,
     logger: storageLogger,
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
-    getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
-    ...(storageOptions?.networkRpcDebounceMs !== undefined
-      ? { networkRpcDebounceMs: storageOptions.networkRpcDebounceMs }
-      : {}),
   });
 
   const initialize = async () =>
@@ -234,11 +237,10 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
 
       await transactionsLifecycle.initialize();
 
-      await networkBootstrap.loadSettings();
+      await networkBootstrap.loadPreferences();
 
       await runtimeLifecycle.withHydration(async () => {
         networkBootstrap.requestSync();
-        await networkBootstrap.hydrateRpcPreferences();
         await sessionLayer.hydrateVaultMeta();
       });
 

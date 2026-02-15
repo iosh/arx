@@ -9,7 +9,7 @@ import type {
   AccountRecord,
   ApprovalRecord,
   KeyringMetaRecord,
-  NetworkRpcPreferenceRecord,
+  NetworkPreferencesRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
@@ -17,7 +17,7 @@ import type {
 import {
   AccountRecordSchema,
   KeyringMetaRecordSchema,
-  NetworkRpcPreferenceRecordSchema,
+  NetworkPreferencesRecordSchema,
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../db/records.js";
@@ -25,10 +25,11 @@ import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/accounts/port.js";
 import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
+import type { NetworkPreferencesPort } from "../../services/networkPreferences/port.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
 import type { SettingsPort } from "../../services/settings/port.js";
 import type { TransactionsPort } from "../../services/transactions/port.js";
-import type { ChainRegistryEntity, NetworkRpcPort, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
+import type { ChainRegistryEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
@@ -365,48 +366,22 @@ export const createChainMetadata = (overrides: Partial<ChainMetadata> = {}): Cha
   return metadata;
 };
 
-export class MemoryNetworkRpcPort implements NetworkRpcPort {
-  #records = new Map<string, NetworkRpcPreferenceRecord>();
-  public readonly upserts: NetworkRpcPreferenceRecord[] = [];
-  public readonly removes: string[] = [];
+export class MemoryNetworkPreferencesPort implements NetworkPreferencesPort {
+  #record: NetworkPreferencesRecord | null;
+  public readonly saved: NetworkPreferencesRecord[] = [];
 
-  constructor(seed: NetworkRpcPreferenceRecord[] = []) {
-    for (const record of seed) {
-      const checked = NetworkRpcPreferenceRecordSchema.parse(record);
-      this.#records.set(checked.chainRef, clone(checked));
-    }
+  constructor(seed: NetworkPreferencesRecord | null = null) {
+    this.#record = seed ? NetworkPreferencesRecordSchema.parse(clone(seed)) : null;
   }
 
-  async get(chainRef: string): Promise<NetworkRpcPreferenceRecord | null> {
-    const found = this.#records.get(chainRef);
-    return found ? clone(found) : null;
+  async get(): Promise<NetworkPreferencesRecord | null> {
+    return this.#record ? clone(this.#record) : null;
   }
 
-  async getAll(): Promise<NetworkRpcPreferenceRecord[]> {
-    return Array.from(this.#records.values())
-      .map((record) => clone(record))
-      .sort((a, b) => a.chainRef.localeCompare(b.chainRef));
-  }
-
-  async upsert(record: NetworkRpcPreferenceRecord): Promise<void> {
-    const checked = NetworkRpcPreferenceRecordSchema.parse(record);
-    this.#records.set(checked.chainRef, clone(checked));
-    this.upserts.push(clone(checked));
-  }
-
-  async upsertMany(records: NetworkRpcPreferenceRecord[]): Promise<void> {
-    for (const record of records) {
-      await this.upsert(record);
-    }
-  }
-
-  async remove(chainRef: string): Promise<void> {
-    this.#records.delete(chainRef);
-    this.removes.push(chainRef);
-  }
-
-  async clear(): Promise<void> {
-    this.#records.clear();
+  async put(record: NetworkPreferencesRecord): Promise<void> {
+    const checked = NetworkPreferencesRecordSchema.parse(record);
+    this.#record = clone(checked);
+    this.saved.push(clone(checked));
   }
 }
 
@@ -597,7 +572,7 @@ export class FakeVault implements VaultService {
 // Test context type
 export type TestBackgroundContext = {
   services: CreateBackgroundServicesResult;
-  networkRpcPort: MemoryNetworkRpcPort;
+  networkPreferencesPort: MemoryNetworkPreferencesPort;
   vaultMetaPort: MemoryVaultMetaPort;
   chainRegistryPort: MemoryChainRegistryPort;
   transactionsPort: MemoryTransactionsPort;
@@ -609,7 +584,7 @@ export type TestBackgroundContext = {
 // Setup options type
 export type SetupBackgroundOptions = {
   chainSeed?: ChainMetadata[];
-  networkRpcSeed?: NetworkRpcPreferenceRecord[];
+  networkPreferencesSeed?: NetworkPreferencesRecord | null;
   settingsSeed?: SettingsRecord | null;
   accountsSeed?: AccountRecord[];
   keyringMetasSeed?: KeyringMetaRecord[];
@@ -633,7 +608,7 @@ export type SetupBackgroundOptions = {
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
   const chainRegistryPort = new MemoryChainRegistryPort(chainSeed.map((metadata) => toRegistryEntity(metadata, 0)));
-  const networkRpcPort = new MemoryNetworkRpcPort(options.networkRpcSeed ?? []);
+  const networkPreferencesPort = new MemoryNetworkPreferencesPort(options.networkPreferencesSeed ?? null);
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const approvalsPort = new MemoryApprovalsPort();
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
@@ -644,7 +619,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
-    networkRpcPort,
     vaultMetaPort,
     ...(options.now ? { now: options.now } : {}),
     ...(options.storageLogger ? { logger: options.storageLogger } : {}),
@@ -669,6 +643,9 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     chainRegistry: {
       port: chainRegistryPort,
       seed: chainSeed,
+    },
+    networkPreferences: {
+      port: networkPreferencesPort,
     },
     store: {
       ports: {
@@ -710,7 +687,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   return {
     services,
-    networkRpcPort,
+    networkPreferencesPort,
     vaultMetaPort,
     chainRegistryPort,
     transactionsPort,

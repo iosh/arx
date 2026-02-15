@@ -11,6 +11,7 @@ import { keyringErrors } from "../../keyring/errors.js";
 import type { Eip155RpcCapabilities } from "../../rpc/namespaceClients/eip155.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import { zeroize } from "../../vault/utils.js";
+import type { UiMethodResult } from "../protocol.js";
 import { buildUiSnapshot } from "./snapshot.js";
 import type { UiHandlers, UiRuntimeDeps } from "./types.js";
 
@@ -33,7 +34,7 @@ const verifyExportPassword = async (session: BackgroundSessionServices, password
 
   try {
     await session.vault.verifyPassword(password);
-  } catch (error) {
+  } catch (_error) {
     throw arxError({
       reason: ArxReasons.VaultInvalidPassword,
       message: "Password verification failed",
@@ -144,9 +145,9 @@ type ApprovalTask = {
   payload?: unknown;
 };
 
-// Approval result can be transaction meta, accounts array, signature string, permission result, or null
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ApprovalResult = any; // Will be validated by zod schema
+// Approval result can be transaction meta, accounts array, signature string, permission result, or null.
+// Validated by zod schema at the UI protocol boundary.
+type ApprovalResult = unknown;
 
 type ApprovalHandlerFn = (task: ApprovalTask, controllers: UiRuntimeDeps["controllers"]) => Promise<ApprovalResult>;
 
@@ -239,7 +240,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   },
 
   [ApprovalTypes.RequestPermissions]: async (task) => {
-    const payload = task.payload as { requested: any[] };
+    const payload = task.payload as { requested: unknown[] };
     return { granted: payload.requested };
   },
 
@@ -462,7 +463,8 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     },
 
     "ui.networks.switchActive": async ({ chainRef }) => {
-      await controllers.network.switchChain(chainRef);
+      const selected = await controllers.network.switchChain(chainRef);
+      await controllers.networkPreferences.setActiveChainRef(selected.chainRef);
       return toChainSnapshot();
     },
 
@@ -517,8 +519,10 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       }
 
       const result = await controllers.approvals.resolve(task.id, () => handler(task as ApprovalTask, controllers));
-
-      return { id: task.id, result };
+      return {
+        id: task.id,
+        result: result as UiMethodResult<"ui.approvals.approve">["result"],
+      };
     },
 
     "ui.approvals.reject": async ({ id, reason }) => {

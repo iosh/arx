@@ -2,7 +2,7 @@ import type {
   AccountRecord,
   ApprovalRecord,
   KeyringMetaRecord,
-  NetworkRpcPreferenceRecord,
+  NetworkPreferencesRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
@@ -18,7 +18,7 @@ type KeyringMetaRow = KeyringMetaRecord;
 export class ArxStorageDatabase extends Dexie {
   settings!: Table<SettingsRecord, string>;
   chains!: Table<ChainRegistryRow, string>;
-  networkRpc!: Table<NetworkRpcPreferenceRecord, string>;
+  networkPreferences!: Table<NetworkPreferencesRecord, string>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, string>;
   approvals!: Table<ApprovalRecord, string>;
@@ -34,7 +34,7 @@ export class ArxStorageDatabase extends Dexie {
       .stores({
         settings: "&id",
         chains: "&chainRef",
-        networkRpc: "&chainRef, updatedAt",
+        networkPreferences: "&id",
         accounts: "&accountId, namespace, keyringId",
         permissions: "&id, origin, &[origin+namespace+chainRef]",
         approvals: "&id, status, type, origin, createdAt",

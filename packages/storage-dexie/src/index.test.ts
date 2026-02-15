@@ -1,10 +1,10 @@
 import "fake-indexeddb/auto";
 
-import { NetworkRpcPreferenceRecordSchema } from "@arx/core/db";
+import { NetworkPreferencesRecordSchema } from "@arx/core/db";
 import { DOMAIN_SCHEMA_VERSION, VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDexieNetworkRpcPort, createDexieVaultMetaPort } from "./ports/factories.js";
+import { createDexieNetworkPreferencesPort, createDexieVaultMetaPort } from "./ports/factories.js";
 
 const DB_NAME = "arx-storage-index-test";
 
@@ -25,18 +25,20 @@ afterEach(async () => {
 });
 
 describe("@arx/storage-dexie ports", () => {
-  it("NetworkRpcPort roundtrips", async () => {
-    const port = createDexieNetworkRpcPort({ databaseName: DB_NAME });
+  it("NetworkPreferencesPort roundtrips", async () => {
+    const port = createDexieNetworkPreferencesPort({ databaseName: DB_NAME });
 
-    const record = NetworkRpcPreferenceRecordSchema.parse({
-      chainRef: "eip155:1",
-      activeIndex: 0,
-      strategy: { id: "round-robin" },
+    const record = NetworkPreferencesRecordSchema.parse({
+      id: "network-preferences",
+      activeChainRef: "eip155:1",
+      rpc: {
+        "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },
+      },
       updatedAt: 1_000,
     });
 
-    await port.upsert(record);
-    expect(await port.get(record.chainRef)).toEqual(record);
+    await port.put(record);
+    expect(await port.get()).toEqual(record);
   });
 
   it("VaultMetaPort drops invalid vault meta on load", async () => {

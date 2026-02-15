@@ -181,7 +181,7 @@ describe("background rpc engine assembly", () => {
 
     const chainRef = services.controllers.network.getActiveChain().chainRef;
     const req = {
-      method: "wallet_switchEthereumChain",
+      method: "eth_newFilter",
       origin: "https://dapp.example",
       arx: { namespace: "eip155", chainRef },
     } as any;

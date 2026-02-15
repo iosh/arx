@@ -1,4 +1,3 @@
-import type { ChainRef } from "@arx/core/chains";
 import { type PermissionRecord, PermissionRecordSchema } from "@arx/core/db";
 import type { PermissionsPort } from "@arx/core/services";
 import type { ArxStorageDatabase } from "../db.js";
@@ -30,12 +29,11 @@ export class DexiePermissionsPort implements PermissionsPort {
   async getByOrigin(params: {
     origin: string;
     namespace: string;
-    chainRef: ChainRef;
   }): Promise<PermissionRecord | null> {
     await this.ready;
     const row = await this.table
-      .where("[origin+namespace+chainRef]")
-      .equals([params.origin, params.namespace, params.chainRef])
+      .where("[origin+namespace]")
+      .equals([params.origin, params.namespace])
       .first();
 
     if (!row) return null;

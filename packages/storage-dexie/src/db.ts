@@ -36,7 +36,7 @@ export class ArxStorageDatabase extends Dexie {
         chains: "&chainRef",
         networkPreferences: "&id",
         accounts: "&accountId, namespace, keyringId",
-        permissions: "&id, origin, &[origin+namespace+chainRef]",
+        permissions: "&id, origin, &[origin+namespace]",
         approvals: "&id, status, type, origin, createdAt",
         transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
 

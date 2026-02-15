@@ -109,11 +109,10 @@ export class MemoryPermissionsPort implements PermissionsPort {
     return Array.from(this.#records.values()).map((record) => clone(record));
   }
 
-  async getByOrigin(params: { origin: string; namespace: string; chainRef: string }): Promise<PermissionRecord | null> {
+  async getByOrigin(params: { origin: string; namespace: string }): Promise<PermissionRecord | null> {
     for (const record of this.#records.values()) {
       if (record.origin !== params.origin) continue;
       if (record.namespace !== params.namespace) continue;
-      if (record.chainRef !== params.chainRef) continue;
       return clone(record);
     }
     return null;

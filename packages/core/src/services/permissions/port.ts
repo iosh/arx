@@ -1,4 +1,3 @@
-import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionRecord } from "../../db/records.js";
 
 export interface PermissionsPort {
@@ -10,7 +9,7 @@ export interface PermissionsPort {
    */
   listAll(): Promise<PermissionRecord[]>;
 
-  getByOrigin(params: { origin: string; namespace: string; chainRef: ChainRef }): Promise<PermissionRecord | null>;
+  getByOrigin(params: { origin: string; namespace: string }): Promise<PermissionRecord | null>;
 
   listByOrigin(origin: string): Promise<PermissionRecord[]>;
 

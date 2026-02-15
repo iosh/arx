@@ -122,7 +122,7 @@ export const AccountRecordSchema = z
     const expected = `${value.namespace}:${value.payloadHex}`;
     if (value.accountId !== expected) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: `accountId must equal "${expected}"`,
         path: ["accountId"],
       });
@@ -133,29 +133,47 @@ export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 export const PermissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
 export type PermissionScope = z.infer<typeof PermissionScopeSchema>;
 
+export const PermissionGrantSchema = z.strictObject({
+  scope: PermissionScopeSchema,
+  // Chain list where this scope applies (EIP-2255 style caveat).
+  chains: z.array(chainRefSchema).min(1),
+});
+export type PermissionGrantRecord = z.infer<typeof PermissionGrantSchema>;
+
 export const PermissionRecordSchema = z
   .strictObject({
     id: z.string().uuid(),
     origin: originStringSchema,
     namespace: z.string().min(1),
-    chainRef: chainRefSchema,
-    scopes: z.array(PermissionScopeSchema),
+    // One record per (origin, namespace). Each scope carries its own permitted chains.
+    grants: z.array(PermissionGrantSchema),
+    // EIP-155 only: persisted as AccountIds to stay chain-agnostic.
     accountIds: z.array(AccountIdSchema).min(1).optional(),
     updatedAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    const needsAccounts = value.scopes.includes(PermissionScopes.Accounts);
-    if (needsAccounts && !value.accountIds) {
+    const scopes = value.grants.map((g) => g.scope);
+    const uniqueScopes = new Set(scopes);
+    if (uniqueScopes.size !== scopes.length) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "accountIds is required when scopes contains Accounts",
+        code: "custom",
+        message: "grants must not contain duplicate scopes",
+        path: ["grants"],
+      });
+    }
+
+    const hasAccountsGrant = scopes.includes(PermissionScopes.Accounts);
+    if (hasAccountsGrant && !value.accountIds) {
+      ctx.addIssue({
+        code: "custom",
+        message: "accountIds is required when grants contains Accounts",
         path: ["accountIds"],
       });
     }
-    if (!needsAccounts && value.accountIds !== undefined) {
+    if (!hasAccountsGrant && value.accountIds !== undefined) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "accountIds must be omitted when scopes does not contain Accounts",
+        code: "custom",
+        message: "accountIds must be omitted when grants does not contain Accounts",
         path: ["accountIds"],
       });
     }
@@ -212,14 +230,14 @@ export const ApprovalRecordSchema = z
     if (isPending) {
       if (hasFinalizedAt) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "finalizedAt must be omitted when status is pending",
           path: ["finalizedAt"],
         });
       }
       if (hasReason) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "finalStatusReason must be omitted when status is pending",
           path: ["finalStatusReason"],
         });
@@ -229,14 +247,14 @@ export const ApprovalRecordSchema = z
 
     if (!hasFinalizedAt) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "finalizedAt is required when status is not pending",
         path: ["finalizedAt"],
       });
     }
     if (!hasReason) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "finalStatusReason is required when status is not pending",
         path: ["finalStatusReason"],
       });

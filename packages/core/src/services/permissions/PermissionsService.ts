@@ -42,13 +42,12 @@ export const createPermissionsService = ({
   };
 
   const upsert = async (record: PermissionRecord) => {
-    // Reuse the same id for the same (origin, namespace, chainRef) so callers can treat the record as stable.
+    // Reuse the same id for the same (origin, namespace) so callers can treat the record as stable.
     // This also keeps in-memory ports (and other implementations without composite uniqueness enforcement)
     // from accumulating duplicate rows.
     const existing = await port.getByOrigin({
       origin: record.origin,
       namespace: record.namespace,
-      chainRef: record.chainRef,
     });
 
     const checked = PermissionRecordSchema.parse({

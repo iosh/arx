@@ -6,7 +6,6 @@ import type { PermissionsPort } from "./port.js";
 
 const ORIGIN = "https://dapp.example";
 const NAMESPACE = "eip155";
-const CHAIN_REF = "eip155:1";
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
   const store = new Map<string, PermissionRecord>(seed.map((r) => [r.id, r]));
@@ -21,9 +20,9 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
       return [...store.values()];
     },
 
-    async getByOrigin({ origin, namespace, chainRef }) {
+    async getByOrigin({ origin, namespace }) {
       for (const record of store.values()) {
-        if (record.origin === origin && record.namespace === namespace && record.chainRef === chainRef) {
+        if (record.origin === origin && record.namespace === namespace) {
           return record;
         }
       }
@@ -57,7 +56,7 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
 };
 
 describe("PermissionsService", () => {
-  it("upsert() reuses id for the same (origin, namespace, chainRef) and emits changed once per write", async () => {
+  it("upsert() reuses id for the same (origin, namespace) and emits changed once per write", async () => {
     const { port, store } = createInMemoryPort();
     let t = 1000;
 
@@ -74,8 +73,7 @@ describe("PermissionsService", () => {
         id: id1,
         origin: ORIGIN,
         namespace: NAMESPACE,
-        chainRef: CHAIN_REF,
-        scopes: [PermissionScopes.Basic],
+        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
         updatedAt: 1,
       }),
     );
@@ -87,8 +85,10 @@ describe("PermissionsService", () => {
         id: id2,
         origin: ORIGIN,
         namespace: NAMESPACE,
-        chainRef: CHAIN_REF,
-        scopes: [PermissionScopes.Basic, PermissionScopes.Sign],
+        grants: [
+          { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
+          { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
+        ],
         updatedAt: 1,
       }),
     );
@@ -96,10 +96,10 @@ describe("PermissionsService", () => {
     expect(changed).toBe(2);
     expect(store.size).toBe(1);
 
-    const current = await service.getByOrigin({ origin: ORIGIN, namespace: NAMESPACE, chainRef: CHAIN_REF });
+    const current = await service.getByOrigin({ origin: ORIGIN, namespace: NAMESPACE });
     expect(current).not.toBeNull();
     expect(current!.id).toBe(id1); // id reused
-    expect(current!.scopes).toEqual([PermissionScopes.Basic, PermissionScopes.Sign]);
+    expect(current!.grants.map((g) => g.scope)).toEqual([PermissionScopes.Basic, PermissionScopes.Sign]);
     expect(current!.updatedAt).toBe(2000);
   });
 
@@ -107,7 +107,7 @@ describe("PermissionsService", () => {
     const { port } = createInMemoryPort();
     const service = createPermissionsService({ port, now: () => 1000 });
 
-    const missing = await service.getByOrigin({ origin: ORIGIN, namespace: NAMESPACE, chainRef: CHAIN_REF });
+    const missing = await service.getByOrigin({ origin: ORIGIN, namespace: NAMESPACE });
     expect(missing).toBeNull();
   });
 
@@ -117,16 +117,14 @@ describe("PermissionsService", () => {
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         origin: ORIGIN,
         namespace: NAMESPACE,
-        chainRef: CHAIN_REF,
-        scopes: [PermissionScopes.Basic],
+        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
         updatedAt: 1,
       }),
       PermissionRecordSchema.parse({
         id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         origin: "https://other.example",
         namespace: NAMESPACE,
-        chainRef: CHAIN_REF,
-        scopes: [PermissionScopes.Basic],
+        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
         updatedAt: 1,
       }),
     ];

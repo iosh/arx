@@ -1,7 +1,7 @@
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../chains/registry.js";
-import type { PermissionRecord } from "../../db/records.js";
+import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
 import type { ChainNamespace } from "../account/types.js";
 import {
@@ -168,12 +168,48 @@ const toEip155AddressFromAccountId = (accountId: string): string => {
   return `0x${(payloadHex ?? "").toLowerCase()}`;
 };
 
-const keyForRecord = (record: { origin: string; namespace: string; chainRef: string }) => {
-  return `${record.origin}::${record.namespace}::${record.chainRef}`;
+const keyForRecord = (record: { origin: string; namespace: string }) => {
+  return `${record.origin}::${record.namespace}`;
 };
 
-const keyForQuery = (origin: string, namespace: string, chainRef: string) => {
-  return `${origin}::${namespace}::${chainRef}`;
+const keyForQuery = (origin: string, namespace: string) => {
+  return `${origin}::${namespace}`;
+};
+
+const uniqSorted = <T extends string>(values: readonly T[]): T[] => {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+};
+
+const upsertGrantChains = (
+  grants: PermissionRecord["grants"],
+  params: { scope: PermissionScope; chainRef: ChainRef },
+): PermissionRecord["grants"] => {
+  const next: PermissionRecord["grants"] = [];
+  let updated = false;
+
+  for (const grant of grants) {
+    if (grant.scope !== params.scope) {
+      next.push(grant);
+      continue;
+    }
+    updated = true;
+    const chains = uniqSorted([...(grant.chains as ChainRef[]), params.chainRef]);
+    next.push({ ...grant, chains });
+  }
+
+  if (!updated) {
+    next.push({ scope: params.scope, chains: [params.chainRef] } as PermissionRecord["grants"][number]);
+  }
+
+  // Keep deterministic order for stable snapshots/tests.
+  next.sort((a, b) => String(a.scope).localeCompare(String(b.scope)));
+  return next;
+};
+
+const hasScopeForChain = (record: PermissionRecord, scope: PermissionScope, chainRef: ChainRef): boolean => {
+  const grant = record.grants.find((g) => g.scope === scope);
+  if (!grant) return false;
+  return (grant.chains as ChainRef[]).includes(chainRef);
 };
 
 const buildStateFromRecords = (records: PermissionRecord[]): PermissionsState => {
@@ -182,30 +218,28 @@ const buildStateFromRecords = (records: PermissionRecord[]): PermissionsState =>
   for (const record of records) {
     const origin = record.origin;
     const namespace = record.namespace as ChainNamespace;
-    const chainRef = record.chainRef as ChainRef;
 
     const currentOrigin: OriginPermissionState = origins[origin] ?? {};
-    const currentNamespace: NamespacePermissionState = currentOrigin[namespace] ?? { scopes: [], chains: [] };
 
-    const nextScopes = new Set<PermissionScope>(currentNamespace.scopes);
-    for (const scope of record.scopes as PermissionScope[]) nextScopes.add(scope);
-
-    const nextChains = currentNamespace.chains.includes(chainRef)
-      ? [...currentNamespace.chains]
-      : [...currentNamespace.chains, chainRef];
+    const scopes = record.grants.map((grant) => grant.scope as PermissionScope);
+    const chainSet = new Set<ChainRef>();
+    for (const grant of record.grants) {
+      for (const chain of grant.chains as ChainRef[]) {
+        chainSet.add(chain);
+      }
+    }
+    const chains = sortChains([...chainSet]) as ChainRef[];
 
     const nextNamespace: NamespacePermissionState = {
-      scopes: sortScopes([...nextScopes]),
-      chains: sortChains(nextChains) as ChainRef[],
-      ...(currentNamespace.accountsByChain ? { accountsByChain: { ...currentNamespace.accountsByChain } } : {}),
+      scopes: sortScopes(scopes),
+      chains,
     };
 
-    if (record.scopes.includes(PermissionScopes.Accounts)) {
-      if (record.namespace === "eip155") {
-        const accounts = (record.accountIds ?? []).map((id) => toEip155AddressFromAccountId(id));
-        const nextAccountsByChain = { ...(nextNamespace.accountsByChain ?? {}) };
-        nextAccountsByChain[chainRef] = accounts;
-        nextNamespace.accountsByChain = nextAccountsByChain;
+    if (namespace === "eip155" && scopes.includes(PermissionScopes.Accounts)) {
+      const accounts = (record.accountIds ?? []).map((id) => toEip155AddressFromAccountId(id));
+      if (accounts.length > 0 && chains.length > 0) {
+        // Keep UI state shape stable: expose accounts per chain even when stored as namespace-wide.
+        nextNamespace.accountsByChain = Object.fromEntries(chains.map((chainRef) => [chainRef, [...accounts]]));
       }
     }
 
@@ -268,18 +302,32 @@ export class StorePermissionController implements PermissionController {
     for (const record of this.#records.values()) {
       if (record.origin !== origin) continue;
 
-      const grant: PermissionGrant = {
-        origin,
-        namespace: record.namespace as ChainNamespace,
-        chainRef: record.chainRef as ChainRef,
-        scopes: sortScopes(record.scopes as PermissionScope[]),
-      };
+      const namespace = record.namespace as ChainNamespace;
+      const accounts =
+        record.namespace === "eip155" && record.grants.some((g) => g.scope === PermissionScopes.Accounts)
+          ? (record.accountIds ?? []).map((id) => toEip155AddressFromAccountId(id))
+          : null;
 
-      if (record.namespace === "eip155" && record.scopes.includes(PermissionScopes.Accounts)) {
-        grant.accounts = (record.accountIds ?? []).map((id) => toEip155AddressFromAccountId(id));
+      const scopesByChain = new Map<ChainRef, Set<PermissionScope>>();
+      for (const entry of record.grants) {
+        const scope = entry.scope as PermissionScope;
+        for (const chainRef of entry.chains as ChainRef[]) {
+          const set = scopesByChain.get(chainRef) ?? new Set<PermissionScope>();
+          set.add(scope);
+          scopesByChain.set(chainRef, set);
+        }
       }
 
-      grants.push(grant);
+      for (const [chainRef, scopes] of scopesByChain.entries()) {
+        const grant: PermissionGrant = {
+          origin,
+          namespace,
+          chainRef,
+          scopes: sortScopes([...scopes]),
+          ...(accounts && accounts.length > 0 ? { accounts } : {}),
+        };
+        grants.push(grant);
+      }
     }
 
     grants.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.chainRef.localeCompare(b.chainRef));
@@ -292,9 +340,11 @@ export class StorePermissionController implements PermissionController {
 
   getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[] {
     const { namespace, chainRef } = deriveNamespaceFromOptions(options);
-    const record = this.#records.get(keyForQuery(origin, namespace, chainRef));
-    if (!record || !record.scopes.includes(PermissionScopes.Accounts)) return [];
+    const record = this.#records.get(keyForQuery(origin, namespace));
+    if (!record) return [];
     if (record.namespace !== "eip155") return [];
+
+    if (!hasScopeForChain(record, PermissionScopes.Accounts, chainRef)) return [];
 
     const ids = record.accountIds ?? [];
     return ids.map((id) => toEip155AddressFromAccountId(id));
@@ -302,8 +352,9 @@ export class StorePermissionController implements PermissionController {
 
   isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean {
     const { namespace, chainRef } = deriveNamespaceFromOptions(options);
-    const record = this.#records.get(keyForQuery(origin, namespace, chainRef));
-    return Boolean(record && record.scopes.includes(PermissionScopes.Accounts));
+    const record = this.#records.get(keyForQuery(origin, namespace));
+    if (!record) return false;
+    return hasScopeForChain(record, PermissionScopes.Accounts, chainRef);
   }
 
   async setPermittedAccounts(
@@ -333,22 +384,21 @@ export class StorePermissionController implements PermissionController {
       throw new Error("setPermittedAccounts requires at least one account");
     }
 
-    const existing = await this.#service.getByOrigin({ origin, namespace, chainRef });
-
-    const nextScopes = new Set<PermissionScope>(existing?.scopes ?? []);
-    nextScopes.add(PermissionScopes.Accounts);
-
     const accountIds = uniqueAccounts.map((address) => toAccountIdFromEip155Address(address));
 
-    await this.#service.upsert({
-      id: existing?.id ?? crypto.randomUUID(),
-      origin,
-      namespace,
-      chainRef,
-      scopes: [...nextScopes],
-      accountIds,
-      updatedAt: 0,
-    });
+    const existing = await this.#service.getByOrigin({ origin, namespace });
+    const nextGrants = upsertGrantChains(existing?.grants ?? [], { scope: PermissionScopes.Accounts, chainRef });
+
+    await this.#service.upsert(
+      PermissionRecordSchema.parse({
+        id: existing?.id ?? crypto.randomUUID(),
+        origin,
+        namespace,
+        grants: nextGrants,
+        accountIds,
+        updatedAt: 0,
+      }),
+    );
 
     await this.#queueSyncFromStore();
   }
@@ -363,62 +413,58 @@ export class StorePermissionController implements PermissionController {
 
     const namespace = deriveNamespaceFromContext(context);
     const parsedChain = tryParseChainRef(context?.chainRef ?? null);
+    const record = this.#records.get(keyForQuery(origin, namespace));
+    if (!record) {
+      throw new Error(`Origin "${origin}" lacks scope "${scope}" for namespace "${namespace}"`);
+    }
 
     if (parsedChain) {
-      const record = this.#records.get(keyForQuery(origin, namespace, parsedChain.value));
-      if (!record || !record.scopes.includes(scope)) {
-        throw new Error(`Origin "${origin}" lacks scope "${scope}" for ${namespace} on chain "${parsedChain.value}"`);
+      const chainRef = parsedChain.value;
+      if (!hasScopeForChain(record, scope, chainRef)) {
+        throw new Error(`Origin "${origin}" lacks scope "${scope}" for ${namespace} on chain "${chainRef}"`);
       }
       return;
     }
 
     // Fallback for contexts without an explicit chainRef.
-    const permissions = this.#state.origins[origin]?.[namespace];
-    if (!permissions || !permissions.scopes.includes(scope)) {
+    if (!record.grants.some((g) => g.scope === scope)) {
       throw new Error(`Origin "${origin}" lacks scope "${scope}" for namespace "${namespace}"`);
     }
   }
 
   async grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void> {
-    const parsedChain = tryParseChainRef(options?.chainRef ?? null);
-    const namespace = options?.namespace ?? parsedChain?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
-    const normalizedChainRef = parsedChain?.value ?? null;
+    const chainRef = options?.chainRef ?? null;
+    if (!chainRef) throw new Error("StorePermissionController.grant requires a chainRef");
+    const { namespace, chainRef: normalized } = deriveNamespaceFromOptions({
+      namespace: options?.namespace ?? null,
+      chainRef: chainRef as ChainRef,
+    });
 
-    if (!normalizedChainRef) {
-      throw new Error("StorePermissionController.grant requires a chainRef");
-    }
+    const existing = await this.#service.getByOrigin({ origin, namespace });
+    const nextGrants = upsertGrantChains(existing?.grants ?? [], { scope, chainRef: normalized });
 
-    if (options?.namespace && parsedChain && parsedChain.namespace !== options.namespace) {
-      throw new Error(
-        `Grant namespace mismatch: chainRef "${parsedChain.value}" belongs to namespace "${parsedChain.namespace}" but "${options.namespace}" was provided`,
-      );
-    }
-
-    if (scope === PermissionScopes.Accounts) {
+    // Accounts require an explicit accountIds payload (via setPermittedAccounts) unless already present.
+    // If accountIds already exist, we allow grant(Accounts) to extend the permitted chains list (used by chain switching).
+    if (scope === PermissionScopes.Accounts && (!existing?.accountIds || existing.accountIds.length === 0)) {
       throw new Error("Accounts permission must be granted via setPermittedAccounts");
     }
 
-    const existing = await this.#service.getByOrigin({ origin, namespace, chainRef: normalizedChainRef as ChainRef });
-
-    const nextScopes = new Set<PermissionScope>(existing?.scopes ?? []);
-    nextScopes.add(scope);
-
-    // Preserve accountIds only if Accounts is already present.
-    const includeAccounts = existing?.scopes?.includes(PermissionScopes.Accounts) ?? false;
-
-    if (includeAccounts && (!existing?.accountIds || existing.accountIds.length === 0)) {
+    const includeAccounts = nextGrants.some((g) => g.scope === PermissionScopes.Accounts);
+    const accountIds = includeAccounts ? existing?.accountIds : undefined;
+    if (includeAccounts && (!accountIds || accountIds.length === 0)) {
       throw new Error("Invariant violation: existing Accounts permission is missing accountIds");
     }
 
-    await this.#service.upsert({
-      id: existing?.id ?? crypto.randomUUID(),
-      origin,
-      namespace,
-      chainRef: normalizedChainRef as ChainRef,
-      scopes: [...nextScopes],
-      ...(includeAccounts ? { accountIds: existing!.accountIds } : {}),
-      updatedAt: 0,
-    });
+    await this.#service.upsert(
+      PermissionRecordSchema.parse({
+        id: existing?.id ?? crypto.randomUUID(),
+        origin,
+        namespace,
+        grants: nextGrants,
+        ...(includeAccounts ? { accountIds } : {}),
+        updatedAt: 0,
+      }),
+    );
 
     await this.#queueSyncFromStore();
   }

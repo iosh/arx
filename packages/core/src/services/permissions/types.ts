@@ -1,4 +1,3 @@
-import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionRecord } from "../../db/records.js";
 
 export type PermissionsChangedEvent = {
@@ -10,7 +9,6 @@ export type PermissionsChangedHandler = (event: PermissionsChangedEvent) => void
 export type GetPermissionByOriginParams = {
   origin: string;
   namespace: string;
-  chainRef: ChainRef;
 };
 
 export type PermissionsService = {

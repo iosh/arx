@@ -16,7 +16,7 @@ const openDb = async () => {
   db = new Dexie(DB_NAME) as unknown as ArxStorageDatabase;
 
   db.version(DOMAIN_SCHEMA_VERSION).stores({
-    permissions: "&id, origin, &[origin+namespace+chainRef]",
+    permissions: "&id, origin, &[origin+namespace]",
   });
 
   await db.open();
@@ -52,8 +52,7 @@ describe("DexiePermissionsPort", () => {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic],
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -61,7 +60,7 @@ describe("DexiePermissionsPort", () => {
     expect(await port.get(record.id)).toEqual(record);
   });
 
-  it("getByOrigin() returns the matching record (origin+namespace+chainRef)", async () => {
+  it("getByOrigin() returns the matching record (origin+namespace)", async () => {
     const db = await openDb();
     const port = new DexiePermissionsPort(db);
 
@@ -69,8 +68,10 @@ describe("DexiePermissionsPort", () => {
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic, PermissionScopes.Sign],
+      grants: [
+        { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
+        { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
+      ],
       updatedAt: 1000,
     });
 
@@ -79,15 +80,13 @@ describe("DexiePermissionsPort", () => {
     const hit = await port.getByOrigin({
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
     });
 
     expect(hit).toEqual(record);
 
     const miss = await port.getByOrigin({
       origin: "https://dapp.example",
-      namespace: "eip155",
-      chainRef: "eip155:5",
+      namespace: "other",
     });
 
     expect(miss).toBeNull();
@@ -101,8 +100,7 @@ describe("DexiePermissionsPort", () => {
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic],
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -110,8 +108,7 @@ describe("DexiePermissionsPort", () => {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
       origin: "https://other.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic],
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -130,8 +127,7 @@ describe("DexiePermissionsPort", () => {
       id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       origin: "https://dapp.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic],
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -139,8 +135,7 @@ describe("DexiePermissionsPort", () => {
       id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       origin: "https://other.example",
       namespace: "eip155",
-      chainRef: "eip155:1",
-      scopes: [PermissionScopes.Basic],
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
       updatedAt: 1000,
     });
 

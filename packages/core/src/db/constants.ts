@@ -19,6 +19,7 @@ export const ApprovalTypes = {
   SignMessage: "wallet_signMessage",
   SignTypedData: "wallet_signTypedData",
   SendTransaction: "wallet_sendTransaction",
+  SwitchChain: "wallet_switchEthereumChain",
   AddChain: "wallet_addEthereumChain",
 } as const;
 
@@ -28,5 +29,6 @@ export const APPROVAL_TYPE_VALUES = [
   ApprovalTypes.SignMessage,
   ApprovalTypes.SignTypedData,
   ApprovalTypes.SendTransaction,
+  ApprovalTypes.SwitchChain,
   ApprovalTypes.AddChain,
 ] as const;

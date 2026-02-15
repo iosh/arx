@@ -6,14 +6,12 @@ import {
   createBackgroundServices,
   createLogger,
   createRpcEngineForBackground,
-  DEFAULT_NAMESPACE,
   extendLogger,
-  type RpcInvocationContext,
 } from "@arx/core";
 import browser from "webextension-polyfill";
 import {
   getExtensionChainRegistry,
-  getExtensionNetworkRpcPort,
+  getExtensionNetworkPreferencesPort,
   getExtensionSettingsPort,
   getExtensionStorePorts,
   getExtensionVaultMetaPort,
@@ -98,9 +96,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     }
 
     contextPromise = (async () => {
-      let getNamespace: (ctx?: RpcInvocationContext) => string = () => DEFAULT_NAMESPACE;
-      const namespaceResolver = (ctx?: RpcInvocationContext) => getNamespace(ctx);
-      const networkRpcPort = getExtensionNetworkRpcPort();
+      const networkPreferencesPort = getExtensionNetworkPreferencesPort();
       const vaultMetaPort = getExtensionVaultMetaPort();
       const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
@@ -115,12 +111,12 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             transactions: storePorts.transactions,
           },
         },
-        storage: { networkRpcPort, vaultMetaPort },
+        networkPreferences: { port: networkPreferencesPort },
+        storage: { vaultMetaPort },
         settings: { port: settingsPort },
         chainRegistry: { port: chainRegistry },
       });
       const { controllers, engine, messenger, session, keyring } = services;
-      const popupActivator = createPopupActivator({ browser });
       const notificationActivator = createPopupActivator({ browser, popupPath: ENTRYPOINTS.NOTIFICATION });
       const popupLog = extendLogger(runtimeLog, "popupActivator");
       const trackedPopupWindows = new Map<number, (removedId: number) => void>();
@@ -294,8 +290,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           uiBridge?.broadcast();
         }),
       );
-
-      getNamespace = services.rpcRegistry.createNamespaceResolver(controllers);
 
       unsubscribeControllerEvents.push(
         session.unlock.onUnlocked((payload) => {

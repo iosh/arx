@@ -4,6 +4,7 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
+import type { ChainNamespace } from "../../controllers/account/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
 import type { TransactionRequest } from "../../controllers/transaction/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../db/records.js";
@@ -100,6 +101,34 @@ const resolveChainRefForNamespace = (controllers: UiRuntimeDeps["controllers"], 
 
   const known = controllers.network.getState().knownChains.find((chain) => chain.namespace === namespace);
   return known?.chainRef ?? active.chainRef;
+};
+
+const extendConnectedOriginsToChain = async (
+  controllers: UiRuntimeDeps["controllers"],
+  params: { namespace: ChainNamespace; chainRef: string },
+): Promise<void> => {
+  const { namespace, chainRef } = params;
+  const state = controllers.permissions.getState();
+  const origins = Object.keys(state.origins);
+
+  for (const origin of origins) {
+    const namespaceState = state.origins[origin]?.[namespace];
+    if (!namespaceState?.scopes.includes(PermissionScopes.Accounts)) continue;
+
+    // Keep connection stable across chain changes: connection is origin-level, not chain-level.
+    try {
+      await controllers.permissions.grant(origin, PermissionScopes.Basic, { namespace, chainRef });
+      await controllers.permissions.grant(origin, PermissionScopes.Accounts, { namespace, chainRef });
+    } catch (error) {
+      // Best-effort: never block a user-approved chain switch on persistence quirks.
+      console.debug("[ui] failed to extend connected origin permissions to chain", {
+        origin,
+        namespace,
+        chainRef,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 };
 
 const selectControllerAccount = async (deps: UiRuntimeDeps, params: { namespace: string; address: string }) => {
@@ -242,6 +271,24 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.RequestPermissions]: async (task) => {
     const payload = task.payload as { requested: unknown[] };
     return { granted: payload.requested };
+  },
+
+  [ApprovalTypes.SwitchChain]: async (task, controllers) => {
+    const payload = task.payload as { chainRef?: string };
+    const requested = payload.chainRef ?? task.chainRef;
+    if (!requested) {
+      throw new Error("Switch chain approval is missing chainRef");
+    }
+
+    const selected = await controllers.network.switchChain(
+      requested as Parameters<typeof controllers.network.switchChain>[0],
+    );
+    await controllers.networkPreferences.setActiveChainRef(selected.chainRef);
+    await extendConnectedOriginsToChain(controllers, {
+      namespace: selected.namespace,
+      chainRef: selected.chainRef,
+    });
+    return null;
   },
 
   [ApprovalTypes.AddChain]: async (task, controllers) => {
@@ -465,6 +512,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     "ui.networks.switchActive": async ({ chainRef }) => {
       const selected = await controllers.network.switchChain(chainRef);
       await controllers.networkPreferences.setActiveChainRef(selected.chainRef);
+      await extendConnectedOriginsToChain(controllers, { namespace: selected.namespace, chainRef: selected.chainRef });
       return toChainSnapshot();
     },
 

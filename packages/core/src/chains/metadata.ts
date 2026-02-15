@@ -111,7 +111,7 @@ const createDuplicateChecker =
     for (const value of values) {
       if (set.has(value)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `Duplicate ${label}: ${value}`,
           path,
         });

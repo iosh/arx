@@ -129,6 +129,14 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
     }),
   }),
   approvalPayloadBase.extend({
+    type: z.literal("switchChain"),
+    payload: z.object({
+      chainRef: z.string().min(1),
+      chainId: hexChainIdSchema.optional(),
+      displayName: z.string().min(1).optional(),
+    }),
+  }),
+  approvalPayloadBase.extend({
     type: z.literal("addChain"),
     payload: z.object({
       chainRef: z.string().min(1),

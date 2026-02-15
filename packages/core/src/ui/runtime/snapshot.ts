@@ -89,6 +89,7 @@ type SendTransactionPayload = {
   warnings?: unknown[];
   issues?: unknown[];
 };
+type SwitchChainPayload = { chainRef?: string };
 type AddChainPayload = { metadata: ChainMetadata; isUpdate: boolean };
 
 const extractPayload = <T>(payload: unknown): T => payload as T;
@@ -204,6 +205,21 @@ const toApprovalSummary = (
           },
           warnings: warningsSource.map(toUiWarning),
           issues: issuesSource.map(toUiIssue),
+        },
+      };
+    }
+    case ApprovalTypes.SwitchChain: {
+      const payload = extractPayload<SwitchChainPayload>(task.payload);
+      const requestedChainRef = payload.chainRef ?? task.chainRef ?? activeChain.chainRef;
+      const target = controllers.network.getChain(requestedChainRef) ?? activeChain;
+
+      return {
+        ...base,
+        type: "switchChain",
+        payload: {
+          chainRef: requestedChainRef,
+          chainId: target.chainId,
+          displayName: target.displayName,
         },
       };
     }

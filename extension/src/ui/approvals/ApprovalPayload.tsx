@@ -6,6 +6,7 @@ import { RequestPermissionsPayload } from "./payloads/RequestPermissionsPayload"
 import { SendTransactionPayload } from "./payloads/SendTransactionPayload";
 import { SignMessagePayload } from "./payloads/SignMessagePayload";
 import { SignTypedDataPayload } from "./payloads/SignTypedDataPayload";
+import { SwitchChainPayload } from "./payloads/SwitchChainPayload";
 
 export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
   switch (approval.type) {
@@ -19,6 +20,8 @@ export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
       return <SendTransactionPayload approval={approval} />;
     case "requestPermissions":
       return <RequestPermissionsPayload approval={approval} />;
+    case "switchChain":
+      return <SwitchChainPayload approval={approval} />;
     case "addChain":
       return <AddChainPayload approval={approval} />;
     default:

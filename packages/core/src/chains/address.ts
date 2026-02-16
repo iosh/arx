@@ -1,19 +1,15 @@
-import * as Address from "ox/Address";
 import { keyringErrors } from "../keyring/errors.js";
+import { createEip155AddressModule } from "./eip155/address.js";
+
+const eip155 = createEip155AddressModule();
 // Canonical lower-case EVM/eSpace address normalizer
 export const toCanonicalEvmAddress = (value: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw keyringErrors.invalidAddress();
-  }
-  const trimmed = value.trim();
-  const withPrefix = trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
-  const lower = withPrefix.toLowerCase();
   try {
-    Address.assert(lower, { strict: false });
+    // Reuse the eip155 chain module as the single source of truth.
+    return eip155.canonicalize({ chainRef: "eip155:1", value }).canonical;
   } catch {
     throw keyringErrors.invalidAddress();
   }
-  return lower;
 };
 
 // TODO: add other normalizers

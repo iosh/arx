@@ -34,9 +34,8 @@ describe("ChainModuleRegistry", () => {
   it("allows registering custom descriptor", () => {
     const descriptor: ChainDescriptor<{ note: string }> = {
       namespace: "demo",
-      supportsChain: (chainRef) => chainRef === "demo:1",
       address: {
-        normalize: vi.fn().mockReturnValue({ canonical: "canonical-value", metadata: { note: "normalized" } }),
+        canonicalize: vi.fn().mockReturnValue({ canonical: "canonical-value", metadata: { note: "normalized" } }),
         format: vi.fn().mockReturnValue("formatted-value"),
         validate: vi.fn(),
       },
@@ -53,7 +52,7 @@ describe("ChainModuleRegistry", () => {
 
     expect(() => registry.validateAddress({ chainRef: "demo:1", canonical: "canonical-value" })).not.toThrow();
 
-    expect(descriptor.address.normalize).toHaveBeenCalledWith({ chainRef: "demo:1", value: "input" });
+    expect(descriptor.address.canonicalize).toHaveBeenCalledWith({ chainRef: "demo:1", value: "input" });
     expect(descriptor.address.format).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
     expect(descriptor.address.validate).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
   });

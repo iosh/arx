@@ -1,10 +1,11 @@
 import { add0x, getChecksumAddress, type Hex, isValidHexAddress } from "@metamask/utils";
 import { assertNamespace } from "../caip.js";
+import { chainErrors } from "../errors.js";
 import type {
+  CanonicalizeAddressParams,
+  CanonicalizedAddressResult,
   ChainAddressModule,
   FormatAddressParams,
-  NormalizeAddressParams,
-  NormalizedAddressResult,
 } from "../types.js";
 
 const HEX_ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/i;
@@ -13,23 +14,27 @@ const with0xPrefix = (value: string): Hex => (value.startsWith("0x") ? (value as
 
 const toCanonical = (value: string): Hex => with0xPrefix(value).toLowerCase() as Hex;
 
+const fail = (where: "input" | "canonical", value: string) => {
+  throw chainErrors.invalidAddress("eip155", { where, value });
+};
+
 const assertValidInput = (value: string): void => {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("Address must be a non-empty string");
+    fail("input", String(value));
   }
   if (!HEX_ADDRESS_PATTERN.test(value.trim())) {
-    throw new Error(`Invalid EIP-155 address: ${value}`);
+    fail("input", value);
   }
 };
 
 const validateCanonical = (canonical: Hex): void => {
   if (!isValidHexAddress(canonical)) {
-    throw new Error(`Invalid canonical EIP-155 address: ${canonical}`);
+    fail("canonical", canonical);
   }
 };
 
 export const createEip155AddressModule = (): ChainAddressModule => ({
-  normalize({ chainRef, value }: NormalizeAddressParams): NormalizedAddressResult {
+  canonicalize({ chainRef, value }: CanonicalizeAddressParams): CanonicalizedAddressResult {
     assertNamespace(chainRef, "eip155");
     assertValidInput(value);
     const canonical = toCanonical(value.trim());

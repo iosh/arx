@@ -64,6 +64,9 @@ export const createEip155ProtocolAdapter = (): NamespaceProtocolAdapter => ({
       case ArxReasons.ChainNotSupported:
         return buildJsonRpcError(4902, error);
 
+      case ArxReasons.ChainInvalidAddress:
+        return buildJsonRpcError(-32602, error);
+
       case ArxReasons.RpcInvalidRequest:
         return buildJsonRpcError(-32600, error);
 

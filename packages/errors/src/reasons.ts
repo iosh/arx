@@ -24,6 +24,7 @@ export const ArxReasons = {
   ChainNotFound: "chain/not_found",
   ChainNotCompatible: "chain/not_compatible",
   ChainNotSupported: "chain/not_supported",
+  ChainInvalidAddress: "chain/invalid_address",
 
   RpcInvalidRequest: "rpc/invalid_request",
   RpcInvalidParams: "rpc/invalid_params",

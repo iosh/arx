@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { createEip155AddressModule } from "./address.js";
 
@@ -6,7 +7,7 @@ const chainRef = "eip155:1";
 
 describe("eip155 address module", () => {
   it("normalizes mixed-case input to lowercase canonical", () => {
-    const result = module.normalize({
+    const result = module.canonicalize({
       chainRef,
       value: "0xAaBbCcDdEeFf00112233445566778899AaBbCcDd",
     });
@@ -14,7 +15,7 @@ describe("eip155 address module", () => {
   });
 
   it("normalizes value without 0x prefix", () => {
-    const result = module.normalize({
+    const result = module.canonicalize({
       chainRef,
       value: "aabbccddeeff00112233445566778899aabbccdd",
     });
@@ -22,12 +23,12 @@ describe("eip155 address module", () => {
   });
 
   it("throws on invalid input", () => {
-    expect(() =>
-      module.normalize({
-        chainRef,
-        value: "0x123",
-      }),
-    ).toThrow(/Invalid EIP-155 address/);
+    try {
+      module.canonicalize({ chainRef, value: "0x123" });
+      throw new Error("Expected normalize to throw");
+    } catch (error) {
+      expect(error).toMatchObject({ reason: ArxReasons.ChainInvalidAddress });
+    }
   });
 
   it("formats canonical address to EIP-55 checksum", () => {
@@ -46,11 +47,11 @@ describe("eip155 address module", () => {
       }),
     ).not.toThrow();
 
-    expect(() =>
-      module.validate?.({
-        chainRef,
-        canonical: "0xzz00000000000000000000000000000000000000",
-      }),
-    ).toThrow(/Invalid canonical EIP-155 address/);
+    try {
+      module.validate?.({ chainRef, canonical: "0xzz00000000000000000000000000000000000000" });
+      throw new Error("Expected validate to throw");
+    } catch (error) {
+      expect(error).toMatchObject({ reason: ArxReasons.ChainInvalidAddress });
+    }
   });
 });

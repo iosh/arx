@@ -29,7 +29,7 @@ export const eip155Codec: AccountCodec = {
   namespace: "eip155",
 
   toCanonicalAddress({ chainRef, value }) {
-    const { canonical } = eip155Module.normalize({ chainRef, value });
+    const { canonical } = eip155Module.canonicalize({ chainRef, value });
     return {
       namespace: "eip155",
       bytes: hexToBytes(canonical.slice(2)),

@@ -1,7 +1,12 @@
 import { parseChainRef } from "./caip.js";
 import { eip155Descriptor } from "./eip155/descriptor.js";
 import type { ChainRef } from "./ids.js";
-import type { ChainDescriptor, FormatAddressParams, NormalizeAddressParams, NormalizedAddressResult } from "./types.js";
+import type {
+  CanonicalizeAddressParams,
+  CanonicalizedAddressResult,
+  ChainDescriptor,
+  FormatAddressParams,
+} from "./types.js";
 export class ChainModuleRegistry {
   #descriptors = new Map<string, ChainDescriptor>();
 
@@ -22,9 +27,7 @@ export class ChainModuleRegistry {
   getDescriptor(chainRef: ChainRef): ChainDescriptor {
     const { namespace } = parseChainRef(chainRef);
     const descriptor = this.#descriptors.get(namespace);
-    if (descriptor?.supportsChain(chainRef)) {
-      return descriptor;
-    }
+    if (descriptor) return descriptor;
     throw new Error(`No chain descriptor registered for "${chainRef}"`);
   }
 
@@ -32,8 +35,8 @@ export class ChainModuleRegistry {
     return this.getDescriptor(chainRef).address;
   }
 
-  toCanonicalAddress(params: NormalizeAddressParams): NormalizedAddressResult {
-    return this.getAddressModule(params.chainRef).normalize(params);
+  toCanonicalAddress(params: CanonicalizeAddressParams): CanonicalizedAddressResult {
+    return this.getAddressModule(params.chainRef).canonicalize(params);
   }
 
   formatAddress(params: FormatAddressParams): string {

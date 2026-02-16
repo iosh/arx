@@ -72,9 +72,10 @@ const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PRO
   message: "URL must use http, https, ws, or wss protocol",
 });
 
-const hexQuantitySchema = z.string({ error: "EIP-155 metadata must include a hex chainId" }).regex(/^0x[0-9a-fA-F]+$/, {
-  message: "Expected a 0x-prefixed hexadecimal string",
-});
+const chainIdSchema = z
+  .string({ error: "Chain metadata must include chainId" })
+  .min(1)
+  .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
 
 const nativeCurrencySchema: z.ZodType<NativeCurrency> = z.strictObject({
   name: trimmedString(),
@@ -123,7 +124,7 @@ const createDuplicateChecker =
 const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
   chainRef: trimmedString(),
   namespace: trimmedString(),
-  chainId: hexQuantitySchema,
+  chainId: chainIdSchema,
   displayName: trimmedString(),
   shortName: trimmedString().optional(),
   description: trimmedString().optional(),
@@ -138,7 +139,8 @@ const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
 
 const defaultNamespaceValidators: Record<string, NamespaceMetadataValidator> = {
   eip155: ({ metadata, parsed, ctx }) => {
-    if (!metadata.chainId) {
+    const hex = metadata.chainId?.toLowerCase();
+    if (!hex || !/^0x[0-9a-f]+$/.test(hex)) {
       ctx.addIssue({
         code: "custom",
         message: "EIP-155 metadata must include a hex chainId",
@@ -147,7 +149,7 @@ const defaultNamespaceValidators: Record<string, NamespaceMetadataValidator> = {
       return;
     }
     try {
-      const decimal = BigInt(metadata.chainId).toString(10);
+      const decimal = BigInt(hex).toString(10);
       if (decimal !== parsed.reference) {
         ctx.addIssue({
           code: "custom",

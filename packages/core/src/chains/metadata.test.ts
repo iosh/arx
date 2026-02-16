@@ -55,7 +55,7 @@ describe("metadata", () => {
       if (!(error instanceof ZodError)) throw error;
       const issue = error.issues[0];
       expect(issue?.path).toEqual(["chainId"]);
-      expect(issue?.message).toBe("EIP-155 metadata must include a hex chainId");
+      expect(issue?.message).toBe("Chain metadata must include chainId");
     }
   });
 

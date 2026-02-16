@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import { ApprovalTypes, type ApprovalTask } from "../../../../../controllers/index.js";
+import { type ApprovalTask, ApprovalTypes } from "../../../../../controllers/index.js";
 import {
   FakeVault,
   MemoryAccountsPort,

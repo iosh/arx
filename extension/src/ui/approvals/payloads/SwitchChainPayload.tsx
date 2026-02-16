@@ -32,4 +32,3 @@ export function SwitchChainPayload({ approval }: { approval: SwitchChainApproval
     </Card>
   );
 }
-

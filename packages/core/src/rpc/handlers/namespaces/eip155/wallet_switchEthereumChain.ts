@@ -186,6 +186,9 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       },
     };
 
-    return await controllers.approvals.requestApproval(task, requireRequestContext(rpcContext, "wallet_switchEthereumChain"));
+    return await controllers.approvals.requestApproval(
+      task,
+      requireRequestContext(rpcContext, "wallet_switchEthereumChain"),
+    );
   },
 };

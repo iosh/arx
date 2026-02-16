@@ -11,10 +11,16 @@ export const parseChainRef = (value: ChainRef): ParsedChainRef => {
   if (typeof value !== "string") {
     throw new Error(`Invalid CAIP-2 identifier: ${String(value)}`);
   }
-  const [namespace, reference] = value.split(":");
-  if (!namespace || !reference) {
+  const first = value.indexOf(":");
+  if (first <= 0 || first === value.length - 1) {
     throw new Error(`CAIP-2 identifier must be "namespace:reference": ${value}`);
   }
+  // Reject additional ":" segments to avoid silently truncating CAIP-10-like strings.
+  if (value.indexOf(":", first + 1) !== -1) {
+    throw new Error(`CAIP-2 identifier must contain exactly one ":": ${value}`);
+  }
+  const namespace = value.slice(0, first);
+  const reference = value.slice(first + 1);
   if (!CAIP2_NAMESPACE_PATTERN.test(namespace)) {
     throw new Error(`Invalid CAIP-2 namespace: ${namespace}`);
   }

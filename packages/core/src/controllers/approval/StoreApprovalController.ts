@@ -1,108 +1,48 @@
-import type { ApprovalRecord, FinalStatusReason, RequestContextRecord } from "../../db/records.js";
+import { ArxReasons, arxError } from "@arx/errors";
+import type { FinalStatusReason, RequestContextRecord } from "../../db/records.js";
 import type { ApprovalsService } from "../../services/approvals/types.js";
+import { createCoalescedRunner } from "../../utils/coalescedRunner.js";
 import type {
   ApprovalController,
   ApprovalExecutor,
+  ApprovalFinishedEvent,
   ApprovalMessenger,
   ApprovalRequestedEvent,
-  ApprovalResult,
   ApprovalState,
   ApprovalTask,
   PendingApproval,
 } from "./types.js";
+import {
+  cloneFinishEvent,
+  cloneRequestEvent,
+  cloneState,
+  cloneTask,
+  createDeferred,
+  isSameState,
+  toQueueItem,
+  toSimpleError,
+  toTask,
+} from "./utils.js";
 
 const APPROVAL_STATE_TOPIC = "approval:stateChanged";
 const APPROVAL_REQUEST_TOPIC = "approval:requested";
 const APPROVAL_FINISH_TOPIC = "approval:finished";
-
-const cloneState = (state: ApprovalState): ApprovalState => ({
-  pending: state.pending.map((item) => ({
-    id: item.id,
-    type: item.type,
-    origin: item.origin,
-    namespace: item.namespace,
-    chainRef: item.chainRef,
-    createdAt: item.createdAt,
-  })),
-});
-
-const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
-  if (!prev || !next) return false;
-  if (prev.pending.length !== next.pending.length) return false;
-
-  for (let index = 0; index < prev.pending.length; index += 1) {
-    const current = prev.pending[index];
-    const other = next.pending[index];
-    if (!other || !current) {
-      return false;
-    }
-    const matches =
-      current.id === other.id &&
-      current.type === other.type &&
-      current.origin === other.origin &&
-      current.namespace === other.namespace &&
-      current.chainRef === other.chainRef &&
-      current.createdAt === other.createdAt;
-
-    if (!matches) {
-      return false;
-    }
-  }
-
-  return true;
-};
-const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
-  id: task.id,
-  type: task.type,
-  origin: task.origin,
-  namespace: task.namespace,
-  chainRef: task.chainRef,
-  payload: task.payload,
-  createdAt: task.createdAt,
-});
-
-const cloneRequestEvent = (event: ApprovalRequestedEvent): ApprovalRequestedEvent => ({
-  task: cloneTask(event.task),
-  requestContext: { ...event.requestContext },
-});
-
-const cloneResult = <T>(result: ApprovalResult<T>): ApprovalResult<T> => ({
-  id: result.id,
-  namespace: result.namespace,
-  chainRef: result.chainRef,
-  value: result.value,
-});
 
 type CreateStoreApprovalControllerOptions = {
   messenger: ApprovalMessenger;
   service: ApprovalsService;
   now?: () => number;
   autoRejectMessage?: string;
-  /**
-   * Default TTL for approvals persisted in the store.
-   * This metadata is currently not used for automatic cleanup.
-   */
+  logger?: (message: string, error?: unknown) => void;
   ttlMs?: number;
 };
 
-const toQueueItem = (record: ApprovalRecord) => ({
-  id: record.id,
-  type: record.type,
-  origin: record.origin,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  createdAt: record.createdAt,
-});
-
-const toTask = (record: ApprovalRecord): ApprovalTask<unknown> => ({
-  id: record.id,
-  type: record.type,
-  origin: record.origin,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  payload: record.payload,
-  createdAt: record.createdAt,
-});
+type FinalizeParams = {
+  id: string;
+  status: "approved" | "rejected" | "expired";
+  finalStatusReason: FinalStatusReason;
+  result?: unknown;
+};
 
 export class StoreApprovalController implements ApprovalController {
   #messenger: ApprovalMessenger;
@@ -110,27 +50,42 @@ export class StoreApprovalController implements ApprovalController {
   #now: () => number;
   #autoRejectMessage: string;
   #ttlMs: number;
+  #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: ApprovalState = { pending: [] };
   #tasks: Map<string, ApprovalTask<unknown>> = new Map();
   #pending: Map<string, PendingApproval<unknown>> = new Map();
 
-  #syncPromise: Promise<void> | null = null;
-  #syncQueued = false;
+  #syncFromStore: () => Promise<void>;
 
-  constructor({ messenger, service, now = Date.now, autoRejectMessage, ttlMs }: CreateStoreApprovalControllerOptions) {
+  constructor({
+    messenger,
+    service,
+    now = Date.now,
+    autoRejectMessage,
+    ttlMs,
+    logger,
+  }: CreateStoreApprovalControllerOptions) {
     this.#messenger = messenger;
     this.#service = service;
     this.#now = now;
     this.#autoRejectMessage = autoRejectMessage ?? "Approval rejected by stub";
     this.#ttlMs = ttlMs ?? 5 * 60_000;
+    this.#logger = logger;
 
-    this.#service.on("changed", () => {
-      void this.#queueSyncFromStore();
+    this.#syncFromStore = createCoalescedRunner(async () => {
+      try {
+        await this.#syncFromStoreOnce();
+      } catch (error) {
+        this.#logger?.("approvals: failed to sync from store", error);
+      }
     });
 
-    // Best-effort initial sync so UI sees store-backed pending items immediately.
-    void this.#queueSyncFromStore();
+    this.#service.on("changed", () => {
+      void this.#syncFromStore();
+    });
+
+    void this.#syncFromStore();
   }
 
   getState(): ApprovalState {
@@ -145,7 +100,7 @@ export class StoreApprovalController implements ApprovalController {
     return this.#messenger.subscribe(APPROVAL_REQUEST_TOPIC, handler);
   }
 
-  onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void {
+  onFinish(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_FINISH_TOPIC, handler);
   }
 
@@ -169,89 +124,129 @@ export class StoreApprovalController implements ApprovalController {
     if (activeTask.origin !== requestContext.origin) {
       throw new Error("Approval origin mismatch between task and requestContext");
     }
-    const expiresAt = this.#now() + this.#ttlMs;
 
-    await this.#service.create({
-      id: activeTask.id,
-      type: activeTask.type,
-      origin: activeTask.origin,
-      ...(activeTask.namespace !== undefined ? { namespace: activeTask.namespace } : {}),
-      ...(activeTask.chainRef !== undefined ? { chainRef: activeTask.chainRef } : {}),
-      payload: activeTask.payload,
-      requestContext,
-      expiresAt,
-      createdAt: activeTask.createdAt,
+    if (this.#pending.has(activeTask.id)) {
+      throw new Error(`Duplicate approval id "${activeTask.id}"`);
+    }
+
+    const deferred = createDeferred<unknown>();
+    this.#pending.set(activeTask.id, {
+      task: activeTask,
+      resolve: deferred.resolve,
+      reject: deferred.reject,
     });
 
-    // Update cache eagerly so UI snapshot (sync) can resolve task payload without awaiting store sync.
-    this.#tasks.set(activeTask.id, activeTask);
-    this.#enqueue(activeTask);
-    this.#publishRequest({ task: activeTask, requestContext });
+    try {
+      const expiresAt = this.#now() + this.#ttlMs;
 
-    return new Promise((resolve, reject) => {
-      this.#pending.set(activeTask.id, {
-        task: activeTask,
-        resolve,
-        reject,
+      await this.#service.create({
+        id: activeTask.id,
+        type: activeTask.type,
+        origin: activeTask.origin,
+        ...(activeTask.namespace !== undefined ? { namespace: activeTask.namespace } : {}),
+        ...(activeTask.chainRef !== undefined ? { chainRef: activeTask.chainRef } : {}),
+        payload: activeTask.payload,
+        requestContext,
+        expiresAt,
+        createdAt: activeTask.createdAt,
       });
-    });
+
+      this.#tasks.set(activeTask.id, activeTask);
+      this.#enqueue(activeTask);
+      this.#publishRequest({ task: activeTask, requestContext });
+
+      return deferred.promise;
+    } catch (error) {
+      this.#pending.delete(activeTask.id);
+      throw error;
+    }
   }
 
   async resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult> {
     const entry = this.#pending.get(id);
     if (!entry) {
-      // Missing resolver means the session is no longer recoverable; expire to avoid stuck UI items.
-      await this.#service.finalize({ id, status: "expired", finalStatusReason: "session_lost" });
-      await this.#queueSyncFromStore();
+      const task = this.#finalizeLocal(id);
+      this.#publishFinish({ id, status: "expired", finalStatusReason: "session_lost", ...this.#taskMeta(task) });
+
+      void this.#persistFinalize({ id, status: "expired", finalStatusReason: "session_lost" });
       throw new Error(`Approval ${id} not found`);
     }
 
     try {
       const value = await executor();
+
       this.#pending.delete(id);
-      await this.#service.finalize({ id, status: "approved", result: value, finalStatusReason: "user_approve" });
-      await this.#queueSyncFromStore();
+      this.#finalizeLocal(id);
 
       this.#publishFinish({
         id,
-        namespace: entry.task.namespace,
-        chainRef: entry.task.chainRef,
+        status: "approved",
+        finalStatusReason: "user_approve",
+        ...this.#taskMeta(entry.task),
         value,
       });
 
       entry.resolve(value);
+
+      void this.#persistFinalize({ id, status: "approved", finalStatusReason: "user_approve", result: value });
+
       return value;
     } catch (error) {
-      this.#pending.delete(id);
-      await this.#service.finalize({ id, status: "rejected", finalStatusReason: "internal_error" });
-      await this.#queueSyncFromStore();
-
       const err = error instanceof Error ? error : new Error(String(error));
+
+      this.#pending.delete(id);
+      this.#finalizeLocal(id);
+
+      this.#publishFinish({
+        id,
+        status: "rejected",
+        finalStatusReason: "internal_error",
+        ...this.#taskMeta(entry.task),
+        error: toSimpleError(err),
+      });
+
       entry.reject(err);
+
+      void this.#persistFinalize({ id, status: "rejected", finalStatusReason: "internal_error" });
+
       throw err;
     }
   }
 
   reject(id: string, reason?: Error): void {
-    const error = reason ?? new Error(this.#autoRejectMessage);
-
-    void (async () => {
-      try {
-        await this.#service.finalize({ id, status: "rejected", finalStatusReason: "user_reject" });
-        await this.#queueSyncFromStore();
-      } catch (finalizeError) {
-        // Avoid unhandled promise rejections on best-effort background persistence.
-        console.warn("[StoreApprovalController] failed to reject approval", {
-          id,
-          error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
-        });
-      }
-    })();
+    const error = this.#getRejectionError({
+      id,
+      provided: reason,
+      message: reason?.message ?? this.#autoRejectMessage,
+    });
 
     const entry = this.#pending.get(id);
-    if (!entry) return;
-    this.#pending.delete(id);
-    entry.reject(error);
+    if (entry) {
+      this.#pending.delete(id);
+      this.#finalizeLocal(id);
+
+      entry.reject(error);
+
+      this.#publishFinish({
+        id,
+        status: "rejected",
+        finalStatusReason: "user_reject",
+        ...this.#taskMeta(entry.task),
+        error: toSimpleError(error),
+      });
+    } else {
+      // Still finalize in store best-effort (eg. stale UI interactions).
+      const task = this.#finalizeLocal(id);
+      this.#publishFinish({
+        id,
+        status: "rejected",
+        finalStatusReason: "user_reject",
+        ...this.#taskMeta(task),
+        error: toSimpleError(error),
+      });
+    }
+
+    void this.#persistFinalize({ id, status: "rejected", finalStatusReason: "user_reject" });
   }
 
   async expirePendingByRequestContext(params: {
@@ -274,54 +269,71 @@ export class StoreApprovalController implements ApprovalController {
     const reason = params.finalStatusReason ?? "session_lost";
 
     for (const record of matches) {
-      await this.#service.finalize({ id: record.id, status: "expired", finalStatusReason: reason });
+      const meta = {
+        type: record.type,
+        origin: record.origin,
+        ...(record.namespace !== undefined ? { namespace: record.namespace } : {}),
+        ...(record.chainRef !== undefined ? { chainRef: record.chainRef } : {}),
+      };
 
-      // Best-effort reject if there's an active resolver.
+      const task = this.#finalizeLocal(record.id);
+      const error = this.#getExpirationError({
+        id: record.id,
+        finalStatusReason: reason,
+        meta,
+      });
+
       const entry = this.#pending.get(record.id);
       if (entry) {
         this.#pending.delete(record.id);
-        entry.reject(new Error("Approval expired due to session loss"));
+        entry.reject(error);
       }
-    }
 
-    await this.#queueSyncFromStore();
+      this.#publishFinish({
+        id: record.id,
+        status: "expired",
+        finalStatusReason: reason,
+        ...meta,
+      });
+
+      void this.#persistFinalize({ id: record.id, status: "expired", finalStatusReason: reason });
+    }
     return matches.length;
   }
 
-  async #queueSyncFromStore(): Promise<void> {
-    if (this.#syncPromise) {
-      this.#syncQueued = true;
-      await this.#syncPromise;
-      return;
+  async #syncFromStoreOnce(): Promise<void> {
+    const pending = await this.#service.listPending();
+    const nextTasks = new Map<string, ApprovalTask<unknown>>();
+    const fromStore = pending.map((record) => {
+      const task = toTask(record);
+      nextTasks.set(task.id, task);
+      return toQueueItem(record);
+    });
+
+    const merged = [...fromStore];
+    const storeIds = new Set(merged.map((item) => item.id));
+
+    // Preserve in-memory pending approvals that may not be visible in the store snapshot yet.
+    for (const [id, entry] of this.#pending) {
+      if (storeIds.has(id)) continue;
+      merged.push({
+        id,
+        type: entry.task.type,
+        origin: entry.task.origin,
+        namespace: entry.task.namespace,
+        chainRef: entry.task.chainRef,
+        createdAt: entry.task.createdAt,
+      });
+      nextTasks.set(id, entry.task);
     }
 
-    this.#syncPromise = (async () => {
-      try {
-        const pending = await this.#service.listPending();
-        const nextTasks = new Map<string, ApprovalTask<unknown>>();
-        const nextState: ApprovalState = {
-          pending: pending.map((record) => {
-            const task = toTask(record);
-            nextTasks.set(task.id, task);
-            return toQueueItem(record);
-          }),
-        };
+    merged.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+    const nextState: ApprovalState = { pending: merged };
 
-        this.#tasks = nextTasks;
-        if (!isSameState(this.#state, nextState)) {
-          this.#state = cloneState(nextState);
-          this.#publishState();
-        }
-      } finally {
-        this.#syncPromise = null;
-      }
-    })();
-
-    await this.#syncPromise;
-    if (this.#syncQueued) {
-      this.#syncQueued = false;
-      await this.#queueSyncFromStore();
-    }
+    this.#tasks = nextTasks;
+    if (isSameState(this.#state, nextState)) return;
+    this.#state = cloneState(nextState);
+    this.#publishState();
   }
 
   #enqueue(task: ApprovalTask<unknown>) {
@@ -346,6 +358,30 @@ export class StoreApprovalController implements ApprovalController {
     this.#publishState();
   }
 
+  #dequeue(id: string) {
+    if (!this.#state.pending.some((item) => item.id === id)) return;
+    this.#state = { pending: this.#state.pending.filter((item) => item.id !== id) };
+    this.#publishState();
+  }
+
+  #finalizeLocal(id: string): ApprovalTask<unknown> | undefined {
+    this.#dequeue(id);
+    const task = this.#tasks.get(id);
+    this.#tasks.delete(id);
+    return task;
+  }
+
+  #taskMeta(task?: ApprovalTask<unknown>) {
+    return task
+      ? {
+          type: task.type,
+          origin: task.origin,
+          namespace: task.namespace,
+          chainRef: task.chainRef,
+        }
+      : {};
+  }
+
   #publishState() {
     this.#messenger.publish(APPROVAL_STATE_TOPIC, cloneState(this.#state), {
       compare: isSameState,
@@ -358,9 +394,65 @@ export class StoreApprovalController implements ApprovalController {
     });
   }
 
-  #publishFinish(result: ApprovalResult<unknown>) {
-    this.#messenger.publish(APPROVAL_FINISH_TOPIC, cloneResult(result), {
-      compare: (prev, next) => Object.is(prev?.id, next?.id),
+  #publishFinish(event: ApprovalFinishedEvent<unknown>) {
+    this.#messenger.publish(APPROVAL_FINISH_TOPIC, cloneFinishEvent(event), {
+      compare: (prev, next) => Object.is(prev?.id, next?.id) && Object.is(prev?.status, next?.status),
     });
+  }
+
+  async #persistFinalize(params: FinalizeParams): Promise<void> {
+    try {
+      const record = await this.#service.finalize({
+        id: params.id,
+        status: params.status,
+        ...(params.status === "approved" ? { result: params.result } : {}),
+        finalStatusReason: params.finalStatusReason,
+      });
+
+      if (!record) {
+        this.#logger?.(`approvals: finalize skipped (${params.id} not found)`);
+      }
+    } catch (error) {
+      this.#logger?.(`approvals: failed to finalize ${params.id}`, error);
+    }
+  }
+
+  #getRejectionError(params: { id: string; provided?: Error | undefined; message: string }): Error {
+    // If the caller provided an error, preserve it (tests and upstream layers may rely on custom fields like `code`).
+    if (params.provided) return params.provided;
+
+    return arxError({
+      reason: ArxReasons.ApprovalRejected,
+      message: params.message || "User rejected the request.",
+      data: { id: params.id },
+    });
+  }
+
+  #getExpirationError(params: {
+    id: string;
+    finalStatusReason: FinalStatusReason;
+    meta: {
+      type: string;
+      origin: string;
+      namespace?: string | undefined;
+      chainRef?: string | undefined;
+    };
+  }): Error {
+    const data = { id: params.id, finalStatusReason: params.finalStatusReason, ...params.meta };
+
+    if (params.finalStatusReason === "session_lost") {
+      return arxError({ reason: ArxReasons.TransportDisconnected, message: "Transport disconnected.", data });
+    }
+    if (params.finalStatusReason === "locked") {
+      return arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked.", data });
+    }
+    if (params.finalStatusReason === "internal_error") {
+      return arxError({ reason: ArxReasons.RpcInternal, message: "Internal error.", data });
+    }
+    if (params.finalStatusReason === "user_approve") {
+      return arxError({ reason: ArxReasons.RpcInternal, message: "Unexpected expiration reason.", data });
+    }
+
+    return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request cancelled.", data });
   }
 }

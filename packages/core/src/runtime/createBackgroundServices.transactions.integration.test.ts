@@ -93,20 +93,17 @@ describe("createBackgroundServices (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
       );
 
-      await flushAsync();
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-      expect(fetchReceipt).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+      expect(fetchReceipt).toHaveBeenCalledTimes(0);
 
       const broadcastMeta = context.services.controllers.transactions.getMeta(submission.id);
       expect(broadcastMeta?.status).toBe("broadcast");
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
-      await flushAsync();
 
-      expect(fetchReceipt).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(fetchReceipt).toHaveBeenCalledTimes(1));
 
       const timeline = statusEvents
         .filter((event) => event.id === submission.id)
@@ -212,8 +209,6 @@ describe("createBackgroundServices (transactions integration)", () => {
         ),
       );
 
-      await flushAsync();
-
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(3));
@@ -302,11 +297,9 @@ describe("createBackgroundServices (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
       );
 
-      await flushAsync();
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
       await flushAsync();
@@ -451,11 +444,9 @@ describe("createBackgroundServices (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
       );
 
-      await flushAsync();
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
       await flushAsync();

@@ -26,11 +26,19 @@ export type ApprovalTask<T> = {
   createdAt: number;
 };
 
-export type ApprovalResult<T> = {
+export type ApprovalFinishedEvent<T = unknown> = {
   id: string;
+  status: "approved" | "rejected" | "expired";
+  finalStatusReason: FinalStatusReason;
+
+  type?: ApprovalType | undefined;
+  origin?: string | undefined;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
-  value: T;
+
+  value?: T | undefined;
+
+  error?: { name: string; message: string } | undefined;
 };
 
 export type ApprovalState = {
@@ -45,7 +53,7 @@ export type ApprovalRequestedEvent = {
 export type ApprovalMessengerTopics = {
   "approval:stateChanged": ApprovalState;
   "approval:requested": ApprovalRequestedEvent;
-  "approval:finished": ApprovalResult<unknown>;
+  "approval:finished": ApprovalFinishedEvent<unknown>;
 };
 
 export type ApprovalMessenger = ControllerMessenger<ApprovalMessengerTopics>;
@@ -66,7 +74,7 @@ export type ApprovalController = {
   requestApproval<TInput>(task: ApprovalTask<TInput>, requestContext: RequestContextRecord): Promise<unknown>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void;
-  onFinish(handler: (result: ApprovalResult<unknown>) => void): () => void;
+  onFinish(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
   replaceState(state: ApprovalState): void;
 
   has(id: string): boolean;

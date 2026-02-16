@@ -90,24 +90,19 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
 
+  let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
+  const storageNow = storageOptions?.now ?? Date.now;
+  const hydrationEnabled = storageOptions?.hydrate ?? true;
+  const storageLogger = storageOptions?.logger ?? (() => {});
+
   const controllerOptions: ControllerLayerOptions = {
     ...(networkOptions ? { network: networkOptions } : {}),
     ...(accountOptions ? { accounts: accountOptions } : {}),
-    ...(approvalOptions ? { approvals: approvalOptions } : {}),
+    ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(permissionOptions ? { permissions: permissionOptions } : {}),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainRegistry: chainRegistryOptions,
   };
-
-  let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
-
-  const storageNow = storageOptions?.now ?? Date.now;
-  const hydrationEnabled = storageOptions?.hydrate ?? true;
-  const storageLogger =
-    storageOptions?.logger ??
-    ((message: string, error?: unknown) => {
-      console.warn("[createBackgroundServices]", message, error);
-    });
 
   const settingsPort = settingsOptions?.port;
   const settingsService =

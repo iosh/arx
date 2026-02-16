@@ -72,6 +72,7 @@ export type ControllerLayerOptions = {
   approvals?: {
     autoRejectMessage?: string;
     initialState?: ApprovalState;
+    logger?: (message: string, error?: unknown) => void;
   };
   permissions?: {
     initialState?: PermissionsState;
@@ -164,6 +165,8 @@ export const initControllers = ({
   const approvalController = new StoreApprovalController({
     messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
     service: approvalsService,
+    autoRejectMessage: approvalOptions?.autoRejectMessage,
+    logger: approvalOptions?.logger,
   });
 
   const permissionController = new StorePermissionController({

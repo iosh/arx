@@ -69,9 +69,8 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     const { controllers, session } = context;
     const activeChain = controllers.network.getActiveChain();
     const networkState = controllers.network.getState();
-    const active = controllers.accounts.getActivePointer();
     const isUnlocked = session.unlock.isUnlocked();
-    const chainRef = active?.chainRef ?? activeChain.chainRef;
+    const chainRef = activeChain.chainRef;
     const accounts = isUnlocked ? controllers.accounts.getAccounts({ chainRef }) : [];
 
     return {
@@ -170,9 +169,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       };
 
       const publishAccountsState = () => {
-        const activePointer = controllers.accounts.getActivePointer();
-        const fallbackChainRef = controllers.network.getActiveChain().chainRef;
-        const chainRef = activePointer?.chainRef ?? fallbackChainRef;
+        const chainRef = controllers.network.getActiveChain().chainRef;
         const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef }) : [];
         callbacks.broadcastEvent("accountsChanged", [accounts]);
       };

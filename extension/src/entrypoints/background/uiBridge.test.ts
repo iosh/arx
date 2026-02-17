@@ -13,6 +13,7 @@ import {
   KeyringService,
   registerBuiltinRpcAdapters,
 } from "@arx/core";
+import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import {
   UI_CHANNEL,
@@ -224,9 +225,13 @@ const createMemoryAccountsStore = () => {
 };
 
 const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
+  const toAccountId = (chainRef: string, address: string) =>
+    toAccountIdFromAddress({ chainRef: chainRef as any, address });
+  const toAddress = (chainRef: string, accountId: string) =>
+    toCanonicalAddressFromAccountId({ chainRef: chainRef as any, accountId: accountId as any });
+
   let state = {
-    namespaces: { [CHAIN.namespace]: { all: [] as string[], primary: null as string | null } },
-    active: null as { namespace: string; chainRef: string; address: string | null } | null,
+    namespaces: { [CHAIN.namespace]: { accountIds: [] as string[], selectedAccountId: null as string | null } },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -242,14 +247,11 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
-    const primary = uniq[0] ?? null;
-
-    // If active address was removed, clear it.
-    if (state.active?.address && !uniq.includes(state.active.address)) {
-      state = { namespaces: { [CHAIN.namespace]: { all: uniq, primary } }, active: null };
-    } else {
-      state = { namespaces: { [CHAIN.namespace]: { all: uniq, primary } }, active: state.active };
-    }
+    const accountIds = uniq.map((addr) => toAccountId(CHAIN.chainRef, addr));
+    const currentSelected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+    const selectedAccountId =
+      currentSelected && accountIds.includes(currentSelected) ? currentSelected : (accountIds[0] ?? null);
+    state = { namespaces: { [CHAIN.namespace]: { accountIds, selectedAccountId } } };
 
     emit();
   };
@@ -273,23 +275,42 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     refresh,
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
-      active: state.active ? { ...state.active } : null,
     }),
-    replaceState: (_next: typeof state) => {},
-    getAccounts: (_params?: { chainRef?: string }) => state.namespaces[CHAIN.namespace]?.all ?? [],
-    getActivePointer: () => state.active,
+    getAccounts: (params: { chainRef: string }) =>
+      (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((id) => toAddress(params.chainRef, id)).filter(Boolean),
+    getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
+    getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
+    getSelectedPointer: (params: { chainRef: string }) => {
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      if (!selected) return null;
+      return {
+        namespace: CHAIN.namespace,
+        chainRef: params.chainRef,
+        accountId: selected,
+        address: toAddress(params.chainRef, selected),
+      };
+    },
+    getSelectedAddress: (_params: { chainRef: string }) => {
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      return selected ? toAddress(_params.chainRef, selected) : null;
+    },
     addAccount: async (_params: any) => {
       throw new Error("addAccount is not supported in store-backed test controller");
     },
     switchActive: async (params: { chainRef: string; address?: string | null }) => {
-      state = {
-        ...state,
-        active: params.address
-          ? { namespace: CHAIN.namespace, chainRef: params.chainRef, address: params.address }
-          : null,
-      };
+      const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
+      const current = state.namespaces[CHAIN.namespace]?.accountIds ?? [];
+      const selectedAccountId = desired && current.includes(desired) ? desired : (current[0] ?? null);
+      state = { namespaces: { [CHAIN.namespace]: { accountIds: [...current], selectedAccountId } } };
       emit();
-      return state.active;
+      return selectedAccountId
+        ? {
+            namespace: CHAIN.namespace,
+            chainRef: params.chainRef,
+            accountId: selectedAccountId,
+            address: toAddress(params.chainRef, selectedAccountId),
+          }
+        : null;
     },
     removeAccount: async (_params: any) => {
       throw new Error("removeAccount is not supported in store-backed test controller");
@@ -298,15 +319,19 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    onActiveChanged: (_fn: any) => () => {},
+    onSelectedChanged: (_fn: any) => () => {},
     onNamespaceChanged: (_fn: any) => () => {},
   };
 };
 
 const createAccountsController = () => {
+  const toAccountId = (chainRef: string, address: string) =>
+    toAccountIdFromAddress({ chainRef: chainRef as any, address });
+  const toAddress = (chainRef: string, accountId: string) =>
+    toCanonicalAddressFromAccountId({ chainRef: chainRef as any, accountId: accountId as any });
+
   let state = {
-    namespaces: { [CHAIN.namespace]: { all: [] as string[], primary: null as string | null } },
-    active: null as { namespace: string; chainRef: string; address: string | null } | null,
+    namespaces: { [CHAIN.namespace]: { accountIds: [] as string[], selectedAccountId: null as string | null } },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -317,42 +342,59 @@ const createAccountsController = () => {
   return {
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
-      active: state.active ? { ...state.active } : null,
     }),
-    replaceState: (next: typeof state) => {
-      state = structuredClone(next);
-      emit();
+    getAccounts: (params: { chainRef: string }) =>
+      (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((id) => toAddress(params.chainRef, id)).filter(Boolean),
+    getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
+    getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
+    getSelectedPointer: (params: { chainRef: string }) => {
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      if (!selected) return null;
+      return {
+        namespace: CHAIN.namespace,
+        chainRef: params.chainRef,
+        accountId: selected,
+        address: toAddress(params.chainRef, selected),
+      };
     },
-    getAccounts: (_params?: { chainRef?: string }) => state.namespaces[CHAIN.namespace]?.all ?? [],
-    getActivePointer: () => state.active,
+    getSelectedAddress: (_params: { chainRef: string }) => {
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      return selected ? toAddress(_params.chainRef, selected) : null;
+    },
     addAccount: async (params: { chainRef: string; address: string; makePrimary?: boolean }) => {
       const ns = CHAIN.namespace;
-      const prev = state.namespaces[ns] ?? { all: [], primary: null };
-      const all = prev.all.includes(params.address) ? prev.all : [...prev.all, params.address];
-      const primary = params.makePrimary ? params.address : (prev.primary ?? params.address);
-      state = {
-        namespaces: { ...state.namespaces, [ns]: { all, primary } },
-        active: state.active ?? { namespace: ns, chainRef: params.chainRef, address: primary },
-      };
+      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
+      const id = toAccountId(params.chainRef, params.address);
+      const accountIds = prev.accountIds.includes(id) ? prev.accountIds : [...prev.accountIds, id];
+      const selectedAccountId = params.makePrimary ? id : (prev.selectedAccountId ?? accountIds[0] ?? null);
+      state = { namespaces: { ...state.namespaces, [ns]: { accountIds, selectedAccountId } } };
       emit();
       return state.namespaces[ns];
     },
     switchActive: async (params: { chainRef: string; address?: string | null }) => {
-      state = {
-        ...state,
-        active: params.address
-          ? { namespace: CHAIN.namespace, chainRef: params.chainRef, address: params.address }
-          : null,
-      };
+      const ns = CHAIN.namespace;
+      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
+      const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
+      const selectedAccountId = desired && prev.accountIds.includes(desired) ? desired : (prev.accountIds[0] ?? null);
+      state = { namespaces: { ...state.namespaces, [ns]: { ...prev, selectedAccountId } } };
       emit();
-      return state.active;
+      return selectedAccountId
+        ? {
+            namespace: ns,
+            chainRef: params.chainRef,
+            accountId: selectedAccountId,
+            address: toAddress(params.chainRef, selectedAccountId),
+          }
+        : null;
     },
     removeAccount: async (params: { chainRef: string; address: string }) => {
       const ns = CHAIN.namespace;
-      const prev = state.namespaces[ns] ?? { all: [], primary: null };
-      const all = prev.all.filter((a) => a !== params.address);
-      const primary = prev.primary === params.address ? (all[0] ?? null) : prev.primary;
-      state = { namespaces: { ...state.namespaces, [ns]: { all, primary } }, active: state.active };
+      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
+      const id = toAccountId(params.chainRef, params.address);
+      const accountIds = prev.accountIds.filter((a) => a !== id);
+      const selectedAccountId =
+        prev.selectedAccountId === id ? (accountIds[0] ?? null) : (prev.selectedAccountId ?? accountIds[0] ?? null);
+      state = { namespaces: { ...state.namespaces, [ns]: { accountIds, selectedAccountId } } };
       emit();
       return state.namespaces[ns];
     },
@@ -360,6 +402,8 @@ const createAccountsController = () => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
+    onSelectedChanged: (_fn: any) => () => {},
+    onNamespaceChanged: (_fn: any) => () => {},
   };
 };
 

@@ -174,6 +174,13 @@ const createJsonRpcTransport = (
 ): RpcTransport => {
   const { fetchFn, abortFactory, defaultTimeoutMs, maxAttempts, retryBackoffMs, logger } = config;
 
+  const RPC_ID_MAX = 0xffff_ffff;
+  let nextRpcId = Math.floor(Math.random() * (RPC_ID_MAX + 1));
+  const allocRpcId = (): number => {
+    nextRpcId = nextRpcId === RPC_ID_MAX ? 0 : nextRpcId + 1;
+    return nextRpcId;
+  };
+
   return async <T>(request: RpcTransportRequest<T>): Promise<T> => {
     const attempts = Math.max(1, maxAttempts);
     let endpoint: RpcEndpointInfo | null = null;
@@ -224,7 +231,7 @@ const createJsonRpcTransport = (
 
         const payload: Record<string, unknown> = {
           jsonrpc: "2.0",
-          id: request.id ?? globalThis.crypto.randomUUID(),
+          id: request.id ?? allocRpcId(),
           method: request.method,
         };
         if (request.params !== undefined) {

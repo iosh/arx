@@ -12,20 +12,24 @@ import {
 } from "../storage/schemas.js";
 import { APPROVAL_TYPE_VALUES, PERMISSION_SCOPE_VALUES, PermissionScopes } from "./constants.js";
 
-export const AccountNamespaceSchema = z.literal("eip155");
+// Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
+// Keep validation loose here; chain-specific rules live in codecs/modules.
+export const AccountNamespaceSchema = z.string().min(1);
 export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
 
 export const AccountPayloadHexSchema = z.string().regex(/^[0-9a-f]{40}$/, {
   error: "payloadHex must be 40 lowercase hex chars (no 0x)",
 });
-export const AccountIdSchema = z.string().regex(/^eip155:[0-9a-f]{40}$/, {
-  error: "accountId must be eip155:<40 lowercase hex>",
+// Deterministic account key: <namespace>:<hex bytes>. Used for dedupe and references.
+export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
+  error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
 });
 export type AccountId = z.infer<typeof AccountIdSchema>;
 
 export const SettingsRecordSchema = z.strictObject({
   id: z.literal("settings"),
-  selectedAccountId: AccountIdSchema.optional(),
+  // Per-namespace selection: only store present selections (absence => null).
+  selectedAccountIdsByNamespace: z.record(z.string().min(1), AccountIdSchema).optional(),
   updatedAt: epochMillisecondsSchema,
 });
 export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;

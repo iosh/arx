@@ -1,10 +1,12 @@
+import { toAccountIdFromAddress } from "../../accounts/accountId.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { parseChainRef } from "../../chains/index.js";
 import type { AccountController, NamespaceAccountsState } from "../../controllers/account/types.js";
+import type { AccountId } from "../../db/records.js";
 import type { KeyringAccount } from "../../keyring/types.js";
 import type { KeyringService } from "./KeyringService.js";
 
-type AccountsPort = Pick<AccountController, "switchActive" | "getState" | "getActivePointer">;
+type AccountsPort = Pick<AccountController, "switchActive" | "getState">;
 
 type BridgeOptions = {
   keyring: KeyringService;
@@ -38,7 +40,11 @@ type SetPrimaryOptions = {
 
 export type BridgeAccountResult = {
   account: KeyringAccount<string>;
-  namespaceState: NamespaceAccountsState<string>;
+  namespaceState: NamespaceAccountsState;
+};
+
+const toAccountId = (params: { namespace: string; chainRef: ChainRef; address: string }): AccountId => {
+  return toAccountIdFromAddress({ chainRef: params.chainRef, address: params.address });
 };
 
 export class AccountsKeyringBridge {
@@ -51,67 +57,62 @@ export class AccountsKeyringBridge {
     this.#accounts = options.accounts;
     this.#logger = options.logger;
   }
+
   async deriveAccount(options: DeriveAccountOptions): Promise<BridgeAccountResult> {
     this.#assertNamespace(options.namespace, options.chainRef);
     const keyringId = options.keyringId ?? this.#pickDefaultHdKeyringId();
     const account = await this.#keyring.deriveAccount(keyringId);
 
-    const namespaceState = this.#computeNamespaceStateAfterUpsert(
-      options.namespace,
-      account.address,
-      options.makePrimary,
-    );
+    const namespaceState = this.#computeNamespaceStateAfterUpsert(options, account.address);
     await this.#maybeSwitchActive(options, account.address, namespaceState);
     return { account, namespaceState };
   }
 
   async importAccount(options: ImportAccountOptions): Promise<BridgeAccountResult> {
     this.#assertNamespace(options.namespace, options.chainRef);
-    const { account } = await this.#keyring.importPrivateKey(options.privateKey, {
-      namespace: options.namespace,
-    });
-    let namespaceState: NamespaceAccountsState<string> | null = null;
+    const { account } = await this.#keyring.importPrivateKey(options.privateKey, { namespace: options.namespace });
 
+    let namespaceState: NamespaceAccountsState | null = null;
     try {
-      namespaceState = this.#computeNamespaceStateAfterUpsert(options.namespace, account.address, options.makePrimary);
+      namespaceState = this.#computeNamespaceStateAfterUpsert(options, account.address);
       await this.#maybeSwitchActive(options, account.address, namespaceState);
       return { account, namespaceState };
     } catch (error) {
       this.#logger?.("bridge: importAccount failed after keyring write", error);
-
       throw error;
     }
   }
 
-  async removeAccount(options: RemoveAccountOptions): Promise<NamespaceAccountsState<string>> {
+  async removeAccount(options: RemoveAccountOptions): Promise<NamespaceAccountsState> {
     this.#assertNamespace(options.namespace, options.chainRef);
-
-    const before = this.#accounts.getState().namespaces[options.namespace] ?? { all: [], primary: null };
+    const before = this.#accounts.getState().namespaces[options.namespace] ?? {
+      accountIds: [],
+      selectedAccountId: null,
+    };
 
     await this.#keyring.removeAccount(options.namespace, options.address);
 
-    const normalize = (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed) return "";
-      return (trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`).toLowerCase();
-    };
+    const removedId = toAccountId({
+      namespace: options.namespace,
+      chainRef: options.chainRef,
+      address: options.address,
+    });
 
-    const target = normalize(options.address);
-    const all = before.all.filter((a) => normalize(a) !== target);
-    const primary =
-      before.primary && normalize(before.primary) === target ? (all[0] ?? null) : (before.primary ?? null);
+    const accountIds = before.accountIds.filter((id) => id !== removedId);
+    const selectedAccountId =
+      before.selectedAccountId === removedId ? (accountIds[0] ?? null) : (before.selectedAccountId ?? null);
 
-    return { all, primary };
+    return { accountIds, selectedAccountId };
   }
 
-  async setPrimaryAccount(options: SetPrimaryOptions): Promise<NamespaceAccountsState<string>> {
+  async setPrimaryAccount(options: SetPrimaryOptions): Promise<NamespaceAccountsState> {
     this.#assertNamespace(options.namespace, options.chainRef);
 
     if (!this.#keyring.hasAccount(options.namespace, options.address)) {
       throw new Error(`Address ${options.address} is not managed by namespace "${options.namespace}"`);
     }
 
-    const namespaceState = this.#computeNamespaceStateAfterUpsert(options.namespace, options.address, true);
+    const namespaceState = this.#computeNamespaceStateAfterUpsert({ ...options, makePrimary: true }, options.address);
     await this.#accounts.switchActive({ chainRef: options.chainRef, address: options.address });
     return namespaceState;
   }
@@ -126,22 +127,33 @@ export class AccountsKeyringBridge {
     }
   }
 
+  #computeNamespaceStateAfterUpsert(
+    options: { namespace: string; chainRef: ChainRef; makePrimary?: boolean },
+    address: string,
+  ) {
+    const state = this.#accounts.getState();
+    const current = state.namespaces[options.namespace] ?? { accountIds: [], selectedAccountId: null };
+
+    const accountId = toAccountId({ namespace: options.namespace, chainRef: options.chainRef, address });
+    const accountIds = current.accountIds.includes(accountId)
+      ? [...current.accountIds]
+      : [...current.accountIds, accountId];
+
+    const selectedAccountId =
+      options.makePrimary === true ? accountId : (current.selectedAccountId ?? accountIds[0] ?? null);
+
+    return { accountIds, selectedAccountId };
+  }
+
   async #maybeSwitchActive(
     options: DeriveAccountOptions,
     address: string,
-    namespaceState: NamespaceAccountsState<string>,
+    namespaceState: NamespaceAccountsState,
   ): Promise<void> {
-    const shouldSwitch = options.switchActive ?? namespaceState.primary === address;
+    const accountId = toAccountId({ namespace: options.namespace, chainRef: options.chainRef, address });
+    const shouldSwitch = options.switchActive ?? namespaceState.selectedAccountId === accountId;
     if (!shouldSwitch) return;
     await this.#accounts.switchActive({ chainRef: options.chainRef, address });
-  }
-
-  #computeNamespaceStateAfterUpsert(namespace: string, address: string, makePrimary?: boolean) {
-    const state = this.#accounts.getState();
-    const current = state.namespaces[namespace] ?? { all: [], primary: null };
-    const all = current.all.includes(address) ? [...current.all] : [...current.all, address];
-    const primary = makePrimary === true ? address : (current.primary ?? (all.length > 0 ? all[0]! : null));
-    return { all, primary };
   }
 
   #pickDefaultHdKeyringId(): string {

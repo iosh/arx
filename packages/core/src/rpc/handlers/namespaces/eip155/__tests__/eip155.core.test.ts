@@ -84,7 +84,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(services.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(services.controllers.accounts.getActivePointer()).toMatchObject({
+      expect(services.controllers.accounts.getSelectedPointer({ chainRef: ALT_CHAIN.chainRef })).toMatchObject({
         chainRef: ALT_CHAIN.chainRef,
         address: activeAddress,
         namespace: "eip155",

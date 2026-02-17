@@ -17,6 +17,8 @@ export type AccountCodec = {
   namespace: string;
 
   toCanonicalAddress(params: { chainRef: ChainRef; value: string }): CanonicalAddress;
+  // Canonical string representation (stable for storage/dedupe).
+  toCanonicalString(params: { chainRef: ChainRef; canonical: CanonicalAddress }): string;
   toDisplayAddress(params: { chainRef: ChainRef; canonical: CanonicalAddress }): string;
 
   toAccountId(canonical: CanonicalAddress): AccountId;
@@ -34,6 +36,13 @@ export const eip155Codec: AccountCodec = {
       namespace: "eip155",
       bytes: hexToBytes(canonical.slice(2)),
     };
+  },
+
+  toCanonicalString({ canonical }) {
+    if (canonical.namespace !== "eip155") {
+      throw new Error(`Unsupported namespace for eip155Codec: ${canonical.namespace}`);
+    }
+    return `0x${bytesToHex(canonical.bytes)}`.toLowerCase();
   },
 
   toDisplayAddress({ chainRef, canonical }) {

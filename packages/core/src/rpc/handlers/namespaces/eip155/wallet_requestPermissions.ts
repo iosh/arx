@@ -122,11 +122,8 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
         for (const chainRef of targetChains) {
           if (descriptor.scope === PermissionScopes.Accounts) {
             const all = controllers.accounts.getAccounts({ chainRef });
-            const pointer = controllers.accounts.getActivePointer();
-            const preferred =
-              pointer?.chainRef === chainRef && pointer.address && all.includes(pointer.address)
-                ? pointer.address
-                : null;
+            const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef });
+            const preferred = preferredAddress && all.includes(preferredAddress) ? preferredAddress : null;
             const selected = preferred ?? all[0] ?? null;
             if (!selected) {
               throw arxError({

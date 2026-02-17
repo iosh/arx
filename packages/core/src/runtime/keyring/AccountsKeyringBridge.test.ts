@@ -28,10 +28,11 @@ const createDerivedAccount = (address: string): KeyringAccount<string> => ({
 });
 
 const noopLogger = vi.fn();
+const toEip155AccountId = (address: string) => `eip155:${address.slice(2).toLowerCase()}`;
 
 describe("AccountsKeyringBridge", () => {
   it("does not switch active when switchActive=false", async () => {
-    const account = createDerivedAccount("0xaaa");
+    const account = createDerivedAccount("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     const keyring = {
       hasNamespace: vi.fn().mockReturnValue(true),
       getKeyrings: () => [{ id: "hd1", type: "hd", namespace }],
@@ -42,10 +43,13 @@ describe("AccountsKeyringBridge", () => {
     const accounts = {
       switchActive: vi.fn(),
       getState: vi.fn().mockReturnValue({
-        namespaces: { [namespace]: { all: [account.address], primary: account.address } },
-        active: null,
+        namespaces: {
+          [namespace]: {
+            accountIds: [toEip155AccountId(account.address)],
+            selectedAccountId: toEip155AccountId(account.address),
+          },
+        },
       }),
-      getActivePointer: vi.fn().mockReturnValue(null),
     };
 
     const bridge = new AccountsKeyringBridge({ keyring, accounts, logger: noopLogger });
@@ -56,7 +60,7 @@ describe("AccountsKeyringBridge", () => {
 
   it("does not attempt to rollback keyring when switchActive fails", async () => {
     const thrown = new Error("switchActive failed");
-    const account = createDerivedAccount("0xbbb");
+    const account = createDerivedAccount("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
     const keyring = {
       hasNamespace: vi.fn().mockReturnValue(true),
       getKeyrings: () => [{ id: "hd1", type: "hd", namespace }],
@@ -66,8 +70,7 @@ describe("AccountsKeyringBridge", () => {
 
     const accounts = {
       switchActive: vi.fn().mockRejectedValue(thrown),
-      getState: vi.fn().mockReturnValue({ namespaces: {}, active: null }),
-      getActivePointer: vi.fn().mockReturnValue(null),
+      getState: vi.fn().mockReturnValue({ namespaces: {} }),
     };
 
     const bridge = new AccountsKeyringBridge({ keyring, accounts, logger: noopLogger });
@@ -80,7 +83,7 @@ describe("AccountsKeyringBridge", () => {
   });
 
   it("propagates keyring removal failure", async () => {
-    const account = createDerivedAccount("0xccc");
+    const account = createDerivedAccount("0xcccccccccccccccccccccccccccccccccccccccc");
     const keyring = {
       hasNamespace: vi.fn().mockReturnValue(true),
       removeAccount: vi.fn().mockImplementation(() => {
@@ -91,10 +94,13 @@ describe("AccountsKeyringBridge", () => {
     const accounts = {
       switchActive: vi.fn(),
       getState: vi.fn().mockReturnValue({
-        namespaces: { [namespace]: { all: [account.address], primary: account.address } },
-        active: { namespace, chainRef, address: account.address },
+        namespaces: {
+          [namespace]: {
+            accountIds: [toEip155AccountId(account.address)],
+            selectedAccountId: toEip155AccountId(account.address),
+          },
+        },
       }),
-      getActivePointer: vi.fn().mockReturnValue({ namespace, chainRef, address: account.address }),
     };
 
     const bridge = new AccountsKeyringBridge({ keyring, accounts, logger: noopLogger });
@@ -107,7 +113,10 @@ describe("AccountsKeyringBridge", () => {
   });
 
   it("importAccount uses custom switchActive flag", async () => {
-    const account = { ...createDerivedAccount("0xddd"), source: "imported" as const };
+    const account = {
+      ...createDerivedAccount("0xdddddddddddddddddddddddddddddddddddddddd"),
+      source: "imported" as const,
+    };
     const keyring = {
       hasNamespace: vi.fn().mockReturnValue(true),
       getKeyrings: () => [],
@@ -118,8 +127,7 @@ describe("AccountsKeyringBridge", () => {
 
     const accounts = {
       switchActive: vi.fn(),
-      getState: vi.fn().mockReturnValue({ namespaces: {}, active: null }),
-      getActivePointer: vi.fn().mockReturnValue(null),
+      getState: vi.fn().mockReturnValue({ namespaces: {} }),
     };
 
     const bridge = new AccountsKeyringBridge({ keyring, accounts, logger: noopLogger });
@@ -129,7 +137,7 @@ describe("AccountsKeyringBridge", () => {
   });
 
   it("syncs derived and imported accounts with live keyring service", async () => {
-    const messenger = new ControllerMessenger<AccountMessengerTopics<string>>({});
+    const messenger = new ControllerMessenger<AccountMessengerTopics>({});
     const accountsStore = createAccountsService({ port: new MemoryAccountsPort() });
     const keyringMetas = createKeyringMetasService({ port: new MemoryKeyringMetasPort() });
 
@@ -203,8 +211,8 @@ describe("AccountsKeyringBridge", () => {
 
     await accountsController.refresh();
     const stateAfterDerive = accountsController.getState();
-    expect(stateAfterDerive.namespaces[namespace]?.all).toContain(derived.address);
-    expect(stateAfterDerive.active?.address).toBe(derived.address);
+    expect(stateAfterDerive.namespaces[namespace]?.accountIds).toContain(toEip155AccountId(derived.address));
+    expect(accountsController.getSelectedAddress({ chainRef })).toBe(derived.address);
     expect(keyringService.getAccounts().map((a) => `0x${a.payloadHex}`)).toContain(derived.address);
 
     const { account: imported } = await bridge.importAccount({
@@ -216,15 +224,15 @@ describe("AccountsKeyringBridge", () => {
 
     await accountsController.refresh();
     const stateAfterImport = accountsController.getState();
-    expect(stateAfterImport.namespaces[namespace]?.all).toContain(imported.address);
-    expect(stateAfterImport.active?.address).toBe(imported.address);
+    expect(stateAfterImport.namespaces[namespace]?.accountIds).toContain(toEip155AccountId(imported.address));
+    expect(accountsController.getSelectedAddress({ chainRef })).toBe(imported.address);
     expect(keyringService.hasAccount(namespace, imported.address)).toBe(true);
 
     await bridge.removeAccount({ namespace, chainRef, address: imported.address });
     await accountsController.refresh();
     const stateAfterRemove = accountsController.getState();
-    expect(stateAfterRemove.namespaces[namespace]?.all).not.toContain(imported.address);
-    expect(stateAfterRemove.active?.address).toBe(firstAddress);
+    expect(stateAfterRemove.namespaces[namespace]?.accountIds).not.toContain(toEip155AccountId(imported.address));
+    expect(accountsController.getSelectedAddress({ chainRef })).toBe(firstAddress);
     expect(keyringService.hasAccount(namespace, imported.address)).toBe(false);
     expect(keyringService.getAccounts().map((a) => `0x${a.payloadHex}`)).not.toContain(imported.address);
   });

@@ -20,11 +20,10 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
     async listAll() {
       return [...store.values()];
     },
-    async getByOrigin({ origin, namespace, chainRef }) {
+    async getByOrigin({ origin, namespace }) {
       for (const record of store.values()) {
         if (record.origin !== origin) continue;
         if (record.namespace !== namespace) continue;
-        if (record.chainRef !== chainRef) continue;
         return record;
       }
       return null;

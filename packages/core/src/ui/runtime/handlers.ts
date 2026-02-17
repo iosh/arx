@@ -67,7 +67,7 @@ const sanitizeMnemonicPhraseFromWords = (words: string[]): string =>
 
 const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boolean => {
   const accountsState = controllers.accounts.getState();
-  return Object.values(accountsState.namespaces).some((ns) => ns.all.length > 0);
+  return Object.values(accountsState.namespaces).some((ns) => ns.accountIds.length > 0);
 };
 
 const requireOnboardingPassword = (password: string | undefined): string => {
@@ -204,11 +204,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
         data: { origin: task.origin, reason: "no_accounts" },
       });
     }
-    const pointer = controllers.accounts.getActivePointer();
-    const preferred =
-      pointer?.chainRef === chainRef && pointer.address && uniqueAccounts.includes(pointer.address)
-        ? pointer.address
-        : null;
+    const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef });
+    const preferred = preferredAddress && uniqueAccounts.includes(preferredAddress) ? preferredAddress : null;
     const selectedAccount = preferred ?? uniqueAccounts[0] ?? null;
     if (!selectedAccount) {
       throw arxError({

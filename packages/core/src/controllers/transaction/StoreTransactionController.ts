@@ -100,7 +100,7 @@ const toTransactionMeta = (record: TransactionRecord): TransactionMeta => ({
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  accounts: Pick<AccountController, "getActivePointer" | "getAccounts">;
+  accounts: Pick<AccountController, "getSelectedAddress" | "getAccounts">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
@@ -122,7 +122,7 @@ export type StoreTransactionControllerOptions = {
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  #accounts: Pick<AccountController, "getActivePointer" | "getAccounts">;
+  #accounts: Pick<AccountController, "getSelectedAddress" | "getAccounts">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
@@ -215,7 +215,7 @@ export class StoreTransactionController implements TransactionController {
 
     const id = opts?.id ?? crypto.randomUUID();
     const timestamp = this.#nextTimestamp();
-    const fromAddress = this.#findFromAddress(request) ?? this.#accounts.getActivePointer()?.address ?? null;
+    const fromAddress = this.#findFromAddress(request) ?? this.#accounts.getSelectedAddress({ chainRef }) ?? null;
 
     if (!fromAddress) {
       throw new Error("Transaction from address is required");

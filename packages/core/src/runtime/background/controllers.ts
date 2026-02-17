@@ -165,8 +165,10 @@ export const initControllers = ({
   const approvalController = new StoreApprovalController({
     messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
     service: approvalsService,
-    autoRejectMessage: approvalOptions?.autoRejectMessage,
-    logger: approvalOptions?.logger,
+    ...(approvalOptions?.autoRejectMessage !== undefined
+      ? { autoRejectMessage: approvalOptions.autoRejectMessage }
+      : {}),
+    ...(approvalOptions?.logger !== undefined ? { logger: approvalOptions.logger } : {}),
   });
 
   const permissionController = new StorePermissionController({
@@ -184,7 +186,7 @@ export const initControllers = ({
       getChain: (chainRef) => networkController.getChain(chainRef),
     },
     accounts: {
-      getActivePointer: () => accountController.getActivePointer(),
+      getSelectedAddress: (params) => accountController.getSelectedAddress(params),
       getAccounts: (params) => accountController.getAccounts(params),
     },
     approvals: {

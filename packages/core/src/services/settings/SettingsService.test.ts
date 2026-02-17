@@ -28,10 +28,13 @@ describe("SettingsService", () => {
     const { port } = createInMemoryPort();
     const service = createSettingsService({ port, now: () => 123 });
 
-    const next = await service.upsert({ selectedAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
+    const next = await service.upsert({
+      selectedAccountIdsByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+
     expect(next).toEqual({
       id: "settings",
-      selectedAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      selectedAccountIdsByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
       updatedAt: 123,
     });
   });
@@ -40,9 +43,55 @@ describe("SettingsService", () => {
     const { port } = createInMemoryPort();
     const service = createSettingsService({ port, now: () => 500 });
 
-    const after = await service.upsert({ selectedAccountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" });
+    const after = await service.upsert({
+      selectedAccountIdsByNamespace: { eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    });
 
-    expect(after.selectedAccountId).toBe("eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    expect(after.selectedAccountIdsByNamespace).toEqual({
+      eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    });
     expect(after.updatedAt).toBe(500);
+  });
+
+  it("patches per-namespace selected account ids", async () => {
+    const { port } = createInMemoryPort();
+    const service = createSettingsService({ port, now: () => 1 });
+
+    const first = await service.upsert({
+      selectedAccountIdsByNamespace: {
+        eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    });
+
+    expect(first.selectedAccountIdsByNamespace).toEqual({
+      eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
+
+    const second = await service.upsert({
+      selectedAccountIdsByNamespace: {
+        eip155: null,
+      },
+    });
+
+    expect(second.selectedAccountIdsByNamespace).toBeUndefined();
+  });
+
+  it("trims namespace keys on write", async () => {
+    const { port } = createInMemoryPort();
+    const service = createSettingsService({ port, now: () => 10 });
+
+    const first = await service.upsert({
+      selectedAccountIdsByNamespace: { " eip155 ": "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+
+    expect(first.selectedAccountIdsByNamespace).toEqual({
+      eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
+
+    const second = await service.upsert({
+      selectedAccountIdsByNamespace: { " eip155 ": null },
+    });
+
+    expect(second.selectedAccountIdsByNamespace).toBeUndefined();
   });
 });

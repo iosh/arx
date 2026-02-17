@@ -37,12 +37,24 @@ export const createSettingsService = ({ port, now }: CreateSettingsServiceOption
         const current = await port.get();
         const base = current ? SettingsRecordSchema.parse(current) : null;
 
-        const selectedAccountId =
-          params.selectedAccountId === undefined ? base?.selectedAccountId : (params.selectedAccountId ?? undefined);
+        const selectedAccountIdsByNamespace: Record<string, string> = {
+          ...(base?.selectedAccountIdsByNamespace ?? {}),
+        };
+        if (params.selectedAccountIdsByNamespace) {
+          for (const [namespace, accountId] of Object.entries(params.selectedAccountIdsByNamespace)) {
+            const ns = namespace.trim();
+            if (!ns) continue;
+            if (!accountId) {
+              delete selectedAccountIdsByNamespace[ns];
+              continue;
+            }
+            selectedAccountIdsByNamespace[ns] = accountId;
+          }
+        }
 
         const next: SettingsRecord = SettingsRecordSchema.parse({
           id: "settings",
-          ...(selectedAccountId ? { selectedAccountId } : {}),
+          ...(Object.keys(selectedAccountIdsByNamespace).length > 0 ? { selectedAccountIdsByNamespace } : {}),
           updatedAt: clock(),
         });
 

@@ -206,7 +206,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     accounts: {
       switchActive: (params) => controllersBase.accounts.switchActive(params),
       getState: () => controllersBase.accounts.getState(),
-      getActivePointer: () => controllersBase.accounts.getActivePointer(),
     },
     logger: storageLogger,
   });

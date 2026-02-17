@@ -60,12 +60,7 @@ export const DEFAULT_NETWORK_STATE: NetworkState = {
 
 export const DEFAULT_ACCOUNTS_STATE: MultiNamespaceAccountsState = {
   namespaces: {
-    eip155: { all: [], primary: null },
-  },
-  active: {
-    namespace: "eip155",
-    chainRef: DEFAULT_CHAIN.chainRef,
-    address: null,
+    eip155: { accountIds: [], selectedAccountId: null },
   },
 };
 

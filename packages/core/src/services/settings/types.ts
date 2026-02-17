@@ -3,7 +3,12 @@ import type { AccountId, SettingsRecord } from "../../db/records.js";
 export type SettingsChangedHandler = () => void;
 
 export type UpdateSettingsParams = {
-  selectedAccountId?: AccountId | null;
+  /**
+   * Patch per-namespace selected account ids.
+   * - value: AccountId => set selection for namespace
+   * - value: null => clear selection for namespace
+   */
+  selectedAccountIdsByNamespace?: Record<string, AccountId | null>;
 };
 
 export type SettingsService = {

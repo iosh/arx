@@ -264,13 +264,15 @@ export const buildUiSnapshot = (deps: {
 
   const chain = controllers.network.getActiveChain();
   const networkState = controllers.network.getState();
-  const activePointer = controllers.accounts.getActivePointer();
-  const resolvedChain = activePointer?.chainRef ?? chain.chainRef;
+  const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef: resolvedChain }) : [];
+  const selectedAddress = session.unlock.isUnlocked()
+    ? controllers.accounts.getSelectedAddress({ chainRef: resolvedChain })
+    : null;
 
   const accountsState = controllers.accounts.getState();
-  const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.all.length, 0);
+  const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountIds.length, 0);
 
   const approvalState = controllers.approvals.getState();
   const approvalSummaries = approvalState.pending
@@ -321,7 +323,7 @@ export const buildUiSnapshot = (deps: {
     accounts: {
       totalCount,
       list: accountList,
-      active: activePointer?.address ?? null,
+      active: selectedAddress,
     },
     session: {
       isUnlocked: session.unlock.isUnlocked(),

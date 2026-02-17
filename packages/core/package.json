@@ -5,11 +5,13 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "compile": "tsc --noEmit"
   },
   "exports": {
     ".": "./src/index.ts",
     "./messenger": "./src/messenger/index.ts",
+    "./accounts": "./src/accounts/index.ts",
     "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
     "./ui": "./src/ui/index.ts",

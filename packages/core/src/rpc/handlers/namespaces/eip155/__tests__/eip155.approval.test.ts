@@ -285,13 +285,8 @@ describe("eip155 handlers - approval metadata", () => {
       const mainnet = services.controllers.network.getActiveChain();
 
       const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
-      const { account } = await services.accountsRuntime.deriveAccount({
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        keyringId,
-        makePrimary: true,
-        switchActive: true,
-      });
+      const account = await services.keyring.deriveAccount(keyringId);
+      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
 
       // Grant basic scope only; transaction scope should be added after a successful send.
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
@@ -384,13 +379,8 @@ describe("eip155 handlers - approval metadata", () => {
       const mainnet = services.controllers.network.getActiveChain();
       const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-      const { account } = await services.accountsRuntime.deriveAccount({
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        keyringId,
-        makePrimary: true,
-        switchActive: true,
-      });
+      const account = await services.keyring.deriveAccount(keyringId);
+      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
 
       const execute = createExecutor(services);
       const message = "0xdeadbeef";
@@ -439,13 +429,8 @@ describe("eip155 handlers - approval metadata", () => {
       const mainnet = services.controllers.network.getActiveChain();
       const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-      const { account } = await services.accountsRuntime.deriveAccount({
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        keyringId,
-        makePrimary: true,
-        switchActive: true,
-      });
+      const account = await services.keyring.deriveAccount(keyringId);
+      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
 
       // Ensure Sign scope is not present before the first typed data signature.
       const beforeState = services.controllers.permissions.getState();

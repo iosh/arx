@@ -29,7 +29,6 @@ import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
 import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
 import { initSessionLayer, type SessionOptions } from "./background/session.js";
 import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
-import { AccountsKeyringBridge } from "./keyring/AccountsKeyringBridge.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
@@ -57,7 +56,7 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
     };
   };
   chainRegistry: NonNullable<ControllerLayerOptions["chainRegistry"]>;
-  settings?: {
+  settings: {
     port: SettingsPort;
   };
   session?: SessionOptions;
@@ -106,14 +105,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     chainRegistry: chainRegistryOptions,
   };
 
-  const settingsPort = settingsOptions?.port;
-  const settingsService =
-    settingsPort === undefined
-      ? null
-      : createSettingsService({
-          port: settingsPort,
-          now: storageNow,
-        });
+  const settingsService = createSettingsService({ port: settingsOptions.port, now: storageNow });
 
   const networkPreferences = createNetworkPreferencesService({
     port: networkPreferencesOptions.port,
@@ -205,14 +197,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     logger: storageLogger,
   });
 
-  const accountsBridge = new AccountsKeyringBridge({
-    keyring: keyringService,
-    accounts: {
-      switchActive: (params) => controllersBase.accounts.switchActive(params),
-      getState: () => controllersBase.accounts.getState(),
-    },
-    logger: storageLogger,
-  });
   const networkBootstrap = createNetworkBootstrap({
     network: networkController,
     chainRegistry: chainRegistryController,
@@ -285,6 +269,5 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
       destroy,
     },
     keyring: keyringService,
-    accountsRuntime: accountsBridge,
   };
 };

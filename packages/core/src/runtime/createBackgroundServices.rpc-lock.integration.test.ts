@@ -16,13 +16,8 @@ const initializeSession = async (services: RpcHarnessInstance["services"]) => {
 const deriveAccount = async (services: RpcHarnessInstance["services"]) => {
   const chain = services.controllers.network.getActiveChain();
   const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
-  const { account } = await services.accountsRuntime.deriveAccount({
-    namespace: chain.namespace,
-    chainRef: chain.chainRef,
-    keyringId,
-    makePrimary: true,
-    switchActive: true,
-  });
+  const account = await services.keyring.deriveAccount(keyringId);
+  await services.controllers.accounts.switchActive({ chainRef: chain.chainRef, address: account.address });
   return { chain, address: account.address };
 };
 

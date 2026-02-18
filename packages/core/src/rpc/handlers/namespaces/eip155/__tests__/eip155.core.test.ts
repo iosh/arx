@@ -63,14 +63,9 @@ describe("eip155 handlers - core error paths", () => {
 
     const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-    const { account } = await services.accountsRuntime.deriveAccount({
-      namespace: "eip155",
-      chainRef: mainnet.chainRef,
-      keyringId,
-      makePrimary: true,
-      switchActive: true,
-    });
-    const activeAddress = account.address;
+    const derived = await services.keyring.deriveAccount(keyringId);
+    await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: derived.address });
+    const activeAddress = derived.address;
 
     try {
       await expect(

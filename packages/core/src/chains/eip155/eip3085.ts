@@ -9,7 +9,7 @@ const trimmed = () =>
   z
     .string()
     .min(1)
-    .transform((value) => value.trim());
+    .refine((value) => value.trim() === value, { message: "Value must not include leading or trailing whitespace" });
 
 const rpcUrl = z.url().refine((url) => isUrlWithProtocols(url, RPC_PROTOCOLS), {
   message: "URL must use http, https, ws, or wss protocol",

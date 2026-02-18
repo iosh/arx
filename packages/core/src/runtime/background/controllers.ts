@@ -1,5 +1,6 @@
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
+import type { ChainDescriptorRegistry } from "../../chains/registry.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
 import type {
@@ -77,6 +78,7 @@ export type ControllerLayerOptions = {
   permissions?: {
     initialState?: PermissionsState;
     scopeResolver?: PermissionScopeResolver;
+    chains?: ChainDescriptorRegistry;
   };
   transactions?: {
     registry?: TransactionAdapterRegistry;
@@ -175,6 +177,7 @@ export const initControllers = ({
     messenger: castMessenger<PermissionMessengerTopics>(messenger) as PermissionMessenger,
     scopeResolver: permissionScopeResolver,
     service: permissionsService,
+    ...(permissionOptions?.chains ? { chains: permissionOptions.chains } : {}),
   });
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();

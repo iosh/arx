@@ -6,7 +6,6 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 import { AccountIdSchema, type AccountRecord, AccountRecordSchema, KeyringMetaRecordSchema } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
-import { getAddressKey } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
 import { vaultErrors } from "../../vault/errors.js";
@@ -317,8 +316,8 @@ export class KeyringService {
 
   async getAccountRef(address: string): Promise<{ namespace: string; keyringId: string; accountId: AccountId }> {
     await this.#waitForHydration();
-    for (const [namespace, config] of this.#namespacesConfig) {
-      const key = getAddressKey(namespace, address, config.toCanonicalAddress);
+    for (const [namespace] of this.#namespacesConfig) {
+      const key = this.#toKey(namespace, address);
       const ref = this.#addressIndex.get(key);
       if (ref) return { namespace, keyringId: ref.keyringId, accountId: ref.accountId };
     }
@@ -561,9 +560,8 @@ export class KeyringService {
   #indexAccounts(strict = true) {
     this.#addressIndex.clear();
     for (const record of this.#accounts.values()) {
-      const config = this.#getConfig(record.namespace);
       const address = `0x${record.payloadHex}`;
-      const key = getAddressKey(record.namespace, address, config.toCanonicalAddress);
+      const key = this.#toKey(record.namespace, address);
       if (this.#addressIndex.has(key)) {
         if (strict) {
           throw keyringErrors.duplicateAccount();
@@ -580,8 +578,7 @@ export class KeyringService {
   }
 
   #assertNoDuplicate(namespace: string, address: string): void {
-    const config = this.#getConfig(namespace);
-    const key = getAddressKey(namespace, address, config.toCanonicalAddress);
+    const key = this.#toKey(namespace, address);
     if (this.#addressIndex.has(key)) {
       throw keyringErrors.duplicateAccount();
     }
@@ -616,12 +613,15 @@ export class KeyringService {
 
   #toCanonicalAddress(namespace: string, address: string): string {
     const config = this.#getConfig(namespace);
-    return config.toCanonicalAddress(address);
+    try {
+      return config.toCanonicalAddress(address);
+    } catch {
+      throw keyringErrors.invalidAddress();
+    }
   }
 
   #toKey(namespace: string, address: string): string {
-    const config = this.#getConfig(namespace);
-    return getAddressKey(namespace, address, config.toCanonicalAddress);
+    return `${namespace}:${this.#toCanonicalAddress(namespace, address)}`;
   }
 
   #defaultNamespace(): string {

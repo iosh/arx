@@ -1,4 +1,4 @@
-import { createDefaultChainModuleRegistry } from "../../chains/registry.js";
+import type { ChainDescriptorRegistry } from "../../chains/registry.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { Eip155RpcCapabilities, Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
 import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
@@ -10,9 +10,10 @@ import type { TransactionAdapterRegistry } from "../../transactions/adapters/reg
 export const registerDefaultTransactionAdapters = (params: {
   transactionRegistry: TransactionAdapterRegistry;
   rpcClients: RpcClientRegistry;
+  chains: ChainDescriptorRegistry;
   keyring: Parameters<typeof createEip155Signer>[0]["keyring"];
 }): { signers: { eip155: Eip155Signer } } => {
-  const { transactionRegistry, rpcClients, keyring } = params;
+  const { transactionRegistry, rpcClients, chains, keyring } = params;
 
   const eip155Signer = createEip155Signer({ keyring });
 
@@ -26,7 +27,7 @@ export const registerDefaultTransactionAdapters = (params: {
       rpcClientFactory,
       signer: eip155Signer,
       broadcaster,
-      chains: createDefaultChainModuleRegistry(),
+      chains,
     });
 
     transactionRegistry.register(EIP155_NAMESPACE, adapter);

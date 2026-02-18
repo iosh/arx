@@ -1,4 +1,4 @@
-import type { ChainModuleRegistry } from "../../../chains/registry.js";
+import type { ChainDescriptorRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { TransactionAdapter } from "../types.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
@@ -8,7 +8,7 @@ import type { Eip155Signer } from "./signer.js";
 
 type AdapterDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
-  chains: ChainModuleRegistry;
+  chains: ChainDescriptorRegistry;
   signer: Pick<Eip155Signer, "signTransaction">;
   broadcaster: Pick<Eip155Broadcaster, "broadcast">;
 };

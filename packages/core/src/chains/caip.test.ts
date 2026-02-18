@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { parseChainRef } from "./caip.js";
 
@@ -7,6 +8,14 @@ describe("parseChainRef", () => {
   });
 
   it("rejects additional colon segments", () => {
-    expect(() => parseChainRef("conflux:cfx:aa...")).toThrow(/exactly one ":"/);
+    try {
+      parseChainRef("conflux:cfx:aa...");
+      throw new Error("Expected parseChainRef to throw");
+    } catch (error) {
+      expect(error).toMatchObject({
+        reason: ArxReasons.RpcInvalidParams,
+        data: { rule: "single_colon" },
+      });
+    }
   });
 });

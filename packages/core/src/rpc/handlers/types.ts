@@ -1,6 +1,7 @@
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
 import type { ChainRef } from "../../chains/ids.js";
+import type { ChainDescriptorRegistry } from "../../chains/registry.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
@@ -24,6 +25,7 @@ export type HandlerControllers = {
   permissions: PermissionController;
   transactions: TransactionController;
   chainRegistry: ChainRegistryController;
+  chains: ChainDescriptorRegistry;
   signers: {
     eip155: Eip155Signer;
   };

@@ -1,3 +1,4 @@
+import { createDefaultChainDescriptorRegistry } from "../chains/registry.js";
 import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
@@ -89,6 +90,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const messenger = new ControllerMessenger<MessengerTopics>(
     messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
   );
+  const chains = createDefaultChainDescriptorRegistry();
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
   const storageNow = storageOptions?.now ?? Date.now;
@@ -99,7 +101,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     ...(networkOptions ? { network: networkOptions } : {}),
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
-    ...(permissionOptions ? { permissions: permissionOptions } : {}),
+    ...(permissionOptions ? { permissions: { ...permissionOptions, chains } } : { permissions: { chains } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainRegistry: chainRegistryOptions,
   };
@@ -183,12 +185,14 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const { signers } = registerDefaultTransactionAdapters({
     transactionRegistry,
     rpcClients: rpcClientRegistry,
+    chains,
     keyring: keyringService,
   });
 
   const controllers: HandlerControllers = {
     ...controllersBase,
     networkPreferences,
+    chains,
     signers,
   };
 

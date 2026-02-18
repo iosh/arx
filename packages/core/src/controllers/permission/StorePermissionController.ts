@@ -1,6 +1,6 @@
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../chains/registry.js";
+import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
 import type { ChainNamespace } from "../account/types.js";
@@ -256,6 +256,7 @@ export type StorePermissionControllerOptions = {
   messenger: PermissionMessenger;
   scopeResolver: PermissionScopeResolver;
   service: PermissionsService;
+  chains?: ChainDescriptorRegistry;
 };
 
 /**
@@ -267,7 +268,7 @@ export class StorePermissionController implements PermissionController {
   #messenger: PermissionMessenger;
   #scopeResolver: PermissionScopeResolver;
   #service: PermissionsService;
-  #chains: ChainModuleRegistry;
+  #chains: ChainDescriptorRegistry;
 
   #state: PermissionsState = { origins: {} };
   #records: Map<string, PermissionRecord> = new Map();
@@ -277,11 +278,11 @@ export class StorePermissionController implements PermissionController {
   #pendingFullSync = false;
   #pendingOrigins: Set<string> = new Set();
 
-  constructor({ messenger, scopeResolver, service }: StorePermissionControllerOptions) {
+  constructor({ messenger, scopeResolver, service, chains }: StorePermissionControllerOptions) {
     this.#messenger = messenger;
     this.#scopeResolver = scopeResolver;
     this.#service = service;
-    this.#chains = createDefaultChainModuleRegistry();
+    this.#chains = chains ?? createDefaultChainDescriptorRegistry();
 
     this.#service.on("changed", (event) => {
       void this.#queueSyncFromStore({ origin: event?.origin ?? null }).catch(() => {});

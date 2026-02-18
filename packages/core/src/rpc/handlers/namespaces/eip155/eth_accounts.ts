@@ -1,10 +1,7 @@
-import { createDefaultChainModuleRegistry } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { lockedResponse } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
-
-const chains = createDefaultChainModuleRegistry();
 
 export const ethAccountsDefinition = defineNoParamsMethod({
   scope: PermissionScopes.Accounts,
@@ -17,6 +14,6 @@ export const ethAccountsDefinition = defineNoParamsMethod({
       chainRef: active.chainRef,
     });
 
-    return accounts.map((canonical) => chains.formatAddress({ chainRef: active.chainRef, canonical }));
+    return accounts.map((canonical) => controllers.chains.formatAddress({ chainRef: active.chainRef, canonical }));
   },
 });

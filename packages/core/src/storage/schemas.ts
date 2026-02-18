@@ -1,9 +1,9 @@
 import type { ZodType } from "zod";
 import { z } from "zod";
+import { CAIP2_CHAIN_REF_PATTERN } from "../chains/caip.js";
 import { chainMetadataSchema } from "../chains/metadata.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols } from "../chains/url.js";
 
-const CHAIN_REF_REGEX = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,}$/;
 const HEX_CHAIN_ID_REGEX = /^0x[0-9a-fA-F]+$/;
 const HEX_QUANTITY_REGEX = /^0x[0-9a-fA-F]+$/;
 const HEX_DATA_REGEX = /^0x[0-9a-fA-F]*$/;
@@ -38,7 +38,7 @@ const accountAddressSchema = z
     error: "Account address must not contain whitespace characters",
   });
 
-const chainRefSchema = z.string().regex(CHAIN_REF_REGEX, {
+const chainRefSchema = z.string().regex(CAIP2_CHAIN_REF_PATTERN, {
   error: "CAIP-2 identifier must follow namespace:reference format",
 });
 

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ChainModuleRegistry, createDefaultChainModuleRegistry } from "./registry.js";
+import { ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "./registry.js";
 import type { ChainDescriptor } from "./types.js";
 
-describe("ChainModuleRegistry", () => {
+describe("ChainDescriptorRegistry", () => {
   it("normalizes address via registered descriptor", () => {
-    const registry = createDefaultChainModuleRegistry();
+    const registry = createDefaultChainDescriptorRegistry();
 
     const normalized = registry.toCanonicalAddress({
       chainRef: "eip155:1",
@@ -15,7 +15,7 @@ describe("ChainModuleRegistry", () => {
   });
 
   it("formats and validates addresses", () => {
-    const registry = createDefaultChainModuleRegistry();
+    const registry = createDefaultChainDescriptorRegistry();
 
     const formatted = registry.formatAddress({
       chainRef: "eip155:1",
@@ -41,7 +41,7 @@ describe("ChainModuleRegistry", () => {
       },
     };
 
-    const registry = new ChainModuleRegistry();
+    const registry = new ChainDescriptorRegistry();
     registry.registerDescriptor(descriptor);
 
     const normalized = registry.toCanonicalAddress({ chainRef: "demo:1", value: "input" });
@@ -58,7 +58,7 @@ describe("ChainModuleRegistry", () => {
   });
 
   it("throws when chain descriptor is missing", () => {
-    const registry = createDefaultChainModuleRegistry();
+    const registry = createDefaultChainDescriptorRegistry();
 
     expect(() =>
       registry.toCanonicalAddress({

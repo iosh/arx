@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import { createDefaultChainModuleRegistry } from "../../../../chains/registry.js";
+import { createDefaultChainDescriptorRegistry } from "../../../../chains/registry.js";
 import type { Eip155FeeOracle, Eip155FeeSuggestion } from "../feeOracle.js";
 import { createEip155PrepareTransaction } from "../prepareTransaction.js";
 
@@ -16,7 +16,7 @@ export const createTestPrepareTransaction = (
   overrides: Partial<Parameters<typeof createEip155PrepareTransaction>[0]> = {},
 ) => {
   return createEip155PrepareTransaction({
-    chains: createDefaultChainModuleRegistry(),
+    chains: createDefaultChainDescriptorRegistry(),
     rpcClientFactory: vi.fn(),
     feeOracleFactory: (_rpc) => {
       const suggestion = {

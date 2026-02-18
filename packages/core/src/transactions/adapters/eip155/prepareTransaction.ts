@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { type ChainModuleRegistry, createDefaultChainModuleRegistry } from "../../../chains/registry.js";
+import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../../chains/registry.js";
 import type { Eip155TransactionPayload } from "../../../controllers/transaction/types.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { TransactionAdapterContext } from "../types.js";
@@ -28,12 +28,12 @@ const hasFatalIssues = (issues: Eip155PreparedTransactionResult["issues"]): bool
 
 type PrepareTransactionDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
-  chains?: ChainModuleRegistry;
+  chains?: ChainDescriptorRegistry;
   feeOracleFactory?: (rpc: Eip155RpcClient) => Eip155FeeOracle;
 };
 
 export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
-  const chains = deps.chains ?? createDefaultChainModuleRegistry();
+  const chains = deps.chains ?? createDefaultChainDescriptorRegistry();
   const deriveAddresses = createAddressResolver({ chains });
   const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 

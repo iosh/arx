@@ -124,7 +124,7 @@ export const initControllers = ({
   namespaceResolver: NamespaceResolver;
   rpcRegistry: RpcRegistry;
   accountsService: AccountsService;
-  settingsService?: SettingsService | null;
+  settingsService: SettingsService;
   approvalsService: ApprovalsService;
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
@@ -157,11 +157,7 @@ export const initControllers = ({
   const accountController: AccountController = new StoreAccountsController({
     messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
     accounts: accountsService,
-    settings: settingsService ?? null,
-    network: {
-      getActiveChain: () => networkController.getActiveChain(),
-      onChainChanged: (handler) => networkController.onChainChanged(handler),
-    },
+    settings: settingsService,
   });
 
   const approvalController = new StoreApprovalController({

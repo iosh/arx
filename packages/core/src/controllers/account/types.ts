@@ -19,19 +19,12 @@ export type ActivePointer = {
   address: AccountAddress;
 };
 
-export type NamespaceStateChange = {
-  namespace: ChainNamespace;
-  state: NamespaceAccountsState;
-};
-
 export type MultiNamespaceAccountsState = {
   namespaces: Record<ChainNamespace, NamespaceAccountsState>;
 };
 
 export type AccountMessengerTopics = {
   "accounts:stateChanged": MultiNamespaceAccountsState;
-  "accounts:namespaceChanged": NamespaceStateChange;
-  "accounts:selectedChanged": { namespace: ChainNamespace; selectedAccountId: AccountId | null };
 };
 
 export const EMPTY_MULTI_NAMESPACE_STATE: MultiNamespaceAccountsState = {
@@ -59,13 +52,9 @@ export type AccountController = {
    */
   switchActive(params: { chainRef: ChainRef; address?: string | null }): Promise<ActivePointer | null>;
 
-  requestAccounts(params: { origin: string; chainRef: ChainRef }): Promise<string[]>;
+  requestAccounts(params: { chainRef: ChainRef }): Promise<AccountAddress[]>;
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;
-  onNamespaceChanged(handler: (payload: NamespaceStateChange) => void): () => void;
-  onSelectedChanged(
-    handler: (payload: { namespace: ChainNamespace; selectedAccountId: AccountId | null }) => void,
-  ): () => void;
 
   destroy?: () => void;
 };

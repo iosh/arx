@@ -575,7 +575,7 @@ export type TestBackgroundContext = {
   vaultMetaPort: MemoryVaultMetaPort;
   chainRegistryPort: MemoryChainRegistryPort;
   transactionsPort: MemoryTransactionsPort;
-  settingsPort?: MemorySettingsPort;
+  settingsPort: MemorySettingsPort;
   destroy: () => void;
   enableAutoApproval: () => () => void; // Returns unsubscribe function
 };
@@ -615,7 +615,10 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
   const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
 
-  const settingsPort = options.settingsSeed !== undefined ? new MemorySettingsPort(options.settingsSeed) : null;
+  const settingsPort =
+    options.settingsSeed !== undefined
+      ? new MemorySettingsPort(options.settingsSeed)
+      : new MemorySettingsPort({ id: "settings", updatedAt: 0 });
 
   const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
     vaultMetaPort,
@@ -656,7 +659,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       },
     },
     storage: storageOptions,
-    ...(settingsPort ? { settings: { port: settingsPort } } : {}),
+    settings: { port: settingsPort },
     ...(sessionOptions ? { session: sessionOptions } : {}),
     ...(options.transactions ? { transactions: options.transactions } : {}),
   });
@@ -690,7 +693,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     vaultMetaPort,
     chainRegistryPort,
     transactionsPort,
-    ...(settingsPort ? { settingsPort } : {}),
+    settingsPort,
     enableAutoApproval,
     destroy: () => {
       services.lifecycle.destroy();

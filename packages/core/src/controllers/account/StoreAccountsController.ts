@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { parseChainRef } from "../../chains/index.js";
@@ -5,7 +6,6 @@ import type { AccountId } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountsService } from "../../services/accounts/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
-import type { NetworkController } from "../network/types.js";
 import type {
   AccountController,
   AccountMessengerTopics,
@@ -13,14 +13,9 @@ import type {
   ChainNamespace,
   MultiNamespaceAccountsState,
   NamespaceAccountsState,
-  NamespaceStateChange,
 } from "./types.js";
 
 const TOPIC_STATE = "accounts:stateChanged";
-const TOPIC_NAMESPACE = "accounts:namespaceChanged";
-const TOPIC_SELECTED = "accounts:selectedChanged";
-
-const emptyNamespaceState = (): NamespaceAccountsState => ({ accountIds: [], selectedAccountId: null });
 
 const cloneNamespace = (state: NamespaceAccountsState): NamespaceAccountsState => ({
   accountIds: [...state.accountIds],
@@ -52,8 +47,7 @@ const isSameState = (prev?: MultiNamespaceAccountsState, next?: MultiNamespaceAc
 type Options = {
   messenger: ControllerMessenger<AccountMessengerTopics>;
   accounts: AccountsService;
-  network: Pick<NetworkController, "getActiveChain" | "onChainChanged">;
-  settings?: SettingsService | null;
+  settings: SettingsService;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -61,34 +55,22 @@ type Options = {
 export class StoreAccountsController implements AccountController {
   #messenger: ControllerMessenger<AccountMessengerTopics>;
   #accounts: AccountsService;
-  #settings: SettingsService | null;
-  #network: Pick<NetworkController, "getActiveChain" | "onChainChanged">;
+  #settings: SettingsService;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: MultiNamespaceAccountsState = { namespaces: {} };
-  #selectedOverrideByNamespace: Record<string, AccountId | null> = {};
   #refreshPromise: Promise<void> | null = null;
-  #subscriptions: Array<() => void> = [];
   #onAccountsChanged = () => void this.refresh();
   #onSettingsChanged = () => void this.refresh();
 
-  constructor({ messenger, accounts, settings, network, logger }: Options) {
+  constructor({ messenger, accounts, settings, logger }: Options) {
     this.#messenger = messenger;
     this.#accounts = accounts;
-    this.#settings = settings ?? null;
-    this.#network = network;
+    this.#settings = settings;
     this.#logger = logger;
 
-    this.#subscriptions.push(
-      this.#network.onChainChanged(() => {
-        // Selection is per-namespace; some namespaces may derive canonical/display forms using chainRef.
-        // Refresh is cheap (store read + compare) and keeps derived state in sync.
-        void this.refresh();
-      }),
-    );
-
     this.#accounts.on("changed", this.#onAccountsChanged);
-    this.#settings?.on("changed", this.#onSettingsChanged);
+    this.#settings.on("changed", this.#onSettingsChanged);
 
     void this.refresh();
   }
@@ -100,17 +82,9 @@ export class StoreAccountsController implements AccountController {
       this.#logger?.("accounts: failed to remove accounts store listener", error);
     }
     try {
-      this.#settings?.off("changed", this.#onSettingsChanged);
+      this.#settings.off("changed", this.#onSettingsChanged);
     } catch (error) {
       this.#logger?.("accounts: failed to remove settings listener", error);
-    }
-
-    for (const unsub of this.#subscriptions.splice(0)) {
-      try {
-        unsub();
-      } catch (error) {
-        this.#logger?.("accounts: failed to remove subscription", error);
-      }
     }
   }
 
@@ -154,33 +128,46 @@ export class StoreAccountsController implements AccountController {
 
     let nextSelected: AccountId | null = null;
     if (address) {
-      const candidate = toAccountIdFromAddress({ chainRef, address });
+      let candidate: AccountId;
+      try {
+        candidate = toAccountIdFromAddress({ chainRef, address });
+      } catch (error) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: `Invalid address "${address}"`,
+          data: { chainRef, namespace, address },
+          cause: error,
+        });
+      }
       const record = await this.#accounts.get(candidate);
       if (!record) {
-        throw new Error(`Unknown account "${address}" for namespace "${namespace}"`);
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: `Unknown account "${address}" for namespace "${namespace}"`,
+          data: { chainRef, namespace, address },
+        });
       }
       if (record.hidden) {
-        throw new Error(`Account "${address}" is hidden for namespace "${namespace}"`);
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: `Account "${address}" is hidden for namespace "${namespace}"`,
+          data: { chainRef, namespace, address },
+        });
       }
       nextSelected = candidate;
     }
 
-    if (this.#settings) {
-      await this.#settings.upsert({
-        selectedAccountIdsByNamespace: {
-          [namespace]: nextSelected,
-        },
-      });
-      delete this.#selectedOverrideByNamespace[namespace];
-    } else {
-      this.#selectedOverrideByNamespace[namespace] = nextSelected;
-    }
+    await this.#settings.upsert({
+      selectedAccountIdsByNamespace: {
+        [namespace]: nextSelected,
+      },
+    });
 
     await this.refresh();
     return this.getSelectedPointer({ chainRef });
   }
 
-  async requestAccounts({ origin: _origin, chainRef }: { origin: string; chainRef: ChainRef }): Promise<string[]> {
+  async requestAccounts({ chainRef }: { chainRef: ChainRef }): Promise<string[]> {
     return this.getAccounts({ chainRef });
   }
 
@@ -188,45 +175,25 @@ export class StoreAccountsController implements AccountController {
     return this.#messenger.subscribe(TOPIC_STATE, handler);
   }
 
-  onNamespaceChanged(handler: (payload: NamespaceStateChange) => void): () => void {
-    return this.#messenger.subscribe(TOPIC_NAMESPACE, handler);
-  }
-
-  onSelectedChanged(
-    handler: (payload: { namespace: ChainNamespace; selectedAccountId: AccountId | null }) => void,
-  ): () => void {
-    return this.#messenger.subscribe(TOPIC_SELECTED, handler);
-  }
-
   async refresh(): Promise<void> {
     if (this.#refreshPromise) return await this.#refreshPromise;
 
     this.#refreshPromise = (async () => {
       const records = await this.#accounts.list({ includeHidden: false });
-      const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
-
       const byNamespace = new Map<string, AccountId[]>();
-      for (const record of sorted) {
+      for (const record of records) {
         const list = byNamespace.get(record.namespace) ?? [];
         list.push(record.accountId);
         byNamespace.set(record.namespace, list);
       }
 
       let selectedByNamespace: Record<string, AccountId> = {};
-      if (this.#settings) {
-        try {
-          const settings = await this.#settings.get();
-          selectedByNamespace = { ...(settings?.selectedAccountIdsByNamespace ?? {}) };
-        } catch (error) {
-          this.#logger?.("accounts: failed to load settings", error);
-          // Ignore and fallback to overrides below.
-          selectedByNamespace = {};
-        }
-      }
-
-      for (const [namespace, override] of Object.entries(this.#selectedOverrideByNamespace)) {
-        if (!override) continue;
-        selectedByNamespace[namespace] = override;
+      try {
+        const settings = await this.#settings.get();
+        selectedByNamespace = { ...(settings?.selectedAccountIdsByNamespace ?? {}) };
+      } catch (error) {
+        this.#logger?.("accounts: failed to load settings", error);
+        selectedByNamespace = {};
       }
 
       const nextNamespaces: Record<ChainNamespace, NamespaceAccountsState> = {};
@@ -243,29 +210,6 @@ export class StoreAccountsController implements AccountController {
       if (isSameState(prev, next)) return;
 
       this.#state = cloneState(next);
-
-      // Per-namespace change events (including removals).
-      const prevKeys = new Set(Object.keys(prev.namespaces));
-      const nextKeys = new Set(Object.keys(next.namespaces));
-      const allKeys = new Set<string>([...prevKeys, ...nextKeys]);
-
-      for (const ns of allKeys) {
-        const prevNs = prev.namespaces[ns];
-        const nextNs = next.namespaces[ns] ?? emptyNamespaceState();
-        if (!prevNs || !isSameNamespace(prevNs, nextNs)) {
-          this.#messenger.publish(
-            TOPIC_NAMESPACE,
-            { namespace: ns, state: cloneNamespace(nextNs) } as NamespaceStateChange,
-            { force: true },
-          );
-        }
-
-        const prevSelected = prevNs?.selectedAccountId ?? null;
-        const nextSelected = nextNs.selectedAccountId ?? null;
-        if (prevSelected !== nextSelected) {
-          this.#messenger.publish(TOPIC_SELECTED, { namespace: ns, selectedAccountId: nextSelected }, { force: true });
-        }
-      }
 
       this.#messenger.publish(TOPIC_STATE, cloneState(this.#state), { force: true });
     })().finally(() => {

@@ -192,7 +192,6 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     const { chainRef, namespace } = deriveChainContext(task, controllers);
 
     const accounts = await controllers.accounts.requestAccounts({
-      origin: task.origin,
       chainRef,
     });
 

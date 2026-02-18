@@ -127,6 +127,7 @@ describe("createBackgroundServices (no snapshots)", () => {
         },
         now,
       },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
     await services.lifecycle.initialize();

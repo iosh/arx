@@ -28,7 +28,7 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     const parsed = records.map((r) => AccountRecordSchema.parse(r));
 
     const filtered = includeHidden ? parsed : parsed.filter((r) => !r.hidden);
-    filtered.sort((a, b) => a.createdAt - b.createdAt);
+    filtered.sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
 
     return filtered;
   };

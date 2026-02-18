@@ -8,6 +8,7 @@ import {
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
+  MemorySettingsPort,
   MemoryTransactionsPort,
 } from "../__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../createBackgroundServices.js";
@@ -88,6 +89,7 @@ describe("background rpc engine assembly", () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),
@@ -120,6 +122,7 @@ describe("background rpc engine assembly", () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),
@@ -160,6 +163,7 @@ describe("background rpc engine assembly", () => {
     const services = createBackgroundServices({
       chainRegistry: { port: new MemoryChainRegistryPort() },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
           approvals: new MemoryApprovalsPort(),

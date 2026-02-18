@@ -8,6 +8,7 @@ import {
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
+  MemorySettingsPort,
   MemoryTransactionsPort,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundServices } from "../../../../../runtime/createBackgroundServices.js";
@@ -63,6 +64,7 @@ export const createServices = (overrides?: Partial<Parameters<typeof createBackg
       ...(chainRegistry ?? {}),
     },
     networkPreferences: networkPreferences ?? { port: new MemoryNetworkPreferencesPort() },
+    settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ports: {
         approvals: new MemoryApprovalsPort(),

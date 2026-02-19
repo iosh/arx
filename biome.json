@@ -13,6 +13,7 @@
       "app/**/*.{ts,tsx,js,jsx,json,css,md}",
       "!extension/.output",
       "!extension/.wxt",
+      "!extension/src/routeTree.gen.ts",
       "!**/node_modules",
       "!**/dist"
     ]

@@ -26,7 +26,7 @@ export default defineConfig({
           generatedRouteTree: "./src/routeTree.gen.ts",
         }),
         enforce: "pre", // force to run before other plugins
-      } as any,
+      },
     ],
   }),
 });

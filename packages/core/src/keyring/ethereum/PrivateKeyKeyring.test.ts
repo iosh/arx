@@ -22,30 +22,36 @@ describe("PrivateKeyKeyring", () => {
 
     const accounts = keyring.getAccounts();
     expect(accounts).toHaveLength(1);
-    expect(keyring.hasAccount(accounts[0]!.address)).toBe(true);
-    const exported = keyring.exportPrivateKey(accounts[0]!.address);
+    const [account] = accounts;
+    if (!account) throw new Error("Expected an imported account");
+    expect(keyring.hasAccount(account.address)).toBe(true);
+    const exported = keyring.exportPrivateKey(account.address);
     expect(exported).toBeInstanceOf(Uint8Array);
   });
 
   it("replaces secret when importing again", () => {
     const keyring = new PrivateKeyKeyring();
     keyring.loadFromPrivateKey(PK);
-    const first = keyring.getAccounts()[0]!.address;
+    const firstAccount = keyring.getAccounts()[0];
+    if (!firstAccount) throw new Error("Expected an imported account");
+    const first = firstAccount.address;
 
     keyring.loadFromPrivateKey(PK2); // should overwrite
     const [account] = keyring.getAccounts();
 
-    expect(account!.address).not.toBe(first);
-    expect(() => keyring.exportPrivateKey(account!.address)).not.toThrow();
+    if (!account) throw new Error("Expected an imported account");
+    expect(account.address).not.toBe(first);
+    expect(() => keyring.exportPrivateKey(account.address)).not.toThrow();
   });
 
   it("remove clears account", () => {
     const keyring = new PrivateKeyKeyring();
     keyring.loadFromPrivateKey(PK);
     const [account] = keyring.getAccounts();
-    keyring.removeAccount(account!.address);
+    if (!account) throw new Error("Expected an imported account");
+    keyring.removeAccount(account.address);
     expect(keyring.getAccounts()).toHaveLength(0);
-    expectReason(() => keyring.removeAccount(account!.address), ArxReasons.KeyringAccountNotFound);
+    expectReason(() => keyring.removeAccount(account.address), ArxReasons.KeyringAccountNotFound);
   });
 
   it("hydrates only when secret is loaded and addresses match", () => {

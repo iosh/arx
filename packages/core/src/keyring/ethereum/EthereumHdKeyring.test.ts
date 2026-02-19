@@ -101,9 +101,9 @@ describe("EthereumHdKeyring", () => {
     keyring.clear();
 
     expect(keyring.getAccounts()).toHaveLength(0);
-    expect(() => keyring.exportPrivateKey(KNOWN_ADDRESSES[0]!)).toThrowError(
-      "Requested account is not managed by this keyring",
-    );
+    const addr = KNOWN_ADDRESSES[0];
+    if (!addr) throw new Error("Missing KNOWN_ADDRESSES fixture");
+    expect(() => keyring.exportPrivateKey(addr)).toThrowError("Requested account is not managed by this keyring");
     expect(() => keyring.deriveNextAccount()).toThrowError("Keyring has not been initialized");
   });
 

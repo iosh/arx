@@ -5,7 +5,7 @@ import type { NetworkController, RpcEndpointInfo, RpcOutcomeReport } from "../co
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 type AbortFactory = () => AbortController;
 
-export type RpcTransportRequest<T = unknown> = {
+export type RpcTransportRequest<_T = unknown> = {
   method: string;
   params?: JsonRpcParams;
   timeoutMs?: number;
@@ -13,7 +13,6 @@ export type RpcTransportRequest<T = unknown> = {
 };
 
 export type RpcTransport = <T>(request: RpcTransportRequest<T>) => Promise<T>;
-type AnyCapabilities = Record<string, unknown>;
 type RpcClientCapabilities = Record<string, unknown>;
 export type RpcClient<TCapabilities extends RpcClientCapabilities = RpcClientCapabilities> = {
   request<T = unknown>(payload: RpcTransportRequest<T>): Promise<T>;
@@ -137,7 +136,7 @@ const buildInternalError = (
   message: string,
   detail?: unknown,
 ) => {
-  const data: Record<string, unknown> = { method };
+  const data: Record<string, unknown> = { namespace, method };
   if (endpoint) data.endpoint = endpoint.url;
   if (detail !== undefined) data.detail = detail;
   return arxError({ reason: ArxReasons.RpcInternal, message, data });
@@ -456,7 +455,11 @@ export class RpcClientRegistry {
       perNamespace.set(chainRef, client);
     }
 
-    return perNamespace.get(chainRef)! as RpcClient<TCapabilities>;
+    const cached = perNamespace.get(chainRef);
+    if (!cached) {
+      throw new Error(`Failed to create RPC client for ${namespace} ${chainRef}`);
+    }
+    return cached as RpcClient<TCapabilities>;
   }
 
   unregisterClient(namespace: string, chainRef: string): void {

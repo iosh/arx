@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPopupActivator } from "./PopupActivator.js";
 
-const makeBrowser = () => {
+type PopupActivatorDeps = Parameters<typeof createPopupActivator>[0];
+type BrowserApi = NonNullable<PopupActivatorDeps["browser"]>;
+
+const makeBrowser = (): BrowserApi => {
   const runtime = { getURL: vi.fn((p: string) => `ext://${p}`) };
   const windows = { get: vi.fn(), update: vi.fn(), getAll: vi.fn(), create: vi.fn() };
-  return { runtime, windows } as any;
+  return { runtime, windows } as unknown as BrowserApi;
 };
 
 describe("PopupActivator", () => {

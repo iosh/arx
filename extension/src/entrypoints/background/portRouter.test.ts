@@ -1,7 +1,10 @@
 import { CHANNEL } from "@arx/provider/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
+import type { BackgroundContext } from "./serviceManager";
+import type { ControllerSnapshot } from "./types";
 
 vi.mock("./origin", () => ({
   getPortOrigin: vi.fn(),
@@ -60,13 +63,13 @@ describe("portRouter privacy", () => {
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      getOrInitContext: getOrInitContext as any,
-      getControllerSnapshot: () => makeSnapshot(false) as any,
+      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
       attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();
-    router.handleConnect(port as any);
+    router.handleConnect(port as unknown as Runtime.Port);
 
     port.triggerMessage({
       channel: CHANNEL,
@@ -76,7 +79,9 @@ describe("portRouter privacy", () => {
     });
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    const [ack] = vi.mocked(port.postMessage).mock.calls[0]!;
+    const firstCall = vi.mocked(port.postMessage).mock.calls[0];
+    if (!firstCall) throw new Error("Expected port.postMessage to be called");
+    const [ack] = firstCall;
     expect(ack).toMatchObject({
       type: "handshake_ack",
       payload: { handshakeId: "h1", accounts: [], isUnlocked: false },
@@ -93,13 +98,13 @@ describe("portRouter privacy", () => {
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      getOrInitContext: getOrInitContext as any,
-      getControllerSnapshot: () => makeSnapshot(false) as any,
+      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
       attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();
-    router.handleConnect(port as any);
+    router.handleConnect(port as unknown as Runtime.Port);
 
     port.triggerMessage({
       channel: CHANNEL,
@@ -130,13 +135,13 @@ describe("portRouter privacy", () => {
       connections: new Set(),
       pendingRequests: new Map(),
       portContexts: new Map(),
-      getOrInitContext: getOrInitContext as any,
-      getControllerSnapshot: () => makeSnapshot(true) as any,
+      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(true),
       attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();
-    router.handleConnect(port as any);
+    router.handleConnect(port as unknown as Runtime.Port);
 
     port.triggerMessage({
       channel: CHANNEL,
@@ -146,7 +151,9 @@ describe("portRouter privacy", () => {
     });
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    const [ack] = vi.mocked(port.postMessage).mock.calls[0]!;
+    const firstCall = vi.mocked(port.postMessage).mock.calls[0];
+    if (!firstCall) throw new Error("Expected port.postMessage to be called");
+    const [ack] = firstCall;
     expect(ack).toMatchObject({
       type: "handshake_ack",
       payload: { handshakeId: "h1", accounts: ["0xabc"], isUnlocked: true },

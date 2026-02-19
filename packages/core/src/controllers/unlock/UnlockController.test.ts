@@ -93,6 +93,8 @@ describe("InMemoryUnlockController", () => {
     const now = 5_000;
 
     const setTimeoutSpy = vi.fn((handler: () => void, timeout: number) => {
+      void handler;
+      void timeout;
       return 1 as unknown as ReturnType<typeof setTimeout>;
     });
     const clearTimeoutSpy = vi.fn();

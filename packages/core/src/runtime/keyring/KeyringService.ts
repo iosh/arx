@@ -418,7 +418,7 @@ export class KeyringService {
       id: keyringId,
       type: "hd",
       name: opts.name,
-      needsBackup: opts.skipBackup ? false : true,
+      needsBackup: !opts.skipBackup,
       nextDerivationIndex: 1,
       createdAt: now,
     });

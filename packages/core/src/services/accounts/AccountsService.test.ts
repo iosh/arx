@@ -130,7 +130,8 @@ describe("AccountsService", () => {
 
     const visible = await service.get("eip155:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");
     expect(visible).not.toBeNull();
-    expect(visible!.hidden).toBeUndefined();
+    if (!visible) throw new Error("Expected account to exist");
+    expect(visible.hidden).toBeUndefined();
 
     expect(changed).toBe(2);
   });

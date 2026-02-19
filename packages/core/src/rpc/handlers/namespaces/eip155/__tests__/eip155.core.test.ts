@@ -664,7 +664,8 @@ describe("eip155 handlers - core error paths", () => {
     await services.session.unlock.unlock({ password: "test" });
     await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-    await (services.controllers.accounts as any).refresh?.();
+    const accountsController = services.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountsController.refresh?.();
 
     const teardown = setupApprovalResponder(services, async (task) => {
       if (task.type !== ApprovalTypes.RequestPermissions) return false;
@@ -713,8 +714,6 @@ describe("eip155 handlers - core error paths", () => {
 
     await services.session.vault.initialize({ password: "test" });
     await services.session.unlock.unlock({ password: "test" });
-
-    const chain = services.controllers.network.getActiveChain();
 
     const execute = createExecutor(services);
     try {

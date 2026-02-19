@@ -13,7 +13,7 @@ type PasswordStrength = {
   valid: boolean;
   message: string;
   hint?: string;
-  color: string;
+  color: "$danger" | "$yellow10" | "$accent" | "$success";
 };
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -147,7 +147,7 @@ export function PasswordSetupScreen({ onSubmit }: PasswordSetupScreenProps) {
               helperText={
                 password.length > 0 && strength.valid ? (
                   <YStack gap="$1">
-                    <Paragraph color={strength.color as any} fontSize="$1">
+                    <Paragraph color={strength.color} fontSize="$1">
                       {strength.message}
                     </Paragraph>
                     {strength.hint ? (

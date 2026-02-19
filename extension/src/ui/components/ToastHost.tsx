@@ -32,7 +32,6 @@ function getIndicatorColor(kind: ToastKind) {
       return "$danger";
     case "warning":
       return "$accent";
-    case "info":
     default:
       return "$border";
   }

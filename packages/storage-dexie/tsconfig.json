@@ -3,5 +3,12 @@
   "compilerOptions": {
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/__fixtures__/**",
+    "src/**/__mocks__/**",
+    "src/**/*.test.*",
+    "src/**/*.spec.*"
+  ]
 }

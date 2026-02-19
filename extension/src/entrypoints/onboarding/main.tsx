@@ -29,8 +29,14 @@ declare module "@tanstack/react-router" {
   }
 }
 
+const getRootElement = (): HTMLElement => {
+  const el = document.getElementById("root");
+  if (!el) throw new Error('Missing "#root" element');
+  return el;
+};
+
 const renderApp = () => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+  ReactDOM.createRoot(getRootElement()).render(
     <React.StrictMode>
       <AppProviders>
         <RouterProvider router={router} />
@@ -40,7 +46,7 @@ const renderApp = () => {
 };
 
 const renderEntryIntentError = (message: string) => {
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+  ReactDOM.createRoot(getRootElement()).render(
     <React.StrictMode>
       <AppProviders>
         <Screen title="Startup error" scroll={false}>

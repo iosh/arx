@@ -51,7 +51,7 @@ import type { PermissionsService } from "../../services/permissions/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import { DEFAULT_NETWORK_STATE, DEFAULT_PERMISSIONS_STATE, DEFAULT_STRATEGY } from "./constants.js";
+import { DEFAULT_NETWORK_STATE, DEFAULT_STRATEGY } from "./constants.js";
 import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
 

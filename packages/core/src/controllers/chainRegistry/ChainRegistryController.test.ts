@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
 import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainRegistryEntity } from "../../storage/index.js";
@@ -257,7 +257,9 @@ describe("InMemoryChainRegistryController", () => {
     const before = await port.getAll();
     expect(before).toHaveLength(1);
 
-    const result = await controller.upsertChain(seed[0]!, { updatedAt: 2_000 });
+    const firstSeed = seed[0];
+    if (!firstSeed) throw new Error("Missing seed fixture");
+    const result = await controller.upsertChain(firstSeed, { updatedAt: 2_000 });
     expect(result.kind).toBe("noop");
 
     const after = await port.getAll();

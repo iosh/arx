@@ -1,4 +1,3 @@
-import * as Hex from "ox/Hex";
 import type { Eip155TransactionPayload } from "../../../../controllers/transaction/types.js";
 import type { TransactionAdapterContext } from "../../types.js";
 import type { Eip155PreparedTransactionResult, FieldResolutionResult } from "../types.js";

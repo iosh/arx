@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { ChainRef } from "../../../../chains/ids.js";
 import { parseChainRef } from "../../../../chains/index.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";

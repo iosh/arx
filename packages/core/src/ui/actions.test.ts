@@ -4,20 +4,41 @@ import { uiMethods } from "./methods.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol.js";
 import { parseUiMethodParams } from "./protocol.js";
 
+type UiClient = Parameters<typeof uiActions>[0];
+
+const createTestClient = (call: UiClient["call"]): UiClient => {
+  return {
+    connect: async () => {},
+    call,
+    on: () => () => {},
+    getLastSnapshot: () => null,
+    waitForSnapshot: async () => {
+      throw new Error("Not implemented in unit tests");
+    },
+    destroy: () => {},
+    extend: function <E extends Record<string, unknown>>(
+      this: UiClient & Record<string, unknown>,
+      extension: (client: UiClient) => E,
+    ) {
+      return Object.assign(this, extension(this as UiClient)) as UiClient & E;
+    },
+  };
+};
+
 describe("ui actions", () => {
   it("invokes all uiMethods keys exactly", () => {
     const called = new Set<string | number | symbol>();
 
-    const client = {
-      call: async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>): Promise<UiMethodResult<M>> => {
+    const client = createTestClient(
+      async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>): Promise<UiMethodResult<M>> => {
         // Ensure sugar passes params that satisfy the protocol runtime contract.
         parseUiMethodParams(_method, _params);
         called.add(_method);
         return null as unknown as UiMethodResult<M>;
       },
-    };
+    );
 
-    const actions = uiActions(client as any);
+    const actions = uiActions(client);
 
     const methodKeys = Object.keys(uiMethods).sort();
 
@@ -83,17 +104,16 @@ describe("ui actions", () => {
   });
 
   it("handles optional parameters correctly", async () => {
-    const client = {
-      call: async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>) => {
-        if (method === "ui.onboarding.generateMnemonic") {
-          const wordCount = (params as any)?.wordCount ?? 12;
-          return { words: Array.from<string>({ length: wordCount }).fill("word") };
-        }
-        return null as unknown as UiMethodResult<M>;
-      },
-    };
+    const client = createTestClient(async <M extends UiMethodName>(method: M, params?: UiMethodParams<M>) => {
+      if (method === "ui.onboarding.generateMnemonic") {
+        const generateParams = params as UiMethodParams<"ui.onboarding.generateMnemonic"> | undefined;
+        const wordCount = generateParams?.wordCount ?? 12;
+        return { words: Array.from<string>({ length: wordCount }).fill("word") };
+      }
+      return null as unknown as UiMethodResult<M>;
+    });
 
-    const actions = uiActions(client as any);
+    const actions = uiActions(client);
 
     // Call without params
     const result1 = await actions.onboarding.generateMnemonic();
@@ -105,15 +125,13 @@ describe("ui actions", () => {
   });
 
   it("passes parameters exactly as provided", async () => {
-    const capturedParams: any[] = [];
-    const client = {
-      call: async <M extends UiMethodName>(_method: M, params?: UiMethodParams<M>) => {
-        capturedParams.push(params);
-        return null as unknown as UiMethodResult<M>;
-      },
-    };
+    const capturedParams: unknown[] = [];
+    const client = createTestClient(async <M extends UiMethodName>(_method: M, params?: UiMethodParams<M>) => {
+      capturedParams.push(params);
+      return null as unknown as UiMethodResult<M>;
+    });
 
-    const actions = uiActions(client as any);
+    const actions = uiActions(client);
 
     await actions.session.unlock({ password: "test123" });
     expect(capturedParams[capturedParams.length - 1]).toEqual({ password: "test123" });
@@ -126,13 +144,11 @@ describe("ui actions", () => {
   });
 
   it("maintains type safety for nested action groups", () => {
-    const client = {
-      call: async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>) => {
-        return null as unknown as UiMethodResult<M>;
-      },
-    };
+    const client = createTestClient(async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>) => {
+      return null as unknown as UiMethodResult<M>;
+    });
 
-    const actions = uiActions(client as any);
+    const actions = uiActions(client);
 
     // These should all be type-safe
     expect(typeof actions.snapshot.get).toBe("function");

@@ -145,10 +145,10 @@ describe("DexieAccountsPort", () => {
     await port.upsert(b1);
 
     await port.remove(a1.accountId);
-    expect((await port.get(a1.accountId)) as any).toBeNull();
+    expect(await port.get(a1.accountId)).toBeNull();
 
     await port.removeByKeyringId(keyringA);
-    expect((await port.get(a2.accountId)) as any).toBeNull();
+    expect(await port.get(a2.accountId)).toBeNull();
     expect(await port.get(b1.accountId)).toEqual(b1);
   });
 });

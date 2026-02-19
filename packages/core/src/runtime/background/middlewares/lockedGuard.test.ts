@@ -83,7 +83,9 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
     const [error] = end.mock.calls[0] ?? [];
-    expect((error as any)?.reason).toBe(ArxReasons.RpcMethodNotFound);
+    const reason =
+      typeof error === "object" && error !== null && "reason" in error ? (error as { reason?: unknown }).reason : null;
+    expect(reason).toBe(ArxReasons.RpcMethodNotFound);
     expect(findMethodDefinition).toHaveBeenCalledWith("eth_unknown", undefined);
     expect(attention.requestAttention).not.toHaveBeenCalled();
   });
@@ -182,7 +184,9 @@ describe("createLockedGuardMiddleware", () => {
 
     expect(next).not.toHaveBeenCalled();
     const [error] = end.mock.calls[0] ?? [];
-    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
+    const reason =
+      typeof error === "object" && error !== null && "reason" in error ? (error as { reason?: unknown }).reason : null;
+    expect(reason).toBe(ArxReasons.SessionLocked);
 
     expect(attention.requestAttention).toHaveBeenCalledWith({
       reason: "unlock_required",
@@ -213,7 +217,9 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
     const [error] = end.mock.calls[0] ?? [];
-    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
+    const reason =
+      typeof error === "object" && error !== null && "reason" in error ? (error as { reason?: unknown }).reason : null;
+    expect(reason).toBe(ArxReasons.SessionLocked);
     expect(attention.requestAttention).toHaveBeenCalledWith({
       reason: "unlock_required",
       origin: ORIGIN,
@@ -266,7 +272,9 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(end).toHaveBeenCalledTimes(1);
     const [error] = end.mock.calls[0] ?? [];
-    expect((error as any)?.reason).toBe(ArxReasons.SessionLocked);
+    const reason =
+      typeof error === "object" && error !== null && "reason" in error ? (error as { reason?: unknown }).reason : null;
+    expect(reason).toBe(ArxReasons.SessionLocked);
     expect(attention.requestAttention).toHaveBeenCalledWith({
       reason: "unlock_required",
       origin: ORIGIN,

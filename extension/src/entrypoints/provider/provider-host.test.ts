@@ -16,6 +16,13 @@ const isEip6963Info = (value: unknown): value is { uuid: string; name: string; i
   return true;
 };
 
+type WindowWithEthereum = Window & { ethereum?: unknown };
+type InjectedProvider = {
+  request: (args: { method: string; params?: unknown }) => Promise<unknown>;
+  on: (event: string, listener: (...args: unknown[]) => void) => void;
+  once: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
 describe("ProviderHost (window injection + EIP-6963)", () => {
   let ctx: TestDomContext;
   let cleanups: Array<() => void>;
@@ -76,7 +83,8 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     host.initialize();
     host.initialize();
 
-    expect((window as any).ethereum).toBeDefined();
+    const w = window as WindowWithEthereum;
+    expect(w.ethereum).toBeDefined();
     expect(initialized).toHaveBeenCalledTimes(1);
 
     const descriptor = Object.getOwnPropertyDescriptor(window, "ethereum");
@@ -87,7 +95,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
 
   it("does not override an existing window.ethereum (no throw, no ethereum#initialized)", async () => {
     const existing = { name: "Other Wallet" };
-    (window as any).ethereum = existing;
+    (window as WindowWithEthereum).ethereum = existing;
 
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
@@ -100,7 +108,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
 
     host.initialize();
 
-    expect((window as any).ethereum).toBe(existing);
+    expect((window as WindowWithEthereum).ethereum).toBe(existing);
     expect(initialized).toHaveBeenCalledTimes(0);
 
     expect(announced).toHaveBeenCalledTimes(1);
@@ -129,7 +137,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.info)).toBe(true);
-    expect(detail?.provider).toBe((window as any).ethereum);
+    expect(detail?.provider).toBe((window as WindowWithEthereum).ethereum);
     expect(detail?.info?.name).toBe("ARX Wallet");
     expect(detail?.info?.rdns).toBe("wallet.arx");
     expect(isEip6963Info(detail?.info)).toBe(true);
@@ -170,7 +178,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     const { host, transport } = createHarness({ registry });
     host.initialize();
 
-    const provider = (window as any).ethereum;
+    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
 
     await bridge.waitForHandshake();
@@ -193,14 +201,18 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     host.initialize();
     await connected;
 
-    const provider = (window as any).ethereum;
+    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
 
-    const chainChanged = new Promise<string>((resolve) => provider.once("chainChanged", resolve));
+    const chainChanged = new Promise<string>((resolve) =>
+      provider.once("chainChanged", (...args: unknown[]) => resolve(args[0] as string)),
+    );
     bridge.emitChainChanged({ chainId: "0x2", chainRef: "eip155:2" });
     await expect(chainChanged).resolves.toBe("0x2");
     await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x2");
 
-    const accountsChanged = new Promise<string[]>((resolve) => provider.once("accountsChanged", resolve));
+    const accountsChanged = new Promise<string[]>((resolve) =>
+      provider.once("accountsChanged", (...args: unknown[]) => resolve(args[0] as string[])),
+    );
     bridge.emitAccountsChanged(["0xbbb"]);
     await expect(accountsChanged).resolves.toEqual(["0xbbb"]);
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xbbb"]);
@@ -218,7 +230,7 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     host.initialize();
     await connected;
 
-    const provider = (window as any).ethereum;
+    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
 
     const onAccountsChanged = vi.fn();
     provider.on("accountsChanged", onAccountsChanged);
@@ -243,13 +255,13 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     host.initialize();
     await firstConnect;
 
-    const provider = (window as any).ethereum;
+    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
 
     const onDisconnect = new Promise<void>((resolve) => transport.once("disconnect", () => resolve()));
     bridge.emitDisconnect();
     await onDisconnect;
 
     await transport.connect();
-    expect((window as any).ethereum).toBe(provider);
+    expect((window as WindowWithEthereum).ethereum).toBe(provider);
   });
 });

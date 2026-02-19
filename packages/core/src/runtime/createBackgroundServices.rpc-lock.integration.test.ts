@@ -30,7 +30,9 @@ describe("createBackgroundServices (locked RPC integration)", () => {
     const harness = await createRpcHarness();
     const { services } = harness;
     const rpcClient = { request: vi.fn().mockResolvedValue("0x64") };
-    const getClient = vi.spyOn(services.rpcClients, "getClient").mockReturnValue(rpcClient as any);
+    const getClient = vi
+      .spyOn(services.rpcClients, "getClient")
+      .mockReturnValue(rpcClient as unknown as ReturnType<(typeof services.rpcClients)["getClient"]>);
 
     try {
       await initializeSession(services);
@@ -142,7 +144,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       const accounts = (await harness.callRpc({ method: "eth_accounts" })) as string[];
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
-      await services.controllers.approvals.resolve(approvalId!, async () => "0xsignedpayload");
+      if (!approvalId) throw new Error("Expected approvalId to be set");
+      await services.controllers.approvals.resolve(approvalId, async () => "0xsignedpayload");
       await expect(pending).resolves.toBe("0xsignedpayload");
 
       expect(approval).toHaveBeenCalledTimes(1);

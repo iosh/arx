@@ -18,6 +18,13 @@ const createProvider = (initialState: TransportState = INITIAL_STATE) => {
   return { transport, provider };
 };
 
+type LegacyEip155Provider = Eip155Provider & {
+  send: (...args: unknown[]) => unknown;
+  sendAsync: (payload: unknown, callback: (...args: unknown[]) => void) => void;
+};
+const asLegacyProvider = (provider: Eip155Provider): LegacyEip155Provider =>
+  provider as unknown as LegacyEip155Provider;
+
 describe("Eip155Provider legacy API compatibility", () => {
   it("send(method, params) resolves a JSON-RPC response object", async () => {
     const { transport, provider } = createProvider();
@@ -26,7 +33,7 @@ describe("Eip155Provider legacy API compatibility", () => {
       return "0x1";
     });
 
-    const response = (await (provider as any).send("eth_chainId")) as unknown;
+    const response = await asLegacyProvider(provider).send("eth_chainId");
 
     expect(response).toEqual({ id: undefined, jsonrpc: "2.0", result: "0x1" });
   });
@@ -36,7 +43,7 @@ describe("Eip155Provider legacy API compatibility", () => {
     transport.setRequestHandler(async () => "0x1");
 
     const callback = vi.fn();
-    const ret = (provider as any).send({ id: 1, jsonrpc: "2.0", method: "eth_chainId" }, callback);
+    const ret = asLegacyProvider(provider).send({ id: 1, jsonrpc: "2.0", method: "eth_chainId" }, callback);
     expect(ret).toBeUndefined();
 
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -53,7 +60,7 @@ describe("Eip155Provider legacy API compatibility", () => {
     });
 
     const callback = vi.fn();
-    (provider as any).sendAsync(
+    asLegacyProvider(provider).sendAsync(
       [
         { id: "a", jsonrpc: "2.0", method: "eth_chainId" },
         { id: "b", jsonrpc: "2.0", method: "eth_unknownMethod" },
@@ -77,25 +84,25 @@ describe("Eip155Provider legacy API compatibility", () => {
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    expect((provider as any).send({ id: 1, jsonrpc: "2.0", method: "eth_accounts" })).toEqual({
+    expect(asLegacyProvider(provider).send({ id: 1, jsonrpc: "2.0", method: "eth_accounts" })).toEqual({
       id: 1,
       jsonrpc: "2.0",
       result: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    expect((provider as any).send({ id: 2, jsonrpc: "2.0", method: "eth_coinbase" })).toEqual({
+    expect(asLegacyProvider(provider).send({ id: 2, jsonrpc: "2.0", method: "eth_coinbase" })).toEqual({
       id: 2,
       jsonrpc: "2.0",
       result: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     });
 
-    expect((provider as any).send({ id: 3, jsonrpc: "2.0", method: "net_version" })).toEqual({
+    expect(asLegacyProvider(provider).send({ id: 3, jsonrpc: "2.0", method: "net_version" })).toEqual({
       id: 3,
       jsonrpc: "2.0",
       result: "1",
     });
 
-    expect(() => (provider as any).send({ id: 4, jsonrpc: "2.0", method: "eth_chainId" })).toThrow(
+    expect(() => asLegacyProvider(provider).send({ id: 4, jsonrpc: "2.0", method: "eth_chainId" })).toThrow(
       /Unsupported sync method/,
     );
   });

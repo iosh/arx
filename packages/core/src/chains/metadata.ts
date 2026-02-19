@@ -378,14 +378,17 @@ export const normalizeChainMetadata = (metadata: ChainMetadata): ChainMetadata =
 const isSameRecord = <T>(
   previous: Record<string, T> | undefined,
   next: Record<string, T> | undefined,
-  comparator: (a: T, b: T) => boolean = (a, b) => a === b,
+  comparator: (a: T | undefined, b: T | undefined) => boolean = (a, b) => a === b,
 ) => {
   if (!previous && !next) return true;
   if (!previous || !next) return false;
   const prevKeys = Object.keys(previous);
   const nextKeys = Object.keys(next);
   if (prevKeys.length !== nextKeys.length) return false;
-  return prevKeys.every((key) => Object.hasOwn(next, key) && comparator(previous[key]!, next[key]!));
+  return prevKeys.every((key) => {
+    if (!Object.hasOwn(next, key)) return false;
+    return comparator(previous[key], next[key]);
+  });
 };
 
 const isSameStringArray = (previous: readonly string[] | undefined, next: readonly string[] | undefined) => {
@@ -444,7 +447,10 @@ export const isSameChainMetadata = (previous: ChainMetadata, next: ChainMetadata
   }
 
   for (let i = 0; i < previous.rpcEndpoints.length; i += 1) {
-    if (!isSameRpcEndpoint(previous.rpcEndpoints[i]!, next.rpcEndpoints[i]!)) {
+    const prevEndpoint = previous.rpcEndpoints[i];
+    const nextEndpoint = next.rpcEndpoints[i];
+    if (!prevEndpoint || !nextEndpoint) return false;
+    if (!isSameRpcEndpoint(prevEndpoint, nextEndpoint)) {
       return false;
     }
   }
@@ -456,7 +462,10 @@ export const isSameChainMetadata = (previous: ChainMetadata, next: ChainMetadata
   if (prevExplorers && nextExplorers) {
     if (prevExplorers.length !== nextExplorers.length) return false;
     for (let i = 0; i < prevExplorers.length; i += 1) {
-      if (!isSameExplorerLink(prevExplorers[i]!, nextExplorers[i]!)) {
+      const prevExplorer = prevExplorers[i];
+      const nextExplorer = nextExplorers[i];
+      if (!prevExplorer || !nextExplorer) return false;
+      if (!isSameExplorerLink(prevExplorer, nextExplorer)) {
         return false;
       }
     }

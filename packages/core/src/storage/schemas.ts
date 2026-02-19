@@ -41,12 +41,6 @@ const accountAddressSchema = z
 const chainRefSchema = z.string().regex(CAIP2_CHAIN_REF_PATTERN, {
   error: "CAIP-2 identifier must follow namespace:reference format",
 });
-
-const nativeCurrencySchema = z.strictObject({
-  name: nonEmptyStringSchema,
-  symbol: nonEmptyStringSchema,
-  decimals: z.number().int().min(0),
-});
 const httpUrlSchema = z
   .string()
   .url()

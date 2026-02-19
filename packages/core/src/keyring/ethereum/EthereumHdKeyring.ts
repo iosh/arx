@@ -90,7 +90,13 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   getAccounts(): readonly EthereumKeyringAccount[] {
-    return this.#order.map((address) => ({ ...this.#accounts.get(address)!.account }));
+    return this.#order.map((address) => {
+      const entry = this.#accounts.get(address);
+      if (!entry) {
+        throw new Error(`Account entry missing for address ${address}`);
+      }
+      return { ...entry.account };
+    });
   }
 
   getAccount(address: string): EthereumKeyringAccount | undefined {

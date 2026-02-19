@@ -25,8 +25,8 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
       </YStack>
       {approval.payload.warnings && approval.payload.warnings.length > 0 && (
         <YStack marginTop="$2" gap="$1">
-          {approval.payload.warnings.map((w, i) => (
-            <Paragraph key={i} color="$orange10" fontSize="$2">
+          {approval.payload.warnings.map((w) => (
+            <Paragraph key={`${w.code}:${w.message}`} color="$orange10" fontSize="$2">
               ⚠ {w.message}
             </Paragraph>
           ))}
@@ -34,8 +34,8 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
       )}
       {approval.payload.issues && approval.payload.issues.length > 0 && (
         <YStack marginTop="$2" gap="$1">
-          {approval.payload.issues.map((issue, i) => (
-            <Paragraph key={i} color="$red10" fontSize="$2">
+          {approval.payload.issues.map((issue) => (
+            <Paragraph key={`${issue.code}:${issue.message}`} color="$red10" fontSize="$2">
               ✕ {issue.message}
             </Paragraph>
           ))}

@@ -204,8 +204,11 @@ export class InMemoryNetworkController implements NetworkController {
       throw new Error("NetworkController requires at least one registered chain");
     }
     if (this.#activeChain === chainRef) {
-      const [first] = this.#chains.keys();
-      this.#activeChain = first ?? Array.from(this.#chains.keys())[0]!;
+      const first = this.#chains.keys().next().value;
+      if (!first) {
+        throw new Error("NetworkController requires at least one registered chain");
+      }
+      this.#activeChain = first;
     }
     this.#publishState();
   }
@@ -219,7 +222,10 @@ export class InMemoryNetworkController implements NetworkController {
     const now = this.#now();
     const targetIndex = this.#selectEndpointIndex(runtime, outcome.endpointIndex);
     runtime.activeIndex = targetIndex;
-    const health = runtime.health[targetIndex]!;
+    const health = runtime.health[targetIndex];
+    if (!health) {
+      throw new Error(`Missing RPC health entry at index ${targetIndex} for chain ${chainRef}`);
+    }
 
     let endpointChanged = false;
     const previousEndpoint = this.#buildEndpointInfo(chainRef, runtime, targetIndex);
@@ -475,13 +481,19 @@ export class InMemoryNetworkController implements NetworkController {
 
     let candidate = (failedIndex + 1) % total;
     for (let attempts = 0; attempts < total; attempts += 1) {
-      const health = runtime.health[candidate]!;
+      const health = runtime.health[candidate];
+      if (!health) {
+        throw new Error(`Missing RPC health entry at index ${candidate}`);
+      }
       if (!health.cooldownUntil || health.cooldownUntil <= now) {
         return candidate;
       }
       candidate = (candidate + 1) % total;
     }
-    const failedHealth = runtime.health[failedIndex]!;
+    const failedHealth = runtime.health[failedIndex];
+    if (!failedHealth) {
+      throw new Error(`Missing RPC health entry at index ${failedIndex}`);
+    }
     if (!failedHealth.cooldownUntil || failedHealth.cooldownUntil <= now) {
       return failedIndex;
     }
@@ -510,7 +522,7 @@ export class InMemoryNetworkController implements NetworkController {
     };
   }
 
-  #buildEndpointState(chainRef: ChainRef, runtime: ChainRuntime): RpcEndpointState {
+  #buildEndpointState(_chainRef: ChainRef, runtime: ChainRuntime): RpcEndpointState {
     return {
       activeIndex: runtime.activeIndex,
       endpoints: buildEndpointInfoList(runtime.endpoints),
@@ -549,9 +561,13 @@ export class InMemoryNetworkController implements NetworkController {
         const nextKeys = Object.keys(next.rpc);
         if (prevKeys.length !== nextKeys.length) return false;
         for (let i = 0; i < prevKeys.length; i += 1) {
-          if (prevKeys[i] !== nextKeys[i]) return false;
-          const prevState = prev.rpc[prevKeys[i]!]!;
-          const nextState = next.rpc[nextKeys[i]!]!;
+          const prevKey = prevKeys[i];
+          const nextKey = nextKeys[i];
+          if (!prevKey || !nextKey) return false;
+          if (prevKey !== nextKey) return false;
+          const prevState = prev.rpc[prevKey];
+          const nextState = next.rpc[nextKey];
+          if (!prevState || !nextState) return false;
           if (prevState.activeIndex !== nextState.activeIndex) return false;
           if (prevState.lastUpdatedAt !== nextState.lastUpdatedAt) return false;
         }

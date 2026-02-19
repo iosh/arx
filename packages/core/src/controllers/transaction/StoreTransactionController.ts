@@ -880,11 +880,12 @@ export class StoreTransactionController implements TransactionController {
         name: reason.name,
         message: reason.message ?? "",
       };
-      if ("code" in reason && typeof (reason as any).code === "number") {
-        (error as any).code = (reason as any).code;
+      const extra = reason as unknown as { code?: unknown; data?: unknown };
+      if (typeof extra.code === "number") {
+        error.code = extra.code;
       }
-      if ("data" in reason) {
-        (error as any).data = (reason as any).data;
+      if ("data" in extra) {
+        error.data = extra.data;
       }
       return error;
     }

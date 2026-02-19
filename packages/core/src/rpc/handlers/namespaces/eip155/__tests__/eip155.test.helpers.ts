@@ -165,7 +165,7 @@ export const waitForChainInNetwork = async (
 
 export const setupApprovalResponder = (
   services: ReturnType<typeof createServices>,
-  responder: (task: ApprovalTask) => Promise<boolean | void> | boolean | void,
+  responder: (task: ApprovalTask) => Promise<boolean | undefined> | boolean | undefined,
 ) => {
   const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
     void (async () => {

@@ -24,7 +24,9 @@ const runMiddleware = async (
   });
 
   return new Promise<void>((resolve, reject) => {
-    engine.handle({ id: 1, jsonrpc: "2.0", method, params, origin, arx: context } as any, (error) => {
+    type EngineRequest = Parameters<JsonRpcEngine["handle"]>[0];
+    const request = { id: 1, jsonrpc: "2.0", method, params, origin, arx: context } as unknown as EngineRequest;
+    engine.handle(request, (error) => {
       if (error) {
         reject(error);
         return;

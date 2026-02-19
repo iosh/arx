@@ -14,6 +14,7 @@ import {
   registerBuiltinRpcAdapters,
 } from "@arx/core";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
+import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/db";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
 import {
   UI_CHANNEL,
@@ -24,6 +25,7 @@ import {
   type UiSnapshot,
 } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { UiPort } from "./ui/portHub";
 import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
@@ -40,6 +42,8 @@ const CHAIN = {
   icon: null,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
+
+type ChainRef = Parameters<typeof toAccountIdFromAddress>[0]["chainRef"];
 
 type Listener = (msg: unknown) => void;
 
@@ -184,7 +188,7 @@ class FakeUnlock {
 }
 
 const createMemoryKeyringMetasStore = () => {
-  let records: any[] = [];
+  let records: KeyringMetaRecord[] = [];
   return {
     async get(id: string) {
       return records.find((r) => r.id === id) ?? null;
@@ -192,7 +196,7 @@ const createMemoryKeyringMetasStore = () => {
     async list() {
       return [...records];
     },
-    async upsert(record: any) {
+    async upsert(record: KeyringMetaRecord) {
       const next = { ...record };
       records = [...records.filter((r) => r.id !== next.id), next];
     },
@@ -203,19 +207,20 @@ const createMemoryKeyringMetasStore = () => {
 };
 
 const createMemoryAccountsStore = () => {
-  let records: any[] = [];
+  let records: AccountRecord[] = [];
   return {
-    async get(accountId: string) {
+    async get(accountId: AccountId) {
       return records.find((r) => r.accountId === accountId) ?? null;
     },
     async list(_params?: { includeHidden?: boolean }) {
+      void _params;
       return [...records];
     },
-    async upsert(record: any) {
+    async upsert(record: AccountRecord) {
       const next = { ...record };
       records = [...records.filter((r) => r.accountId !== next.accountId), next];
     },
-    async remove(accountId: string) {
+    async remove(accountId: AccountId) {
       records = records.filter((r) => r.accountId !== accountId);
     },
     async removeByKeyringId(keyringId: string) {
@@ -225,13 +230,12 @@ const createMemoryAccountsStore = () => {
 };
 
 const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
-  const toAccountId = (chainRef: string, address: string) =>
-    toAccountIdFromAddress({ chainRef: chainRef as any, address });
-  const toAddress = (chainRef: string, accountId: string) =>
-    toCanonicalAddressFromAccountId({ chainRef: chainRef as any, accountId: accountId as any });
+  const toAccountId = (chainRef: ChainRef, address: string) => toAccountIdFromAddress({ chainRef, address });
+  const toAddress = (chainRef: ChainRef, accountId: AccountId) =>
+    toCanonicalAddressFromAccountId({ chainRef, accountId });
 
   let state = {
-    namespaces: { [CHAIN.namespace]: { accountIds: [] as string[], selectedAccountId: null as string | null } },
+    namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -242,8 +246,8 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
   const refresh = async () => {
     const rows = await deps.accountsStore.list({ includeHidden: true });
     const all = rows
-      .filter((r: any) => r?.namespace === CHAIN.namespace)
-      .map((r: any) => `0x${String(r.payloadHex ?? "").toLowerCase()}`)
+      .filter((r) => r.namespace === CHAIN.namespace)
+      .map((r) => `0x${String(r.payloadHex ?? "").toLowerCase()}`)
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
@@ -257,12 +261,12 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
   };
 
   // Wrap store writers so controller state stays in sync for unit tests.
-  const wrap = <T extends (...args: any[]) => Promise<any>>(fn: T) => {
-    return (async (...args: Parameters<T>) => {
+  const wrap = <Args extends unknown[], R>(fn: (...args: Args) => Promise<R>) => {
+    return async (...args: Args): Promise<R> => {
       const res = await fn(...args);
       await refresh();
       return res;
-    }) as T;
+    };
   };
   deps.accountsStore.upsert = wrap(deps.accountsStore.upsert);
   deps.accountsStore.remove = wrap(deps.accountsStore.remove);
@@ -291,10 +295,11 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
       };
     },
     getSelectedAddress: (_params: { chainRef: string }) => {
+      void _params;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
       return selected ? toAddress(_params.chainRef, selected) : null;
     },
-    addAccount: async (_params: any) => {
+    addAccount: async () => {
       throw new Error("addAccount is not supported in store-backed test controller");
     },
     switchActive: async (params: { chainRef: string; address?: string | null }) => {
@@ -312,26 +317,31 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
           }
         : null;
     },
-    removeAccount: async (_params: any) => {
+    removeAccount: async () => {
       throw new Error("removeAccount is not supported in store-backed test controller");
     },
-    onStateChanged: (fn: (s: any) => void) => {
+    onStateChanged: (fn: (s: typeof state) => void) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    onSelectedChanged: (_fn: any) => () => {},
-    onNamespaceChanged: (_fn: any) => () => {},
+    onSelectedChanged: (fn: unknown) => {
+      void fn;
+      return () => {};
+    },
+    onNamespaceChanged: (fn: unknown) => {
+      void fn;
+      return () => {};
+    },
   };
 };
 
 const createAccountsController = () => {
-  const toAccountId = (chainRef: string, address: string) =>
-    toAccountIdFromAddress({ chainRef: chainRef as any, address });
-  const toAddress = (chainRef: string, accountId: string) =>
-    toCanonicalAddressFromAccountId({ chainRef: chainRef as any, accountId: accountId as any });
+  const toAccountId = (chainRef: ChainRef, address: string) => toAccountIdFromAddress({ chainRef, address });
+  const toAddress = (chainRef: ChainRef, accountId: AccountId) =>
+    toCanonicalAddressFromAccountId({ chainRef, accountId });
 
   let state = {
-    namespaces: { [CHAIN.namespace]: { accountIds: [] as string[], selectedAccountId: null as string | null } },
+    namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -358,6 +368,7 @@ const createAccountsController = () => {
       };
     },
     getSelectedAddress: (_params: { chainRef: string }) => {
+      void _params;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
       return selected ? toAddress(_params.chainRef, selected) : null;
     },
@@ -398,12 +409,18 @@ const createAccountsController = () => {
       emit();
       return state.namespaces[ns];
     },
-    onStateChanged: (fn: (s: any) => void) => {
+    onStateChanged: (fn: (s: typeof state) => void) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    onSelectedChanged: (_fn: any) => () => {},
-    onNamespaceChanged: (_fn: any) => () => {},
+    onSelectedChanged: (fn: unknown) => {
+      void fn;
+      return () => {};
+    },
+    onNamespaceChanged: (fn: unknown) => {
+      void fn;
+      return () => {};
+    },
   };
 };
 
@@ -454,8 +471,11 @@ const createApprovalsController = () => {
 const createControllers = () => {
   const accounts = createAccountsController();
   const approvals = {
-    getState: () => ({ pending: [] as any[] }),
-    get: (_id: string) => null,
+    getState: () => ({ pending: [] as unknown[] }),
+    get: (_id: string) => {
+      void _id;
+      return null;
+    },
     onStateChanged: (fn: () => void) => {
       return () => void fn;
     },
@@ -472,7 +492,9 @@ const createControllers = () => {
   const network = {
     getActiveChain: () => CHAIN,
     getState: () => ({ activeChain: CHAIN.chainRef, knownChains: [CHAIN] }),
-    switchChain: async (_chainRef: string) => {},
+    switchChain: async (_chainRef: string) => {
+      void _chainRef;
+    },
     onStateChanged: (fn: () => void) => {
       networkListeners.add(fn);
       return () => networkListeners.delete(fn);
@@ -480,7 +502,10 @@ const createControllers = () => {
     onChainChanged: (fn: (c: typeof CHAIN) => void) => {
       return () => void fn;
     },
-    getChain: (_chainRef: string) => CHAIN,
+    getChain: (_chainRef: string) => {
+      void _chainRef;
+      return CHAIN;
+    },
   };
   const transactions = {
     approveTransaction: async () => null,
@@ -559,16 +584,19 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
   keyring.attach();
 
   const approvalsController = createApprovalsController();
-  const controllers = createControllers();
-  (controllers as any).accounts = accountsController;
-  (controllers as any).approvals = approvalsController;
+  const controllers = {
+    ...createControllers(),
+    accounts: accountsController,
+    approvals: approvalsController,
+  } as unknown as HandlerControllers;
 
   const session = {
     unlock,
     withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
     vault: {
       getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext }),
-      initialize: async (_params: { password: string }) => {
+      initialize: async (params: { password: string }) => {
+        void params;
         hasCiphertext = true;
         return {
           version: 1,
@@ -586,20 +614,23 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
 
   const browserApi = makeBrowser();
   const persistVaultMeta = vi.fn(async () => {});
+  type UiBridgeDeps = Parameters<typeof createUiBridge>[0];
   const bridge = createUiBridge({
-    browser: browserApi as any,
+    browser: browserApi as unknown as UiBridgeDeps["browser"],
     controllers,
     session,
     rpcClients: {
-      getClient: () =>
-        ({
+      getClient: (params?: unknown) => {
+        void params;
+        return {
           getBalance: vi.fn(async () => "0x0"),
-        }) as any,
-    },
+        } as unknown;
+      },
+    } as unknown as UiBridgeDeps["rpcClients"],
     rpcRegistry,
     persistVaultMeta,
     keyring,
-    attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
+    attention: { getSnapshot: () => ({ queue: [], count: 0 }) } as unknown as UiBridgeDeps["attention"],
   });
 
   return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi, persistVaultMeta };
@@ -607,21 +638,28 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
 
 const createPort = () => new FakePort();
 
-const expectError = (msg: any, reason: string) => {
-  expect(msg?.type).toBe("ui:error");
-  expect(msg?.error?.reason).toBe(reason);
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
 };
 
-const expectResponse = (msg: any, id: string) => {
-  expect(msg?.type).toBe("ui:response");
-  expect(msg?.id).toBe(id);
-  return msg?.result;
+const expectError = (msg: unknown, reason: string) => {
+  if (!isRecord(msg)) throw new Error("Expected ui:error envelope to be an object");
+  const error = isRecord(msg.error) ? msg.error : null;
+  expect(msg.type).toBe("ui:error");
+  expect(error?.reason).toBe(reason);
+};
+
+const expectResponse = <T = unknown>(msg: unknown, id: string): T => {
+  if (!isRecord(msg)) throw new Error("Expected ui:response envelope to be an object");
+  expect(msg.type).toBe("ui:response");
+  expect(msg.id).toBe(id);
+  return msg.result as T;
 };
 
 const latestSnapshotFromMessages = (messages: unknown[]) => {
-  const events = messages.filter((m: any) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED) as any[];
-  const last = events[events.length - 1];
-  expect(last).toBeTruthy();
+  const events = messages.filter((m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED);
+  const last = events.at(-1);
+  if (!last || !isRecord(last)) throw new Error("Expected at least one snapshotChanged event");
   return last.payload as UiSnapshot;
 };
 
@@ -644,7 +682,7 @@ describe("uiBridge", () => {
     runtimeBrowser = ctx.browser;
 
     port = createPort();
-    bridge.attachPort(port as any);
+    bridge.attachPort(port as unknown as UiPort);
     bridge.attachListeners();
     port.messages = []; // drop initial snapshot
   });
@@ -653,10 +691,13 @@ describe("uiBridge", () => {
     const id = crypto.randomUUID();
     const envelope: UiPortEnvelope = { type: "ui:request", id, method, params };
     await port.triggerMessage(envelope);
-    const message = port.messages.find(
-      (m: any) => m?.id === id && (m?.type === "ui:response" || m?.type === "ui:error"),
-    );
-    return { envelope: message as any, id };
+    const message = port.messages.find((m) => {
+      if (!isRecord(m)) return false;
+      if (m.id !== id) return false;
+      return m.type === "ui:response" || m.type === "ui:error";
+    });
+    if (!message) throw new Error(`Expected response for ${method}`);
+    return { envelope: message, id };
   };
 
   it("rejects when locked", async () => {
@@ -666,7 +707,7 @@ describe("uiBridge", () => {
     const { envelope } = await send("ui.keyrings.confirmNewMnemonic", {
       words: Array.from({ length: 12 }, () => "word"),
       alias: "test",
-    } as any);
+    });
 
     expectError(envelope, ArxReasons.SessionLocked);
   });
@@ -676,7 +717,7 @@ describe("uiBridge", () => {
     vault.setUnlocked(false);
 
     const { envelope, id } = await send("ui.onboarding.generateMnemonic", { wordCount: 12 });
-    const res = expectResponse(envelope, id);
+    const res = expectResponse<{ words: string[] }>(envelope, id);
     expect(res.words).toHaveLength(12);
   });
 
@@ -692,12 +733,12 @@ describe("uiBridge", () => {
       params: { words, skipBackup: true },
     } satisfies UiPortEnvelope);
 
-    const responseIndex = port.messages.findIndex((m: any) => m?.type === "ui:response" && m?.id === id);
+    const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);
     expect(responseIndex).toBeGreaterThanOrEqual(0);
 
     const snapshotEvents = port.messages
-      .map((m: any, idx: number) => ({ m, idx }))
-      .filter(({ m }) => m?.type === "ui:event" && m?.event === UI_EVENT_SNAPSHOT_CHANGED);
+      .map((m, idx) => ({ m, idx }))
+      .filter(({ m }) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED);
     const lastSnapshotEventIndex = snapshotEvents.at(-1)?.idx ?? -1;
     expect(lastSnapshotEventIndex).toBeGreaterThan(responseIndex);
 
@@ -708,7 +749,7 @@ describe("uiBridge", () => {
 
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {
     const words = Array.from({ length: 12 }, () => "foo");
-    const { envelope } = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "bad" } as any);
+    const { envelope } = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "bad" });
     expectError(envelope, ArxReasons.KeyringInvalidMnemonic);
   });
 
@@ -836,8 +877,8 @@ describe("uiBridge", () => {
   it("onboarding.openTab: focuses existing tab via query fallback", async () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(0);
 
-    runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: any) => {
-      if (queryInfo?.url) throw new Error("query-by-url failed");
+    runtimeBrowser.tabs.query.mockImplementation(async (queryInfo: unknown) => {
+      if (isRecord(queryInfo) && queryInfo.url) throw new Error("query-by-url failed");
       return [{ id: 7, windowId: 8, url: "ext://onboarding.html" }];
     });
 

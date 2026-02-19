@@ -25,21 +25,26 @@ describe("WindowPostMessageTransport", () => {
     }
   });
 
+  const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === "object" && value !== null;
+  };
+
   const getHandshakeFromSpy = (postMessageSpy: ReturnType<typeof vi.spyOn>) => {
     const calls = postMessageSpy.mock.calls as Array<Parameters<Window["postMessage"]>>;
     let handshake: unknown;
 
     for (let i = calls.length - 1; i >= 0; i -= 1) {
       const [candidate] = calls[i] ?? [];
-      const msg = candidate as any;
-      if (msg?.channel === CHANNEL && msg?.type === "handshake") {
-        handshake = msg;
+      if (isRecord(candidate) && candidate.channel === CHANNEL && candidate.type === "handshake") {
+        handshake = candidate;
         break;
       }
     }
 
-    const handshakeId = (handshake as any)?.payload?.handshakeId;
-    const sessionId = (handshake as any)?.sessionId;
+    const handshakeEnvelope = isRecord(handshake) ? handshake : null;
+    const handshakePayload = isRecord(handshakeEnvelope?.payload) ? handshakeEnvelope.payload : null;
+    const handshakeId = handshakePayload?.handshakeId;
+    const sessionId = handshakeEnvelope?.sessionId;
     expect(typeof handshakeId).toBe("string");
     expect(typeof sessionId).toBe("string");
     return { sessionId: sessionId as string, handshakeId: handshakeId as string };
@@ -48,11 +53,12 @@ describe("WindowPostMessageTransport", () => {
   const getRequestsFromSpy = (postMessageSpy: ReturnType<typeof vi.spyOn>) => {
     const calls = postMessageSpy.mock.calls as Array<Parameters<Window["postMessage"]>>;
     return calls
-      .map(([candidate]) => candidate as any)
-      .filter((msg) => msg?.channel === CHANNEL && msg?.type === "request")
+      .map(([candidate]) => candidate)
+      .filter((msg) => isRecord(msg) && msg.channel === CHANNEL && msg.type === "request")
       .map((requestEnvelope) => {
-        const sessionId = requestEnvelope.sessionId as unknown;
-        const id = requestEnvelope.id as unknown;
+        if (!isRecord(requestEnvelope)) throw new Error("Expected request envelope to be an object");
+        const sessionId = requestEnvelope.sessionId;
+        const id = requestEnvelope.id;
         expect(typeof sessionId).toBe("string");
         expect(typeof id).toBe("string");
         return { sessionId: sessionId as string, id: id as string };
@@ -79,7 +85,7 @@ describe("WindowPostMessageTransport", () => {
   const dispatchHandshakeAck = (
     sessionId: string,
     handshakeId: string,
-    payload: any,
+    payload: Record<string, unknown>,
     options?: { protocolVersion?: number | null },
   ) => {
     const protocolVersion = options?.protocolVersion ?? PROTOCOL_VERSION;
@@ -474,8 +480,9 @@ describe("WindowPostMessageTransport", () => {
 
       const requests = getRequestsFromSpy(postMessageSpy);
       expect(requests.length).toBeGreaterThanOrEqual(2);
-      const r1 = requests.at(-2)!;
-      const r2 = requests.at(-1)!;
+      const r1 = requests.at(-2);
+      const r2 = requests.at(-1);
+      if (!r1 || !r2) throw new Error("Expected at least two request envelopes");
 
       dispatchEnvelope({
         channel: CHANNEL,

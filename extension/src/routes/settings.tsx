@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Input, Paragraph, Separator, Slider, XStack, YStack } from "tamagui";
+import { Input, Paragraph, Slider, XStack } from "tamagui";
 import { Button, Card, Divider, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";

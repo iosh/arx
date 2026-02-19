@@ -7,7 +7,7 @@ import { UNKNOWN_ORIGIN } from "./constants.js";
 import { createLockedGuardMiddleware } from "./middlewares/lockedGuard.js";
 import { createPermissionGuardMiddleware } from "./middlewares/permissionGuard.js";
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
-import { type ArxInvocation, createResolveInvocationMiddleware } from "./middlewares/resolveInvocation.js";
+import { createResolveInvocationMiddleware } from "./middlewares/resolveInvocation.js";
 
 export type BackgroundServices = ReturnType<typeof createBackgroundServices>;
 

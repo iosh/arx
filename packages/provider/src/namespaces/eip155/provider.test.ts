@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { evmProviderErrors, evmRpcErrors } from "../../errors.js";
 import { Eip155Provider } from "../../provider/index.js";
-import type { RequestArguments } from "../../types/eip1193.js";
-import type { TransportMeta, TransportState } from "../../types/transport.js";
+import type { TransportState } from "../../types/transport.js";
 import { DISCONNECT_EVENT_CODE, DISCONNECT_EVENT_MESSAGE, REQUEST_VALIDATION_MESSAGES } from "./constants.js";
 import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
 
@@ -13,6 +12,10 @@ const INITIAL_STATE: TransportState = {
   accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
   isUnlocked: true,
   meta: buildMeta(),
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
 };
 
 const createProvider = (
@@ -33,14 +36,20 @@ describe("Eip155Provider: request() argument validation", () => {
   ])("rejects non-object args ($label)", async ({ args, expectData }) => {
     const { provider } = createProvider();
 
-    const error: any = await provider.request(args as any).catch((err) => err);
+    const error = (await provider
+      .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
+      .catch((err) => err)) as unknown;
     expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidArgs });
 
     if (expectData) {
+      expect(isRecord(error)).toBe(true);
+      if (!isRecord(error)) throw new Error("Expected error to be an object");
       expect("data" in error).toBe(true);
-      expect((error as any).data).toEqual(args);
+      expect(error.data).toEqual(args);
     } else {
-      expect("data" in error).toBe(false);
+      if (isRecord(error)) {
+        expect("data" in error).toBe(false);
+      }
     }
   });
 
@@ -51,7 +60,9 @@ describe("Eip155Provider: request() argument validation", () => {
     { label: "method empty string", args: { method: "" } },
   ])("rejects invalid args.method ($label)", async ({ args }) => {
     const { provider } = createProvider();
-    const error = await provider.request(args as any).catch((err) => err);
+    const error = await provider
+      .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
+      .catch((err) => err);
     expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidMethod, data: args });
   });
 
@@ -63,7 +74,9 @@ describe("Eip155Provider: request() argument validation", () => {
   ])("rejects invalid args.params ($label)", async ({ params }) => {
     const { provider } = createProvider();
     const args = { method: "eth_call", params };
-    const error = await provider.request(args as any).catch((err) => err);
+    const error = await provider
+      .request(args as unknown as Parameters<Eip155Provider["request"]>[0])
+      .catch((err) => err);
     expect(error).toMatchObject({ code: -32600, message: REQUEST_VALIDATION_MESSAGES.invalidParams, data: args });
   });
 });
@@ -77,9 +90,11 @@ describe("Eip155Provider: request() state errors", () => {
       throw evmProviderErrors.disconnected();
     });
 
-    const error: any = await provider.request({ method: "eth_blockNumber" }).catch((err) => err);
+    const error = (await provider.request({ method: "eth_blockNumber" }).catch((err) => err)) as unknown;
     expect(error).toMatchObject({ code: 4900 });
-    expect("data" in error).toBe(false);
+    if (isRecord(error)) {
+      expect("data" in error).toBe(false);
+    }
   });
 
   it("times out while waiting for initialization", async () => {

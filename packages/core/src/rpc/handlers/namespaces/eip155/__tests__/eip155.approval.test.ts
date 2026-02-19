@@ -275,7 +275,7 @@ describe("eip155 handlers - approval metadata", () => {
           const result = await services.controllers.transactions.approveTransaction(task.id);
           await services.controllers.approvals.resolve(task.id, async () => result);
         }
-      } catch (error) {
+      } catch {
         // Ignore errors if approval was already resolved
       }
     });
@@ -305,12 +305,12 @@ describe("eip155 handlers - approval metadata", () => {
         namespace: string;
         chainRef: string;
         from: string | null;
-        warnings: any[];
-        issues: any[];
+        warnings: unknown[];
+        issues: unknown[];
       } | null = null;
       const unsubscribeTx = services.messenger.subscribe("transaction:statusChanged", (event) => {
         if (event.nextStatus === "broadcast") {
-          broadcastMeta = event.meta as any;
+          broadcastMeta = event.meta as unknown as NonNullable<typeof broadcastMeta>;
         }
       });
 
@@ -333,15 +333,15 @@ describe("eip155 handlers - approval metadata", () => {
 
       unsubscribeTx();
 
-      expect(broadcastMeta).not.toBeNull();
-      expect(broadcastMeta!.id).toEqual(expect.any(String));
-      expect(broadcastMeta!.status).toBe("broadcast");
-      expect(broadcastMeta!.hash).toBe(txHash);
-      expect(broadcastMeta!.namespace).toBe("eip155");
-      expect(broadcastMeta!.chainRef).toBe(mainnet.chainRef);
-      expect(broadcastMeta!.from).toBe(account.address);
-      expect(broadcastMeta!.warnings).toEqual([]);
-      expect(broadcastMeta!.issues).toEqual([]);
+      if (!broadcastMeta) throw new Error("Expected broadcast meta to be captured");
+      expect(broadcastMeta.id).toEqual(expect.any(String));
+      expect(broadcastMeta.status).toBe("broadcast");
+      expect(broadcastMeta.hash).toBe(txHash);
+      expect(broadcastMeta.namespace).toBe("eip155");
+      expect(broadcastMeta.chainRef).toBe(mainnet.chainRef);
+      expect(broadcastMeta.from).toBe(account.address);
+      expect(broadcastMeta.warnings).toEqual([]);
+      expect(broadcastMeta.issues).toEqual([]);
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
 
       const afterPermissions = services.controllers.permissions.getState();

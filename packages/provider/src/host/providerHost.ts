@@ -89,7 +89,8 @@ export class ProviderHost {
   }
 
   #getOrCreateProvider(namespace: string): EIP1193Provider | null {
-    if (this.#providers.has(namespace)) return this.#providers.get(namespace)!.proxy;
+    const cached = this.#providers.get(namespace);
+    if (cached) return cached.proxy;
 
     const factory = this.#registry.factories[namespace];
     if (!factory) return null;

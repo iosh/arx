@@ -37,7 +37,7 @@ export class DexieTransactionsPort implements TransactionsPort {
       if (chainRef !== undefined) {
         const upper = beforeCreatedAt !== undefined ? [chainRef, beforeCreatedAt] : [chainRef, Dexie.maxKey];
         const includeUpper = beforeCreatedAt === undefined;
-        return (this.table as any)
+        return (this.table as unknown as Dexie.Table<TransactionRecord, string>)
           .where("[chainRef+createdAt]")
           .between([chainRef, Dexie.minKey], upper, true, includeUpper)
           .reverse();
@@ -46,7 +46,7 @@ export class DexieTransactionsPort implements TransactionsPort {
       if (status !== undefined) {
         const upper = beforeCreatedAt !== undefined ? [status, beforeCreatedAt] : [status, Dexie.maxKey];
         const includeUpper = beforeCreatedAt === undefined;
-        return (this.table as any)
+        return (this.table as unknown as Dexie.Table<TransactionRecord, string>)
           .where("[status+createdAt]")
           .between([status, Dexie.minKey], upper, true, includeUpper)
           .reverse();

@@ -70,7 +70,7 @@ export type SessionLayerResult = {
 
 export const initSessionLayer = ({
   messenger,
-  controllers,
+  controllers: _controllers,
   vaultMetaPort,
   accountsStore,
   keyringMetas,

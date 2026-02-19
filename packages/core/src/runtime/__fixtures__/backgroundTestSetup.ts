@@ -1,6 +1,5 @@
 import type { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
-import { vi } from "vitest";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
@@ -259,7 +258,11 @@ export class MemoryKeyringMetasPort implements KeyringMetasPort {
   }
 }
 
-export const baseChainMetadata = DEFAULT_CHAIN_METADATA[0]! as ChainMetadata;
+const defaultBaseChainMetadata = DEFAULT_CHAIN_METADATA[0];
+if (!defaultBaseChainMetadata) {
+  throw new Error("Missing DEFAULT_CHAIN_METADATA seed");
+}
+export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
 
 const DEFAULT_FLUSH_TURNS = 8;
 
@@ -671,7 +674,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
               return null;
           }
         });
-      } catch (error) {
+      } catch {
         // Ignore errors if approval was already resolved
       }
     });

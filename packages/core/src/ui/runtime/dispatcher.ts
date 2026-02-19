@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../events.js";
-import type { UiEventEnvelope, UiPortEnvelope, UiRequestEnvelope } from "../messages.js";
+import type { UiError, UiEventEnvelope, UiPortEnvelope, UiRequestEnvelope } from "../messages.js";
 import { uiMethods } from "../methods.js";
 import type { UiMethodName } from "../protocol.js";
 import { isUiMethodName, parseUiMethodParams, parseUiMethodResult } from "../protocol.js";
@@ -61,7 +61,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
         { surface: "ui", namespace: ctx.namespace, chainRef: ctx.chainRef, method: raw.method },
       );
       return {
-        reply: { type: "ui:error", id: raw.id, error: encoded as any, context: ctx },
+        reply: { type: "ui:error", id: raw.id, error: encoded as unknown as UiError, context: ctx },
         effects: { broadcastSnapshot: false, persistVaultMeta: false, holdBroadcast: false },
       };
     }
@@ -90,7 +90,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
         method,
       });
       return {
-        reply: { type: "ui:error", id: raw.id, error: encoded as any, context: ctx },
+        reply: { type: "ui:error", id: raw.id, error: encoded as unknown as UiError, context: ctx },
         effects: { broadcastSnapshot: false, persistVaultMeta: false, holdBroadcast: false },
       };
     }

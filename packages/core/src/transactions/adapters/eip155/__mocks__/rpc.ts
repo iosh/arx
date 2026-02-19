@@ -15,16 +15,16 @@ import type { Eip155RpcClient } from "../../../../rpc/namespaceClients/eip155.js
  */
 export const createEip155RpcMock = (): {
   client: Eip155RpcClient;
-  request: any;
-  estimateGas: any;
-  getBalance: any;
-  getTransactionCount: any;
-  getGasPrice: any;
-  getMaxPriorityFeePerGas: any;
-  getFeeHistory: any;
-  getBlockByNumber: any;
-  getTransactionReceipt: any;
-  sendRawTransaction: any;
+  request: ReturnType<typeof vi.fn>;
+  estimateGas: ReturnType<typeof vi.fn>;
+  getBalance: ReturnType<typeof vi.fn>;
+  getTransactionCount: ReturnType<typeof vi.fn>;
+  getGasPrice: ReturnType<typeof vi.fn>;
+  getMaxPriorityFeePerGas: ReturnType<typeof vi.fn>;
+  getFeeHistory: ReturnType<typeof vi.fn>;
+  getBlockByNumber: ReturnType<typeof vi.fn>;
+  getTransactionReceipt: ReturnType<typeof vi.fn>;
+  sendRawTransaction: ReturnType<typeof vi.fn>;
 } => {
   const request = vi.fn();
   const estimateGas = vi.fn();

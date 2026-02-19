@@ -98,9 +98,10 @@ describe("PermissionsService", () => {
 
     const current = await service.getByOrigin({ origin: ORIGIN, namespace: NAMESPACE });
     expect(current).not.toBeNull();
-    expect(current!.id).toBe(id1); // id reused
-    expect(current!.grants.map((g) => g.scope)).toEqual([PermissionScopes.Basic, PermissionScopes.Sign]);
-    expect(current!.updatedAt).toBe(2000);
+    if (!current) throw new Error("Expected permission record to exist");
+    expect(current.id).toBe(id1); // id reused
+    expect(current.grants.map((g) => g.scope)).toEqual([PermissionScopes.Basic, PermissionScopes.Sign]);
+    expect(current.updatedAt).toBe(2000);
   });
 
   it("getByOrigin() returns null when missing", async () => {

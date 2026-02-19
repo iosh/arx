@@ -162,21 +162,6 @@ export const createPortRouter = ({
     }
   };
 
-  const emitEventToPort = (port: Runtime.Port, event: string, params: unknown[]) => {
-    const sessionId = getSessionIdForPort(port);
-    if (!sessionId) return;
-    postEnvelopeOrDrop(
-      port,
-      {
-        channel: CHANNEL,
-        sessionId,
-        type: "event",
-        payload: { event, params },
-      },
-      "emit_event_failed",
-    );
-  };
-
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
     const sessionId = getSessionIdForPort(port);
     if (!sessionId) return;

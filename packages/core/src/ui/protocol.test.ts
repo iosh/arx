@@ -84,7 +84,7 @@ describe("ui protocol registry", () => {
   it("validates method results (strict)", () => {
     const okPk = parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: "f".repeat(64) });
     expect(okPk.privateKey.length).toBe(64);
-    expect(() => parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: "0x" + "f".repeat(64) })).toThrow();
+    expect(() => parseUiMethodResult("ui.keyrings.exportPrivateKey", { privateKey: `0x${"f".repeat(64)}` })).toThrow();
 
     const okOnboardingMnemonic = parseUiMethodResult("ui.onboarding.generateMnemonic", {
       words: Array.from<string>({ length: 12 }).fill("word"),

@@ -3,13 +3,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { copyBytes, zeroize } from "../../vault/utils.js";
 import { keyringErrors } from "../errors.js";
-import type {
-  HierarchicalDeterministicKeyring,
-  HierarchicalDeterministicKeyringSnapshot,
-  KeyringAccount,
-  SimpleKeyring,
-  SimpleKeyringSnapshot,
-} from "../types.js";
+import type { KeyringAccount, SimpleKeyring, SimpleKeyringSnapshot } from "../types.js";
 
 const ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/;
 const PRIVATE_KEY_PATTERN = /^(?:0x)?[0-9a-fA-F]{64}$/;
@@ -52,7 +46,12 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
 
   importAccount(privateKey: string | Uint8Array): KeyringAccount<string> {
     this.loadFromPrivateKey(privateKey);
-    return { ...this.#entry!.account };
+    const entry = this.#entry;
+    if (!entry) {
+      // Defensive: loadFromPrivateKey should always set this.
+      throw new Error("Private key entry not initialized");
+    }
+    return { ...entry.account };
   }
 
   getAccounts(): readonly KeyringAccount<string>[] {
@@ -60,7 +59,9 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
   }
 
   getAccount(address: string): KeyringAccount<string> | undefined {
-    return this.hasAccount(address) ? { ...this.#entry!.account } : undefined;
+    const entry = this.#entry;
+    if (!entry) return undefined;
+    return this.#toCanonicalAddress(address) === entry.account.address ? { ...entry.account } : undefined;
   }
 
   hasAccount(address: string): boolean {
@@ -79,7 +80,11 @@ export class PrivateKeyKeyring implements SimpleKeyring<KeyringAccount<string>> 
     if (!this.hasAccount(address)) {
       throw keyringErrors.accountNotFound();
     }
-    return copyBytes(this.#entry!.secret);
+    const entry = this.#entry;
+    if (!entry) {
+      throw keyringErrors.secretUnavailable();
+    }
+    return copyBytes(entry.secret);
   }
 
   toSnapshot(): SimpleKeyringSnapshot<KeyringAccount<string>> {

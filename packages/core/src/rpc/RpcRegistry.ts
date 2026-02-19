@@ -135,10 +135,14 @@ export class RpcRegistry {
       });
     }
 
-    if (this.protocolAdapters.has(namespace)) return this.protocolAdapters.get(namespace)!;
+    const direct = this.protocolAdapters.get(namespace);
+    if (direct) return direct;
 
     const [prefix] = namespace.split(":");
-    if (prefix && this.protocolAdapters.has(prefix)) return this.protocolAdapters.get(prefix)!;
+    if (prefix) {
+      const byPrefix = this.protocolAdapters.get(prefix);
+      if (byPrefix) return byPrefix;
+    }
 
     throw arxError({
       reason: ArxReasons.RpcInternal,
@@ -365,9 +369,13 @@ export class RpcRegistry {
       if (!definition.parseParams && !definition.paramsSchema) return args.params;
 
       try {
-        return definition.parseParams
-          ? definition.parseParams(args.params, args.context)
-          : definition.paramsSchema!.parse(args.params);
+        if (definition.parseParams) {
+          return definition.parseParams(args.params, args.context);
+        }
+        if (!definition.paramsSchema) {
+          return args.params;
+        }
+        return definition.paramsSchema.parse(args.params);
       } catch (error) {
         if (isArxError(error)) throw error;
 

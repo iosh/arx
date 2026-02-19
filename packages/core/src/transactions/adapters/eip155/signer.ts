@@ -44,7 +44,9 @@ const readErrorMessage = (value: unknown) => {
 
 const isHexValue = (value: unknown): value is HexType => typeof value === "string" && value.startsWith("0x");
 
-const toBigInt = (value: HexType | null | undefined, label: string, required = false): bigint | undefined => {
+function toBigInt(value: HexType | null | undefined, label: string, required: true): bigint;
+function toBigInt(value: HexType | null | undefined, label: string, required?: false): bigint | undefined;
+function toBigInt(value: HexType | null | undefined, label: string, required = false): bigint | undefined {
   if (value == null) {
     if (required) {
       throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Transaction ${label} is required.` });
@@ -60,7 +62,7 @@ const toBigInt = (value: HexType | null | undefined, label: string, required = f
       message: `Transaction ${label} is not a valid hex quantity.`,
     });
   }
-};
+}
 
 /**
  * Extract numeric chainId from transaction or context.
@@ -114,8 +116,8 @@ const buildEnvelope = (
   const has1559Fees = prepared.maxFeePerGas != null || prepared.maxPriorityFeePerGas != null;
 
   if (has1559Fees) {
-    const maxFeePerGas = toBigInt(prepared.maxFeePerGas, "maxFeePerGas", true)!;
-    const maxPriorityFeePerGas = toBigInt(prepared.maxPriorityFeePerGas, "maxPriorityFeePerGas", true)!;
+    const maxFeePerGas = toBigInt(prepared.maxFeePerGas, "maxFeePerGas", true);
+    const maxPriorityFeePerGas = toBigInt(prepared.maxPriorityFeePerGas, "maxPriorityFeePerGas", true);
 
     return {
       type: "eip1559",
@@ -128,7 +130,7 @@ const buildEnvelope = (
     };
   }
 
-  const gasPrice = toBigInt(prepared.gasPrice, "gasPrice", true)!;
+  const gasPrice = toBigInt(prepared.gasPrice, "gasPrice", true);
 
   return {
     type: "legacy",

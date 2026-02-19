@@ -52,6 +52,10 @@ export const buildMeta = (activeChain: string): TransportMeta => ({
   supportedChains: [activeChain],
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
+};
+
 export class MockContentBridge {
   #dom: JSDOM;
   #attached = false;
@@ -173,12 +177,13 @@ export class MockContentBridge {
   }
 
   #handleMessage = (event: MessageEvent) => {
-    const data = event.data as any;
-    if (data?.channel !== CHANNEL) return;
+    const data = event.data;
+    if (!isRecord(data) || data.channel !== CHANNEL) return;
 
     if (data.type === "handshake") {
-      this.#sessionId = data.sessionId;
-      this.#handshakeId = data.payload?.handshakeId;
+      this.#sessionId = typeof data.sessionId === "string" ? data.sessionId : null;
+      this.#handshakeId =
+        isRecord(data.payload) && typeof data.payload.handshakeId === "string" ? data.payload.handshakeId : null;
       for (const resolve of this.#handshakeWaiters.splice(0)) resolve();
       if (this.#autoHandshake) {
         this.ackHandshake();
@@ -188,9 +193,9 @@ export class MockContentBridge {
 
     if (data.type !== "request") return;
 
-    const method = data.payload?.method as string | undefined;
-    const id = data.id as string | undefined;
-    const sessionId = data.sessionId as string | undefined;
+    const method = isRecord(data.payload) ? data.payload.method : undefined;
+    const id = data.id;
+    const sessionId = data.sessionId;
     if (typeof method !== "string" || typeof id !== "string" || typeof sessionId !== "string") return;
 
     this.#requestCounts.set(method, (this.#requestCounts.get(method) ?? 0) + 1);

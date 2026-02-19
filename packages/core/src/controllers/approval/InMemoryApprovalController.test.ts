@@ -151,7 +151,7 @@ describe("InMemoryApprovalController", () => {
     });
 
     const custom = new Error("custom rejection");
-    (custom as any).code = 4001;
+    (custom as Error & { code?: number }).code = 4001;
 
     controller.reject(id, custom);
     await expect(promise).rejects.toBe(custom);

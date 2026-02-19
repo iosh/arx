@@ -5,6 +5,13 @@ import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
 import { createEip155InjectedProvider } from "./injected.js";
 import { Eip155Provider } from "./provider.js";
 
+type InjectedEip155Provider = Eip155Provider &
+  Record<string, unknown> & {
+    isMetaMask: boolean;
+    _metamask: { isUnlocked: () => Promise<boolean> };
+    networkVersion: string;
+  };
+
 const INITIAL_STATE: TransportState = {
   connected: true,
   chainId: "0x1",
@@ -35,7 +42,7 @@ describe("createEip155InjectedProvider", () => {
   const createInjected = (initialState: TransportState = INITIAL_STATE) => {
     const transport = new StubTransport(initialState);
     const raw = new Eip155Provider({ transport });
-    const injected = createEip155InjectedProvider(raw) as any;
+    const injected = createEip155InjectedProvider(raw) as unknown as InjectedEip155Provider;
     return { transport, raw, injected };
   };
 
@@ -45,7 +52,8 @@ describe("createEip155InjectedProvider", () => {
       return;
     }
 
-    delete (Object.prototype as any)[property];
+    const proto = Object.prototype as unknown as Record<string, unknown>;
+    delete proto[property];
   };
 
   describe("compatibility shims", () => {

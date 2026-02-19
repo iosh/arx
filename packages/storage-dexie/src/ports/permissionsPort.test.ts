@@ -30,7 +30,7 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
     const first = args[0];
     if (typeof first === "string" && first.startsWith("[storage-dexie]")) return;
-    originalWarn(...(args as any[]));
+    originalWarn(...args);
   });
 });
 

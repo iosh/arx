@@ -4,11 +4,9 @@ import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalTask,
   ApprovalTypes,
-  type PermissionApprovalResult,
   type PermissionRequestDescriptor,
   type PermissionScope,
   PermissionScopes,
-  type RequestPermissionsApprovalPayload,
 } from "../../../../controllers/index.js";
 import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../../permissions.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
@@ -100,7 +98,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
     const namespace = EIP155_NAMESPACE;
 
     const requested = toRequestDescriptors(params, activeChain.chainRef);
-    const task: ApprovalTask<RequestPermissionsApprovalPayload> = {
+    const task = {
       id: createTaskId("wallet_requestPermissions"),
       type: ApprovalTypes.RequestPermissions,
       origin,
@@ -108,13 +106,13 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       chainRef: activeChain.chainRef,
       createdAt: Date.now(),
       payload: { requested },
-    };
+    } satisfies ApprovalTask<typeof ApprovalTypes.RequestPermissions>;
 
     try {
-      const result = (await controllers.approvals.requestApproval(
+      const result = await controllers.approvals.requestApproval(
         task,
         requireRequestContext(rpcContext, "wallet_requestPermissions"),
-      )) as PermissionApprovalResult;
+      );
       const grants = result?.granted ?? [];
 
       for (const descriptor of grants) {

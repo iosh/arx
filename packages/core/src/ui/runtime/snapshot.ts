@@ -94,10 +94,7 @@ type AddChainPayload = { metadata: ChainMetadata; isUpdate: boolean };
 
 const extractPayload = <T>(payload: unknown): T => payload as T;
 
-const toApprovalSummary = (
-  controllers: HandlerControllers,
-  task: ApprovalTask<unknown>,
-): UiSnapshot["approvals"][number] => {
+const toApprovalSummary = (controllers: HandlerControllers, task: ApprovalTask): UiSnapshot["approvals"][number] => {
   const activeChain = controllers.network.getActiveChain();
   const base = {
     id: task.id,

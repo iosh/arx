@@ -1,5 +1,10 @@
-import type { ApprovalRecord } from "../../db/records.js";
-import type { ApprovalFinishedEvent, ApprovalRequestedEvent, ApprovalState, ApprovalTask } from "./types.js";
+import type {
+  ApprovalFinishedEvent,
+  ApprovalRequestedEvent,
+  ApprovalState,
+  ApprovalTask,
+  ApprovalType,
+} from "./types.js";
 
 export const cloneState = (state: ApprovalState): ApprovalState => ({
   pending: state.pending.map((item) => ({
@@ -35,7 +40,7 @@ export const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
   return true;
 };
 
-export const cloneTask = <T>(task: ApprovalTask<T>): ApprovalTask<T> => ({
+export const cloneTask = <K extends ApprovalType>(task: ApprovalTask<K>): ApprovalTask<K> => ({
   id: task.id,
   type: task.type,
   origin: task.origin,
@@ -84,22 +89,3 @@ export const toSimpleError = (error: unknown): { name: string; message: string }
   const err = error instanceof Error ? error : new Error(String(error));
   return { name: err.name || "Error", message: err.message || "Unknown error" };
 };
-
-export const toQueueItem = (record: ApprovalRecord) => ({
-  id: record.id,
-  type: record.type,
-  origin: record.origin,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  createdAt: record.createdAt,
-});
-
-export const toTask = (record: ApprovalRecord): ApprovalTask<unknown> => ({
-  id: record.id,
-  type: record.type,
-  origin: record.origin,
-  namespace: record.namespace,
-  chainRef: record.chainRef,
-  payload: record.payload,
-  createdAt: record.createdAt,
-});

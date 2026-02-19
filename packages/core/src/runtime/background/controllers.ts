@@ -9,12 +9,11 @@ import type {
   AccountMessengerTopics,
   MultiNamespaceAccountsState,
 } from "../../controllers/account/types.js";
-import { StoreApprovalController } from "../../controllers/approval/StoreApprovalController.js";
+import { InMemoryApprovalController } from "../../controllers/approval/InMemoryApprovalController.js";
 import type {
   ApprovalController,
   ApprovalMessenger,
   ApprovalMessengerTopics,
-  ApprovalState,
 } from "../../controllers/approval/types.js";
 import { InMemoryChainRegistryController } from "../../controllers/chainRegistry/ChainRegistryController.js";
 import type {
@@ -48,7 +47,6 @@ import type {
 import type { Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/accounts/types.js";
-import type { ApprovalsService } from "../../services/approvals/types.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
@@ -72,7 +70,7 @@ export type ControllerLayerOptions = {
   };
   approvals?: {
     autoRejectMessage?: string;
-    initialState?: ApprovalState;
+    ttlMs?: number;
     logger?: (message: string, error?: unknown) => void;
   };
   permissions?: {
@@ -115,7 +113,6 @@ export const initControllers = ({
   rpcRegistry,
   accountsService,
   settingsService,
-  approvalsService,
   permissionsService,
   transactionsService,
   options,
@@ -125,7 +122,6 @@ export const initControllers = ({
   rpcRegistry: RpcRegistry;
   accountsService: AccountsService;
   settingsService: SettingsService;
-  approvalsService: ApprovalsService;
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
   options: ControllerLayerOptions;
@@ -160,12 +156,12 @@ export const initControllers = ({
     settings: settingsService,
   });
 
-  const approvalController = new StoreApprovalController({
+  const approvalController = new InMemoryApprovalController({
     messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
-    service: approvalsService,
     ...(approvalOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: approvalOptions.autoRejectMessage }
       : {}),
+    ...(approvalOptions?.ttlMs !== undefined ? { ttlMs: approvalOptions.ttlMs } : {}),
     ...(approvalOptions?.logger !== undefined ? { logger: approvalOptions.logger } : {}),
   });
 

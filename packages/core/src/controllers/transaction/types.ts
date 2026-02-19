@@ -1,5 +1,6 @@
 import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../../chains/ids.js";
+import type { ApprovalTypes } from "../../db/constants.js";
 import type { RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountAddress } from "../account/types.js";
@@ -117,7 +118,7 @@ export type TransactionApprovalTaskPayload = {
   issues: TransactionIssue[];
 };
 
-export type TransactionApprovalTask = ApprovalTask<TransactionApprovalTaskPayload>;
+export type TransactionApprovalTask = ApprovalTask<typeof ApprovalTypes.SendTransaction>;
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;

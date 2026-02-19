@@ -7,7 +7,6 @@ import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import type {
   AccountRecord,
-  ApprovalRecord,
   KeyringMetaRecord,
   NetworkPreferencesRecord,
   PermissionRecord,
@@ -23,7 +22,6 @@ import {
 } from "../../db/records.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/accounts/port.js";
-import type { ApprovalsPort } from "../../services/approvals/port.js";
 import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../../services/networkPreferences/port.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
@@ -68,25 +66,6 @@ export class MemorySettingsPort implements SettingsPort {
   async put(record: SettingsRecord): Promise<void> {
     this.#record = clone(record);
     this.saved.push(clone(record));
-  }
-}
-
-export class MemoryApprovalsPort implements ApprovalsPort {
-  #records = new Map<string, ApprovalRecord>();
-
-  async get(id: ApprovalRecord["id"]): Promise<ApprovalRecord | null> {
-    const found = this.#records.get(id);
-    return found ? clone(found) : null;
-  }
-
-  async listPending(): Promise<ApprovalRecord[]> {
-    return Array.from(this.#records.values())
-      .filter((record) => record.status === "pending")
-      .map((record) => clone(record));
-  }
-
-  async upsert(record: ApprovalRecord): Promise<void> {
-    this.#records.set(record.id, clone(record));
   }
 }
 
@@ -609,7 +588,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const chainRegistryPort = new MemoryChainRegistryPort(chainSeed.map((metadata) => toRegistryEntity(metadata, 0)));
   const networkPreferencesPort = new MemoryNetworkPreferencesPort(options.networkPreferencesSeed ?? null);
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
-  const approvalsPort = new MemoryApprovalsPort();
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
   const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
@@ -651,7 +629,6 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     },
     store: {
       ports: {
-        approvals: approvalsPort,
         permissions: permissionsPort,
         transactions: transactionsPort,
         accounts: accountsPort,
@@ -670,16 +647,30 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   // Helper function to enable auto-approval for testing
   const enableAutoApproval = () => {
     const unsubscribe = services.controllers.approvals.onRequest(async ({ task }) => {
-      // Automatically resolve approval requests
       try {
-        if (task.type === "wallet_sendTransaction") {
-          // For transactions, approve via transaction controller
-          const result = await services.controllers.transactions.approveTransaction(task.id);
-          await services.controllers.approvals.resolve(task.id, async () => result);
-        } else {
-          // For other types, resolve with empty result
-          await services.controllers.approvals.resolve(task.id, async () => ({}));
-        }
+        // Keep responses semantically valid for each approval type.
+        await services.controllers.approvals.resolve(task.id, async () => {
+          switch (task.type) {
+            case "wallet_sendTransaction": {
+              const result = await services.controllers.transactions.approveTransaction(task.id);
+              return result;
+            }
+            case "wallet_requestAccounts":
+              return services.controllers.accounts.getAccounts({
+                chainRef: task.chainRef ?? services.controllers.network.getActiveChain().chainRef,
+              });
+            case "wallet_signMessage":
+            case "wallet_signTypedData":
+              return "0xsignedpayload";
+            case "wallet_requestPermissions":
+              return { granted: [] };
+            case "wallet_switchEthereumChain":
+            case "wallet_addEthereumChain":
+              return null;
+            default:
+              return null;
+          }
+        });
       } catch (error) {
         // Ignore errors if approval was already resolved
       }

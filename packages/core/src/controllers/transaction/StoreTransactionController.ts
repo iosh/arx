@@ -269,7 +269,7 @@ export class StoreTransactionController implements TransactionController {
     this.#upsertCache(storedMeta);
 
     const task = this.#createApprovalTask(storedMeta);
-    const approvalPromise = this.#approvals.requestApproval(task, requestContext) as Promise<TransactionMeta>;
+    const approvalPromise = this.#approvals.requestApproval(task, requestContext);
 
     // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#queuePrepare(id);

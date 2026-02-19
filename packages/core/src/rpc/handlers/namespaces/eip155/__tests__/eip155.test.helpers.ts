@@ -4,7 +4,6 @@ import { type ApprovalTask, ApprovalTypes } from "../../../../../controllers/ind
 import {
   FakeVault,
   MemoryAccountsPort,
-  MemoryApprovalsPort,
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
@@ -67,7 +66,6 @@ export const createServices = (overrides?: Partial<Parameters<typeof createBackg
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ports: {
-        approvals: new MemoryApprovalsPort(),
         permissions: new MemoryPermissionsPort(),
         transactions: new MemoryTransactionsPort(),
         accounts: new MemoryAccountsPort(),
@@ -167,7 +165,7 @@ export const waitForChainInNetwork = async (
 
 export const setupApprovalResponder = (
   services: ReturnType<typeof createServices>,
-  responder: (task: ApprovalTask<unknown>) => Promise<boolean | void> | boolean | void,
+  responder: (task: ApprovalTask) => Promise<boolean | void> | boolean | void,
 ) => {
   const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
     void (async () => {

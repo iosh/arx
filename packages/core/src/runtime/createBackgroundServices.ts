@@ -5,8 +5,6 @@ import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
-import { createApprovalsService } from "../services/approvals/ApprovalsService.js";
-import type { ApprovalsPort } from "../services/approvals/port.js";
 import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
 import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
@@ -48,7 +46,6 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
   };
   store: {
     ports: {
-      approvals: ApprovalsPort;
       transactions: TransactionsPort;
       accounts: AccountsPort;
       keyringMetas: KeyringMetasPort;
@@ -113,11 +110,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     now: storageNow,
   });
 
-  const approvalsService = createApprovalsService({
-    port: storeOptions.ports.approvals,
-    now: storageNow,
-  });
-
   const transactionsService = createTransactionsService({
     port: storeOptions.ports.transactions,
     now: storageNow,
@@ -137,7 +129,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     rpcRegistry,
     accountsService: accountsStore,
     settingsService,
-    approvalsService,
     permissionsService,
     transactionsService,
     options: controllerOptions,
@@ -210,12 +201,6 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     runtimeLifecycle.initialize(async () => {
       await chainRegistryController.whenReady();
       await controllersBase.permissions.whenReady();
-
-      try {
-        await approvalsService.expireAllPending({ finalStatusReason: "session_lost" });
-      } catch (error) {
-        storageLogger("approvals: failed to expire pending on initialize", error);
-      }
 
       await transactionsLifecycle.initialize();
 

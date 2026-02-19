@@ -1,6 +1,5 @@
 import type {
   AccountRecord,
-  ApprovalRecord,
   KeyringMetaRecord,
   NetworkPreferencesRecord,
   PermissionRecord,
@@ -21,7 +20,6 @@ export class ArxStorageDatabase extends Dexie {
   networkPreferences!: Table<NetworkPreferencesRecord, string>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, string>;
-  approvals!: Table<ApprovalRecord, string>;
   transactions!: Table<TransactionRecord, string>;
 
   vaultMeta!: Table<VaultMetaEntity, string>;
@@ -37,15 +35,12 @@ export class ArxStorageDatabase extends Dexie {
         networkPreferences: "&id",
         accounts: "&accountId, namespace, keyringId",
         permissions: "&id, origin, &[origin+namespace]",
-        approvals: "&id, status, type, origin, createdAt",
         transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
 
         vaultMeta: "&id",
 
         keyringMetas: "&id, type, createdAt",
       })
-      .upgrade((transaction) => {
-        return runMigrations({ db: this, transaction });
-      });
+      .upgrade((transaction) => runMigrations({ db: this, transaction }));
   }
 }

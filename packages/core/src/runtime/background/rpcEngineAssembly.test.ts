@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import {
   MemoryAccountsPort,
-  MemoryApprovalsPort,
   MemoryChainRegistryPort,
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
@@ -92,7 +91,6 @@ describe("background rpc engine assembly", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
-          approvals: new MemoryApprovalsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
@@ -125,7 +123,6 @@ describe("background rpc engine assembly", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
-          approvals: new MemoryApprovalsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),
@@ -166,7 +163,6 @@ describe("background rpc engine assembly", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
         ports: {
-          approvals: new MemoryApprovalsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
           keyringMetas: new MemoryKeyringMetasPort(),

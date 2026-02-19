@@ -1,6 +1,5 @@
 import type {
   AccountsPort,
-  ApprovalsPort,
   KeyringMetasPort,
   NetworkPreferencesPort,
   PermissionsPort,
@@ -10,7 +9,6 @@ import type { VaultMetaPort } from "@arx/core/storage";
 import { ArxStorageDatabase } from "../db.js";
 import { DEFAULT_DB_NAME, getOrCreateDatabase } from "../sharedDb.js";
 import { DexieAccountsPort } from "./accountsPort.js";
-import { DexieApprovalsPort } from "./approvalsPort.js";
 import { DexieKeyringMetasPort } from "./keyringMetasPort.js";
 import { DexieNetworkPreferencesPort } from "./networkPreferencesPort.js";
 import { DexiePermissionsPort } from "./permissionsPort.js";
@@ -18,12 +16,6 @@ import { DexieTransactionsPort } from "./transactionsPort.js";
 import { DexieVaultMetaPort } from "./vaultMetaPort.js";
 
 const getDb = (dbName: string) => getOrCreateDatabase(dbName, (name) => new ArxStorageDatabase(name));
-
-export type CreateDexieApprovalsPortOptions = { databaseName?: string };
-export const createDexieApprovalsPort = (options: CreateDexieApprovalsPortOptions = {}): ApprovalsPort => {
-  const dbName = options.databaseName ?? DEFAULT_DB_NAME;
-  return new DexieApprovalsPort(getDb(dbName));
-};
 
 export type CreateDexiePermissionsPortOptions = { databaseName?: string };
 export const createDexiePermissionsPort = (options: CreateDexiePermissionsPortOptions = {}): PermissionsPort => {

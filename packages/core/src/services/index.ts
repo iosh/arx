@@ -1,5 +1,4 @@
 export * from "./accounts/index.js";
-export * from "./approvals/index.js";
 export * from "./attention/index.js";
 export * from "./chains/index.js";
 export * from "./keyringMetas/index.js";

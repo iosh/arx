@@ -10,7 +10,7 @@ import {
   TransactionRequestSchema,
   TransactionWarningSchema,
 } from "../storage/schemas.js";
-import { APPROVAL_TYPE_VALUES, PERMISSION_SCOPE_VALUES, PermissionScopes } from "./constants.js";
+import { PERMISSION_SCOPE_VALUES, PermissionScopes } from "./constants.js";
 
 // Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
 // Keep validation loose here; chain-specific rules live in codecs/modules.
@@ -184,12 +184,6 @@ export const PermissionRecordSchema = z
   });
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 
-export const ApprovalTypeSchema = z.enum(APPROVAL_TYPE_VALUES);
-export type ApprovalType = z.infer<typeof ApprovalTypeSchema>;
-
-export const ApprovalStatusSchema = z.enum(["pending", "approved", "rejected", "expired"]);
-export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
-
 export const RequestContextSchema = z.strictObject({
   transport: z.enum(["provider", "ui"]),
   portId: nonEmptyStringSchema,
@@ -198,73 +192,6 @@ export const RequestContextSchema = z.strictObject({
   origin: originStringSchema,
 });
 export type RequestContextRecord = z.infer<typeof RequestContextSchema>;
-
-export const FinalStatusReasonSchema = z.enum([
-  "timeout",
-  "session_lost",
-  "locked",
-  "user_reject",
-  "user_approve",
-  "replaced",
-  "internal_error",
-]);
-export type FinalStatusReason = z.infer<typeof FinalStatusReasonSchema>;
-
-export const ApprovalRecordSchema = z
-  .strictObject({
-    id: z.string().uuid(),
-    type: ApprovalTypeSchema,
-    status: ApprovalStatusSchema,
-    origin: originStringSchema,
-    namespace: z.string().min(1).optional(),
-    chainRef: chainRefSchema.optional(),
-    payload: z.unknown(),
-    result: z.unknown().optional(),
-    requestContext: RequestContextSchema,
-    expiresAt: epochMillisecondsSchema,
-    createdAt: epochMillisecondsSchema,
-    finalizedAt: epochMillisecondsSchema.optional(),
-    finalStatusReason: FinalStatusReasonSchema.optional(),
-  })
-  .superRefine((value, ctx) => {
-    const isPending = value.status === "pending";
-    const hasFinalizedAt = value.finalizedAt !== undefined;
-    const hasReason = value.finalStatusReason !== undefined;
-
-    if (isPending) {
-      if (hasFinalizedAt) {
-        ctx.addIssue({
-          code: "custom",
-          message: "finalizedAt must be omitted when status is pending",
-          path: ["finalizedAt"],
-        });
-      }
-      if (hasReason) {
-        ctx.addIssue({
-          code: "custom",
-          message: "finalStatusReason must be omitted when status is pending",
-          path: ["finalStatusReason"],
-        });
-      }
-      return;
-    }
-
-    if (!hasFinalizedAt) {
-      ctx.addIssue({
-        code: "custom",
-        message: "finalizedAt is required when status is not pending",
-        path: ["finalizedAt"],
-      });
-    }
-    if (!hasReason) {
-      ctx.addIssue({
-        code: "custom",
-        message: "finalStatusReason is required when status is not pending",
-        path: ["finalStatusReason"],
-      });
-    }
-  });
-export type ApprovalRecord = z.infer<typeof ApprovalRecordSchema>;
 
 export const TransactionStatusSchema = z.enum([
   "pending",

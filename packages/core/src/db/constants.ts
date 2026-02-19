@@ -22,13 +22,3 @@ export const ApprovalTypes = {
   SwitchChain: "wallet_switchEthereumChain",
   AddChain: "wallet_addEthereumChain",
 } as const;
-
-export const APPROVAL_TYPE_VALUES = [
-  ApprovalTypes.RequestAccounts,
-  ApprovalTypes.RequestPermissions,
-  ApprovalTypes.SignMessage,
-  ApprovalTypes.SignTypedData,
-  ApprovalTypes.SendTransaction,
-  ApprovalTypes.SwitchChain,
-  ApprovalTypes.AddChain,
-] as const;

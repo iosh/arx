@@ -6,7 +6,6 @@ import { createUiHandlers } from "../ui/runtime/handlers.js";
 import {
   flushAsync,
   MemoryAccountsPort,
-  MemoryApprovalsPort,
   MemoryChainRegistryPort,
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
@@ -64,7 +63,6 @@ describe("createBackgroundServices (no snapshots)", () => {
       networkPreferences: { port: networkPreferencesPort },
       store: {
         ports: {
-          approvals: new MemoryApprovalsPort(),
           permissions: new MemoryPermissionsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
@@ -112,7 +110,6 @@ describe("createBackgroundServices (no snapshots)", () => {
       networkPreferences: { port: networkPreferencesPort },
       store: {
         ports: {
-          approvals: new MemoryApprovalsPort(),
           permissions: new MemoryPermissionsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),

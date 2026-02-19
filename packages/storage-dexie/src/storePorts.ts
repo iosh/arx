@@ -1,6 +1,5 @@
 import {
   createDexieAccountsPort,
-  createDexieApprovalsPort,
   createDexieKeyringMetasPort,
   createDexiePermissionsPort,
   createDexieTransactionsPort,
@@ -12,11 +11,10 @@ export type CreateDexieStorePortsOptions = {
 export const createDexieStorePorts = (options: CreateDexieStorePortsOptions = {}) => {
   const { databaseName } = options;
 
-  const approvals = createDexieApprovalsPort({ ...(databaseName ? { databaseName } : {}) });
   const permissions = createDexiePermissionsPort({ ...(databaseName ? { databaseName } : {}) });
   const accounts = createDexieAccountsPort({ ...(databaseName ? { databaseName } : {}) });
   const keyringMetas = createDexieKeyringMetasPort({ ...(databaseName ? { databaseName } : {}) });
   const transactions = createDexieTransactionsPort({ ...(databaseName ? { databaseName } : {}) });
 
-  return { approvals, permissions, accounts, keyringMetas, transactions };
+  return { permissions, accounts, keyringMetas, transactions };
 };

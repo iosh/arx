@@ -15,7 +15,9 @@ const createNetworkStub = () => {
   const endpointListeners = new Set<
     (change: { chainRef: string; previous: RpcEndpointInfo; next: RpcEndpointInfo }) => void
   >();
-  const chainListeners = new Set<(metadata: ChainMetadata) => void>();
+  const metadataListeners = new Set<
+    (payload: { chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }) => void
+  >();
 
   const stub: RpcClientRegistryOptions["network"] = {
     getActiveEndpoint: () => currentEndpoint,
@@ -28,10 +30,10 @@ const createNetworkStub = () => {
         endpointListeners.delete(handler);
       };
     },
-    onChainChanged(handler) {
-      chainListeners.add(handler);
+    onChainMetadataChanged(handler) {
+      metadataListeners.add(handler);
       return () => {
-        chainListeners.delete(handler);
+        metadataListeners.delete(handler);
       };
     },
   };
@@ -42,7 +44,7 @@ const createNetworkStub = () => {
     }
   };
 
-  const emitChainChanged = (chainRef: string, url: string) => {
+  const emitChainMetadataChanged = (chainRef: string, url: string) => {
     const metadata: ChainMetadata = {
       chainRef,
       namespace: chainRef.split(":")[0] ?? "eip155",
@@ -51,8 +53,8 @@ const createNetworkStub = () => {
       nativeCurrency: { name: "Stub", symbol: "STB", decimals: 18 },
       rpcEndpoints: [{ url }],
     };
-    for (const handler of chainListeners) {
-      handler(metadata);
+    for (const handler of metadataListeners) {
+      handler({ chainRef, previous: null, next: metadata });
     }
   };
 
@@ -63,7 +65,7 @@ const createNetworkStub = () => {
       const previous = currentEndpoint;
       currentEndpoint = { ...currentEndpoint, url, headers };
       emitEndpointChanged(chainRef, previous, currentEndpoint);
-      emitChainChanged(chainRef, url);
+      emitChainMetadataChanged(chainRef, url);
     },
   };
 };

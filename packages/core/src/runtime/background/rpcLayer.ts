@@ -24,7 +24,7 @@ export const initRpcLayer = ({
       getActiveEndpoint: (chainRef) => controllers.network.getActiveEndpoint(chainRef),
       reportRpcOutcome: (chainRef, outcome) => controllers.network.reportRpcOutcome(chainRef, outcome),
       onRpcEndpointChanged: (handler) => controllers.network.onRpcEndpointChanged(handler),
-      onChainChanged: (handler) => controllers.network.onChainChanged(handler),
+      onChainMetadataChanged: (handler) => controllers.network.onChainMetadataChanged(handler),
     },
   });
 

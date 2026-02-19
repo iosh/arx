@@ -26,7 +26,7 @@ import type {
   NetworkController,
   NetworkMessenger,
   NetworkMessengerTopic,
-  NetworkState,
+  NetworkStateInput,
   RpcEventLogger,
   RpcStrategyConfig,
 } from "../../controllers/network/types.js";
@@ -51,7 +51,7 @@ import type { PermissionsService } from "../../services/permissions/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import { DEFAULT_NETWORK_STATE, DEFAULT_STRATEGY } from "./constants.js";
+import { DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
 import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
 
@@ -59,7 +59,7 @@ type NamespaceResolver = (context?: RpcInvocationContext) => Namespace;
 
 export type ControllerLayerOptions = {
   network?: {
-    initialState?: NetworkState;
+    initialState?: NetworkStateInput;
     defaultStrategy?: RpcStrategyConfig;
     defaultCooldownMs?: number;
     now?: () => number;
@@ -140,7 +140,7 @@ export const initControllers = ({
 
   const networkController = new InMemoryNetworkController({
     messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
-    initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE,
+    initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT,
     defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
     ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),

@@ -57,7 +57,8 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(services);
     const mainnet = services.controllers.network.getActiveChain();
 
-    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
 
@@ -96,7 +97,8 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const execute = createExecutor(services);
-    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
 
@@ -124,7 +126,8 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const execute = createExecutor(services);
-    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
     try {
       await expect(
@@ -182,13 +185,15 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const execute = createExecutor(services);
-    await services.controllers.network.addChain({
+    const baseChain: ChainMetadata = {
       ...ALT_CHAIN,
       chainRef: "eip155:8453",
       chainId: "0x2105",
       displayName: "Base",
       features: ["eip155"],
-    });
+    };
+    await services.controllers.chainRegistry.upsertChain(baseChain);
+    await waitForChainInNetwork(services, baseChain.chainRef);
 
     try {
       await expect(
@@ -267,19 +272,20 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("emits chainChanged event on successful switch", async () => {
+  it("emits activeChainChanged event on successful switch", async () => {
     const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();
 
     const execute = createExecutor(services);
-    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
 
     const changes: string[] = [];
-    const unsubscribe = services.controllers.network.onChainChanged((chain) => {
-      changes.push(chain.chainRef);
+    const unsubscribe = services.controllers.network.onActiveChainChanged(({ next }) => {
+      changes.push(next);
     });
 
     try {
@@ -624,7 +630,8 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const main = services.controllers.network.getActiveChain();
-    await services.controllers.network.addChain(ALT_CHAIN);
+    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
     await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: main.chainRef });
     await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: ALT_CHAIN.chainRef });

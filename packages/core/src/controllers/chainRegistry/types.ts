@@ -23,6 +23,11 @@ export type ChainRegistryUpsertOptions = {
   schemaVersion?: number;
 };
 
+export type ChainRegistryUpsertResult =
+  | { kind: "added"; chain: ChainRegistryEntity }
+  | { kind: "updated"; chain: ChainRegistryEntity; previous: ChainRegistryEntity }
+  | { kind: "noop"; chain: ChainRegistryEntity };
+
 export interface ChainRegistryController {
   getState(): ChainRegistryState;
   getChain(chainRef: ChainRef): ChainRegistryEntity | null;
@@ -30,7 +35,7 @@ export interface ChainRegistryController {
   upsertChain(
     chain: ChainRegistryEntity["metadata"],
     options?: ChainRegistryUpsertOptions,
-  ): Promise<{ kind: "added" | "updated"; chain: ChainRegistryEntity; previous?: ChainRegistryEntity }>;
+  ): Promise<ChainRegistryUpsertResult>;
   removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainRegistryEntity }>;
   onStateChanged(handler: (state: ChainRegistryState) => void): () => void;
   onChainUpdated(handler: (update: ChainRegistryUpdate) => void): () => void;

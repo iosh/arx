@@ -32,7 +32,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   let listenersAttached = false;
   let unsubscribeRegistry: (() => void) | null = null;
 
-  const readRegistryChains = (): ChainMetadata[] => chainRegistry.getChains().map((entry) => entry.metadata);
+  const readRegistryChains = (): ChainMetadata[] => chainRegistry.getState().chains.map((entry) => entry.metadata);
+
+  let syncInFlight: Promise<void> | null = null;
 
   const computeRpcState = (registryChains: ChainMetadata[], current: ReturnType<typeof network.getState>) => {
     const corrections: Record<ChainRef, NetworkRpcPreference> = {};
@@ -109,10 +111,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return patch;
   };
 
-  const syncFromRegistry = async () => {
+  const syncOnceFromRegistry = async () => {
     const registryChains = readRegistryChains();
     if (registryChains.length === 0) {
-      pendingSync = false;
       return;
     }
 
@@ -160,8 +161,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         }
       }
     }
-
-    pendingSync = false;
   };
 
   const requestSync = () => {
@@ -169,7 +168,22 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     if (getIsHydrating()) {
       return;
     }
-    void syncFromRegistry().catch((error) => logger("network: failed to sync from registry", error));
+    if (syncInFlight) {
+      return;
+    }
+
+    syncInFlight = (async () => {
+      try {
+        while (pendingSync && !getIsHydrating()) {
+          pendingSync = false;
+          await syncOnceFromRegistry();
+        }
+      } catch (error) {
+        logger("network: failed to sync from registry", error);
+      } finally {
+        syncInFlight = null;
+      }
+    })();
   };
 
   const attachListeners = () => {
@@ -212,10 +226,15 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   };
 
   const flushPendingSync = async () => {
-    if (!pendingSync) {
+    if (syncInFlight) {
+      await syncInFlight;
       return;
     }
-    await syncFromRegistry();
+
+    if (pendingSync) {
+      pendingSync = false;
+      await syncOnceFromRegistry();
+    }
   };
 
   const start = () => {

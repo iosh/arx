@@ -1,5 +1,12 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
+import type { ChainRegistryPort } from "../../chains/index.js";
+import {
+  type ChainMetadata,
+  cloneChainMetadata,
+  isSameChainMetadata,
+  normalizeChainMetadata,
+  validateChainMetadata,
+} from "../../chains/metadata.js";
 import {
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
@@ -11,126 +18,11 @@ import type {
   ChainRegistryState,
   ChainRegistryUpdate,
   ChainRegistryUpsertOptions,
+  ChainRegistryUpsertResult,
 } from "./types.js";
 
 const STATE_TOPIC = "chainRegistry:stateChanged";
 const UPDATE_TOPIC = "chainRegistry:updated";
-
-const isSameRecord = <T>(
-  previous: Record<string, T> | undefined,
-  next: Record<string, T> | undefined,
-  comparator: (a: T, b: T) => boolean = (a, b) => a === b,
-) => {
-  if (!previous && !next) return true;
-  if (!previous || !next) return false;
-  const prevKeys = Object.keys(previous);
-  const nextKeys = Object.keys(next);
-  if (prevKeys.length !== nextKeys.length) return false;
-  return prevKeys.every((key) => Object.hasOwn(next, key) && comparator(previous[key]!, next[key]!));
-};
-
-const isSameHeaders = (previous: Record<string, string> | undefined, next: Record<string, string> | undefined) => {
-  return isSameRecord(previous, next);
-};
-
-const isSameStringArray = (previous: readonly string[] | undefined, next: readonly string[] | undefined) => {
-  if (!previous && !next) return true;
-  if (!previous || !next) return false;
-  if (previous.length !== next.length) return false;
-  return previous.every((value, index) => value === next[index]);
-};
-
-const isSameRpcEndpoint = (
-  previous: ChainMetadata["rpcEndpoints"][number],
-  next: ChainMetadata["rpcEndpoints"][number],
-) => {
-  return (
-    previous.url === next.url &&
-    previous.type === next.type &&
-    previous.weight === next.weight &&
-    isSameHeaders(previous.headers, next.headers)
-  );
-};
-
-const isSameExplorerLink = (
-  previous: NonNullable<ChainMetadata["blockExplorers"]>[number],
-  next: NonNullable<ChainMetadata["blockExplorers"]>[number],
-) => {
-  return previous.type === next.type && previous.url === next.url && previous.title === next.title;
-};
-
-const isSameNativeCurrency = (previous: ChainMetadata["nativeCurrency"], next: ChainMetadata["nativeCurrency"]) => {
-  return previous.name === next.name && previous.symbol === next.symbol && previous.decimals === next.decimals;
-};
-
-const isSameIcon = (previous: ChainMetadata["icon"], next: ChainMetadata["icon"]) => {
-  if (!previous && !next) return true;
-  if (!previous || !next) return false;
-  return (
-    previous.url === next.url &&
-    previous.width === next.width &&
-    previous.height === next.height &&
-    previous.format === next.format
-  );
-};
-
-const isSameExtensions = (previous: ChainMetadata["extensions"], next: ChainMetadata["extensions"]) => {
-  return isSameRecord(previous, next);
-};
-
-const isSameMetadata = (previous: ChainMetadata, next: ChainMetadata) => {
-  if (
-    previous.chainRef !== next.chainRef ||
-    previous.namespace !== next.namespace ||
-    previous.chainId !== next.chainId ||
-    previous.displayName !== next.displayName ||
-    previous.shortName !== next.shortName ||
-    previous.description !== next.description
-  ) {
-    return false;
-  }
-
-  if (!isSameNativeCurrency(previous.nativeCurrency, next.nativeCurrency)) {
-    return false;
-  }
-
-  if (previous.rpcEndpoints.length !== next.rpcEndpoints.length) {
-    return false;
-  }
-
-  for (let i = 0; i < previous.rpcEndpoints.length; i += 1) {
-    if (!isSameRpcEndpoint(previous.rpcEndpoints[i]!, next.rpcEndpoints[i]!)) {
-      return false;
-    }
-  }
-
-  const prevExplorers = previous.blockExplorers;
-  const nextExplorers = next.blockExplorers;
-  if (!prevExplorers && nextExplorers) return false;
-  if (prevExplorers && !nextExplorers) return false;
-  if (prevExplorers && nextExplorers) {
-    if (prevExplorers.length !== nextExplorers.length) return false;
-    for (let i = 0; i < prevExplorers.length; i += 1) {
-      if (!isSameExplorerLink(prevExplorers[i]!, nextExplorers[i]!)) {
-        return false;
-      }
-    }
-  }
-
-  if (!isSameIcon(previous.icon, next.icon)) {
-    return false;
-  }
-
-  if (!isSameStringArray(previous.features, next.features)) {
-    return false;
-  }
-
-  if (!isSameStringArray(previous.tags, next.tags)) {
-    return false;
-  }
-
-  return isSameExtensions(previous.extensions, next.extensions);
-};
 
 const isSameEntity = (previous: ChainRegistryEntity, next: ChainRegistryEntity) => {
   if (
@@ -142,49 +34,13 @@ const isSameEntity = (previous: ChainRegistryEntity, next: ChainRegistryEntity) 
     return false;
   }
 
-  return isSameMetadata(previous.metadata, next.metadata);
+  return isSameChainMetadata(previous.metadata, next.metadata);
 };
 
 const cloneEntity = (entity: ChainRegistryEntity): ChainRegistryEntity => ({
   chainRef: entity.chainRef,
   namespace: entity.namespace,
-  metadata: {
-    chainRef: entity.metadata.chainRef,
-    namespace: entity.metadata.namespace,
-    chainId: entity.metadata.chainId,
-    displayName: entity.metadata.displayName,
-    shortName: entity.metadata.shortName,
-    description: entity.metadata.description,
-    nativeCurrency: {
-      name: entity.metadata.nativeCurrency.name,
-      symbol: entity.metadata.nativeCurrency.symbol,
-      decimals: entity.metadata.nativeCurrency.decimals,
-    },
-    rpcEndpoints: entity.metadata.rpcEndpoints.map((endpoint) => ({
-      url: endpoint.url,
-      type: endpoint.type,
-      weight: endpoint.weight,
-      headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-    })),
-    blockExplorers: entity.metadata.blockExplorers
-      ? entity.metadata.blockExplorers.map((explorer) => ({
-          type: explorer.type,
-          url: explorer.url,
-          title: explorer.title,
-        }))
-      : undefined,
-    icon: entity.metadata.icon
-      ? {
-          url: entity.metadata.icon.url,
-          width: entity.metadata.icon.width,
-          height: entity.metadata.icon.height,
-          format: entity.metadata.icon.format,
-        }
-      : undefined,
-    features: entity.metadata.features ? [...entity.metadata.features] : undefined,
-    tags: entity.metadata.tags ? [...entity.metadata.tags] : undefined,
-    extensions: entity.metadata.extensions ? { ...entity.metadata.extensions } : undefined,
-  },
+  metadata: cloneChainMetadata(entity.metadata),
   schemaVersion: entity.schemaVersion,
   updatedAt: entity.updatedAt,
 });
@@ -201,10 +57,6 @@ type ControllerOptions = {
   seed?: readonly ChainMetadata[];
   schemaVersion?: number;
 };
-
-type UpsertResult =
-  | { kind: "added"; chain: ChainRegistryEntity }
-  | { kind: "updated"; chain: ChainRegistryEntity; previous: ChainRegistryEntity };
 
 export class InMemoryChainRegistryController implements ChainRegistryController {
   #messenger: ChainRegistryMessenger;
@@ -234,29 +86,36 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
   }
 
   getChains(): ChainRegistryEntity[] {
-    return Array.from(this.#chains.values(), cloneEntity);
+    return cloneState(this.#chains.values()).chains;
   }
 
-  async upsertChain(metadata: ChainMetadata, options?: ChainRegistryUpsertOptions): Promise<UpsertResult> {
+  async upsertChain(metadata: ChainMetadata, options?: ChainRegistryUpsertOptions): Promise<ChainRegistryUpsertResult> {
     await this.#ready;
 
+    // Validate first so normalization cannot throw (e.g. bad payloads cast as ChainMetadata).
+    const validated = validateChainMetadata(metadata);
+    const normalized = normalizeChainMetadata(validated);
+    const previous = this.#chains.get(normalized.chainRef) ?? null;
+    const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
+    if (previous && previous.schemaVersion === schemaVersion && isSameChainMetadata(previous.metadata, normalized)) {
+      return { kind: "noop", chain: cloneEntity(previous) };
+    }
+
     const entity: ChainRegistryEntity = {
-      chainRef: metadata.chainRef,
-      namespace: metadata.namespace,
-      metadata,
-      schemaVersion: options?.schemaVersion ?? this.#defaultSchemaVersion,
+      chainRef: normalized.chainRef,
+      namespace: normalized.namespace,
+      metadata: normalized,
+      schemaVersion,
       updatedAt: options?.updatedAt ?? this.#now(),
     };
 
     const checked = ChainRegistryEntitySchema.parse(entity);
 
-    const previous = this.#chains.get(checked.chainRef) ?? null;
-
     await this.#port.put(checked);
 
     this.#chains.set(checked.chainRef, checked);
 
-    const result: UpsertResult =
+    const result: ChainRegistryUpsertResult =
       previous === null
         ? { kind: "added" as const, chain: cloneEntity(checked) }
         : { kind: "updated" as const, chain: cloneEntity(checked), previous: cloneEntity(previous) };
@@ -300,15 +159,17 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
       const sanitized = await this.#sanitizePersisted(persisted);
 
       if (sanitized.length === 0 && seed.length > 0) {
-        const seedEntities = seed.map((metadata) =>
-          ChainRegistryEntitySchema.parse({
-            chainRef: metadata.chainRef,
-            namespace: metadata.namespace,
-            metadata,
+        const seedEntities = seed.map((metadata) => {
+          const validated = validateChainMetadata(metadata);
+          const normalized = normalizeChainMetadata(validated);
+          return ChainRegistryEntitySchema.parse({
+            chainRef: normalized.chainRef,
+            namespace: normalized.namespace,
+            metadata: normalized,
             schemaVersion: this.#defaultSchemaVersion,
             updatedAt: this.#now(),
-          }),
-        );
+          });
+        });
 
         await this.#port.putMany(seedEntities);
         for (const entity of seedEntities) {

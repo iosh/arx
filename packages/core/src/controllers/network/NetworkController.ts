@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainIcon, ChainMetadata, ExplorerLink, RpcEndpoint } from "../../chains/metadata.js";
+import { type ChainMetadata, cloneChainMetadata, type RpcEndpoint } from "../../chains/metadata.js";
 import type {
   NetworkController,
   NetworkMessenger,
@@ -55,42 +55,6 @@ const cloneRpcEndpoint = (endpoint: RpcEndpoint): RpcEndpoint => {
   if (endpoint.headers) clone.headers = cloneHeaders(endpoint.headers);
   return clone;
 };
-
-const cloneExplorerLink = (link: ExplorerLink): ExplorerLink => {
-  const clone: ExplorerLink = { type: link.type, url: link.url };
-  if (link.title) clone.title = link.title;
-  return clone;
-};
-
-const cloneIcon = (icon: ChainIcon | undefined) => {
-  if (!icon) return undefined;
-  return {
-    url: icon.url,
-    width: icon.width,
-    height: icon.height,
-    format: icon.format,
-  };
-};
-
-const cloneMetadata = (metadata: ChainMetadata): ChainMetadata => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  chainId: metadata.chainId,
-  displayName: metadata.displayName,
-  shortName: metadata.shortName,
-  description: metadata.description,
-  nativeCurrency: {
-    name: metadata.nativeCurrency.name,
-    symbol: metadata.nativeCurrency.symbol,
-    decimals: metadata.nativeCurrency.decimals,
-  },
-  rpcEndpoints: metadata.rpcEndpoints.map(cloneRpcEndpoint),
-  blockExplorers: metadata.blockExplorers?.map(cloneExplorerLink),
-  icon: cloneIcon(metadata.icon),
-  features: metadata.features ? [...metadata.features] : undefined,
-  tags: metadata.tags ? [...metadata.tags] : undefined,
-  extensions: metadata.extensions ? { ...metadata.extensions } : undefined,
-});
 
 const sortChains = (chains: ChainMetadata[]) => {
   return [...chains].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
@@ -154,12 +118,12 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   getActiveChain(): ChainMetadata {
-    return cloneMetadata(this.#requireRuntime(this.#activeChain).metadata);
+    return cloneChainMetadata(this.#requireRuntime(this.#activeChain).metadata);
   }
 
   getChain(chainRef: ChainRef): ChainMetadata | null {
     const runtime = this.#chains.get(chainRef);
-    return runtime ? cloneMetadata(runtime.metadata) : null;
+    return runtime ? cloneChainMetadata(runtime.metadata) : null;
   }
 
   getEndpointState(chainRef: ChainRef): RpcEndpointState | null {
@@ -210,14 +174,14 @@ export class InMemoryNetworkController implements NetworkController {
     }
     this.#activeChain = target;
     this.#publishState();
-    return cloneMetadata(runtime.metadata);
+    return cloneChainMetadata(runtime.metadata);
   }
 
   async addChain(
     metadata: ChainMetadata,
     options?: { activate?: boolean; strategy?: RpcStrategyConfig },
   ): Promise<ChainMetadata> {
-    const incoming = cloneMetadata(metadata);
+    const incoming = cloneChainMetadata(metadata);
     const existing = this.#chains.get(incoming.chainRef);
     const strategy = deriveStrategyConfig(options?.strategy ?? existing?.strategy ?? this.#defaultStrategy);
     const runtime = this.#createRuntime(incoming, strategy, existing);
@@ -228,7 +192,7 @@ export class InMemoryNetworkController implements NetworkController {
     }
 
     this.#publishState();
-    return cloneMetadata(runtime.metadata);
+    return cloneChainMetadata(runtime.metadata);
   }
 
   async removeChain(chainRef: ChainRef): Promise<void> {
@@ -358,7 +322,7 @@ export class InMemoryNetworkController implements NetworkController {
 
   async syncChain(metadata: ChainMetadata): Promise<void> {
     const runtime = this.#requireRuntime(metadata.chainRef);
-    const updated = cloneMetadata(metadata);
+    const updated = cloneChainMetadata(metadata);
     const currentEndpoints = runtime.endpoints.map((endpoint) => endpoint.url);
     const nextEndpoints = updated.rpcEndpoints.map((endpoint) => endpoint.url);
     const endpointsChanged =
@@ -393,7 +357,7 @@ export class InMemoryNetworkController implements NetworkController {
     }
 
     const chainMap = new Map<ChainRef, ChainRuntime>();
-    for (const metadata of sortChains(state.knownChains.map(cloneMetadata))) {
+    for (const metadata of sortChains(state.knownChains.map(cloneChainMetadata))) {
       const snapshot = state.rpc[metadata.chainRef];
       const strategy = deriveStrategyConfig(snapshot?.strategy ?? this.#defaultStrategy);
       const runtime = this.#createRuntimeFromSnapshot(metadata, strategy, snapshot);
@@ -532,7 +496,9 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   #buildStateSnapshot(): NetworkState {
-    const knownChains = sortChains(Array.from(this.#chains.values(), (runtime) => cloneMetadata(runtime.metadata)));
+    const knownChains = sortChains(
+      Array.from(this.#chains.values(), (runtime) => cloneChainMetadata(runtime.metadata)),
+    );
     const rpcEntries = Array.from(this.#chains.entries()).map(
       ([chainRef, runtime]) => [chainRef, this.#buildEndpointState(chainRef, runtime)] as const,
     );
@@ -594,7 +560,7 @@ export class InMemoryNetworkController implements NetworkController {
     });
 
     const activeRuntime = this.#requireRuntime(this.#activeChain);
-    this.#messenger.publish(NETWORK_CHAIN_TOPIC, cloneMetadata(activeRuntime.metadata), {
+    this.#messenger.publish(NETWORK_CHAIN_TOPIC, cloneChainMetadata(activeRuntime.metadata), {
       force,
       compare: (prev?: ChainMetadata, next?: ChainMetadata) => prev?.chainRef === next?.chainRef,
     });

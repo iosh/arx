@@ -228,16 +228,43 @@ describe("InMemoryChainRegistryController", () => {
     expect(updates).toHaveLength(1);
     expect(updates[0]?.kind).toBe("added");
 
-    await controller.upsertChain(optimism, { updatedAt: 2_000 });
-
-    const secondUpdate = updates[1];
-    expect(secondUpdate?.kind).toBe("updated");
-    if (secondUpdate?.kind !== "updated") throw new Error("expected updated update");
-    expect(secondUpdate.chain.updatedAt).toBe(2_000);
-    expect(secondUpdate.previous?.updatedAt).toBe(2_000);
+    const noop = await controller.upsertChain(optimism, { updatedAt: 2_000 });
+    expect(noop.kind).toBe("noop");
     expect(states).toHaveLength(2);
-    expect(updates).toHaveLength(2);
-    expect(updates[1]?.kind).toBe("updated");
+    expect(updates).toHaveLength(1);
+  });
+
+  it("does not write or emit events for idempotent upserts", async () => {
+    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const port = new MemoryChainRegistryPort();
+    const now = () => 1_000;
+    const seed = [createEip155Metadata(1)];
+
+    const controller = new InMemoryChainRegistryController({
+      messenger,
+      port,
+      seed,
+      now,
+    });
+
+    await controller.whenReady();
+
+    const states: ChainRegistryState[] = [];
+    const updates: ChainRegistryUpdate[] = [];
+    controller.onStateChanged((state) => states.push(state));
+    controller.onChainUpdated((update) => updates.push(update));
+
+    const before = await port.getAll();
+    expect(before).toHaveLength(1);
+
+    const result = await controller.upsertChain(seed[0]!, { updatedAt: 2_000 });
+    expect(result.kind).toBe("noop");
+
+    const after = await port.getAll();
+    expect(after).toHaveLength(1);
+    expect(after[0]?.updatedAt).toBe(1_000);
+    expect(states).toHaveLength(0);
+    expect(updates).toHaveLength(0);
   });
 
   it("returns removed false when chain is missing", async () => {

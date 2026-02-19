@@ -4,9 +4,9 @@ import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import { InMemoryNetworkController } from "./NetworkController.js";
 import type {
   NetworkMessengerTopic,
-  NetworkState,
+  NetworkStateInput,
   RpcEndpointChange,
-  RpcEndpointState,
+  RpcEndpointHealth,
   RpcOutcomeReport,
 } from "./types.js";
 
@@ -23,37 +23,18 @@ const createMetadata = (overrides?: Partial<ChainMetadata>): ChainMetadata => ({
   ...overrides,
 });
 
-const stateFromMetadata = (metadata: ChainMetadata): NetworkState => {
-  const endpoints = metadata.rpcEndpoints.map((endpoint, index) => ({
-    index,
-    url: endpoint.url,
-    type: endpoint.type,
-    weight: endpoint.weight,
-    headers: endpoint.headers ? { ...endpoint.headers } : undefined,
-  }));
-
-  const health = endpoints.map((endpoint) => ({
-    index: endpoint.index,
-    successCount: 0,
-    failureCount: 0,
-    consecutiveFailures: 0,
-  }));
-
-  const rpc: Record<string, RpcEndpointState> = {
-    [metadata.chainRef]: {
-      activeIndex: 0,
-      endpoints,
-      health,
-      strategy: { id: "round-robin" },
-      lastUpdatedAt: 0,
-    },
-  };
-
-  return {
+const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkStateInput>): NetworkStateInput => {
+  const base: NetworkStateInput = {
     activeChain: metadata.chainRef,
     knownChains: [metadata],
-    rpc,
-  } satisfies NetworkState;
+    rpc: {
+      [metadata.chainRef]: {
+        activeIndex: 0,
+        strategy: { id: "round-robin" },
+      },
+    },
+  };
+  return { ...base, ...(overrides ?? {}) };
 };
 
 describe("InMemoryNetworkController", () => {
@@ -62,7 +43,9 @@ describe("InMemoryNetworkController", () => {
     const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
     const now = 1_000;
     const logger = vi.fn();
+
     const endpointChanges: RpcEndpointChange[] = [];
+    const healthUpdates: Array<{ chainRef: string; health: RpcEndpointHealth[] }> = [];
 
     const controller = new InMemoryNetworkController({
       messenger,
@@ -73,9 +56,8 @@ describe("InMemoryNetworkController", () => {
       logger,
     });
 
-    controller.onRpcEndpointChanged((change) => {
-      endpointChanges.push(change);
-    });
+    controller.onRpcEndpointChanged((change) => endpointChanges.push(change));
+    controller.onRpcHealthChanged((update) => healthUpdates.push(update));
 
     const failure: RpcOutcomeReport = {
       success: false,
@@ -84,21 +66,28 @@ describe("InMemoryNetworkController", () => {
 
     controller.reportRpcOutcome(metadata.chainRef, failure);
 
-    const state = controller.getEndpointState(metadata.chainRef);
-    expect(state?.activeIndex).toBe(1);
-    expect(state?.health[0]?.failureCount).toBe(1);
-    expect(state?.health[0]?.consecutiveFailures).toBe(1);
-    expect(state?.health[0]?.cooldownUntil).toBe(11_000);
+    expect(controller.getState().rpc[metadata.chainRef]?.activeIndex).toBe(1);
     expect(endpointChanges).toHaveLength(1);
     expect(endpointChanges[0]?.next.index).toBe(1);
+
+    const lastHealth = healthUpdates.at(-1);
+    expect(lastHealth?.chainRef).toBe(metadata.chainRef);
+    expect(lastHealth?.health[0]?.failureCount).toBe(1);
+    expect(lastHealth?.health[0]?.consecutiveFailures).toBe(1);
+    expect(lastHealth?.health[0]?.cooldownUntil).toBe(11_000);
+
     expect(logger).toHaveBeenCalledWith(expect.objectContaining({ event: "rpcFailure", chainRef: metadata.chainRef }));
   });
 
-  it("preserves index and clears cooldown on success", () => {
-    const metadata = createMetadata();
+  it("clears cooldown and logs recovery on success", () => {
+    const metadata = createMetadata({
+      rpcEndpoints: [{ url: "https://rpc.only.example", type: "public" as const }],
+    });
     const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
     let now = 5_000;
     const logger = vi.fn();
+
+    const healthUpdates: Array<{ chainRef: string; health: RpcEndpointHealth[] }> = [];
 
     const controller = new InMemoryNetworkController({
       messenger,
@@ -108,6 +97,8 @@ describe("InMemoryNetworkController", () => {
       logger,
     });
 
+    controller.onRpcHealthChanged((update) => healthUpdates.push(update));
+
     controller.reportRpcOutcome(metadata.chainRef, {
       success: false,
       error: { message: "temporary" },
@@ -116,37 +107,41 @@ describe("InMemoryNetworkController", () => {
     now = 11_000;
     controller.reportRpcOutcome(metadata.chainRef, { success: true });
 
-    const state = controller.getEndpointState(metadata.chainRef);
-    expect(state?.activeIndex).toBe(controller.getActiveEndpoint().index);
-    expect(state?.health[controller.getActiveEndpoint().index]?.consecutiveFailures).toBe(0);
-    expect(state?.health[controller.getActiveEndpoint().index]?.lastError).toBeUndefined();
-    expect(logger).toHaveBeenCalledTimes(1);
+    const last = healthUpdates.at(-1)?.health[0];
+    expect(last?.consecutiveFailures).toBe(0);
+    expect(last?.lastError).toBeUndefined();
+    expect(last?.cooldownUntil).toBeUndefined();
+
+    // One failure + one recovery.
     expect(logger).toHaveBeenCalledWith(expect.objectContaining({ event: "rpcFailure", chainRef: metadata.chainRef }));
+    expect(logger).toHaveBeenCalledWith(expect.objectContaining({ event: "rpcRecovery", chainRef: metadata.chainRef }));
   });
 
-  it("syncs metadata and reinitialises endpoints when registry updates", async () => {
+  it("clamps routing index when registry metadata changes", () => {
     const metadata = createMetadata();
     const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
-
     const controller = new InMemoryNetworkController({
       messenger,
-      initialState: stateFromMetadata(metadata),
+      initialState: stateFromMetadata(metadata, {
+        rpc: { [metadata.chainRef]: { activeIndex: 1, strategy: { id: "round-robin" } } },
+      }),
     });
 
-    const updatedMetadata: ChainMetadata = {
+    const updates: Array<{ chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }> = [];
+    controller.onChainMetadataChanged((payload) => updates.push(payload));
+
+    const updated: ChainMetadata = {
       ...metadata,
-      rpcEndpoints: [
-        { url: "https://rpc.primary.example", type: "public" as const },
-        { url: "https://rpc.secondary.example", type: "public" as const },
-        { url: "https://rpc.tertiary.example", type: "public" as const },
-      ],
+      rpcEndpoints: [{ url: metadata.rpcEndpoints[0]!.url, type: "public" as const }],
     };
 
-    await controller.syncChain(updatedMetadata);
+    controller.replaceState(
+      stateFromMetadata(updated, {
+        rpc: { [updated.chainRef]: { activeIndex: 1, strategy: { id: "round-robin" } } },
+      }),
+    );
 
-    const state = controller.getEndpointState(metadata.chainRef);
-    expect(state?.endpoints).toHaveLength(3);
-    expect(state?.health).toHaveLength(3);
-    expect(state?.activeIndex).toBeLessThan(3);
+    expect(controller.getState().rpc[metadata.chainRef]?.activeIndex).toBe(0);
+    expect(updates.some((u) => u.chainRef === metadata.chainRef)).toBe(true);
   });
 });

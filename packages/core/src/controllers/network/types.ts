@@ -33,12 +33,9 @@ export type RpcEndpointHealth = {
   cooldownUntil?: number | undefined;
 };
 
-export type RpcEndpointState = {
+export type RpcRoutingState = {
   activeIndex: number;
-  endpoints: RpcEndpointInfo[];
-  health: RpcEndpointHealth[];
   strategy: RpcStrategyConfig;
-  lastUpdatedAt: number;
 };
 
 export type RpcOutcomeReport =
@@ -54,10 +51,13 @@ export type RpcOutcomeReport =
     };
 
 export type NetworkState = {
+  revision: number;
   activeChain: ChainRef;
   knownChains: ChainMetadata[];
-  rpc: Record<ChainRef, RpcEndpointState>;
+  rpc: Record<ChainRef, RpcRoutingState>;
 };
+
+export type NetworkStateInput = Omit<NetworkState, "revision">;
 
 export type RpcEndpointChange = {
   chainRef: ChainRef;
@@ -67,7 +67,7 @@ export type RpcEndpointChange = {
 
 export type RpcLogEvent = {
   level: "info" | "warn";
-  event: "rpcFailure" | "rpcRecovery" | "strategyChanged" | "endpointsUpdated";
+  event: "rpcFailure" | "rpcRecovery" | "strategyChanged";
   chainRef: ChainRef;
   endpoint?: RpcEndpointInfo;
   nextEndpoint?: RpcEndpointInfo;
@@ -82,9 +82,14 @@ export type RpcEventLogger = (event: RpcLogEvent) => void;
 
 export type NetworkMessengerTopic = {
   "network:stateChanged": NetworkState;
-  "network:chainChanged": ChainMetadata;
+  "network:activeChainChanged": { previous: ChainRef; next: ChainRef };
+  "network:chainMetadataChanged": {
+    chainRef: ChainRef;
+    previous: ChainMetadata | null;
+    next: ChainMetadata | null;
+  };
   "network:rpcEndpointChanged": RpcEndpointChange;
-  "network:rpcHealthChanged": { chainRef: ChainRef; state: RpcEndpointState };
+  "network:rpcHealthChanged": { chainRef: ChainRef; health: RpcEndpointHealth[] };
 };
 
 export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
@@ -93,20 +98,16 @@ export interface NetworkController {
   getState(): NetworkState;
   getActiveChain(): ChainMetadata;
   getChain(chainRef: ChainRef): ChainMetadata | null;
-  getEndpointState(chainRef: ChainRef): RpcEndpointState | null;
   getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo;
   onStateChanged(handler: (state: NetworkState) => void): () => void;
-  onChainChanged(handler: (chain: ChainMetadata) => void): () => void;
+  onActiveChainChanged(handler: (payload: { previous: ChainRef; next: ChainRef }) => void): () => void;
+  onChainMetadataChanged(
+    handler: (payload: { chainRef: ChainRef; previous: ChainMetadata | null; next: ChainMetadata | null }) => void,
+  ): () => void;
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void;
-  onRpcHealthChanged(handler: (update: { chainRef: ChainRef; state: RpcEndpointState }) => void): () => void;
+  onRpcHealthChanged(handler: (update: { chainRef: ChainRef; health: RpcEndpointHealth[] }) => void): () => void;
   switchChain(target: ChainRef): Promise<ChainMetadata>;
-  addChain(
-    chain: ChainMetadata,
-    options?: { activate?: boolean; strategy?: RpcStrategyConfig },
-  ): Promise<ChainMetadata>;
-  removeChain(chainRef: ChainRef): Promise<void>;
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
   setStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
-  syncChain(chain: ChainMetadata): Promise<void>;
-  replaceState(state: NetworkState): void;
+  replaceState(state: NetworkStateInput): void;
 }

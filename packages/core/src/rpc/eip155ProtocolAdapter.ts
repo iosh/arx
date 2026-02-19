@@ -54,6 +54,7 @@ export const createEip155ProtocolAdapter = (): NamespaceProtocolAdapter => ({
         return buildJsonRpcError(4100, error);
 
       case ArxReasons.ApprovalRejected:
+      case ArxReasons.ApprovalTimeout:
         return buildJsonRpcError(4001, error);
 
       case ArxReasons.TransportDisconnected:

@@ -79,5 +79,4 @@ export type PermissionController = {
   getPermissions(origin: string): OriginPermissionState | undefined;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void;
-  replaceState(state: PermissionsState): void;
 };

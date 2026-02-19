@@ -488,10 +488,6 @@ export class StorePermissionController implements PermissionController {
     return this.#messenger.subscribe(PERMISSION_ORIGIN_TOPIC, handler);
   }
 
-  replaceState(_state: PermissionsState): void {
-    // Store-backed; legacy snapshot hydration is intentionally disabled.
-  }
-
   async #queueSyncFromStore(params?: { origin?: string | null }): Promise<void> {
     const origin = params?.origin ?? null;
     if (origin) {

@@ -17,6 +17,7 @@ export const ArxReasons = {
   PermissionDenied: "permission/denied",
 
   ApprovalRejected: "approval/rejected",
+  ApprovalTimeout: "approval/timeout",
   SessionLocked: "session/locked",
 
   TransportDisconnected: "transport/disconnected",

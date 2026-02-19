@@ -103,7 +103,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const services = createBackgroundServices({
         store: {
           ports: {
-            approvals: storePorts.approvals,
             accounts: storePorts.accounts,
             keyringMetas: storePorts.keyringMetas,
             permissions: storePorts.permissions,

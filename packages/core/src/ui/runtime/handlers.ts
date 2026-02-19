@@ -279,7 +279,6 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     const selected = await controllers.network.switchChain(
       requested as Parameters<typeof controllers.network.switchChain>[0],
     );
-    await controllers.networkPreferences.setActiveChainRef(selected.chainRef);
     await extendConnectedOriginsToChain(controllers, {
       namespace: selected.namespace,
       chainRef: selected.chainRef,
@@ -507,7 +506,6 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
     "ui.networks.switchActive": async ({ chainRef }) => {
       const selected = await controllers.network.switchChain(chainRef);
-      await controllers.networkPreferences.setActiveChainRef(selected.chainRef);
       await extendConnectedOriginsToChain(controllers, { namespace: selected.namespace, chainRef: selected.chainRef });
       return toChainSnapshot();
     },

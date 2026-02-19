@@ -1,10 +1,10 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
-import type { NetworkController, RpcEndpointState } from "../../controllers/network/types.js";
+import type { NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../db/records.js";
 import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
-import { buildDefaultEndpointState, DEFAULT_CHAIN } from "./constants.js";
+import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
 
 export type CreateNetworkBootstrapOptions = {
   network: NetworkController;
@@ -28,9 +28,11 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
   let cachedPreferences: NetworkPreferencesRecord | null = null;
   let pendingSync = false;
+  let suppressActivePersist = false;
 
   let listenersAttached = false;
   let unsubscribeRegistry: (() => void) | null = null;
+  let unsubscribeNetwork: (() => void) | null = null;
 
   const readRegistryChains = (): ChainMetadata[] => chainRegistry.getState().chains.map((entry) => entry.metadata);
 
@@ -42,7 +44,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     const rpc = Object.fromEntries(
       registryChains.map((chain) => {
         const fromCurrent = current.rpc[chain.chainRef];
-        const base = fromCurrent ?? buildDefaultEndpointState(chain);
+        const base = fromCurrent ?? buildDefaultRoutingState(chain);
 
         const pref = cachedPreferences?.rpc?.[chain.chainRef] ?? null;
         if (!pref) {
@@ -55,15 +57,11 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
           corrections[chain.chainRef] = { ...pref, activeIndex: safeIndex };
         }
 
-        const next: RpcEndpointState = {
-          ...base,
-          activeIndex: safeIndex,
-          strategy: pref.strategy,
-        };
+        const next: RpcRoutingState = { ...base, activeIndex: safeIndex, strategy: pref.strategy };
 
         return [chain.chainRef, next] as const;
       }),
-    ) as Record<ChainRef, RpcEndpointState>;
+    ) as Record<ChainRef, RpcRoutingState>;
 
     return { rpc, corrections };
   };
@@ -133,11 +131,16 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     const { rpc, corrections } = computeRpcState(registryChains, current);
     const prunePatch = pruneRpcPreferences(available);
 
-    network.replaceState({
-      activeChain: nextActive,
-      knownChains: registryChains,
-      rpc,
-    });
+    suppressActivePersist = true;
+    try {
+      network.replaceState({
+        activeChain: nextActive,
+        knownChains: registryChains,
+        rpc,
+      });
+    } finally {
+      suppressActivePersist = false;
+    }
 
     // Persist any corrections even when the active chain didn't change (e.g. stale preferences fallback).
     if (!getIsHydrating()) {
@@ -193,6 +196,20 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     listenersAttached = true;
 
     unsubscribeRegistry = chainRegistry.onStateChanged(() => requestSync());
+    unsubscribeNetwork = network.onActiveChainChanged(({ next }) => {
+      if (getIsHydrating()) {
+        return;
+      }
+      if (suppressActivePersist) {
+        return;
+      }
+      void preferences
+        .setActiveChainRef(next)
+        .then((record) => {
+          cachedPreferences = record;
+        })
+        .catch((error) => logger("preferences: failed to persist activeChainRef", error));
+    });
   };
 
   const detachListeners = () => {
@@ -208,6 +225,15 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         logger("lifecycle: failed to remove chain registry listener", error);
       }
       unsubscribeRegistry = null;
+    }
+
+    if (unsubscribeNetwork) {
+      try {
+        unsubscribeNetwork();
+      } catch (error) {
+        logger("lifecycle: failed to remove network listener", error);
+      }
+      unsubscribeNetwork = null;
     }
   };
 

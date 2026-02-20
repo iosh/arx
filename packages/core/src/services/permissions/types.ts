@@ -21,8 +21,17 @@ export type PermissionsService = {
   listAll(): Promise<PermissionRecord[]>;
 
   listByOrigin(origin: string): Promise<PermissionRecord[]>;
-  upsert(record: PermissionRecord): Promise<void>;
+  /**
+   * Store-facing upsert:
+   * - `updatedAt` is managed by the service (callers should not supply it).
+   * - `id` is optional; the service reuses the existing id for (origin, namespace).
+   */
+  upsert(record: PermissionRecordInput): Promise<PermissionRecord>;
   remove(id: PermissionRecord["id"]): Promise<void>;
 
   clearOrigin(origin: string): Promise<void>;
+};
+
+export type PermissionRecordInput = Omit<PermissionRecord, "id" | "updatedAt"> & {
+  id?: PermissionRecord["id"];
 };

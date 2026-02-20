@@ -1,7 +1,13 @@
 import { EventEmitter } from "eventemitter3";
+import { z } from "zod";
 import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
 import type { PermissionsPort } from "./port.js";
-import type { GetPermissionByOriginParams, PermissionsChangedEvent, PermissionsService } from "./types.js";
+import type {
+  GetPermissionByOriginParams,
+  PermissionRecordInput,
+  PermissionsChangedEvent,
+  PermissionsService,
+} from "./types.js";
 
 type ServiceEvents = {
   changed: PermissionsChangedEvent;
@@ -17,6 +23,10 @@ export const createPermissionsService = ({
   now = Date.now,
 }: CreatePermissionsServiceOptions): PermissionsService => {
   const emitter = new EventEmitter<ServiceEvents>();
+
+  const PermissionRecordInputSchema = PermissionRecordSchema.omit({ id: true, updatedAt: true }).extend({
+    id: z.string().uuid().optional(),
+  });
 
   const emitChanged = (event: PermissionsChangedEvent) => {
     emitter.emit("changed", event);
@@ -41,23 +51,26 @@ export const createPermissionsService = ({
     return records.map((r) => PermissionRecordSchema.parse(r));
   };
 
-  const upsert = async (record: PermissionRecord) => {
+  const upsert = async (record: PermissionRecordInput) => {
+    const input = PermissionRecordInputSchema.parse(record);
+
     // Reuse the same id for the same (origin, namespace) so callers can treat the record as stable.
     // This also keeps in-memory ports (and other implementations without composite uniqueness enforcement)
     // from accumulating duplicate rows.
     const existing = await port.getByOrigin({
-      origin: record.origin,
-      namespace: record.namespace,
+      origin: input.origin,
+      namespace: input.namespace,
     });
 
     const checked = PermissionRecordSchema.parse({
-      ...record,
-      id: existing?.id ?? record.id ?? crypto.randomUUID(),
+      ...input,
+      id: existing?.id ?? input.id ?? crypto.randomUUID(),
       updatedAt: now(),
     });
 
     await port.upsert(checked);
     emitChanged({ origin: checked.origin });
+    return checked;
   };
 
   const remove = async (id: PermissionRecord["id"]) => {

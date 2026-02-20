@@ -130,9 +130,14 @@ describe("InMemoryNetworkController", () => {
     const updates: Array<{ chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }> = [];
     controller.onChainMetadataChanged((payload) => updates.push(payload));
 
+    const firstEndpoint = metadata.rpcEndpoints[0];
+    if (!firstEndpoint) {
+      throw new Error("Expected chain metadata to have at least one RPC endpoint");
+    }
+
     const updated: ChainMetadata = {
       ...metadata,
-      rpcEndpoints: [{ url: metadata.rpcEndpoints[0]!.url, type: "public" as const }],
+      rpcEndpoints: [{ url: firstEndpoint.url, type: "public" as const }],
     };
 
     controller.replaceState(

@@ -260,7 +260,10 @@ export class InMemoryNetworkController implements NetworkController {
     const now = this.#now();
     const targetIndex = this.#selectEndpointIndex(runtime, outcome.endpointIndex);
     const previousIndex = runtime.routing.activeIndex;
-    const health = runtime.health[targetIndex]!;
+    const health = runtime.health[targetIndex];
+    if (!health) {
+      throw new Error(`Invariant violation: missing RPC health entry for chain ${chainRef} index ${targetIndex}`);
+    }
 
     const targetEndpoint = this.#buildEndpointInfo(chainRef, runtime, targetIndex);
 
@@ -417,9 +420,9 @@ export class InMemoryNetworkController implements NetworkController {
       if (!previousFingerprint) {
         stateChanged = true;
         pendingMetadataEvents.push({ chainRef, previous: null, next: metadata });
-      } else if (previousFingerprint !== nextRuntime.metadataFingerprint) {
+      } else if (prev && previousFingerprint !== nextRuntime.metadataFingerprint) {
         stateChanged = true;
-        pendingMetadataEvents.push({ chainRef, previous: prev!.metadata, next: metadata });
+        pendingMetadataEvents.push({ chainRef, previous: prev.metadata, next: metadata });
       }
 
       if (
@@ -501,14 +504,24 @@ export class InMemoryNetworkController implements NetworkController {
 
     let candidate = (failedIndex + 1) % total;
     for (let attempts = 0; attempts < total; attempts += 1) {
-      const health = runtime.health[candidate]!;
+      const health = runtime.health[candidate];
+      if (!health) {
+        throw new Error(
+          `Invariant violation: missing RPC health entry for chain ${runtime.metadata.chainRef} index ${candidate}`,
+        );
+      }
       if (!health.cooldownUntil || health.cooldownUntil <= now) {
         return candidate;
       }
       candidate = (candidate + 1) % total;
     }
 
-    const failedHealth = runtime.health[failedIndex]!;
+    const failedHealth = runtime.health[failedIndex];
+    if (!failedHealth) {
+      throw new Error(
+        `Invariant violation: missing RPC health entry for chain ${runtime.metadata.chainRef} index ${failedIndex}`,
+      );
+    }
     if (!failedHealth.cooldownUntil || failedHealth.cooldownUntil <= now) {
       return failedIndex;
     }

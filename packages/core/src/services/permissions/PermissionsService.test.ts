@@ -68,30 +68,24 @@ describe("PermissionsService", () => {
     });
 
     const id1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    await service.upsert(
-      PermissionRecordSchema.parse({
-        id: id1,
-        origin: ORIGIN,
-        namespace: NAMESPACE,
-        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
-        updatedAt: 1,
-      }),
-    );
+    await service.upsert({
+      id: id1,
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+    });
 
     t = 2000;
     const id2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-    await service.upsert(
-      PermissionRecordSchema.parse({
-        id: id2,
-        origin: ORIGIN,
-        namespace: NAMESPACE,
-        grants: [
-          { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
-          { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
-        ],
-        updatedAt: 1,
-      }),
-    );
+    await service.upsert({
+      id: id2,
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      grants: [
+        { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
+        { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
+      ],
+    });
 
     expect(changed).toBe(2);
     expect(store.size).toBe(1);

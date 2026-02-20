@@ -7,10 +7,14 @@ import type { ChainNamespace } from "../account/types.js";
 export { PermissionScopes };
 export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionScopes];
 
-export type NamespacePermissionState = {
+export type ChainPermissionState = {
   scopes: PermissionScope[];
-  chains: ChainRef[];
-  accountsByChain?: Record<ChainRef, string[]>;
+  // EIP-155 only for now; keep per-chain to avoid leaking accounts to non-connected chains.
+  accounts?: string[];
+};
+
+export type NamespacePermissionState = {
+  chains: Record<ChainRef, ChainPermissionState>;
 };
 
 export type OriginPermissionState = Record<ChainNamespace, NamespacePermissionState>;
@@ -65,6 +69,7 @@ export type PermissionController = {
   listGrants(origin: string): PermissionGrant[];
 
   getState(): PermissionsState;
+  listConnectedOrigins(options: { namespace: ChainNamespace }): string[];
 
   getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[];
   setPermittedAccounts(

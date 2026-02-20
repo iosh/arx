@@ -164,7 +164,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       await initializeSession(services);
       const { chain, address } = await deriveAccount(services);
 
-      // Simulate a connected origin (accountsByChain present), but do NOT grant Sign scope.
+      // Simulate a connected origin (Accounts scope present), but do NOT grant Sign scope.
       await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
@@ -175,7 +175,9 @@ describe("createBackgroundServices (locked RPC integration)", () => {
         accounts: [address],
       });
 
-      const beforeScopes = services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.scopes ?? [];
+      const beforeScopes =
+        services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
+          ?.scopes ?? [];
       expect(beforeScopes).not.toContain(PermissionScopes.Sign);
 
       await expect(
@@ -188,7 +190,9 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
       expect(approval).toHaveBeenCalledTimes(1);
 
-      const afterScopes = services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.scopes ?? [];
+      const afterScopes =
+        services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
+          ?.scopes ?? [];
       expect(afterScopes).toContain(PermissionScopes.Sign);
     } finally {
       approval.mockRestore();

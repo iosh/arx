@@ -108,13 +108,9 @@ const extendConnectedOriginsToChain = async (
   params: { namespace: ChainNamespace; chainRef: string },
 ): Promise<void> => {
   const { namespace, chainRef } = params;
-  const state = controllers.permissions.getState();
-  const origins = Object.keys(state.origins);
+  const origins = controllers.permissions.listConnectedOrigins({ namespace });
 
   for (const origin of origins) {
-    const namespaceState = state.origins[origin]?.[namespace];
-    if (!namespaceState?.scopes.includes(PermissionScopes.Accounts)) continue;
-
     // Keep connection stable across chain changes: connection is origin-level, not chain-level.
     try {
       await controllers.permissions.grant(origin, PermissionScopes.Basic, { namespace, chainRef });

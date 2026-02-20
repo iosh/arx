@@ -705,7 +705,8 @@ describe("eip155 handlers - core error paths", () => {
       );
 
       const state = services.controllers.permissions.getPermissions(ORIGIN);
-      expect(state?.eip155?.scopes).toEqual(
+      const chainRef = services.controllers.network.getActiveChain().chainRef;
+      expect(state?.eip155?.chains?.[chainRef]?.scopes ?? []).toEqual(
         expect.arrayContaining([PermissionScopes.Basic, PermissionScopes.Accounts]),
       );
     } finally {
@@ -735,7 +736,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("returns permitted accounts for eth_accounts after connection writes accountsByChain", async () => {
+  it("returns permitted accounts for eth_accounts after connection persists per-chain accounts", async () => {
     const services = createServices();
     await services.lifecycle.initialize();
     services.lifecycle.start();

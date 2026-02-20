@@ -46,10 +46,13 @@ export const VaultSnapshotSchema = z.object({
 
 const PermissionScopeSchema = z.enum(["wallet_basic", "wallet_accounts", "wallet_sign", "wallet_transaction"]);
 
-const NamespacePermissionStateSchema = z.object({
+const ChainPermissionStateSchema = z.object({
   scopes: z.array(PermissionScopeSchema),
-  chains: z.array(z.string().min(1)),
-  accountsByChain: z.record(z.string().min(1), z.array(z.string().min(1))).optional(),
+  accounts: z.array(z.string().min(1)).optional(),
+});
+
+const NamespacePermissionStateSchema = z.object({
+  chains: z.record(z.string().min(1), ChainPermissionStateSchema),
 });
 
 const OriginPermissionStateSchema = z.record(z.string().min(1), NamespacePermissionStateSchema);

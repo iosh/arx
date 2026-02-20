@@ -9,6 +9,7 @@ import type {
   TransactionAdapterContext,
 } from "../../transactions/adapters/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
+import { toEip155AccountIdFromCanonicalAddress, toEip155AddressFromAccountId } from "../../utils/accountId.js";
 import type { AccountAddress, AccountController } from "../account/types.js";
 import { type ApprovalController, ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
@@ -53,18 +54,6 @@ const cloneMeta = (meta: TransactionMeta): TransactionMeta => ({
   request: cloneRequest(meta.request),
   prepared: meta.prepared ? { ...meta.prepared } : null,
 });
-
-const toAccountIdFromEip155Address = (address: string): string => {
-  const canonical = toCanonicalEvmAddress(address);
-  const payloadHex = canonical.slice(2); // strip 0x
-  return `eip155:${payloadHex}`;
-};
-
-const toEip155AddressFromAccountId = (accountId: string): string => {
-  // Assumes CAIP-10-like `eip155:<hex40>` account id format for now.
-  const [, payloadHex] = accountId.split(":");
-  return `0x${payloadHex ?? ""}`.toLowerCase();
-};
 
 const toTransactionMeta = (record: TransactionRecord): TransactionMeta => ({
   id: record.id,
@@ -251,7 +240,7 @@ export class StoreTransactionController implements TransactionController {
       }
     }
 
-    const fromAccountId = toAccountIdFromEip155Address(fromAddress);
+    const fromAccountId = toEip155AccountIdFromCanonicalAddress(toCanonicalEvmAddress(fromAddress));
 
     const created = await this.#service.createPending({
       id,

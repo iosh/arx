@@ -88,8 +88,7 @@ describe("StorePermissionController", () => {
     expect(store.size).toBe(1);
 
     const state = controller.getState();
-    expect(state.origins[ORIGIN]?.eip155?.scopes).toEqual([PermissionScopes.Sign]);
-    expect(state.origins[ORIGIN]?.eip155?.chains).toEqual([CHAIN_REF]);
+    expect(state.origins[ORIGIN]?.eip155?.chains[CHAIN_REF]?.scopes).toEqual([PermissionScopes.Sign]);
     expect(originEvents.length).toBeGreaterThan(0);
   });
 });

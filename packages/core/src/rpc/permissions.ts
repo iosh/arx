@@ -1,10 +1,5 @@
 import type { ChainRef } from "../chains/ids.js";
-import {
-  type OriginPermissionState,
-  type PermissionGrant,
-  type PermissionScope,
-  PermissionScopes,
-} from "../controllers/permission/types.js";
+import { type PermissionGrant, type PermissionScope, PermissionScopes } from "../controllers/permission/types.js";
 
 export type WalletPermissionCaveat = {
   type: string;
@@ -20,7 +15,6 @@ export type WalletPermissionDescriptor = {
 export type BuildWalletPermissionsOptions = {
   origin: string;
   grants?: readonly PermissionGrant[];
-  permissions?: OriginPermissionState;
   getAccounts?: (chainRef: ChainRef) => readonly string[] | undefined;
 };
 
@@ -54,21 +48,9 @@ const sanitizeAccounts = (values: readonly unknown[]): string[] => {
 export const buildWalletPermissions = ({
   origin,
   grants,
-  permissions,
   getAccounts,
 }: BuildWalletPermissionsOptions): WalletPermissionDescriptor[] => {
-  const effectiveGrants: PermissionGrant[] =
-    (grants ? [...grants] : undefined) ??
-    (permissions
-      ? Object.entries(permissions).flatMap(([namespace, namespaceState]) =>
-          unique(namespaceState.chains).map((chainRef) => ({
-            origin,
-            namespace: namespace as PermissionGrant["namespace"],
-            chainRef,
-            scopes: [...namespaceState.scopes],
-          })),
-        )
-      : []);
+  const effectiveGrants: PermissionGrant[] = grants ? [...grants] : [];
 
   if (effectiveGrants.length === 0) return [];
 

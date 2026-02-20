@@ -295,8 +295,8 @@ describe("eip155 handlers - approval metadata", () => {
       });
 
       const beforePermissions = services.controllers.permissions.getState();
-      const beforeNamespace = beforePermissions.origins[ORIGIN]?.eip155;
-      expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Transaction);
+      const beforeScopes = beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
+      expect(beforeScopes).not.toContain(PermissionScopes.Transaction);
 
       let broadcastMeta: {
         id: string;
@@ -345,9 +345,8 @@ describe("eip155 handlers - approval metadata", () => {
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
 
       const afterPermissions = services.controllers.permissions.getState();
-      const afterNamespace = afterPermissions.origins[ORIGIN]?.eip155;
-      expect(afterNamespace?.scopes ?? []).toContain(PermissionScopes.Transaction);
-      expect(afterNamespace?.chains ?? []).toContain(mainnet.chainRef);
+      const afterScopes = afterPermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
+      expect(afterScopes).toContain(PermissionScopes.Transaction);
     } finally {
       unsubscribe();
       services.lifecycle.destroy();
@@ -434,8 +433,8 @@ describe("eip155 handlers - approval metadata", () => {
 
       // Ensure Sign scope is not present before the first typed data signature.
       const beforeState = services.controllers.permissions.getState();
-      const beforeNamespace = beforeState.origins[ORIGIN]?.eip155;
-      expect(beforeNamespace?.scopes ?? []).not.toContain(PermissionScopes.Sign);
+      const beforeScopes = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
+      expect(beforeScopes).not.toContain(PermissionScopes.Sign);
 
       const execute = createExecutor(services);
       const payload = {

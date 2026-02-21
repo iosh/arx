@@ -1,5 +1,5 @@
 import type { ControllerMessenger, Unsubscribe } from "../../messenger/ControllerMessenger.js";
-import type { UnlockVaultParams, VaultService } from "../../vault/types.js";
+import type { UnlockVaultParams } from "../../vault/types.js";
 
 export type UnlockReason = "manual" | "timeout" | "blur" | "suspend" | "reload";
 
@@ -12,19 +12,25 @@ export type UnlockState = {
 
 export type UnlockParams = UnlockVaultParams;
 
+export type UnlockVaultPort = {
+  unlock(params: UnlockParams): Promise<void>;
+  lock(): void;
+  isUnlocked(): boolean;
+};
+
 export type UnlockLockedPayload = { at: number; reason: UnlockReason };
 export type UnlockUnlockedPayload = { at: number };
 
 export type UnlockMessengerTopics = {
-  "session:stateChanged": UnlockState;
-  "session:locked": UnlockLockedPayload;
-  "session:unlocked": UnlockUnlockedPayload;
+  "unlock:stateChanged": UnlockState;
+  "unlock:locked": UnlockLockedPayload;
+  "unlock:unlocked": UnlockUnlockedPayload;
 };
 
 export type UnlockControllerOptions = {
   messenger: ControllerMessenger<UnlockMessengerTopics>;
-  vault: Pick<VaultService, "unlock" | "lock" | "isUnlocked">;
-  autoLockDuration?: number;
+  vault: UnlockVaultPort;
+  autoLockDurationMs?: number;
   now?: () => number;
   timers?: {
     setTimeout?: typeof setTimeout;

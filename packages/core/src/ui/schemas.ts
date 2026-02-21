@@ -36,7 +36,7 @@ export const AccountsSnapshotSchema = z.object({
 
 export const SessionSnapshotSchema = z.object({
   isUnlocked: z.boolean(),
-  autoLockDurationMs: z.number().int().nonnegative(),
+  autoLockDurationMs: z.number().int().positive(),
   nextAutoLockAt: z.number().int().nullable(),
 });
 

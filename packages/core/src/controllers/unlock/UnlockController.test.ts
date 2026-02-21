@@ -12,9 +12,9 @@ describe("InMemoryUnlockController", () => {
     const lockedEvents: UnlockLockedPayload[] = [];
     const unlockedEvents: UnlockUnlockedPayload[] = [];
 
-    messenger.subscribe("session:stateChanged", (state) => stateUpdates.push(state));
-    messenger.subscribe("session:locked", (payload) => lockedEvents.push(payload));
-    messenger.subscribe("session:unlocked", (payload) => unlockedEvents.push(payload));
+    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
+    messenger.subscribe("unlock:locked", (payload) => lockedEvents.push(payload));
+    messenger.subscribe("unlock:unlocked", (payload) => unlockedEvents.push(payload));
 
     let now = 1_000;
     let triggerTimeout: (() => void) | null = () => {};
@@ -33,7 +33,7 @@ describe("InMemoryUnlockController", () => {
       clearTimeout: clearTimeoutSpy as unknown as typeof clearTimeout,
     };
 
-    const vaultUnlock = vi.fn(async () => new Uint8Array([1, 2, 3]));
+    const vaultUnlock = vi.fn(async () => {});
     const vaultLock = vi.fn();
 
     const controller = new InMemoryUnlockController({
@@ -43,7 +43,7 @@ describe("InMemoryUnlockController", () => {
         lock: vaultLock,
         isUnlocked: () => false,
       },
-      autoLockDuration: 500,
+      autoLockDurationMs: 500,
       now: () => now,
       timers,
     });
@@ -88,7 +88,7 @@ describe("InMemoryUnlockController", () => {
   it("reconfigures auto-lock duration while unlocked", async () => {
     const messenger = createMessenger();
     const stateUpdates: UnlockState[] = [];
-    messenger.subscribe("session:stateChanged", (state) => stateUpdates.push(state));
+    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
 
     const now = 5_000;
 
@@ -107,11 +107,11 @@ describe("InMemoryUnlockController", () => {
     const controller = new InMemoryUnlockController({
       messenger,
       vault: {
-        unlock: vi.fn(async () => new Uint8Array([7])),
+        unlock: vi.fn(async () => {}),
         lock: vi.fn(),
         isUnlocked: () => false,
       },
-      autoLockDuration: 600,
+      autoLockDurationMs: 600,
       now: () => now,
       timers,
     });
@@ -135,7 +135,7 @@ describe("InMemoryUnlockController", () => {
   it("stays locked when vault unlock throws", async () => {
     const messenger = createMessenger();
     const stateUpdates: UnlockState[] = [];
-    messenger.subscribe("session:stateChanged", (state) => stateUpdates.push(state));
+    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
 
     const timers = {
       setTimeout: vi.fn(),
@@ -153,7 +153,7 @@ describe("InMemoryUnlockController", () => {
         lock: vi.fn(),
         isUnlocked: () => false,
       },
-      autoLockDuration: 1_000,
+      autoLockDurationMs: 1_000,
       now: () => 10_000,
       timers: timers as unknown as {
         setTimeout: typeof setTimeout;

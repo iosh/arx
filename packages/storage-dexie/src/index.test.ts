@@ -67,7 +67,7 @@ describe("@arx/storage-dexie ports", () => {
       updatedAt: 1_000,
       payload: {
         ciphertext: null,
-        autoLockDuration: 900_000,
+        autoLockDurationMs: 900_000,
         initializedAt: 1_000,
       },
     });

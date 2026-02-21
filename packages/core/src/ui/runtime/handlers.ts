@@ -16,9 +16,6 @@ import type { UiMethodResult } from "../protocol.js";
 import { buildUiSnapshot } from "./snapshot.js";
 import type { UiHandlers, UiRuntimeDeps } from "./types.js";
 
-const MIN_AUTO_LOCK_MS = 60_000;
-const MAX_AUTO_LOCK_MS = 60 * 60_000;
-
 const assertUnlocked = (session: BackgroundSessionServices) => {
   if (!session.unlock.isUnlocked()) {
     throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
@@ -367,15 +364,8 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     },
 
     "ui.session.setAutoLockDuration": async ({ durationMs }) => {
-      if (!Number.isFinite(durationMs)) {
-        throw new Error("Auto-lock duration must be a number");
-      }
-      const rounded = Math.round(durationMs);
-      if (rounded < MIN_AUTO_LOCK_MS || rounded > MAX_AUTO_LOCK_MS) {
-        throw new Error("Auto-lock duration must be between 1 and 60 minutes");
-      }
-      session.unlock.setAutoLockDuration(rounded);
-      session.unlock.scheduleAutoLock(rounded);
+      // Params are validated by zod in the UI dispatcher.
+      session.unlock.setAutoLockDuration(durationMs);
       const state = session.unlock.getState();
       return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
     },

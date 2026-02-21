@@ -572,7 +572,7 @@ export type SetupBackgroundOptions = {
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionsSeed?: TransactionRecord[];
-  autoLockDuration?: number;
+  autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
   vault?: VaultService | (() => VaultService);
@@ -608,14 +608,14 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   };
 
   const needsSessionOptions =
-    options.autoLockDuration !== undefined ||
+    options.autoLockDurationMs !== undefined ||
     options.timers !== undefined ||
     options.vault !== undefined ||
     options.persistDebounceMs !== undefined;
 
   const sessionOptions: CreateBackgroundServicesOptions["session"] | undefined = needsSessionOptions
     ? {
-        ...(options.autoLockDuration !== undefined ? { autoLockDuration: options.autoLockDuration } : {}),
+        ...(options.autoLockDurationMs !== undefined ? { autoLockDurationMs: options.autoLockDurationMs } : {}),
         ...(options.timers ? { timers: options.timers } : {}),
         ...(options.vault ? { vault: options.vault } : {}),
         ...(options.persistDebounceMs !== undefined ? { persistDebounceMs: options.persistDebounceMs } : {}),

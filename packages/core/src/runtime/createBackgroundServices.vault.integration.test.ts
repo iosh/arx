@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("createBackgroundServices (vault integration)", () => {
-  it("persists unlock snapshot metadata for recovery workflows", async () => {
+  it("persists vault metadata for recovery workflows", async () => {
     const chain = createChainMetadata();
     let currentTime = TEST_INITIAL_TIME;
     const clock = () => currentTime;
@@ -26,7 +26,7 @@ describe("createBackgroundServices (vault integration)", () => {
       chainSeed: [chain],
       now: clock,
       vault: vaultFactory,
-      autoLockDuration: TEST_AUTO_LOCK_DURATION,
+      autoLockDurationMs: TEST_AUTO_LOCK_DURATION,
       persistDebounceMs: 0,
     });
 
@@ -44,8 +44,9 @@ describe("createBackgroundServices (vault integration)", () => {
 
       persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       expect(persistedMeta).not.toBeNull();
-      expect(persistedMeta?.payload.unlockState?.isUnlocked).toBe(true);
-      expect(persistedMeta?.payload.unlockState?.nextAutoLockAt).toBe(unlockedState.nextAutoLockAt);
+      expect(persistedMeta?.payload.ciphertext).not.toBeNull();
+      expect(persistedMeta?.payload.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
+      expect(persistedMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
     } finally {
       first.destroy();
     }
@@ -54,14 +55,16 @@ describe("createBackgroundServices (vault integration)", () => {
       chainSeed: [chain],
       now: clock,
       vault: vaultFactory,
-      autoLockDuration: TEST_AUTO_LOCK_DURATION,
+      autoLockDurationMs: TEST_AUTO_LOCK_DURATION,
       persistDebounceMs: 0,
       vaultMeta: persistedMeta,
     });
 
     try {
       const restoredMeta = second.services.session.getLastPersistedVaultMeta();
-      expect(restoredMeta?.payload.unlockState).toEqual(persistedMeta?.payload.unlockState);
+      expect(restoredMeta?.payload.ciphertext).toEqual(persistedMeta?.payload.ciphertext);
+      expect(restoredMeta?.payload.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
+      expect(restoredMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
 
       const unlockState = second.services.session.unlock.getState();
       expect(unlockState.isUnlocked).toBe(false);

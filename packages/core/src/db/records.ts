@@ -60,22 +60,14 @@ export const VaultCiphertextSchema = z.strictObject({
 });
 export type VaultCiphertextRecord = z.infer<typeof VaultCiphertextSchema>;
 
-export const UnlockStateRecordSchema = z.strictObject({
-  isUnlocked: z.boolean(),
-  lastUnlockedAt: epochMillisecondsSchema.nullable(),
-  nextAutoLockAt: epochMillisecondsSchema.nullable(),
-});
-export type UnlockStateRecord = z.infer<typeof UnlockStateRecordSchema>;
-
 export const VaultMetaRecordSchema = z.strictObject({
   id: z.literal("vault-meta"),
   version: z.number().int().positive(),
   updatedAt: epochMillisecondsSchema,
   payload: z.strictObject({
     ciphertext: VaultCiphertextSchema.nullable(),
-    autoLockDuration: z.number().int().positive(),
+    autoLockDurationMs: z.number().int().positive(),
     initializedAt: epochMillisecondsSchema,
-    unlockState: UnlockStateRecordSchema.optional(),
   }),
 });
 export type VaultMetaRecord = z.infer<typeof VaultMetaRecordSchema>;

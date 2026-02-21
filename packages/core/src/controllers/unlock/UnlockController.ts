@@ -1,11 +1,9 @@
-import { zeroize } from "../../vault/utils.js";
+import { DEFAULT_AUTO_LOCK_MS } from "./constants.js";
 import type { UnlockController, UnlockControllerOptions, UnlockParams, UnlockReason, UnlockState } from "./types.js";
 
-const SESSION_STATE_TOPIC = "session:stateChanged" as const;
-const SESSION_LOCKED_TOPIC = "session:locked" as const;
-const SESSION_UNLOCKED_TOPIC = "session:unlocked" as const;
-
-const DEFAULT_AUTO_LOCK_MS = 15 * 60 * 1000;
+const UNLOCK_STATE_TOPIC = "unlock:stateChanged" as const;
+const UNLOCK_LOCKED_TOPIC = "unlock:locked" as const;
+const UNLOCK_UNLOCKED_TOPIC = "unlock:unlocked" as const;
 
 const cloneState = (state: UnlockState): UnlockState => ({
   isUnlocked: state.isUnlocked,
@@ -51,7 +49,10 @@ export class InMemoryUnlockController implements UnlockController {
     this.#setTimeout = options.timers?.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.#clearTimeout = options.timers?.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
 
-    const initialTimeout = assertPositiveNumber(options.autoLockDuration ?? DEFAULT_AUTO_LOCK_MS, "Auto-lock duration");
+    const initialTimeout = assertPositiveNumber(
+      options.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_MS,
+      "Auto-lock duration",
+    );
     const unlocked = this.#vault.isUnlocked();
 
     this.#state = {
@@ -77,20 +78,17 @@ export class InMemoryUnlockController implements UnlockController {
   }
 
   async unlock(params: UnlockParams): Promise<void> {
-    const secret = await this.#vault.unlock(params);
-    try {
-      const timestamp = this.#now();
-      this.#state = {
-        ...this.#state,
-        isUnlocked: true,
-        lastUnlockedAt: timestamp,
-      };
-      this.scheduleAutoLock();
-      this.#publishState();
-      this.#messenger.publish(SESSION_UNLOCKED_TOPIC, { at: timestamp });
-    } finally {
-      zeroize(secret);
-    }
+    await this.#vault.unlock(params);
+
+    const timestamp = this.#now();
+    this.#state = {
+      ...this.#state,
+      isUnlocked: true,
+      lastUnlockedAt: timestamp,
+    };
+    this.scheduleAutoLock();
+    this.#publishState();
+    this.#messenger.publish(UNLOCK_UNLOCKED_TOPIC, { at: timestamp });
   }
 
   lock(reason: UnlockReason): void {
@@ -109,7 +107,7 @@ export class InMemoryUnlockController implements UnlockController {
     };
 
     this.#publishState();
-    this.#messenger.publish(SESSION_LOCKED_TOPIC, { at: timestamp, reason });
+    this.#messenger.publish(UNLOCK_LOCKED_TOPIC, { at: timestamp, reason });
   }
 
   scheduleAutoLock(duration?: number): number | null {
@@ -163,19 +161,19 @@ export class InMemoryUnlockController implements UnlockController {
   }
 
   onStateChanged(handler: (state: UnlockState) => void) {
-    return this.#messenger.subscribe(SESSION_STATE_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_STATE_TOPIC, handler);
   }
 
   onLocked(handler: (payload: { at: number; reason: UnlockReason }) => void) {
-    return this.#messenger.subscribe(SESSION_LOCKED_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_LOCKED_TOPIC, handler);
   }
 
   onUnlocked(handler: (payload: { at: number }) => void) {
-    return this.#messenger.subscribe(SESSION_UNLOCKED_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_UNLOCKED_TOPIC, handler);
   }
 
   #publishState() {
-    this.#messenger.publish(SESSION_STATE_TOPIC, cloneState(this.#state), {
+    this.#messenger.publish(UNLOCK_STATE_TOPIC, cloneState(this.#state), {
       compare: isSameState,
     });
   }

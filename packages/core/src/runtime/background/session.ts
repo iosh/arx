@@ -1,4 +1,5 @@
 import { toCanonicalEvmAddress } from "../../chains/address.js";
+import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
 import type {
   UnlockController,
   UnlockControllerOptions,
@@ -19,7 +20,6 @@ import type { ControllersBase } from "./controllers.js";
 import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
 
-const DEFAULT_AUTO_LOCK_MS = 15 * 60 * 1000;
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 
 type VaultFactory = () => VaultService;
@@ -28,7 +28,7 @@ type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
 export type SessionOptions = {
   vault?: VaultService | VaultFactory;
   unlock?: UnlockFactory;
-  autoLockDuration?: number;
+  autoLockDurationMs?: number;
   persistDebounceMs?: number;
   timers?: UnlockControllerOptions["timers"];
 };
@@ -96,7 +96,7 @@ export const initSessionLayer = ({
   const sessionTimers = sessionOptions?.timers ?? {};
   const sessionSetTimeout = sessionTimers.setTimeout ?? setTimeout;
   const sessionClearTimeout = sessionTimers.clearTimeout ?? clearTimeout;
-  const baseAutoLockDuration = sessionOptions?.autoLockDuration ?? DEFAULT_AUTO_LOCK_MS;
+  const baseAutoLockDurationMs = sessionOptions?.autoLockDurationMs ?? DEFAULT_AUTO_LOCK_MS;
   const persistDebounceMs = sessionOptions?.persistDebounceMs ?? DEFAULT_PERSIST_DEBOUNCE_MS;
 
   let vaultInitializedAt: number | null = null;
@@ -152,13 +152,8 @@ export const initSessionLayer = ({
       updatedAt: storageNow(),
       payload: {
         ciphertext,
-        autoLockDuration: unlockState.timeoutMs,
+        autoLockDurationMs: unlockState.timeoutMs,
         initializedAt: getOrInitVaultInitializedAt(),
-        unlockState: {
-          isUnlocked: unlockState.isUnlocked,
-          lastUnlockedAt: unlockState.lastUnlockedAt,
-          nextAutoLockAt: unlockState.nextAutoLockAt,
-        },
       },
     };
 
@@ -283,11 +278,15 @@ export const initSessionLayer = ({
   const unlockOptions: UnlockControllerOptions = {
     messenger: castMessenger<UnlockMessengerTopics>(messenger),
     vault: {
-      unlock: vaultProxy.unlock.bind(vaultProxy),
+      unlock: async (params) => {
+        const secret = await vaultProxy.unlock(params);
+        // Reduce sensitive bytes copies: the vault keeps its own in-memory secret.
+        zeroize(secret);
+      },
       lock: vaultProxy.lock.bind(vaultProxy),
       isUnlocked: vaultProxy.isUnlocked.bind(vaultProxy),
     },
-    autoLockDuration: baseAutoLockDuration,
+    autoLockDurationMs: baseAutoLockDurationMs,
     now: storageNow,
   };
 
@@ -340,16 +339,6 @@ export const initSessionLayer = ({
         scheduleVaultMetaPersist();
       }),
     );
-    sessionSubscriptions.push(
-      unlock.onLocked(() => {
-        scheduleVaultMetaPersist();
-      }),
-    );
-    sessionSubscriptions.push(
-      unlock.onUnlocked(() => {
-        scheduleVaultMetaPersist();
-      }),
-    );
   };
 
   const detachSessionListeners = () => {
@@ -375,13 +364,13 @@ export const initSessionLayer = ({
       if (!meta) {
         vaultInitializedAt = null;
         lastPersistedVaultMeta = null;
-        unlock.setAutoLockDuration(baseAutoLockDuration);
+        unlock.setAutoLockDuration(baseAutoLockDurationMs);
         return;
       }
 
       lastPersistedVaultMeta = meta;
       vaultInitializedAt = meta.payload.initializedAt;
-      unlock.setAutoLockDuration(meta.payload.autoLockDuration);
+      unlock.setAutoLockDuration(meta.payload.autoLockDurationMs);
 
       if (meta.payload.ciphertext) {
         try {
@@ -395,7 +384,7 @@ export const initSessionLayer = ({
           }
           vaultInitializedAt = null;
           lastPersistedVaultMeta = null;
-          unlock.setAutoLockDuration(baseAutoLockDuration);
+          unlock.setAutoLockDuration(baseAutoLockDurationMs);
         }
       }
     } catch (error) {
@@ -421,13 +410,8 @@ export const initSessionLayer = ({
 
       return {
         ciphertext: vaultProxy.getCiphertext(),
-        autoLockDuration: unlockState.timeoutMs,
+        autoLockDurationMs: unlockState.timeoutMs,
         initializedAt: getOrInitVaultInitializedAt(),
-        unlockState: {
-          isUnlocked: unlockState.isUnlocked,
-          lastUnlockedAt: unlockState.lastUnlockedAt,
-          nextAutoLockAt: unlockState.nextAutoLockAt,
-        },
       };
     },
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,

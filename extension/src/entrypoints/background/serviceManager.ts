@@ -21,7 +21,6 @@ import { isInternalOrigin } from "./origin";
 import { createPopupActivator } from "./services/popupActivator";
 import type { ControllerSnapshot } from "./types";
 import { createUiBridge } from "./uiBridge";
-import { restoreUnlockState } from "./unlockRecovery";
 
 export type BackgroundContext = {
   services: ReturnType<typeof createBackgroundServices>;
@@ -290,7 +289,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       unsubscribeControllerEvents.push(
         session.unlock.onUnlocked((payload) => {
           sessionLog("event:onUnlocked", { at: payload.at });
-          callbacks.broadcastEvent("session:unlocked", [payload]);
+          callbacks.broadcastEvent("unlock:unlocked", [payload]);
           publishAccountsState();
         }),
       );
@@ -299,7 +298,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           sessionLog("event:onLocked", { reason: payload.reason, at: payload.at });
           // Auto-reject all pending approvals when session is locked.
           void rejectAllPendingApprovals("sessionLocked", { lockReason: payload.reason });
-          callbacks.broadcastEvent("session:locked", [payload]);
+          callbacks.broadcastEvent("unlock:locked", [payload]);
           publishAccountsState();
           callbacks.broadcastDisconnect();
         }),
@@ -313,24 +312,13 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
 
-      const lastMeta = services.session.getLastPersistedVaultMeta();
-      const persistedUnlockState = lastMeta?.payload.unlockState;
-      if (persistedUnlockState) {
-        restoreUnlockState({
-          controller: session.unlock,
-          snapshot: persistedUnlockState,
-          snapshotCapturedAt: lastMeta.updatedAt,
-          now: () => Date.now(),
-        });
-      }
-
       createRpcEngineForBackground(services, {
         isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
         shouldRequestUnlockAttention: () => true,
       });
 
       unsubscribeControllerEvents.push(
-        controllers.network.onChainChanged(() => {
+        controllers.network.onActiveChainChanged(() => {
           const snapshot = getControllerSnapshot();
           callbacks.syncAllPortContexts(snapshot);
           callbacks.broadcastEvent("chainChanged", [

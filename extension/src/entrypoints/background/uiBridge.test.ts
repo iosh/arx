@@ -13,8 +13,8 @@ import {
   KeyringService,
   registerBuiltinRpcAdapters,
 } from "@arx/core";
-import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
-import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
+import { getAccountCodec, toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
+import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
@@ -570,10 +570,11 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
     namespaces: [
       {
         namespace: CHAIN.namespace,
-        toCanonicalAddress: (addr: string) => addr.toLowerCase(),
+        defaultChainRef: CHAIN.chainRef,
+        codec: getAccountCodec(CHAIN.namespace),
         factories: {
-          hd: () => new EthereumHdKeyring(),
-          "private-key": () => new PrivateKeyKeyring(),
+          hd: () => new EvmHdKeyring(),
+          "private-key": () => new EvmPrivateKeyKeyring(),
         },
       },
     ],
@@ -778,7 +779,7 @@ describe("uiBridge", () => {
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 
-    const derivedAccountId = `eip155:${derived.address.slice(2).toLowerCase()}`;
+    const derivedAccountId = toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address: derived.address });
 
     const hideRes = await send("ui.keyrings.hideHdAccount", { accountId: derivedAccountId });
     expectResponse(hideRes.envelope, hideRes.id);
@@ -790,7 +791,10 @@ describe("uiBridge", () => {
     const exported = expectResponse(exportMnemonic.envelope, exportMnemonic.id) as { words: string[] };
     expect(exported.words.join(" ")).toBe(TEST_MNEMONIC);
 
-    const exportPk = await send("ui.keyrings.exportPrivateKey", { address, password: PASSWORD });
+    const exportPk = await send("ui.keyrings.exportPrivateKey", {
+      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address }),
+      password: PASSWORD,
+    });
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
     expect(pkResult.privateKey.length).toBe(64);
   });
@@ -800,10 +804,10 @@ describe("uiBridge", () => {
     const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
     const { keyringId } = expectResponse(createRes.envelope, createRes.id) as { keyringId: string };
 
-    const spy = vi.spyOn(keyring, "exportMnemonic");
+    const spy = vi.spyOn(vault, "verifyPassword");
     const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: "wrong-password" });
     expectError(exportAttempt.envelope, ArxReasons.VaultInvalidPassword);
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith("wrong-password");
     spy.mockRestore();
   });
 
@@ -813,9 +817,12 @@ describe("uiBridge", () => {
     const createResult = expectResponse(createRes.envelope, createRes.id) as { keyringId: string; address: string };
 
     const secret = new Uint8Array([0xde, 0xad, 0xbe, 0xef, ...new Uint8Array(28)]);
-    const spy = vi.spyOn(keyring, "exportPrivateKeyByAddress").mockResolvedValue(secret);
+    const spy = vi.spyOn(keyring, "exportPrivateKeyByAccountId").mockResolvedValue(secret);
 
-    const exportPk = await send("ui.keyrings.exportPrivateKey", { address: createResult.address, password: PASSWORD });
+    const exportPk = await send("ui.keyrings.exportPrivateKey", {
+      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address: createResult.address }),
+      password: PASSWORD,
+    });
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
 
     expect(pkResult.privateKey).toBe(`deadbeef${"00".repeat(28)}`);

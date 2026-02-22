@@ -140,7 +140,7 @@ export const useUiSnapshot = () => {
   });
 
   const exportPrivateKeyMutation = useMutation({
-    mutationFn: (params: { address: string; password: string }) => uiClient.keyrings.exportPrivateKey(params),
+    mutationFn: (params: { accountId: string; password: string }) => uiClient.keyrings.exportPrivateKey(params),
   });
 
   const fetchKeyrings = useCallback(

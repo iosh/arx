@@ -1,6 +1,6 @@
 import type { ChainRef } from "../chains/ids.js";
 import { parseChainRef } from "../chains/index.js";
-import type { AccountId } from "../db/records.js";
+import type { AccountId } from "../storage/records.js";
 import { getAccountCodec } from "./codec.js";
 
 export const toAccountIdFromAddress = (params: { chainRef: ChainRef; address: string }): AccountId => {

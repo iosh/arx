@@ -1,7 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { KeyringMetaRecordSchema } from "@arx/core/db";
-import { DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
+import { DOMAIN_SCHEMA_VERSION, KeyringMetaRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

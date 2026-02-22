@@ -12,9 +12,9 @@ import type {
   PermissionScopeResolver,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
-import type { RequestContextRecord } from "../../db/records.js";
 import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
+import type { RequestContext } from "../requestContext.js";
 import { NoParamsSchema } from "./params.js";
 
 export type HandlerControllers = {
@@ -39,7 +39,7 @@ export type RpcRequest = {
 export type RpcInvocationContext = {
   chainRef?: ChainRef | null;
   namespace?: Namespace | null;
-  requestContext?: RequestContextRecord | null;
+  requestContext?: RequestContext | null;
   meta?: unknown;
 };
 

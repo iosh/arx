@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
 import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import { createPermissionsService } from "../../services/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
+import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
 import type { PermissionMessengerTopics } from "./types.js";
 import { PermissionScopes } from "./types.js";

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { chainMetadataSchema } from "../chains/metadata.js";
+import { PERMISSION_SCOPE_VALUES, PermissionScopes } from "../permissions/constants.js";
+import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   chainRefSchema,
   epochMillisecondsSchema,
@@ -9,8 +10,7 @@ import {
   TransactionErrorSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,
-} from "../storage/schemas.js";
-import { PERMISSION_SCOPE_VALUES, PermissionScopes } from "./constants.js";
+} from "./schemas.js";
 
 // Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
 // Keep validation loose here; chain-specific rules live in codecs/modules.
@@ -20,6 +20,7 @@ export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
 export const AccountPayloadHexSchema = z.string().regex(/^[0-9a-f]{40}$/, {
   error: "payloadHex must be 40 lowercase hex chars (no 0x)",
 });
+
 // Deterministic account key: <namespace>:<hex bytes>. Used for dedupe and references.
 export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
   error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
@@ -49,49 +50,6 @@ export const NetworkPreferencesRecordSchema = z.strictObject({
 });
 export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
 
-export const VaultCiphertextSchema = z.strictObject({
-  version: z.number().int().positive(),
-  algorithm: z.literal("pbkdf2-sha256"),
-  salt: z.string().min(1),
-  iterations: z.number().int().positive(),
-  iv: z.string().min(1),
-  cipher: z.string().min(1),
-  createdAt: epochMillisecondsSchema,
-});
-export type VaultCiphertextRecord = z.infer<typeof VaultCiphertextSchema>;
-
-export const VaultMetaRecordSchema = z.strictObject({
-  id: z.literal("vault-meta"),
-  version: z.number().int().positive(),
-  updatedAt: epochMillisecondsSchema,
-  payload: z.strictObject({
-    ciphertext: VaultCiphertextSchema.nullable(),
-    autoLockDurationMs: z.number().int().positive(),
-    initializedAt: epochMillisecondsSchema,
-  }),
-});
-export type VaultMetaRecord = z.infer<typeof VaultMetaRecordSchema>;
-
-export const ChainRecordSchema = z
-  .strictObject({
-    chainRef: chainRefSchema,
-    namespace: z.string().min(1),
-    metadata: chainMetadataSchema,
-    schemaVersion: z.number().int().positive(),
-    updatedAt: epochMillisecondsSchema,
-  })
-  .refine((value) => value.metadata.chainRef === value.chainRef, {
-    error: "metadata.chainRef must match chainRef",
-    path: ["metadata", "chainRef"],
-  })
-  .refine((value) => value.metadata.namespace === value.namespace, {
-    error: "metadata.namespace must match namespace",
-    path: ["metadata", "namespace"],
-  });
-export type ChainRecord = z.infer<typeof ChainRecordSchema>;
-
-export const KeyringTypeSchema = z.enum(["hd", "private-key"]);
-export type KeyringType = z.infer<typeof KeyringTypeSchema>;
 export const KeyringMetaRecordSchema = z.strictObject({
   id: z.string().uuid(),
   type: KeyringTypeSchema,
@@ -141,7 +99,7 @@ export const PermissionRecordSchema = z
     id: z.string().uuid(),
     origin: originStringSchema,
     namespace: z.string().min(1),
-    // One record per (origin, namespace). Each scope carries its own permitted chains.
+    // One entity per (origin, namespace). Each scope carries its own permitted chains.
     grants: z.array(PermissionGrantSchema),
     // EIP-155 only: persisted as AccountIds to stay chain-agnostic.
     accountIds: z.array(AccountIdSchema).min(1).optional(),
@@ -175,15 +133,6 @@ export const PermissionRecordSchema = z
     }
   });
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
-
-export const RequestContextSchema = z.strictObject({
-  transport: z.enum(["provider", "ui"]),
-  portId: nonEmptyStringSchema,
-  sessionId: z.string().uuid(),
-  requestId: nonEmptyStringSchema,
-  origin: originStringSchema,
-});
-export type RequestContextRecord = z.infer<typeof RequestContextSchema>;
 
 export const TransactionStatusSchema = z.enum([
   "pending",

@@ -1,6 +1,6 @@
 import type { ChainRef } from "@arx/core/chains";
-import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/db";
 import type { TransactionsPort } from "@arx/core/services";
+import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import type { ArxStorageDatabase } from "../db.js";
 

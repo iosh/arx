@@ -1,4 +1,4 @@
-import type { KeyringMetaRecord } from "../../db/records.js";
+import type { KeyringMetaRecord } from "../../storage/records.js";
 
 export interface KeyringMetasPort {
   get(id: KeyringMetaRecord["id"]): Promise<KeyringMetaRecord | null>;

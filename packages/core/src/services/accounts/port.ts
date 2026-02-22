@@ -1,4 +1,4 @@
-import type { AccountId, AccountRecord } from "../../db/records.js";
+import type { AccountId, AccountRecord } from "../../storage/records.js";
 
 export interface AccountsPort {
   get(accountId: AccountId): Promise<AccountRecord | null>;

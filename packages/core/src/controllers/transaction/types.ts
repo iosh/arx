@@ -1,8 +1,8 @@
 import type { Hex } from "ox/Hex";
+import type { ApprovalTypes } from "../../approvals/constants.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ApprovalTypes } from "../../db/constants.js";
-import type { RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type { AccountAddress } from "../account/types.js";
 import type { ApprovalTask } from "../approval/types.js";
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
@@ -125,7 +125,7 @@ export type TransactionController = {
   requestTransactionApproval(
     origin: string,
     request: TransactionRequest,
-    requestContext: RequestContextRecord,
+    requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;

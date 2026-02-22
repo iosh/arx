@@ -15,7 +15,6 @@ export type {
 export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
 export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
 export * from "./permissions.js";
-
 export {
   type RpcClient,
   type RpcClientFactory,
@@ -26,6 +25,7 @@ export {
 } from "./RpcClientRegistry.js";
 export type { ExecuteWithAdaptersContext, ExecuteWithAdaptersResult } from "./RpcRegistry.js";
 export { RpcRegistry } from "./RpcRegistry.js";
+export { type RequestContext, RequestContextSchema } from "./requestContext.js";
 
 export const DEFAULT_NAMESPACE = RpcRegistry.DEFAULT_NAMESPACE;
 

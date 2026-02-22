@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../db/records.js";
+import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../storage/records.js";
 import { createKeyringMetasService } from "./KeyringMetasService.js";
 import type { KeyringMetasPort } from "./port.js";
 

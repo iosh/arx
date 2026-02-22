@@ -1,7 +1,7 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { createEip155AddressModule } from "../chains/eip155/address.js";
 import type { ChainRef } from "../chains/ids.js";
-import { type AccountId, AccountIdSchema } from "../db/records.js";
+import { type AccountId, AccountIdSchema } from "../storage/records.js";
 
 export type CanonicalAddress = {
   namespace: string;

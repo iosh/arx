@@ -14,8 +14,8 @@ import {
   registerBuiltinRpcAdapters,
 } from "@arx/core";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
-import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/db";
 import { EthereumHdKeyring, PrivateKeyKeyring } from "@arx/core/keyring";
+import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
   UI_EVENT_SNAPSHOT_CHANGED,

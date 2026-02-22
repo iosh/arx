@@ -1,4 +1,4 @@
-import type { AccountId, SettingsRecord } from "../../db/records.js";
+import type { AccountId, SettingsRecord } from "../../storage/records.js";
 
 export type SettingsChangedHandler = () => void;
 

@@ -4,21 +4,6 @@ import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
-import type {
-  AccountRecord,
-  KeyringMetaRecord,
-  NetworkPreferencesRecord,
-  PermissionRecord,
-  SettingsRecord,
-  TransactionRecord,
-} from "../../db/records.js";
-import {
-  AccountRecordSchema,
-  KeyringMetaRecordSchema,
-  NetworkPreferencesRecordSchema,
-  PermissionRecordSchema,
-  TransactionRecordSchema,
-} from "../../db/records.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/accounts/port.js";
 import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
@@ -28,6 +13,21 @@ import type { SettingsPort } from "../../services/settings/port.js";
 import type { TransactionsPort } from "../../services/transactions/port.js";
 import type { ChainRegistryEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
+import type {
+  AccountRecord,
+  KeyringMetaRecord,
+  NetworkPreferencesRecord,
+  PermissionRecord,
+  SettingsRecord,
+  TransactionRecord,
+} from "../../storage/records.js";
+import {
+  AccountRecordSchema,
+  KeyringMetaRecordSchema,
+  NetworkPreferencesRecordSchema,
+  PermissionRecordSchema,
+  TransactionRecordSchema,
+} from "../../storage/records.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
 import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
 import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";

@@ -1,8 +1,8 @@
 import type { UnlockController } from "../../controllers/unlock/types.js";
-import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../db/records.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { VaultKeyringEntry } from "../../storage/keyringSchemas.js";
+import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { VaultService } from "../../vault/types.js";
 
 // Service dependencies

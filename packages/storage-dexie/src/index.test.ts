@@ -1,7 +1,11 @@
 import "fake-indexeddb/auto";
 
-import { NetworkPreferencesRecordSchema } from "@arx/core/db";
-import { DOMAIN_SCHEMA_VERSION, VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "@arx/core/storage";
+import {
+  DOMAIN_SCHEMA_VERSION,
+  NetworkPreferencesRecordSchema,
+  VAULT_META_SNAPSHOT_VERSION,
+  VaultMetaSnapshotSchema,
+} from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieNetworkPreferencesPort, createDexieVaultMetaPort } from "./ports/factories.js";

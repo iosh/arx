@@ -1,4 +1,4 @@
-import type { TransactionStatus } from "../../db/records.js";
+import type { TransactionStatus } from "../../storage/records.js";
 
 const ALLOWED: Record<TransactionStatus, ReadonlySet<TransactionStatus>> = {
   pending: new Set(["approved", "failed"]),

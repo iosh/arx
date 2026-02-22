@@ -5,7 +5,7 @@ import {
   type NetworkPreferencesRecord,
   NetworkPreferencesRecordSchema,
   type NetworkRpcPreference,
-} from "../../db/records.js";
+} from "../../storage/records.js";
 import type { NetworkPreferencesPort } from "./port.js";
 import type {
   NetworkPreferencesChangedPayload,

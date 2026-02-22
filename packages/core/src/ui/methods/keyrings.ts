@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AccountIdSchema } from "../../db/records.js";
+import { AccountIdSchema } from "../../storage/records.js";
 import { UiAccountMetaSchema, UiKeyringMetaSchema } from "../schemas.js";
 import { defineMethod } from "./types.js";
 

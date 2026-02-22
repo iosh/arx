@@ -1,8 +1,7 @@
 import "fake-indexeddb/auto";
 
 import { PermissionScopes } from "@arx/core";
-import { PermissionRecordSchema } from "@arx/core/db";
-import { DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
+import { DOMAIN_SCHEMA_VERSION, PermissionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

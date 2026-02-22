@@ -1,4 +1,4 @@
-import type { KeyringMetaRecord } from "../../db/records.js";
+import type { KeyringMetaRecord } from "../../storage/records.js";
 
 export type KeyringMetasChangedHandler = () => void;
 export type KeyringMetasService = {

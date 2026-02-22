@@ -1,5 +1,5 @@
-import { type NetworkPreferencesRecord, NetworkPreferencesRecordSchema } from "@arx/core/db";
 import type { NetworkPreferencesPort } from "@arx/core/services";
+import { type NetworkPreferencesRecord, NetworkPreferencesRecordSchema } from "@arx/core/storage";
 import type { Dexie, PromiseExtended, Table } from "dexie";
 import type { ArxStorageDatabase } from "../db.js";
 

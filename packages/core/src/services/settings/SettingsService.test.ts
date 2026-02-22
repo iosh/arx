@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { SettingsRecord } from "../../db/records.js";
+import type { SettingsRecord } from "../../storage/records.js";
 import type { SettingsPort } from "./port.js";
 import { createSettingsService } from "./SettingsService.js";
 

@@ -1,8 +1,7 @@
 import type { ChainRegistryPort } from "@arx/core/chains";
-import type { SettingsRecord } from "@arx/core/db";
-import { SettingsRecordSchema } from "@arx/core/db";
 import type { SettingsPort } from "@arx/core/services";
-import { type ChainRegistryEntity, ChainRegistryEntitySchema } from "@arx/core/storage";
+import type { SettingsRecord } from "@arx/core/storage";
+import { type ChainRegistryEntity, ChainRegistryEntitySchema, SettingsRecordSchema } from "@arx/core/storage";
 import type { Dexie, PromiseExtended, Table } from "dexie";
 import { ArxStorageDatabase } from "./db.js";
 import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";

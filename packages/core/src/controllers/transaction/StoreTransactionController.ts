@@ -1,4 +1,4 @@
-import type { RequestContextRecord } from "../../db/records.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
@@ -96,7 +96,7 @@ export class StoreTransactionController implements TransactionController {
   requestTransactionApproval(
     origin: string,
     request: TransactionRequest,
-    requestContext: RequestContextRecord,
+    requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta> {
     return this.#executor.requestTransactionApproval(origin, request, requestContext, opts);

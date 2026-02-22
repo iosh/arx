@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PermissionScopes } from "../../controllers/permission/types.js";
-import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
+import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { createPermissionsService } from "./PermissionsService.js";
 import type { PermissionsPort } from "./port.js";
 

@@ -2,12 +2,16 @@ import { ArxReasons, isArxError } from "@arx/errors";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { generateMnemonic as BIP39Generate, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-
-import { AccountIdSchema, type AccountRecord, AccountRecordSchema, KeyringMetaRecordSchema } from "../../db/records.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { KeyringKind, NamespaceConfig } from "../../keyring/namespace.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { KEYRING_VAULT_ENTRY_VERSION } from "../../storage/keyringSchemas.js";
+import {
+  AccountIdSchema,
+  type AccountRecord,
+  AccountRecordSchema,
+  KeyringMetaRecordSchema,
+} from "../../storage/records.js";
 import { vaultErrors } from "../../vault/errors.js";
 import { zeroize } from "../../vault/utils.js";
 import { KeyringHydration } from "./KeyringHydration.js";

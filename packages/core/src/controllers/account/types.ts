@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountId } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { AccountId } from "../../storage/records.js";
 
 // Chain-canonical address string (eg. EVM lowercased 0x...).
 export type AccountAddress = string;

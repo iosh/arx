@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../chains/url.js";
-import { AccountIdSchema } from "../db/records.js";
+import { PERMISSION_SCOPE_VALUES } from "../permissions/constants.js";
+import { AccountIdSchema } from "../storage/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
   message: "Expected a 0x-prefixed hexadecimal string",
@@ -44,7 +45,7 @@ export const VaultSnapshotSchema = z.object({
   initialized: z.boolean(),
 });
 
-const PermissionScopeSchema = z.enum(["wallet_basic", "wallet_accounts", "wallet_sign", "wallet_transaction"]);
+const PermissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
 
 const ChainPermissionStateSchema = z.object({
   scopes: z.array(PermissionScopeSchema),

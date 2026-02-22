@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { NetworkPreferencesRecord } from "../../db/records.js";
+import type { NetworkPreferencesRecord } from "../../storage/records.js";
 import { createNetworkPreferencesService } from "./NetworkPreferencesService.js";
 import type { NetworkPreferencesPort } from "./port.js";
 

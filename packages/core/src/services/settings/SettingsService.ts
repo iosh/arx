@@ -1,6 +1,6 @@
 import { EventEmitter } from "eventemitter3";
 
-import { type SettingsRecord, SettingsRecordSchema } from "../../db/records.js";
+import { type SettingsRecord, SettingsRecordSchema } from "../../storage/records.js";
 import type { SettingsPort } from "./port.js";
 import type { SettingsService, UpdateSettingsParams } from "./types.js";
 

@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../db/records.js";
+import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "../../storage/records.js";
 import type { KeyringMetasPort } from "./port.js";
 import type { KeyringMetasService } from "./types.js";
 

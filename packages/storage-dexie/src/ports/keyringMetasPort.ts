@@ -1,5 +1,5 @@
-import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "@arx/core/db";
 import type { KeyringMetasPort } from "@arx/core/services";
+import { type KeyringMetaRecord, KeyringMetaRecordSchema } from "@arx/core/storage";
 import type { ArxStorageDatabase } from "../db.js";
 export class DexieKeyringMetasPort implements KeyringMetasPort {
   private readonly ready: ReturnType<ArxStorageDatabase["open"]>;

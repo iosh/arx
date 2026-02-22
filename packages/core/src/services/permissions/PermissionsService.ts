@@ -1,6 +1,6 @@
 import { EventEmitter } from "eventemitter3";
 import { z } from "zod";
-import { type PermissionRecord, PermissionRecordSchema } from "../../db/records.js";
+import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import type { PermissionsPort } from "./port.js";
 import type {
   GetPermissionByOriginParams,

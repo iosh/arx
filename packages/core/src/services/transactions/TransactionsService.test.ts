@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type TransactionRecord, TransactionRecordSchema } from "../../db/records.js";
+import { type TransactionRecord, TransactionRecordSchema } from "../../storage/records.js";
 import type { TransactionsPort } from "./port.js";
 import { createTransactionsService } from "./TransactionsService.js";
 

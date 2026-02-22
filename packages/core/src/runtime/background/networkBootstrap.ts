@@ -2,8 +2,8 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
 import type { NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
-import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../db/records.js";
 import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
+import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
 import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
 
 export type CreateNetworkBootstrapOptions = {

@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import { type AccountId, type AccountRecord, AccountRecordSchema } from "../../db/records.js";
+import { type AccountId, type AccountRecord, AccountRecordSchema } from "../../storage/records.js";
 import type { AccountsPort } from "./port.js";
 import type { AccountsService, ListAccountsParams } from "./types.js";
 

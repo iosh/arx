@@ -5,7 +5,7 @@ import type {
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
-} from "@arx/core/db";
+} from "@arx/core/storage";
 import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie, type Table } from "dexie";
 import { runMigrations } from "./migrations.js";

@@ -1,5 +1,5 @@
-import { type AccountId, type AccountRecord, AccountRecordSchema } from "@arx/core/db";
 import type { AccountsPort } from "@arx/core/services";
+import { type AccountId, type AccountRecord, AccountRecordSchema } from "@arx/core/storage";
 import type { ArxStorageDatabase } from "../db.js";
 
 export class DexieAccountsPort implements AccountsPort {

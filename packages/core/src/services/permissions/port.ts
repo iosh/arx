@@ -1,4 +1,4 @@
-import type { PermissionRecord } from "../../db/records.js";
+import type { PermissionRecord } from "../../storage/records.js";
 
 export interface PermissionsPort {
   get(id: PermissionRecord["id"]): Promise<PermissionRecord | null>;

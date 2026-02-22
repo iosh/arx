@@ -1,8 +1,8 @@
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
-import type { PermissionRecord } from "../../db/records.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
+import type { PermissionRecord } from "../../storage/records.js";
 import { toEip155AccountIdFromCanonicalAddress, toEip155AddressFromAccountId } from "../../utils/accountId.js";
 import type { ChainNamespace } from "../account/types.js";
 import {

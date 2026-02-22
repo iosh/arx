@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
-import { PermissionScopes } from "../../db/constants.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { PermissionScopes } from "../../permissions/constants.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { ChainNamespace } from "../account/types.js";
 

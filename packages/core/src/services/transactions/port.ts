@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { TransactionRecord, TransactionStatus } from "../../db/records.js";
+import type { TransactionRecord, TransactionStatus } from "../../storage/records.js";
 
 export type ListTransactionsQuery = {
   chainRef?: ChainRef;

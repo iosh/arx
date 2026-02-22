@@ -1,8 +1,8 @@
+import { ApprovalTypes } from "../../approvals/constants.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import { ApprovalTypes } from "../../db/constants.js";
-import type { RequestContextRecord } from "../../db/records.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type { ChainNamespace } from "../account/types.js";
 import type { PermissionApprovalResult, RequestPermissionsApprovalPayload } from "../permission/types.js";
 import type { TransactionApprovalTaskPayload, TransactionMeta } from "../transaction/types.js";
@@ -97,7 +97,7 @@ export type ApprovalState = {
 
 export type ApprovalRequestedEvent = {
   task: ApprovalTask;
-  requestContext: RequestContextRecord;
+  requestContext: RequestContext;
 };
 
 export type ApprovalMessengerTopics = {
@@ -115,7 +115,7 @@ export type ApprovalExecutor<TResult> = () => Promise<TResult>;
  */
 export type PendingApproval<K extends ApprovalType = ApprovalType> = {
   task: ApprovalTask<K>;
-  requestContext: RequestContextRecord;
+  requestContext: RequestContext;
   // We cannot reliably type this by id alone (resolve() takes only id),
   // and the generic K is not recoverable from the id at runtime.
   // Keep the resolver value loosely typed and enforce typing at the
@@ -128,7 +128,7 @@ export type ApprovalController = {
   getState(): ApprovalState;
   requestApproval<K extends ApprovalType>(
     task: ApprovalTask<K>,
-    requestContext: RequestContextRecord,
+    requestContext: RequestContext,
   ): Promise<ApprovalResultByType[K]>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void;

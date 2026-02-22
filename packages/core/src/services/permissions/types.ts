@@ -1,4 +1,4 @@
-import type { PermissionRecord } from "../../db/records.js";
+import type { PermissionRecord } from "../../storage/records.js";
 
 export type PermissionsChangedEvent = {
   origin: string | null;

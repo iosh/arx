@@ -1,7 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { AccountRecordSchema } from "@arx/core/db";
-import { DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
+import { AccountRecordSchema, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArxStorageDatabase } from "../db.js";

@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../db/records.js";
+import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
 
 export type NetworkPreferencesChangedPayload = {
   next: NetworkPreferencesRecord;

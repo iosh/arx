@@ -12,12 +12,13 @@
     ".": "./src/index.ts",
     "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
+    "./approvals": "./src/approvals/index.ts",
     "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
+    "./permissions": "./src/permissions/index.ts",
     "./ui": "./src/ui/index.ts",
     "./ui/runtime": "./src/ui/runtime/index.ts",
     "./keyring": "./src/keyring/index.ts",
-    "./db": "./src/db/index.ts",
     "./services": "./src/services/index.ts"
   },
   "dependencies": {

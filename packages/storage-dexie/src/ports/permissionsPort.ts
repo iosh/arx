@@ -1,5 +1,5 @@
-import { type PermissionRecord, PermissionRecordSchema } from "@arx/core/db";
 import type { PermissionsPort } from "@arx/core/services";
+import { type PermissionRecord, PermissionRecordSchema } from "@arx/core/storage";
 import type { ArxStorageDatabase } from "../db.js";
 export class DexiePermissionsPort implements PermissionsPort {
   private readonly ready: ReturnType<ArxStorageDatabase["open"]>;

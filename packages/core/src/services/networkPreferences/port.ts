@@ -1,4 +1,4 @@
-import type { NetworkPreferencesRecord } from "../../db/records.js";
+import type { NetworkPreferencesRecord } from "../../storage/records.js";
 
 export interface NetworkPreferencesPort {
   get(): Promise<NetworkPreferencesRecord | null>;

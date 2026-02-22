@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { RequestContextRecord } from "../../db/records.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type {
   ApprovalController,
   ApprovalExecutor,
@@ -78,7 +78,7 @@ export class InMemoryApprovalController implements ApprovalController {
 
   async requestApproval<K extends ApprovalType>(
     task: ApprovalTask<K>,
-    requestContext: RequestContextRecord,
+    requestContext: RequestContext,
   ): Promise<ApprovalResultByType[K]> {
     if (!requestContext) throw new Error("Approval requestContext is required");
 

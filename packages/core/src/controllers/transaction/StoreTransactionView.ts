@@ -1,6 +1,6 @@
 import { toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
-import type { TransactionRecord } from "../../db/records.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED_TOPIC, TRANSACTION_STATUS_CHANGED_TOPIC } from "./topics.js";
 import type {
   TransactionIssue,

@@ -1,5 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
+import { toAccountIdFromAddress } from "../../../../../accounts/accountId.js";
 import { ApprovalTypes, PermissionScopes } from "../../../../../controllers/index.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
@@ -368,7 +369,10 @@ describe("eip155 handlers - approval metadata", () => {
       const payload = task.payload as { from: string; message: string };
       await services.controllers.approvals.resolve(task.id, async () =>
         services.controllers.signers.eip155.signPersonalMessage({
-          address: payload.from,
+          accountId: toAccountIdFromAddress({
+            chainRef: services.controllers.network.getActiveChain().chainRef,
+            address: payload.from,
+          }),
           message: payload.message,
         }),
       );
@@ -395,7 +399,10 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       await expect(
-        services.controllers.signers.eip155.signPersonalMessage({ address: account.address, message }),
+        services.controllers.signers.eip155.signPersonalMessage({
+          accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+          message,
+        }),
       ).resolves.toBe(signature);
     } finally {
       teardownApprovalResponder();
@@ -418,7 +425,10 @@ describe("eip155 handlers - approval metadata", () => {
       const payload = task.payload as { from: string; typedData: string };
       await services.controllers.approvals.resolve(task.id, async () =>
         services.controllers.signers.eip155.signTypedData({
-          address: payload.from,
+          accountId: toAccountIdFromAddress({
+            chainRef: services.controllers.network.getActiveChain().chainRef,
+            address: payload.from,
+          }),
           typedData: payload.typedData,
         }),
       );
@@ -462,7 +472,10 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       await expect(
-        services.controllers.signers.eip155.signTypedData({ address: account.address, typedData }),
+        services.controllers.signers.eip155.signTypedData({
+          accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+          typedData,
+        }),
       ).resolves.toBe(signature);
     } finally {
       teardownApprovalResponder();

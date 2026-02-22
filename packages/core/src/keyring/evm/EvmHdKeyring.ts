@@ -1,6 +1,3 @@
-import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
@@ -11,19 +8,18 @@ import type {
   HierarchicalDeterministicKeyringSnapshot,
   KeyringAccount,
 } from "../types.js";
+import { canonicalizeEvmAddress, privateKeyToEvmAddress } from "./evmCrypto.js";
 
 const DERIVATION_PREFIX = "m/44'/60'/0'/0";
-const ADDRESS_PATTERN = /^(?:0x)?[0-9a-fA-F]{40}$/;
-const PRIVATE_KEY_PATTERN = /^(?:0x)?[0-9a-fA-F]{64}$/;
 
-export type EthereumKeyringAccount = KeyringAccount<string>;
+export type EvmKeyringAccount = KeyringAccount<string>;
 
 type StoredAccount = {
-  account: EthereumKeyringAccount;
+  account: EvmKeyringAccount;
   secret: Uint8Array;
 };
 
-export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<EthereumKeyringAccount> {
+export class EvmHdKeyring implements HierarchicalDeterministicKeyring<EvmKeyringAccount> {
   #root: HDKey | null = null;
   #accounts = new Map<string, StoredAccount>();
   #order: string[] = [];
@@ -50,7 +46,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     this.#nextIndex = 0;
   }
 
-  deriveAccount(index: number): EthereumKeyringAccount {
+  deriveAccount(index: number): EvmKeyringAccount {
     this.#assertHasSecret();
     this.#assertValidIndex(index);
     if (this.#derivedIndices.has(index)) {
@@ -61,35 +57,13 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     return { ...account };
   }
 
-  deriveNextAccount(): EthereumKeyringAccount {
+  deriveNextAccount(): EvmKeyringAccount {
     const index = this.#nextIndex;
     const account = this.deriveAccount(index);
     return account;
   }
 
-  importAccount(privateKey: string | Uint8Array): EthereumKeyringAccount {
-    const secret = this.#parsePrivateKeyBytes(privateKey);
-    try {
-      const address = this.#addressFromSecret(secret);
-      if (this.#accounts.has(address)) {
-        throw keyringErrors.duplicateAccount();
-      }
-
-      const account: EthereumKeyringAccount = {
-        address,
-        derivationPath: null,
-        derivationIndex: null,
-        source: "imported",
-      };
-
-      this.#storeAccount(account, secret);
-      return { ...account };
-    } finally {
-      zeroize(secret);
-    }
-  }
-
-  getAccounts(): readonly EthereumKeyringAccount[] {
+  getAccounts(): readonly EvmKeyringAccount[] {
     return this.#order.map((address) => {
       const entry = this.#accounts.get(address);
       if (!entry) {
@@ -99,19 +73,19 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     });
   }
 
-  getAccount(address: string): EthereumKeyringAccount | undefined {
-    const canonical = this.#toCanonicalAddress(address);
+  getAccount(address: string): EvmKeyringAccount | undefined {
+    const canonical = canonicalizeEvmAddress(address);
     const entry = this.#accounts.get(canonical);
     return entry ? { ...entry.account } : undefined;
   }
 
   hasAccount(address: string): boolean {
-    const canonical = this.#toCanonicalAddress(address);
+    const canonical = canonicalizeEvmAddress(address);
     return this.#accounts.has(canonical);
   }
 
   removeAccount(address: string): void {
-    const canonical = this.#toCanonicalAddress(address);
+    const canonical = canonicalizeEvmAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
       throw keyringErrors.accountNotFound();
@@ -129,7 +103,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
   }
 
   exportPrivateKey(address: string): Uint8Array {
-    const canonical = this.#toCanonicalAddress(address);
+    const canonical = canonicalizeEvmAddress(address);
     const entry = this.#accounts.get(canonical);
     if (!entry) {
       throw keyringErrors.accountNotFound();
@@ -137,7 +111,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     return copyBytes(entry.secret);
   }
 
-  toSnapshot(): HierarchicalDeterministicKeyringSnapshot<EthereumKeyringAccount> {
+  toSnapshot(): HierarchicalDeterministicKeyringSnapshot<EvmKeyringAccount> {
     return {
       type: "hierarchical",
       accounts: this.getAccounts().map((account) => ({ ...account })),
@@ -145,7 +119,7 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     };
   }
 
-  hydrate(snapshot: HierarchicalDeterministicKeyringSnapshot<EthereumKeyringAccount>): void {
+  hydrate(snapshot: HierarchicalDeterministicKeyringSnapshot<EvmKeyringAccount>): void {
     this.#assertHasSecret();
     this.#clearAccounts();
 
@@ -186,12 +160,12 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
         throw keyringErrors.secretUnavailable();
       }
 
-      const address = this.#addressFromSecret(privateKey);
+      const address = privateKeyToEvmAddress(privateKey);
       if (this.#accounts.has(address)) {
         throw keyringErrors.duplicateAccount();
       }
 
-      const account: EthereumKeyringAccount = {
+      const account: EvmKeyringAccount = {
         address,
         derivationPath: `${DERIVATION_PREFIX}/${index}`,
         derivationIndex: index,
@@ -210,8 +184,8 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     }
   }
 
-  #storeAccount(account: EthereumKeyringAccount, secret: Uint8Array): StoredAccount {
-    const canonical = this.#toCanonicalAddress(account.address);
+  #storeAccount(account: EvmKeyringAccount, secret: Uint8Array): StoredAccount {
+    const canonical = canonicalizeEvmAddress(account.address);
     const entry: StoredAccount = {
       account: { ...account, address: canonical },
       secret: copyBytes(secret),
@@ -230,47 +204,8 @@ export class EthereumHdKeyring implements HierarchicalDeterministicKeyring<Ether
     this.#derivedIndices.clear();
   }
 
-  #addressFromSecret(secret: Uint8Array): string {
-    const publicKey = secp256k1.getPublicKey(secret, false);
-    const hash = keccak_256(publicKey.subarray(1));
-    const addressBytes = hash.slice(hash.length - 20);
-    return `0x${bytesToHex(addressBytes)}`;
-  }
-
   #toCanonicalAddress(value: string): string {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw keyringErrors.invalidAddress();
-    }
-    const normalized = value.trim().toLowerCase();
-    if (!ADDRESS_PATTERN.test(normalized)) {
-      throw keyringErrors.invalidAddress();
-    }
-    return normalized.startsWith("0x") ? normalized : `0x${normalized}`;
-  }
-
-  #parsePrivateKeyBytes(value: string | Uint8Array): Uint8Array {
-    if (value instanceof Uint8Array) {
-      if (value.length !== 32) {
-        throw keyringErrors.invalidPrivateKey();
-      }
-      return copyBytes(value);
-    }
-
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw keyringErrors.invalidPrivateKey();
-    }
-
-    const trimmed = value.trim();
-    if (!PRIVATE_KEY_PATTERN.test(trimmed)) {
-      throw keyringErrors.invalidPrivateKey();
-    }
-
-    const bytes = hexToBytes(trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed);
-    if (bytes.length !== 32) {
-      zeroize(bytes);
-      throw keyringErrors.invalidPrivateKey();
-    }
-    return bytes;
+    return canonicalizeEvmAddress(value);
   }
 
   #assertHasSecret(): void {

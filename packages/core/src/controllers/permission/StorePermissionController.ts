@@ -1,9 +1,9 @@
+import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
 import type { PermissionsService } from "../../services/permissions/types.js";
 import type { PermissionRecord } from "../../storage/records.js";
-import { toEip155AccountIdFromCanonicalAddress, toEip155AddressFromAccountId } from "../../utils/accountId.js";
 import type { ChainNamespace } from "../account/types.js";
 import {
   type GrantPermissionOptions,
@@ -197,9 +197,9 @@ const buildOriginStateFromRecords = (records: PermissionRecord[]): OriginPermiss
     if (namespace === "eip155" && record.accountIds?.length) {
       const accountsGrant = record.grants.find((g) => g.scope === PermissionScopes.Accounts);
       const permittedChains = (accountsGrant?.chains ?? []) as ChainRef[];
-      const accounts = record.accountIds.map((id) => toEip155AddressFromAccountId(id));
 
       for (const chainRef of permittedChains) {
+        const accounts = record.accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId }));
         const entry = chainMap.get(chainRef) ?? { scopes: new Set<PermissionScope>() };
         entry.scopes.add(PermissionScopes.Accounts);
         entry.accounts = [...accounts];
@@ -374,7 +374,7 @@ export class StorePermissionController implements PermissionController {
       throw new Error("setPermittedAccounts requires at least one account");
     }
 
-    const accountIds = uniqueAccounts.map((address) => toEip155AccountIdFromCanonicalAddress(address));
+    const accountIds = uniqueAccounts.map((address) => toAccountIdFromAddress({ chainRef, address }));
 
     const existing = await this.#service.getByOrigin({ origin, namespace });
     const nextGrants = upsertGrantChains(existing?.grants ?? [], { scope: PermissionScopes.Accounts, chainRef });

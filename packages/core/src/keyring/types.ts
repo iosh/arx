@@ -23,7 +23,6 @@ export interface HierarchicalDeterministicKeyring<TAccount extends KeyringAccoun
   loadFromMnemonic(mnemonic: string, options?: { passphrase?: string }): void;
   deriveAccount(index: number): TAccount;
   deriveNextAccount(): TAccount;
-  importAccount(privateKey: string | Uint8Array): TAccount;
   getAccounts(): readonly TAccount[];
   getAccount(address: string): TAccount | undefined;
   hasAccount(address: string): boolean;

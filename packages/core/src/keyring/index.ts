@@ -1,7 +1,6 @@
-export type { EthereumKeyringAccount } from "./ethereum/EthereumHdKeyring.js";
-export { EthereumHdKeyring } from "./ethereum/EthereumHdKeyring.js";
-export { PrivateKeyKeyring } from "./ethereum/PrivateKeyKeyring.js";
-export type { KeyringKind, NamespaceConfig, NamespaceKeyringFactories } from "./namespace.js";
+export type { EvmKeyringAccount } from "./evm/EvmHdKeyring.js";
+export { EvmHdKeyring } from "./evm/EvmHdKeyring.js";
+export { EvmPrivateKeyKeyring } from "./evm/EvmPrivateKeyKeyring.js";
 export type {
   HierarchicalDeterministicKeyring,
   HierarchicalDeterministicKeyringSnapshot,

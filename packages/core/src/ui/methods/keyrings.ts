@@ -29,6 +29,11 @@ const ImportPrivateKeyResultSchema = z.strictObject({
   account: KeyringAccountSchema,
 });
 
+const passwordSchema = z
+  .string()
+  .min(1)
+  .refine((v) => v.trim().length > 0, { message: "Password cannot be empty." });
+
 export const keyringsMethods = {
   "ui.keyrings.confirmNewMnemonic": defineMethod(
     z.strictObject({
@@ -101,12 +106,12 @@ export const keyringsMethods = {
   }),
 
   "ui.keyrings.exportMnemonic": defineMethod(
-    z.strictObject({ keyringId: z.uuid(), password: z.string().min(1) }),
+    z.strictObject({ keyringId: z.uuid(), password: passwordSchema }),
     ExportMnemonicResultSchema,
   ),
 
   "ui.keyrings.exportPrivateKey": defineMethod(
-    z.strictObject({ address: z.string().min(1), password: z.string().min(1) }),
+    z.strictObject({ accountId: AccountIdSchema, password: passwordSchema }),
     ExportPrivateKeyResultSchema,
   ),
 } as const;

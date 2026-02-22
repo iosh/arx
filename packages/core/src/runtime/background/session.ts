@@ -1,4 +1,4 @@
-import { toCanonicalEvmAddress } from "../../chains/address.js";
+import { getAccountCodec } from "../../accounts/codec.js";
 import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
 import type {
   UnlockController,
@@ -6,7 +6,7 @@ import type {
   UnlockMessengerTopics,
 } from "../../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
-import { EthereumHdKeyring, PrivateKeyKeyring } from "../../keyring/index.js";
+import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
@@ -21,6 +21,7 @@ import type { BackgroundMessenger } from "./messenger.js";
 import { castMessenger } from "./messenger.js";
 
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
+const DEFAULT_EIP155_CHAIN_REF = "eip155:1" as const;
 
 type VaultFactory = () => VaultService;
 type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
@@ -304,10 +305,11 @@ export const initSessionLayer = ({
     namespaces: [
       {
         namespace: EIP155_NAMESPACE,
-        toCanonicalAddress: toCanonicalEvmAddress,
+        defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
+        codec: getAccountCodec(EIP155_NAMESPACE),
         factories: {
-          hd: () => new EthereumHdKeyring(),
-          "private-key": () => new PrivateKeyKeyring(),
+          hd: () => new EvmHdKeyring(),
+          "private-key": () => new EvmPrivateKeyKeyring(),
         },
       },
     ],

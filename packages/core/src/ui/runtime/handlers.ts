@@ -3,6 +3,8 @@ import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
+import { toAccountIdFromAddress } from "../../accounts/accountId.js";
+import { parseChainRef } from "../../chains/caip.js";
 import type { ChainNamespace } from "../../controllers/account/types.js";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
 import { PermissionScopes } from "../../controllers/permission/types.js";
@@ -19,25 +21,6 @@ import type { UiHandlers, UiRuntimeDeps } from "./types.js";
 const assertUnlocked = (session: BackgroundSessionServices) => {
   if (!session.unlock.isUnlocked()) {
     throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
-  }
-};
-
-const verifyExportPassword = async (session: BackgroundSessionServices, password: string): Promise<void> => {
-  if (!password || password.trim().length === 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "Password cannot be empty",
-    });
-  }
-
-  try {
-    await session.vault.verifyPassword(password);
-  } catch (_error) {
-    throw arxError({
-      reason: ArxReasons.VaultInvalidPassword,
-      message: "Password verification failed",
-      data: { context: "export_operation" },
-    });
   }
 };
 
@@ -150,11 +133,40 @@ const toUiKeyringMeta = (meta: KeyringMetaRecord) => ({
 // Helper to derive chain context from a task (with fallback to active chain).
 const deriveChainContext = (
   task: { chainRef?: string; namespace?: string },
-  controllers: { network: { getActiveChain: () => { chainRef: string } } },
+  controllers: { network: Pick<UiRuntimeDeps["controllers"]["network"], "getActiveChain" | "getState"> },
 ) => {
-  const chainRef = task.chainRef ?? controllers.network.getActiveChain().chainRef;
-  const namespace = task.namespace ?? "eip155";
-  return { chainRef, namespace };
+  const active = controllers.network.getActiveChain();
+
+  if (task.chainRef) {
+    const parsed = parseChainRef(task.chainRef);
+    if (task.namespace && task.namespace !== parsed.namespace) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "Approval task has mismatched namespace and chainRef.",
+        data: { namespace: task.namespace, chainRef: task.chainRef },
+      });
+    }
+    return { chainRef: `${parsed.namespace}:${parsed.reference}`, namespace: parsed.namespace };
+  }
+
+  if (task.namespace) {
+    if (active.namespace === task.namespace) {
+      return { chainRef: active.chainRef, namespace: task.namespace };
+    }
+
+    const known = controllers.network.getState().knownChains.find((c) => c.namespace === task.namespace);
+    if (!known) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "Approval task is missing chainRef and cannot be resolved from namespace.",
+        data: { namespace: task.namespace },
+      });
+    }
+
+    return { chainRef: known.chainRef, namespace: task.namespace };
+  }
+
+  return { chainRef: active.chainRef, namespace: active.namespace };
 };
 
 // Approval task type
@@ -224,9 +236,16 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.SignMessage]: async (task, controllers) => {
     const payload = task.payload as { from: string; message: string };
     const { chainRef, namespace } = deriveChainContext(task, controllers);
+    if (namespace !== "eip155") {
+      throw arxError({
+        reason: ArxReasons.ChainNotCompatible,
+        message: `SignMessage is not supported for namespace "${namespace}".`,
+        data: { namespace, chainRef },
+      });
+    }
 
     const signature = await controllers.signers.eip155.signPersonalMessage({
-      address: payload.from,
+      accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
       message: payload.message,
     });
 
@@ -241,11 +260,18 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.SignTypedData]: async (task, controllers) => {
     const payload = task.payload as { from: string; typedData: unknown };
     const { chainRef, namespace } = deriveChainContext(task, controllers);
+    if (namespace !== "eip155") {
+      throw arxError({
+        reason: ArxReasons.ChainNotCompatible,
+        message: `SignTypedData is not supported for namespace "${namespace}".`,
+        data: { namespace, chainRef },
+      });
+    }
 
     const typedDataStr = typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
 
     const signature = await controllers.signers.eip155.signTypedData({
-      address: payload.from,
+      accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
       typedData: typedDataStr,
     });
 
@@ -671,14 +697,12 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
     "ui.keyrings.exportMnemonic": async (params) => {
       assertUnlocked(session);
-      await verifyExportPassword(session, params.password);
       return { words: (await keyring.exportMnemonic(params.keyringId, params.password)).split(" ") };
     },
 
     "ui.keyrings.exportPrivateKey": async (params) => {
       assertUnlocked(session);
-      await verifyExportPassword(session, params.password);
-      const secret = await keyring.exportPrivateKeyByAddress(params.address, params.password);
+      const secret = await keyring.exportPrivateKeyByAccountId(params.accountId, params.password);
       const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
       return { privateKey };
     },

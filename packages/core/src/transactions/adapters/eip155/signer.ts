@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
 import * as Hash from "ox/Hash";
 import type { Hex as HexType } from "ox/Hex";
 import * as Hex from "ox/Hex";
@@ -7,16 +6,16 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
+import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
-import { zeroize } from "../../../vault/utils.js";
 import type { SignedTransactionPayload, TransactionAdapterContext } from "../types.js";
 import type { Eip155PreparedTransaction } from "./types.js";
 
 const textEncoder = new TextEncoder();
 
 type SignerDeps = {
-  keyring: Pick<KeyringService, "hasAccount" | "exportPrivateKeyForSigning">;
+  keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
 };
 
 export type Eip155Signer = {
@@ -24,8 +23,8 @@ export type Eip155Signer = {
     context: TransactionAdapterContext,
     prepared: Record<string, unknown>,
   ) => Promise<SignedTransactionPayload>;
-  signPersonalMessage: (params: { address: string; message: HexType | string }) => Promise<HexType>;
-  signTypedData: (params: { address: string; typedData: string }) => Promise<HexType>;
+  signPersonalMessage: (params: { accountId: string; message: HexType | string }) => Promise<HexType>;
+  signTypedData: (params: { accountId: string; typedData: string }) => Promise<HexType>;
 };
 
 type ParsedSignature = {
@@ -142,21 +141,6 @@ const buildEnvelope = (
   };
 };
 
-const parseSignature = (payload: HexType, privateKey: Uint8Array): ParsedSignature => {
-  const payloadBytes = Hex.toBytes(payload);
-
-  const signature = secp256k1.sign(payloadBytes, privateKey, { lowS: true });
-
-  const compactBytes = signature.toCompactRawBytes();
-
-  return {
-    r: signature.r,
-    s: signature.s,
-    yParity: signature.recovery ?? 0,
-    bytes: compactBytes,
-  };
-};
-
 const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
   const output = new Uint8Array(65);
   output.set(bytes.subarray(0, 64), 0);
@@ -164,12 +148,15 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
   return Hex.from(output);
 };
 
-const assertUnlockedAccount = (keyring: SignerDeps["keyring"], address: string) => {
-  if (!keyring.hasAccount("eip155", address)) {
+const assertUnlockedAccount = async (keyring: SignerDeps["keyring"], accountId: string) => {
+  // hasAccountId relies on in-memory indices that are populated during hydration.
+  // Waiting avoids false "locked" errors during unlock/hydration races.
+  await keyring.waitForReady();
+  if (!keyring.hasAccountId(accountId)) {
     throw arxError({
       reason: ArxReasons.SessionLocked,
-      message: `Address ${address} is not unlocked.`,
-      data: { address },
+      message: `Account ${accountId} is not unlocked.`,
+      data: { accountId },
     });
   }
 };
@@ -252,66 +239,58 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
 
     const from = requestFrom;
 
-    assertUnlockedAccount(deps.keyring, from);
+    const fromAccountId = toAccountIdFromAddress({ chainRef: context.chainRef, address: from });
+    await assertUnlockedAccount(deps.keyring, fromAccountId);
     const prepared = preparedInput as Eip155PreparedTransaction;
     const chainId = deriveChainId(context, preparedInput);
     const envelope = buildEnvelope(prepared, chainId);
 
-    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", from);
-    try {
-      if (envelope.type === "eip1559") {
-        const payload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
-        const signature = parseSignature(payload, secret);
-        const signed = TransactionEnvelopeEip1559.from(envelope.value, {
-          signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
-        });
-        const raw = TransactionEnvelopeEip1559.serialize(signed);
-        const hash = TransactionEnvelopeEip1559.hash(signed);
-        return { raw, hash };
-      }
-
-      const payload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
-      const signature = parseSignature(payload, secret);
-      const signed = TransactionEnvelopeLegacy.from(envelope.value, {
+    if (envelope.type === "eip1559") {
+      const payload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
+      const signature = await deps.keyring.signDigestByAccountId({
+        accountId: fromAccountId,
+        digest: Hex.toBytes(payload),
+      });
+      const signed = TransactionEnvelopeEip1559.from(envelope.value, {
         signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
       });
-      const raw = TransactionEnvelopeLegacy.serialize(signed);
-      const hash = TransactionEnvelopeLegacy.hash(signed);
+      const raw = TransactionEnvelopeEip1559.serialize(signed);
+      const hash = TransactionEnvelopeEip1559.hash(signed);
       return { raw, hash };
-    } finally {
-      zeroize(secret);
     }
+
+    const payload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
+    const signature = await deps.keyring.signDigestByAccountId({
+      accountId: fromAccountId,
+      digest: Hex.toBytes(payload),
+    });
+    const signed = TransactionEnvelopeLegacy.from(envelope.value, {
+      signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
+    });
+    const raw = TransactionEnvelopeLegacy.serialize(signed);
+    const hash = TransactionEnvelopeLegacy.hash(signed);
+    return { raw, hash };
   };
 
-  const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ address, message }) => {
-    assertUnlockedAccount(deps.keyring, address);
+  const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ accountId, message }) => {
+    await assertUnlockedAccount(deps.keyring, accountId);
 
     const messageHex = toPersonalMessageHex(message);
     const payload = PersonalMessage.getSignPayload(messageHex);
 
-    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", address);
-    try {
-      const signature = parseSignature(payload, secret);
-      return composeSignatureHex(signature);
-    } finally {
-      zeroize(secret);
-    }
+    const signature = await deps.keyring.signDigestByAccountId({ accountId, digest: Hex.toBytes(payload) });
+    return composeSignatureHex(signature);
   };
 
-  const signTypedData: Eip155Signer["signTypedData"] = async ({ address, typedData }) => {
-    assertUnlockedAccount(deps.keyring, address);
+  const signTypedData: Eip155Signer["signTypedData"] = async ({ accountId, typedData }) => {
+    await assertUnlockedAccount(deps.keyring, accountId);
 
     const definition = parseTypedDataPayload(typedData);
     const encoded = TypedData.encode(definition);
     const digest = Hash.keccak256(encoded);
 
-    const secret = await deps.keyring.exportPrivateKeyForSigning("eip155", address);
-    try {
-      const signature = parseSignature(digest, secret);
-      return composeSignatureHex(signature);
-    } finally {
-      zeroize(secret);
-    }
+    const signature = await deps.keyring.signDigestByAccountId({ accountId, digest: Hex.toBytes(digest) });
+    return composeSignatureHex(signature);
   };
 
   return {

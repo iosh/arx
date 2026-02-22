@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
+import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { parseChainRef } from "../../chains/index.js";
 import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountsService } from "../../services/accounts/types.js";
 import type { SettingsService } from "../../services/settings/types.js";

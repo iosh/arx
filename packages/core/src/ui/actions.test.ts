@@ -98,7 +98,10 @@ describe("ui actions", () => {
     void actions.keyrings.unhideHdAccount({ accountId: "eip155:0000000000000000000000000000000000000000" });
     void actions.keyrings.removePrivateKeyKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.exportMnemonic({ keyringId: "00000000-0000-0000-0000-000000000000", password: "pw" });
-    void actions.keyrings.exportPrivateKey({ address: "0x0", password: "pw" });
+    void actions.keyrings.exportPrivateKey({
+      accountId: "eip155:0000000000000000000000000000000000000000",
+      password: "pw",
+    });
 
     expect([...called].sort()).toEqual(methodKeys);
   });

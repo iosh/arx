@@ -1,5 +1,5 @@
+import { parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
-import { parseChainRef } from "../chains/index.js";
 import type { AccountId } from "../storage/records.js";
 import { getAccountCodec } from "./codec.js";
 

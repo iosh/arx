@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EthereumHdKeyring } from "./EthereumHdKeyring.js";
+import { EvmHdKeyring } from "./EvmHdKeyring.js";
 
 const MNEMONIC = "test test test test test test test test test test test junk";
 const KNOWN_ADDRESSES = ["0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"];
@@ -12,13 +12,11 @@ const MORE_KNOWN_ADDRESSES = [
   "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
 ] as const;
 
-const toHex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-
-describe("EthereumHdKeyring", () => {
-  let keyring: EthereumHdKeyring;
+describe("EvmHdKeyring", () => {
+  let keyring: EvmHdKeyring;
 
   beforeEach(() => {
-    keyring = new EthereumHdKeyring();
+    keyring = new EvmHdKeyring();
     keyring.loadFromMnemonic(MNEMONIC);
   });
 
@@ -38,7 +36,7 @@ describe("EthereumHdKeyring", () => {
   it("derives different accounts when using a passphrase", () => {
     const baseline = keyring.deriveNextAccount().address;
 
-    const withPassphrase = new EthereumHdKeyring();
+    const withPassphrase = new EvmHdKeyring();
     withPassphrase.loadFromMnemonic(MNEMONIC, { passphrase: "test123" });
     const derivedWithPassphrase = withPassphrase.deriveNextAccount().address;
 
@@ -46,12 +44,12 @@ describe("EthereumHdKeyring", () => {
   });
 
   it("rejects invalid mnemonic phrases", () => {
-    const blank = new EthereumHdKeyring();
+    const blank = new EvmHdKeyring();
     expect(() => blank.loadFromMnemonic("invalid words here")).toThrowError("Mnemonic phrase is invalid");
   });
 
   it("throws when deriving before initialization", () => {
-    const blank = new EthereumHdKeyring();
+    const blank = new EvmHdKeyring();
     expect(() => blank.deriveNextAccount()).toThrowError("Keyring has not been initialized");
   });
 
@@ -60,28 +58,11 @@ describe("EthereumHdKeyring", () => {
     expect(() => keyring.deriveAccount(0)).toThrowError("Account already exists in this keyring");
   });
 
-  it("imports raw private keys and exports the same secret", () => {
-    const privateKey = "0x4c0883a69102937d6231471b5dbb6204fe5129617082794ae5a3dfcc5a7b5d14";
-    const imported = keyring.importAccount(privateKey);
-
-    expect(imported.source).toBe("imported");
-    expect(imported.derivationPath).toBeNull();
-
-    const exported = keyring.exportPrivateKey(imported.address);
-    expect(toHex(exported)).toBe(privateKey.replace(/^0x/, "").toLowerCase());
-  });
-
   it("throws when exporting non-existent accounts", () => {
     keyring.deriveNextAccount();
     expect(() => keyring.exportPrivateKey("0x0000000000000000000000000000000000000000")).toThrowError(
       "Requested account is not managed by this keyring",
     );
-  });
-
-  it("rejects invalid private key formats", () => {
-    expect(() => keyring.importAccount("0xshort")).toThrowError("Private key must be a 32-byte hex value");
-    expect(() => keyring.importAccount("")).toThrowError("Private key must be a 32-byte hex value");
-    expect(() => keyring.importAccount("not hex at all")).toThrowError("Private key must be a 32-byte hex value");
   });
 
   it("hydrates from snapshot after clearing state", () => {

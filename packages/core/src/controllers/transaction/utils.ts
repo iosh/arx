@@ -1,6 +1,6 @@
 import { ArxReasons, isArxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
-import { parseChainRef } from "../../chains/index.js";
+import { parseChainRef } from "../../chains/caip.js";
 import type { TransactionAdapterContext } from "../../transactions/adapters/types.js";
 import type {
   TransactionError,

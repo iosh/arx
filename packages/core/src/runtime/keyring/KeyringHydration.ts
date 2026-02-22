@@ -1,3 +1,4 @@
+import { bytesToHex } from "@noble/hashes/utils.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
@@ -244,9 +245,12 @@ export class KeyringHydration {
 
               for (const meta of derived) {
                 const derivedAccount = hd.deriveAccount(meta.derivationIndex ?? 0);
-                const canonical = config.toCanonicalAddress(derivedAccount.address);
-                const expected = `0x${meta.payloadHex}`;
-                if (canonical !== expected) {
+                const canonical = config.codec.toCanonicalAddress({
+                  chainRef: config.defaultChainRef,
+                  value: derivedAccount.address,
+                });
+                const expected = meta.payloadHex;
+                if (bytesToHex(canonical.bytes) !== expected) {
                   throw keyringErrors.secretUnavailable();
                 }
               }

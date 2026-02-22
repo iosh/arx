@@ -1,6 +1,6 @@
 import { ArxReasons, isArxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../accounts/accountId.js";
-import { parseChainRef } from "../../chains/index.js";
+import { parseChainRef } from "../../chains/caip.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";

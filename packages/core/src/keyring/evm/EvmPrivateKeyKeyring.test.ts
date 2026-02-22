@@ -1,7 +1,7 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { KeyringAccount, SimpleKeyringSnapshot } from "../types.js";
-import { PrivateKeyKeyring } from "./PrivateKeyKeyring.js";
+import { EvmPrivateKeyKeyring } from "./EvmPrivateKeyKeyring.js";
 
 const PK = "0xe4489a71aa574af4c240b10161854d43981965b4ab8c4fbc393401a508e11d00";
 const PK2 = "0xd05a5b7b99209028f6550ef16790697515273d4252f9445cf5c7f1b74df32659";
@@ -15,9 +15,9 @@ const expectReason = (fn: () => unknown, reason: string) => {
   }
 };
 
-describe("PrivateKeyKeyring", () => {
+describe("EvmPrivateKeyKeyring", () => {
   it("imports and exposes account", () => {
-    const keyring = new PrivateKeyKeyring();
+    const keyring = new EvmPrivateKeyKeyring();
     keyring.loadFromPrivateKey(PK);
 
     const accounts = keyring.getAccounts();
@@ -30,7 +30,7 @@ describe("PrivateKeyKeyring", () => {
   });
 
   it("replaces secret when importing again", () => {
-    const keyring = new PrivateKeyKeyring();
+    const keyring = new EvmPrivateKeyKeyring();
     keyring.loadFromPrivateKey(PK);
     const firstAccount = keyring.getAccounts()[0];
     if (!firstAccount) throw new Error("Expected an imported account");
@@ -45,7 +45,7 @@ describe("PrivateKeyKeyring", () => {
   });
 
   it("remove clears account", () => {
-    const keyring = new PrivateKeyKeyring();
+    const keyring = new EvmPrivateKeyKeyring();
     keyring.loadFromPrivateKey(PK);
     const [account] = keyring.getAccounts();
     if (!account) throw new Error("Expected an imported account");
@@ -55,7 +55,7 @@ describe("PrivateKeyKeyring", () => {
   });
 
   it("hydrates only when secret is loaded and addresses match", () => {
-    const keyring = new PrivateKeyKeyring();
+    const keyring = new EvmPrivateKeyKeyring();
     const snapshot: SimpleKeyringSnapshot<KeyringAccount<string>> = {
       type: "simple",
       account: {
@@ -86,14 +86,8 @@ describe("PrivateKeyKeyring", () => {
     expect(keyring.getAccounts()).toHaveLength(0);
   });
 
-  it("derive methods are unsupported", () => {
-    const keyring = new PrivateKeyKeyring();
-    expectReason(() => keyring.deriveNextAccount(), ArxReasons.KeyringIndexOutOfRange);
-    expectReason(() => keyring.deriveAccount(), ArxReasons.KeyringIndexOutOfRange);
-  });
-
   it("hydrates with loaded secret and rejects mismatches", () => {
-    const keyring = new PrivateKeyKeyring();
+    const keyring = new EvmPrivateKeyKeyring();
 
     expectReason(
       () =>

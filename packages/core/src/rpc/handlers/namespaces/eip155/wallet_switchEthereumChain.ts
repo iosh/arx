@@ -1,6 +1,6 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
-import { parseChainRef } from "../../../../chains/index.js";
+import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";

@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { parseChainRef } from "../../../../chains/index.js";
+import { parseChainRef } from "../../../../chains/caip.js";
 import { PermissionScopes } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";

@@ -22,8 +22,8 @@ import type {
 import { StorePermissionController } from "../../controllers/permission/StorePermissionController.js";
 import { PERMISSION_TOPICS } from "../../controllers/permission/topics.js";
 import type {
+  PermissionCapabilityResolver,
   PermissionController,
-  PermissionScopeResolver,
   PermissionsState,
 } from "../../controllers/permission/types.js";
 import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
@@ -59,7 +59,7 @@ export type ControllerLayerOptions = {
   };
   permissions?: {
     initialState?: PermissionsState;
-    scopeResolver?: PermissionScopeResolver;
+    capabilityResolver?: PermissionCapabilityResolver;
     chains?: ChainDescriptorRegistry;
   };
   transactions?: {
@@ -131,8 +131,9 @@ export const initControllers = ({
     ...(networkOptions?.logger ? { logger: networkOptions.logger } : {}),
   });
 
-  const permissionScopeResolver =
-    permissionOptions?.scopeResolver ?? rpcRegistry.createPermissionScopeResolver((ctx) => namespaceResolver(ctx));
+  const permissionCapabilityResolver =
+    permissionOptions?.capabilityResolver ??
+    rpcRegistry.createPermissionCapabilityResolver((ctx) => namespaceResolver(ctx));
 
   const accountController: AccountController = new StoreAccountsController({
     messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
@@ -151,7 +152,7 @@ export const initControllers = ({
 
   const permissionController = new StorePermissionController({
     messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
-    scopeResolver: permissionScopeResolver,
+    capabilityResolver: permissionCapabilityResolver,
     service: permissionsService,
     ...(permissionOptions?.chains ? { chains: permissionOptions.chains } : {}),
   });

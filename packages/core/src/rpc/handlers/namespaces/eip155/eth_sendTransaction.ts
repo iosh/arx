@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../../../chains/caip.js";
-import { PermissionScopes } from "../../../../controllers/index.js";
+import { PermissionCapabilities } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
@@ -15,7 +15,7 @@ type RpcLikeError = Error & { code: number; data?: unknown };
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
 export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionParams> = {
-  scope: PermissionScopes.Transaction,
+  scope: PermissionCapabilities.SendTransaction,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
   parseParams: (params) => {
@@ -72,7 +72,7 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
         throw new TransactionResolutionError(broadcastMeta);
       }
 
-      await controllers.permissions.grant(origin, PermissionScopes.Transaction, {
+      await controllers.permissions.grant(origin, PermissionCapabilities.SendTransaction, {
         namespace: broadcastMeta.namespace,
         chainRef: broadcastMeta.chainRef,
       });

@@ -1,10 +1,10 @@
-import { PermissionScopes } from "../../../../controllers/index.js";
+import { PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedResponse } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
 
 export const ethAccountsDefinition = defineNoParamsMethod({
-  scope: PermissionScopes.Accounts,
+  scope: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedResponse([]),
   handler: ({ origin, controllers }) => {

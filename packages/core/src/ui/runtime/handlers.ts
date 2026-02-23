@@ -7,7 +7,7 @@ import { toAccountIdFromAddress } from "../../accounts/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainNamespace } from "../../controllers/account/types.js";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
-import { PermissionScopes } from "../../controllers/permission/types.js";
+import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import type { TransactionRequest } from "../../controllers/transaction/types.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { Eip155RpcCapabilities } from "../../rpc/namespaceClients/eip155.js";
@@ -93,8 +93,8 @@ const extendConnectedOriginsToChain = async (
   for (const origin of origins) {
     // Keep connection stable across chain changes: connection is origin-level, not chain-level.
     try {
-      await controllers.permissions.grant(origin, PermissionScopes.Basic, { namespace, chainRef });
-      await controllers.permissions.grant(origin, PermissionScopes.Accounts, { namespace, chainRef });
+      await controllers.permissions.grant(origin, PermissionCapabilities.Basic, { namespace, chainRef });
+      await controllers.permissions.grant(origin, PermissionCapabilities.Accounts, { namespace, chainRef });
     } catch (error) {
       // Best-effort: never block a user-approved chain switch on persistence quirks.
       console.debug("[ui] failed to extend connected origin permissions to chain", {
@@ -219,7 +219,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    await controllers.permissions.grant(task.origin, PermissionScopes.Basic, {
+    await controllers.permissions.grant(task.origin, PermissionCapabilities.Basic, {
       namespace,
       chainRef,
     });
@@ -249,7 +249,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       message: payload.message,
     });
 
-    await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+    await controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, {
       namespace,
       chainRef,
     });
@@ -275,7 +275,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       typedData: typedDataStr,
     });
 
-    await controllers.permissions.grant(task.origin, PermissionScopes.Sign, {
+    await controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, {
       namespace,
       chainRef,
     });

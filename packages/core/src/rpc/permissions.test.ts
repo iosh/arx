@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { type PermissionGrant, PermissionScopes } from "../controllers/permission/types.js";
+import { PermissionCapabilities, type PermissionGrant } from "../controllers/permission/types.js";
 import { buildWalletPermissions } from "./permissions.js";
 
 const ORIGIN = "https://dapp.example";
@@ -11,8 +11,8 @@ describe("buildWalletPermissions", () => {
 
   it("emits chain caveat per scope", () => {
     const grants: PermissionGrant[] = [
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", scopes: [PermissionScopes.Basic] },
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:137", scopes: [PermissionScopes.Basic] },
+      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", capabilities: [PermissionCapabilities.Basic] },
+      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:137", capabilities: [PermissionCapabilities.Basic] },
     ];
 
     expect(buildWalletPermissions({ origin: ORIGIN, grants })).toEqual([
@@ -26,7 +26,7 @@ describe("buildWalletPermissions", () => {
 
   it("adds restrictReturnedAccounts for eth_accounts", () => {
     const grants: PermissionGrant[] = [
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", scopes: [PermissionScopes.Accounts] },
+      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", capabilities: [PermissionCapabilities.Accounts] },
     ];
     const getAccounts = vi.fn((chainRef: string) => (chainRef === "eip155:1" ? ["0xabc", "0xabc", "0xdef"] : []));
 

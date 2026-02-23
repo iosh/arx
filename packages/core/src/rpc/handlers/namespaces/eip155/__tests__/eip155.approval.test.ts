@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/accountId.js";
-import { ApprovalTypes, PermissionScopes } from "../../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
@@ -291,14 +291,15 @@ describe("eip155 handlers - approval metadata", () => {
       await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
 
       // Grant basic scope only; transaction scope should be added after a successful send.
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
+      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
       });
 
       const beforePermissions = services.controllers.permissions.getState();
-      const beforeScopes = beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
-      expect(beforeScopes).not.toContain(PermissionScopes.Transaction);
+      const beforeCapabilities =
+        beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
+      expect(beforeCapabilities).not.toContain(PermissionCapabilities.SendTransaction);
 
       let broadcastMeta: {
         id: string;
@@ -347,8 +348,8 @@ describe("eip155 handlers - approval metadata", () => {
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
 
       const afterPermissions = services.controllers.permissions.getState();
-      const afterScopes = afterPermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
-      expect(afterScopes).toContain(PermissionScopes.Transaction);
+      const afterCapabilities = afterPermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
+      expect(afterCapabilities).toContain(PermissionCapabilities.SendTransaction);
     } finally {
       unsubscribe();
       services.lifecycle.destroy();
@@ -444,8 +445,8 @@ describe("eip155 handlers - approval metadata", () => {
 
       // Ensure Sign scope is not present before the first typed data signature.
       const beforeState = services.controllers.permissions.getState();
-      const beforeScopes = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.scopes ?? [];
-      expect(beforeScopes).not.toContain(PermissionScopes.Sign);
+      const beforeCapabilities = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
+      expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);
 
       const execute = createExecutor(services);
       const payload = {

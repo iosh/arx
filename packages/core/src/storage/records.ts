@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PERMISSION_SCOPE_VALUES, PermissionScopes } from "../permissions/constants.js";
+import { PERMISSION_CAPABILITY_VALUES, PermissionCapabilities } from "../permissions/capabilities.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   chainRefSchema,
@@ -84,13 +84,13 @@ export const AccountRecordSchema = z
   });
 export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 
-export const PermissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
-export type PermissionScope = z.infer<typeof PermissionScopeSchema>;
+export const PermissionCapabilitySchema = z.enum(PERMISSION_CAPABILITY_VALUES);
+export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
 
 export const PermissionGrantSchema = z.strictObject({
-  scope: PermissionScopeSchema,
-  // Chain list where this scope applies (EIP-2255 style caveat).
-  chains: z.array(chainRefSchema).min(1),
+  capability: PermissionCapabilitySchema,
+  // Chain list where this capability applies (EIP-2255-style caveat).
+  chainRefs: z.array(chainRefSchema).min(1),
 });
 export type PermissionGrantRecord = z.infer<typeof PermissionGrantSchema>;
 
@@ -106,17 +106,17 @@ export const PermissionRecordSchema = z
     updatedAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    const scopes = value.grants.map((g) => g.scope);
-    const uniqueScopes = new Set(scopes);
-    if (uniqueScopes.size !== scopes.length) {
+    const capabilities = value.grants.map((g) => g.capability);
+    const unique = new Set(capabilities);
+    if (unique.size !== capabilities.length) {
       ctx.addIssue({
         code: "custom",
-        message: "grants must not contain duplicate scopes",
+        message: "grants must not contain duplicate capabilities",
         path: ["grants"],
       });
     }
 
-    const hasAccountsGrant = scopes.includes(PermissionScopes.Accounts);
+    const hasAccountsGrant = capabilities.includes(PermissionCapabilities.Accounts);
     if (hasAccountsGrant && !value.accountIds) {
       ctx.addIssue({
         code: "custom",

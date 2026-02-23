@@ -1,12 +1,12 @@
 import type { ChainRef } from "../../../../chains/ids.js";
-import { PermissionScopes } from "../../../../controllers/index.js";
+import { PermissionCapabilities } from "../../../../controllers/index.js";
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedAllow } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
 
 export const walletGetPermissionsDefinition = defineNoParamsMethod({
-  scope: PermissionScopes.Basic,
+  scope: PermissionCapabilities.Basic,
   permissionCheck: PermissionChecks.None,
   locked: lockedAllow(),
   handler: ({ origin, controllers }) => {

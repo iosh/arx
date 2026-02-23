@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { PermissionScopes } from "@arx/core";
+import { PermissionCapabilities } from "@arx/core";
 import { DOMAIN_SCHEMA_VERSION, PermissionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,7 +51,7 @@ describe("DexiePermissionsPort", () => {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       origin: "https://dapp.example",
       namespace: "eip155",
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -68,8 +68,8 @@ describe("DexiePermissionsPort", () => {
       origin: "https://dapp.example",
       namespace: "eip155",
       grants: [
-        { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
-        { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
+        { capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] },
+        { capability: PermissionCapabilities.Sign, chainRefs: ["eip155:1"] },
       ],
       updatedAt: 1000,
     });
@@ -99,7 +99,7 @@ describe("DexiePermissionsPort", () => {
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       origin: "https://dapp.example",
       namespace: "eip155",
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -107,7 +107,7 @@ describe("DexiePermissionsPort", () => {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
       origin: "https://other.example",
       namespace: "eip155",
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -126,7 +126,7 @@ describe("DexiePermissionsPort", () => {
       id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       origin: "https://dapp.example",
       namespace: "eip155",
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
       updatedAt: 1000,
     });
 
@@ -134,7 +134,7 @@ describe("DexiePermissionsPort", () => {
       id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       origin: "https://other.example",
       namespace: "eip155",
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
       updatedAt: 1000,
     });
 

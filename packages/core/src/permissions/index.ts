@@ -1,1 +1,2 @@
-export * from "./constants.js";
+export * from "./capabilities.js";
+export * from "./eip2255.js";

@@ -7,9 +7,9 @@ import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type {
+  PermissionCapability,
+  PermissionCapabilityResolver,
   PermissionController,
-  PermissionScope,
-  PermissionScopeResolver,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NetworkPreferencesService } from "../../services/networkPreferences/types.js";
@@ -71,7 +71,7 @@ export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionC
 export type LockedPolicy = { allow: true } | { allow: false } | { response: Json };
 
 export type MethodDefinition<P = unknown> = {
-  scope?: PermissionScope;
+  scope?: PermissionCapability;
   /**
    * Permission guard mode.
    *
@@ -103,7 +103,7 @@ export type MethodDefinition<P = unknown> = {
 
 export type Namespace = string;
 
-export type { PermissionScopeResolver };
+export type { PermissionCapabilityResolver };
 
 export const defineMethod = <P>(definition: MethodDefinition<P>): MethodDefinition<P> => definition;
 

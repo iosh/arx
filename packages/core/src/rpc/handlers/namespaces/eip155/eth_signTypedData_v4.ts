@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -7,7 +7,7 @@ import { requireRequestContext } from "./shared.js";
 type EthSignTypedDataV4Params = { address: string; typedData: string };
 
 export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Params> = {
-  scope: PermissionScopes.Sign,
+  scope: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
   parseParams: (params) => parseTypedDataParams(toParamsArray(params)),
@@ -36,7 +36,7 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
       );
 
       // Grant Sign permission after successful signature
-      await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
         namespace: "eip155",
         chainRef: activeChain.chainRef,
       });

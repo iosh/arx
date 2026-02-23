@@ -148,8 +148,7 @@ const toApprovalSummary = (controllers: HandlerControllers, task: ApprovalTask):
         payload: {
           permissions: payload.requested.map((item) => ({
             capability: item.capability,
-            scope: item.scope,
-            chains: [...item.chains],
+            chainRefs: [...item.chainRefs],
           })),
         },
       };

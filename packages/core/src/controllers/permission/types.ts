@@ -1,13 +1,13 @@
 import type { ChainRef } from "../../chains/ids.js";
-import { PermissionScopes } from "../../permissions/constants.js";
+import { PermissionCapabilities } from "../../permissions/capabilities.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { ChainNamespace } from "../account/types.js";
 
-export { PermissionScopes };
-export type PermissionScope = (typeof PermissionScopes)[keyof typeof PermissionScopes];
+export { PermissionCapabilities };
+export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof PermissionCapabilities];
 
 export type ChainPermissionState = {
-  scopes: PermissionScope[];
+  capabilities: PermissionCapability[];
   // EIP-155 only for now; keep per-chain to avoid leaking accounts to non-connected chains.
   accounts?: string[];
 };
@@ -31,7 +31,7 @@ export type PermissionGrant = {
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  scopes: PermissionScope[];
+  capabilities: PermissionCapability[];
   accounts?: string[];
 };
 
@@ -40,12 +40,14 @@ export type GrantPermissionOptions = {
   chainRef?: ChainRef | null;
 };
 
-export type PermissionScopeResolver = (method: string, context?: RpcInvocationContext) => PermissionScope | undefined;
+export type PermissionCapabilityResolver = (
+  method: string,
+  context?: RpcInvocationContext,
+) => PermissionCapability | undefined;
 
 export type PermissionRequestDescriptor = {
-  scope: PermissionScope;
-  capability: string;
-  chains: ChainRef[];
+  capability: PermissionCapability;
+  chainRefs: ChainRef[];
 };
 
 export type RequestPermissionsApprovalPayload = {
@@ -71,7 +73,7 @@ export type PermissionController = {
   isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean;
 
   assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
-  grant(origin: string, scope: PermissionScope, options?: GrantPermissionOptions): Promise<void>;
+  grant(origin: string, capability: PermissionCapability, options?: GrantPermissionOptions): Promise<void>;
   clear(origin: string): Promise<void>;
   getPermissions(origin: string): OriginPermissionState | undefined;
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;

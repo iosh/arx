@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PermissionScopes } from "../../controllers/permission/types.js";
+import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { createPermissionsService } from "./PermissionsService.js";
 import type { PermissionsPort } from "./port.js";
@@ -72,7 +72,7 @@ describe("PermissionsService", () => {
       id: id1,
       origin: ORIGIN,
       namespace: NAMESPACE,
-      grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
     });
 
     t = 2000;
@@ -82,8 +82,8 @@ describe("PermissionsService", () => {
       origin: ORIGIN,
       namespace: NAMESPACE,
       grants: [
-        { scope: PermissionScopes.Basic, chains: ["eip155:1"] },
-        { scope: PermissionScopes.Sign, chains: ["eip155:1"] },
+        { capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] },
+        { capability: PermissionCapabilities.Sign, chainRefs: ["eip155:1"] },
       ],
     });
 
@@ -94,7 +94,10 @@ describe("PermissionsService", () => {
     expect(current).not.toBeNull();
     if (!current) throw new Error("Expected permission record to exist");
     expect(current.id).toBe(id1); // id reused
-    expect(current.grants.map((g) => g.scope)).toEqual([PermissionScopes.Basic, PermissionScopes.Sign]);
+    expect(current.grants.map((g) => g.capability)).toEqual([
+      PermissionCapabilities.Basic,
+      PermissionCapabilities.Sign,
+    ]);
     expect(current.updatedAt).toBe(2000);
   });
 
@@ -112,14 +115,14 @@ describe("PermissionsService", () => {
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         origin: ORIGIN,
         namespace: NAMESPACE,
-        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+        grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
         updatedAt: 1,
       }),
       PermissionRecordSchema.parse({
         id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         origin: "https://other.example",
         namespace: NAMESPACE,
-        grants: [{ scope: PermissionScopes.Basic, chains: ["eip155:1"] }],
+        grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
         updatedAt: 1,
       }),
     ];

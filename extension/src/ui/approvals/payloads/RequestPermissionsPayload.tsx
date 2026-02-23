@@ -12,10 +12,7 @@ export function RequestPermissionsPayload({ approval }: { approval: RequestPermi
           <Card key={`${perm.capability}-${index}`} padded bordered>
             <Paragraph fontWeight="600">{perm.capability}</Paragraph>
             <Paragraph color="$color10" fontSize="$2">
-              Scope: {perm.scope}
-            </Paragraph>
-            <Paragraph color="$color10" fontSize="$2">
-              Chains: {perm.chains.join(", ")}
+              Chains: {perm.chainRefs.join(", ")}
             </Paragraph>
           </Card>
         ))}

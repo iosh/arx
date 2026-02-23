@@ -1,41 +1,31 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalTask,
   ApprovalTypes,
+  PermissionCapabilities,
+  type PermissionCapability,
   type PermissionRequestDescriptor,
-  type PermissionScope,
-  PermissionScopes,
 } from "../../../../controllers/index.js";
-import { buildWalletPermissions, PERMISSION_SCOPE_CAPABILITIES } from "../../../permissions.js";
+import { isPermissionCapability } from "../../../../permissions/capabilities.js";
+import { buildWalletPermissions } from "../../../permissions.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-const CAPABILITY_TO_SCOPE = new Map(
-  Object.entries(PERMISSION_SCOPE_CAPABILITIES).map(([scope, capability]) => [capability, scope as PermissionScope]),
-);
-
 const toRequestDescriptors = (
-  capabilities: readonly string[],
+  capabilities: readonly PermissionCapability[],
   defaultChain: ChainRef,
 ): PermissionRequestDescriptor[] => {
   const requests = new Map<string, PermissionRequestDescriptor>();
 
   const addCapability = (capability: string) => {
-    const scope = CAPABILITY_TO_SCOPE.get(capability);
-    if (!scope) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidParams,
-        message: `wallet_requestPermissions does not support capability "${capability}"`,
-        data: { capability },
-      });
-    }
+    if (!isPermissionCapability(capability)) return;
     const existing = requests.get(capability);
     if (existing) return;
 
-    requests.set(capability, { scope, capability, chains: [defaultChain] });
+    requests.set(capability, { capability, chainRefs: [defaultChain] });
   };
 
   for (const capability of capabilities) {
@@ -45,7 +35,7 @@ const toRequestDescriptors = (
   return [...requests.values()];
 };
 
-type WalletRequestPermissionsParams = readonly string[];
+type WalletRequestPermissionsParams = readonly PermissionCapability[];
 
 const WalletRequestPermissionsParamsSchema = z
   .any()
@@ -60,13 +50,26 @@ const WalletRequestPermissionsParamsSchema = z
       });
     }
 
-    const capabilities = new Set<string>(entries);
-    capabilities.add(PERMISSION_SCOPE_CAPABILITIES[PermissionScopes.Basic]);
-    return [...capabilities];
+    const unique = new Set<string>(entries);
+    unique.add(PermissionCapabilities.Basic);
+
+    const out: PermissionCapability[] = [];
+    for (const capability of unique) {
+      if (!isPermissionCapability(capability)) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: `wallet_requestPermissions does not support capability "${capability}"`,
+          data: { capability },
+        });
+      }
+      out.push(capability);
+    }
+
+    return out;
   });
 
 export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
-  scope: PermissionScopes.Basic,
+  scope: PermissionCapabilities.Basic,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
   parseParams: (params, rpcContext) => {
@@ -108,17 +111,30 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       payload: { requested },
     } satisfies ApprovalTask<typeof ApprovalTypes.RequestPermissions>;
 
+    let result: { granted: PermissionRequestDescriptor[] } | null = null;
     try {
-      const result = await controllers.approvals.requestApproval(
+      result = await controllers.approvals.requestApproval(
         task,
         requireRequestContext(rpcContext, "wallet_requestPermissions"),
       );
-      const grants = result?.granted ?? [];
+    } catch (error) {
+      // Preserve domain/RPC errors from the approvals controller (e.g. user reject, timeout, transport loss).
+      if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
+      // Unknown approval failures are not user rejections.
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
+        message: "Failed to request permissions approval",
+        data: { origin },
+        cause: error,
+      });
+    }
 
-      for (const descriptor of grants) {
-        const targetChains = descriptor.chains.length ? descriptor.chains : [activeChain.chainRef];
+    const grantedDescriptors = result?.granted ?? [];
+    try {
+      for (const descriptor of grantedDescriptors) {
+        const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [activeChain.chainRef];
         for (const chainRef of targetChains) {
-          if (descriptor.scope === PermissionScopes.Accounts) {
+          if (descriptor.capability === PermissionCapabilities.Accounts) {
             const all = controllers.accounts.getAccounts({ chainRef });
             const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef });
             const preferred = preferredAddress && all.includes(preferredAddress) ? preferredAddress : null;
@@ -139,28 +155,30 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
             continue;
           }
 
-          await controllers.permissions.grant(origin, descriptor.scope, {
+          await controllers.permissions.grant(origin, descriptor.capability, {
             namespace,
             chainRef,
           });
         }
       }
     } catch (error) {
-      if (isDomainError(error) || isRpcError(error)) throw error;
+      if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
+      // Approval has already been granted at this point; persistence failures must not be
+      // reported as "user rejected".
       throw arxError({
-        reason: ArxReasons.ApprovalRejected,
-        message: "User rejected permission request",
+        reason: ArxReasons.RpcInternal,
+        message: "Failed to persist granted permissions",
         data: { origin },
         cause: error,
       });
     }
 
-    const grants = controllers.permissions.listGrants(origin);
+    const permissionGrants = controllers.permissions.listGrants(origin);
     const getAccounts = (chainRef: string) =>
       controllers.permissions.getPermittedAccounts(origin, {
         namespace,
         chainRef: chainRef as ChainRef,
       });
-    return buildWalletPermissions({ origin, grants, getAccounts });
+    return buildWalletPermissions({ origin, grants: permissionGrants, getAccounts });
   },
 };

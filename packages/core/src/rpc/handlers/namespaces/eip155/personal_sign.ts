@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -7,7 +7,7 @@ import { requireRequestContext } from "./shared.js";
 type PersonalSignParams = { address: string; message: string };
 
 export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
-  scope: PermissionScopes.Sign,
+  scope: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
   approvalRequired: true,
   parseParams: (params) => {
@@ -65,7 +65,7 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       );
 
       // Grant Sign permission after successful signature
-      await controllers.permissions.grant(origin, PermissionScopes.Sign, {
+      await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
         namespace: "eip155",
         chainRef: activeChain.chainRef,
       });

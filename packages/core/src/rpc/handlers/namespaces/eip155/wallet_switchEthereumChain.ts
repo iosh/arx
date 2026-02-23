@@ -1,7 +1,7 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
-import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -75,7 +75,7 @@ const WalletSwitchEthereumChainParamsSchema = z
   .transform(normalizeWalletSwitchEthereumChainParams);
 
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
-  scope: PermissionScopes.Basic,
+  scope: PermissionCapabilities.Basic,
   // Require an existing connection so unrelated pages cannot spam chain switch prompts.
   // User still approves the switch explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,

@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
 import { type ChainMetadata, createEip155MetadataFromEip3085 } from "../../../../chains/index.js";
-import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -45,7 +45,7 @@ const isSameEip3085Metadata = (a: ChainMetadata, b: ChainMetadata) => {
 };
 
 export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
-  scope: PermissionScopes.Basic,
+  scope: PermissionCapabilities.Basic,
   // Require an existing connection so unrelated pages cannot spam chain addition prompts.
   // User still approves the addition explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,

@@ -3,8 +3,7 @@ import { defineMethod } from "./types.js";
 
 const PermissionRequestDescriptorSchema = z.strictObject({
   capability: z.string().min(1),
-  scope: z.string().min(1),
-  chains: z.array(z.string().min(1)),
+  chainRefs: z.array(z.string().min(1)),
 });
 
 const PermissionApprovalResultSchema = z.strictObject({

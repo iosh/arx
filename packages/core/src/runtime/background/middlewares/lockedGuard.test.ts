@@ -1,6 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
-import { PermissionScopes } from "../../../controllers/permission/types.js";
+import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import { createLockedGuardMiddleware } from "./lockedGuard.js";
 
 const ORIGIN = "https://dapp.example";
@@ -114,7 +114,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { allow: true } }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { allow: true } }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -133,7 +133,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, locked: { response: ["0x123"] } }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { response: ["0x123"] } }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -204,7 +204,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -235,7 +235,7 @@ describe("createLockedGuardMiddleware", () => {
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionScopes.Accounts, approvalRequired: true }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, approvalRequired: true }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -256,7 +256,7 @@ describe("createLockedGuardMiddleware", () => {
       isUnlocked: () => false,
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({
-        scope: PermissionScopes.Accounts,
+        scope: PermissionCapabilities.Accounts,
         approvalRequired: true,
         locked: { allow: false },
       }),

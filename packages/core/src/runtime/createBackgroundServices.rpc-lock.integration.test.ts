@@ -1,6 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PermissionScopes } from "../controllers/index.js";
+import { PermissionCapabilities } from "../controllers/index.js";
 import { createRpcHarness, flushAsync, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
 
 const PASSWORD = "secret-pass";
@@ -99,11 +99,11 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       await initializeSession(services);
       const { chain, address } = await deriveAccount(services);
 
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
+      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, {
+      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
@@ -136,7 +136,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       expect(approvalId).toBeTruthy();
 
       await services.session.unlock.unlock({ password: PASSWORD });
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, {
+      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
@@ -165,7 +165,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       const { chain, address } = await deriveAccount(services);
 
       // Simulate a connected origin (Accounts scope present), but do NOT grant Sign scope.
-      await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, {
+      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
@@ -177,8 +177,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
       const beforeScopes =
         services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
-          ?.scopes ?? [];
-      expect(beforeScopes).not.toContain(PermissionScopes.Sign);
+          ?.capabilities ?? [];
+      expect(beforeScopes).not.toContain(PermissionCapabilities.Sign);
 
       await expect(
         harness.callRpc({
@@ -192,8 +192,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
       const afterScopes =
         services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
-          ?.scopes ?? [];
-      expect(afterScopes).toContain(PermissionScopes.Sign);
+          ?.capabilities ?? [];
+      expect(afterScopes).toContain(PermissionCapabilities.Sign);
     } finally {
       approval.mockRestore();
       harness.destroy();

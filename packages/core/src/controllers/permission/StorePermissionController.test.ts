@@ -5,7 +5,7 @@ import type { PermissionsPort } from "../../services/permissions/port.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
 import { PERMISSION_TOPICS } from "./topics.js";
-import { PermissionScopes } from "./types.js";
+import { PermissionCapabilities } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
 const CHAIN_REF = "eip155:1";
@@ -58,12 +58,12 @@ describe("StorePermissionController", () => {
 
     const controller = new StorePermissionController({
       messenger,
-      scopeResolver: () => undefined,
+      capabilityResolver: () => undefined,
       service,
     });
 
     await controller.whenReady();
-    await expect(controller.grant(ORIGIN, PermissionScopes.Basic)).rejects.toThrow(/chainRef/i);
+    await expect(controller.grant(ORIGIN, PermissionCapabilities.Basic)).rejects.toThrow(/chainRef/i);
   });
 
   it("grant() writes to the store and publishes originChanged", async () => {
@@ -73,7 +73,7 @@ describe("StorePermissionController", () => {
 
     const controller = new StorePermissionController({
       messenger,
-      scopeResolver: () => undefined,
+      capabilityResolver: () => undefined,
       service,
     });
 
@@ -83,12 +83,12 @@ describe("StorePermissionController", () => {
     });
 
     await controller.whenReady();
-    await controller.grant(ORIGIN, PermissionScopes.Sign, { chainRef: CHAIN_REF });
+    await controller.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: CHAIN_REF });
 
     expect(store.size).toBe(1);
 
     const state = controller.getState();
-    expect(state.origins[ORIGIN]?.eip155?.chains[CHAIN_REF]?.scopes).toEqual([PermissionScopes.Sign]);
+    expect(state.origins[ORIGIN]?.eip155?.chains[CHAIN_REF]?.capabilities).toEqual([PermissionCapabilities.Sign]);
     expect(originEvents.length).toBeGreaterThan(0);
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   ApprovalTypes,
-  PermissionScopes,
+  PermissionCapabilities,
   type RequestPermissionsApprovalPayload,
 } from "../../../../../controllers/index.js";
 import {
@@ -591,7 +591,7 @@ describe("eip155 handlers - core error paths", () => {
     services.lifecycle.start();
 
     const chain = services.controllers.network.getActiveChain();
-    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: chain.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: chain.chainRef });
     await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
       chainRef: chain.chainRef,
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
@@ -633,9 +633,11 @@ describe("eip155 handlers - core error paths", () => {
     await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
 
-    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: main.chainRef });
-    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Basic, { chainRef: ALT_CHAIN.chainRef });
-    await services.controllers.permissions.grant(ORIGIN, PermissionScopes.Sign, { chainRef: ALT_CHAIN.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });
+    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      chainRef: ALT_CHAIN.chainRef,
+    });
+    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: ALT_CHAIN.chainRef });
 
     const execute = createExecutor(services);
     try {
@@ -679,8 +681,8 @@ describe("eip155 handlers - core error paths", () => {
       const payload = task.payload as RequestPermissionsApprovalPayload;
       expect(payload.requested).toEqual(
         expect.arrayContaining([
-          { capability: "wallet_basic", chains: [chain.chainRef], scope: PermissionScopes.Basic },
-          { capability: "eth_accounts", chains: [chain.chainRef], scope: PermissionScopes.Accounts },
+          { capability: "wallet_basic", chainRefs: [chain.chainRef] },
+          { capability: "eth_accounts", chainRefs: [chain.chainRef] },
         ]),
       );
       await services.controllers.approvals.resolve(task.id, async () => ({
@@ -706,8 +708,8 @@ describe("eip155 handlers - core error paths", () => {
 
       const state = services.controllers.permissions.getPermissions(ORIGIN);
       const chainRef = services.controllers.network.getActiveChain().chainRef;
-      expect(state?.eip155?.chains?.[chainRef]?.scopes ?? []).toEqual(
-        expect.arrayContaining([PermissionScopes.Basic, PermissionScopes.Accounts]),
+      expect(state?.eip155?.chains?.[chainRef]?.capabilities ?? []).toEqual(
+        expect.arrayContaining([PermissionCapabilities.Basic, PermissionCapabilities.Accounts]),
       );
     } finally {
       teardown();

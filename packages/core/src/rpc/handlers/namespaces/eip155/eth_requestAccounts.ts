@@ -1,11 +1,11 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalTypes, PermissionScopes } from "../../../../controllers/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineNoParamsMethod({
-  scope: PermissionScopes.Accounts,
+  scope: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   approvalRequired: true,
   handler: async ({ origin, controllers, rpcContext }) => {

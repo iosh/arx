@@ -2,7 +2,7 @@ import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter, UiErro
 import { type ArxError, ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError } from "zod";
 import type { ChainRef } from "../chains/ids.js";
-import type { PermissionScope, PermissionScopeResolver } from "../controllers/index.js";
+import type { PermissionCapability, PermissionCapabilityResolver } from "../controllers/index.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import type {
@@ -341,10 +341,10 @@ export class RpcRegistry {
     };
   }
 
-  createPermissionScopeResolver(
+  createPermissionCapabilityResolver(
     namespaceResolver: (context?: RpcInvocationContext) => Namespace,
-    overrides?: Partial<Record<string, PermissionScope | null>>,
-  ): PermissionScopeResolver {
+    overrides?: Partial<Record<string, PermissionCapability | null>>,
+  ): PermissionCapabilityResolver {
     return (method, context) => {
       if (overrides && Object.hasOwn(overrides, method)) {
         const value = overrides[method];

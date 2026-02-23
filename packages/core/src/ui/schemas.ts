@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../chains/url.js";
-import { PERMISSION_SCOPE_VALUES } from "../permissions/constants.js";
+import { PERMISSION_CAPABILITY_VALUES } from "../permissions/capabilities.js";
 import { AccountIdSchema } from "../storage/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
@@ -45,10 +45,10 @@ export const VaultSnapshotSchema = z.object({
   initialized: z.boolean(),
 });
 
-const PermissionScopeSchema = z.enum(PERMISSION_SCOPE_VALUES);
+const PermissionCapabilitySchema = z.enum(PERMISSION_CAPABILITY_VALUES);
 
 const ChainPermissionStateSchema = z.object({
-  scopes: z.array(PermissionScopeSchema),
+  capabilities: z.array(PermissionCapabilitySchema),
   accounts: z.array(z.string().min(1)).optional(),
 });
 
@@ -126,8 +126,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
       permissions: z.array(
         z.object({
           capability: z.string(),
-          scope: z.string(),
-          chains: z.array(z.string()),
+          chainRefs: z.array(z.string()),
         }),
       ),
     }),

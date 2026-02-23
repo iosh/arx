@@ -1,6 +1,8 @@
 import {
   ApprovalTypes,
   ArxReasons,
+  ATTENTION_REQUESTED,
+  ATTENTION_STATE_CHANGED,
   arxError,
   type BackgroundSessionServices,
   createBackgroundServices,
@@ -183,7 +185,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       });
 
       unsubscribeControllerEvents.push(
-        messenger.subscribe("attention:requested", (request) => {
+        messenger.subscribe(ATTENTION_REQUESTED, (request) => {
           popupLog("event:attention:requested", {
             reason: request.reason,
             origin: request.origin,
@@ -281,7 +283,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
       unsubscribeControllerEvents.push(
-        messenger.subscribe("attention:stateChanged", (_state) => {
+        messenger.subscribe(ATTENTION_STATE_CHANGED, (_state) => {
           uiBridge?.broadcast();
         }),
       );

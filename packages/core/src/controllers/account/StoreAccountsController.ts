@@ -2,50 +2,21 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountsService } from "../../services/accounts/types.js";
 import type { SettingsService } from "../../services/settings/types.js";
 import type { AccountId } from "../../storage/records.js";
+import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
+import { ACCOUNTS_STATE_CHANGED, type AccountMessenger } from "./topics.js";
 import type {
   AccountController,
-  AccountMessengerTopics,
   ActivePointer,
   ChainNamespace,
   MultiNamespaceAccountsState,
   NamespaceAccountsState,
 } from "./types.js";
 
-const TOPIC_STATE = "accounts:stateChanged";
-
-const cloneNamespace = (state: NamespaceAccountsState): NamespaceAccountsState => ({
-  accountIds: [...state.accountIds],
-  selectedAccountId: state.selectedAccountId ?? null,
-});
-
-const cloneState = (state: MultiNamespaceAccountsState): MultiNamespaceAccountsState => {
-  const namespaces = Object.fromEntries(
-    Object.entries(state.namespaces).map(([ns, value]) => [ns, cloneNamespace(value as NamespaceAccountsState)]),
-  ) as Record<ChainNamespace, NamespaceAccountsState>;
-  return { namespaces };
-};
-
-const isSameNamespace = (prev?: NamespaceAccountsState, next?: NamespaceAccountsState) => {
-  if (!prev || !next) return false;
-  if ((prev.selectedAccountId ?? null) !== (next.selectedAccountId ?? null)) return false;
-  if (prev.accountIds.length !== next.accountIds.length) return false;
-  return prev.accountIds.every((value, index) => value === next.accountIds[index]);
-};
-
-const isSameState = (prev?: MultiNamespaceAccountsState, next?: MultiNamespaceAccountsState) => {
-  if (!prev || !next) return false;
-  const prevNamespaces = Object.keys(prev.namespaces);
-  const nextNamespaces = Object.keys(next.namespaces);
-  if (prevNamespaces.length !== nextNamespaces.length) return false;
-  return prevNamespaces.every((ns) => isSameNamespace(prev.namespaces[ns], next.namespaces[ns]));
-};
-
 type Options = {
-  messenger: ControllerMessenger<AccountMessengerTopics>;
+  messenger: AccountMessenger;
   accounts: AccountsService;
   settings: SettingsService;
   logger?: (message: string, error?: unknown) => void;
@@ -53,7 +24,7 @@ type Options = {
 
 // Store-backed accounts controller: derives a read model from AccountsService + SettingsService.
 export class StoreAccountsController implements AccountController {
-  #messenger: ControllerMessenger<AccountMessengerTopics>;
+  #messenger: AccountMessenger;
   #accounts: AccountsService;
   #settings: SettingsService;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
@@ -89,7 +60,7 @@ export class StoreAccountsController implements AccountController {
   }
 
   getState(): MultiNamespaceAccountsState {
-    return cloneState(this.#state);
+    return cloneMultiNamespaceAccountsState(this.#state);
   }
 
   getAccounts(params: { chainRef: ChainRef }): string[] {
@@ -172,7 +143,7 @@ export class StoreAccountsController implements AccountController {
   }
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void {
-    return this.#messenger.subscribe(TOPIC_STATE, handler);
+    return this.#messenger.subscribe(ACCOUNTS_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   async refresh(): Promise<void> {
@@ -187,6 +158,12 @@ export class StoreAccountsController implements AccountController {
         byNamespace.set(record.namespace, list);
       }
 
+      // Stabilize ordering to avoid state jitter when the storage layer returns nondeterministic lists.
+      for (const [ns, list] of byNamespace.entries()) {
+        const sorted = [...list].sort((a, b) => String(a).localeCompare(String(b)));
+        byNamespace.set(ns, sorted);
+      }
+
       let selectedByNamespace: Record<string, AccountId> = {};
       try {
         const settings = await this.#settings.get();
@@ -197,7 +174,8 @@ export class StoreAccountsController implements AccountController {
       }
 
       const nextNamespaces: Record<ChainNamespace, NamespaceAccountsState> = {};
-      for (const [ns, accountIds] of byNamespace.entries()) {
+      const namespaces = [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [ns, accountIds] of namespaces) {
         const desired = selectedByNamespace[ns] ?? null;
         nextNamespaces[ns] = {
           accountIds: [...accountIds],
@@ -207,11 +185,11 @@ export class StoreAccountsController implements AccountController {
 
       const next: MultiNamespaceAccountsState = { namespaces: nextNamespaces };
       const prev = this.#state;
-      if (isSameState(prev, next)) return;
+      if (isSameMultiNamespaceAccountsState(prev, next)) return;
 
-      this.#state = cloneState(next);
+      this.#state = cloneMultiNamespaceAccountsState(next);
 
-      this.#messenger.publish(TOPIC_STATE, cloneState(this.#state), { force: true });
+      this.#messenger.publish(ACCOUNTS_STATE_CHANGED, cloneMultiNamespaceAccountsState(this.#state), { force: true });
     })().finally(() => {
       this.#refreshPromise = null;
     });

@@ -5,6 +5,7 @@ import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } fr
 import type { PermissionsService } from "../../services/permissions/types.js";
 import type { PermissionRecord } from "../../storage/records.js";
 import type { ChainNamespace } from "../account/types.js";
+import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionMessenger } from "./topics.js";
 import {
   type GrantPermissionOptions,
   type NamespacePermissionState,
@@ -12,15 +13,11 @@ import {
   type OriginPermissions,
   type PermissionController,
   type PermissionGrant,
-  type PermissionMessenger,
   type PermissionScope,
   type PermissionScopeResolver,
   PermissionScopes,
   type PermissionsState,
 } from "./types.js";
-
-const PERMISSION_STATE_TOPIC = "permission:stateChanged";
-const PERMISSION_ORIGIN_TOPIC = "permission:originChanged";
 
 const DEFAULT_PERMISSION_NAMESPACE: ChainNamespace = "eip155";
 
@@ -466,11 +463,11 @@ export class StorePermissionController implements PermissionController {
   }
 
   onPermissionsChanged(handler: (state: PermissionsState) => void): () => void {
-    return this.#messenger.subscribe(PERMISSION_STATE_TOPIC, handler);
+    return this.#messenger.subscribe(PERMISSION_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void {
-    return this.#messenger.subscribe(PERMISSION_ORIGIN_TOPIC, handler);
+    return this.#messenger.subscribe(PERMISSION_ORIGIN_CHANGED, handler);
   }
 
   async #queueSyncFromStore(params?: { origin?: string | null }): Promise<void> {
@@ -572,14 +569,14 @@ export class StorePermissionController implements PermissionController {
   }
 
   #publishState() {
-    this.#messenger.publish(PERMISSION_STATE_TOPIC, cloneState(this.#state), { force: true });
+    this.#messenger.publish(PERMISSION_STATE_CHANGED, cloneState(this.#state), { force: true });
   }
 
   #publishOrigin(payload: OriginPermissions) {
     const clonedNamespaces =
       cloneState({ origins: { [payload.origin]: payload.namespaces } }).origins[payload.origin] ?? {};
     this.#messenger.publish(
-      PERMISSION_ORIGIN_TOPIC,
+      PERMISSION_ORIGIN_CHANGED,
       { origin: payload.origin, namespaces: clonedNamespaces },
       { force: true },
     );

@@ -1,14 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { Messenger } from "../../messenger/Messenger.js";
 import { InMemoryNetworkController } from "./NetworkController.js";
-import type {
-  NetworkMessengerTopic,
-  NetworkStateInput,
-  RpcEndpointChange,
-  RpcEndpointHealth,
-  RpcOutcomeReport,
-} from "./types.js";
+import { NETWORK_TOPICS } from "./topics.js";
+import type { NetworkStateInput, RpcEndpointChange, RpcEndpointHealth, RpcOutcomeReport } from "./types.js";
 
 const createMetadata = (overrides?: Partial<ChainMetadata>): ChainMetadata => ({
   chainRef: "eip155:1",
@@ -40,7 +35,8 @@ const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkS
 describe("InMemoryNetworkController", () => {
   it("rotates endpoints and records failures", () => {
     const metadata = createMetadata();
-    const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const now = 1_000;
     const logger = vi.fn();
 
@@ -83,7 +79,8 @@ describe("InMemoryNetworkController", () => {
     const metadata = createMetadata({
       rpcEndpoints: [{ url: "https://rpc.only.example", type: "public" as const }],
     });
-    const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
     let now = 5_000;
     const logger = vi.fn();
 
@@ -119,7 +116,8 @@ describe("InMemoryNetworkController", () => {
 
   it("clamps routing index when registry metadata changes", () => {
     const metadata = createMetadata();
-    const messenger = new ControllerMessenger<NetworkMessengerTopic>({});
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const controller = new InMemoryNetworkController({
       messenger,
       initialState: stateFromMetadata(metadata, {

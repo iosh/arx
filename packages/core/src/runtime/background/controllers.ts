@@ -3,47 +3,33 @@ import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainDescriptorRegistry } from "../../chains/registry.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
-import type {
-  AccountController,
-  AccountMessenger,
-  AccountMessengerTopics,
-  MultiNamespaceAccountsState,
-} from "../../controllers/account/types.js";
+import { ACCOUNTS_TOPICS } from "../../controllers/account/topics.js";
+import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import { InMemoryApprovalController } from "../../controllers/approval/InMemoryApprovalController.js";
-import type {
-  ApprovalController,
-  ApprovalMessenger,
-  ApprovalMessengerTopics,
-} from "../../controllers/approval/types.js";
+import { APPROVAL_TOPICS } from "../../controllers/approval/topics.js";
+import type { ApprovalController } from "../../controllers/approval/types.js";
 import { InMemoryChainRegistryController } from "../../controllers/chainRegistry/ChainRegistryController.js";
-import type {
-  ChainRegistryController,
-  ChainRegistryMessenger,
-  ChainRegistryMessengerTopics,
-} from "../../controllers/chainRegistry/types.js";
+import { CHAIN_REGISTRY_TOPICS } from "../../controllers/chainRegistry/topics.js";
+import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
 import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
+import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
 import type {
   NetworkController,
-  NetworkMessenger,
-  NetworkMessengerTopic,
   NetworkStateInput,
   RpcEventLogger,
   RpcStrategyConfig,
 } from "../../controllers/network/types.js";
 import { StorePermissionController } from "../../controllers/permission/StorePermissionController.js";
+import { PERMISSION_TOPICS } from "../../controllers/permission/topics.js";
 import type {
   PermissionController,
-  PermissionMessenger,
-  PermissionMessengerTopics,
   PermissionScopeResolver,
   PermissionsState,
 } from "../../controllers/permission/types.js";
 import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
-import type {
-  TransactionController,
-  TransactionMessenger,
-  TransactionMessengerTopics,
-} from "../../controllers/transaction/types.js";
+import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
+import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { Messenger } from "../../messenger/Messenger.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/accounts/types.js";
@@ -52,8 +38,6 @@ import type { SettingsService } from "../../services/settings/types.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import { DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
-import type { BackgroundMessenger } from "./messenger.js";
-import { castMessenger } from "./messenger.js";
 
 type NamespaceResolver = (context?: RpcInvocationContext) => Namespace;
 
@@ -108,7 +92,7 @@ export type ControllersInitResult = {
 };
 
 export const initControllers = ({
-  messenger,
+  bus,
   namespaceResolver,
   rpcRegistry,
   accountsService,
@@ -117,7 +101,7 @@ export const initControllers = ({
   transactionsService,
   options,
 }: {
-  messenger: BackgroundMessenger;
+  bus: Messenger;
   namespaceResolver: NamespaceResolver;
   rpcRegistry: RpcRegistry;
   accountsService: AccountsService;
@@ -139,7 +123,7 @@ export const initControllers = ({
   }
 
   const networkController = new InMemoryNetworkController({
-    messenger: castMessenger<NetworkMessengerTopic>(messenger) as NetworkMessenger,
+    messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
     initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT,
     defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
     ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
@@ -151,13 +135,13 @@ export const initControllers = ({
     permissionOptions?.scopeResolver ?? rpcRegistry.createPermissionScopeResolver((ctx) => namespaceResolver(ctx));
 
   const accountController: AccountController = new StoreAccountsController({
-    messenger: castMessenger<AccountMessengerTopics>(messenger) as AccountMessenger,
+    messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
     accounts: accountsService,
     settings: settingsService,
   });
 
   const approvalController = new InMemoryApprovalController({
-    messenger: castMessenger<ApprovalMessengerTopics>(messenger) as ApprovalMessenger,
+    messenger: bus.scope({ name: "approvals", publish: APPROVAL_TOPICS }),
     ...(approvalOptions?.autoRejectMessage !== undefined
       ? { autoRejectMessage: approvalOptions.autoRejectMessage }
       : {}),
@@ -166,7 +150,7 @@ export const initControllers = ({
   });
 
   const permissionController = new StorePermissionController({
-    messenger: castMessenger<PermissionMessengerTopics>(messenger) as PermissionMessenger,
+    messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
     scopeResolver: permissionScopeResolver,
     service: permissionsService,
     ...(permissionOptions?.chains ? { chains: permissionOptions.chains } : {}),
@@ -175,7 +159,7 @@ export const initControllers = ({
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
 
   const transactionController = new StoreTransactionController({
-    messenger: castMessenger<TransactionMessengerTopics>(messenger) as TransactionMessenger,
+    messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
     network: {
       getActiveChain: () => networkController.getActiveChain(),
       getChain: (chainRef) => networkController.getChain(chainRef),
@@ -196,7 +180,7 @@ export const initControllers = ({
   const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
 
   const chainRegistryController = new InMemoryChainRegistryController({
-    messenger: castMessenger<ChainRegistryMessengerTopics>(messenger) as ChainRegistryMessenger,
+    messenger: bus.scope({ name: "chainRegistry", publish: CHAIN_REGISTRY_TOPICS }),
     port: chainRegistryOptions.port,
     seed: registrySeed,
     ...(chainRegistryOptions.now ? { now: chainRegistryOptions.now } : {}),

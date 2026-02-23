@@ -1,10 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import { APPROVAL_FINISHED, APPROVAL_REQUESTED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
 import type {
   ApprovalController,
   ApprovalExecutor,
   ApprovalFinishedEvent,
-  ApprovalMessenger,
   ApprovalRequestedEvent,
   ApprovalResultByType,
   ApprovalState,
@@ -13,19 +13,7 @@ import type {
   FinalStatusReason,
   PendingApproval,
 } from "./types.js";
-import {
-  cloneFinishEvent,
-  cloneRequestEvent,
-  cloneState,
-  cloneTask,
-  createDeferred,
-  isSameState,
-  toSimpleError,
-} from "./utils.js";
-
-const APPROVAL_STATE_TOPIC = "approval:stateChanged";
-const APPROVAL_REQUEST_TOPIC = "approval:requested";
-const APPROVAL_FINISH_TOPIC = "approval:finished";
+import { cloneFinishEvent, cloneRequestEvent, cloneState, cloneTask, createDeferred, toSimpleError } from "./utils.js";
 
 type CreateInMemoryApprovalControllerOptions = {
   messenger: ApprovalMessenger;
@@ -57,15 +45,15 @@ export class InMemoryApprovalController implements ApprovalController {
   }
 
   onStateChanged(handler: (state: ApprovalState) => void): () => void {
-    return this.#messenger.subscribe(APPROVAL_STATE_TOPIC, handler);
+    return this.#messenger.subscribe(APPROVAL_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void {
-    return this.#messenger.subscribe(APPROVAL_REQUEST_TOPIC, handler);
+    return this.#messenger.subscribe(APPROVAL_REQUESTED, handler);
   }
 
   onFinish(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void {
-    return this.#messenger.subscribe(APPROVAL_FINISH_TOPIC, handler);
+    return this.#messenger.subscribe(APPROVAL_FINISHED, handler);
   }
 
   has(id: string): boolean {
@@ -300,21 +288,15 @@ export class InMemoryApprovalController implements ApprovalController {
   }
 
   #publishState() {
-    this.#messenger.publish(APPROVAL_STATE_TOPIC, cloneState(this.#state), {
-      compare: isSameState,
-    });
+    this.#messenger.publish(APPROVAL_STATE_CHANGED, cloneState(this.#state));
   }
 
   #publishRequest(event: ApprovalRequestedEvent) {
-    this.#messenger.publish(APPROVAL_REQUEST_TOPIC, cloneRequestEvent(event), {
-      compare: (prev, next) => prev?.task.id === next?.task.id && prev?.task.type === next?.task.type,
-    });
+    this.#messenger.publish(APPROVAL_REQUESTED, cloneRequestEvent(event));
   }
 
   #publishFinish(event: ApprovalFinishedEvent<unknown>) {
-    this.#messenger.publish(APPROVAL_FINISH_TOPIC, cloneFinishEvent(event), {
-      compare: (prev, next) => Object.is(prev?.id, next?.id) && Object.is(prev?.status, next?.status),
-    });
+    this.#messenger.publish(APPROVAL_FINISHED, cloneFinishEvent(event));
   }
 
   #getRejectionError(params: { id: string; provided?: Error | undefined; message: string }): Error {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { Messenger } from "../../messenger/Messenger.js";
 import { createPermissionsService } from "../../services/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
-import type { PermissionMessengerTopics } from "./types.js";
+import { PERMISSION_TOPICS } from "./topics.js";
 import { PermissionScopes } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
@@ -54,7 +54,7 @@ describe("StorePermissionController", () => {
   it("grant() requires chainRef", async () => {
     const { port } = createInMemoryPort();
     const service = createPermissionsService({ port, now: () => 1000 });
-    const messenger = new ControllerMessenger<PermissionMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
 
     const controller = new StorePermissionController({
       messenger,
@@ -69,7 +69,7 @@ describe("StorePermissionController", () => {
   it("grant() writes to the store and publishes originChanged", async () => {
     const { port, store } = createInMemoryPort();
     const service = createPermissionsService({ port, now: () => 1000 });
-    const messenger = new ControllerMessenger<PermissionMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
 
     const controller = new StorePermissionController({
       messenger,

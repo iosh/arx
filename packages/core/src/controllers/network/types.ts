@@ -1,6 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../../chains/metadata.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 
 export type RpcStrategyId = "round-robin" | string;
 
@@ -79,20 +78,6 @@ export type RpcLogEvent = {
 };
 
 export type RpcEventLogger = (event: RpcLogEvent) => void;
-
-export type NetworkMessengerTopic = {
-  "network:stateChanged": NetworkState;
-  "network:activeChainChanged": { previous: ChainRef; next: ChainRef };
-  "network:chainMetadataChanged": {
-    chainRef: ChainRef;
-    previous: ChainMetadata | null;
-    next: ChainMetadata | null;
-  };
-  "network:rpcEndpointChanged": RpcEndpointChange;
-  "network:rpcHealthChanged": { chainRef: ChainRef; health: RpcEndpointHealth[] };
-};
-
-export type NetworkMessenger = ControllerMessenger<NetworkMessengerTopic>;
 
 export interface NetworkController {
   getState(): NetworkState;

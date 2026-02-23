@@ -1,5 +1,4 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { AccountId } from "../../storage/records.js";
 
 // Chain-canonical address string (eg. EVM lowercased 0x...).
@@ -23,15 +22,9 @@ export type MultiNamespaceAccountsState = {
   namespaces: Record<ChainNamespace, NamespaceAccountsState>;
 };
 
-export type AccountMessengerTopics = {
-  "accounts:stateChanged": MultiNamespaceAccountsState;
-};
-
 export const EMPTY_MULTI_NAMESPACE_STATE: MultiNamespaceAccountsState = {
   namespaces: {},
 };
-
-export type AccountMessenger = ControllerMessenger<AccountMessengerTopics>;
 
 export type AccountController = {
   getState(): MultiNamespaceAccountsState;

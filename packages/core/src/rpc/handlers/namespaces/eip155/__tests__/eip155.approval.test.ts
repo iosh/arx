@@ -2,6 +2,7 @@ import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/accountId.js";
 import { ApprovalTypes, PermissionScopes } from "../../../../../controllers/index.js";
+import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
   ADD_CHAIN_PARAMS,
@@ -309,7 +310,7 @@ describe("eip155 handlers - approval metadata", () => {
         warnings: unknown[];
         issues: unknown[];
       } | null = null;
-      const unsubscribeTx = services.messenger.subscribe("transaction:statusChanged", (event) => {
+      const unsubscribeTx = services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
         if (event.nextStatus === "broadcast") {
           broadcastMeta = event.meta as unknown as NonNullable<typeof broadcastMeta>;
         }

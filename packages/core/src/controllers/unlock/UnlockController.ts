@@ -1,9 +1,6 @@
 import { DEFAULT_AUTO_LOCK_MS } from "./constants.js";
+import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_UNLOCKED } from "./topics.js";
 import type { UnlockController, UnlockControllerOptions, UnlockParams, UnlockReason, UnlockState } from "./types.js";
-
-const UNLOCK_STATE_TOPIC = "unlock:stateChanged" as const;
-const UNLOCK_LOCKED_TOPIC = "unlock:locked" as const;
-const UNLOCK_UNLOCKED_TOPIC = "unlock:unlocked" as const;
 
 const cloneState = (state: UnlockState): UnlockState => ({
   isUnlocked: state.isUnlocked,
@@ -11,16 +8,6 @@ const cloneState = (state: UnlockState): UnlockState => ({
   timeoutMs: state.timeoutMs,
   nextAutoLockAt: state.nextAutoLockAt,
 });
-
-const isSameState = (prev?: UnlockState, next?: UnlockState) => {
-  if (!prev || !next) return false;
-  return (
-    prev.isUnlocked === next.isUnlocked &&
-    prev.lastUnlockedAt === next.lastUnlockedAt &&
-    prev.timeoutMs === next.timeoutMs &&
-    prev.nextAutoLockAt === next.nextAutoLockAt
-  );
-};
 
 const assertPositiveNumber = (value: number, label: string) => {
   if (!Number.isFinite(value) || value <= 0) {
@@ -88,7 +75,7 @@ export class InMemoryUnlockController implements UnlockController {
     };
     this.scheduleAutoLock();
     this.#publishState();
-    this.#messenger.publish(UNLOCK_UNLOCKED_TOPIC, { at: timestamp });
+    this.#messenger.publish(UNLOCK_UNLOCKED, { at: timestamp });
   }
 
   lock(reason: UnlockReason): void {
@@ -107,7 +94,7 @@ export class InMemoryUnlockController implements UnlockController {
     };
 
     this.#publishState();
-    this.#messenger.publish(UNLOCK_LOCKED_TOPIC, { at: timestamp, reason });
+    this.#messenger.publish(UNLOCK_LOCKED, { at: timestamp, reason });
   }
 
   scheduleAutoLock(duration?: number): number | null {
@@ -161,21 +148,19 @@ export class InMemoryUnlockController implements UnlockController {
   }
 
   onStateChanged(handler: (state: UnlockState) => void) {
-    return this.#messenger.subscribe(UNLOCK_STATE_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   onLocked(handler: (payload: { at: number; reason: UnlockReason }) => void) {
-    return this.#messenger.subscribe(UNLOCK_LOCKED_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_LOCKED, handler);
   }
 
   onUnlocked(handler: (payload: { at: number }) => void) {
-    return this.#messenger.subscribe(UNLOCK_UNLOCKED_TOPIC, handler);
+    return this.#messenger.subscribe(UNLOCK_UNLOCKED, handler);
   }
 
   #publishState() {
-    this.#messenger.publish(UNLOCK_STATE_TOPIC, cloneState(this.#state), {
-      compare: isSameState,
-    });
+    this.#messenger.publish(UNLOCK_STATE_CHANGED, cloneState(this.#state));
   }
 
   #clearAutoLockTimer() {

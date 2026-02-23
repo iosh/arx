@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { Messenger } from "../../messenger/Messenger.js";
 import type { ChainRegistryEntity } from "../../storage/index.js";
 import { InMemoryChainRegistryController } from "./ChainRegistryController.js";
-import type { ChainRegistryMessengerTopics, ChainRegistryState, ChainRegistryUpdate } from "./types.js";
+import { CHAIN_REGISTRY_TOPICS } from "./topics.js";
+import type { ChainRegistryState, ChainRegistryUpdate } from "./types.js";
 
 const createEip155Metadata = (reference: number, overrides: Partial<ChainMetadata> = {}): ChainMetadata => {
   return {
@@ -60,7 +61,7 @@ class MemoryChainRegistryPort implements ChainRegistryPort {
 
 describe("InMemoryChainRegistryController", () => {
   it("loads seed when storage is empty", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const port = new MemoryChainRegistryPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1), createEip155Metadata(10)];
@@ -79,7 +80,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("upserts metadata and emits update events", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const existingMetadata = createEip155Metadata(1);
     const existingEntity: ChainRegistryEntity = {
       chainRef: existingMetadata.chainRef,
@@ -127,7 +128,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("removes chains and publishes removal", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const metadata = createEip155Metadata(137);
     const entity: ChainRegistryEntity = {
       chainRef: metadata.chainRef,
@@ -159,7 +160,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("drops invalid persisted entries", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const invalid: ChainRegistryEntity = {
       chainRef: "eip155:1",
       namespace: "eip155",
@@ -185,7 +186,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("publishes state changes and dedupes identical snapshots", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const port = new MemoryChainRegistryPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1)];
@@ -235,7 +236,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("does not write or emit events for idempotent upserts", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const port = new MemoryChainRegistryPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1)];
@@ -253,6 +254,8 @@ describe("InMemoryChainRegistryController", () => {
     const updates: ChainRegistryUpdate[] = [];
     controller.onStateChanged((state) => states.push(state));
     controller.onChainUpdated((update) => updates.push(update));
+    expect(states).toHaveLength(1);
+    states.length = 0;
 
     const before = await port.getAll();
     expect(before).toHaveLength(1);
@@ -270,7 +273,7 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("returns removed false when chain is missing", async () => {
-    const messenger = new ControllerMessenger<ChainRegistryMessengerTopics>({});
+    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
     const port = new MemoryChainRegistryPort();
 
     const controller = new InMemoryChainRegistryController({

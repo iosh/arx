@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { Messenger } from "../../messenger/Messenger.js";
 import { InMemoryAttentionService } from "./InMemoryAttentionService.js";
-import type { AttentionServiceMessengerTopics } from "./types.js";
+import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED, ATTENTION_TOPICS } from "./topics.js";
 
 const setup = (opts?: { maxQueueSize?: number }) => {
   let t = 1_000;
-  const messenger = new ControllerMessenger<AttentionServiceMessengerTopics>({});
+  const messenger = new Messenger().scope({ publish: ATTENTION_TOPICS });
   const requested: unknown[] = [];
   const stateChanged: unknown[] = [];
-  messenger.subscribe("attention:requested", (p) => requested.push(p));
-  messenger.subscribe("attention:stateChanged", (p) => stateChanged.push(p));
+  messenger.subscribe(ATTENTION_REQUESTED, (p) => requested.push(p));
+  messenger.subscribe(ATTENTION_STATE_CHANGED, (p) => stateChanged.push(p));
   const service = new InMemoryAttentionService({
     messenger,
     now: () => t,

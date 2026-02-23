@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
-import type { UnlockLockedPayload, UnlockMessengerTopics, UnlockState, UnlockUnlockedPayload } from "./types.js";
+import { Messenger } from "../../messenger/Messenger.js";
+import { UNLOCK_LOCKED, UNLOCK_STATE_CHANGED, UNLOCK_TOPICS, UNLOCK_UNLOCKED } from "./topics.js";
+import type { UnlockLockedPayload, UnlockState, UnlockUnlockedPayload } from "./types.js";
 import { InMemoryUnlockController } from "./UnlockController.js";
 
-const createMessenger = () => new ControllerMessenger<UnlockMessengerTopics>({});
+const createMessenger = () => new Messenger().scope({ publish: UNLOCK_TOPICS });
 
 describe("InMemoryUnlockController", () => {
   it("unlocks the vault, emits events, and schedules auto lock", async () => {
@@ -12,9 +13,9 @@ describe("InMemoryUnlockController", () => {
     const lockedEvents: UnlockLockedPayload[] = [];
     const unlockedEvents: UnlockUnlockedPayload[] = [];
 
-    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
-    messenger.subscribe("unlock:locked", (payload) => lockedEvents.push(payload));
-    messenger.subscribe("unlock:unlocked", (payload) => unlockedEvents.push(payload));
+    messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
+    messenger.subscribe(UNLOCK_LOCKED, (payload) => lockedEvents.push(payload));
+    messenger.subscribe(UNLOCK_UNLOCKED, (payload) => unlockedEvents.push(payload));
 
     let now = 1_000;
     let triggerTimeout: (() => void) | null = () => {};
@@ -88,7 +89,7 @@ describe("InMemoryUnlockController", () => {
   it("reconfigures auto-lock duration while unlocked", async () => {
     const messenger = createMessenger();
     const stateUpdates: UnlockState[] = [];
-    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
+    messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
 
     const now = 5_000;
 
@@ -135,7 +136,7 @@ describe("InMemoryUnlockController", () => {
   it("stays locked when vault unlock throws", async () => {
     const messenger = createMessenger();
     const stateUpdates: UnlockState[] = [];
-    messenger.subscribe("unlock:stateChanged", (state) => stateUpdates.push(state));
+    messenger.subscribe(UNLOCK_STATE_CHANGED, (state) => stateUpdates.push(state));
 
     const timers = {
       setTimeout: vi.fn(),

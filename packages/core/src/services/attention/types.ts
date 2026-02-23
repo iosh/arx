@@ -30,11 +30,6 @@ export type AttentionRequestResult = {
   state: AttentionState;
 };
 
-export type AttentionServiceMessengerTopics = {
-  "attention:requested": AttentionRequest;
-  "attention:stateChanged": AttentionState;
-};
-
 export type AttentionService = {
   requestAttention(params: RequestAttentionParams): AttentionRequestResult;
   getSnapshot(): AttentionState;

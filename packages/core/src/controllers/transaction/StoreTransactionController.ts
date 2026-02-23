@@ -9,11 +9,10 @@ import { StoreTransactionView } from "./StoreTransactionView.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
-import { TRANSACTION_STATE_CHANGED_TOPIC, TRANSACTION_STATUS_CHANGED_TOPIC } from "./topics.js";
+import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   TransactionController,
   TransactionError,
-  TransactionMessenger,
   TransactionMeta,
   TransactionRequest,
   TransactionStateChange,
@@ -119,10 +118,10 @@ export class StoreTransactionController implements TransactionController {
   }
 
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void {
-    return this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED_TOPIC, handler);
+    return this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED, handler);
   }
 
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void {
-    return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED_TOPIC, handler);
+    return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED, handler);
   }
 }

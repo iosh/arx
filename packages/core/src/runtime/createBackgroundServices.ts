@@ -1,11 +1,11 @@
 import { createDefaultChainDescriptorRegistry } from "../chains/registry.js";
-import { type CompareFn, ControllerMessenger } from "../messenger/ControllerMessenger.js";
+import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { createAccountsService } from "../services/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/accounts/port.js";
-import { type AttentionServiceMessengerTopics, createAttentionService } from "../services/attention/index.js";
+import { ATTENTION_TOPICS, createAttentionService } from "../services/attention/index.js";
 import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
 import { createNetworkPreferencesService } from "../services/networkPreferences/NetworkPreferencesService.js";
@@ -20,7 +20,6 @@ import type { VaultMetaPort } from "../storage/index.js";
 import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
-import type { MessengerTopics } from "./background/messenger.js";
 import { createNetworkBootstrap } from "./background/networkBootstrap.js";
 import { registerDefaultTransactionAdapters } from "./background/registerDefaultTransactionAdapters.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
@@ -32,7 +31,7 @@ export type { BackgroundSessionServices } from "./background/session.js";
 
 export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chainRegistry"> & {
   messenger?: {
-    compare?: CompareFn<unknown>;
+    violationMode?: ViolationMode;
   };
   engine?: EngineOptions;
   networkPreferences: {
@@ -59,9 +58,6 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
 };
-
-const castMessenger = <Topics extends Record<string, unknown>>(messenger: ControllerMessenger<MessengerTopics>) =>
-  messenger as unknown as ControllerMessenger<Topics>;
 export const createBackgroundServices = (options: CreateBackgroundServicesOptions) => {
   const rpcRegistry = createRpcRegistry();
   registerBuiltinRpcAdapters(rpcRegistry);
@@ -83,15 +79,17 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     rpcClients: rpcClientOptions,
   } = options;
 
-  const messenger = new ControllerMessenger<MessengerTopics>(
-    messengerOptions?.compare === undefined ? {} : { compare: messengerOptions.compare },
-  );
+  const storageLogger = storageOptions?.logger ?? (() => {});
+  const messenger = new Messenger({
+    violationMode: messengerOptions?.violationMode ?? "throw",
+    onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
+    onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
+  });
   const chains = createDefaultChainDescriptorRegistry();
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
-  const storageLogger = storageOptions?.logger ?? (() => {});
 
   const controllerOptions: ControllerLayerOptions = {
     ...(networkOptions ? { network: networkOptions } : {}),
@@ -124,7 +122,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
 
   const controllersInit = initControllers({
-    messenger,
+    bus: messenger,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
     rpcRegistry,
     accountsService: accountsStore,
@@ -143,13 +141,13 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
 
   const vaultMetaPort = storageOptions?.vaultMetaPort;
   const attention = createAttentionService({
-    messenger: castMessenger<AttentionServiceMessengerTopics>(messenger),
+    messenger: messenger.scope({ name: "attention", publish: ATTENTION_TOPICS }),
     now: storageNow,
   });
 
   const runtimeLifecycle = createRuntimeLifecycle("createBackgroundServices");
   const sessionLayer = initSessionLayer({
-    messenger,
+    bus: messenger,
     controllers: controllersBase,
     accountsStore,
     keyringMetas,

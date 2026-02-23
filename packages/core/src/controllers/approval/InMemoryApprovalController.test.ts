@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { Messenger } from "../../messenger/Messenger.js";
 import { InMemoryApprovalController } from "./InMemoryApprovalController.js";
-import type { ApprovalMessengerTopics, ApprovalTask } from "./types.js";
+import { APPROVAL_TOPICS } from "./topics.js";
+import type { ApprovalTask } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -12,8 +13,8 @@ describe("InMemoryApprovalController", () => {
   });
 
   it("requestApproval() requires requestContext", async () => {
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
     const task: ApprovalTask = {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -30,8 +31,8 @@ describe("InMemoryApprovalController", () => {
   });
 
   it("requestApproval() enqueues + resolve() finalizes + resolves the original promise", async () => {
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
     const id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const task: ApprovalTask = {
@@ -62,8 +63,8 @@ describe("InMemoryApprovalController", () => {
   });
 
   it("allows synchronous onRequest handlers to resolve without races", async () => {
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
     const id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     const task: ApprovalTask = {
@@ -96,8 +97,8 @@ describe("InMemoryApprovalController", () => {
   });
 
   it("expirePendingByRequestContext() rejects matching approvals and removes them from state", async () => {
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
     const id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const task: ApprovalTask = {
@@ -128,8 +129,8 @@ describe("InMemoryApprovalController", () => {
   });
 
   it("reject() preserves caller-provided Error instance", async () => {
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
     const id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     const task: ApprovalTask = {
@@ -159,8 +160,11 @@ describe("InMemoryApprovalController", () => {
 
   it("expires approvals after ttlMs to avoid hanging requests", async () => {
     vi.useFakeTimers();
-    const messenger = new ControllerMessenger<ApprovalMessengerTopics>({});
-    const controller = new InMemoryApprovalController({ messenger, ttlMs: 1_000 });
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({
+      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      ttlMs: 1_000,
+    });
 
     const id = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     const task: ApprovalTask = {

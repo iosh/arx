@@ -1,5 +1,4 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import { PermissionScopes } from "../../permissions/constants.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { ChainNamespace } from "../account/types.js";
@@ -40,13 +39,6 @@ export type GrantPermissionOptions = {
   namespace?: ChainNamespace | null;
   chainRef?: ChainRef | null;
 };
-
-export type PermissionMessengerTopics = {
-  "permission:stateChanged": PermissionsState;
-  "permission:originChanged": OriginPermissions;
-};
-
-export type PermissionMessenger = ControllerMessenger<PermissionMessengerTopics>;
 
 export type PermissionScopeResolver = (method: string, context?: RpcInvocationContext) => PermissionScope | undefined;
 

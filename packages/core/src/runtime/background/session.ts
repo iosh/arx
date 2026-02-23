@@ -1,12 +1,10 @@
 import { getAccountCodec } from "../../accounts/codec.js";
 import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
-import type {
-  UnlockController,
-  UnlockControllerOptions,
-  UnlockMessengerTopics,
-} from "../../controllers/unlock/types.js";
+import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/topics.js";
+import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
+import type { Messenger } from "../../messenger/Messenger.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
@@ -17,8 +15,6 @@ import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import { encodePayload } from "../keyring/keyring-utils.js";
 import type { ControllersBase } from "./controllers.js";
-import type { BackgroundMessenger } from "./messenger.js";
-import { castMessenger } from "./messenger.js";
 
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 const DEFAULT_EIP155_CHAIN_REF = "eip155:1" as const;
@@ -44,7 +40,7 @@ export type BackgroundSessionServices = {
 };
 
 type SessionLayerParams = {
-  messenger: BackgroundMessenger;
+  bus: Messenger;
   controllers: ControllersBase;
   vaultMetaPort?: VaultMetaPort;
   accountsStore: AccountsService;
@@ -70,7 +66,7 @@ export type SessionLayerResult = {
 };
 
 export const initSessionLayer = ({
-  messenger,
+  bus,
   controllers: _controllers,
   vaultMetaPort,
   accountsStore,
@@ -277,7 +273,7 @@ export const initSessionLayer = ({
   };
 
   const unlockOptions: UnlockControllerOptions = {
-    messenger: castMessenger<UnlockMessengerTopics>(messenger),
+    messenger: bus.scope({ name: "unlock", publish: UNLOCK_TOPICS }),
     vault: {
       unlock: async (params) => {
         const secret = await vaultProxy.unlock(params);
@@ -336,8 +332,18 @@ export const initSessionLayer = ({
     if (sessionListenersAttached) return;
 
     sessionListenersAttached = true;
+    // onStateChanged replays the current snapshot; ignore that initial emission to avoid
+    // persisting vault metadata when nothing actually changed.
+    let lastUnlockState = unlock.getState();
     sessionSubscriptions.push(
       unlock.onStateChanged(() => {
+        const next = unlock.getState();
+        const isEqual = UNLOCK_STATE_CHANGED.isEqual ?? Object.is;
+        if (isEqual(lastUnlockState, next)) {
+          lastUnlockState = next;
+          return;
+        }
+        lastUnlockState = next;
         scheduleVaultMetaPersist();
       }),
     );

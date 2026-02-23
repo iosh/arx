@@ -1,53 +1,25 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainRegistryPort } from "../../chains/index.js";
-import {
-  type ChainMetadata,
-  cloneChainMetadata,
-  isSameChainMetadata,
-  normalizeChainMetadata,
-  validateChainMetadata,
-} from "../../chains/metadata.js";
+import { type ChainMetadata, isSameChainMetadata } from "../../chains/metadata.js";
 import {
   CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
   type ChainRegistryEntity,
   ChainRegistryEntitySchema,
 } from "../../storage/index.js";
+import {
+  cloneChainRegistryEntity,
+  cloneChainRegistryState,
+  normalizeAndValidateMetadata,
+  parseEntity,
+} from "./state.js";
+import { CHAIN_REGISTRY_STATE_CHANGED, CHAIN_REGISTRY_UPDATED, type ChainRegistryMessenger } from "./topics.js";
 import type {
   ChainRegistryController,
-  ChainRegistryMessenger,
   ChainRegistryState,
   ChainRegistryUpdate,
   ChainRegistryUpsertOptions,
   ChainRegistryUpsertResult,
 } from "./types.js";
-
-const STATE_TOPIC = "chainRegistry:stateChanged";
-const UPDATE_TOPIC = "chainRegistry:updated";
-
-const isSameEntity = (previous: ChainRegistryEntity, next: ChainRegistryEntity) => {
-  if (
-    previous.chainRef !== next.chainRef ||
-    previous.namespace !== next.namespace ||
-    previous.schemaVersion !== next.schemaVersion ||
-    previous.updatedAt !== next.updatedAt
-  ) {
-    return false;
-  }
-
-  return isSameChainMetadata(previous.metadata, next.metadata);
-};
-
-const cloneEntity = (entity: ChainRegistryEntity): ChainRegistryEntity => ({
-  chainRef: entity.chainRef,
-  namespace: entity.namespace,
-  metadata: cloneChainMetadata(entity.metadata),
-  schemaVersion: entity.schemaVersion,
-  updatedAt: entity.updatedAt,
-});
-
-const cloneState = (entities: Iterable<ChainRegistryEntity>): ChainRegistryState => ({
-  chains: Array.from(entities, cloneEntity).sort((a, b) => a.chainRef.localeCompare(b.chainRef)),
-});
 
 type ControllerOptions = {
   messenger: ChainRegistryMessenger;
@@ -77,28 +49,27 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
   }
 
   getState(): ChainRegistryState {
-    return cloneState(this.#chains.values());
+    return cloneChainRegistryState(this.#chains.values());
   }
 
   getChain(chainRef: ChainRef): ChainRegistryEntity | null {
     const entry = this.#chains.get(chainRef);
-    return entry ? cloneEntity(entry) : null;
+    return entry ? cloneChainRegistryEntity(entry) : null;
   }
 
   getChains(): ChainRegistryEntity[] {
-    return cloneState(this.#chains.values()).chains;
+    return cloneChainRegistryState(this.#chains.values()).chains;
   }
 
   async upsertChain(metadata: ChainMetadata, options?: ChainRegistryUpsertOptions): Promise<ChainRegistryUpsertResult> {
     await this.#ready;
 
     // Validate first so normalization cannot throw (e.g. bad payloads cast as ChainMetadata).
-    const validated = validateChainMetadata(metadata);
-    const normalized = normalizeChainMetadata(validated);
+    const normalized = normalizeAndValidateMetadata(metadata);
     const previous = this.#chains.get(normalized.chainRef) ?? null;
     const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
     if (previous && previous.schemaVersion === schemaVersion && isSameChainMetadata(previous.metadata, normalized)) {
-      return { kind: "noop", chain: cloneEntity(previous) };
+      return { kind: "noop", chain: cloneChainRegistryEntity(previous) };
     }
 
     const entity: ChainRegistryEntity = {
@@ -117,8 +88,12 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
 
     const result: ChainRegistryUpsertResult =
       previous === null
-        ? { kind: "added" as const, chain: cloneEntity(checked) }
-        : { kind: "updated" as const, chain: cloneEntity(checked), previous: cloneEntity(previous) };
+        ? { kind: "added" as const, chain: cloneChainRegistryEntity(checked) }
+        : {
+            kind: "updated" as const,
+            chain: cloneChainRegistryEntity(checked),
+            previous: cloneChainRegistryEntity(previous),
+          };
 
     this.#publishState();
     this.#publishUpdate(previous, checked);
@@ -137,16 +112,20 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     this.#chains.delete(chainRef);
 
     this.#publishState();
-    this.#messenger.publish(UPDATE_TOPIC, { kind: "removed", chainRef, previous: cloneEntity(previous) });
-    return { removed: true, previous: cloneEntity(previous) };
+    this.#messenger.publish(CHAIN_REGISTRY_UPDATED, {
+      kind: "removed",
+      chainRef,
+      previous: cloneChainRegistryEntity(previous),
+    });
+    return { removed: true, previous: cloneChainRegistryEntity(previous) };
   }
 
   onStateChanged(handler: (state: ChainRegistryState) => void): () => void {
-    return this.#messenger.subscribe(STATE_TOPIC, handler);
+    return this.#messenger.subscribe(CHAIN_REGISTRY_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   onChainUpdated(handler: (update: ChainRegistryUpdate) => void): () => void {
-    return this.#messenger.subscribe(UPDATE_TOPIC, handler);
+    return this.#messenger.subscribe(CHAIN_REGISTRY_UPDATED, handler);
   }
 
   whenReady(): Promise<void> {
@@ -160,9 +139,8 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
 
       if (sanitized.length === 0 && seed.length > 0) {
         const seedEntities = seed.map((metadata) => {
-          const validated = validateChainMetadata(metadata);
-          const normalized = normalizeChainMetadata(validated);
-          return ChainRegistryEntitySchema.parse({
+          const normalized = normalizeAndValidateMetadata(metadata);
+          return parseEntity({
             chainRef: normalized.chainRef,
             namespace: normalized.namespace,
             metadata: normalized,
@@ -209,33 +187,15 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
   }
 
   #publishState(): void {
-    this.#messenger.publish(STATE_TOPIC, cloneState(this.#chains.values()), {
-      compare: (previous, next) => {
-        if (!previous || !next) return false;
-        if (previous.chains.length !== next.chains.length) return false;
-
-        for (let i = 0; i < previous.chains.length; i += 1) {
-          const prevChain = previous.chains[i];
-          const nextChain = next.chains[i];
-          if (!prevChain || !nextChain) {
-            return false;
-          }
-          if (!isSameEntity(prevChain, nextChain)) {
-            return false;
-          }
-        }
-
-        return true;
-      },
-    });
+    this.#messenger.publish(CHAIN_REGISTRY_STATE_CHANGED, cloneChainRegistryState(this.#chains.values()));
   }
 
   #publishUpdate(previous: ChainRegistryEntity | null, next: ChainRegistryEntity): void {
     const payload: ChainRegistryUpdate =
       previous === null
-        ? { kind: "added", chain: cloneEntity(next) }
-        : { kind: "updated", chain: cloneEntity(next), previous: cloneEntity(previous) };
+        ? { kind: "added", chain: cloneChainRegistryEntity(next) }
+        : { kind: "updated", chain: cloneChainRegistryEntity(next), previous: cloneChainRegistryEntity(previous) };
 
-    this.#messenger.publish(UPDATE_TOPIC, payload);
+    this.#messenger.publish(CHAIN_REGISTRY_UPDATED, payload);
   }
 }

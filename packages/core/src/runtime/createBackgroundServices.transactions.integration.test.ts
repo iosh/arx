@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransactionStatusChange } from "../controllers/index.js";
+import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import {
@@ -74,7 +75,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     });
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
-    const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
+    const unsubscribeStatus = context.services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
       statusEvents.push(payload);
     });
     try {
@@ -174,7 +175,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
-    const unsubscribeStatus = context.services.messenger.subscribe("transaction:statusChanged", (payload) => {
+    const unsubscribeStatus = context.services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
       statusEvents.push(payload);
     });
 

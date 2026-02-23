@@ -1,7 +1,6 @@
 import { ApprovalTypes } from "../../approvals/constants.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { ChainNamespace } from "../account/types.js";
 import type { PermissionApprovalResult, RequestPermissionsApprovalPayload } from "../permission/types.js";
@@ -99,14 +98,6 @@ export type ApprovalRequestedEvent = {
   task: ApprovalTask;
   requestContext: RequestContext;
 };
-
-export type ApprovalMessengerTopics = {
-  "approval:stateChanged": ApprovalState;
-  "approval:requested": ApprovalRequestedEvent;
-  "approval:finished": ApprovalFinishedEvent<unknown>;
-};
-
-export type ApprovalMessenger = ControllerMessenger<ApprovalMessengerTopics>;
 
 export type ApprovalExecutor<TResult> = () => Promise<TResult>;
 

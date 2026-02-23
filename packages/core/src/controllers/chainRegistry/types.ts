@@ -1,5 +1,4 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
 import type { ChainRegistryEntity } from "../../storage/index.js";
 
 export type ChainRegistryState = {
@@ -10,13 +9,6 @@ export type ChainRegistryUpdate =
   | { kind: "added"; chain: ChainRegistryEntity }
   | { kind: "updated"; chain: ChainRegistryEntity; previous: ChainRegistryEntity }
   | { kind: "removed"; chainRef: ChainRef; previous?: ChainRegistryEntity };
-
-export type ChainRegistryMessengerTopics = {
-  "chainRegistry:stateChanged": ChainRegistryState;
-  "chainRegistry:updated": ChainRegistryUpdate;
-};
-
-export type ChainRegistryMessenger = ControllerMessenger<ChainRegistryMessengerTopics>;
 
 export type ChainRegistryUpsertOptions = {
   updatedAt?: number;

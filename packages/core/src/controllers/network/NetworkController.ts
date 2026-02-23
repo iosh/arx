@@ -1,9 +1,16 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../../chains/metadata.js";
 import { cloneChainMetadata } from "../../chains/metadata.js";
+import type { NetworkMessenger } from "./topics.js";
+import {
+  NETWORK_ACTIVE_CHAIN_CHANGED,
+  NETWORK_CHAIN_METADATA_CHANGED,
+  NETWORK_RPC_ENDPOINT_CHANGED,
+  NETWORK_RPC_HEALTH_CHANGED,
+  NETWORK_STATE_CHANGED,
+} from "./topics.js";
 import type {
   NetworkController,
-  NetworkMessenger,
   NetworkState,
   NetworkStateInput,
   RpcEndpointChange,
@@ -15,12 +22,6 @@ import type {
   RpcRoutingState,
   RpcStrategyConfig,
 } from "./types.js";
-
-const NETWORK_STATE_TOPIC = "network:stateChanged";
-const NETWORK_ACTIVE_CHAIN_TOPIC = "network:activeChainChanged";
-const NETWORK_CHAIN_METADATA_TOPIC = "network:chainMetadataChanged";
-const NETWORK_RPC_ENDPOINT_TOPIC = "network:rpcEndpointChanged";
-const NETWORK_RPC_HEALTH_TOPIC = "network:rpcHealthChanged";
 
 const DEFAULT_STRATEGY: RpcStrategyConfig = { id: "round-robin" };
 const defaultLogger: RpcEventLogger = () => {};
@@ -211,25 +212,25 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   onStateChanged(handler: (state: NetworkState) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_STATE_TOPIC, handler);
+    return this.#messenger.subscribe(NETWORK_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
   onActiveChainChanged(handler: (payload: { previous: ChainRef; next: ChainRef }) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_ACTIVE_CHAIN_TOPIC, handler);
+    return this.#messenger.subscribe(NETWORK_ACTIVE_CHAIN_CHANGED, handler);
   }
 
   onChainMetadataChanged(
     handler: (payload: { chainRef: ChainRef; previous: ChainMetadata | null; next: ChainMetadata | null }) => void,
   ): () => void {
-    return this.#messenger.subscribe(NETWORK_CHAIN_METADATA_TOPIC, handler);
+    return this.#messenger.subscribe(NETWORK_CHAIN_METADATA_CHANGED, handler);
   }
 
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_RPC_ENDPOINT_TOPIC, handler);
+    return this.#messenger.subscribe(NETWORK_RPC_ENDPOINT_CHANGED, handler);
   }
 
   onRpcHealthChanged(handler: (update: { chainRef: ChainRef; health: RpcEndpointHealth[] }) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_RPC_HEALTH_TOPIC, handler);
+    return this.#messenger.subscribe(NETWORK_RPC_HEALTH_CHANGED, handler);
   }
 
   async switchChain(target: ChainRef): Promise<ChainMetadata> {
@@ -573,19 +574,16 @@ export class InMemoryNetworkController implements NetworkController {
 
   #publishState(force = false) {
     const snapshot = this.#buildStateSnapshot();
-    this.#messenger.publish(NETWORK_STATE_TOPIC, snapshot, {
-      force,
-      compare: (prev?: NetworkState, next?: NetworkState) => !!prev && !!next && prev.revision === next.revision,
-    });
+    this.#messenger.publish(NETWORK_STATE_CHANGED, snapshot, { force });
   }
 
   #publishActiveChainChanged(previous: ChainRef, next: ChainRef) {
-    this.#messenger.publish(NETWORK_ACTIVE_CHAIN_TOPIC, { previous, next }, { force: true });
+    this.#messenger.publish(NETWORK_ACTIVE_CHAIN_CHANGED, { previous, next }, { force: true });
   }
 
   #publishChainMetadataChanged(chainRef: ChainRef, previous: ChainMetadata | null, next: ChainMetadata | null) {
     this.#messenger.publish(
-      NETWORK_CHAIN_METADATA_TOPIC,
+      NETWORK_CHAIN_METADATA_CHANGED,
       {
         chainRef,
         previous: previous ? cloneChainMetadata(previous) : null,
@@ -596,12 +594,12 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   #publishEndpointChange(chainRef: ChainRef, previous: RpcEndpointInfo, next: RpcEndpointInfo) {
-    this.#messenger.publish(NETWORK_RPC_ENDPOINT_TOPIC, { chainRef, previous, next }, { force: true });
+    this.#messenger.publish(NETWORK_RPC_ENDPOINT_CHANGED, { chainRef, previous, next }, { force: true });
   }
 
   #publishRpcHealth(chainRef: ChainRef, runtime: ChainRuntime) {
     this.#messenger.publish(
-      NETWORK_RPC_HEALTH_TOPIC,
+      NETWORK_RPC_HEALTH_CHANGED,
       { chainRef, health: cloneHealth(runtime.health) },
       { force: true },
     );

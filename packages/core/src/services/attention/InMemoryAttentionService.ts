@@ -1,9 +1,8 @@
-import type { ControllerMessenger } from "../../messenger/ControllerMessenger.js";
+import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED, type AttentionMessenger } from "./topics.js";
 import type {
   AttentionRequest,
   AttentionRequestResult,
   AttentionService,
-  AttentionServiceMessengerTopics,
   AttentionState,
   RequestAttentionParams,
 } from "./types.js";
@@ -14,7 +13,7 @@ const DEFAULT_MAX_QUEUE_SIZE = 20;
 type Entry = { key: string; request: AttentionRequest };
 
 export class InMemoryAttentionService implements AttentionService {
-  #messenger: ControllerMessenger<AttentionServiceMessengerTopics>;
+  #messenger: AttentionMessenger;
   #now: () => number;
   #defaultTtlMs: number;
   #maxQueueSize: number;
@@ -22,7 +21,7 @@ export class InMemoryAttentionService implements AttentionService {
   #byKey = new Map<string, AttentionRequest>();
 
   constructor(opts: {
-    messenger: ControllerMessenger<AttentionServiceMessengerTopics>;
+    messenger: AttentionMessenger;
     now?: () => number;
     defaultTtlMs?: number;
     maxQueueSize?: number;
@@ -47,7 +46,7 @@ export class InMemoryAttentionService implements AttentionService {
     const existing = this.#byKey.get(key);
 
     if (existing && existing.expiresAt > now) {
-      this.#messenger.publish("attention:requested", existing, { force: true });
+      this.#messenger.publish(ATTENTION_REQUESTED, existing, { force: true });
       return { enqueued: false, request: null, state: this.getSnapshot() };
     }
 
@@ -70,9 +69,9 @@ export class InMemoryAttentionService implements AttentionService {
       if (dropped) this.#byKey.delete(dropped.key);
     }
 
-    this.#messenger.publish("attention:requested", request);
+    this.#messenger.publish(ATTENTION_REQUESTED, request);
     const state = this.getSnapshot();
-    this.#messenger.publish("attention:stateChanged", state);
+    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
 
     return { enqueued: true, request, state };
   }
@@ -99,7 +98,7 @@ export class InMemoryAttentionService implements AttentionService {
     this.#queue = [];
     this.#byKey.clear();
     const state = this.getSnapshot();
-    this.#messenger.publish("attention:stateChanged", state);
+    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
     return state;
   }
 
@@ -109,7 +108,7 @@ export class InMemoryAttentionService implements AttentionService {
     if (!changed) return this.getSnapshot();
 
     const state = this.getSnapshot();
-    this.#messenger.publish("attention:stateChanged", state);
+    this.#messenger.publish(ATTENTION_STATE_CHANGED, state);
     return state;
   }
 }

@@ -1,10 +1,9 @@
 import { toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
 import type { TransactionsService } from "../../services/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
-import { TRANSACTION_STATE_CHANGED_TOPIC, TRANSACTION_STATUS_CHANGED_TOPIC } from "./topics.js";
+import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   TransactionIssue,
-  TransactionMessenger,
   TransactionMeta,
   TransactionPrepared,
   TransactionReceipt,
@@ -112,7 +111,7 @@ export class StoreTransactionView {
         nextStatus: next.status,
         meta: cloneMeta(next),
       };
-      this.#messenger.publish(TRANSACTION_STATUS_CHANGED_TOPIC, payload);
+      this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
     }
 
     return previous ? cloneMeta(previous) : undefined;
@@ -187,7 +186,7 @@ export class StoreTransactionView {
       this.#statePublishScheduled = false;
       this.#stateRevision += 1;
       const payload: TransactionStateChange = { revision: this.#stateRevision };
-      this.#messenger.publish(TRANSACTION_STATE_CHANGED_TOPIC, payload);
+      this.#messenger.publish(TRANSACTION_STATE_CHANGED, payload);
     });
   }
 

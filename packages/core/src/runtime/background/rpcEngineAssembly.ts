@@ -77,7 +77,6 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   const rpcRegistry = services.rpcRegistry;
 
   const findMethodDefinition = rpcRegistry.createMethodDefinitionResolver(controllers);
-  const deriveMethodNamespace = rpcRegistry.createMethodNamespaceResolver(controllers);
 
   const executeMethod = rpcRegistry.createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
 
@@ -87,39 +86,41 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     rpcRegistry.getPassthroughAllowance(controllers, method, rpcContext);
 
   const resolveInvocation: Middleware = createResolveInvocationMiddleware({
-    deriveNamespace: (method, ctx) => deriveMethodNamespace(method, ctx),
-    getActiveChainRef: () => controllers.network.getActiveChain().chainRef,
+    resolveInvocation: (method, ctx) => rpcRegistry.resolveInvocation(controllers, method, ctx),
   }) as unknown as Middleware;
 
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
-    const invocation = reqWithArx.arxInvocation;
-    const rpcContext = invocation?.rpcContext ?? reqWithArx.arx;
-    const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
-    const namespace = invocation?.namespace ?? deriveMethodNamespace(req.method, rpcContext ?? undefined);
-    const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef;
+    const encode = (error: unknown) => {
+      const invocation = reqWithArx.arxInvocation;
+      const rpcContext = invocation?.rpcContext ?? reqWithArx.arx ?? undefined;
+      const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
+      const chainRef =
+        invocation?.chainRef ?? rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef ?? null;
+      const namespace =
+        invocation?.namespace ??
+        rpcContext?.namespace?.split(":")[0] ??
+        (typeof chainRef === "string" ? chainRef.split(":")[0] : null) ??
+        "eip155";
+
+      return rpcRegistry.encodeErrorWithAdapters(error, {
+        surface: "dapp",
+        namespace,
+        chainRef,
+        origin,
+        method: req.method,
+      }) as JsonRpcError;
+    };
 
     try {
       await next();
     } catch (error) {
-      res.error = rpcRegistry.encodeErrorWithAdapters(error, {
-        surface: "dapp",
-        namespace,
-        chainRef,
-        origin,
-        method: req.method,
-      }) as JsonRpcError;
+      res.error = encode(error);
       return;
     }
 
     if (res.error) {
-      res.error = rpcRegistry.encodeErrorWithAdapters(res.error, {
-        surface: "dapp",
-        namespace,
-        chainRef,
-        origin,
-        method: req.method,
-      }) as JsonRpcError;
+      res.error = encode(res.error);
     }
   });
 
@@ -157,7 +158,8 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     res.result = result as Json;
   });
 
-  return [resolveInvocation, errorBoundary, lockedGuard, permissionGuard, executor];
+  // Put errorBoundary first so any downstream middleware errors are encoded consistently.
+  return [errorBoundary, resolveInvocation, lockedGuard, permissionGuard, executor];
 };
 
 export const createRpcEngineForBackground = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {

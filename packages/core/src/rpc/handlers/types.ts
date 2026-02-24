@@ -48,6 +48,7 @@ type MethodHandlerContext<P> = {
   request: RpcRequest;
   params: P;
   controllers: HandlerControllers;
+  invocation: { namespace: Namespace; chainRef: ChainRef };
   rpcContext?: RpcInvocationContext;
 };
 
@@ -68,7 +69,11 @@ export const PermissionChecks = {
 } as const;
 export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionChecks];
 
-export type LockedPolicy = { allow: true } | { allow: false } | { response: Json };
+export type LockedPolicy =
+  | { type: "allow" }
+  | { type: "deny" }
+  | { type: "response"; response: Json }
+  | { type: "queue" };
 
 export type MethodDefinition<P = unknown> = {
   scope?: PermissionCapability;
@@ -84,7 +89,6 @@ export type MethodDefinition<P = unknown> = {
    * - otherwise => "none"
    */
   permissionCheck?: PermissionCheck;
-  approvalRequired?: boolean;
   locked?: LockedPolicy;
   /**
    * Optional zod schema for JSON-RPC params.

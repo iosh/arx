@@ -108,13 +108,13 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it("allows methods when locked.allow is true", async () => {
+  it("allows methods when locked.type is allow", async () => {
     const next = createNextStub();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { allow: true } }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { type: "allow" } }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -127,13 +127,16 @@ describe("createLockedGuardMiddleware", () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it("returns locked.response payload", async () => {
+  it("returns locked.type=response payload", async () => {
     const next = createNextStub();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { response: ["0x123"] } }),
+      findMethodDefinition: () => ({
+        scope: PermissionCapabilities.Accounts,
+        locked: { type: "response", response: ["0x123"] },
+      }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -229,13 +232,13 @@ describe("createLockedGuardMiddleware", () => {
     });
   });
 
-  it("allows approvalRequired methods while locked (queues approval flow)", async () => {
+  it("allows locked.type=queue methods while locked (queues approval flow)", async () => {
     const next = createNextStub();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
       isUnlocked: () => false,
       isInternalOrigin: () => false,
-      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, approvalRequired: true }),
+      findMethodDefinition: () => ({ scope: PermissionCapabilities.Accounts, locked: { type: "queue" } }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,
     });
@@ -246,10 +249,16 @@ describe("createLockedGuardMiddleware", () => {
     await middleware(req, res, next, end);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(attention.requestAttention).not.toHaveBeenCalled();
+    expect(attention.requestAttention).toHaveBeenCalledWith({
+      reason: "unlock_required",
+      origin: ORIGIN,
+      method: "eth_requestAccounts",
+      chainRef: null,
+      namespace: null,
+    });
   });
 
-  it("does not bypass explicit locked deny for approvalRequired methods", async () => {
+  it("respects locked.type=deny", async () => {
     const next = createNextStub();
     const attention = createAttentionHelpers();
     const middleware = createLockedGuardMiddleware({
@@ -257,8 +266,7 @@ describe("createLockedGuardMiddleware", () => {
       isInternalOrigin: () => false,
       findMethodDefinition: () => ({
         scope: PermissionCapabilities.Accounts,
-        approvalRequired: true,
-        locked: { allow: false },
+        locked: { type: "deny" },
       }),
       getPassthroughAllowance: defaultPassthroughAllowance,
       attentionService: attention,

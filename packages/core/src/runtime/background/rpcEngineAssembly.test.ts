@@ -60,7 +60,7 @@ describe("background rpc engine assembly", () => {
       isInternalOrigin: () => false,
     });
 
-    // Should push 5 middlewares: resolveInvocation, errorBoundary, lockedGuard, permissionGuard, executor
+    // Should push 5 middlewares: errorBoundary, resolveInvocation, lockedGuard, permissionGuard, executor
     expect(pushSpy).toHaveBeenCalledTimes(5);
 
     createRpcEngineForBackground(services, {
@@ -89,7 +89,7 @@ describe("background rpc engine assembly", () => {
     const middlewares = createBackgroundRpcMiddlewares(services, {
       isInternalOrigin: () => false,
     });
-    const errorBoundary = middlewares[1];
+    const errorBoundary = middlewares[0];
     if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
     const chainRef = services.controllers.network.getActiveChain().chainRef;
 

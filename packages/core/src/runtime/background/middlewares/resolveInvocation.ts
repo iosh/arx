@@ -1,5 +1,7 @@
 import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
+import type { ChainRef } from "../../../chains/ids.js";
+import type { Namespace } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 
@@ -8,8 +10,8 @@ export type ArxInvocation = {
   method: string;
   params: JsonRpcParams | undefined;
   rpcContext: RpcInvocationContext | undefined;
-  namespace: string;
-  chainRef: string;
+  namespace: Namespace;
+  chainRef: ChainRef;
 };
 
 type ReqLike = {
@@ -21,20 +23,12 @@ type ReqLike = {
 };
 
 export const createResolveInvocationMiddleware = (deps: {
-  deriveNamespace(method: string, ctx?: RpcInvocationContext): string;
-  getActiveChainRef(): string;
+  resolveInvocation(method: string, ctx?: RpcInvocationContext): { namespace: Namespace; chainRef: ChainRef };
 }) => {
-  /**
-   * Normalize a JSON-RPC request into a single invocation context (SSOT).
-   *
-   * Downstream middleware should prefer `req.arxInvocation` to avoid
-   * recomputing origin/namespace/chainRef in multiple places.
-   */
   return createAsyncMiddleware<JsonRpcParams, Json>(async (req: ReqLike, _res, next) => {
     const rpcContext = req.arx;
     const origin = req.origin ?? UNKNOWN_ORIGIN;
-    const namespace = deps.deriveNamespace(req.method, rpcContext);
-    const chainRef = (rpcContext?.chainRef ?? deps.getActiveChainRef()) as string;
+    const { namespace, chainRef } = deps.resolveInvocation(req.method, rpcContext);
 
     req.arxInvocation = {
       origin,

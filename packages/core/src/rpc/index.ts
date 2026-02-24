@@ -1,5 +1,4 @@
-import { createEip155ProtocolAdapter } from "./eip155ProtocolAdapter.js";
-import { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
+import { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
@@ -14,6 +13,8 @@ export type {
 } from "./handlers/types.js";
 export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
 export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
+export { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
+export type { RpcNamespaceModule } from "./namespaces/types.js";
 export * from "./permissions.js";
 export {
   type RpcClient,
@@ -32,11 +33,13 @@ export const DEFAULT_NAMESPACE = RpcRegistry.DEFAULT_NAMESPACE;
 export const createRpcRegistry = (): RpcRegistry => new RpcRegistry();
 
 export const registerBuiltinRpcAdapters = (registry: RpcRegistry): void => {
-  // Namespace adapters
-  if (!registry.getRegisteredNamespaceAdapters().some((entry) => entry.namespace === EIP155_NAMESPACE)) {
-    registry.registerNamespaceAdapter(createEip155Adapter());
-  }
+  const registered = new Set(registry.getRegisteredNamespaceAdapters().map((entry) => entry.namespace));
 
-  // Error protocol adapters
-  registry.registerNamespaceProtocolAdapter(EIP155_NAMESPACE, createEip155ProtocolAdapter());
+  for (const module of BUILTIN_RPC_NAMESPACE_MODULES) {
+    if (!registered.has(module.namespace)) {
+      registry.registerNamespaceAdapter(module.adapter);
+      registered.add(module.namespace);
+    }
+    registry.registerNamespaceProtocolAdapter(module.namespace, module.protocolAdapter);
+  }
 };

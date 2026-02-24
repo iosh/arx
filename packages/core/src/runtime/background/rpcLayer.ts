@@ -1,4 +1,4 @@
-import { createEip155RpcClientFactory } from "../../rpc/namespaceClients/eip155.js";
+import { BUILTIN_RPC_NAMESPACE_MODULES } from "../../rpc/namespaces/builtin.js";
 import {
   type RpcClientFactory,
   RpcClientRegistry,
@@ -28,7 +28,11 @@ export const initRpcLayer = ({
     },
   });
 
-  rpcClientRegistry.registerFactory("eip155", createEip155RpcClientFactory());
+  for (const module of BUILTIN_RPC_NAMESPACE_MODULES) {
+    if (module.clientFactory) {
+      rpcClientRegistry.registerFactory(module.namespace, module.clientFactory);
+    }
+  }
 
   for (const entry of rpcClientOptions?.factories ?? []) {
     rpcClientRegistry.registerFactory(entry.namespace, entry.factory);

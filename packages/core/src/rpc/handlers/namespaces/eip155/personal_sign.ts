@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -9,7 +10,7 @@ type PersonalSignParams = { address: string; message: string };
 export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
   scope: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
-  approvalRequired: true,
+  locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);
     if (paramsArray.length < 2) {
@@ -40,19 +41,19 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
 
     return { address, message };
   },
-  handler: async ({ origin, params, controllers, rpcContext }) => {
+  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
     const { address, message } = params;
-    const activeChain = controllers.network.getActiveChain();
+    const chainRef = invocation.chainRef;
 
     const task = {
       id: createTaskId("personal_sign"),
       type: ApprovalTypes.SignMessage,
       origin,
-      namespace: "eip155",
-      chainRef: activeChain.chainRef,
+      namespace: invocation.namespace,
+      chainRef,
       createdAt: Date.now(),
       payload: {
-        chainRef: activeChain.chainRef,
+        chainRef,
         from: address,
         message,
       },
@@ -66,8 +67,8 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
 
       // Grant Sign permission after successful signature
       await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
-        namespace: "eip155",
-        chainRef: activeChain.chainRef,
+        namespace: invocation.namespace,
+        chainRef,
       });
 
       return signature;

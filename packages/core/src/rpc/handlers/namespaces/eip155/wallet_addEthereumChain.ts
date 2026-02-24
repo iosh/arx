@@ -2,19 +2,30 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
 import { type ChainMetadata, createEip155MetadataFromEip3085 } from "../../../../chains/index.js";
 import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
-const normalizeUrls = (urls: readonly string[]) =>
-  Array.from(
-    new Set(
-      urls
-        .map((value) => value.trim())
-        .filter(Boolean)
-        .map((value) => value.toLowerCase()),
-    ),
-  ).sort();
+const normalizeUrl = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    return `${url.protocol}//${url.host}${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return trimmed;
+  }
+};
+
+const normalizeUrls = (urls: readonly string[]) => {
+  const unique = new Set<string>();
+  for (const value of urls) {
+    const normalized = normalizeUrl(value);
+    if (normalized) unique.add(normalized);
+  }
+  return [...unique].sort();
+};
 
 const isSameEip3085Metadata = (a: ChainMetadata, b: ChainMetadata) => {
   if (a.chainRef !== b.chainRef) return false;
@@ -49,7 +60,7 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
   // Require an existing connection so unrelated pages cannot spam chain addition prompts.
   // User still approves the addition explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,
-  approvalRequired: true,
+  locked: lockedQueue(),
   parseParams: (params) => {
     const [raw] = toParamsArray(params);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

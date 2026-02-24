@@ -10,6 +10,7 @@ import {
 } from "../../../../controllers/index.js";
 import { isPermissionCapability } from "../../../../permissions/capabilities.js";
 import { buildWalletPermissions } from "../../../permissions.js";
+import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -71,17 +72,8 @@ const WalletRequestPermissionsParamsSchema = z
 export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
   scope: PermissionCapabilities.Basic,
   permissionCheck: PermissionChecks.None,
-  approvalRequired: true,
-  parseParams: (params, rpcContext) => {
-    // If caller provides rpcContext.chainRef, ensure it looks like a CAIP-2-ish id.
-    if (rpcContext?.chainRef && typeof rpcContext.chainRef === "string" && !rpcContext.chainRef.includes(":")) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "wallet_requestPermissions received an invalid chainRef identifier",
-        data: { chainRef: rpcContext.chainRef },
-      });
-    }
-
+  locked: lockedQueue(),
+  parseParams: (params, _rpcContext) => {
     try {
       return WalletRequestPermissionsParamsSchema.parse(params);
     } catch (error) {
@@ -96,17 +88,17 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, rpcContext }) => {
-    const activeChain = controllers.network.getActiveChain();
+  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+    const chainRef = invocation.chainRef;
     const namespace = EIP155_NAMESPACE;
 
-    const requested = toRequestDescriptors(params, activeChain.chainRef);
+    const requested = toRequestDescriptors(params, chainRef);
     const task = {
       id: createTaskId("wallet_requestPermissions"),
       type: ApprovalTypes.RequestPermissions,
       origin,
       namespace,
-      chainRef: activeChain.chainRef,
+      chainRef,
       createdAt: Date.now(),
       payload: { requested },
     } satisfies ApprovalTask<typeof ApprovalTypes.RequestPermissions>;
@@ -118,9 +110,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
         requireRequestContext(rpcContext, "wallet_requestPermissions"),
       );
     } catch (error) {
-      // Preserve domain/RPC errors from the approvals controller (e.g. user reject, timeout, transport loss).
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
-      // Unknown approval failures are not user rejections.
       throw arxError({
         reason: ArxReasons.RpcInternal,
         message: "Failed to request permissions approval",
@@ -132,24 +122,24 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
     const grantedDescriptors = result?.granted ?? [];
     try {
       for (const descriptor of grantedDescriptors) {
-        const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [activeChain.chainRef];
-        for (const chainRef of targetChains) {
+        const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [chainRef];
+        for (const targetChainRef of targetChains) {
           if (descriptor.capability === PermissionCapabilities.Accounts) {
-            const all = controllers.accounts.getAccounts({ chainRef });
-            const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef });
+            const all = controllers.accounts.getAccounts({ chainRef: targetChainRef });
+            const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef: targetChainRef });
             const preferred = preferredAddress && all.includes(preferredAddress) ? preferredAddress : null;
             const selected = preferred ?? all[0] ?? null;
             if (!selected) {
               throw arxError({
                 reason: ArxReasons.PermissionDenied,
                 message: "No selectable account available for permission request",
-                data: { origin, chainRef, capability: descriptor.capability },
+                data: { origin, chainRef: targetChainRef, capability: descriptor.capability },
               });
             }
 
             await controllers.permissions.setPermittedAccounts(origin, {
               namespace,
-              chainRef,
+              chainRef: targetChainRef,
               accounts: [selected],
             });
             continue;
@@ -157,14 +147,12 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
 
           await controllers.permissions.grant(origin, descriptor.capability, {
             namespace,
-            chainRef,
+            chainRef: targetChainRef,
           });
         }
       }
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
-      // Approval has already been granted at this point; persistence failures must not be
-      // reported as "user rejected".
       throw arxError({
         reason: ArxReasons.RpcInternal,
         message: "Failed to persist granted permissions",

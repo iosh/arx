@@ -2,6 +2,7 @@ import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -79,7 +80,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
   // Require an existing connection so unrelated pages cannot spam chain switch prompts.
   // User still approves the switch explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,
-  approvalRequired: true,
+  locked: lockedQueue(),
   parseParams: (params) => {
     try {
       return WalletSwitchEthereumChainParamsSchema.parse(params);
@@ -96,7 +97,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, rpcContext }) => {
+  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;
@@ -169,8 +170,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       });
     }
 
-    const active = controllers.network.getActiveChain();
-    if (active.chainRef === target.chainRef) {
+    if (invocation.chainRef === target.chainRef) {
       return null;
     }
 
@@ -178,7 +178,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       id: createTaskId("wallet_switchEthereumChain"),
       type: ApprovalTypes.SwitchChain,
       origin,
-      namespace: "eip155",
+      namespace: invocation.namespace,
       chainRef: target.chainRef,
       createdAt: Date.now(),
       payload: {

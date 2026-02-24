@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { lockedQueue } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
@@ -7,20 +8,20 @@ import { requireRequestContext } from "./shared.js";
 export const ethRequestAccountsDefinition = defineNoParamsMethod({
   scope: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
-  approvalRequired: true,
-  handler: async ({ origin, controllers, rpcContext }) => {
-    const activeChain = controllers.network.getActiveChain();
-    const suggested = controllers.accounts.getAccounts({ chainRef: activeChain.chainRef });
+  locked: lockedQueue(),
+  handler: async ({ origin, controllers, rpcContext, invocation }) => {
+    const chainRef = invocation.chainRef;
+    const suggested = controllers.accounts.getAccounts({ chainRef });
 
     const task = {
       id: createTaskId("eth_requestAccounts"),
       type: ApprovalTypes.RequestAccounts,
       origin,
-      namespace: "eip155",
-      chainRef: activeChain.chainRef,
+      namespace: invocation.namespace,
+      chainRef,
       createdAt: Date.now(),
       payload: {
-        chainRef: activeChain.chainRef,
+        chainRef,
         suggestedAccounts: [...suggested],
       },
     };

@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { parseChainRef } from "../../../../chains/caip.js";
 import { PermissionCapabilities } from "../../../../controllers/index.js";
+import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
@@ -17,7 +17,7 @@ type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionParams> = {
   scope: PermissionCapabilities.SendTransaction,
   permissionCheck: PermissionChecks.Connected,
-  approvalRequired: true,
+  locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);
 
@@ -31,32 +31,8 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
 
     return paramsArray as unknown as EthSendTransactionParams;
   },
-  handler: async ({ origin, params, controllers, rpcContext }) => {
-    const activeChain = controllers.network.getActiveChain();
-    let chainRef = activeChain.chainRef;
-
-    const ctxChainRef = rpcContext?.chainRef ?? null;
-    if (ctxChainRef) {
-      try {
-        const parsed = parseChainRef(ctxChainRef);
-        if (parsed.namespace !== "eip155") {
-          throw arxError({
-            reason: ArxReasons.ChainNotCompatible,
-            message: "Requested chain is not compatible with eth_sendTransaction",
-            data: { chainRef: ctxChainRef },
-          });
-        }
-        chainRef = `${parsed.namespace}:${parsed.reference}`;
-      } catch (error) {
-        if (isDomainError(error) || isRpcError(error)) throw error;
-        throw arxError({
-          reason: ArxReasons.RpcInvalidParams,
-          message: "eth_sendTransaction received an invalid chainRef identifier",
-          data: { chainRef: ctxChainRef },
-          cause: error,
-        });
-      }
-    }
+  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+    const chainRef = invocation.chainRef;
 
     const txRequest = buildEip155TransactionRequest(params, chainRef);
 

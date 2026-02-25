@@ -1,3 +1,4 @@
+import type { RpcRegistry } from "@arx/core";
 import { CHANNEL } from "@arx/provider/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -56,7 +57,11 @@ describe("portRouter privacy", () => {
 
   it("sends handshake_ack with empty accounts when locked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
+    const getOrInitContext = vi.fn(async () => ({
+      runtime: { rpc: { registry } },
+      controllers: { permissions: { getPermittedAccounts } },
+    }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
@@ -91,7 +96,11 @@ describe("portRouter privacy", () => {
 
   it("broadcasts accountsChanged([]) when locked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
+    const getOrInitContext = vi.fn(async () => ({
+      runtime: { rpc: { registry } },
+      controllers: { permissions: { getPermittedAccounts } },
+    }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
@@ -128,7 +137,11 @@ describe("portRouter privacy", () => {
 
   it("sends handshake_ack with permitted accounts when unlocked", async () => {
     const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const getOrInitContext = vi.fn(async () => ({ controllers: { permissions: { getPermittedAccounts } } }));
+    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
+    const getOrInitContext = vi.fn(async () => ({
+      runtime: { rpc: { registry } },
+      controllers: { permissions: { getPermittedAccounts } },
+    }));
 
     const router = createPortRouter({
       extensionOrigin: "ext://",

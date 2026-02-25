@@ -559,6 +559,8 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
   let hasCiphertext = opts?.hasCiphertext ?? true;
 
   const keyring = new KeyringService({
+    now: () => Date.now(),
+    uuid: () => crypto.randomUUID(),
     vault: {
       exportKey: () => vault.exportKey(),
       isUnlocked: () => vault.isUnlocked(),

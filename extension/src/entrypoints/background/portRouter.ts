@@ -49,12 +49,9 @@ export const createPortRouter = ({
 
   const getContext = async () => {
     const ctx = await getOrInitContext();
-    // Tests may stub getOrInitContext with a partial context; keep this best-effort.
-    const registry = (ctx as unknown as { services?: { rpcRegistry?: RpcRegistry } }).services?.rpcRegistry;
-    if (registry) {
-      rpcRegistry = registry;
-      registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
-    }
+    const registry = ctx.runtime.rpc.registry;
+    rpcRegistry = registry;
+    registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
     return ctx;
   };
 

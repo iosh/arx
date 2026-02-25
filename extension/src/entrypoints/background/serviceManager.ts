@@ -5,9 +5,8 @@ import {
   ATTENTION_STATE_CHANGED,
   arxError,
   type BackgroundSessionServices,
-  createBackgroundServices,
+  createBackgroundRuntime,
   createLogger,
-  createRpcEngineForBackground,
   extendLogger,
 } from "@arx/core";
 import browser from "webextension-polyfill";
@@ -25,9 +24,9 @@ import type { ControllerSnapshot } from "./types";
 import { createUiBridge } from "./uiBridge";
 
 export type BackgroundContext = {
-  services: ReturnType<typeof createBackgroundServices>;
-  controllers: ReturnType<typeof createBackgroundServices>["controllers"];
-  engine: ReturnType<typeof createBackgroundServices>["engine"];
+  runtime: ReturnType<typeof createBackgroundRuntime>;
+  controllers: ReturnType<typeof createBackgroundRuntime>["controllers"];
+  engine: ReturnType<typeof createBackgroundRuntime>["rpc"]["engine"];
   session: BackgroundSessionServices;
 };
 
@@ -101,7 +100,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const storePorts = getExtensionStorePorts();
       const chainRegistry = getExtensionChainRegistry();
       const settingsPort = getExtensionSettingsPort();
-      const services = createBackgroundServices({
+      const runtime = createBackgroundRuntime({
         store: {
           ports: {
             accounts: storePorts.accounts,
@@ -114,8 +113,18 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         storage: { vaultMetaPort },
         settings: { port: settingsPort },
         chainRegistry: { port: chainRegistry },
+        rpcEngine: {
+          env: {
+            isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
+            shouldRequestUnlockAttention: () => true,
+          },
+        },
       });
-      const { controllers, engine, messenger, session, keyring } = services;
+      const { controllers } = runtime;
+      const engine = runtime.rpc.engine;
+      const messenger = runtime.bus;
+      const session = runtime.services.session;
+      const keyring = runtime.services.keyring;
       const notificationActivator = createPopupActivator({ browser, popupPath: ENTRYPOINTS.NOTIFICATION });
       const popupLog = extendLogger(runtimeLog, "popupActivator");
       const trackedPopupWindows = new Map<number, (removedId: number) => void>();
@@ -174,8 +183,8 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         callbacks.broadcastEvent("accountsChanged", [accounts]);
       };
 
-      await services.lifecycle.initialize();
-      services.lifecycle.start();
+      await runtime.lifecycle.initialize();
+      runtime.lifecycle.start();
 
       unsubscribeControllerEvents.push(() => {
         for (const [windowId, listener] of trackedPopupWindows.entries()) {
@@ -314,11 +323,6 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
 
-      createRpcEngineForBackground(services, {
-        isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),
-        shouldRequestUnlockAttention: () => true,
-      });
-
       unsubscribeControllerEvents.push(
         controllers.network.onActiveChainChanged(() => {
           const snapshot = getControllerSnapshot();
@@ -339,17 +343,17 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         }),
       );
 
-      context = { services, controllers, engine, session };
+      context = { runtime, controllers, engine, session };
 
       uiBridge = createUiBridge({
         browser,
         controllers,
         session,
-        rpcClients: services.rpcClients,
-        rpcRegistry: services.rpcRegistry,
+        rpcClients: runtime.rpc.clients,
+        rpcRegistry: runtime.rpc.registry,
         persistVaultMeta,
         keyring,
-        attention: services.attention,
+        attention: runtime.services.attention,
       });
       uiBridge.attachListeners();
 
@@ -378,7 +382,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     uiBridge?.teardown();
     uiBridge = null;
 
-    context?.services.lifecycle.destroy();
+    context?.runtime.lifecycle.destroy();
     context = null;
   };
 

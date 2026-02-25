@@ -8,7 +8,7 @@ import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
   createExecutor,
-  createServices,
+  createRuntime,
   ORIGIN,
   setupApprovalResponder,
   TEST_MNEMONIC,
@@ -16,21 +16,21 @@ import {
 
 describe("eip155 handlers - approval metadata", () => {
   it("includes namespace metadata for eth_requestAccounts approvals", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const activeChain = services.controllers.network.getActiveChain();
+    const execute = createExecutor(runtime);
+    const activeChain = runtime.controllers.network.getActiveChain();
 
-    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
-    const originalRequestApproval = services.controllers.approvals.requestApproval;
-    services.controllers.approvals.requestApproval = (async (task) => {
+    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    const originalRequestApproval = runtime.controllers.approvals.requestApproval;
+    runtime.controllers.approvals.requestApproval = (async (task) => {
       capturedTask = task;
       // Return empty array directly instead of calling original method
       // This test only needs to verify the approval task metadata, not actually approve
       return [];
-    }) as typeof services.controllers.approvals.requestApproval;
+    }) as typeof runtime.controllers.approvals.requestApproval;
 
     try {
       await expect(
@@ -43,32 +43,37 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
-      services.controllers.approvals.requestApproval = originalRequestApproval;
-      services.lifecycle.destroy();
+      runtime.controllers.approvals.requestApproval = originalRequestApproval;
+      runtime.lifecycle.destroy();
     }
   });
 
   it("includes namespace metadata for personal_sign approvals", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const activeChain = services.controllers.network.getActiveChain();
+    const execute = createExecutor(runtime);
+    const activeChain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
-    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
     const rejectionError = Object.assign(
       new Error("The requested method and/or account has not been authorized by the user."),
       { code: 4100 },
     );
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type === ApprovalTypes.RequestAccounts) {
-        await services.controllers.approvals.resolve(task.id, async () => []);
+        await runtime.controllers.approvals.resolve(task.id, async () => []);
         return true;
       }
       if (task.type === ApprovalTypes.SignMessage) {
         capturedTask = task;
-        services.controllers.approvals.reject(task.id, rejectionError);
+        runtime.controllers.approvals.reject(task.id, rejectionError);
         return true;
       }
       return false;
@@ -89,29 +94,34 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("includes namespace metadata for eth_signTypedData_v4 approvals", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const activeChain = services.controllers.network.getActiveChain();
+    const execute = createExecutor(runtime);
+    const activeChain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
-    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
     const rejectionError = Object.assign(
       new Error("The requested method and/or account has not been authorized by the user."),
       { code: 4100 },
     );
-    const teardownApprovalResponder = setupApprovalResponder(services, (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.type !== ApprovalTypes.SignTypedData) {
         return false;
       }
       capturedTask = task;
-      services.controllers.approvals.reject(task.id, rejectionError);
+      runtime.controllers.approvals.reject(task.id, rejectionError);
       return true;
     });
 
@@ -140,24 +150,24 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("includes chain metadata for wallet_addEthereumChain approvals", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
-    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type !== ApprovalTypes.AddChain) {
         return false;
       }
       capturedTask = task;
-      await services.controllers.approvals.resolve(task.id, async () => null);
+      await runtime.controllers.approvals.resolve(task.id, async () => null);
       return true;
     });
 
@@ -173,7 +183,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(ADDED_CHAIN_REF);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
@@ -188,23 +198,28 @@ describe("eip155 handlers - approval metadata", () => {
       signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x", hash: null })),
       broadcastTransaction: vi.fn(async (_ctx, _signed) => ({ hash: "0x1111" })),
     });
-    const services = createServices({
+    const runtime = createRuntime({
       transactions: { registry },
     });
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const activeChain = services.controllers.network.getActiveChain();
+    const execute = createExecutor(runtime);
+    const activeChain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: activeChain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
 
-    let capturedTask: Parameters<typeof services.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
     const rejectionError = Object.assign(new Error("User rejected the request."), { code: 4001 });
-    const teardownApprovalResponder = setupApprovalResponder(services, (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.type !== ApprovalTypes.SendTransaction) {
         return false;
       }
       capturedTask = task;
-      services.controllers.approvals.reject(task.id, rejectionError);
+      runtime.controllers.approvals.reject(task.id, rejectionError);
       return true;
     });
 
@@ -230,7 +245,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
@@ -257,25 +272,25 @@ describe("eip155 handlers - approval metadata", () => {
       getTransactionReceipt: rpcMocks.getTransactionReceipt,
     }));
 
-    const services = createServices({
+    const runtime = createRuntime({
       transactions: { registry: new TransactionAdapterRegistry() },
       rpcClients: {
         factories: [{ namespace: "eip155", factory: rpcFactory }],
       },
     });
 
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
     // Setup auto-approval for transactions
-    const unsubscribe = services.controllers.approvals.onRequest(async ({ task }) => {
+    const unsubscribe = runtime.controllers.approvals.onRequest(async ({ task }) => {
       try {
         if (task.type === "wallet_sendTransaction") {
-          const result = await services.controllers.transactions.approveTransaction(task.id);
-          await services.controllers.approvals.resolve(task.id, async () => result);
+          const result = await runtime.controllers.transactions.approveTransaction(task.id);
+          await runtime.controllers.approvals.resolve(task.id, async () => result);
         }
       } catch {
         // Ignore errors if approval was already resolved
@@ -283,20 +298,25 @@ describe("eip155 handlers - approval metadata", () => {
     });
 
     try {
-      const execute = createExecutor(services);
-      const mainnet = services.controllers.network.getActiveChain();
+      const execute = createExecutor(runtime);
+      const mainnet = runtime.controllers.network.getActiveChain();
 
-      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
-      const account = await services.keyring.deriveAccount(keyringId);
-      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const account = await runtime.services.keyring.deriveAccount(keyringId);
+      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        accounts: [account.address],
+      });
 
       // Grant basic scope only; transaction scope should be added after a successful send.
-      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
       });
 
-      const beforePermissions = services.controllers.permissions.getState();
+      const beforePermissions = runtime.controllers.permissions.getState();
       const beforeCapabilities =
         beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
       expect(beforeCapabilities).not.toContain(PermissionCapabilities.SendTransaction);
@@ -311,7 +331,7 @@ describe("eip155 handlers - approval metadata", () => {
         warnings: unknown[];
         issues: unknown[];
       } | null = null;
-      const unsubscribeTx = services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
+      const unsubscribeTx = runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
         if (event.nextStatus === "broadcast") {
           broadcastMeta = event.meta as unknown as NonNullable<typeof broadcastMeta>;
         }
@@ -347,32 +367,32 @@ describe("eip155 handlers - approval metadata", () => {
       expect(broadcastMeta.issues).toEqual([]);
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
 
-      const afterPermissions = services.controllers.permissions.getState();
+      const afterPermissions = runtime.controllers.permissions.getState();
       const afterCapabilities = afterPermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
       expect(afterCapabilities).toContain(PermissionCapabilities.SendTransaction);
     } finally {
       unsubscribe();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("signs personal_sign requests when the account is unlocked", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type !== ApprovalTypes.SignMessage) {
         return false;
       }
       const payload = task.payload as { from: string; message: string };
-      await services.controllers.approvals.resolve(task.id, async () =>
-        services.controllers.signers.eip155.signPersonalMessage({
+      await runtime.controllers.approvals.resolve(task.id, async () =>
+        runtime.controllers.signers.eip155.signPersonalMessage({
           accountId: toAccountIdFromAddress({
-            chainRef: services.controllers.network.getActiveChain().chainRef,
+            chainRef: runtime.controllers.network.getActiveChain().chainRef,
             address: payload.from,
           }),
           message: payload.message,
@@ -381,13 +401,18 @@ describe("eip155 handlers - approval metadata", () => {
       return true;
     });
     try {
-      const mainnet = services.controllers.network.getActiveChain();
-      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const mainnet = runtime.controllers.network.getActiveChain();
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-      const account = await services.keyring.deriveAccount(keyringId);
-      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      const account = await runtime.services.keyring.deriveAccount(keyringId);
+      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        accounts: [account.address],
+      });
 
-      const execute = createExecutor(services);
+      const execute = createExecutor(runtime);
       const message = "0xdeadbeef";
 
       const signature = (await execute({
@@ -401,34 +426,34 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       await expect(
-        services.controllers.signers.eip155.signPersonalMessage({
+        runtime.controllers.signers.eip155.signPersonalMessage({
           accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
           message,
         }),
       ).resolves.toBe(signature);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("signs eth_signTypedData_v4 requests with the eip155 signer", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type !== ApprovalTypes.SignTypedData) {
         return false;
       }
       const payload = task.payload as { from: string; typedData: string };
-      await services.controllers.approvals.resolve(task.id, async () =>
-        services.controllers.signers.eip155.signTypedData({
+      await runtime.controllers.approvals.resolve(task.id, async () =>
+        runtime.controllers.signers.eip155.signTypedData({
           accountId: toAccountIdFromAddress({
-            chainRef: services.controllers.network.getActiveChain().chainRef,
+            chainRef: runtime.controllers.network.getActiveChain().chainRef,
             address: payload.from,
           }),
           typedData: payload.typedData,
@@ -437,18 +462,23 @@ describe("eip155 handlers - approval metadata", () => {
       return true;
     });
     try {
-      const mainnet = services.controllers.network.getActiveChain();
-      const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const mainnet = runtime.controllers.network.getActiveChain();
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-      const account = await services.keyring.deriveAccount(keyringId);
-      await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      const account = await runtime.services.keyring.deriveAccount(keyringId);
+      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+        namespace: "eip155",
+        chainRef: mainnet.chainRef,
+        accounts: [account.address],
+      });
 
       // Ensure Sign scope is not present before the first typed data signature.
-      const beforeState = services.controllers.permissions.getState();
+      const beforeState = runtime.controllers.permissions.getState();
       const beforeCapabilities = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
       expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);
 
-      const execute = createExecutor(services);
+      const execute = createExecutor(runtime);
       const payload = {
         domain: { name: "ARX", version: "1" },
         message: { contents: "hello" },
@@ -474,14 +504,14 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       await expect(
-        services.controllers.signers.eip155.signTypedData({
+        runtime.controllers.signers.eip155.signTypedData({
           accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
           typedData,
         }),
       ).resolves.toBe(signature);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 });

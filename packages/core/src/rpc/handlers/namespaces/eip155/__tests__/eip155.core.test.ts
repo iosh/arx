@@ -1,5 +1,5 @@
 import type { JsonRpcParams } from "@metamask/utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   ApprovalTypes,
@@ -11,7 +11,7 @@ import {
   ADDED_CHAIN_REF,
   ALT_CHAIN,
   createExecutor,
-  createServices,
+  createRuntime,
   ORIGIN,
   setupApprovalResponder,
   setupSwitchChainApprovalResponder,
@@ -23,11 +23,11 @@ import {
 
 describe("eip155 handlers - core error paths", () => {
   it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       await expect(
         execute({
@@ -42,30 +42,30 @@ describe("eip155 handlers - core error paths", () => {
         message: "Requested chain is not registered with ARX",
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("switches chains and retains the active account when wallet_switchEthereumChain succeeds", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const execute = createExecutor(services);
-    const mainnet = services.controllers.network.getActiveChain();
+    const execute = createExecutor(runtime);
+    const mainnet = runtime.controllers.network.getActiveChain();
 
-    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
-    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
+    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
-    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
 
-    const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-    const derived = await services.keyring.deriveAccount(keyringId);
-    await services.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: derived.address });
+    const derived = await runtime.services.keyring.deriveAccount(keyringId);
+    await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: derived.address });
     const activeAddress = derived.address;
 
     try {
@@ -79,28 +79,28 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(services.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(services.controllers.accounts.getSelectedPointer({ chainRef: ALT_CHAIN.chainRef })).toMatchObject({
+      expect(runtime.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.controllers.accounts.getSelectedPointer({ chainRef: ALT_CHAIN.chainRef })).toMatchObject({
         chainRef: ALT_CHAIN.chainRef,
         address: activeAddress,
         namespace: "eip155",
       });
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("switches chains when only chainRef is provided", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
-    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
+    const execute = createExecutor(runtime);
+    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
-    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
 
     try {
       await expect(
@@ -113,21 +113,21 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(services.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects when chainId and chainRef do not match", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
-    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
+    const execute = createExecutor(runtime);
+    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     try {
       await expect(
@@ -142,16 +142,16 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects invalid hex chainId values", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       // Test both forms: non-hex string and invalid hex characters
@@ -175,16 +175,16 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("returns 4902 when chain lacks wallet_switchEthereumChain feature", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     const baseChain: ChainMetadata = {
       ...ALT_CHAIN,
       chainRef: "eip155:8453",
@@ -192,8 +192,8 @@ describe("eip155 handlers - core error paths", () => {
       displayName: "Base",
       features: ["eip155"],
     };
-    await services.controllers.chainRegistry.upsertChain(baseChain);
-    await waitForChainInNetwork(services, baseChain.chainRef);
+    await runtime.controllers.chainRegistry.upsertChain(baseChain);
+    await waitForChainInNetwork(runtime, baseChain.chainRef);
 
     try {
       await expect(
@@ -208,16 +208,16 @@ describe("eip155 handlers - core error paths", () => {
         code: 4902,
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects non-eip155 namespaces", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -232,16 +232,16 @@ describe("eip155 handlers - core error paths", () => {
         code: 4902,
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects when no chain parameters are provided", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -268,23 +268,23 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("emits activeChainChanged event on successful switch", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
-    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
+    const execute = createExecutor(runtime);
+    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
-    const teardownApprovalResponder = setupSwitchChainApprovalResponder(services);
+    const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
 
     const changes: string[] = [];
-    const unsubscribe = services.controllers.network.onActiveChainChanged(({ next }) => {
+    const unsubscribe = runtime.controllers.network.onActiveChainChanged(({ next }) => {
       changes.push(next);
     });
 
@@ -301,16 +301,16 @@ describe("eip155 handlers - core error paths", () => {
     } finally {
       teardownApprovalResponder();
       unsubscribe();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("throw invalid params when eth_sendTransaction receives no payload", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -323,22 +323,22 @@ describe("eip155 handlers - core error paths", () => {
         message: "eth_sendTransaction requires at least one transaction parameter",
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("adds a new chain via wallet_addEthereumChain", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type === ApprovalTypes.AddChain) {
         const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
-        await services.controllers.chainRegistry.upsertChain(payload.metadata);
-        await services.controllers.approvals.resolve(task.id, async () => null);
+        await runtime.controllers.chainRegistry.upsertChain(payload.metadata);
+        await runtime.controllers.approvals.resolve(task.id, async () => null);
         return true;
       }
       return false;
@@ -355,24 +355,24 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      const networkChain = await waitForChainInNetwork(services, ADDED_CHAIN_REF);
+      const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.displayName).toBe("Base Mainnet");
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
 
-      const registryEntry = services.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("returns invalid params when wallet_addEthereumChain payload is malformed", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -394,21 +394,21 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("maps approval rejection to 4001 for wallet_addEthereumChain", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     const rejectionError = Object.assign(new Error("user denied"), { code: 4001 });
-    const teardownApprovalResponder = setupApprovalResponder(services, (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.type === ApprovalTypes.AddChain) {
-        services.controllers.approvals.reject(task.id, rejectionError);
+        runtime.controllers.approvals.reject(task.id, rejectionError);
         return true;
       }
       return false;
@@ -428,16 +428,16 @@ describe("eip155 handlers - core error paths", () => {
       });
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects invalid chainId format", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -455,16 +455,16 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects invalid rpcUrls", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -482,22 +482,22 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("updates existing chain when re-adding", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
-    const teardownApprovalResponder = setupApprovalResponder(services, async (task) => {
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type === ApprovalTypes.AddChain) {
         const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
-        await services.controllers.chainRegistry.upsertChain(payload.metadata);
-        await services.controllers.approvals.resolve(task.id, async () => null);
+        await runtime.controllers.chainRegistry.upsertChain(payload.metadata);
+        await runtime.controllers.approvals.resolve(task.id, async () => null);
         return true;
       }
       return false;
@@ -513,7 +513,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).resolves.toBeNull();
-      await waitForChainInNetwork(services, ADDED_CHAIN_REF);
+      await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
 
       const updatedParams = {
         ...ADD_CHAIN_PARAMS,
@@ -530,23 +530,23 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      const networkChain = await waitForChainInNetwork(services, ADDED_CHAIN_REF);
+      const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
 
-      const registryEntry = services.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
       teardownApprovalResponder();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects negative decimals", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
 
     try {
       await expect(
@@ -564,15 +564,15 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
   it("returns empty array for wallet_getPermissions when origin lacks grants", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       const result = await execute({
         origin: ORIGIN,
@@ -581,23 +581,23 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(result).toEqual([]);
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("returns EIP-2255 descriptors for wallet_getPermissions", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const chain = services.controllers.network.getActiveChain();
-    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: chain.chainRef });
-    await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+    const chain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: chain.chainRef });
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       chainRef: chain.chainRef,
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       const result = await execute({
         origin: ORIGIN,
@@ -620,26 +620,26 @@ describe("eip155 handlers - core error paths", () => {
         },
       ]);
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("does not leak scope chains across different grants", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const main = services.controllers.network.getActiveChain();
-    await services.controllers.chainRegistry.upsertChain(ALT_CHAIN);
-    await waitForChainInNetwork(services, ALT_CHAIN.chainRef);
+    const main = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
-    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });
-    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });
+    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
       chainRef: ALT_CHAIN.chainRef,
     });
-    await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: ALT_CHAIN.chainRef });
+    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: ALT_CHAIN.chainRef });
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       const result = await execute({
         origin: ORIGIN,
@@ -659,24 +659,24 @@ describe("eip155 handlers - core error paths", () => {
         ]),
       );
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("grants permissions after wallet_requestPermissions approval", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const chain = services.controllers.network.getActiveChain();
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
-    await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const chain = runtime.controllers.network.getActiveChain();
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
-    const accountsController = services.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
 
-    const teardown = setupApprovalResponder(services, async (task) => {
+    const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.type !== ApprovalTypes.RequestPermissions) return false;
       const payload = task.payload as RequestPermissionsApprovalPayload;
       expect(payload.requested).toEqual(
@@ -685,13 +685,13 @@ describe("eip155 handlers - core error paths", () => {
           { capability: "eth_accounts", chainRefs: [chain.chainRef] },
         ]),
       );
-      await services.controllers.approvals.resolve(task.id, async () => ({
+      await runtime.controllers.approvals.resolve(task.id, async () => ({
         granted: payload.requested,
       }));
       return true;
     });
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       const result = await execute({
         origin: ORIGIN,
@@ -706,26 +706,26 @@ describe("eip155 handlers - core error paths", () => {
         ]),
       );
 
-      const state = services.controllers.permissions.getPermissions(ORIGIN);
-      const chainRef = services.controllers.network.getActiveChain().chainRef;
+      const state = runtime.controllers.permissions.getPermissions(ORIGIN);
+      const chainRef = runtime.controllers.network.getActiveChain().chainRef;
       expect(state?.eip155?.chains?.[chainRef]?.capabilities ?? []).toEqual(
         expect.arrayContaining([PermissionCapabilities.Basic, PermissionCapabilities.Accounts]),
       );
     } finally {
       teardown();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("returns [] for eth_accounts when wallet is unlocked but origin is not connected", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       await expect(
         execute({
@@ -734,29 +734,29 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("returns permitted accounts for eth_accounts after connection persists per-chain accounts", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    await services.session.vault.initialize({ password: "test" });
-    await services.session.unlock.unlock({ password: "test" });
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const chain = services.controllers.network.getActiveChain();
+    const chain = runtime.controllers.network.getActiveChain();
     const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
     const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 
-    await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: chain.chainRef,
       accounts: [a1, a2],
     });
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     try {
       await expect(
         execute({
@@ -772,7 +772,114 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects personal_sign when the requested account is not permitted for the origin", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: chain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    const execute = createExecutor(runtime);
+    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "requestApproval");
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "personal_sign",
+            params: ["0xdeadbeef", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+      expect(requestApprovalSpy).not.toHaveBeenCalled();
+    } finally {
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects eth_signTypedData_v4 when the requested account is not permitted for the origin", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: chain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    const execute = createExecutor(runtime);
+    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "requestApproval");
+    const typedData = {
+      domain: { name: "ARX", version: "1" },
+      message: { contents: "hello" },
+      primaryType: "Example",
+      types: {
+        EIP712Domain: [{ name: "name", type: "string" }],
+        Example: [{ name: "contents", type: "string" }],
+      },
+    };
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_signTypedData_v4",
+            params: ["0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", JSON.stringify(typedData)] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+      expect(requestApprovalSpy).not.toHaveBeenCalled();
+    } finally {
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects eth_sendTransaction when the from address is not permitted for the origin", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = runtime.controllers.network.getActiveChain();
+    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: chain.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    const execute = createExecutor(runtime);
+    const txSpy = vi.spyOn(runtime.controllers.transactions, "requestTransactionApproval");
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                to: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                value: "0x0",
+                data: "0x",
+              },
+            ] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+      expect(txSpy).not.toHaveBeenCalled();
+    } finally {
+      runtime.lifecycle.destroy();
     }
   });
 });

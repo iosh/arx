@@ -3,7 +3,7 @@ import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/i
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { assertPermittedEip155Account, requireRequestContext } from "./shared.js";
 
 type EthSignTypedDataV4Params = { address: string; typedData: string };
 
@@ -15,6 +15,13 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
   handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
     const { address, typedData } = params;
     const chainRef = invocation.chainRef;
+    const from = assertPermittedEip155Account({
+      origin,
+      method: "eth_signTypedData_v4",
+      chainRef,
+      address,
+      controllers,
+    });
 
     const task = {
       id: createTaskId("eth_signTypedData_v4"),
@@ -22,10 +29,10 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
       origin,
       namespace: invocation.namespace,
       chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: {
         chainRef,
-        from: address,
+        from,
         typedData,
       },
     };

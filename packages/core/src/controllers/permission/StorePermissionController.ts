@@ -354,7 +354,12 @@ export class StorePermissionController implements PermissionController {
   isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean {
     const { namespace, chainRef } = deriveNamespaceFromOptions(options);
     const chainState = this.#state.origins[origin]?.[namespace]?.chains?.[chainRef];
-    return !!chainState?.capabilities.includes(PermissionCapabilities.Accounts);
+    if (!chainState?.capabilities.includes(PermissionCapabilities.Accounts)) return false;
+    if (namespace === "eip155") {
+      // Treat missing accounts as not-connected to avoid spreading dirty state.
+      return (chainState.accounts?.length ?? 0) > 0;
+    }
+    return true;
   }
 
   async setPermittedAccounts(

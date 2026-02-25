@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createPermissionsService } from "../../services/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/permissions/port.js";
+import type { PermissionsService } from "../../services/permissions/types.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
 import { PERMISSION_TOPICS } from "./topics.js";
@@ -90,5 +91,72 @@ describe("StorePermissionController", () => {
     const state = controller.getState();
     expect(state.origins[ORIGIN]?.eip155?.chains[CHAIN_REF]?.capabilities).toEqual([PermissionCapabilities.Sign]);
     expect(originEvents.length).toBeGreaterThan(0);
+  });
+
+  it("isConnected() requires non-empty accounts for eip155", async () => {
+    const { port } = createInMemoryPort();
+    const service = createPermissionsService({ port, now: () => 1000 });
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+
+    const controller = new StorePermissionController({
+      messenger,
+      capabilityResolver: () => undefined,
+      service,
+    });
+
+    await controller.whenReady();
+    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(false);
+
+    await controller.setPermittedAccounts(ORIGIN, {
+      namespace: "eip155",
+      chainRef: CHAIN_REF,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(true);
+  });
+
+  it("isConnected() treats Accounts capability without accounts as not connected (dirty store defense)", async () => {
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+
+    const dirtyRecord = {
+      id: crypto.randomUUID(),
+      origin: ORIGIN,
+      namespace: "eip155",
+      grants: [{ capability: PermissionCapabilities.Accounts, chainRefs: [CHAIN_REF] }],
+      // Intentionally omit accountIds (this can happen if older versions wrote incomplete rows).
+      updatedAt: 1000,
+    } as unknown as PermissionRecord;
+
+    const service = {
+      on() {},
+      off() {},
+      async get() {
+        return null;
+      },
+      async getByOrigin() {
+        return dirtyRecord;
+      },
+      async listAll() {
+        return [dirtyRecord];
+      },
+      async listByOrigin() {
+        return [dirtyRecord];
+      },
+      async upsert() {
+        return dirtyRecord;
+      },
+      async remove() {},
+      async clearOrigin() {},
+    } as unknown as PermissionsService;
+
+    const controller = new StorePermissionController({
+      messenger,
+      capabilityResolver: () => undefined,
+      service,
+    });
+
+    await controller.whenReady();
+    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(false);
   });
 });

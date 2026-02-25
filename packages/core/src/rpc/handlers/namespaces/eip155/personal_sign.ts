@@ -3,7 +3,7 @@ import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/i
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { assertPermittedEip155Account, requireRequestContext } from "./shared.js";
 
 type PersonalSignParams = { address: string; message: string };
 
@@ -44,6 +44,13 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
   handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
     const { address, message } = params;
     const chainRef = invocation.chainRef;
+    const from = assertPermittedEip155Account({
+      origin,
+      method: "personal_sign",
+      chainRef,
+      address,
+      controllers,
+    });
 
     const task = {
       id: createTaskId("personal_sign"),
@@ -51,10 +58,10 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       origin,
       namespace: invocation.namespace,
       chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: {
         chainRef,
-        from: address,
+        from,
         message,
       },
     };

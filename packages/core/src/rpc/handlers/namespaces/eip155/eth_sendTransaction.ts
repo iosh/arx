@@ -4,6 +4,7 @@ import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
+  assertPermittedEip155Account,
   isTransactionResolutionError,
   requireRequestContext,
   TransactionResolutionError,
@@ -35,6 +36,14 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
     const chainRef = invocation.chainRef;
 
     const txRequest = buildEip155TransactionRequest(params, chainRef);
+    const from = assertPermittedEip155Account({
+      origin,
+      method: "eth_sendTransaction",
+      chainRef,
+      address: txRequest.payload.from,
+      controllers,
+    });
+    txRequest.payload.from = from;
 
     try {
       const meta = await controllers.transactions.requestTransactionApproval(

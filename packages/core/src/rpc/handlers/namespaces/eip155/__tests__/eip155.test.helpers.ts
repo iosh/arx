@@ -10,7 +10,7 @@ import {
   MemorySettingsPort,
   MemoryTransactionsPort,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
-import { createBackgroundServices } from "../../../../../runtime/createBackgroundServices.js";
+import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
 
 // Shared test constants
 export const ORIGIN = "https://dapp.example";
@@ -55,13 +55,21 @@ export const createChainRegistryPort = () => ({
 });
 
 // Create test services with optional overrides
-export const createServices = (overrides?: Partial<Parameters<typeof createBackgroundServices>[0]>) => {
-  const { chainRegistry, session, networkPreferences, ...rest } = overrides ?? {};
-  return createBackgroundServices({
+export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
+  const { chainRegistry, session, networkPreferences, rpcEngine, ...rest } = overrides ?? {};
+  const runtime = createBackgroundRuntime({
     chainRegistry: {
       port: createChainRegistryPort(),
       ...(chainRegistry ?? {}),
     },
+    rpcEngine:
+      rpcEngine ??
+      ({
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      } as const),
     networkPreferences: networkPreferences ?? { port: new MemoryNetworkPreferencesPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
@@ -79,15 +87,17 @@ export const createServices = (overrides?: Partial<Parameters<typeof createBackg
     },
     ...rest,
   });
+
+  return runtime;
 };
 
 // Create method executor from services
-export const createExecutor = (services: ReturnType<typeof createServices>) => {
-  const execute = services.rpcRegistry.createMethodExecutor(services.controllers, {
-    rpcClientRegistry: services.rpcClients,
+export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
+  const execute = runtime.rpc.registry.createMethodExecutor(runtime.controllers, {
+    rpcClientRegistry: runtime.rpc.clients,
   });
   return async (args: Parameters<typeof execute>[0]) => {
-    const chainRef = args.context?.chainRef ?? services.controllers.network.getActiveChain().chainRef;
+    const chainRef = args.context?.chainRef ?? runtime.controllers.network.getActiveChain().chainRef;
     const ctx = args.context ?? {};
     const context = {
       ...ctx,
@@ -101,7 +111,7 @@ export const createExecutor = (services: ReturnType<typeof createServices>) => {
           origin: args.origin,
         } as const),
     };
-    const result = await services.rpcRegistry.executeWithAdapters(
+    const result = await runtime.rpc.registry.executeWithAdapters(
       {
         surface: "dapp",
         namespace: "eip155",
@@ -117,11 +127,11 @@ export const createExecutor = (services: ReturnType<typeof createServices>) => {
 };
 
 export const waitForChainInNetwork = async (
-  services: ReturnType<typeof createServices>,
+  runtime: ReturnType<typeof createRuntime>,
   chainRef: ChainRef,
   timeoutMs = 5000,
 ): Promise<ChainMetadata> => {
-  const existing = services.controllers.network.getChain(chainRef);
+  const existing = runtime.controllers.network.getChain(chainRef);
   if (existing) {
     return existing;
   }
@@ -142,7 +152,7 @@ export const waitForChainInNetwork = async (
     };
 
     const tryResolve = () => {
-      const chain = services.controllers.network.getChain(chainRef);
+      const chain = runtime.controllers.network.getChain(chainRef);
       if (chain) {
         cleanup();
         resolve(chain);
@@ -155,7 +165,7 @@ export const waitForChainInNetwork = async (
       reject(new Error(`Timeout waiting for chain ${chainRef} in network controller`));
     }, timeoutMs);
 
-    unsubscribe = services.controllers.network.onStateChanged(() => {
+    unsubscribe = runtime.controllers.network.onStateChanged(() => {
       tryResolve();
     });
 
@@ -164,10 +174,10 @@ export const waitForChainInNetwork = async (
 };
 
 export const setupApprovalResponder = (
-  services: ReturnType<typeof createServices>,
+  runtime: ReturnType<typeof createRuntime>,
   responder: (task: ApprovalTask) => Promise<boolean | undefined> | boolean | undefined,
 ) => {
-  const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
+  const unsubscribe = runtime.controllers.approvals.onRequest(({ task }) => {
     void (async () => {
       try {
         // Wait a microtask to let requestApproval() complete its setup
@@ -181,8 +191,8 @@ export const setupApprovalResponder = (
         // Reject the approval with this error to fail the test immediately
         // instead of letting it timeout.
         console.error("[setupApprovalResponder] Responder error:", error);
-        if (services.controllers.approvals.has(task.id)) {
-          services.controllers.approvals.reject(
+        if (runtime.controllers.approvals.has(task.id)) {
+          runtime.controllers.approvals.reject(
             task.id,
             new Error("setupApprovalResponder: responder did not resolve/reject task"),
           );
@@ -194,8 +204,8 @@ export const setupApprovalResponder = (
   return unsubscribe;
 };
 
-export const setupSwitchChainApprovalResponder = (services: ReturnType<typeof createServices>) => {
-  return setupApprovalResponder(services, async (task) => {
+export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof createRuntime>) => {
+  return setupApprovalResponder(runtime, async (task) => {
     if (task.type !== ApprovalTypes.SwitchChain) {
       return false;
     }
@@ -206,10 +216,10 @@ export const setupSwitchChainApprovalResponder = (services: ReturnType<typeof cr
       throw new Error("Switch chain approval is missing chainRef");
     }
 
-    await services.controllers.approvals.resolve(task.id, async () => {
-      await services.controllers.network.switchChain(chainRef);
-      await services.controllers.networkPreferences.setActiveChainRef(
-        chainRef as Parameters<typeof services.controllers.networkPreferences.setActiveChainRef>[0],
+    await runtime.controllers.approvals.resolve(task.id, async () => {
+      await runtime.controllers.network.switchChain(chainRef);
+      await runtime.controllers.networkPreferences.setActiveChainRef(
+        chainRef as Parameters<typeof runtime.controllers.networkPreferences.setActiveChainRef>[0],
       );
       return null;
     });

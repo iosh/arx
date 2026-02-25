@@ -1,15 +1,14 @@
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
-import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AttentionService, RequestAttentionParams } from "../../services/attention/index.js";
-import type { createBackgroundServices } from "../createBackgroundServices.js";
+import type { createBackgroundRuntime } from "../createBackgroundRuntime.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
-import { createLockedGuardMiddleware } from "./middlewares/lockedGuard.js";
-import { createPermissionGuardMiddleware } from "./middlewares/permissionGuard.js";
+import { createAccessPolicyGuardMiddleware } from "./middlewares/accessPolicyGuard.js";
+import { createInvocationContextMiddleware } from "./middlewares/invocationContext.js";
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
-import { createResolveInvocationMiddleware } from "./middlewares/resolveInvocation.js";
+import { createRequireInitializedMiddleware } from "./middlewares/requireInitialized.js";
 
-export type BackgroundServices = ReturnType<typeof createBackgroundServices>;
+export type BackgroundRuntimeInstance = ReturnType<typeof createBackgroundRuntime>;
 
 export type BackgroundRpcEnvHooks = {
   isInternalOrigin(origin: string): boolean;
@@ -47,46 +46,14 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
   }
 };
 
-const wrapAttentionService = (service: AttentionService, envHooks: BackgroundRpcEnvHooks) => {
-  const shouldRequestUnlock = envHooks.shouldRequestUnlockAttention ?? (() => true);
+export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
+  const controllers = runtime.controllers;
+  const rpcRegistry = runtime.rpc.registry;
 
-  const wrapped: Pick<AttentionService, "requestAttention"> = {
-    requestAttention: (params) => {
-      // Check unlock attention hook
-      if (params.reason === "unlock_required") {
-        const ok = shouldRequestUnlock({
-          origin: params.origin,
-          method: params.method,
-          chainRef: params.chainRef ?? null,
-          namespace: params.namespace ?? null,
-        });
-        if (!ok) {
-          return { enqueued: false, request: null, state: safeGetAttentionSnapshot(service) };
-        }
-      }
+  const executeMethod = rpcRegistry.createMethodExecutor(controllers, { rpcClientRegistry: runtime.rpc.clients });
 
-      return safeRequestAttention(service, params);
-    },
-  };
-
-  return wrapped;
-};
-
-export const createBackgroundRpcMiddlewares = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {
-  const controllers = services.controllers;
-  const rpcRegistry = services.rpcRegistry;
-
-  const findMethodDefinition = rpcRegistry.createMethodDefinitionResolver(controllers);
-
-  const executeMethod = rpcRegistry.createMethodExecutor(controllers, { rpcClientRegistry: services.rpcClients });
-
-  // Wrap attention service with hook-aware behavior (unified handling for all attention types)
-  const wrappedAttentionService = wrapAttentionService(services.attention, envHooks);
-  const getPassthroughAllowance = (method: string, rpcContext?: RpcInvocationContext) =>
-    rpcRegistry.getPassthroughAllowance(controllers, method, rpcContext);
-
-  const resolveInvocation: Middleware = createResolveInvocationMiddleware({
-    resolveInvocation: (method, ctx) => rpcRegistry.resolveInvocation(controllers, method, ctx),
+  const invocationContext: Middleware = createInvocationContextMiddleware({
+    resolve: (method, ctx) => rpcRegistry.resolveInvocationDetails(controllers, method, ctx),
   }) as unknown as Middleware;
 
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
@@ -124,20 +91,32 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
     }
   });
 
-  const lockedGuard: Middleware = createLockedGuardMiddleware({
-    isUnlocked: () => services.session.unlock.isUnlocked(),
-    isInternalOrigin: envHooks.isInternalOrigin,
-    findMethodDefinition,
-    getPassthroughAllowance,
-    attentionService: wrappedAttentionService,
+  const requireInitialized: Middleware = createRequireInitializedMiddleware({
+    getIsInitialized: runtime.lifecycle.getIsInitialized,
   }) as unknown as Middleware;
 
-  const permissionGuard: Middleware = createPermissionGuardMiddleware({
-    assertPermission: (origin, method, context) => controllers.permissions.assertPermission(origin, method, context),
+  const accessPolicyGuardDeps: Parameters<typeof createAccessPolicyGuardMiddleware>[0] = {
+    isUnlocked: () => runtime.services.session.unlock.isUnlocked(),
     isInternalOrigin: envHooks.isInternalOrigin,
+    requestAttention: (args) => {
+      safeRequestAttention(runtime.services.attention as AttentionService, {
+        reason: "unlock_required",
+        origin: args.origin,
+        method: args.method,
+        chainRef: args.chainRef,
+        namespace: args.namespace,
+      });
+    },
+    assertPermission: (origin, method, context) => controllers.permissions.assertPermission(origin, method, context),
     isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
-    findMethodDefinition,
-  });
+    ...(envHooks.shouldRequestUnlockAttention
+      ? { shouldRequestUnlockAttention: envHooks.shouldRequestUnlockAttention }
+      : {}),
+  };
+
+  const accessPolicyGuard: Middleware = createAccessPolicyGuardMiddleware(
+    accessPolicyGuardDeps,
+  ) as unknown as Middleware;
 
   const executor: Middleware = createAsyncMiddleware(async (req, res) => {
     const reqWithArx = req as typeof req & ArxMiddlewareRequest;
@@ -159,24 +138,24 @@ export const createBackgroundRpcMiddlewares = (services: BackgroundServices, env
   });
 
   // Put errorBoundary first so any downstream middleware errors are encoded consistently.
-  return [errorBoundary, resolveInvocation, lockedGuard, permissionGuard, executor];
+  return [errorBoundary, requireInitialized, invocationContext, accessPolicyGuard, executor];
 };
 
-export const createRpcEngineForBackground = (services: BackgroundServices, envHooks: BackgroundRpcEnvHooks) => {
-  const engine = services.engine as EngineWithAssemblyFlag;
+export const createRpcEngineForBackground = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
+  const engine = runtime.rpc.engine as EngineWithAssemblyFlag;
 
   if (engine[BACKGROUND_RPC_ENGINE_ASSEMBLED]) {
-    return services.engine;
+    return runtime.rpc.engine;
   }
 
   // Symbol flag prevents silent middleware duplication across multiple initializations.
   engine[BACKGROUND_RPC_ENGINE_ASSEMBLED] = true;
 
   try {
-    for (const middleware of createBackgroundRpcMiddlewares(services, envHooks)) {
-      services.engine.push(middleware);
+    for (const middleware of createBackgroundRpcMiddlewares(runtime, envHooks)) {
+      runtime.rpc.engine.push(middleware);
     }
-    return services.engine;
+    return runtime.rpc.engine;
   } catch (error) {
     delete engine[BACKGROUND_RPC_ENGINE_ASSEMBLED];
     throw error;

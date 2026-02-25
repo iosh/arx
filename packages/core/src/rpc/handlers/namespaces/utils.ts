@@ -1,6 +1,10 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { Eip155TransactionPayload, TransactionRequest } from "../../../controllers/index.js";
+import type {
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  TransactionRequest,
+} from "../../../controllers/index.js";
 import type { Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";
@@ -87,7 +91,7 @@ export const parseTypedDataParams = (params: readonly unknown[]) => {
 export const buildEip155TransactionRequest = (
   params: readonly unknown[],
   chainRef: ChainRef,
-): TransactionRequest<"eip155"> => {
+): TransactionRequest<"eip155"> & { payload: Eip155TransactionPayloadWithFrom } => {
   const [raw] = params;
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -108,9 +112,7 @@ export const buildEip155TransactionRequest = (
     });
   }
 
-  const payload: Eip155TransactionPayload = {
-    from: tx.from,
-  };
+  const payload: Eip155TransactionPayloadWithFrom = { from: tx.from };
 
   if (tx.to !== undefined) {
     if (tx.to === null || (typeof tx.to === "string" && tx.to.startsWith("0x"))) {

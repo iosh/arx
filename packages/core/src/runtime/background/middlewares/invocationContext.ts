@@ -1,7 +1,7 @@
 import { createAsyncMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../chains/ids.js";
-import type { Namespace } from "../../../rpc/handlers/types.js";
+import type { MethodDefinition, Namespace } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 
@@ -10,8 +10,12 @@ export type ArxInvocation = {
   method: string;
   params: JsonRpcParams | undefined;
   rpcContext: RpcInvocationContext | undefined;
+
   namespace: Namespace;
   chainRef: ChainRef;
+
+  definition: MethodDefinition | undefined;
+  passthrough: { isPassthrough: boolean; allowWhenLocked: boolean };
 };
 
 type ReqLike = {
@@ -22,21 +26,29 @@ type ReqLike = {
   arxInvocation?: ArxInvocation;
 };
 
-export const createResolveInvocationMiddleware = (deps: {
-  resolveInvocation(method: string, ctx?: RpcInvocationContext): { namespace: Namespace; chainRef: ChainRef };
+export const createInvocationContextMiddleware = (deps: {
+  resolve(
+    method: string,
+    ctx?: RpcInvocationContext,
+  ): {
+    namespace: Namespace;
+    chainRef: ChainRef;
+    definition: MethodDefinition | undefined;
+    passthrough: { isPassthrough: boolean; allowWhenLocked: boolean };
+  };
 }) => {
   return createAsyncMiddleware<JsonRpcParams, Json>(async (req: ReqLike, _res, next) => {
     const rpcContext = req.arx;
     const origin = req.origin ?? UNKNOWN_ORIGIN;
-    const { namespace, chainRef } = deps.resolveInvocation(req.method, rpcContext);
+
+    const details = deps.resolve(req.method, rpcContext);
 
     req.arxInvocation = {
       origin,
       method: req.method,
       params: req.params,
       rpcContext,
-      namespace,
-      chainRef,
+      ...details,
     };
 
     if (req.origin === undefined) {

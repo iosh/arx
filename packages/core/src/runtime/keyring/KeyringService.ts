@@ -126,8 +126,8 @@ export class KeyringService {
     const accountId = this.#toAccountId(namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = Date.now();
-    const keyringId = crypto.randomUUID();
+    const now = this.#options.now();
+    const keyringId = this.#options.uuid();
 
     const secret = instance.exportPrivateKey(canonical);
     const secretHex = bytesToHex(secret);
@@ -191,7 +191,7 @@ export class KeyringService {
     const accountId = this.#toAccountId(runtime.namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = Date.now();
+    const now = this.#options.now();
     const record = this.#buildAccountRecord({
       namespace: runtime.namespace,
       address: canonical,
@@ -429,8 +429,8 @@ export class KeyringService {
     const accountId = this.#toAccountId(namespace, canonical);
     this.#assertNoDuplicate(accountId);
 
-    const now = Date.now();
-    const keyringId = crypto.randomUUID();
+    const now = this.#options.now();
+    const keyringId = this.#options.uuid();
 
     const payloadEntry: VaultKeyringEntry = {
       keyringId,

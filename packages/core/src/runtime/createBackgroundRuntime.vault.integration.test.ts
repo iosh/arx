@@ -15,7 +15,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("createBackgroundServices (vault integration)", () => {
+describe("createBackgroundRuntime (vault integration)", () => {
   it("persists vault metadata for recovery workflows", async () => {
     const chain = createChainMetadata();
     let currentTime = TEST_INITIAL_TIME;
@@ -33,14 +33,14 @@ describe("createBackgroundServices (vault integration)", () => {
     let persistedMeta = null;
 
     try {
-      await first.services.session.vault.initialize({ password: "secret" });
-      await first.services.session.unlock.unlock({ password: "secret" });
-      const unlockedState = first.services.session.unlock.getState();
+      await first.runtime.services.session.vault.initialize({ password: "secret" });
+      await first.runtime.services.session.unlock.unlock({ password: "secret" });
+      const unlockedState = first.runtime.services.session.unlock.getState();
       expect(unlockedState.isUnlocked).toBe(true);
       expect(unlockedState.nextAutoLockAt).not.toBeNull();
 
       currentTime += 200;
-      await first.services.session.persistVaultMeta();
+      await first.runtime.services.session.persistVaultMeta();
 
       persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       expect(persistedMeta).not.toBeNull();
@@ -61,12 +61,12 @@ describe("createBackgroundServices (vault integration)", () => {
     });
 
     try {
-      const restoredMeta = second.services.session.getLastPersistedVaultMeta();
+      const restoredMeta = second.runtime.services.session.getLastPersistedVaultMeta();
       expect(restoredMeta?.payload.ciphertext).toEqual(persistedMeta?.payload.ciphertext);
       expect(restoredMeta?.payload.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(restoredMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
 
-      const unlockState = second.services.session.unlock.getState();
+      const unlockState = second.runtime.services.session.unlock.getState();
       expect(unlockState.isUnlocked).toBe(false);
       expect(unlockState.timeoutMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(second.vaultMetaPort.savedVaultMeta).toBeNull();

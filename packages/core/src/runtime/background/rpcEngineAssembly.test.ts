@@ -1,3 +1,4 @@
+import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -9,10 +10,10 @@ import {
   MemorySettingsPort,
   MemoryTransactionsPort,
 } from "../__fixtures__/backgroundTestSetup.js";
-import { createBackgroundServices } from "../createBackgroundServices.js";
+import { createBackgroundRuntime } from "../createBackgroundRuntime.js";
 import { createBackgroundRpcMiddlewares, createRpcEngineForBackground } from "./rpcEngineAssembly.js";
 
-const createNextStub = () =>
+const _createNextStub = () =>
   vi.fn<(returnHandler?: (runReturnHandlers: (error?: unknown) => void) => void) => Promise<void>>((returnHandler) => {
     if (returnHandler) {
       returnHandler((error) => {
@@ -40,8 +41,9 @@ const createPendingRes = (): PendingJsonRpcResponse<Json> => ({
 
 describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
-    const services = createBackgroundServices({
+    const runtime = createBackgroundRuntime({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
@@ -54,16 +56,16 @@ describe("background rpc engine assembly", () => {
       },
     });
 
-    const pushSpy = vi.spyOn(services.engine, "push");
+    const pushSpy = vi.spyOn(runtime.rpc.engine, "push");
 
-    createRpcEngineForBackground(services, {
+    createRpcEngineForBackground(runtime, {
       isInternalOrigin: () => false,
     });
 
-    // Should push 5 middlewares: errorBoundary, resolveInvocation, lockedGuard, permissionGuard, executor
+    // Should push 5 middlewares: errorBoundary, requireInitialized, invocationContext, accessPolicyGuard, executor
     expect(pushSpy).toHaveBeenCalledTimes(5);
 
-    createRpcEngineForBackground(services, {
+    createRpcEngineForBackground(runtime, {
       isInternalOrigin: () => false,
     });
 
@@ -72,8 +74,9 @@ describe("background rpc engine assembly", () => {
   });
 
   it("encodes existing res.error (error boundary)", async () => {
-    const services = createBackgroundServices({
+    const runtime = createBackgroundRuntime({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
@@ -86,12 +89,12 @@ describe("background rpc engine assembly", () => {
       },
     });
 
-    const middlewares = createBackgroundRpcMiddlewares(services, {
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
       isInternalOrigin: () => false,
     });
     const errorBoundary = middlewares[0];
     if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
-    const chainRef = services.controllers.network.getActiveChain().chainRef;
+    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
 
     const req = {
       method: "eth_chainId",
@@ -118,8 +121,9 @@ describe("background rpc engine assembly", () => {
   });
 
   it("respects shouldRequestUnlockAttention hook", async () => {
-    const services = createBackgroundServices({
+    const runtime = createBackgroundRuntime({
       chainRegistry: { port: new MemoryChainRegistryPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
       store: {
@@ -132,34 +136,44 @@ describe("background rpc engine assembly", () => {
       },
     });
 
-    const attentionSpy = vi.spyOn(services.attention, "requestAttention");
+    const attentionSpy = vi.spyOn(runtime.services.attention, "requestAttention");
 
-    const middlewares = createBackgroundRpcMiddlewares(services, {
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
       isInternalOrigin: () => false,
       shouldRequestUnlockAttention: () => false,
     });
-    const lockedGuard = middlewares[2];
-    if (!lockedGuard) throw new Error("Expected lockedGuard middleware");
 
-    const chainRef = services.controllers.network.getActiveChain().chainRef;
-    const req = {
-      method: "eth_newFilter",
-      origin: "https://dapp.example",
-      arx: { namespace: "eip155", chainRef },
-    } as unknown as Parameters<typeof lockedGuard>[0];
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const res = createPendingRes();
-    const end = vi.fn();
+    const engine = new JsonRpcEngine();
+    for (const middleware of middlewares.slice(0, 4)) {
+      engine.push(middleware);
+    }
+    engine.push((_req, _res, _next, end) => end());
 
-    await lockedGuard(
-      req,
-      res,
-      createNextStub() as unknown as Parameters<typeof lockedGuard>[2],
-      end as unknown as Parameters<typeof lockedGuard>[3],
-    );
-    expect(end).toHaveBeenCalledTimes(1);
-    const [error] = end.mock.calls[0] ?? [];
-    expect(error).toBeTruthy();
+    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        engine.handle(
+          {
+            id: 1,
+            jsonrpc: "2.0",
+            method: "eth_newFilter",
+            origin: "https://dapp.example",
+            arx: { namespace: "eip155", chainRef },
+          },
+          (error) => {
+            if (!error) {
+              reject(new Error("Expected error"));
+              return;
+            }
+            resolve();
+          },
+        );
+      }),
+    ).resolves.toBeUndefined();
+
     expect(attentionSpy).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,7 @@ import { zeroize } from "../../vault/utils.js";
 import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import { encodePayload } from "../keyring/keyring-utils.js";
+import type { NamespaceConfig } from "../keyring/namespaces.js";
 import type { ControllersBase } from "./controllers.js";
 
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
@@ -28,6 +29,8 @@ export type SessionOptions = {
   autoLockDurationMs?: number;
   persistDebounceMs?: number;
   timers?: UnlockControllerOptions["timers"];
+  uuid?: () => string;
+  keyringNamespaces?: NamespaceConfig[];
 };
 
 export type BackgroundSessionServices = {
@@ -293,22 +296,26 @@ export const initSessionLayer = ({
 
   const unlock = unlockFactory(unlockOptions);
 
+  const defaultKeyringNamespaces: NamespaceConfig[] = [
+    {
+      namespace: EIP155_NAMESPACE,
+      defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
+      codec: getAccountCodec(EIP155_NAMESPACE),
+      factories: {
+        hd: () => new EvmHdKeyring(),
+        "private-key": () => new EvmPrivateKeyKeyring(),
+      },
+    },
+  ];
+
   const keyringService = new KeyringService({
+    now: storageNow,
+    uuid: sessionOptions?.uuid ?? (() => crypto.randomUUID()),
     vault: vaultProxy,
     unlock,
     accountsStore,
     keyringMetas,
-    namespaces: [
-      {
-        namespace: EIP155_NAMESPACE,
-        defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
-        codec: getAccountCodec(EIP155_NAMESPACE),
-        factories: {
-          hd: () => new EvmHdKeyring(),
-          "private-key": () => new EvmPrivateKeyKeyring(),
-        },
-      },
-    ],
+    namespaces: sessionOptions?.keyringNamespaces ?? defaultKeyringNamespaces,
     logger: storageLogger,
   });
 

@@ -180,7 +180,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       origin,
       namespace: invocation.namespace,
       chainRef: target.chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: {
         chainRef: target.chainRef,
       },

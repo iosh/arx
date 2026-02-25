@@ -22,18 +22,25 @@ import { type ControllerLayerOptions, initControllers } from "./background/contr
 import { type EngineOptions, initEngine } from "./background/engine.js";
 import { createNetworkBootstrap } from "./background/networkBootstrap.js";
 import { registerDefaultTransactionAdapters } from "./background/registerDefaultTransactionAdapters.js";
+import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
 import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
-import { initSessionLayer, type SessionOptions } from "./background/session.js";
+import { type RuntimePlugin, runPluginHooks, startPlugins } from "./background/runtimePlugins.js";
+import { type BackgroundSessionServices, initSessionLayer, type SessionOptions } from "./background/session.js";
 import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
+import type { KeyringService } from "./keyring/KeyringService.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
-export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chainRegistry"> & {
+export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainRegistry"> & {
   messenger?: {
     violationMode?: ViolationMode;
   };
   engine?: EngineOptions;
+  rpcEngine: {
+    env: BackgroundRpcEnvHooks;
+    assemble?: boolean;
+  };
   networkPreferences: {
     port: NetworkPreferencesPort;
   };
@@ -58,7 +65,30 @@ export type CreateBackgroundServicesOptions = Omit<ControllerLayerOptions, "chai
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
 };
-export const createBackgroundServices = (options: CreateBackgroundServicesOptions) => {
+
+export type BackgroundRuntime = {
+  bus: Messenger;
+  controllers: HandlerControllers;
+  services: {
+    attention: ReturnType<typeof createAttentionService>;
+    session: BackgroundSessionServices;
+    keyring: KeyringService;
+  };
+  rpc: {
+    engine: ReturnType<typeof initEngine>;
+    registry: ReturnType<typeof createRpcRegistry>;
+    clients: ReturnType<typeof initRpcLayer>;
+    getActiveNamespace: (context?: RpcInvocationContext) => Namespace;
+  };
+  lifecycle: {
+    initialize: () => Promise<void>;
+    start: () => void;
+    destroy: () => void;
+    getIsInitialized: () => boolean;
+  };
+};
+
+export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const rpcRegistry = createRpcRegistry();
   registerBuiltinRpcAdapters(rpcRegistry);
 
@@ -70,6 +100,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     permissions: permissionOptions,
     transactions: transactionOptions,
     engine: engineOptions,
+    rpcEngine: rpcEngineOptions,
     networkPreferences: networkPreferencesOptions,
     storage: storageOptions,
     store: storeOptions,
@@ -80,12 +111,12 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   } = options;
 
   const storageLogger = storageOptions?.logger ?? (() => {});
-  const messenger = new Messenger({
+  const bus = new Messenger({
     violationMode: messengerOptions?.violationMode ?? "throw",
     onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
-  const chains = createDefaultChainDescriptorRegistry();
+  const chainDescriptors = createDefaultChainDescriptorRegistry();
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
   const storageNow = storageOptions?.now ?? Date.now;
@@ -95,7 +126,9 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     ...(networkOptions ? { network: networkOptions } : {}),
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
-    ...(permissionOptions ? { permissions: { ...permissionOptions, chains } } : { permissions: { chains } }),
+    ...(permissionOptions
+      ? { permissions: { ...permissionOptions, chains: chainDescriptors } }
+      : { permissions: { chains: chainDescriptors } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainRegistry: chainRegistryOptions,
   };
@@ -122,7 +155,7 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
 
   const controllersInit = initControllers({
-    bus: messenger,
+    bus,
     namespaceResolver: (ctx) => namespaceResolverFn(ctx),
     rpcRegistry,
     accountsService: accountsStore,
@@ -141,13 +174,13 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
 
   const vaultMetaPort = storageOptions?.vaultMetaPort;
   const attention = createAttentionService({
-    messenger: messenger.scope({ name: "attention", publish: ATTENTION_TOPICS }),
+    messenger: bus.scope({ name: "attention", publish: ATTENTION_TOPICS }),
     now: storageNow,
   });
 
-  const runtimeLifecycle = createRuntimeLifecycle("createBackgroundServices");
+  const runtimeLifecycle = createRuntimeLifecycle("createBackgroundRuntime");
   const sessionLayer = initSessionLayer({
-    bus: messenger,
+    bus,
     controllers: controllersBase,
     accountsStore,
     keyringMetas,
@@ -166,14 +199,17 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
   const { signers } = registerDefaultTransactionAdapters({
     transactionRegistry,
     rpcClients: rpcClientRegistry,
-    chains,
+    chains: chainDescriptors,
     keyring: keyringService,
   });
 
   const controllers: HandlerControllers = {
     ...controllersBase,
     networkPreferences,
-    chains,
+    chainDescriptors,
+    clock: {
+      now: storageNow,
+    },
     signers,
   };
 
@@ -195,62 +231,128 @@ export const createBackgroundServices = (options: CreateBackgroundServicesOption
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
   });
 
-  const initialize = async () =>
-    runtimeLifecycle.initialize(async () => {
+  const coreReadyPlugin: RuntimePlugin = {
+    name: "coreReady",
+    initialize: async () => {
       await chainRegistryController.whenReady();
       await controllersBase.permissions.whenReady();
+    },
+  };
 
-      await transactionsLifecycle.initialize();
+  const transactionsPlugin: RuntimePlugin = {
+    name: "transactionsLifecycle",
+    initialize: () => transactionsLifecycle.initialize(),
+    start: () => transactionsLifecycle.start(),
+    destroy: () => transactionsLifecycle.destroy(),
+  };
 
-      await networkBootstrap.loadPreferences();
+  const networkBootstrapPlugin: RuntimePlugin = {
+    name: "networkBootstrap",
+    initialize: () => networkBootstrap.loadPreferences(),
+    hydrate: async () => {
+      networkBootstrap.requestSync();
+    },
+    afterHydration: () => networkBootstrap.flushPendingSync(),
+    start: () => networkBootstrap.start(),
+    destroy: () => networkBootstrap.destroy(),
+  };
 
-      await runtimeLifecycle.withHydration(async () => {
-        networkBootstrap.requestSync();
-        await sessionLayer.hydrateVaultMeta();
-      });
-
-      await networkBootstrap.flushPendingSync();
-    });
-
-  const start = () =>
-    runtimeLifecycle.start(() => {
-      networkBootstrap.start();
-      sessionLayer.attachSessionListeners();
-      transactionsLifecycle.start();
-    });
-
-  const destroy = () =>
-    runtimeLifecycle.destroy(() => {
-      transactionsLifecycle.destroy();
+  const sessionPlugin: RuntimePlugin = {
+    name: "sessionLayer",
+    hydrate: () => sessionLayer.hydrateVaultMeta(),
+    start: () => sessionLayer.attachSessionListeners(),
+    destroy: () => {
       sessionLayer.cleanupVaultPersistTimer();
       sessionLayer.detachSessionListeners();
       sessionLayer.destroySessionLayer();
+    },
+  };
+
+  const accountsControllerPlugin: RuntimePlugin = {
+    name: "accountsController",
+    destroy: () => {
       try {
         controllersBase.accounts.destroy?.();
       } catch (error) {
         storageLogger("lifecycle: failed to destroy accounts controller", error);
       }
-      networkBootstrap.destroy();
-
-      rpcClientRegistry.destroy();
-      engine.destroy();
-      messenger.clear();
-    });
-
-  return {
-    messenger,
-    attention,
-    engine,
-    controllers,
-    session: sessionLayer.session,
-    rpcClients: rpcClientRegistry,
-    rpcRegistry,
-    getActiveNamespace: namespaceResolverFn,
-    lifecycle: {
-      initialize,
-      start,
-      destroy,
     },
-    keyring: keyringService,
   };
+
+  const rpcClientsPlugin: RuntimePlugin = {
+    name: "rpcClients",
+    destroy: () => rpcClientRegistry.destroy(),
+  };
+
+  const enginePlugin: RuntimePlugin = {
+    name: "rpcEngine",
+    destroy: () => engine.destroy(),
+  };
+
+  const busPlugin: RuntimePlugin = {
+    name: "messenger",
+    destroy: () => bus.clear(),
+  };
+
+  const initializeOrder = [coreReadyPlugin, transactionsPlugin, networkBootstrapPlugin] as const;
+  const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
+  const afterHydrationOrder = [networkBootstrapPlugin] as const;
+  const startOrder = [networkBootstrapPlugin, sessionPlugin, transactionsPlugin] as const;
+  const destroyOrder = [
+    transactionsPlugin,
+    sessionPlugin,
+    networkBootstrapPlugin,
+    accountsControllerPlugin,
+    rpcClientsPlugin,
+    enginePlugin,
+    busPlugin,
+  ] as const;
+
+  const runtime: BackgroundRuntime = {
+    bus,
+    controllers,
+    services: {
+      attention,
+      session: sessionLayer.session,
+      keyring: keyringService,
+    },
+    rpc: {
+      engine,
+      registry: rpcRegistry,
+      clients: rpcClientRegistry,
+      getActiveNamespace: namespaceResolverFn,
+    },
+    lifecycle: {
+      initialize: async () =>
+        runtimeLifecycle.initialize(async () => {
+          await runPluginHooks([...initializeOrder], "initialize");
+          await runtimeLifecycle.withHydration(async () => {
+            await runPluginHooks([...hydrateOrder], "hydrate");
+          });
+          await runPluginHooks([...afterHydrationOrder], "afterHydration");
+        }),
+      start: () =>
+        runtimeLifecycle.start(() => {
+          startPlugins([...startOrder]);
+        }),
+      destroy: () =>
+        runtimeLifecycle.destroy(() => {
+          for (const plugin of destroyOrder) {
+            try {
+              plugin.destroy?.();
+            } catch {
+              // best-effort
+            }
+          }
+        }),
+      getIsInitialized: () => runtimeLifecycle.getIsInitialized(),
+    },
+  };
+
+  // Assemble the RPC pipeline exactly once per engine instance (default: enabled).
+  if (rpcEngineOptions.assemble !== false) {
+    createRpcEngineForBackground(runtime, rpcEngineOptions.env);
+  }
+
+  return runtime;
 };

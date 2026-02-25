@@ -99,7 +99,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       origin,
       namespace,
       chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: { requested },
     } satisfies ApprovalTask<typeof ApprovalTypes.RequestPermissions>;
 

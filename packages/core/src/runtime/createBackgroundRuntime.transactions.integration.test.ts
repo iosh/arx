@@ -27,7 +27,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("createBackgroundServices (transactions integration)", () => {
+describe("createBackgroundRuntime (transactions integration)", () => {
   it("processes an auto-approved transaction through receipt confirmation", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
@@ -75,11 +75,11 @@ describe("createBackgroundServices (transactions integration)", () => {
     });
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
-    const unsubscribeStatus = context.services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
+    const unsubscribeStatus = context.runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
       statusEvents.push(payload);
     });
     try {
-      const submission = await context.services.controllers.transactions.requestTransactionApproval(
+      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -99,7 +99,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
       expect(fetchReceipt).toHaveBeenCalledTimes(0);
 
-      const broadcastMeta = context.services.controllers.transactions.getMeta(submission.id);
+      const broadcastMeta = context.runtime.controllers.transactions.getMeta(submission.id);
       expect(broadcastMeta?.status).toBe("broadcast");
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
@@ -117,7 +117,7 @@ describe("createBackgroundServices (transactions integration)", () => {
         ["broadcast", "confirmed"],
       ]);
 
-      const confirmedMeta = context.services.controllers.transactions.getMeta(submission.id);
+      const confirmedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
       expect(confirmedMeta?.status).toBe("confirmed");
       expect(confirmedMeta?.receipt).toMatchObject(confirmedReceipt);
 
@@ -175,7 +175,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
-    const unsubscribeStatus = context.services.messenger.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
+    const unsubscribeStatus = context.runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
       statusEvents.push(payload);
     });
 
@@ -193,7 +193,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       const submissions = await Promise.all(
         fromAddresses.map((from, index) =>
-          context.services.controllers.transactions.requestTransactionApproval(
+          context.runtime.controllers.transactions.requestTransactionApproval(
             "https://dapp.example",
             {
               namespace: chain.namespace,
@@ -216,7 +216,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       const submissionIds = submissions.map((submission) => submission.id);
       for (const id of submissionIds) {
-        const meta = context.services.controllers.transactions.getMeta(id);
+        const meta = context.runtime.controllers.transactions.getMeta(id);
         expect(meta?.status).toBe("broadcast");
       }
 
@@ -283,7 +283,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const submission = await context.services.controllers.transactions.requestTransactionApproval(
+      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -308,7 +308,7 @@ describe("createBackgroundServices (transactions integration)", () => {
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
       expect(detectReplacement).toHaveBeenCalledTimes(1);
 
-      const replacedMeta = context.services.controllers.transactions.getMeta(submission.id);
+      const replacedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
       expect(replacedMeta?.status).toBe("replaced");
       expect(replacedMeta?.hash).toBe(replacementHash);
       expect(replacedMeta?.error?.name).toBe("TransactionReplacedError");
@@ -355,7 +355,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.requestTransactionApproval(
+      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -380,7 +380,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(20);
 
-      const failedMeta = context.services.controllers.transactions.getMeta(submission.id);
+      const failedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.error?.name).toBe("TransactionReceiptTimeoutError");
 
@@ -430,7 +430,7 @@ describe("createBackgroundServices (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.services.controllers.transactions.requestTransactionApproval(
+      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
         "https://dapp.example",
         {
           namespace: chain.namespace,
@@ -454,7 +454,7 @@ describe("createBackgroundServices (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
-      const failedMeta = context.services.controllers.transactions.getMeta(submission.id);
+      const failedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.error?.name).toBe("TransactionExecutionFailed");
       expect(failedMeta?.receipt).toMatchObject(failedReceipt);

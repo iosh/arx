@@ -8,35 +8,35 @@ const MESSAGE = "0x68656c6c6f";
 const ORIGIN = "https://dapp.example";
 
 type RpcHarnessInstance = Awaited<ReturnType<typeof createRpcHarness>>;
-const initializeSession = async (services: RpcHarnessInstance["services"]) => {
-  await services.session.vault.initialize({ password: PASSWORD });
-  await services.session.unlock.unlock({ password: PASSWORD });
+const initializeSession = async (runtime: RpcHarnessInstance["runtime"]) => {
+  await runtime.services.session.vault.initialize({ password: PASSWORD });
+  await runtime.services.session.unlock.unlock({ password: PASSWORD });
 };
 
-const deriveAccount = async (services: RpcHarnessInstance["services"]) => {
-  const chain = services.controllers.network.getActiveChain();
-  const { keyringId } = await services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
-  const account = await services.keyring.deriveAccount(keyringId);
-  await services.controllers.accounts.switchActive({ chainRef: chain.chainRef, address: account.address });
+const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
+  const chain = runtime.controllers.network.getActiveChain();
+  const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+  const account = await runtime.services.keyring.deriveAccount(keyringId);
+  await runtime.controllers.accounts.switchActive({ chainRef: chain.chainRef, address: account.address });
   return { chain, address: account.address };
 };
 
-describe("createBackgroundServices (locked RPC integration)", () => {
+describe("createBackgroundRuntime (locked RPC integration)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it("allows read passthrough methods while locked", async () => {
     const harness = await createRpcHarness();
-    const { services } = harness;
+    const { runtime } = harness;
     const rpcClient = { request: vi.fn().mockResolvedValue("0x64") };
     const getClient = vi
-      .spyOn(services.rpcClients, "getClient")
-      .mockReturnValue(rpcClient as unknown as ReturnType<(typeof services.rpcClients)["getClient"]>);
+      .spyOn(runtime.rpc.clients, "getClient")
+      .mockReturnValue(rpcClient as unknown as ReturnType<(typeof runtime.rpc.clients)["getClient"]>);
 
     try {
-      await initializeSession(services);
-      services.session.unlock.lock("manual");
+      await initializeSession(runtime);
+      runtime.services.session.unlock.lock("manual");
 
       await expect(
         harness.callRpc({
@@ -58,12 +58,12 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
   it("rejects passthrough methods that require an unlocked session", async () => {
     const harness = await createRpcHarness();
-    const { services } = harness;
-    const getClient = vi.spyOn(services.rpcClients, "getClient");
+    const { runtime } = harness;
+    const getClient = vi.spyOn(runtime.rpc.clients, "getClient");
 
     try {
-      await initializeSession(services);
-      services.session.unlock.lock("manual");
+      await initializeSession(runtime);
+      runtime.services.session.unlock.lock("manual");
 
       await expect(
         harness.callRpc({
@@ -84,11 +84,11 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
   it("enforces lock semantics for eth_accounts and personal_sign", async () => {
     const harness = await createRpcHarness();
-    const { services } = harness;
-    const approval = vi.spyOn(services.controllers.approvals, "requestApproval");
+    const { runtime } = harness;
+    const approval = vi.spyOn(runtime.controllers.approvals, "requestApproval");
     let approvalId: string | null = null;
     const approvalRequested = new Promise<void>((resolve) => {
-      const unsubscribe = services.controllers.approvals.onRequest(({ task }) => {
+      const unsubscribe = runtime.controllers.approvals.onRequest(({ task }) => {
         approvalId = task.id;
         unsubscribe();
         resolve();
@@ -96,25 +96,25 @@ describe("createBackgroundServices (locked RPC integration)", () => {
     });
 
     try {
-      await initializeSession(services);
-      const { chain, address } = await deriveAccount(services);
+      await initializeSession(runtime);
+      const { chain, address } = await deriveAccount(runtime);
 
-      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
-      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
+      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
 
-      await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
         accounts: [address],
       });
 
-      services.session.unlock.lock("manual");
+      runtime.services.session.unlock.lock("manual");
 
       await expect(harness.callRpc({ method: "eth_accounts" })).resolves.toEqual([]);
 
@@ -135,8 +135,8 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       expect(settled).toBe(false);
       expect(approvalId).toBeTruthy();
 
-      await services.session.unlock.unlock({ password: PASSWORD });
-      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
+      await runtime.services.session.unlock.unlock({ password: PASSWORD });
+      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
@@ -145,7 +145,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
       if (!approvalId) throw new Error("Expected approvalId to be set");
-      await services.controllers.approvals.resolve(approvalId, async () => "0xsignedpayload");
+      await runtime.controllers.approvals.resolve(approvalId, async () => "0xsignedpayload");
       await expect(pending).resolves.toBe("0xsignedpayload");
 
       expect(approval).toHaveBeenCalledTimes(1);
@@ -157,26 +157,26 @@ describe("createBackgroundServices (locked RPC integration)", () => {
 
   it("allows personal_sign when connected but sign scope is missing", async () => {
     const harness = await createRpcHarness();
-    const { services } = harness;
-    const approval = vi.spyOn(services.controllers.approvals, "requestApproval").mockResolvedValue("0xsignedpayload");
+    const { runtime } = harness;
+    const approval = vi.spyOn(runtime.controllers.approvals, "requestApproval").mockResolvedValue("0xsignedpayload");
 
     try {
-      await initializeSession(services);
-      const { chain, address } = await deriveAccount(services);
+      await initializeSession(runtime);
+      const { chain, address } = await deriveAccount(runtime);
 
       // Simulate a connected origin (Accounts scope present), but do NOT grant Sign scope.
-      await services.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
       });
-      await services.controllers.permissions.setPermittedAccounts(ORIGIN, {
+      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
         accounts: [address],
       });
 
       const beforeScopes =
-        services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
+        runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
           ?.capabilities ?? [];
       expect(beforeScopes).not.toContain(PermissionCapabilities.Sign);
 
@@ -191,7 +191,7 @@ describe("createBackgroundServices (locked RPC integration)", () => {
       expect(approval).toHaveBeenCalledTimes(1);
 
       const afterScopes =
-        services.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
+        runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
           ?.capabilities ?? [];
       expect(afterScopes).toContain(PermissionCapabilities.Sign);
     } finally {

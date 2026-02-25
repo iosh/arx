@@ -70,6 +70,7 @@ export type Eip155TransactionPayload = {
   maxPriorityFeePerGas?: Hex;
   nonce?: Hex;
 };
+export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
 
 export type TransactionPayloadMap = {
   eip155: Eip155TransactionPayload;

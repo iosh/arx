@@ -277,6 +277,34 @@ export class RpcRegistry {
     };
   }
 
+  resolveInvocationDetails(
+    controllers: HandlerControllers,
+    method: string,
+    context?: RpcInvocationContext,
+  ): {
+    namespace: Namespace;
+    chainRef: ChainRef;
+    definition: MethodDefinition | undefined;
+    passthrough: { isPassthrough: boolean; allowWhenLocked: boolean };
+  } {
+    const { namespace, chainRef } = this.resolveInvocation(controllers, method, context);
+    const definition = this.getDefinitionsForNamespace(namespace)?.[method];
+    const passthrough = this.passthroughByNamespace.get(namespace);
+    if (!passthrough) {
+      return { namespace, chainRef, definition, passthrough: { isPassthrough: false, allowWhenLocked: false } };
+    }
+    const isPassthrough = passthrough.allowedMethods.has(method);
+    return {
+      namespace,
+      chainRef,
+      definition,
+      passthrough: {
+        isPassthrough,
+        allowWhenLocked: isPassthrough && passthrough.allowWhenLocked.has(method),
+      },
+    };
+  }
+
   private namespaceFromChainRef(chainRef: string | null | undefined): Namespace | null {
     if (!chainRef) {
       return null;

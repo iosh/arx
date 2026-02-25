@@ -25,7 +25,10 @@ export type HandlerControllers = {
   permissions: PermissionController;
   transactions: TransactionController;
   chainRegistry: ChainRegistryController;
-  chains: ChainDescriptorRegistry;
+  chainDescriptors: ChainDescriptorRegistry;
+  clock: {
+    now: () => number;
+  };
   signers: {
     eip155: Eip155Signer;
   };

@@ -13,7 +13,7 @@ import {
   MemorySettingsPort,
   MemoryTransactionsPort,
 } from "./__fixtures__/backgroundTestSetup.js";
-import { createBackgroundServices } from "./createBackgroundServices.js";
+import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
 const MAINNET_CHAIN: ChainMetadata = {
   chainRef: "eip155:1",
@@ -41,7 +41,7 @@ const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainRegistryEn
   updatedAt: now,
 });
 
-describe("createBackgroundServices (no snapshots)", () => {
+describe("createBackgroundRuntime (no snapshots)", () => {
   it("hydrates network preferences from NetworkPreferencesPort", async () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
@@ -58,8 +58,14 @@ describe("createBackgroundServices (no snapshots)", () => {
       updatedAt: now(),
     });
 
-    const services = createBackgroundServices({
+    const runtime = createBackgroundRuntime({
       chainRegistry: { port: chainRegistryPort, seed: chainSeed },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
       networkPreferences: { port: networkPreferencesPort },
       store: {
         ports: {
@@ -81,14 +87,14 @@ describe("createBackgroundServices (no snapshots)", () => {
     });
 
     await flushAsync();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const networkState = services.controllers.network.getState();
+    const networkState = runtime.controllers.network.getState();
     expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
-    services.lifecycle.destroy();
+    runtime.lifecycle.destroy();
   });
 
   it("persists activeChainRef when ui.networks.switchActive succeeds", async () => {
@@ -105,8 +111,14 @@ describe("createBackgroundServices (no snapshots)", () => {
       updatedAt: 0,
     });
 
-    const services = createBackgroundServices({
+    const runtime = createBackgroundRuntime({
       chainRegistry: { port: chainRegistryPort, seed: chainSeed },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
       networkPreferences: { port: networkPreferencesPort },
       store: {
         ports: {
@@ -127,16 +139,16 @@ describe("createBackgroundServices (no snapshots)", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
     const handlers = createUiHandlers({
-      controllers: services.controllers,
-      session: services.session,
-      keyring: services.keyring,
-      attention: services.attention,
-      rpcClients: services.rpcClients,
-      rpcRegistry: services.rpcRegistry,
+      controllers: runtime.controllers,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      rpcClients: runtime.rpc.clients,
+      rpcRegistry: runtime.rpc.registry,
       uiOrigin: "chrome-extension://arx",
       platform: {
         openOnboardingTab: async () => ({ activationPath: "create" }),
@@ -151,6 +163,6 @@ describe("createBackgroundServices (no snapshots)", () => {
     expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
     await expect(networkPreferencesPort.get()).resolves.toMatchObject({ activeChainRef: ALT_CHAIN.chainRef });
 
-    services.lifecycle.destroy();
+    runtime.lifecycle.destroy();
   });
 });

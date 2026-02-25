@@ -1,5 +1,5 @@
 import type { RpcInvocationContext } from "../../../rpc/index.js";
-import type { ArxInvocation } from "./resolveInvocation.js";
+import type { ArxInvocation } from "./invocationContext.js";
 
 /**
  * Common request fields injected into json-rpc-engine requests by our pipeline.

@@ -19,7 +19,7 @@ export const ethRequestAccountsDefinition = defineNoParamsMethod({
       origin,
       namespace: invocation.namespace,
       chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: {
         chainRef,
         suggestedAccounts: [...suggested],

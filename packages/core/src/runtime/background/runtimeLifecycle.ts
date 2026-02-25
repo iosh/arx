@@ -1,5 +1,6 @@
 export type RuntimeLifecycle = {
   getIsHydrating(): boolean;
+  getIsInitialized(): boolean;
   getIsDestroyed(): boolean;
   initialize(run: () => Promise<void>): Promise<void>;
   start(run: () => void): void;
@@ -11,17 +12,18 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
   let destroyed = false;
   let initialized = false;
   let initializePromise: Promise<void> | null = null;
-  let isHydrating = true;
+  let hydrationDepth = 0;
 
   const getIsDestroyed = () => destroyed;
-  const getIsHydrating = () => isHydrating;
+  const getIsHydrating = () => hydrationDepth > 0;
+  const getIsInitialized = () => initialized;
 
   const withHydration = async <T>(run: () => Promise<T>): Promise<T> => {
-    isHydrating = true;
+    hydrationDepth += 1;
     try {
       return await run();
     } finally {
-      isHydrating = false;
+      hydrationDepth = Math.max(0, hydrationDepth - 1);
     }
   };
 
@@ -70,6 +72,7 @@ export const createRuntimeLifecycle = (label: string): RuntimeLifecycle => {
 
   return {
     getIsHydrating,
+    getIsInitialized,
     getIsDestroyed,
     initialize,
     start,

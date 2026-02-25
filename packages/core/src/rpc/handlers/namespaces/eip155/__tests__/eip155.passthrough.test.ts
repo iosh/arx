@@ -1,21 +1,21 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import type { RpcClient } from "../../../../index.js";
-import { createExecutor, createServices, ORIGIN } from "./eip155.test.helpers.js";
+import { createExecutor, createRuntime, ORIGIN } from "./eip155.test.helpers.js";
 
 describe("eip155 passthrough executor", () => {
   it("forwards allowed passthrough methods to the RPC client", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     const params = ["0xabc", "latest"] as JsonRpcParams;
-    const chainRef = services.controllers.network.getActiveChain().chainRef;
+    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockResolvedValue("0x64"),
     };
-    const getClient = vi.spyOn(services.rpcClients, "getClient").mockReturnValue(rpcClient as RpcClient);
+    const getClient = vi.spyOn(runtime.rpc.clients, "getClient").mockReturnValue(rpcClient as RpcClient);
 
     try {
       const result = await execute({
@@ -28,17 +28,17 @@ describe("eip155 passthrough executor", () => {
       expect(rpcClient.request).toHaveBeenCalledWith({ method: "eth_getBalance", params });
     } finally {
       getClient.mockRestore();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("rejects methods outside the passthrough matrix", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const getClient = vi.spyOn(services.rpcClients, "getClient");
+    const execute = createExecutor(runtime);
+    const getClient = vi.spyOn(runtime.rpc.clients, "getClient");
 
     try {
       await expect(
@@ -51,20 +51,20 @@ describe("eip155 passthrough executor", () => {
       expect(getClient).not.toHaveBeenCalled();
     } finally {
       getClient.mockRestore();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("propagates RPC errors returned by the node", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
+    const execute = createExecutor(runtime);
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockRejectedValue({ code: -32000, message: "execution reverted" }),
     };
-    const getClient = vi.spyOn(services.rpcClients, "getClient").mockReturnValue(rpcClient as RpcClient);
+    const getClient = vi.spyOn(runtime.rpc.clients, "getClient").mockReturnValue(rpcClient as RpcClient);
 
     try {
       await expect(
@@ -75,21 +75,21 @@ describe("eip155 passthrough executor", () => {
       ).rejects.toMatchObject({ code: -32000, message: "execution reverted" });
     } finally {
       getClient.mockRestore();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 
   it("wraps unexpected client failures as internal errors", async () => {
-    const services = createServices();
-    await services.lifecycle.initialize();
-    services.lifecycle.start();
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
 
-    const execute = createExecutor(services);
-    const chainRef = services.controllers.network.getActiveChain().chainRef;
+    const execute = createExecutor(runtime);
+    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockRejectedValue(new Error("boom")),
     };
-    const getClient = vi.spyOn(services.rpcClients, "getClient").mockReturnValue(rpcClient as RpcClient);
+    const getClient = vi.spyOn(runtime.rpc.clients, "getClient").mockReturnValue(rpcClient as RpcClient);
 
     try {
       await expect(
@@ -104,7 +104,7 @@ describe("eip155 passthrough executor", () => {
       });
     } finally {
       getClient.mockRestore();
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     }
   });
 });

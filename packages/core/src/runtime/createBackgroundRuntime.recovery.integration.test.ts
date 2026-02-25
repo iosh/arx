@@ -17,7 +17,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("createBackgroundServices (recovery integration)", () => {
+describe("createBackgroundRuntime (recovery integration)", () => {
   it("resumes receipt tracking for broadcast transactions during initialization", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
@@ -88,7 +88,7 @@ describe("createBackgroundServices (recovery integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
-      const meta = context.services.controllers.transactions.getMeta(txId);
+      const meta = context.runtime.controllers.transactions.getMeta(txId);
       expect(meta?.status).toBe("confirmed");
       expect(meta?.receipt).toMatchObject({ status: "0x1" });
     } finally {
@@ -163,17 +163,17 @@ describe("createBackgroundServices (recovery integration)", () => {
       expect(signTransaction).toHaveBeenCalledTimes(0);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
 
-      const before = context.services.controllers.transactions.getMeta(txId);
+      const before = context.runtime.controllers.transactions.getMeta(txId);
       expect(before?.status).toBe("approved");
 
-      await context.services.controllers.transactions.resumePending({ includeSigning: true });
+      await context.runtime.controllers.transactions.resumePending({ includeSigning: true });
       await flushAsync();
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
-      const after = context.services.controllers.transactions.getMeta(txId);
+      const after = context.runtime.controllers.transactions.getMeta(txId);
       expect(after?.status).toBe("broadcast");
     } finally {
       context.destroy();

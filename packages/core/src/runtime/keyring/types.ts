@@ -7,6 +7,8 @@ import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 
 // Service dependencies
 export type KeyringServiceOptions = {
+  now: () => number;
+  uuid: () => string;
   vault: Pick<VaultService, "exportKey" | "isUnlocked" | "verifyPassword">;
   unlock: Pick<UnlockController, "onUnlocked" | "onLocked" | "isUnlocked">;
   keyringMetas: {

@@ -118,7 +118,7 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
       origin,
       namespace: metadata.namespace,
       chainRef: metadata.chainRef,
-      createdAt: Date.now(),
+      createdAt: controllers.clock.now(),
       payload: {
         metadata,
         isUpdate,

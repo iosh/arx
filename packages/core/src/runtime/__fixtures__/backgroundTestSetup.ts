@@ -29,8 +29,8 @@ import {
   TransactionRecordSchema,
 } from "../../storage/records.js";
 import type { VaultCiphertext, VaultService } from "../../vault/types.js";
-import { createRpcEngineForBackground } from "../background/rpcEngineAssembly.js";
-import { type CreateBackgroundServicesOptions, createBackgroundServices } from "../createBackgroundServices.js";
+import type { BackgroundRpcEnvHooks } from "../background/rpcEngineAssembly.js";
+import { type CreateBackgroundRuntimeOptions, createBackgroundRuntime } from "../createBackgroundRuntime.js";
 
 // Test constants
 export const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -45,7 +45,7 @@ export type RpcTimers = {
   clearTimeout?: typeof clearTimeout;
 };
 
-export type CreateBackgroundServicesResult = ReturnType<typeof createBackgroundServices>;
+export type CreateBackgroundRuntimeResult = ReturnType<typeof createBackgroundRuntime>;
 
 // Utility functions
 export const clone = <T>(value: T): T => structuredClone(value);
@@ -552,7 +552,7 @@ export class FakeVault implements VaultService {
 
 // Test context type
 export type TestBackgroundContext = {
-  services: CreateBackgroundServicesResult;
+  runtime: CreateBackgroundRuntimeResult;
   networkPreferencesPort: MemoryNetworkPreferencesPort;
   vaultMetaPort: MemoryVaultMetaPort;
   chainRegistryPort: MemoryChainRegistryPort;
@@ -577,8 +577,9 @@ export type SetupBackgroundOptions = {
   timers?: RpcTimers;
   vault?: VaultService | (() => VaultService);
   persistDebounceMs?: number;
-  transactions?: CreateBackgroundServicesOptions["transactions"];
+  transactions?: CreateBackgroundRuntimeOptions["transactions"];
   storageLogger?: (message: string, error: unknown) => void;
+  rpcEngine?: CreateBackgroundRuntimeOptions["rpcEngine"];
 };
 
 /**
@@ -601,7 +602,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       ? new MemorySettingsPort(options.settingsSeed)
       : new MemorySettingsPort({ id: "settings", updatedAt: 0 });
 
-  const storageOptions: NonNullable<CreateBackgroundServicesOptions["storage"]> = {
+  const storageOptions: NonNullable<CreateBackgroundRuntimeOptions["storage"]> = {
     vaultMetaPort,
     ...(options.now ? { now: options.now } : {}),
     ...(options.storageLogger ? { logger: options.storageLogger } : {}),
@@ -613,7 +614,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     options.vault !== undefined ||
     options.persistDebounceMs !== undefined;
 
-  const sessionOptions: CreateBackgroundServicesOptions["session"] | undefined = needsSessionOptions
+  const sessionOptions: CreateBackgroundRuntimeOptions["session"] | undefined = needsSessionOptions
     ? {
         ...(options.autoLockDurationMs !== undefined ? { autoLockDurationMs: options.autoLockDurationMs } : {}),
         ...(options.timers ? { timers: options.timers } : {}),
@@ -622,11 +623,18 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
       }
     : undefined;
 
-  const services = createBackgroundServices({
+  const defaultEnv: BackgroundRpcEnvHooks = {
+    // Tests treat all origins as external; individual tests can override via options.rpcEngine.env.
+    isInternalOrigin: () => false,
+    shouldRequestUnlockAttention: () => false,
+  };
+
+  const runtime = createBackgroundRuntime({
     chainRegistry: {
       port: chainRegistryPort,
       seed: chainSeed,
     },
+    rpcEngine: options.rpcEngine ?? { env: defaultEnv },
     networkPreferences: {
       port: networkPreferencesPort,
     },
@@ -644,23 +652,23 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     ...(options.transactions ? { transactions: options.transactions } : {}),
   });
 
-  await services.lifecycle.initialize();
-  services.lifecycle.start();
+  await runtime.lifecycle.initialize();
+  runtime.lifecycle.start();
 
   // Helper function to enable auto-approval for testing
   const enableAutoApproval = () => {
-    const unsubscribe = services.controllers.approvals.onRequest(async ({ task }) => {
+    const unsubscribe = runtime.controllers.approvals.onRequest(async ({ task }) => {
       try {
         // Keep responses semantically valid for each approval type.
-        await services.controllers.approvals.resolve(task.id, async () => {
+        await runtime.controllers.approvals.resolve(task.id, async () => {
           switch (task.type) {
             case "wallet_sendTransaction": {
-              const result = await services.controllers.transactions.approveTransaction(task.id);
+              const result = await runtime.controllers.transactions.approveTransaction(task.id);
               return result;
             }
             case "wallet_requestAccounts":
-              return services.controllers.accounts.getAccounts({
-                chainRef: task.chainRef ?? services.controllers.network.getActiveChain().chainRef,
+              return runtime.controllers.accounts.getAccounts({
+                chainRef: task.chainRef ?? runtime.controllers.network.getActiveChain().chainRef,
               });
             case "wallet_signMessage":
             case "wallet_signTypedData":
@@ -682,7 +690,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   };
 
   return {
-    services,
+    runtime,
     networkPreferencesPort,
     vaultMetaPort,
     chainRegistryPort,
@@ -690,7 +698,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     settingsPort,
     enableAutoApproval,
     destroy: () => {
-      services.lifecycle.destroy();
+      runtime.lifecycle.destroy();
     },
   };
 };
@@ -722,15 +730,23 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const clock = setupOptions.now ?? Date.now;
   const background = await setupBackground({
     ...setupOptions,
+    rpcEngine:
+      setupOptions.rpcEngine ??
+      ({
+        env: {
+          isInternalOrigin: (origin) => origin === internalOrigin,
+          shouldRequestUnlockAttention: () => false,
+        },
+      } as const),
     ...(setupOptions.vault === undefined ? { vault: () => new FakeVault(clock) } : {}),
   });
-  const { services } = background;
+  const { runtime } = background;
 
-  const deriveMethodNamespace = services.rpcRegistry.createMethodNamespaceResolver(services.controllers);
-  const engine = services.engine;
+  const deriveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver(runtime.controllers);
+  const engine = runtime.rpc.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
-    const chain = services.controllers.network.getActiveChain();
+    const chain = runtime.controllers.network.getActiveChain();
     const namespace = overrides?.namespace ?? chain.namespace;
     const chainRef = overrides?.chainRef ?? chain.chainRef;
     return {
@@ -740,11 +756,6 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
       ...(overrides?.meta ? { meta: overrides.meta } : {}),
     };
   };
-
-  createRpcEngineForBackground(services, {
-    isInternalOrigin: (origin) => origin === internalOrigin,
-    shouldRequestUnlockAttention: () => false,
-  });
 
   let nextRequestId = 0;
   const sessionId = crypto.randomUUID();
@@ -764,7 +775,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         } as const),
     });
     const namespace = deriveMethodNamespace(method, contextPayload);
-    const resolvedChainRef = contextPayload.chainRef ?? services.controllers.network.getActiveChain().chainRef;
+    const resolvedChainRef = contextPayload.chainRef ?? runtime.controllers.network.getActiveChain().chainRef;
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {
@@ -778,7 +789,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         (error, response) => {
           if (error) {
             reject(
-              services.rpcRegistry.encodeErrorWithAdapters(error, {
+              runtime.rpc.registry.encodeErrorWithAdapters(error, {
                 surface: "dapp",
                 namespace,
                 chainRef: resolvedChainRef,

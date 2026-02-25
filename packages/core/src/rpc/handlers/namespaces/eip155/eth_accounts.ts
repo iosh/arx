@@ -14,6 +14,6 @@ export const ethAccountsDefinition = defineNoParamsMethod({
       chainRef,
     });
 
-    return accounts.map((canonical) => controllers.chains.formatAddress({ chainRef, canonical }));
+    return accounts.map((canonical) => controllers.chainDescriptors.formatAddress({ chainRef, canonical }));
   },
 });

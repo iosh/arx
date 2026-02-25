@@ -119,7 +119,7 @@ export const initControllers = ({
   } = options;
 
   if (!chainRegistryOptions?.port) {
-    throw new Error("createBackgroundServices requires chainRegistry.port");
+    throw new Error("createBackgroundRuntime requires chainRegistry.port");
   }
 
   const networkController = new InMemoryNetworkController({

@@ -1,5 +1,5 @@
 import { toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
@@ -31,7 +31,7 @@ export class StoreTransactionView {
   #service: TransactionsService;
   #stateLimit: number;
   #logger: (message: string, data?: unknown) => void;
-  #onStoreChanged: () => void;
+  #unsubscribeStore: (() => void) | null = null;
   #fromDecodeLogged: Set<string> = new Set();
 
   #records: Map<string, TransactionMeta> = new Map();
@@ -48,20 +48,22 @@ export class StoreTransactionView {
     this.#stateLimit = stateLimit;
     this.#logger = logger ?? (() => {});
 
-    this.#onStoreChanged = () => this.requestSync();
-    this.#service.on("changed", this.#onStoreChanged);
+    this.#unsubscribeStore = this.#service.subscribeChanged(() => this.requestSync());
 
     // Best-effort initial sync so RPC/UI can see store-backed transactions quickly after cold starts.
     this.requestSync();
   }
 
   destroy() {
+    if (!this.#unsubscribeStore) return;
     try {
-      this.#service.off("changed", this.#onStoreChanged);
+      this.#unsubscribeStore();
     } catch (error) {
       this.#logger("transactions:view failed to remove store listener", {
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this.#unsubscribeStore = null;
     }
   }
 

@@ -32,10 +32,10 @@ import type { TransactionController } from "../../controllers/transaction/types.
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
-import type { AccountsService } from "../../services/accounts/types.js";
-import type { PermissionsService } from "../../services/permissions/types.js";
-import type { SettingsService } from "../../services/settings/types.js";
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { AccountsService } from "../../services/store/accounts/types.js";
+import type { PermissionsService } from "../../services/store/permissions/types.js";
+import type { SettingsService } from "../../services/store/settings/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import { DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
 

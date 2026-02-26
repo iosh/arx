@@ -8,7 +8,6 @@ import type {
 } from "@arx/core/storage";
 import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie, type Table } from "dexie";
-import { runMigrations } from "./migrations.js";
 import type { VaultMetaEntity } from "./types.js";
 
 type ChainRegistryRow = ChainRegistryEntity;
@@ -19,7 +18,7 @@ export class ArxStorageDatabase extends Dexie {
   chains!: Table<ChainRegistryRow, string>;
   networkPreferences!: Table<NetworkPreferencesRecord, string>;
   accounts!: Table<AccountRecord, string>;
-  permissions!: Table<PermissionRecord, string>;
+  permissions!: Table<PermissionRecord, [string, string]>;
   transactions!: Table<TransactionRecord, string>;
 
   vaultMeta!: Table<VaultMetaEntity, string>;
@@ -28,19 +27,17 @@ export class ArxStorageDatabase extends Dexie {
 
   constructor(name: string) {
     super(name);
-    this.version(DOMAIN_SCHEMA_VERSION)
-      .stores({
-        settings: "&id",
-        chains: "&chainRef",
-        networkPreferences: "&id",
-        accounts: "&accountId, namespace, keyringId",
-        permissions: "&id, origin, &[origin+namespace]",
-        transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
+    this.version(DOMAIN_SCHEMA_VERSION).stores({
+      settings: "&id",
+      chains: "&chainRef",
+      networkPreferences: "&id",
+      accounts: "&accountId, namespace, keyringId",
+      permissions: "[origin+namespace], origin",
+      transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
 
-        vaultMeta: "&id",
+      vaultMeta: "&id",
 
-        keyringMetas: "&id, type, createdAt",
-      })
-      .upgrade((transaction) => runMigrations({ db: this, transaction }));
+      keyringMetas: "&id, type, createdAt",
+    });
   }
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
-import { createPermissionsService } from "../../services/permissions/PermissionsService.js";
-import type { PermissionsPort } from "../../services/permissions/port.js";
-import type { PermissionsService } from "../../services/permissions/types.js";
+import { createPermissionsService } from "../../services/store/permissions/PermissionsService.js";
+import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { PermissionsService } from "../../services/store/permissions/types.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
 import { PERMISSION_TOPICS } from "./topics.js";
@@ -12,32 +12,25 @@ const ORIGIN = "https://dapp.example";
 const CHAIN_REF = "eip155:1";
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
-  const store = new Map<string, PermissionRecord>(seed.map((record) => [record.id, record]));
+  const toKey = (record: PermissionRecord) => `${record.origin}::${record.namespace}`;
+  const store = new Map<string, PermissionRecord>(seed.map((record) => [toKey(record), record]));
 
   const port: PermissionsPort = {
-    async get(id) {
-      return store.get(id) ?? null;
-    },
     async listAll() {
       return [...store.values()];
     },
-    async getByOrigin({ origin, namespace }) {
-      for (const record of store.values()) {
-        if (record.origin !== origin) continue;
-        if (record.namespace !== namespace) continue;
-        return record;
-      }
-      return null;
+    async get({ origin, namespace }) {
+      return store.get(`${origin}::${namespace}`) ?? null;
     },
     async listByOrigin(origin) {
       return [...store.values()].filter((record) => record.origin === origin);
     },
     async upsert(record) {
       const checked = PermissionRecordSchema.parse(record);
-      store.set(checked.id, checked);
+      store.set(toKey(checked), checked);
     },
-    async remove(id) {
-      store.delete(id);
+    async remove({ origin, namespace }) {
+      store.delete(`${origin}::${namespace}`);
     },
     async clearOrigin(origin) {
       for (const [id, record] of store.entries()) {
@@ -120,7 +113,6 @@ describe("StorePermissionController", () => {
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
 
     const dirtyRecord = {
-      id: crypto.randomUUID(),
       origin: ORIGIN,
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Accounts, chainRefs: [CHAIN_REF] }],
@@ -129,13 +121,11 @@ describe("StorePermissionController", () => {
     } as unknown as PermissionRecord;
 
     const service = {
-      on() {},
-      off() {},
+      subscribeChanged() {
+        return () => {};
+      },
       async get() {
         return null;
-      },
-      async getByOrigin() {
-        return dirtyRecord;
       },
       async listAll() {
         return [dirtyRecord];

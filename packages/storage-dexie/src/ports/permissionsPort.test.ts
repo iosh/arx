@@ -15,7 +15,7 @@ const openDb = async () => {
   db = new Dexie(DB_NAME) as unknown as ArxStorageDatabase;
 
   db.version(DOMAIN_SCHEMA_VERSION).stores({
-    permissions: "&id, origin, &[origin+namespace]",
+    permissions: "[origin+namespace], origin",
   });
 
   await db.open();
@@ -48,7 +48,6 @@ describe("DexiePermissionsPort", () => {
     const port = new DexiePermissionsPort(db);
 
     const record = PermissionRecordSchema.parse({
-      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       origin: "https://dapp.example",
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
@@ -56,15 +55,14 @@ describe("DexiePermissionsPort", () => {
     });
 
     await port.upsert(record);
-    expect(await port.get(record.id)).toEqual(record);
+    expect(await port.get({ origin: record.origin, namespace: record.namespace })).toEqual(record);
   });
 
-  it("getByOrigin() returns the matching record (origin+namespace)", async () => {
+  it("get() returns the matching record (origin+namespace)", async () => {
     const db = await openDb();
     const port = new DexiePermissionsPort(db);
 
     const record = PermissionRecordSchema.parse({
-      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       origin: "https://dapp.example",
       namespace: "eip155",
       grants: [
@@ -76,14 +74,14 @@ describe("DexiePermissionsPort", () => {
 
     await port.upsert(record);
 
-    const hit = await port.getByOrigin({
+    const hit = await port.get({
       origin: "https://dapp.example",
       namespace: "eip155",
     });
 
     expect(hit).toEqual(record);
 
-    const miss = await port.getByOrigin({
+    const miss = await port.get({
       origin: "https://dapp.example",
       namespace: "other",
     });
@@ -96,7 +94,6 @@ describe("DexiePermissionsPort", () => {
     const port = new DexiePermissionsPort(db);
 
     const a1 = PermissionRecordSchema.parse({
-      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       origin: "https://dapp.example",
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
@@ -104,7 +101,6 @@ describe("DexiePermissionsPort", () => {
     });
 
     const b1 = PermissionRecordSchema.parse({
-      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
       origin: "https://other.example",
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
@@ -115,7 +111,7 @@ describe("DexiePermissionsPort", () => {
     await port.upsert(b1);
 
     const list = await port.listByOrigin("https://dapp.example");
-    expect(list.map((r) => r.id)).toEqual([a1.id]);
+    expect(list.map((r) => r.namespace)).toEqual([a1.namespace]);
   });
 
   it("clearOrigin() deletes only that origin", async () => {
@@ -123,7 +119,6 @@ describe("DexiePermissionsPort", () => {
     const port = new DexiePermissionsPort(db);
 
     const a1 = PermissionRecordSchema.parse({
-      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       origin: "https://dapp.example",
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
@@ -131,7 +126,6 @@ describe("DexiePermissionsPort", () => {
     });
 
     const b1 = PermissionRecordSchema.parse({
-      id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       origin: "https://other.example",
       namespace: "eip155",
       grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
@@ -144,21 +138,21 @@ describe("DexiePermissionsPort", () => {
     await port.clearOrigin("https://dapp.example");
 
     expect(await port.listByOrigin("https://dapp.example")).toEqual([]);
-    expect((await port.listByOrigin("https://other.example")).map((r) => r.id)).toEqual([b1.id]);
+    expect((await port.listByOrigin("https://other.example")).map((r) => r.namespace)).toEqual([b1.namespace]);
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
     const db = await openDb();
 
     await db.table("permissions").put({
-      id: "12121212-1212-4121-8121-121212121212",
       origin: "https://dapp.example",
-      // missing required fields on purpose
+      namespace: "eip155",
+      // missing required fields on purpose (grants/updatedAt)
     });
 
     const port = new DexiePermissionsPort(db);
 
-    const loaded = await port.get("12121212-1212-4121-8121-121212121212");
+    const loaded = await port.get({ origin: "https://dapp.example", namespace: "eip155" });
     expect(loaded).toBeNull();
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -166,7 +160,7 @@ describe("DexiePermissionsPort", () => {
       expect.anything(),
     );
 
-    const after = await db.table("permissions").get("12121212-1212-4121-8121-121212121212");
+    const after = await db.table("permissions").get(["https://dapp.example", "eip155"]);
     expect(after).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@ import type { RpcRegistry } from "../../rpc/index.js";
 import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { AttentionService } from "../../services/attention/index.js";
+import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol.js";
 
 /**

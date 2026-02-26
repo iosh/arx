@@ -1,6 +1,6 @@
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { UnlockController } from "../../controllers/unlock/types.js";
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 
 export type TransactionsLifecycleOptions = {
   controller: Pick<TransactionController, "resumePending">;

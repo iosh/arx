@@ -2,7 +2,7 @@ import { ArxReasons, isArxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../accounts/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { AccountController } from "../account/types.js";

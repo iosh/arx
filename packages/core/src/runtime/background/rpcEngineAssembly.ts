@@ -1,6 +1,6 @@
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
-import type { AttentionService, RequestAttentionParams } from "../../services/attention/index.js";
+import type { AttentionService, RequestAttentionParams } from "../../services/runtime/attention/index.js";
 import type { createBackgroundRuntime } from "../createBackgroundRuntime.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
 import { createAccessPolicyGuardMiddleware } from "./middlewares/accessPolicyGuard.js";

@@ -2,8 +2,8 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountsService } from "../../services/accounts/types.js";
-import type { SettingsService } from "../../services/settings/types.js";
+import type { AccountsService } from "../../services/store/accounts/types.js";
+import type { SettingsService } from "../../services/store/settings/types.js";
 import type { AccountId } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED, type AccountMessenger } from "./topics.js";
@@ -33,6 +33,8 @@ export class StoreAccountsController implements AccountController {
   #refreshPromise: Promise<void> | null = null;
   #onAccountsChanged = () => void this.refresh();
   #onSettingsChanged = () => void this.refresh();
+  #unsubscribeAccounts: (() => void) | null = null;
+  #unsubscribeSettings: (() => void) | null = null;
 
   constructor({ messenger, accounts, settings, logger }: Options) {
     this.#messenger = messenger;
@@ -40,22 +42,30 @@ export class StoreAccountsController implements AccountController {
     this.#settings = settings;
     this.#logger = logger;
 
-    this.#accounts.on("changed", this.#onAccountsChanged);
-    this.#settings.on("changed", this.#onSettingsChanged);
+    this.#unsubscribeAccounts = this.#accounts.subscribeChanged(() => this.#onAccountsChanged());
+    this.#unsubscribeSettings = this.#settings.subscribeChanged(() => this.#onSettingsChanged());
 
     void this.refresh();
   }
 
   destroy() {
-    try {
-      this.#accounts.off("changed", this.#onAccountsChanged);
-    } catch (error) {
-      this.#logger?.("accounts: failed to remove accounts store listener", error);
+    if (this.#unsubscribeAccounts) {
+      try {
+        this.#unsubscribeAccounts();
+      } catch (error) {
+        this.#logger?.("accounts: failed to remove accounts store listener", error);
+      } finally {
+        this.#unsubscribeAccounts = null;
+      }
     }
-    try {
-      this.#settings.off("changed", this.#onSettingsChanged);
-    } catch (error) {
-      this.#logger?.("accounts: failed to remove settings listener", error);
+    if (this.#unsubscribeSettings) {
+      try {
+        this.#unsubscribeSettings();
+      } catch (error) {
+        this.#logger?.("accounts: failed to remove settings listener", error);
+      } finally {
+        this.#unsubscribeSettings = null;
+      }
     }
   }
 
@@ -128,7 +138,7 @@ export class StoreAccountsController implements AccountController {
       nextSelected = candidate;
     }
 
-    await this.#settings.upsert({
+    await this.#settings.update({
       selectedAccountIdsByNamespace: {
         [namespace]: nextSelected,
       },

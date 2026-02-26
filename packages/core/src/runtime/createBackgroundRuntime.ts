@@ -3,19 +3,19 @@ import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
-import { createAccountsService } from "../services/accounts/AccountsService.js";
-import type { AccountsPort } from "../services/accounts/port.js";
-import { ATTENTION_TOPICS, createAttentionService } from "../services/attention/index.js";
-import { createKeyringMetasService } from "../services/keyringMetas/KeyringMetasService.js";
-import type { KeyringMetasPort } from "../services/keyringMetas/port.js";
-import { createNetworkPreferencesService } from "../services/networkPreferences/NetworkPreferencesService.js";
-import type { NetworkPreferencesPort } from "../services/networkPreferences/port.js";
-import { createPermissionsService } from "../services/permissions/PermissionsService.js";
-import type { PermissionsPort } from "../services/permissions/port.js";
-import type { SettingsPort } from "../services/settings/port.js";
-import { createSettingsService } from "../services/settings/SettingsService.js";
-import type { TransactionsPort } from "../services/transactions/port.js";
-import { createTransactionsService } from "../services/transactions/TransactionsService.js";
+import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
+import { createAccountsService } from "../services/store/accounts/AccountsService.js";
+import type { AccountsPort } from "../services/store/accounts/port.js";
+import { createKeyringMetasService } from "../services/store/keyringMetas/KeyringMetasService.js";
+import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
+import { createNetworkPreferencesService } from "../services/store/networkPreferences/NetworkPreferencesService.js";
+import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
+import { createPermissionsService } from "../services/store/permissions/PermissionsService.js";
+import type { PermissionsPort } from "../services/store/permissions/port.js";
+import type { SettingsPort } from "../services/store/settings/port.js";
+import { createSettingsService } from "../services/store/settings/SettingsService.js";
+import type { TransactionsPort } from "../services/store/transactions/port.js";
+import { createTransactionsService } from "../services/store/transactions/TransactionsService.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
@@ -279,6 +279,17 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     },
   };
 
+  const permissionsControllerPlugin: RuntimePlugin = {
+    name: "permissionsController",
+    destroy: () => {
+      try {
+        controllersBase.permissions.destroy?.();
+      } catch (error) {
+        storageLogger("lifecycle: failed to destroy permissions controller", error);
+      }
+    },
+  };
+
   const rpcClientsPlugin: RuntimePlugin = {
     name: "rpcClients",
     destroy: () => rpcClientRegistry.destroy(),
@@ -303,6 +314,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     sessionPlugin,
     networkBootstrapPlugin,
     accountsControllerPlugin,
+    permissionsControllerPlugin,
     rpcClientsPlugin,
     enginePlugin,
     busPlugin,

@@ -1,5 +1,5 @@
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";

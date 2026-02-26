@@ -1,4 +1,4 @@
-import type { TransactionsService } from "../../services/transactions/types.js";
+import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isPrepareEligibleTransactionStatus } from "./status.js";

@@ -3,7 +3,7 @@ import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
 import { sortPermissionCapabilities } from "../../permissions/capabilities.js";
-import type { PermissionsService } from "../../services/permissions/types.js";
+import type { PermissionsService } from "../../services/store/permissions/types.js";
 import type { PermissionRecord } from "../../storage/records.js";
 import type { ChainNamespace } from "../account/types.js";
 import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionMessenger } from "./topics.js";
@@ -52,7 +52,34 @@ const cloneState = (state: PermissionsState): PermissionsState => ({
 
 type OriginHashMap = Map<string, string>;
 
-const selectWinnerByNamespace = (records: readonly PermissionRecord[]): Map<string, PermissionRecord> => {
+type StablePermissionRecordSnapshot = {
+  namespace: string;
+  grants: Array<{ capability: string; chainRefs: ChainRef[] }>;
+  accountIds: string[];
+};
+
+const stablePermissionRecordSnapshot = (record: PermissionRecord): StablePermissionRecordSnapshot => {
+  const grants = [...record.grants]
+    .map((g) => ({
+      capability: String(g.capability),
+      chainRefs: uniqSorted((g.chainRefs as ChainRef[]).map((c) => String(c) as ChainRef)),
+    }))
+    .sort((a, b) => a.capability.localeCompare(b.capability));
+
+  const accountIds = (record.accountIds ?? []).map(String).sort((a, b) => a.localeCompare(b));
+
+  return {
+    namespace: String(record.namespace),
+    grants,
+    accountIds,
+  };
+};
+
+const stablePermissionRecordValue = (record: PermissionRecord): string => {
+  return JSON.stringify(stablePermissionRecordSnapshot(record));
+};
+
+const selectLatestByNamespace = (records: readonly PermissionRecord[]): Map<string, PermissionRecord> => {
   const winners = new Map<string, PermissionRecord>();
 
   for (const record of records) {
@@ -62,15 +89,19 @@ const selectWinnerByNamespace = (records: readonly PermissionRecord[]): Map<stri
       continue;
     }
 
-    // Deterministic "winner" rule for dirty stores:
+    // Deterministic rule for safety against dirty stores:
     // - Prefer higher updatedAt (latest write)
-    // - Tie-break by id (lexicographically higher) for stable results across list orders.
+    // - Tie-break by stable value for consistent results across list orders.
     if (record.updatedAt > current.updatedAt) {
       winners.set(record.namespace, record);
       continue;
     }
-    if (record.updatedAt === current.updatedAt && record.id.localeCompare(current.id) > 0) {
-      winners.set(record.namespace, record);
+    if (record.updatedAt === current.updatedAt) {
+      const nextValue = stablePermissionRecordValue(record);
+      const currentValue = stablePermissionRecordValue(current);
+      if (nextValue.localeCompare(currentValue) > 0) {
+        winners.set(record.namespace, record);
+      }
     }
   }
 
@@ -78,26 +109,11 @@ const selectWinnerByNamespace = (records: readonly PermissionRecord[]): Map<stri
 };
 
 const hashOriginRecords = (records: PermissionRecord[]): string => {
-  const winners = selectWinnerByNamespace(records);
+  const winners = selectLatestByNamespace(records);
 
   // Use a stable JSON representation to avoid delimiter-collision footguns.
   const stable = [...winners.values()]
-    .map((record) => {
-      const grants = [...record.grants]
-        .map((g) => ({
-          capability: String(g.capability),
-          chainRefs: uniqSorted((g.chainRefs as ChainRef[]).map((c) => String(c) as ChainRef)),
-        }))
-        .sort((a, b) => a.capability.localeCompare(b.capability));
-
-      const accountIds = (record.accountIds ?? []).map(String).sort((a, b) => a.localeCompare(b));
-
-      return {
-        namespace: String(record.namespace),
-        grants,
-        accountIds,
-      };
-    })
+    .map(stablePermissionRecordSnapshot)
     .sort((a, b) => a.namespace.localeCompare(b.namespace));
 
   return JSON.stringify(stable);
@@ -179,7 +195,7 @@ const upsertGrantChains = (
 
 const buildOriginStateFromRecords = (records: PermissionRecord[]): OriginPermissionState => {
   // One record per (origin, namespace). If the store is dirty, pick a deterministic winner.
-  const byNamespace = selectWinnerByNamespace(records);
+  const byNamespace = selectLatestByNamespace(records);
 
   const originState: OriginPermissionState = {};
 
@@ -265,6 +281,8 @@ export class StorePermissionController implements PermissionController {
   #capabilityResolver: PermissionCapabilityResolver;
   #service: PermissionsService;
   #chains: ChainDescriptorRegistry;
+  #unsubscribeStore: (() => void) | null = null;
+  #destroyed = false;
 
   #state: PermissionsState = { origins: {} };
   #originHash: OriginHashMap = new Map();
@@ -280,13 +298,25 @@ export class StorePermissionController implements PermissionController {
     this.#service = service;
     this.#chains = chains ?? createDefaultChainDescriptorRegistry();
 
-    this.#service.on("changed", (event) => {
+    this.#unsubscribeStore = this.#service.subscribeChanged((event) => {
+      if (this.#destroyed) return;
       void this.#queueSyncFromStore({ origin: event?.origin ?? null }).catch(() => {});
     });
 
     // lifecycle.initialize() awaits whenReady(); keep constructor side-effects best-effort.
     this.#ready = this.#queueSyncFromStore();
     this.#publishState();
+  }
+
+  destroy() {
+    this.#destroyed = true;
+    if (!this.#unsubscribeStore) return;
+    try {
+      this.#unsubscribeStore();
+    } catch {
+    } finally {
+      this.#unsubscribeStore = null;
+    }
   }
 
   whenReady(): Promise<void> {
@@ -391,14 +421,13 @@ export class StorePermissionController implements PermissionController {
 
     const accountIds = uniqueAccounts.map((address) => toAccountIdFromAddress({ chainRef, address }));
 
-    const existing = await this.#service.getByOrigin({ origin, namespace });
+    const existing = await this.#service.get({ origin, namespace });
     const nextGrants = upsertGrantChains(existing?.grants ?? [], {
       capability: PermissionCapabilities.Accounts,
       chainRef,
     });
 
     await this.#service.upsert({
-      ...(existing?.id ? { id: existing.id } : {}),
       origin,
       namespace,
       grants: nextGrants,
@@ -447,7 +476,7 @@ export class StorePermissionController implements PermissionController {
       chainRef: chainRef as ChainRef,
     });
 
-    const existing = await this.#service.getByOrigin({ origin, namespace });
+    const existing = await this.#service.get({ origin, namespace });
     const nextGrants = upsertGrantChains(existing?.grants ?? [], { capability, chainRef: normalized });
 
     // Accounts require an explicit accountIds payload (via setPermittedAccounts) unless already present.
@@ -463,7 +492,6 @@ export class StorePermissionController implements PermissionController {
     }
 
     await this.#service.upsert({
-      ...(existing?.id ? { id: existing.id } : {}),
       origin,
       namespace,
       grants: nextGrants,
@@ -492,6 +520,7 @@ export class StorePermissionController implements PermissionController {
   }
 
   async #queueSyncFromStore(params?: { origin?: string | null }): Promise<void> {
+    if (this.#destroyed) return;
     const origin = params?.origin ?? null;
     if (origin) {
       this.#pendingOrigins.add(origin);
@@ -590,10 +619,12 @@ export class StorePermissionController implements PermissionController {
   }
 
   #publishState() {
+    if (this.#destroyed) return;
     this.#messenger.publish(PERMISSION_STATE_CHANGED, cloneState(this.#state), { force: true });
   }
 
   #publishOrigin(payload: OriginPermissions) {
+    if (this.#destroyed) return;
     const clonedNamespaces =
       cloneState({ origins: { [payload.origin]: payload.namespaces } }).origins[payload.origin] ?? {};
     this.#messenger.publish(

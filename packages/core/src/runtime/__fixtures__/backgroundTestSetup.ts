@@ -5,12 +5,12 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
-import type { AccountsPort } from "../../services/accounts/port.js";
-import type { KeyringMetasPort } from "../../services/keyringMetas/port.js";
-import type { NetworkPreferencesPort } from "../../services/networkPreferences/port.js";
-import type { PermissionsPort } from "../../services/permissions/port.js";
-import type { SettingsPort } from "../../services/settings/port.js";
-import type { TransactionsPort } from "../../services/transactions/port.js";
+import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
+import type { NetworkPreferencesPort } from "../../services/store/networkPreferences/port.js";
+import type { PermissionsPort } from "../../services/store/permissions/port.js";
+import type { SettingsPort } from "../../services/store/settings/port.js";
+import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import type { ChainRegistryEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type {
@@ -74,26 +74,17 @@ export class MemoryPermissionsPort implements PermissionsPort {
   constructor(seed: PermissionRecord[] = []) {
     for (const record of seed) {
       const checked = PermissionRecordSchema.parse(record);
-      this.#records.set(checked.id, clone(checked));
+      this.#records.set(`${checked.origin}::${checked.namespace}`, clone(checked));
     }
   }
 
-  async get(id: PermissionRecord["id"]): Promise<PermissionRecord | null> {
-    const found = this.#records.get(id);
+  async get(params: { origin: string; namespace: string }): Promise<PermissionRecord | null> {
+    const found = this.#records.get(`${params.origin}::${params.namespace}`);
     return found ? clone(found) : null;
   }
 
   async listAll(): Promise<PermissionRecord[]> {
     return Array.from(this.#records.values()).map((record) => clone(record));
-  }
-
-  async getByOrigin(params: { origin: string; namespace: string }): Promise<PermissionRecord | null> {
-    for (const record of this.#records.values()) {
-      if (record.origin !== params.origin) continue;
-      if (record.namespace !== params.namespace) continue;
-      return clone(record);
-    }
-    return null;
   }
 
   async listByOrigin(origin: string): Promise<PermissionRecord[]> {
@@ -104,11 +95,11 @@ export class MemoryPermissionsPort implements PermissionsPort {
 
   async upsert(record: PermissionRecord): Promise<void> {
     const checked = PermissionRecordSchema.parse(record);
-    this.#records.set(checked.id, clone(checked));
+    this.#records.set(`${checked.origin}::${checked.namespace}`, clone(checked));
   }
 
-  async remove(id: PermissionRecord["id"]): Promise<void> {
-    this.#records.delete(id);
+  async remove(params: { origin: string; namespace: string }): Promise<void> {
+    this.#records.delete(`${params.origin}::${params.namespace}`);
   }
 
   async clearOrigin(origin: string): Promise<void> {

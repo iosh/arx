@@ -96,7 +96,6 @@ export type PermissionGrantRecord = z.infer<typeof PermissionGrantSchema>;
 
 export const PermissionRecordSchema = z
   .strictObject({
-    id: z.string().uuid(),
     origin: originStringSchema,
     namespace: z.string().min(1),
     // One entity per (origin, namespace). Each scope carries its own permitted chains.

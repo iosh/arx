@@ -2,15 +2,12 @@ import { z } from "zod";
 import { PERMISSION_CAPABILITY_VALUES, PermissionCapabilities } from "../permissions/capabilities.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
-  chainRefSchema,
-  epochMillisecondsSchema,
-  nonEmptyStringSchema,
-  originStringSchema,
   RpcStrategySchema,
   TransactionErrorSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,
 } from "./schemas.js";
+import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
 
 // Namespace is CAIP-2-ish (e.g. "eip155", "conflux").
 // Keep validation loose here; chain-specific rules live in codecs/modules.
@@ -98,7 +95,7 @@ export const PermissionRecordSchema = z
   .strictObject({
     origin: originStringSchema,
     namespace: z.string().min(1),
-    // One entity per (origin, namespace). Each scope carries its own permitted chains.
+    // One entity per (origin, namespace). Each capability carries its own permitted chains.
     grants: z.array(PermissionGrantSchema),
     // EIP-155 only: persisted as AccountIds to stay chain-agnostic.
     accountIds: z.array(AccountIdSchema).min(1).optional(),
@@ -144,22 +141,60 @@ export const TransactionStatusSchema = z.enum([
 ]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
 
-export const TransactionRecordSchema = z.strictObject({
-  id: z.string().uuid(),
-  namespace: z.string().min(1),
-  chainRef: chainRefSchema,
-  origin: originStringSchema,
-  fromAccountId: AccountIdSchema,
-  status: TransactionStatusSchema,
-  request: TransactionRequestSchema,
-  prepared: z.unknown().nullable().optional(),
-  hash: z.string().nullable(),
-  receipt: z.unknown().optional(),
-  error: TransactionErrorSchema.optional(),
-  userRejected: z.boolean(),
-  warnings: z.array(TransactionWarningSchema),
-  issues: z.array(TransactionWarningSchema),
-  createdAt: epochMillisecondsSchema,
-  updatedAt: epochMillisecondsSchema,
-});
+export const TransactionRecordSchema = z
+  .strictObject({
+    id: z.uuid(),
+    namespace: z.string().min(1),
+    chainRef: chainRefSchema,
+    origin: originStringSchema,
+    fromAccountId: AccountIdSchema,
+    status: TransactionStatusSchema,
+    request: TransactionRequestSchema,
+    prepared: z.unknown().nullable().optional(),
+    hash: z.string().nullable(),
+    receipt: z.unknown().optional(),
+    error: TransactionErrorSchema.optional(),
+    userRejected: z.boolean(),
+    warnings: z.array(TransactionWarningSchema),
+    issues: z.array(TransactionWarningSchema),
+    createdAt: epochMillisecondsSchema,
+    updatedAt: epochMillisecondsSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.request.namespace !== value.namespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: `request.namespace must equal record namespace "${value.namespace}"`,
+        path: ["request", "namespace"],
+      });
+    }
+
+    if (value.request.chainRef && value.request.chainRef !== value.chainRef) {
+      ctx.addIssue({
+        code: "custom",
+        message: `request.chainRef must equal record chainRef "${value.chainRef}" when provided`,
+        path: ["request", "chainRef"],
+      });
+    }
+
+    for (let i = 0; i < value.warnings.length; i++) {
+      if (value.warnings[i]?.kind !== "warning") {
+        ctx.addIssue({
+          code: "custom",
+          message: 'warnings entries must have kind="warning"',
+          path: ["warnings", i, "kind"],
+        });
+      }
+    }
+
+    for (let i = 0; i < value.issues.length; i++) {
+      if (value.issues[i]?.kind !== "issue") {
+        ctx.addIssue({
+          code: "custom",
+          message: 'issues entries must have kind="issue"',
+          path: ["issues", i, "kind"],
+        });
+      }
+    }
+  });
 export type TransactionRecord = z.infer<typeof TransactionRecordSchema>;

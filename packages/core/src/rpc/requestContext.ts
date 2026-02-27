@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { nonEmptyStringSchema, originStringSchema } from "../storage/schemas.js";
+import { nonEmptyStringSchema, originStringSchema } from "../storage/validators.js";
 
 export const RequestContextSchema = z.strictObject({
   transport: z.enum(["provider", "ui"]),

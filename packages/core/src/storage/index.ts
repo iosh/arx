@@ -1,4 +1,11 @@
-export * from "./keyringSchemas.js";
+export type { KeyringType, VaultKeyringEntry, VaultKeyringPayload } from "./keyringSchemas.js";
+export {
+  KEYRING_TYPES,
+  KEYRING_VAULT_ENTRY_VERSION,
+  KeyringTypeSchema,
+  VaultKeyringEntrySchema,
+  VaultKeyringPayloadSchema,
+} from "./keyringSchemas.js";
 export type {
   AccountId,
   AccountNamespace,
@@ -31,5 +38,14 @@ export {
   TransactionRecordSchema,
   TransactionStatusSchema,
 } from "./records.js";
-export * from "./schemas.js";
-export * from "./types.js";
+
+export type { ChainRegistryEntity, VaultMetaSnapshot } from "./schemas.js";
+export {
+  CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
+  ChainRegistryEntitySchema,
+  DOMAIN_SCHEMA_VERSION,
+  VAULT_META_SNAPSHOT_VERSION,
+  VaultMetaSnapshotSchema,
+} from "./schemas.js";
+
+export type { VaultMetaPort } from "./types.js";

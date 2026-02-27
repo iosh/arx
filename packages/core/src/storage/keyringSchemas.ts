@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { epochMillisecondsSchema } from "./schemas.js";
+import { epochMillisecondsSchema } from "./validators.js";
 
 // Keyring types: hd (mnemonic) and private-key (single imported key)
 export const KEYRING_TYPES = ["hd", "private-key"] as const;

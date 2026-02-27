@@ -68,9 +68,16 @@ export type MethodHandler<P = unknown> = BivariantCallback<
 export const PermissionChecks = {
   None: "none",
   Connected: "connected",
-  Scope: "scope",
+  Capability: "capability",
 } as const;
 export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionChecks];
+
+export const derivePermissionCheck = (definition: {
+  permissionCheck?: PermissionCheck;
+  capability?: PermissionCapability;
+}): PermissionCheck => {
+  return definition.permissionCheck ?? (definition.capability ? PermissionChecks.Capability : PermissionChecks.None);
+};
 
 export type LockedPolicy =
   | { type: "allow" }
@@ -79,16 +86,16 @@ export type LockedPolicy =
   | { type: "queue" };
 
 export type MethodDefinition<P = unknown> = {
-  scope?: PermissionCapability;
+  capability?: PermissionCapability;
   /**
    * Permission guard mode.
    *
    * - "none": no permission check; the method must self-filter (e.g. return []).
    * - "connected": require Accounts connection for namespace+chainRef.
-   * - "scope": require the method's scope via permissions.assertPermission.
+   * - "capability": require the method's capability via permissions.assertPermission.
    *
    * Default:
-   * - if `scope` is present => "scope"
+   * - if `capability` is present => "capability"
    * - otherwise => "none"
    */
   permissionCheck?: PermissionCheck;

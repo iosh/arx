@@ -76,7 +76,7 @@ const WalletSwitchEthereumChainParamsSchema = z
   .transform(normalizeWalletSwitchEthereumChainParams);
 
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
-  scope: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Basic,
   // Require an existing connection so unrelated pages cannot spam chain switch prompts.
   // User still approves the switch explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,

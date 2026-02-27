@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import { describe, expect, it, vi } from "vitest";
 import { PermissionCapabilities } from "../../../controllers/permission/types.js";
-import type { MethodDefinition } from "../../../rpc/handlers/types.js";
+import { type MethodDefinition, PermissionChecks } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import { createAccessPolicyGuardMiddleware } from "./accessPolicyGuard.js";
 import { createInvocationContextMiddleware } from "./invocationContext.js";
@@ -154,7 +154,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
         namespace: "eip155",
         chainRef: "eip155:1",
         definition: {
-          scope: PermissionCapabilities.Accounts,
+          capability: PermissionCapabilities.Accounts,
           locked: { type: "response", response: [] },
           handler: vi.fn(),
         },
@@ -172,7 +172,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
     expect(attention).not.toHaveBeenCalled();
   });
 
-  it("denies scoped methods by default when locked", async () => {
+  it("denies capability-protected methods by default when locked", async () => {
     const attention = vi.fn();
     await expect(
       run({
@@ -181,7 +181,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
         resolve: () => ({
           namespace: "eip155",
           chainRef: "eip155:1",
-          definition: { scope: PermissionCapabilities.Accounts, handler: vi.fn() },
+          definition: { capability: PermissionCapabilities.Accounts, handler: vi.fn() },
           passthrough: { isPassthrough: false, allowWhenLocked: false },
         }),
         guard: {
@@ -208,8 +208,8 @@ describe("createAccessPolicyGuardMiddleware", () => {
           namespace: "eip155",
           chainRef: "eip155:1",
           definition: {
-            scope: PermissionCapabilities.Sign,
-            permissionCheck: "connected",
+            capability: PermissionCapabilities.Sign,
+            permissionCheck: PermissionChecks.Connected,
             locked: { type: "allow" },
             handler: vi.fn(),
           },
@@ -226,7 +226,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
     ).rejects.toMatchObject({ reason: ArxReasons.PermissionNotConnected });
   });
 
-  it("enforces scope permission checks", async () => {
+  it("enforces capability permission checks", async () => {
     const attention = vi.fn();
     await expect(
       run({
@@ -236,7 +236,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           namespace: "eip155",
           chainRef: "eip155:1",
           definition: {
-            scope: PermissionCapabilities.Accounts,
+            capability: PermissionCapabilities.Accounts,
             locked: { type: "allow" },
             handler: vi.fn(),
           },

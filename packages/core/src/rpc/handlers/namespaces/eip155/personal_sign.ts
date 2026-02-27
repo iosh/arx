@@ -8,7 +8,7 @@ import { assertPermittedEip155Account, requireRequestContext } from "./shared.js
 type PersonalSignParams = { address: string; message: string };
 
 export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
-  scope: PermissionCapabilities.Sign,
+  capability: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {

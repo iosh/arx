@@ -70,7 +70,7 @@ const WalletRequestPermissionsParamsSchema = z
   });
 
 export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
-  scope: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Basic,
   permissionCheck: PermissionChecks.None,
   locked: lockedQueue(),
   parseParams: (params, _rpcContext) => {

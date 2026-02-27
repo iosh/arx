@@ -6,7 +6,7 @@ import { createTaskId, isDomainError, isRpcError } from "../utils.js";
 import { requireRequestContext } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineNoParamsMethod({
-  scope: PermissionCapabilities.Accounts,
+  capability: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedQueue(),
   handler: async ({ origin, controllers, rpcContext, invocation }) => {

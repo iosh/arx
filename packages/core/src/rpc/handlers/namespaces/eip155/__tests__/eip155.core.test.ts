@@ -624,7 +624,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("does not leak scope chains across different grants", async () => {
+  it("does not leak capability chains across different grants", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();

@@ -493,7 +493,7 @@ export class RpcRegistry {
         return value === null ? undefined : value;
       }
       const namespace = namespaceResolver(context);
-      return this.getDefinitionsForNamespace(namespace)?.[method]?.scope;
+      return this.getDefinitionsForNamespace(namespace)?.[method]?.capability;
     };
   }
 

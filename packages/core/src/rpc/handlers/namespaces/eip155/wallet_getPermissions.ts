@@ -6,7 +6,7 @@ import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
 
 export const walletGetPermissionsDefinition = defineNoParamsMethod({
-  scope: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Basic,
   permissionCheck: PermissionChecks.None,
   locked: lockedAllow(),
   handler: ({ origin, controllers }) => {

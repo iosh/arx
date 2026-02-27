@@ -56,7 +56,7 @@ const isSameEip3085Metadata = (a: ChainMetadata, b: ChainMetadata) => {
 };
 
 export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
-  scope: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Basic,
   // Require an existing connection so unrelated pages cannot spam chain addition prompts.
   // User still approves the addition explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,

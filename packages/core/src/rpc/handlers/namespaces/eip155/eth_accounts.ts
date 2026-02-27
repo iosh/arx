@@ -4,7 +4,7 @@ import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { EIP155_NAMESPACE } from "../utils.js";
 
 export const ethAccountsDefinition = defineNoParamsMethod({
-  scope: PermissionCapabilities.Accounts,
+  capability: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedResponse([]),
   handler: ({ origin, controllers, invocation }) => {

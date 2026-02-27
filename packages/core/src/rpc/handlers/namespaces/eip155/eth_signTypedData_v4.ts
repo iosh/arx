@@ -8,7 +8,7 @@ import { assertPermittedEip155Account, requireRequestContext } from "./shared.js
 type EthSignTypedDataV4Params = { address: string; typedData: string };
 
 export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Params> = {
-  scope: PermissionCapabilities.Sign,
+  capability: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => parseTypedDataParams(toParamsArray(params)),

@@ -3,7 +3,7 @@ import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rp
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainNamespace } from "../../../controllers/index.js";
-import { type PermissionCheck, PermissionChecks } from "../../../rpc/handlers/types.js";
+import { derivePermissionCheck, type PermissionCheck, PermissionChecks } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 import type { ArxMiddlewareRequest } from "./requestTypes.js";
@@ -130,8 +130,8 @@ export const createAccessPolicyGuardMiddleware = ({
         }
       }
 
-      // Default: methods with scope require unlock unless explicitly allowed above.
-      if (definition.scope && locked?.type !== "allow" && locked?.type !== "queue") {
+      // Default: methods with capability require unlock unless explicitly allowed above.
+      if (definition.capability && locked?.type !== "allow" && locked?.type !== "queue") {
         requestUnlockAttention();
         throw arxError({
           reason: ArxReasons.SessionLocked,
@@ -142,8 +142,16 @@ export const createAccessPolicyGuardMiddleware = ({
     }
 
     // Permission policy.
-    const mode: PermissionCheck =
-      definition.permissionCheck ?? (definition.scope ? PermissionChecks.Scope : PermissionChecks.None);
+    const mode: PermissionCheck = derivePermissionCheck(definition);
+
+    // Prevent misconfigured method definitions from silently allowing calls.
+    if (mode === PermissionChecks.Capability && !definition.capability) {
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
+        message: `Method "${req.method}" is misconfigured: permissionCheck="capability" requires capability`,
+        data: { origin, method: req.method },
+      });
+    }
 
     switch (mode) {
       case PermissionChecks.None: {
@@ -181,7 +189,7 @@ export const createAccessPolicyGuardMiddleware = ({
         await next();
         return;
       }
-      case PermissionChecks.Scope: {
+      case PermissionChecks.Capability: {
         try {
           await assertPermission(origin, req.method, rpcContext);
         } catch (error) {

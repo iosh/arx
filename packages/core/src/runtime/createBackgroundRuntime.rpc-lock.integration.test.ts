@@ -155,7 +155,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
     }
   });
 
-  it("allows personal_sign when connected but sign scope is missing", async () => {
+  it("allows personal_sign when connected but Sign capability is missing", async () => {
     const harness = await createRpcHarness();
     const { runtime } = harness;
     const approval = vi.spyOn(runtime.controllers.approvals, "requestApproval").mockResolvedValue("0xsignedpayload");
@@ -164,7 +164,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       await initializeSession(runtime);
       const { chain, address } = await deriveAccount(runtime);
 
-      // Simulate a connected origin (Accounts scope present), but do NOT grant Sign scope.
+      // Simulate a connected origin (Accounts capability present), but do NOT grant Sign capability.
       await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: chain.namespace,
         chainRef: chain.chainRef,
@@ -175,10 +175,10 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         accounts: [address],
       });
 
-      const beforeScopes =
+      const beforeCapabilities =
         runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
           ?.capabilities ?? [];
-      expect(beforeScopes).not.toContain(PermissionCapabilities.Sign);
+      expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);
 
       await expect(
         harness.callRpc({
@@ -190,10 +190,10 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
 
       expect(approval).toHaveBeenCalledTimes(1);
 
-      const afterScopes =
+      const afterCapabilities =
         runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
           ?.capabilities ?? [];
-      expect(afterScopes).toContain(PermissionCapabilities.Sign);
+      expect(afterCapabilities).toContain(PermissionCapabilities.Sign);
     } finally {
       approval.mockRestore();
       harness.destroy();

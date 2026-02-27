@@ -9,7 +9,7 @@ describe("buildWalletPermissions", () => {
     expect(buildWalletPermissions({ origin: ORIGIN })).toEqual([]);
   });
 
-  it("emits chain caveat per scope", () => {
+  it("emits chain caveat per capability", () => {
     const grants: PermissionGrant[] = [
       { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", capabilities: [PermissionCapabilities.Basic] },
       { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:137", capabilities: [PermissionCapabilities.Basic] },

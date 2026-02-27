@@ -310,7 +310,7 @@ describe("eip155 handlers - approval metadata", () => {
         accounts: [account.address],
       });
 
-      // Grant basic scope only; transaction scope should be added after a successful send.
+      // Grant basic capability only; transaction capability should be added after a successful send.
       await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
@@ -473,7 +473,7 @@ describe("eip155 handlers - approval metadata", () => {
         accounts: [account.address],
       });
 
-      // Ensure Sign scope is not present before the first typed data signature.
+      // Ensure Sign capability is not present before the first typed data signature.
       const beforeState = runtime.controllers.permissions.getState();
       const beforeCapabilities = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
       expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);

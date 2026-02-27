@@ -16,7 +16,7 @@ type RpcLikeError = Error & { code: number; data?: unknown };
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
 export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionParams> = {
-  scope: PermissionCapabilities.SendTransaction,
+  capability: PermissionCapabilities.SendTransaction,
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {

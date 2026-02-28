@@ -4,7 +4,7 @@ import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isPrepareEligibleTransactionStatus } from "./status.js";
 import type { TransactionIssue, TransactionMeta, TransactionWarning } from "./types.js";
 import {
-  buildAdapterContext,
+  buildPrepareContext,
   cloneIssues,
   cloneWarnings,
   issueFromPrepareError,
@@ -135,7 +135,7 @@ export class TransactionPrepareManager {
     }
 
     try {
-      const context = buildAdapterContext(meta);
+      const context = buildPrepareContext(meta);
       const runPrepare = async () => await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
 

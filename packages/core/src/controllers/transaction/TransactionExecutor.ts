@@ -26,7 +26,8 @@ import type {
   TransactionWarning,
 } from "./types.js";
 import {
-  buildAdapterContext,
+  buildPrepareContext,
+  buildSignContext,
   cloneIssues,
   cloneRequest,
   cloneWarnings,
@@ -268,8 +269,7 @@ export class TransactionExecutor
         meta = next;
       }
 
-      const context = buildAdapterContext(meta);
-      const signed = await adapter.signTransaction(context, prepared);
+      const signed = await adapter.signTransaction(buildSignContext(meta), prepared);
 
       let signedMeta: TransactionMeta = meta;
       if (meta.status === "approved") {
@@ -294,7 +294,7 @@ export class TransactionExecutor
         return;
       }
 
-      const broadcast = await adapter.broadcastTransaction(buildAdapterContext(signedMeta), signed);
+      const broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed);
 
       const afterBroadcast = await this.#service.transition({
         id,

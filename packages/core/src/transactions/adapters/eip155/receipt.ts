@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { ReceiptResolution, ReplacementResolution, TransactionAdapterContext } from "../types.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionPrepareContext } from "../types.js";
 
 type ReceiptDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
@@ -62,7 +62,7 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   return "failed";
 };
 
-const extractNonce = (context: TransactionAdapterContext): string | null => {
+const extractNonce = (context: TransactionPrepareContext): string | null => {
   const payload = context.request.payload;
   if (!payload || typeof payload !== "object") {
     return null;
@@ -86,8 +86,8 @@ const toBigInt = (value: string): bigint | null => {
 };
 
 export type Eip155ReceiptService = {
-  fetchReceipt(context: TransactionAdapterContext, hash: string): Promise<ReceiptResolution | null>;
-  detectReplacement(context: TransactionAdapterContext): Promise<ReplacementResolution | null>;
+  fetchReceipt(context: TransactionPrepareContext, hash: string): Promise<ReceiptResolution | null>;
+  detectReplacement(context: TransactionPrepareContext): Promise<ReplacementResolution | null>;
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {

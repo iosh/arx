@@ -9,7 +9,7 @@ import * as TypedData from "ox/TypedData";
 import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
-import type { SignedTransactionPayload, TransactionAdapterContext } from "../types.js";
+import type { SignedTransactionPayload, TransactionSignContext } from "../types.js";
 import type { Eip155PreparedTransaction } from "./types.js";
 
 const textEncoder = new TextEncoder();
@@ -20,7 +20,7 @@ type SignerDeps = {
 
 export type Eip155Signer = {
   signTransaction: (
-    context: TransactionAdapterContext,
+    context: TransactionSignContext,
     prepared: Record<string, unknown>,
   ) => Promise<SignedTransactionPayload>;
   signPersonalMessage: (params: { accountId: string; message: HexType | string }) => Promise<HexType>;
@@ -67,7 +67,7 @@ function toBigInt(value: HexType | null | undefined, label: string, required = f
  * Extract numeric chainId from transaction or context.
  * Validates chainId is a positive 53-bit safe integer.
  */
-const deriveChainId = (context: TransactionAdapterContext, prepared: Record<string, unknown>): number => {
+const deriveChainId = (context: TransactionSignContext, prepared: Record<string, unknown>): number => {
   if (prepared.chainId) {
     const numeric = Number(Hex.toBigInt(prepared.chainId as Hex.Hex));
     if (!Number.isSafeInteger(numeric) || numeric <= 0) {
@@ -219,37 +219,28 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
       });
     }
 
-    const requestFrom = context.meta.from;
-    if (!requestFrom) {
-      throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Transaction from address is required." });
+    const requestPayload = context.request.payload;
+    const payloadFrom =
+      requestPayload && typeof requestPayload === "object" ? (requestPayload as { from?: unknown }).from : undefined;
+    if (typeof payloadFrom === "string" && payloadFrom.toLowerCase() !== context.from.toLowerCase()) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: "Transaction from address does not match approved account.",
+        data: { payloadFrom, approvedFrom: context.from },
+      });
     }
 
-    const activeFrom = context.from;
-    if (activeFrom) {
-      const normalizedRequest = requestFrom.toLowerCase();
-      const normalizedActive = activeFrom.toLowerCase();
-      if (normalizedRequest !== normalizedActive) {
-        throw arxError({
-          reason: ArxReasons.RpcInvalidRequest,
-          message: "Transaction from address does not match active account.",
-          data: { requestFrom, activeAccount: activeFrom },
-        });
-      }
-    }
-
-    const from = requestFrom;
-
-    const fromAccountId = toAccountIdFromAddress({ chainRef: context.chainRef, address: from });
+    const fromAccountId = toAccountIdFromAddress({ chainRef: context.chainRef, address: context.from });
     await assertUnlockedAccount(deps.keyring, fromAccountId);
     const prepared = preparedInput as Eip155PreparedTransaction;
     const chainId = deriveChainId(context, preparedInput);
     const envelope = buildEnvelope(prepared, chainId);
 
     if (envelope.type === "eip1559") {
-      const payload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
+      const txSignPayload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
       const signature = await deps.keyring.signDigestByAccountId({
         accountId: fromAccountId,
-        digest: Hex.toBytes(payload),
+        digest: Hex.toBytes(txSignPayload),
       });
       const signed = TransactionEnvelopeEip1559.from(envelope.value, {
         signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
@@ -259,10 +250,10 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
       return { raw, hash };
     }
 
-    const payload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
+    const txSignPayload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
     const signature = await deps.keyring.signDigestByAccountId({
       accountId: fromAccountId,
-      digest: Hex.toBytes(payload),
+      digest: Hex.toBytes(txSignPayload),
     });
     const signed = TransactionEnvelopeLegacy.from(envelope.value, {
       signature: { r: signature.r, s: signature.s, yParity: signature.yParity },

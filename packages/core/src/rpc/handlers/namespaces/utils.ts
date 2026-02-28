@@ -4,7 +4,7 @@ import type {
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
   TransactionRequest,
-} from "../../../controllers/index.js";
+} from "../../../transactions/types.js";
 import type { Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES } from "./__fixtures__/constants.js";
-import { createAdapterContext } from "./__fixtures__/contexts.js";
+import { createPrepareContext } from "./__fixtures__/contexts.js";
 import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
@@ -11,7 +11,7 @@ describe("prepareTransaction - field handling", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.value = "0xDE0B6B3A7640000";
       ctx.request.payload.gas = "0x5208";
       ctx.request.payload.gasPrice = "0x3B9ACA00";
@@ -33,7 +33,7 @@ describe("prepareTransaction - field handling", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.data = "0xABCD";
 
       const result = await prepareTransaction(ctx);
@@ -51,10 +51,9 @@ describe("prepareTransaction - field handling", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.value = "0x0";
       ctx.request.payload.data = "0x";
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
 
@@ -72,7 +71,7 @@ describe("prepareTransaction - field handling", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.to = null;
       ctx.request.payload.data = "0x60006000";
 
@@ -88,7 +87,7 @@ describe("prepareTransaction - field handling", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.to = null;
       ctx.request.payload.data = "0x60006000";
 

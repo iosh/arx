@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../../chains/registry.js";
-import type { Eip155TransactionPayload } from "../../../controllers/transaction/types.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { TransactionAdapterContext } from "../types.js";
+import type { Eip155TransactionPayload } from "../../types.js";
+import type { TransactionPrepareContext } from "../types.js";
 import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
@@ -37,7 +37,7 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
   const deriveAddresses = createAddressResolver({ chains });
   const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 
-  return async (ctx: TransactionAdapterContext): Promise<Eip155PreparedTransactionResult> => {
+  return async (ctx: TransactionPrepareContext): Promise<Eip155PreparedTransactionResult> => {
     if (ctx.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,

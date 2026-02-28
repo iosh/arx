@@ -1,7 +1,7 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { TransactionAdapterContext } from "../types.js";
+import type { TransactionPrepareContext } from "../types.js";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
 import { createReceiptContext } from "./__fixtures__/contexts.js";
 import { createEip155RpcClient } from "./__mocks__/rpc.js";
@@ -53,7 +53,7 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const context: TransactionAdapterContext = {
+    const context: TransactionPrepareContext = {
       ...BASE_CONTEXT,
       request: {
         ...BASE_CONTEXT.request,

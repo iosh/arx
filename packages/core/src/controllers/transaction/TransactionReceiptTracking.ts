@@ -5,7 +5,7 @@ import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tr
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
 import type { TransactionMeta } from "./types.js";
-import { buildAdapterContext } from "./utils.js";
+import { buildPrepareContext } from "./utils.js";
 
 type Options = {
   view: StoreTransactionView;
@@ -57,7 +57,7 @@ export class TransactionReceiptTracking {
    */
   handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
     if (next.status === "broadcast" && typeof next.hash === "string") {
-      const context = buildAdapterContext(next);
+      const context = buildPrepareContext(next);
       if (this.#tracker.isTracking(next.id)) {
         this.#tracker.resume(next.id, context, next.hash);
       } else {
@@ -81,7 +81,7 @@ export class TransactionReceiptTracking {
    */
   resumeBroadcast(meta: TransactionMeta) {
     if (meta.status !== "broadcast" || typeof meta.hash !== "string") return;
-    this.#tracker.resume(meta.id, buildAdapterContext(meta), meta.hash);
+    this.#tracker.resume(meta.id, buildPrepareContext(meta), meta.hash);
   }
 
   async #applyReceiptResolution(id: string, resolution: ReceiptResolution): Promise<void> {

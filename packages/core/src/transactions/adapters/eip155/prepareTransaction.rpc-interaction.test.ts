@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES, TEST_VALUES } from "./__fixtures__/constants.js";
-import { createAdapterContext } from "./__fixtures__/contexts.js";
+import { createPrepareContext } from "./__fixtures__/contexts.js";
 import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
@@ -14,7 +14,7 @@ describe("prepareTransaction - RPC interaction", () => {
         rpcClientFactory: vi.fn(() => rpc.client),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       // Provide values so preparation can check balance without extra RPC lookups.
       ctx.request.payload.nonce = "0x1";
       ctx.request.payload.gas = "0x5208";
@@ -48,7 +48,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       const prepared = await prepareTransaction(ctx);
 
       expect(prepared.prepared.nonce).toBe("0xa");
@@ -75,7 +75,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
@@ -94,7 +94,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.nonce = "0xa";
       ctx.request.payload.gas = "0x5208";
       ctx.request.payload.gasPrice = "0x3b9aca00";
@@ -113,10 +113,8 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext({ from: null });
+      const ctx = createPrepareContext({ from: null });
       Reflect.deleteProperty(ctx.request.payload, "from");
-      ctx.meta.from = null;
-      ctx.meta.request = ctx.request;
 
       const prepared = await prepareTransaction(ctx);
 
@@ -144,7 +142,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       const prepared = await prepareTransaction(ctx);
 
       expect(prepared.issues.map((item) => item.code)).toEqual(
@@ -169,7 +167,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
       const prepared = await prepareTransaction(ctx);
@@ -195,7 +193,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
       const prepared = await prepareTransaction(ctx);
@@ -214,7 +212,7 @@ describe("prepareTransaction - RPC interaction", () => {
         }),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       const prepared = await prepareTransaction(ctx);
 
       expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.rpc_unavailable");
@@ -228,7 +226,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
       const prepared = await prepareTransaction(ctx);
@@ -245,7 +243,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
       const prepared = await prepareTransaction(ctx);
@@ -272,7 +270,7 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const prepared = await prepareTransaction(createAdapterContext());
+      const prepared = await prepareTransaction(createPrepareContext());
 
       const issueCodes = prepared.issues.map((item) => item.code);
       expect(issueCodes).toContain("transaction.prepare.invalid_hex");
@@ -287,7 +285,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       await prepareTransaction(ctx);
 
       expect(rpc.estimateGas).toHaveBeenCalledWith({
@@ -305,7 +303,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
       const prepared = await prepareTransaction(ctx);
@@ -321,7 +319,7 @@ describe("prepareTransaction - RPC interaction", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
       const prepared = await prepareTransaction(ctx);

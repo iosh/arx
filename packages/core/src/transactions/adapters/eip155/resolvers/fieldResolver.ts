@@ -1,11 +1,11 @@
-import type { Eip155TransactionPayload } from "../../../../controllers/transaction/types.js";
-import type { TransactionAdapterContext } from "../../types.js";
+import type { Eip155TransactionPayload } from "../../../types.js";
+import type { TransactionPrepareContext } from "../../types.js";
 import type { Eip155PreparedTransactionResult, FieldResolutionResult } from "../types.js";
 import { deriveExpectedChainId } from "../utils/chainHelpers.js";
 import { parseHexData, parseHexQuantity, pushIssue, pushWarning } from "../utils/validation.js";
 
 export const deriveFields = (
-  context: TransactionAdapterContext,
+  context: TransactionPrepareContext,
   payload: Eip155TransactionPayload,
   issues: Eip155PreparedTransactionResult["issues"],
   warnings: Eip155PreparedTransactionResult["warnings"],
@@ -18,12 +18,15 @@ export const deriveFields = (
   if (payload.chainId) {
     const chainId = parseHexQuantity(issues, payload.chainId, "chainId");
     if (chainId) {
-      prepared.chainId = chainId;
       if (expectedChainId && chainId !== expectedChainId) {
         pushIssue(issues, "transaction.prepare.chain_id_mismatch", "chainId does not match active chain.", {
           payloadChainId: chainId,
           expectedChainId,
         });
+        // Ensure signing uses the active chainId derived from chainRef.
+        prepared.chainId = expectedChainId;
+      } else {
+        prepared.chainId = chainId;
       }
     }
   } else {

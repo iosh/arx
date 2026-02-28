@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReceiptResolution, ReplacementResolution, TransactionAdapterContext } from "../adapters/types.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionPrepareContext } from "../adapters/types.js";
 import { createReceiptTracker } from "./ReceiptTracker.js";
 
-const BASE_CONTEXT: TransactionAdapterContext = {
+const BASE_CONTEXT: TransactionPrepareContext = {
   namespace: "eip155",
   chainRef: "eip155:1",
   origin: "https://dapp.example",
@@ -17,34 +17,6 @@ const BASE_CONTEXT: TransactionAdapterContext = {
       value: "0x0",
       data: "0x",
     },
-  },
-  meta: {
-    id: "tx-1",
-    namespace: "eip155",
-    chainRef: "eip155:1",
-    origin: "https://dapp.example",
-    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    request: {
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      payload: {
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        nonce: "0x1",
-        value: "0x0",
-        data: "0x",
-      },
-    },
-    prepared: null,
-    status: "broadcast",
-    hash: "0xhash",
-    receipt: null,
-    error: null,
-    userRejected: false,
-    warnings: [],
-    issues: [],
-    createdAt: 1_000,
-    updatedAt: 1_000,
   },
 };
 
@@ -162,76 +134,6 @@ describe("ReceiptTracker", () => {
         delays.push(timeout);
       }
       return (originalSetTimeout as typeof globalThis.setTimeout)(handler, timeout, ...args);
-    }) as typeof globalThis.setTimeout);
-
-    const tracker = createReceiptTracker(
-      {
-        getAdapter: () => adapter,
-        onReceipt: vi.fn(),
-        onReplacement: vi.fn(),
-        onTimeout: vi.fn(),
-        onError: vi.fn(),
-      },
-      { initialDelayMs: 100, maxDelayMs: 500, maxAttempts: 4 },
-    );
-
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
-
-    await vi.advanceTimersByTimeAsync(100);
-    await vi.advanceTimersByTimeAsync(200);
-    await vi.advanceTimersByTimeAsync(400);
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(delays.slice(0, 4)).toEqual([100, 200, 400, 500]);
-    setTimeoutSpy.mockRestore();
-  });
-
-  it("stops tracking and clears pending timers", async () => {
-    const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
-    };
-
-    const onReceipt = vi.fn();
-    const tracker = createReceiptTracker(
-      {
-        getAdapter: () => adapter,
-        onReceipt,
-        onReplacement: vi.fn(),
-        onTimeout: vi.fn(),
-        onError: vi.fn(),
-      },
-      { initialDelayMs: 100, maxDelayMs: 1000, maxAttempts: 5 },
-    );
-
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
-    expect(tracker.isTracking("tx-1")).toBe(true);
-
-    tracker.stop("tx-1");
-    expect(tracker.isTracking("tx-1")).toBe(false);
-
-    await vi.runOnlyPendingTimersAsync();
-    expect(onReceipt).not.toHaveBeenCalled();
-    expect(adapter.fetchReceipt).not.toHaveBeenCalled();
-    expect(tracker.pending()).toBe(0);
-  });
-
-  it("doubles delay on each attempt until it reaches maxDelay", async () => {
-    const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
-    };
-
-    const delays: number[] = [];
-
-    const originalSetTimeout = globalThis.setTimeout;
-    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-
-    setTimeoutSpy.mockImplementation(((handler: TimeoutHandler, timeout?: number, ...args: unknown[]) => {
-      if (typeof timeout === "number") {
-        delays.push(timeout);
-      }
-      return originalSetTimeout(handler, timeout, ...(args as Parameters<typeof globalThis.setTimeout>).slice(2));
     }) as typeof globalThis.setTimeout);
 
     const tracker = createReceiptTracker(

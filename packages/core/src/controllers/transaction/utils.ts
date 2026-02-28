@@ -1,7 +1,7 @@
-import { ArxReasons, isArxError } from "@arx/errors";
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import { parseChainRef } from "../../chains/caip.js";
-import type { TransactionAdapterContext } from "../../transactions/adapters/types.js";
+import type { TransactionPrepareContext, TransactionSignContext } from "../../transactions/adapters/types.js";
 import type {
   TransactionError,
   TransactionIssue,
@@ -143,14 +143,25 @@ export const isUserRejectedError = (reason: unknown, coerced?: TransactionError)
   return rejected || coerced?.code === 4001 || coerced?.name === "TransactionRejectedError";
 };
 
-export const buildAdapterContext = (meta: TransactionMeta): TransactionAdapterContext => ({
+export const buildPrepareContext = (meta: TransactionMeta): TransactionPrepareContext => ({
   namespace: meta.namespace,
   chainRef: meta.chainRef,
   origin: meta.origin,
   from: meta.from,
   request: cloneRequest(meta.request),
-  meta: cloneMeta(meta),
 });
+
+export const buildSignContext = (meta: TransactionMeta): TransactionSignContext => {
+  const ctx = buildPrepareContext(meta);
+  if (!ctx.from) {
+    throw arxError({
+      reason: ArxReasons.RpcInternal,
+      message: "Failed to resolve from address for signing.",
+      data: { id: meta.id, chainRef: meta.chainRef },
+    });
+  }
+  return { ...ctx, from: ctx.from };
+};
 
 export const deriveEip155HexChainIdFromChainRef = (chainRef: string): `0x${string}` => {
   const parsed = parseChainRef(chainRef);

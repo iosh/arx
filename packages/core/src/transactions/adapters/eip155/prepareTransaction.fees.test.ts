@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAdapterContext } from "./__fixtures__/contexts.js";
+import { createPrepareContext } from "./__fixtures__/contexts.js";
 import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
@@ -16,7 +16,7 @@ describe("prepareTransaction - fees", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.gasPrice = "0x3b9aca00";
 
       const prepared = await prepareTransaction(ctx);
@@ -32,7 +32,7 @@ describe("prepareTransaction - fees", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
       ctx.request.payload.gasPrice = "0x2540be400";
 
@@ -58,7 +58,7 @@ describe("prepareTransaction - fees", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
       Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
@@ -77,7 +77,7 @@ describe("prepareTransaction - fees", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
       ctx.request.payload.maxFeePerGas = "0x59682f00";
@@ -98,7 +98,7 @@ describe("prepareTransaction - fees", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
       ctx.request.payload.maxFeePerGas = "0x59682F00";
       ctx.request.payload.maxPriorityFeePerGas = "0x3B9ACA00";
@@ -114,7 +114,7 @@ describe("prepareTransaction - fees", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.maxFeePerGas = "0x59682f00";
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
@@ -130,7 +130,7 @@ describe("prepareTransaction - fees", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.gasPrice = "0x3b9aca00";
       ctx.request.payload.maxFeePerGas = "0x59682f00";
 
@@ -146,7 +146,7 @@ describe("prepareTransaction - fees", () => {
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.gasPrice = "0x3b9aca00";
       ctx.request.payload.maxFeePerGas = "0x59682f00";
       ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
@@ -170,7 +170,7 @@ describe("prepareTransaction - fees", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gasPrice");
       Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");

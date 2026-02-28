@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES, TEST_CHAINS } from "./__fixtures__/constants.js";
-import { createAdapterContext, createEip155Request, createTransactionMeta } from "./__fixtures__/contexts.js";
+import { createEip155Request, createPrepareContext } from "./__fixtures__/contexts.js";
 import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcClient, createEip155RpcMock } from "./__mocks__/rpc.js";
 
@@ -8,7 +8,7 @@ describe("prepareTransaction - validation", () => {
   describe("namespace validation", () => {
     it("rejects requests from non-eip155 namespace", async () => {
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn() });
-      const ctx = createAdapterContext({ namespace: "conflux" });
+      const ctx = createPrepareContext({ namespace: "conflux" });
 
       await expect(prepareTransaction(ctx)).rejects.toThrow(/eip155/);
     });
@@ -22,10 +22,9 @@ describe("prepareTransaction - validation", () => {
 
       const request = createEip155Request();
       Reflect.deleteProperty(request.payload, "from");
-      const ctx = createAdapterContext({
+      const ctx = createPrepareContext({
         request,
-        meta: createTransactionMeta(request),
-        from: undefined as unknown as string,
+        from: null,
       });
 
       const result = await prepareTransaction(ctx);
@@ -37,10 +36,9 @@ describe("prepareTransaction - validation", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcClient()),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.from = "0xINVALID" as unknown as `0x${string}`;
       ctx.from = "0xINVALID" as unknown as string;
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
       expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.from_invalid");
@@ -52,9 +50,8 @@ describe("prepareTransaction - validation", () => {
       rpc.estimateGas.mockResolvedValue("0x5208");
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.from = TEST_ADDRESSES.TO_B;
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
       const mismatch = result.issues.find((item) => item.code === "transaction.prepare.from_mismatch");
@@ -75,12 +72,10 @@ describe("prepareTransaction - validation", () => {
       const request = createEip155Request();
       Reflect.deleteProperty(request.payload, "from");
 
-      const ctx = createAdapterContext({
+      const ctx = createPrepareContext({
         from: TEST_ADDRESSES.MIXED_CASE,
         request,
-        meta: createTransactionMeta(request),
       });
-      ctx.meta.from = TEST_ADDRESSES.MIXED_CASE;
 
       const result = await prepareTransaction(ctx);
 
@@ -98,9 +93,8 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.to = "0x123" as unknown as `0x${string}`;
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
       expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.to_invalid");
@@ -117,14 +111,13 @@ describe("prepareTransaction - validation", () => {
         rpcClientFactory: vi.fn(() => rpc.client),
       });
 
-      const ctx = createAdapterContext({
+      const ctx = createPrepareContext({
         chainRef: TEST_CHAINS.MAINNET,
         from: TEST_ADDRESSES.FROM_A,
       });
 
       ctx.request.payload.from = TEST_ADDRESSES.TO_B;
       ctx.request.payload.chainId = "0x2";
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
       expect(result.issues.map((item) => item.code)).toEqual(
@@ -143,9 +136,8 @@ describe("prepareTransaction - validation", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcClient()),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "chainId");
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
 
@@ -157,9 +149,8 @@ describe("prepareTransaction - validation", () => {
         rpcClientFactory: vi.fn(() => createEip155RpcClient()),
       });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       ctx.request.payload.chainId = TEST_CHAINS.MAINNET_CHAIN_ID;
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
 
@@ -178,10 +169,9 @@ describe("prepareTransaction - validation", () => {
       request.chainRef = "eip155:mainnet";
       request.payload.chainId = TEST_CHAINS.MAINNET_CHAIN_ID;
 
-      const ctx = createAdapterContext({
+      const ctx = createPrepareContext({
         chainRef: "eip155:mainnet",
         request,
-        meta: createTransactionMeta(request),
       });
 
       const result = await prepareTransaction(ctx);
@@ -196,12 +186,11 @@ describe("prepareTransaction - validation", () => {
       const rpc = createEip155RpcMock();
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
 
-      const ctx = createAdapterContext();
+      const ctx = createPrepareContext();
       (ctx.request.payload as Record<string, unknown>).value = "1000";
       (ctx.request.payload as Record<string, unknown>).gas = "0xZZ";
       (ctx.request.payload as Record<string, unknown>).nonce = "0x1G";
       (ctx.request.payload as Record<string, unknown>).data = "0x123";
-      ctx.meta.request = ctx.request;
 
       const result = await prepareTransaction(ctx);
       const issueCodes = result.issues.map((item) => item.code);

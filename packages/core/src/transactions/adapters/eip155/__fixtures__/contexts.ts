@@ -1,14 +1,14 @@
-import type { Eip155TransactionPayload, TransactionMeta } from "../../../../controllers/transaction/types.js";
-import type { TransactionAdapterContext } from "../../types.js";
+import type { Eip155TransactionPayload } from "../../../types.js";
+import type { TransactionPrepareContext } from "../../types.js";
 
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_VALUES } from "./constants.js";
 
 /**
- * Creates a minimal EIP-155 transaction request for testing
+ * Creates a minimal EIP-155 transaction request for testing.
  */
 export const createEip155Request = (
   overrides: Partial<Eip155TransactionPayload> = {},
-): TransactionAdapterContext["request"] => ({
+): TransactionPrepareContext["request"] => ({
   namespace: "eip155",
   chainRef: TEST_CHAINS.MAINNET,
   payload: {
@@ -22,80 +22,48 @@ export const createEip155Request = (
 });
 
 /**
- * Creates a transaction metadata object for testing
+ * Creates a complete transaction prepare context for testing.
  */
-export const createTransactionMeta = (
-  request: TransactionAdapterContext["request"],
-  overrides: Partial<TransactionMeta> = {},
-): TransactionMeta => ({
-  id: "tx-1",
-  namespace: "eip155",
-  chainRef: TEST_CHAINS.MAINNET,
-  origin: "https://dapp.example",
-  from: TEST_ADDRESSES.FROM_A,
-  request,
-  prepared: null,
-  status: "pending",
-  hash: null,
-  receipt: null,
-  error: null,
-  userRejected: false,
-  warnings: [],
-  issues: [],
-  createdAt: 1_000,
-  updatedAt: 1_000,
-  ...overrides,
-});
-
-/**
- * Creates a complete transaction adapter context for testing
- */
-export const createAdapterContext = (overrides: Partial<TransactionAdapterContext> = {}): TransactionAdapterContext => {
+export const createPrepareContext = (overrides: Partial<TransactionPrepareContext> = {}): TransactionPrepareContext => {
   const request = overrides.request ?? createEip155Request();
-  const meta = overrides.meta ?? createTransactionMeta(request);
 
   return {
     namespace: "eip155",
     chainRef: TEST_CHAINS.MAINNET,
     origin: "https://dapp.example",
     from: TEST_ADDRESSES.FROM_A,
-    meta,
     request,
     ...overrides,
   };
 };
 
 /**
- * Creates a context for broadcaster tests (transaction in approved state)
+ * Creates a context for broadcaster tests.
  */
 export const createBroadcasterContext = (
-  overrides: Partial<TransactionAdapterContext> = {},
-): TransactionAdapterContext => {
-  const baseRequest = {
-    namespace: "eip155" as const,
+  overrides: Partial<TransactionPrepareContext> = {},
+): TransactionPrepareContext => {
+  const baseRequest: TransactionPrepareContext["request"] = {
+    namespace: "eip155",
     chainRef: TEST_CHAINS.MAINNET,
     payload: {
       from: TEST_ADDRESSES.ACCOUNT_AA,
     },
   };
 
-  return createAdapterContext({
+  return createPrepareContext({
     from: TEST_ADDRESSES.ACCOUNT_AA,
     request: baseRequest,
-    meta: createTransactionMeta(baseRequest, {
-      from: TEST_ADDRESSES.ACCOUNT_AA,
-      status: "approved",
-    }),
     ...overrides,
   });
 };
 
 /**
- * Creates a context for receipt tests (transaction in broadcast state)
+ * Creates a context for receipt tests (transaction is already broadcast).
  */
-export const createReceiptContext = (overrides: Partial<TransactionAdapterContext> = {}): TransactionAdapterContext => {
-  const baseRequest = {
-    namespace: "eip155" as const,
+export const createReceiptContext = (overrides: Partial<TransactionPrepareContext> = {}): TransactionPrepareContext => {
+  const baseRequest: TransactionPrepareContext["request"] = {
+    namespace: "eip155",
     chainRef: TEST_CHAINS.MAINNET,
     payload: {
       from: TEST_ADDRESSES.ACCOUNT_AA,
@@ -106,13 +74,9 @@ export const createReceiptContext = (overrides: Partial<TransactionAdapterContex
     },
   };
 
-  return createAdapterContext({
+  return createPrepareContext({
     from: TEST_ADDRESSES.ACCOUNT_AA,
     request: baseRequest,
-    meta: createTransactionMeta(baseRequest, {
-      from: TEST_ADDRESSES.ACCOUNT_AA,
-      status: "broadcast",
-    }),
     ...overrides,
   });
 };

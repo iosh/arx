@@ -3,7 +3,7 @@ import * as Hash from "ox/Hash";
 import * as Hex from "ox/Hex";
 import { describe, expect, it } from "vitest";
 import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
-import type { TransactionAdapterContext } from "../types.js";
+import type { TransactionSignContext } from "../types.js";
 import { createEip155Signer } from "./signer.js";
 
 const toQuantity = (value: bigint) => `0x${value === 0n ? "0" : value.toString(16)}` as const;
@@ -110,13 +110,16 @@ describe("eip155 signer (vectors)", () => {
     const signer = createEip155Signer({ keyring });
 
     const to = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
-    const context: TransactionAdapterContext = {
+    const context: TransactionSignContext = {
       namespace: "eip155",
       chainRef,
       origin: "https://example.test",
       from: address,
-      request: {} as unknown as TransactionAdapterContext["request"],
-      meta: { from: address } as unknown as TransactionAdapterContext["meta"],
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: { from: address },
+      } as TransactionSignContext["request"],
     };
     const signed = await signer.signTransaction(context, {
       chainId: toQuantity(1n),
@@ -156,13 +159,16 @@ describe("eip155 signer (vectors)", () => {
     const signer = createEip155Signer({ keyring });
 
     const to = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
-    const context: TransactionAdapterContext = {
+    const context: TransactionSignContext = {
       namespace: "eip155",
       chainRef,
       origin: "https://example.test",
       from: address,
-      request: {} as unknown as TransactionAdapterContext["request"],
-      meta: { from: address } as unknown as TransactionAdapterContext["meta"],
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: { from: address },
+      } as TransactionSignContext["request"],
     };
     const signed = await signer.signTransaction(context, {
       chainId: toQuantity(1n),

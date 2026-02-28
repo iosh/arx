@@ -2,7 +2,7 @@ import type {
   ReceiptResolution,
   ReplacementResolution,
   TransactionAdapter,
-  TransactionAdapterContext,
+  TransactionPrepareContext,
 } from "../adapters/types.js";
 
 type TrackerAdapter = Pick<TransactionAdapter, "fetchReceipt" | "detectReplacement">;
@@ -22,7 +22,7 @@ type TrackerOptions = {
 
 type TaskState = {
   id: string;
-  context: TransactionAdapterContext;
+  context: TransactionPrepareContext;
   hash: string;
   attempts: number;
   delay: number;
@@ -35,8 +35,8 @@ const DEFAULT_MAX_DELAY_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 20;
 
 export type ReceiptTracker = {
-  start(id: string, context: TransactionAdapterContext, hash: string): void;
-  resume(id: string, context: TransactionAdapterContext, hash: string): void;
+  start(id: string, context: TransactionPrepareContext, hash: string): void;
+  resume(id: string, context: TransactionPrepareContext, hash: string): void;
   stop(id: string): void;
   isTracking(id: string): boolean;
   pending(): number;
@@ -107,7 +107,7 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
     }
   };
 
-  const start = (id: string, context: TransactionAdapterContext, hash: string) => {
+  const start = (id: string, context: TransactionPrepareContext, hash: string) => {
     if (tasks.has(id)) return;
     const state: TaskState = {
       id,
@@ -126,7 +126,7 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
    * Restarts tracking from the initial delay (used after cold starts).
    * Attempts and backoff delay are reset, so the polling loop begins anew.
    */
-  const resume = (id: string, context: TransactionAdapterContext, hash: string) => {
+  const resume = (id: string, context: TransactionPrepareContext, hash: string) => {
     stop(id);
     start(id, context, hash);
   };

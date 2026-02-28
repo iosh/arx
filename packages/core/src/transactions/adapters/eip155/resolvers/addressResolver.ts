@@ -1,6 +1,6 @@
 import * as Hex from "ox/Hex";
 import type { ChainDescriptorRegistry } from "../../../../chains/registry.js";
-import type { TransactionAdapterContext } from "../../types.js";
+import type { TransactionPrepareContext } from "../../types.js";
 import type { AddressResolutionResult, Eip155PreparedTransactionResult } from "../types.js";
 import { pushIssue, readErrorMessage } from "../utils/validation.js";
 
@@ -11,7 +11,7 @@ type AddressResolverDeps = {
 // Create factory function instead of direct export
 export const createAddressResolver = (deps: AddressResolverDeps) => {
   return (
-    context: TransactionAdapterContext,
+    context: TransactionPrepareContext,
     payload: { from?: string | null; to?: string | null | undefined },
     issues: Eip155PreparedTransactionResult["issues"],
   ): AddressResolutionResult => {

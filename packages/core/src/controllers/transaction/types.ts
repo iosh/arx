@@ -2,38 +2,18 @@ import type { Hex } from "ox/Hex";
 import type { ApprovalTypes } from "../../approvals/constants.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import type {
+  TransactionError,
+  TransactionIssue,
+  TransactionPrepared,
+  TransactionReceipt,
+  TransactionRequest,
+  TransactionWarning,
+} from "../../transactions/types.js";
 import type { AccountAddress } from "../account/types.js";
 import type { ApprovalTask } from "../approval/types.js";
+
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
-
-export type TransactionDiagnosticSeverity = "low" | "medium" | "high";
-
-export type TransactionDiagnostic = {
-  kind: "warning" | "issue";
-  code: string;
-  message: string;
-  /**
-   * Optional severity hint for UI treatment and decision-making.
-   * - "warning" diagnostics may still be treated as blocking by the UI.
-   * - "issue" diagnostics are blocking candidates by default.
-   */
-  severity?: TransactionDiagnosticSeverity;
-  data?: unknown;
-};
-
-export type TransactionWarning = TransactionDiagnostic & { kind: "warning" };
-export type TransactionIssue = TransactionDiagnostic & { kind: "issue" };
-
-export type TransactionError = {
-  name: string;
-  message: string;
-  code?: number | undefined;
-  data?: unknown;
-};
-
-export type TransactionReceipt = Record<string, unknown>;
-
-export type TransactionPrepared = Record<string, unknown>;
 
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
@@ -56,30 +36,6 @@ export type TransactionStatusChange = {
 
 export type TransactionStateChange = {
   revision: number;
-};
-
-export type Eip155TransactionPayload = {
-  chainId?: Hex;
-  from?: AccountAddress;
-  to?: AccountAddress | null;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  gasPrice?: Hex;
-  maxFeePerGas?: Hex;
-  maxPriorityFeePerGas?: Hex;
-  nonce?: Hex;
-};
-export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
-
-export type TransactionPayloadMap = {
-  eip155: Eip155TransactionPayload;
-};
-
-export type TransactionRequest<TNamespace extends string = keyof TransactionPayloadMap | string> = {
-  namespace: TNamespace;
-  chainRef?: ChainRef | undefined;
-  payload: TNamespace extends keyof TransactionPayloadMap ? TransactionPayloadMap[TNamespace] : Record<string, unknown>;
 };
 
 export type TransactionMeta = {
@@ -128,3 +84,17 @@ export type TransactionController = {
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };
+
+export type {
+  Eip155TransactionPayload,
+  Eip155TransactionPayloadWithFrom,
+  TransactionDiagnostic,
+  TransactionDiagnosticSeverity,
+  TransactionError,
+  TransactionIssue,
+  TransactionPayloadMap,
+  TransactionPrepared,
+  TransactionReceipt,
+  TransactionRequest,
+  TransactionWarning,
+} from "../../transactions/types.js";

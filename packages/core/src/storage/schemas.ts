@@ -12,7 +12,9 @@ export {
 export {
   Eip155TransactionPayloadSchema,
   GenericTransactionRequestSchema,
+  TransactionDiagnosticSchema,
   TransactionErrorSchema,
+  TransactionIssueSchema,
   TransactionReceiptSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,

@@ -4,6 +4,7 @@ import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
   TransactionErrorSchema,
+  TransactionIssueSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,
 } from "./schemas.js";
@@ -156,7 +157,7 @@ export const TransactionRecordSchema = z
     error: TransactionErrorSchema.optional(),
     userRejected: z.boolean(),
     warnings: z.array(TransactionWarningSchema),
-    issues: z.array(TransactionWarningSchema),
+    issues: z.array(TransactionIssueSchema),
     createdAt: epochMillisecondsSchema,
     updatedAt: epochMillisecondsSchema,
   })
@@ -175,26 +176,6 @@ export const TransactionRecordSchema = z
         message: `request.chainRef must equal record chainRef "${value.chainRef}" when provided`,
         path: ["request", "chainRef"],
       });
-    }
-
-    for (let i = 0; i < value.warnings.length; i++) {
-      if (value.warnings[i]?.kind !== "warning") {
-        ctx.addIssue({
-          code: "custom",
-          message: 'warnings entries must have kind="warning"',
-          path: ["warnings", i, "kind"],
-        });
-      }
-    }
-
-    for (let i = 0; i < value.issues.length; i++) {
-      if (value.issues[i]?.kind !== "issue") {
-        ctx.addIssue({
-          code: "custom",
-          message: 'issues entries must have kind="issue"',
-          path: ["issues", i, "kind"],
-        });
-      }
     }
   });
 export type TransactionRecord = z.infer<typeof TransactionRecordSchema>;

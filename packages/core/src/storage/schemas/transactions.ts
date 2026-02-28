@@ -43,12 +43,21 @@ export const GenericTransactionRequestSchema = z
 
 export const TransactionRequestSchema = z.union([Eip155TransactionRequestInnerSchema, GenericTransactionRequestSchema]);
 
-export const TransactionWarningSchema = z.strictObject({
+// A persisted diagnostic entry (warning or issue). The runtime domain type is `TransactionDiagnostic`.
+export const TransactionDiagnosticSchema = z.strictObject({
   kind: z.enum(["warning", "issue"]),
   code: nonEmptyStringSchema,
   message: z.string(),
   severity: z.enum(["low", "medium", "high"]).optional(),
   data: z.unknown().optional(),
+});
+
+export const TransactionWarningSchema = TransactionDiagnosticSchema.extend({
+  kind: z.literal("warning"),
+});
+
+export const TransactionIssueSchema = TransactionDiagnosticSchema.extend({
+  kind: z.literal("issue"),
 });
 
 export const TransactionErrorSchema = z.strictObject({

@@ -1,10 +1,13 @@
-import type { ArxReason } from "./reasons.js";
+import type { JsonValue } from "./json.js";
+import { toJsonSafe } from "./json.js";
+import type { ArxReason } from "./spec.js";
+import { isArxReason } from "./spec.js";
 
 export type ArxErrorJson = {
   kind: "ArxError";
   reason: ArxReason;
   message: string;
-  data?: unknown;
+  data?: JsonValue;
 };
 
 export type ArxErrorInput = {
@@ -12,6 +15,13 @@ export type ArxErrorInput = {
   message: string;
   data?: unknown;
   cause?: unknown;
+};
+
+export type ArxErrorLike = {
+  kind: "ArxError";
+  reason: unknown;
+  message: unknown;
+  data?: unknown;
 };
 
 export class ArxError extends Error {
@@ -27,11 +37,12 @@ export class ArxError extends Error {
   }
 
   toJSON(): ArxErrorJson {
+    const safeData = toJsonSafe(this.data);
     return {
       kind: "ArxError",
       reason: this.reason,
       message: this.message,
-      ...(this.data !== undefined ? { data: this.data } : {}),
+      ...(safeData !== undefined ? { data: safeData } : {}),
     };
   }
 }
@@ -39,8 +50,27 @@ export class ArxError extends Error {
 export const arxError = (input: ArxErrorInput): ArxError => new ArxError(input);
 
 export const isArxError = (value: unknown): value is ArxError => {
-  if (!value || typeof value !== "object") return false;
+  return value instanceof ArxError;
+};
 
+export const isArxErrorLike = (value: unknown): value is ArxErrorLike => {
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  return candidate.kind === "ArxError" && typeof candidate.reason === "string" && typeof candidate.message === "string";
+  return candidate.kind === "ArxError";
+};
+
+export const coerceArxError = (value: unknown): ArxError | null => {
+  if (value instanceof ArxError) return value;
+  if (!isArxErrorLike(value)) return null;
+
+  const reason = (value as ArxErrorLike).reason;
+  const message = (value as ArxErrorLike).message;
+  if (!isArxReason(reason) || typeof message !== "string") return null;
+
+  return arxError({
+    reason,
+    message,
+    data: (value as ArxErrorLike).data,
+    cause: value,
+  });
 };

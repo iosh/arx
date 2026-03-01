@@ -20,4 +20,10 @@ describe("ArxError", () => {
     expect(json.message).toBe("Internal error");
     expect("cause" in json).toBe(false);
   });
+
+  it("omits non-serializable data", () => {
+    const err = arxError({ reason: ArxReasons.RpcInternal, message: "Internal error", data: { value: 1n } });
+    const json = JSON.parse(JSON.stringify(err)) as { data?: unknown };
+    expect("data" in json).toBe(false);
+  });
 });

@@ -330,7 +330,7 @@ export const buildUiSnapshot = (deps: {
     attention: attention.getSnapshot(),
     permissions: controllers.permissions.getState(),
     vault: {
-      initialized: session.vault.getStatus().hasCiphertext,
+      initialized: session.vault.getStatus().hasEnvelope,
     },
     warnings: {
       hdKeyringsNeedingBackup: keyringWarnings,

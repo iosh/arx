@@ -1,7 +1,7 @@
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
-import { copyBytes, zeroize } from "../../vault/utils.js";
+import { copyBytes, zeroize } from "../../utils/bytes.js";
 import { keyringErrors } from "../errors.js";
 import type {
   HierarchicalDeterministicKeyring,

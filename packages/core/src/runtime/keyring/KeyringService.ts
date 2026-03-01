@@ -12,10 +12,10 @@ import {
   AccountRecordSchema,
   KeyringMetaRecordSchema,
 } from "../../storage/records.js";
+import { zeroize } from "../../utils/bytes.js";
 import { vaultErrors } from "../../vault/errors.js";
-import { zeroize } from "../../vault/utils.js";
 import { KeyringHydration } from "./KeyringHydration.js";
-import { decodePayload, encodePayload } from "./keyring-utils.js";
+import { decodePayloadAndZeroize, encodePayload } from "./keyring-utils.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 import type {
   AccountId,
@@ -363,7 +363,7 @@ export class KeyringService {
     } else if (payload === null) {
       this.#payload = { keyrings: [] };
     } else if (this.#options.vault.isUnlocked()) {
-      this.#payload = decodePayload(this.#options.vault.exportKey(), this.#options.logger);
+      this.#payload = decodePayloadAndZeroize(this.#options.vault.exportSecret(), this.#options.logger);
     } else {
       this.#payload = { keyrings: [] };
     }

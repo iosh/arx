@@ -13,7 +13,7 @@ import type { Eip155RpcCapabilities } from "../../rpc/namespaceClients/eip155.js
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { TransactionRequest } from "../../transactions/types.js";
-import { zeroize } from "../../vault/utils.js";
+import { zeroize } from "../../utils/bytes.js";
 import type { UiMethodResult } from "../protocol.js";
 import { buildUiSnapshot } from "./snapshot.js";
 import type { UiHandlers, UiRuntimeDeps } from "./types.js";
@@ -416,12 +416,12 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
       return await session.withVaultMetaPersistHold(async () => {
         const status = session.vault.getStatus();
-        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(controllers)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
         // Allow resuming "setupIncomplete" (ciphertext exists but no accounts) without re-initializing the vault.
-        if (!status.hasCiphertext) {
+        if (!status.hasEnvelope) {
           const password = requireOnboardingPassword(params.password);
           await session.vault.initialize({ password });
           await session.unlock.unlock({ password });
@@ -451,11 +451,11 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
       return await session.withVaultMetaPersistHold(async () => {
         const status = session.vault.getStatus();
-        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(controllers)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
-        if (!status.hasCiphertext) {
+        if (!status.hasEnvelope) {
           const password = requireOnboardingPassword(params.password);
           await session.vault.initialize({ password });
           await session.unlock.unlock({ password });
@@ -484,11 +484,11 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
 
       return await session.withVaultMetaPersistHold(async () => {
         const status = session.vault.getStatus();
-        if (status.hasCiphertext && hasAnyAccounts(controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(controllers)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
-        if (!status.hasCiphertext) {
+        if (!status.hasEnvelope) {
           const password = requireOnboardingPassword(params.password);
           await session.vault.initialize({ password });
           await session.unlock.unlock({ password });

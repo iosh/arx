@@ -27,22 +27,18 @@ export const randomBytes = (size: number): Uint8Array => {
   return buffer;
 };
 
-export const copyBytes = (input: Uint8Array): Uint8Array => new Uint8Array(input);
-
-export const zeroize = (buffer: Uint8Array): void => {
-  buffer.fill(0);
-};
-
 export const toBase64 = (bytes: Uint8Array): string => {
   if (typeof Buffer !== "undefined") {
     return Buffer.from(bytes).toString("base64");
   }
   if (typeof globalThis.btoa === "function") {
-    let binary = "";
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
+    const CHUNK_SIZE = 0x2000;
+    const parts: string[] = [];
+    for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
+      const slice = bytes.subarray(offset, offset + CHUNK_SIZE);
+      parts.push(String.fromCharCode(...slice));
     }
-    return globalThis.btoa(binary);
+    return globalThis.btoa(parts.join(""));
   }
   throw new Error("Base64 encoder is not available");
 };

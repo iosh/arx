@@ -1,7 +1,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { copyBytes, zeroize } from "../../vault/utils.js";
+import { copyBytes, zeroize } from "../../utils/bytes.js";
 import { keyringErrors } from "../errors.js";
 
 const PRIVATE_KEY_PATTERN = /^(?:0x)?[0-9a-fA-F]{64}$/;

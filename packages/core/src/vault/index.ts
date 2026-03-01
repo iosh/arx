@@ -1,11 +1,11 @@
 export type {
+  CommitSecretParams,
   InitializeVaultParams,
+  ReencryptParams,
   UnlockVaultParams,
-  VaultAlgorithm,
-  VaultCiphertext,
   VaultConfig,
+  VaultEnvelope,
   VaultService,
   VaultStatus,
 } from "./types.js";
-export { zeroize } from "./utils.js";
 export { createVaultService, VAULT_VERSION } from "./vaultService.js";

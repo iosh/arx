@@ -1,25 +1,24 @@
 import { ArxReasons, isArxError } from "@arx/errors";
+import { copyBytes, zeroize } from "../utils/bytes.js";
 import { vaultErrors } from "./errors.js";
 import type {
+  CommitSecretParams,
   InitializeVaultParams,
-  SealVaultParams,
+  ReencryptParams,
   UnlockVaultParams,
-  VaultAlgorithm,
-  VaultCiphertext,
   VaultConfig,
+  VaultEnvelope,
   VaultService,
   VaultStatus,
 } from "./types.js";
 import {
   aesGcmDecrypt,
   aesGcmEncrypt,
-  copyBytes,
   deriveKeyMaterial,
   fromBase64,
   importPasswordKey,
   randomBytes,
   toBase64,
-  zeroize,
 } from "./utils.js";
 
 type ResolvedVaultConfig = {
@@ -30,14 +29,17 @@ type ResolvedVaultConfig = {
 };
 
 const DEFAULT_CONFIG: ResolvedVaultConfig = {
+  // Target: ~200ms on typical devices; can be tuned per platform.
   iterations: 600_000,
   saltBytes: 16,
   ivBytes: 12,
   secretBytes: 32,
 };
 
-const VAULT_ALGORITHM: VaultAlgorithm = "pbkdf2-sha256";
-export const VAULT_VERSION = 1;
+export const VAULT_VERSION = 1 as const;
+
+const VAULT_KDF = { name: "pbkdf2", hash: "sha256" } as const;
+const VAULT_CIPHER = { name: "aes-gcm" } as const;
 
 const assertPositiveInteger = (value: number, label: string) => {
   if (!Number.isInteger(value) || value <= 0) {
@@ -59,16 +61,43 @@ const deriveVaultConfig = (config?: VaultConfig): ResolvedVaultConfig => {
   return { iterations, saltBytes, ivBytes, secretBytes };
 };
 
-const cloneCiphertext = (ciphertext: VaultCiphertext): VaultCiphertext => ({ ...ciphertext });
+const cloneEnvelope = (envelope: VaultEnvelope): VaultEnvelope => ({
+  version: envelope.version,
+  kdf: { ...envelope.kdf },
+  cipher: { ...envelope.cipher },
+});
+
+const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
+  if (value.version !== VAULT_VERSION) throw vaultErrors.invalidCiphertext();
+  if (value.kdf.name !== VAULT_KDF.name || value.kdf.hash !== VAULT_KDF.hash) throw vaultErrors.invalidCiphertext();
+  if (value.cipher.name !== VAULT_CIPHER.name) throw vaultErrors.invalidCiphertext();
+
+  try {
+    const saltBytes = fromBase64(value.kdf.salt);
+    const ivBytes = fromBase64(value.cipher.iv);
+    const dataBytes = fromBase64(value.cipher.data);
+    if (!saltBytes.length || !ivBytes.length || !dataBytes.length) {
+      throw new Error("Decoded envelope is empty");
+    }
+
+    return {
+      envelope: cloneEnvelope(value),
+      saltBytes,
+      iterations: value.kdf.iterations,
+      ivBytes,
+      dataBytes,
+    };
+  } catch {
+    throw vaultErrors.invalidCiphertext();
+  }
+};
 
 export const createVaultService = (config?: VaultConfig): VaultService => {
   const resolved = deriveVaultConfig(config);
 
-  let ciphertext: VaultCiphertext | null = null;
+  let envelope: VaultEnvelope | null = null;
   let derivedKey: Uint8Array | null = null;
   let secret: Uint8Array | null = null;
-  let salt: Uint8Array | null = null;
-  let iterationCount: number | null = null;
 
   const clearSession = () => {
     if (derivedKey) {
@@ -79,82 +108,98 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
       zeroize(secret);
       secret = null;
     }
-    salt = null;
-    iterationCount = null;
   };
 
-  const parseCiphertext = (value: VaultCiphertext) => {
-    if (value.version !== VAULT_VERSION || value.algorithm !== VAULT_ALGORITHM) {
-      throw vaultErrors.invalidCiphertext();
-    }
-    try {
-      const decodedSalt = fromBase64(value.salt);
-      const decodedIv = fromBase64(value.iv);
-      const decodedCipher = fromBase64(value.cipher);
-      if (!decodedSalt.length || !decodedIv.length || !decodedCipher.length) {
-        throw new Error("Decoded ciphertext is empty");
-      }
-      return {
-        ciphertext: cloneCiphertext(value),
-        salt: decodedSalt,
-        iterations: value.iterations,
-      };
-    } catch {
-      throw vaultErrors.invalidCiphertext();
-    }
+  const decryptWithPassword = async (params: {
+    password: string;
+    decoded: ReturnType<typeof decodeEnvelopeOrThrow>;
+  }): Promise<{ keyMaterial: Uint8Array; plain: Uint8Array }> => {
+    const passwordKey = await importPasswordKey(params.password);
+    const keyMaterial = await deriveKeyMaterial(passwordKey, params.decoded.saltBytes, params.decoded.iterations);
+    const plain = await aesGcmDecrypt(keyMaterial, params.decoded.dataBytes, params.decoded.ivBytes);
+    return { keyMaterial, plain };
+  };
+
+  const encryptWithPassword = async (params: {
+    password: string;
+    secret: Uint8Array;
+    saltBytes: Uint8Array;
+    iterations: number;
+  }): Promise<{ keyMaterial: Uint8Array; envelope: VaultEnvelope }> => {
+    const passwordKey = await importPasswordKey(params.password);
+    const keyMaterial = await deriveKeyMaterial(passwordKey, params.saltBytes, params.iterations);
+    const { cipher, iv } = await aesGcmEncrypt(keyMaterial, params.secret, resolved.ivBytes);
+
+    return {
+      keyMaterial,
+      envelope: {
+        version: VAULT_VERSION,
+        kdf: {
+          name: VAULT_KDF.name,
+          hash: VAULT_KDF.hash,
+          salt: toBase64(params.saltBytes),
+          iterations: params.iterations,
+        },
+        cipher: {
+          name: VAULT_CIPHER.name,
+          iv: toBase64(iv),
+          data: toBase64(cipher),
+        },
+      },
+    };
+  };
+
+  const encryptWithDerivedKey = async (params: {
+    keyMaterial: Uint8Array;
+    secret: Uint8Array;
+    base: VaultEnvelope;
+  }): Promise<VaultEnvelope> => {
+    const { cipher, iv } = await aesGcmEncrypt(params.keyMaterial, params.secret, resolved.ivBytes);
+    return {
+      version: VAULT_VERSION,
+      kdf: { ...params.base.kdf },
+      cipher: {
+        name: VAULT_CIPHER.name,
+        iv: toBase64(iv),
+        data: toBase64(cipher),
+      },
+    };
   };
 
   return {
-    async initialize(params: InitializeVaultParams): Promise<VaultCiphertext> {
-      const passwordKey = await importPasswordKey(params.password);
-      clearSession();
-
-      const derivedSalt = randomBytes(resolved.saltBytes);
-      const keyMaterial = await deriveKeyMaterial(passwordKey, derivedSalt, resolved.iterations);
+    async initialize(params: InitializeVaultParams): Promise<VaultEnvelope> {
+      const saltBytes = randomBytes(resolved.saltBytes);
       const sessionSecret = params.secret ? copyBytes(params.secret) : randomBytes(resolved.secretBytes);
 
-      salt = derivedSalt;
-      iterationCount = resolved.iterations;
+      clearSession();
+      const { keyMaterial, envelope: next } = await encryptWithPassword({
+        password: params.password,
+        secret: sessionSecret,
+        saltBytes,
+        iterations: resolved.iterations,
+      });
+
       derivedKey = keyMaterial;
       secret = sessionSecret;
+      envelope = next;
 
-      const { cipher, iv } = await aesGcmEncrypt(keyMaterial, sessionSecret, resolved.ivBytes);
-      ciphertext = {
-        version: VAULT_VERSION,
-        algorithm: VAULT_ALGORITHM,
-        salt: toBase64(derivedSalt),
-        iterations: iterationCount,
-        iv: toBase64(iv),
-        cipher: toBase64(cipher),
-        createdAt: Date.now(),
-      };
-
-      return cloneCiphertext(ciphertext);
+      return cloneEnvelope(next);
     },
 
-    async unlock(params: UnlockVaultParams): Promise<Uint8Array> {
-      const parsed = params.ciphertext ? parseCiphertext(params.ciphertext) : null;
-      const sealed = parsed?.ciphertext ?? ciphertext;
+    async unlock(params: UnlockVaultParams): Promise<void> {
+      const sealed = params.envelope ?? envelope;
       if (!sealed) {
         throw vaultErrors.notInitialized();
       }
 
-      const saltBytes = parsed?.salt ?? fromBase64(sealed.salt);
-      const iterations = parsed?.iterations ?? sealed.iterations;
       clearSession();
 
+      const decoded = decodeEnvelopeOrThrow(sealed);
       try {
-        const passwordKey = await importPasswordKey(params.password);
-        const keyMaterial = await deriveKeyMaterial(passwordKey, saltBytes, iterations);
-        const plain = await aesGcmDecrypt(keyMaterial, fromBase64(sealed.cipher), fromBase64(sealed.iv));
-
+        const { keyMaterial, plain } = await decryptWithPassword({ password: params.password, decoded });
         derivedKey = keyMaterial;
         secret = plain;
-        salt = saltBytes;
-        iterationCount = iterations;
-        ciphertext = cloneCiphertext(sealed);
-
-        return copyBytes(plain);
+        envelope = cloneEnvelope(sealed);
       } catch (error) {
         clearSession();
         if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
@@ -168,108 +213,128 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
       clearSession();
     },
 
-    exportKey(): Uint8Array {
+    exportSecret(): Uint8Array {
       if (!secret || !derivedKey) {
         throw vaultErrors.locked();
       }
       return copyBytes(secret);
     },
 
-    async seal(params: SealVaultParams): Promise<VaultCiphertext> {
-      const sealed = ciphertext;
-      if (!sealed) {
+    async commitSecret(params: CommitSecretParams): Promise<VaultEnvelope> {
+      if (!derivedKey || !secret) {
+        throw vaultErrors.locked();
+      }
+      const base = envelope;
+      if (!base) {
         throw vaultErrors.notInitialized();
       }
 
-      const saltBytes = salt ?? fromBase64(sealed.salt);
-      const iterations = iterationCount ?? sealed.iterations;
-      const passwordKey = await importPasswordKey(params.password);
-      const keyMaterial = await deriveKeyMaterial(passwordKey, saltBytes, iterations);
-
-      clearSession();
-
-      const secretCopy = copyBytes(params.secret);
-      const { cipher, iv } = await aesGcmEncrypt(keyMaterial, secretCopy, resolved.ivBytes);
-
-      derivedKey = keyMaterial;
-      secret = secretCopy;
-      salt = saltBytes;
-      iterationCount = iterations;
-      ciphertext = {
-        version: VAULT_VERSION,
-        algorithm: VAULT_ALGORITHM,
-        salt: toBase64(saltBytes),
-        iterations,
-        iv: toBase64(iv),
-        cipher: toBase64(cipher),
-        createdAt: Date.now(),
-      };
-
-      return cloneCiphertext(ciphertext);
-    },
-
-    async reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext> {
-      if (!derivedKey || !salt || iterationCount === null) {
-        throw vaultErrors.locked();
-      }
-
       const nextSecret = copyBytes(params.secret);
-      const { cipher, iv } = await aesGcmEncrypt(derivedKey, nextSecret, resolved.ivBytes);
+      const nextEnvelope = await encryptWithDerivedKey({ keyMaterial: derivedKey, secret: nextSecret, base });
 
-      if (secret) {
-        zeroize(secret);
-      }
+      zeroize(secret);
       secret = nextSecret;
-      ciphertext = {
-        version: VAULT_VERSION,
-        algorithm: VAULT_ALGORITHM,
-        salt: toBase64(salt),
-        iterations: iterationCount,
-        iv: toBase64(iv),
-        cipher: toBase64(cipher),
-        createdAt: Date.now(),
-      };
+      envelope = nextEnvelope;
 
-      return cloneCiphertext(ciphertext);
-    },
-    importCiphertext(value: VaultCiphertext): void {
-      const parsed = parseCiphertext(value);
-      clearSession();
-      ciphertext = parsed.ciphertext;
-      salt = parsed.salt;
-      iterationCount = parsed.iterations;
+      return cloneEnvelope(nextEnvelope);
     },
 
-    async verifyPassword(password: string): Promise<void> {
-      const sealed = ciphertext;
+    async reencrypt(params: ReencryptParams): Promise<VaultEnvelope> {
+      const sealed = envelope;
       if (!sealed) throw vaultErrors.notInitialized();
 
-      const saltBytes = fromBase64(sealed.salt);
-      const iterations = sealed.iterations;
-      const cipherBytes = fromBase64(sealed.cipher);
-      const ivBytes = fromBase64(sealed.iv);
-      let keyMaterial: Uint8Array | null = null;
+      const rotateSalt = params.rotateSalt ?? true;
+      const wasUnlocked = secret !== null && derivedKey !== null;
+
+      let plain: Uint8Array | null = null;
+      let tempKeyMaterial: Uint8Array | null = null;
+
       try {
-        const passwordKey = await importPasswordKey(password);
-        keyMaterial = await deriveKeyMaterial(passwordKey, saltBytes, iterations);
-        await aesGcmDecrypt(keyMaterial, cipherBytes, ivBytes);
+        if (wasUnlocked) {
+          plain = copyBytes(secret as Uint8Array);
+        } else {
+          if (!params.currentPassword) throw vaultErrors.locked();
+          const decoded = decodeEnvelopeOrThrow(sealed);
+          const opened = await decryptWithPassword({ password: params.currentPassword, decoded });
+          tempKeyMaterial = opened.keyMaterial;
+          plain = opened.plain;
+        }
+
+        const decoded = decodeEnvelopeOrThrow(sealed);
+        const saltBytes = rotateSalt ? randomBytes(resolved.saltBytes) : decoded.saltBytes;
+        const iterations = resolved.iterations;
+
+        const encrypted = await encryptWithPassword({
+          password: params.newPassword,
+          secret: plain,
+          saltBytes,
+          iterations,
+        });
+
+        envelope = encrypted.envelope;
+
+        if (wasUnlocked) {
+          // Keep the vault unlocked, but rotate the in-memory derived key to match the new password.
+          zeroize(derivedKey as Uint8Array);
+          derivedKey = encrypted.keyMaterial;
+
+          zeroize(secret as Uint8Array);
+          secret = plain;
+          plain = null;
+        } else {
+          // Keep the vault locked.
+          zeroize(encrypted.keyMaterial);
+        }
+
+        return cloneEnvelope(envelope);
       } catch (error) {
         if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
           throw vaultErrors.invalidPassword();
         }
         throw error;
       } finally {
+        if (plain) zeroize(plain);
+        if (tempKeyMaterial) zeroize(tempKeyMaterial);
+      }
+    },
+
+    importEnvelope(value: VaultEnvelope): void {
+      // Validate on import so callers fail fast before persisting.
+      decodeEnvelopeOrThrow(value);
+      clearSession();
+      envelope = cloneEnvelope(value);
+    },
+
+    async verifyPassword(password: string): Promise<void> {
+      const sealed = envelope;
+      if (!sealed) throw vaultErrors.notInitialized();
+
+      const decoded = decodeEnvelopeOrThrow(sealed);
+      let keyMaterial: Uint8Array | null = null;
+      let plain: Uint8Array | null = null;
+      try {
+        const opened = await decryptWithPassword({ password, decoded });
+        keyMaterial = opened.keyMaterial;
+        plain = opened.plain;
+      } catch (error) {
+        if (isArxError(error) && error.reason === ArxReasons.VaultInvalidCiphertext) {
+          throw vaultErrors.invalidPassword();
+        }
+        throw error;
+      } finally {
+        if (plain) zeroize(plain);
         if (keyMaterial) zeroize(keyMaterial);
       }
     },
-    getCiphertext(): VaultCiphertext | null {
-      return ciphertext ? cloneCiphertext(ciphertext) : null;
+
+    getEnvelope(): VaultEnvelope | null {
+      return envelope ? cloneEnvelope(envelope) : null;
     },
 
     getStatus(): VaultStatus {
       return {
         isUnlocked: secret !== null,
-        hasCiphertext: ciphertext !== null,
+        hasEnvelope: envelope !== null,
       };
     },
 

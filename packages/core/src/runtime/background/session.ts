@@ -9,8 +9,8 @@ import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
-import type { VaultCiphertext, VaultService } from "../../vault/types.js";
-import { zeroize } from "../../vault/utils.js";
+import { zeroize } from "../../utils/bytes.js";
+import type { VaultService } from "../../vault/types.js";
 import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import { encodePayload } from "../keyring/keyring-utils.js";
@@ -114,13 +114,6 @@ export const initSessionLayer = ({
     return vaultInitializedAt;
   };
 
-  const updateInitializedAtFromCiphertext = (ciphertext: VaultCiphertext | null | undefined) => {
-    if (!ciphertext) {
-      return;
-    }
-    vaultInitializedAt = ciphertext.createdAt;
-  };
-
   const sessionSubscriptions: Array<() => void> = [];
 
   const cleanupVaultPersistTimer = () => {
@@ -140,18 +133,13 @@ export const initSessionLayer = ({
       return;
     }
 
-    const ciphertext = vaultProxy.getCiphertext();
-    if (ciphertext) {
-      updateInitializedAtFromCiphertext(ciphertext);
-    }
-
     const unlockState = unlock.getState();
 
     const envelope: VaultMetaSnapshot = {
       version: VAULT_META_SNAPSHOT_VERSION,
       updatedAt: storageNow(),
       payload: {
-        ciphertext,
+        envelope: vaultProxy.getEnvelope(),
         autoLockDurationMs: unlockState.timeoutMs,
         initializedAt: getOrInitVaultInitializedAt(),
       },
@@ -214,58 +202,48 @@ export const initSessionLayer = ({
 
   const vaultProxy: VaultService = {
     async initialize(params) {
+      // Re-initializing should also reset the initializedAt marker.
+      vaultInitializedAt = storageNow();
       const ciphertext = await baseVault.initialize({
         ...params,
         // The vault secret is used to store the keyring payload; seed it with a valid empty payload so
         // first-time hydration doesn't attempt to JSON.parse random bytes.
         secret: params.secret ?? encodePayload({ keyrings: [] }),
       });
-      updateInitializedAtFromCiphertext(ciphertext);
       if (!getIsHydrating()) {
         await persistVaultMetaImmediate();
       }
       return ciphertext;
     },
     async unlock(params) {
-      const secret = await baseVault.unlock(params);
-      if (params.ciphertext) {
-        updateInitializedAtFromCiphertext(params.ciphertext);
-      } else {
-        updateInitializedAtFromCiphertext(baseVault.getCiphertext());
-      }
-      return secret;
+      await baseVault.unlock(params);
     },
     lock() {
       baseVault.lock();
       scheduleVaultMetaPersist();
     },
-    exportKey() {
-      return baseVault.exportKey();
-    },
-    async seal(params) {
-      const ciphertext = await baseVault.seal(params);
-      updateInitializedAtFromCiphertext(ciphertext);
-      if (!getIsHydrating()) {
-        await persistVaultMetaImmediate();
-      }
-      return ciphertext;
+    exportSecret() {
+      return baseVault.exportSecret();
     },
     async verifyPassword(password) {
       await baseVault.verifyPassword(password);
     },
-    async reseal(params) {
-      const ciphertext = await baseVault.reseal(params);
-      updateInitializedAtFromCiphertext(ciphertext);
+    async commitSecret(params) {
+      const ciphertext = await baseVault.commitSecret(params);
       scheduleVaultMetaPersist();
       return ciphertext;
     },
-    importCiphertext(value) {
-      baseVault.importCiphertext(value);
-      updateInitializedAtFromCiphertext(value);
+    async reencrypt(params) {
+      const ciphertext = await baseVault.reencrypt(params);
+      scheduleVaultMetaPersist();
+      return ciphertext;
+    },
+    importEnvelope(value) {
+      baseVault.importEnvelope(value);
       scheduleVaultMetaPersist();
     },
-    getCiphertext() {
-      return baseVault.getCiphertext();
+    getEnvelope() {
+      return baseVault.getEnvelope();
     },
     getStatus() {
       return baseVault.getStatus();
@@ -279,9 +257,7 @@ export const initSessionLayer = ({
     messenger: bus.scope({ name: "unlock", publish: UNLOCK_TOPICS }),
     vault: {
       unlock: async (params) => {
-        const secret = await vaultProxy.unlock(params);
-        // Reduce sensitive bytes copies: the vault keeps its own in-memory secret.
-        zeroize(secret);
+        await vaultProxy.unlock(params);
       },
       lock: vaultProxy.lock.bind(vaultProxy),
       isUnlocked: vaultProxy.isUnlocked.bind(vaultProxy),
@@ -325,7 +301,7 @@ export const initSessionLayer = ({
     keyringService.onPayloadUpdated(async (payload) => {
       if (!payload) return;
       try {
-        await vaultProxy.reseal({ secret: payload });
+        await vaultProxy.commitSecret({ secret: payload });
         scheduleVaultMetaPersist();
       } catch (error) {
         storageLogger("session: failed to reseal keyring payload", error);
@@ -387,9 +363,9 @@ export const initSessionLayer = ({
       vaultInitializedAt = meta.payload.initializedAt;
       unlock.setAutoLockDuration(meta.payload.autoLockDurationMs);
 
-      if (meta.payload.ciphertext) {
+      if (meta.payload.envelope) {
         try {
-          vaultProxy.importCiphertext(meta.payload.ciphertext);
+          vaultProxy.importEnvelope(meta.payload.envelope);
         } catch (error) {
           storageLogger("session: failed to import vault ciphertext", error);
           try {
@@ -424,7 +400,7 @@ export const initSessionLayer = ({
       const unlockState = unlock.getState();
 
       return {
-        ciphertext: vaultProxy.getCiphertext(),
+        envelope: vaultProxy.getEnvelope(),
         autoLockDurationMs: unlockState.timeoutMs,
         initializedAt: getOrInitVaultInitializedAt(),
       };

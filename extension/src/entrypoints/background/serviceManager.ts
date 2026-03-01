@@ -208,7 +208,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             return;
           }
 
-          const vaultInitialized = session.vault.getStatus().hasCiphertext;
+          const vaultInitialized = session.vault.getStatus().hasEnvelope;
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
               reason: request.reason,
@@ -253,7 +253,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
             return;
           }
 
-          const vaultInitialized = session.vault.getStatus().hasCiphertext;
+          const vaultInitialized = session.vault.getStatus().hasEnvelope;
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
               reason: "approval_required",

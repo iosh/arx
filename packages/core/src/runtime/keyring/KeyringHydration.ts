@@ -2,7 +2,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
-import { decodePayload } from "./keyring-utils.js";
+import { decodePayloadAndZeroize } from "./keyring-utils.js";
 import type {
   AccountId,
   AccountRecord,
@@ -140,7 +140,7 @@ export class KeyringHydration {
         let payload: Payload;
         try {
           if (isStale()) return;
-          payload = decodePayload(this.#options.vault.exportKey(), this.#options.logger);
+          payload = decodePayloadAndZeroize(this.#options.vault.exportSecret(), this.#options.logger);
         } catch (error) {
           // If the user initialized a vault but never created/imported any keyrings, the vault secret may still be
           // random bytes (legacy behavior). In that case we can safely treat it as an empty keyring payload.

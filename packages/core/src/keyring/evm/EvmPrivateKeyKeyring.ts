@@ -1,4 +1,4 @@
-import { copyBytes, zeroize } from "../../vault/utils.js";
+import { copyBytes, zeroize } from "../../utils/bytes.js";
 import { keyringErrors } from "../errors.js";
 import type { KeyringAccount, SimpleKeyring, SimpleKeyringSnapshot } from "../types.js";
 import { canonicalizeEvmAddress, parsePrivateKeyBytes, privateKeyToEvmAddress } from "./evmCrypto.js";

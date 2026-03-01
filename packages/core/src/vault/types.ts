@@ -1,33 +1,48 @@
-export type VaultAlgorithm = "pbkdf2-sha256";
+export type VaultKdfName = "pbkdf2";
+export type VaultKdfHash = "sha256";
+export type VaultCipherName = "aes-gcm";
 
-export type VaultCiphertext = {
-  version: number;
-  algorithm: VaultAlgorithm;
-  salt: string;
-  iterations: number;
-  iv: string;
-  cipher: string;
-  createdAt: number;
+export type VaultEnvelope = {
+  version: 1;
+  kdf: {
+    name: VaultKdfName;
+    hash: VaultKdfHash;
+    salt: string; // base64
+    iterations: number;
+  };
+  cipher: {
+    name: VaultCipherName;
+    iv: string; // base64
+    data: string; // base64
+  };
 };
 
 export type VaultStatus = {
   isUnlocked: boolean;
-  hasCiphertext: boolean;
+  hasEnvelope: boolean;
 };
 
 export type InitializeVaultParams = {
   password: string;
+  // The secret bytes that the vault protects (e.g. keyring payload).
+  // If omitted, a random secret will be generated.
   secret?: Uint8Array;
 };
 
 export type UnlockVaultParams = {
   password: string;
-  ciphertext?: VaultCiphertext;
+  envelope?: VaultEnvelope;
 };
 
-export type SealVaultParams = {
-  password: string;
+export type CommitSecretParams = {
   secret: Uint8Array;
+};
+
+export type ReencryptParams = {
+  newPassword: string;
+  // Optional: allow reencrypt while locked (decrypt with current password first).
+  currentPassword?: string;
+  rotateSalt?: boolean;
 };
 
 export type VaultConfig = {
@@ -38,15 +53,17 @@ export type VaultConfig = {
 };
 
 export interface VaultService {
-  initialize(params: InitializeVaultParams): Promise<VaultCiphertext>;
-  unlock(params: UnlockVaultParams): Promise<Uint8Array>;
+  initialize(params: InitializeVaultParams): Promise<VaultEnvelope>;
+  unlock(params: UnlockVaultParams): Promise<void>;
   lock(): void;
-  exportKey(): Uint8Array;
-  seal(params: SealVaultParams): Promise<VaultCiphertext>;
-  reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext>; // uses current derived key, unlocked only
-  importCiphertext(ciphertext: VaultCiphertext): void;
+
+  exportSecret(): Uint8Array;
+  commitSecret(params: CommitSecretParams): Promise<VaultEnvelope>; // uses current derived key, unlocked only
+  reencrypt(params: ReencryptParams): Promise<VaultEnvelope>;
+
+  importEnvelope(envelope: VaultEnvelope): void;
   verifyPassword(password: string): Promise<void>;
-  getCiphertext(): VaultCiphertext | null;
+  getEnvelope(): VaultEnvelope | null;
   getStatus(): VaultStatus;
   isUnlocked(): boolean;
 }

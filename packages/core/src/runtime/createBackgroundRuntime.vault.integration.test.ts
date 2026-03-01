@@ -44,7 +44,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
       persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
       expect(persistedMeta).not.toBeNull();
-      expect(persistedMeta?.payload.ciphertext).not.toBeNull();
+      expect(persistedMeta?.payload.envelope).not.toBeNull();
       expect(persistedMeta?.payload.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(persistedMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
     } finally {
@@ -62,7 +62,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
     try {
       const restoredMeta = second.runtime.services.session.getLastPersistedVaultMeta();
-      expect(restoredMeta?.payload.ciphertext).toEqual(persistedMeta?.payload.ciphertext);
+      expect(restoredMeta?.payload.envelope).toEqual(persistedMeta?.payload.envelope);
       expect(restoredMeta?.payload.autoLockDurationMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(restoredMeta?.payload.initializedAt).toBe(TEST_INITIAL_TIME);
 

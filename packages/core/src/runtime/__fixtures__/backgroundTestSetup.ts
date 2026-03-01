@@ -28,7 +28,8 @@ import {
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../storage/records.js";
-import type { VaultCiphertext, VaultService } from "../../vault/types.js";
+import { vaultErrors } from "../../vault/errors.js";
+import type { VaultEnvelope, VaultService } from "../../vault/types.js";
 import type { BackgroundRpcEnvHooks } from "../background/rpcEngineAssembly.js";
 import { type CreateBackgroundRuntimeOptions, createBackgroundRuntime } from "../createBackgroundRuntime.js";
 
@@ -429,7 +430,7 @@ export class MemoryChainRegistryPort implements ChainRegistryPort {
 
 // Fake vault implementation for testing
 export class FakeVault implements VaultService {
-  #ciphertext: VaultCiphertext | null;
+  #envelope: VaultEnvelope | null;
   #unlocked = false;
   #counter = 0;
   #password: string | null = null;
@@ -437,47 +438,40 @@ export class FakeVault implements VaultService {
 
   constructor(
     private readonly clock: () => number,
-    initialCiphertext: VaultCiphertext | null = null,
+    initialEnvelope: VaultEnvelope | null = null,
   ) {
-    this.#ciphertext = initialCiphertext ? { ...initialCiphertext } : null;
+    this.#envelope = initialEnvelope ? structuredClone(initialEnvelope) : null;
   }
 
-  private createCiphertext(): VaultCiphertext {
-    const createdAt = this.clock();
+  private createEnvelope(): VaultEnvelope {
+    void this.clock();
     this.#counter += 1;
     return {
       version: 1,
-      algorithm: "pbkdf2-sha256",
-      salt: "salt-base64",
-      iterations: 1,
-      iv: "iv-base64",
-      cipher: `cipher-${this.#counter}`,
-      createdAt,
+      kdf: { name: "pbkdf2", hash: "sha256", salt: "salt-base64", iterations: 1 },
+      cipher: { name: "aes-gcm", iv: "iv-base64", data: `data-${this.#counter}` },
     };
   }
 
-  async initialize(params: { password: string }): Promise<VaultCiphertext> {
+  async initialize(params: { password: string; secret?: Uint8Array }): Promise<VaultEnvelope> {
     this.#password = params.password;
-    this.#ciphertext = this.createCiphertext();
+    this.#envelope = this.createEnvelope();
     this.#unlocked = true;
-    // Initialize with empty keyrings payload that KeyringService expects
-    const encoder = new TextEncoder();
-    this.#secret = encoder.encode(JSON.stringify({ keyrings: [] }));
-    return { ...this.#ciphertext };
+    this.#secret = params.secret
+      ? new Uint8Array(params.secret)
+      : new TextEncoder().encode(JSON.stringify({ keyrings: [] }));
+    return structuredClone(this.#envelope);
   }
 
-  async unlock(params: { password: string; ciphertext?: VaultCiphertext }): Promise<Uint8Array> {
+  async unlock(params: { password: string; envelope?: VaultEnvelope }): Promise<void> {
     if (!this.#password || params.password !== this.#password) {
-      throw new Error("invalid password");
+      throw vaultErrors.invalidPassword();
     }
 
-    if (params.ciphertext) {
-      if (this.#ciphertext && params.ciphertext.cipher !== this.#ciphertext.cipher) {
-        throw new Error("invalid ciphertext");
-      }
-      this.#ciphertext = { ...params.ciphertext };
-    } else if (!this.#ciphertext) {
-      throw new Error("ciphertext required");
+    if (params.envelope) {
+      this.#envelope = structuredClone(params.envelope);
+    } else if (!this.#envelope) {
+      throw vaultErrors.notInitialized();
     }
 
     this.#unlocked = true;
@@ -486,53 +480,53 @@ export class FakeVault implements VaultService {
       const encoder = new TextEncoder();
       this.#secret = encoder.encode(JSON.stringify({ keyrings: [] }));
     }
-    return new Uint8Array(this.#secret);
   }
 
   lock(): void {
     this.#unlocked = false;
   }
 
-  exportKey(): Uint8Array {
+  exportSecret(): Uint8Array {
     if (!this.#unlocked || !this.#secret) {
-      throw new Error("vault locked");
+      throw vaultErrors.locked();
     }
     return new Uint8Array(this.#secret);
   }
 
-  async seal(params: { password: string; secret: Uint8Array }): Promise<VaultCiphertext> {
-    if (!this.#password || params.password !== this.#password) {
-      throw new Error("invalid password");
-    }
-    this.#ciphertext = this.createCiphertext();
-    this.#secret = new Uint8Array(params.secret);
-    return { ...this.#ciphertext };
-  }
-
   verifyPassword(password: string): Promise<void> {
     if (!this.#password || password !== this.#password) {
-      throw new Error("invalid password");
+      throw vaultErrors.invalidPassword();
     }
     return Promise.resolve();
   }
-  async reseal(params: { secret: Uint8Array }): Promise<VaultCiphertext> {
-    this.#ciphertext = this.createCiphertext();
+
+  async commitSecret(params: { secret: Uint8Array }): Promise<VaultEnvelope> {
+    if (!this.#unlocked) throw vaultErrors.locked();
+    this.#envelope = this.createEnvelope();
     this.#secret = new Uint8Array(params.secret);
-    return { ...this.#ciphertext };
+    return structuredClone(this.#envelope);
   }
 
-  importCiphertext(ciphertext: VaultCiphertext): void {
-    this.#ciphertext = { ...ciphertext };
+  async reencrypt(params: { newPassword: string }): Promise<VaultEnvelope> {
+    if (!this.#unlocked) throw vaultErrors.locked();
+    this.#password = params.newPassword;
+    this.#envelope = this.createEnvelope();
+    return structuredClone(this.#envelope);
   }
 
-  getCiphertext(): VaultCiphertext | null {
-    return this.#ciphertext ? { ...this.#ciphertext } : null;
+  importEnvelope(value: VaultEnvelope): void {
+    this.#envelope = structuredClone(value);
+    this.#unlocked = false;
+  }
+
+  getEnvelope(): VaultEnvelope | null {
+    return this.#envelope ? structuredClone(this.#envelope) : null;
   }
 
   getStatus() {
     return {
       isUnlocked: this.#unlocked,
-      hasCiphertext: this.#ciphertext !== null,
+      hasEnvelope: this.#envelope !== null,
     };
   }
 

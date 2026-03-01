@@ -91,7 +91,7 @@ class FakeVault {
     this.#password = password;
   }
 
-  exportKey() {
+  exportSecret() {
     return new Uint8Array(this.#payload);
   }
 
@@ -550,19 +550,19 @@ const makeBrowser = (): MockBrowserApi => {
   };
 };
 
-const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => {
+const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   const vault = new FakeVault(new Uint8Array(), opts?.unlocked ?? true);
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
   const keyringMetas = createMemoryKeyringMetasStore();
   const accountsStore = createMemoryAccountsStore();
   const accountsController = createStoreBackedAccountsController({ accountsStore });
-  let hasCiphertext = opts?.hasCiphertext ?? true;
+  let hasEnvelope = opts?.hasEnvelope ?? true;
 
   const keyring = new KeyringService({
     now: () => Date.now(),
     uuid: () => crypto.randomUUID(),
     vault: {
-      exportKey: () => vault.exportKey(),
+      exportSecret: () => vault.exportSecret(),
       isUnlocked: () => vault.isUnlocked(),
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),
     },
@@ -597,18 +597,14 @@ const buildBridge = (opts?: { unlocked?: boolean; hasCiphertext?: boolean }) => 
     unlock,
     withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
     vault: {
-      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasCiphertext }),
+      getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasEnvelope }),
       initialize: async (params: { password: string }) => {
         void params;
-        hasCiphertext = true;
+        hasEnvelope = true;
         return {
           version: 1,
-          algorithm: "pbkdf2-sha256",
-          salt: "salt",
-          iterations: 1,
-          iv: "iv",
-          cipher: "cipher",
-          createdAt: Date.now(),
+          kdf: { name: "pbkdf2", hash: "sha256", salt: "salt", iterations: 1 },
+          cipher: { name: "aes-gcm", iv: "iv", data: "data" },
         };
       },
       verifyPassword: (pwd: string) => vault.verifyPassword(pwd),

@@ -9,6 +9,7 @@ import {
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieNetworkPreferencesPort, createDexieVaultMetaPort } from "./ports/factories.js";
+import { __closeSharedDatabaseForTests } from "./sharedDb.js";
 
 const DB_NAME = "arx-storage-index-test";
 
@@ -24,6 +25,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  __closeSharedDatabaseForTests(DB_NAME);
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
@@ -70,7 +72,7 @@ describe("@arx/storage-dexie ports", () => {
       version: VAULT_META_SNAPSHOT_VERSION,
       updatedAt: 1_000,
       payload: {
-        ciphertext: null,
+        envelope: null,
         autoLockDurationMs: 900_000,
         initializedAt: 1_000,
       },

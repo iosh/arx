@@ -11,7 +11,7 @@ export class DexiePermissionsPort implements PermissionsPort {
   }
   async get(params: { origin: string; namespace: string }): Promise<PermissionRecord | null> {
     await this.ready;
-    const key = [params.origin, params.namespace] as const;
+    const key = [params.origin, params.namespace] as [string, string];
     const row = await this.table.get(key);
     const parsed = PermissionRecordSchema.safeParse(row);
     if (!row) return null;
@@ -53,7 +53,7 @@ export class DexiePermissionsPort implements PermissionsPort {
 
   async remove(params: { origin: string; namespace: string }): Promise<void> {
     await this.ready;
-    await this.table.delete([params.origin, params.namespace] as const);
+    await this.table.delete([params.origin, params.namespace] as [string, string]);
   }
 
   async clearOrigin(origin: string): Promise<void> {
@@ -70,7 +70,7 @@ export class DexiePermissionsPort implements PermissionsPort {
       const origin = typeof (row as { origin?: unknown }).origin === "string" ? row.origin : null;
       const namespace = typeof (row as { namespace?: unknown }).namespace === "string" ? row.namespace : null;
       if (origin && namespace) {
-        await this.table.delete([origin, namespace] as const);
+        await this.table.delete([origin, namespace] as [string, string]);
       }
       return null;
     }

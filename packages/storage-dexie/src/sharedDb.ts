@@ -21,3 +21,11 @@ export const getOrCreateDatabase = <TDb extends Dexie>(dbName: string, factory: 
 
   return db;
 };
+
+// Test helper: close the cached shared connection before deleting the DB.
+export const __closeSharedDatabaseForTests = (dbName: string): void => {
+  const db = databaseRegistry.get(dbName);
+  if (!db) return;
+  db.close();
+  databaseRegistry.delete(dbName);
+};

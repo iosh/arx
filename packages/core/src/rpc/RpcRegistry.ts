@@ -1,5 +1,5 @@
 import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter, UiErrorPayload } from "@arx/errors";
-import { type ArxError, ArxReasons, arxError, isArxError } from "@arx/errors";
+import { type ArxError, ArxReasons, arxError, coerceArxError, isArxError } from "@arx/errors";
 import { ZodError } from "zod";
 import { normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
@@ -164,7 +164,7 @@ export class RpcRegistry {
       }
     }
 
-    const domain = isArxError(error) ? error : toInternalArxError(error, ctx);
+    const domain = coerceArxError(error) ?? toInternalArxError(error, ctx);
 
     try {
       const adapter = this.getNamespaceProtocolAdapter(ctx.namespace);

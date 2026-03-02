@@ -80,10 +80,16 @@ const decodeEnvelopeOrThrow = (value: VaultEnvelope) => {
       throw new Error("Decoded envelope is empty");
     }
 
+    // Normalize malformed envelopes to a stable VaultInvalidCiphertext reason.
+    const iterations = value.kdf.iterations;
+    if (!Number.isInteger(iterations) || iterations <= 0) {
+      throw new Error("PBKDF2 iteration count must be a positive integer");
+    }
+
     return {
       envelope: cloneEnvelope(value),
       saltBytes,
-      iterations: value.kdf.iterations,
+      iterations,
       ivBytes,
       dataBytes,
     };

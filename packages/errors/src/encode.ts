@@ -1,7 +1,7 @@
-import type { ErrorEncodeContext, UiErrorPayload } from "./protocol.js";
+import type { ArxError } from "./ArxError.js";
 import { toJsonSafe } from "./json.js";
 import type { JsonRpcErrorObject } from "./jsonRpc.js";
-import { ArxError } from "./ArxError.js";
+import type { ErrorEncodeContext, UiErrorPayload } from "./protocol.js";
 import type { ArxReason } from "./spec.js";
 import { ArxErrorSpec } from "./spec.js";
 
@@ -26,8 +26,7 @@ export const encodeDappError = (
   const patch = overrides?.[error.reason];
   const code = patch?.code ?? spec.dapp.code;
   const message =
-    patch?.message ??
-    (spec.exposure === "ui_and_dapp" && error.message.length > 0 ? error.message : spec.dapp.message);
+    patch?.message ?? (spec.exposure === "ui_and_dapp" && error.message.length > 0 ? error.message : spec.dapp.message);
 
   const data =
     spec.exposure === "ui_and_dapp"

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { evmProviderErrors, evmRpcErrors } from "../../errors.js";
 import { Eip155Provider } from "../../provider/index.js";
 import type { TransportState } from "../../types/transport.js";
-import { DISCONNECT_EVENT_CODE, DISCONNECT_EVENT_MESSAGE, REQUEST_VALIDATION_MESSAGES } from "./constants.js";
+import { REQUEST_VALIDATION_MESSAGES } from "./constants.js";
 import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
 
 const INITIAL_STATE: TransportState = {
@@ -145,7 +145,8 @@ describe("Eip155Provider: disconnect event semantics", () => {
 
     expect(disconnectListener).toHaveBeenCalledTimes(1);
     const [error] = disconnectListener.mock.calls[0] ?? [];
-    expect(error).toMatchObject({ code: DISCONNECT_EVENT_CODE, message: DISCONNECT_EVENT_MESSAGE });
+    expect(error).toMatchObject({ code: 4900 });
+    expect(typeof error?.message).toBe("string");
   });
 });
 

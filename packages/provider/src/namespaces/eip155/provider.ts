@@ -12,9 +12,7 @@ import {
   DEFAULT_READONLY_METHODS,
   DEFAULT_READONLY_TIMEOUT_MS,
   DEFAULT_READY_TIMEOUT_MS,
-  DISCONNECT_EVENT_CODE,
-  DISCONNECT_EVENT_MESSAGE,
-  PROVIDER_INFO,
+  EIP6963_PROVIDER_INFO,
   REQUEST_VALIDATION_MESSAGES,
 } from "./constants.js";
 import { Eip155ProviderState, type ProviderPatch, type ProviderSnapshot, type ProviderStateSnapshot } from "./state.js";
@@ -56,9 +54,6 @@ export type Eip155ProviderOptions = {
 
 type ApplyOptions = { emit?: boolean };
 
-const createDisconnectError = (): EIP1193ProviderRpcError =>
-  Object.assign(new Error(DISCONNECT_EVENT_MESSAGE), { code: DISCONNECT_EVENT_CODE });
-
 export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   #transport: Transport;
   #state = new Eip155ProviderState();
@@ -94,7 +89,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
     this.#syncWithTransportState();
   }
 
-  static readonly providerInfo = PROVIDER_INFO;
+  static readonly providerInfo = EIP6963_PROVIDER_INFO;
 
   #configureTimeouts(timeouts: Eip155ProviderTimeouts | undefined) {
     if (!timeouts) return;
@@ -492,11 +487,9 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   };
 
   #handleTransportDisconnect = (error?: unknown) => {
-    const readinessError = error ?? evmProviderErrors.disconnected();
-
-    this.#restartReady(readinessError);
-
-    this.emit("disconnect", createDisconnectError());
+    const eip1193Error = this.#toEip1193Error(error ?? evmProviderErrors.disconnected());
+    this.#restartReady(eip1193Error);
+    this.emit("disconnect", eip1193Error);
   };
 
   #startConnect() {

@@ -11,4 +11,3 @@ export const toJsonSafe = (value: unknown): JsonValue | undefined => {
     return undefined;
   }
 };
-

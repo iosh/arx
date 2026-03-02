@@ -111,6 +111,11 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     expect((window as WindowWithEthereum).ethereum).toBe(existing);
     expect(initialized).toHaveBeenCalledTimes(0);
 
+    // EIP-6963 announcements are emitted in response to requestProvider.
+    expect(announced).toHaveBeenCalledTimes(0);
+
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+
     expect(announced).toHaveBeenCalledTimes(1);
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(detail?.provider).toBeDefined();
@@ -128,7 +133,6 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     const announced = onWindowEvent("eip6963:announceProvider");
 
     host.initialize();
-    announced.mockClear();
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
     window.dispatchEvent(new Event("eip6963:requestProvider"));
@@ -139,13 +143,13 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     expect(Object.isFrozen(detail.info)).toBe(true);
     expect(detail?.provider).toBe((window as WindowWithEthereum).ethereum);
     expect(detail?.info?.name).toBe("ARX Wallet");
-    expect(detail?.info?.rdns).toBe("wallet.arx");
+    expect(detail?.info?.rdns).toBe("com.arx.wallet");
     expect(isEip6963Info(detail?.info)).toBe(true);
 
     await waitForTransportConnect(transport);
   });
 
-  it("supports requestProvider before host init (announce on init + re-announce on request)", async () => {
+  it("supports requestProvider before host init (announce only after init + request)", async () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
@@ -157,17 +161,17 @@ describe("ProviderHost (window injection + EIP-6963)", () => {
     expect(announced).toHaveBeenCalledTimes(0);
 
     host.initialize();
-    expect(announced).toHaveBeenCalledTimes(1);
+    expect(announced).toHaveBeenCalledTimes(0);
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
-    expect(announced).toHaveBeenCalledTimes(2);
+    expect(announced).toHaveBeenCalledTimes(1);
 
     await waitForTransportConnect(transport);
   });
 
   it("does not throw for eth_accounts before ready, then returns accounts after handshake", async () => {
     const registry = createProviderRegistry({
-      ethereum: { timeouts: { ethAccountsWaitMs: 0, readyTimeoutMs: 2000 } },
+      eip155: { timeouts: { ethAccountsWaitMs: 0, readyTimeoutMs: 2000 } },
     });
 
     const bridge = new MockContentBridge(ctx.dom, { autoHandshake: false });

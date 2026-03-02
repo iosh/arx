@@ -161,4 +161,3 @@ export type ArxReason = (typeof ArxReasons)[keyof typeof ArxReasons];
 export const isArxReason = (value: unknown): value is ArxReason => {
   return typeof value === "string" && Object.hasOwn(ArxErrorSpec, value);
 };
-

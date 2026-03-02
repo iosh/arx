@@ -43,12 +43,5 @@ export interface Transport {
   on(event: string, listener: (...args: unknown[]) => void): void;
   removeListener(event: string, listener: (...args: unknown[]) => void): void;
 }
-export interface EventMessage {
-  type: "event";
-  eventName: string;
-  params: unknown[];
-}
-
-export type TransportMessage = TransportRequest | TransportResponse | EventMessage;
 
 export type { JsonRpcVersion2, EIP1193ProviderRpcError };

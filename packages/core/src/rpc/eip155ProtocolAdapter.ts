@@ -1,10 +1,10 @@
 import {
-  type ArxError,
   type ErrorEncodeContext,
+  encodeDappError,
+  encodeUiError,
   type NamespaceProtocolAdapter,
   type UiErrorPayload,
 } from "@arx/errors";
-import { encodeDappError, encodeUiError } from "@arx/errors";
 
 export const createEip155ProtocolAdapter = (): NamespaceProtocolAdapter => ({
   encodeDappError(error, _ctx: ErrorEncodeContext) {

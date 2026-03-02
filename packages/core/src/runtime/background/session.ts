@@ -204,7 +204,7 @@ export const initSessionLayer = ({
     async initialize(params) {
       // Re-initializing should also reset the initializedAt marker.
       vaultInitializedAt = storageNow();
-      const ciphertext = await baseVault.initialize({
+      const envelope = await baseVault.initialize({
         ...params,
         // The vault secret is used to store the keyring payload; seed it with a valid empty payload so
         // first-time hydration doesn't attempt to JSON.parse random bytes.
@@ -213,7 +213,7 @@ export const initSessionLayer = ({
       if (!getIsHydrating()) {
         await persistVaultMetaImmediate();
       }
-      return ciphertext;
+      return envelope;
     },
     async unlock(params) {
       await baseVault.unlock(params);
@@ -229,14 +229,14 @@ export const initSessionLayer = ({
       await baseVault.verifyPassword(password);
     },
     async commitSecret(params) {
-      const ciphertext = await baseVault.commitSecret(params);
+      const envelope = await baseVault.commitSecret(params);
       scheduleVaultMetaPersist();
-      return ciphertext;
+      return envelope;
     },
     async reencrypt(params) {
-      const ciphertext = await baseVault.reencrypt(params);
+      const envelope = await baseVault.reencrypt(params);
       scheduleVaultMetaPersist();
-      return ciphertext;
+      return envelope;
     },
     importEnvelope(value) {
       baseVault.importEnvelope(value);
@@ -367,7 +367,7 @@ export const initSessionLayer = ({
         try {
           vaultProxy.importEnvelope(meta.payload.envelope);
         } catch (error) {
-          storageLogger("session: failed to import vault ciphertext", error);
+          storageLogger("session: failed to import vault envelope", error);
           try {
             await vaultMetaPort.clearVaultMeta();
           } catch (clearError) {

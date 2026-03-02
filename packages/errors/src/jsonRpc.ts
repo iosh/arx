@@ -5,4 +5,3 @@ export type JsonRpcErrorObject = {
   message: string;
   data?: JsonValue;
 };
-

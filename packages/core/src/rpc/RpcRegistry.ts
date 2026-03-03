@@ -59,17 +59,23 @@ const toInternalArxError = (error: unknown, ctx: ExecuteWithAdaptersContext): Ar
   });
 };
 
-const encodeUiInternalFallback = (error: ArxError): UiErrorPayload => ({
-  reason: error.reason,
-  message: error.message,
-  ...(error.data !== undefined ? { data: error.data } : {}),
-});
+const encodeUiInternalFallback = (error: ArxError): UiErrorPayload => {
+  const json = error.toJSON();
+  return {
+    reason: json.reason,
+    message: json.message,
+    ...(json.data !== undefined ? { data: json.data } : {}),
+  };
+};
 
-const encodeDappInternalFallback = (error: ArxError) => ({
-  code: -32603,
-  message: error.message || "Internal error",
-  ...(error.data !== undefined ? { data: error.data } : {}),
-});
+const encodeDappInternalFallback = (error: ArxError) => {
+  const json = error.toJSON();
+  return {
+    code: -32603,
+    message: json.message || "Internal error",
+    ...(json.data !== undefined ? { data: json.data } : {}),
+  };
+};
 
 export class RpcRegistry {
   static readonly DEFAULT_NAMESPACE: Namespace = "eip155";

@@ -10,13 +10,7 @@ import {
   extendLogger,
 } from "@arx/core";
 import browser from "webextension-polyfill";
-import {
-  getExtensionChainRegistry,
-  getExtensionNetworkPreferencesPort,
-  getExtensionSettingsPort,
-  getExtensionStorePorts,
-  getExtensionVaultMetaPort,
-} from "@/platform/storage";
+import { getExtensionStorage } from "@/platform/storage";
 import { ENTRYPOINTS } from "./constants";
 import { isInternalOrigin } from "./origin";
 import { createPopupActivator } from "./services/popupActivator";
@@ -95,24 +89,20 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
     }
 
     contextPromise = (async () => {
-      const networkPreferencesPort = getExtensionNetworkPreferencesPort();
-      const vaultMetaPort = getExtensionVaultMetaPort();
-      const storePorts = getExtensionStorePorts();
-      const chainRegistry = getExtensionChainRegistry();
-      const settingsPort = getExtensionSettingsPort();
+      const storage = getExtensionStorage();
       const runtime = createBackgroundRuntime({
         store: {
           ports: {
-            accounts: storePorts.accounts,
-            keyringMetas: storePorts.keyringMetas,
-            permissions: storePorts.permissions,
-            transactions: storePorts.transactions,
+            accounts: storage.ports.accounts,
+            keyringMetas: storage.ports.keyringMetas,
+            permissions: storage.ports.permissions,
+            transactions: storage.ports.transactions,
           },
         },
-        networkPreferences: { port: networkPreferencesPort },
-        storage: { vaultMetaPort },
-        settings: { port: settingsPort },
-        chainRegistry: { port: chainRegistry },
+        networkPreferences: { port: storage.ports.networkPreferences },
+        storage: { vaultMetaPort: storage.ports.vaultMeta },
+        settings: { port: storage.ports.settings },
+        chainRegistry: { port: storage.ports.chainRegistry },
         rpcEngine: {
           env: {
             isInternalOrigin: (origin) => isInternalOrigin(origin, extensionOrigin),

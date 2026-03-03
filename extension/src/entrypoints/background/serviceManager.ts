@@ -9,6 +9,7 @@ import {
   createLogger,
   extendLogger,
 } from "@arx/core";
+import { PROVIDER_EVENTS } from "@arx/provider/protocol";
 import browser from "webextension-polyfill";
 import { getExtensionStorage } from "@/platform/storage";
 import { ENTRYPOINTS } from "./constants";
@@ -170,7 +171,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       const publishAccountsState = () => {
         const chainRef = controllers.network.getActiveChain().chainRef;
         const accounts = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef }) : [];
-        callbacks.broadcastEvent("accountsChanged", [accounts]);
+        callbacks.broadcastEvent(PROVIDER_EVENTS.accountsChanged, [accounts]);
       };
 
       await runtime.lifecycle.initialize();
@@ -290,7 +291,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
       unsubscribeControllerEvents.push(
         session.unlock.onUnlocked((payload) => {
           sessionLog("event:onUnlocked", { at: payload.at });
-          callbacks.broadcastEvent("unlock:unlocked", [payload]);
+          callbacks.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
           publishAccountsState();
         }),
       );
@@ -299,7 +300,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
           sessionLog("event:onLocked", { reason: payload.reason, at: payload.at });
           // Auto-reject all pending approvals when session is locked.
           void rejectAllPendingApprovals("sessionLocked", { lockReason: payload.reason });
-          callbacks.broadcastEvent("unlock:locked", [payload]);
+          callbacks.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
           publishAccountsState();
           callbacks.broadcastDisconnect();
         }),
@@ -309,7 +310,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         controllers.network.onStateChanged(() => {
           const snapshot = getControllerSnapshot();
           callbacks.syncAllPortContexts(snapshot);
-          callbacks.broadcastEvent("metaChanged", [snapshot.meta]);
+          callbacks.broadcastEvent(PROVIDER_EVENTS.metaChanged, [snapshot.meta]);
         }),
       );
 
@@ -317,7 +318,7 @@ export const createServiceManager = ({ extensionOrigin, callbacks }: ServiceMana
         controllers.network.onActiveChainChanged(() => {
           const snapshot = getControllerSnapshot();
           callbacks.syncAllPortContexts(snapshot);
-          callbacks.broadcastEvent("chainChanged", [
+          callbacks.broadcastEvent(PROVIDER_EVENTS.chainChanged, [
             {
               chainId: snapshot.chain.chainId,
               chainRef: snapshot.chain.chainRef,

@@ -1,4 +1,4 @@
-import { CHANNEL, PROTOCOL_VERSION } from "@arx/provider/protocol";
+import { CHANNEL, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { TransportMeta } from "@arx/provider/types";
 import { JSDOM } from "jsdom";
 
@@ -7,7 +7,9 @@ export type TestDomContext = {
   teardown: () => void;
 };
 
-export const createTestDom = (url = "https://dapp.test"): TestDomContext => {
+export const DEFAULT_DAPP_URL = "https://dapp.test";
+
+export const createTestDom = (url = DEFAULT_DAPP_URL): TestDomContext => {
   const dom = new JSDOM("<!doctype html><html><body></body></html>", { url });
 
   const g = globalThis as unknown as Record<string, unknown>;
@@ -139,7 +141,7 @@ export class MockContentBridge {
       channel: CHANNEL,
       sessionId: this.#sessionId,
       type: "event",
-      payload: { event: "accountsChanged", params: [accounts] },
+      payload: { event: PROVIDER_EVENTS.accountsChanged, params: [accounts] },
     });
   }
 
@@ -150,7 +152,7 @@ export class MockContentBridge {
       sessionId: this.#sessionId,
       type: "event",
       payload: {
-        event: "chainChanged",
+        event: PROVIDER_EVENTS.chainChanged,
         params: [{ chainId: update.chainId, chainRef: update.chainRef, meta: buildMeta(update.chainRef) }],
       },
     });
@@ -162,7 +164,7 @@ export class MockContentBridge {
       channel: CHANNEL,
       sessionId: this.#sessionId,
       type: "event",
-      payload: { event: "disconnect", params: [] },
+      payload: { event: PROVIDER_EVENTS.disconnect, params: [] },
     });
   }
 

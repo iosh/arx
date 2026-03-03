@@ -8,7 +8,7 @@ export default defineContentScript({
   async main() {
     bootstrapContent();
 
-    await injectScript("/provider.js", {
+    await injectScript("/inpage.js", {
       keepInDom: true,
     });
   },

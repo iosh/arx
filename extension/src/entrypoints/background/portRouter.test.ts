@@ -1,5 +1,5 @@
 import type { RpcRegistry } from "@arx/core";
-import { CHANNEL } from "@arx/provider/protocol";
+import { CHANNEL, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
@@ -124,13 +124,13 @@ describe("portRouter privacy", () => {
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
 
-    router.broadcastEvent("accountsChanged", [["0xignored"]]);
+    router.broadcastEvent(PROVIDER_EVENTS.accountsChanged, [["0xignored"]]);
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
     const [, eventMessage] = vi.mocked(port.postMessage).mock.calls.map(([msg]) => msg);
     expect(eventMessage).toMatchObject({
       type: "event",
-      payload: { event: "accountsChanged", params: [[]] },
+      payload: { event: PROVIDER_EVENTS.accountsChanged, params: [[]] },
     });
     expect(getPermittedAccounts).not.toHaveBeenCalled();
   });

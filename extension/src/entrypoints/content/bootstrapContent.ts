@@ -1,4 +1,4 @@
-import { CHANNEL, type Envelope } from "@arx/provider/protocol";
+import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import browser, { type Runtime } from "webextension-polyfill";
 
 export const bootstrapContent = () => {
@@ -13,7 +13,7 @@ export const bootstrapContent = () => {
         channel: CHANNEL,
         sessionId: activeSessionId,
         type: "event",
-        payload: { event: "disconnect", params: [DISCONNECT_ERROR] },
+        payload: { event: PROVIDER_EVENTS.disconnect, params: [DISCONNECT_ERROR] },
       },
       window.location.origin,
     );

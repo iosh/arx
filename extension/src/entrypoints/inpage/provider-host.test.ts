@@ -23,7 +23,7 @@ type InjectedProvider = {
   once: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
-describe("ProviderHost (window injection + EIP-6963)", () => {
+describe("ProviderHost (inpage injection + EIP-6963)", () => {
   let ctx: TestDomContext;
   let cleanups: Array<() => void>;
 

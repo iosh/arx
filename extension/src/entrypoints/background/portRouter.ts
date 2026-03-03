@@ -10,7 +10,7 @@ import {
   type JsonRpcRequest,
   type RpcRegistry,
 } from "@arx/core";
-import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
+import { CHANNEL, type Envelope, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
@@ -187,7 +187,7 @@ export const createPortRouter = ({
       overrideError ??
       ((rpcRegistry?.encodeErrorWithAdapters(
         arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
-        { surface: "dapp", namespace, chainRef, origin, method: "disconnect" },
+        { surface: "dapp", namespace, chainRef, origin, method: PROVIDER_EVENTS.disconnect },
       ) ??
         // Fallback when the background context is not initialized yet.
         ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError);
@@ -204,7 +204,7 @@ export const createPortRouter = ({
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
-    if (event === "accountsChanged") {
+    if (event === PROVIDER_EVENTS.accountsChanged) {
       const snapshot = getControllerSnapshot();
 
       for (const port of [...connections]) {
@@ -218,7 +218,7 @@ export const createPortRouter = ({
               channel: CHANNEL,
               sessionId,
               type: "event",
-              payload: { event: "accountsChanged", params: [accounts] },
+              payload: { event: PROVIDER_EVENTS.accountsChanged, params: [accounts] },
             });
             if (!ok) {
               dropStalePort(port, "broadcast_accounts_changed_failed");
@@ -290,7 +290,7 @@ export const createPortRouter = ({
           namespace,
           chainRef,
           origin,
-          method: "disconnect",
+          method: PROVIDER_EVENTS.disconnect,
         },
       ) ?? ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError;
       rejectPendingWithDisconnect(port, error);
@@ -298,7 +298,7 @@ export const createPortRouter = ({
         channel: CHANNEL,
         sessionId,
         type: "event",
-        payload: { event: "disconnect", params: [error] },
+        payload: { event: PROVIDER_EVENTS.disconnect, params: [error] },
       });
       if (success) {
         const origin = getPortOrigin(port, extensionOrigin);

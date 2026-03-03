@@ -2,6 +2,7 @@ import { EventEmitter } from "eventemitter3";
 import { evmProviderErrors, evmRpcErrors } from "../errors.js";
 import { CHANNEL } from "../protocol/channel.js";
 import { deriveProtocolVersion, type Envelope, isEnvelope } from "../protocol/envelope.js";
+import { PROVIDER_EVENTS } from "../protocol/events.js";
 import { PROTOCOL_VERSION } from "../protocol/version.js";
 import type { EIP1193ProviderRpcError, RequestArguments } from "../types/eip1193.js";
 import type {
@@ -352,32 +353,32 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     const { event: eventName, params = [] } = payload;
 
     switch (eventName) {
-      case "accountsChanged": {
+      case PROVIDER_EVENTS.accountsChanged: {
         const [accounts] = params;
         if (Array.isArray(accounts)) {
           this.#updateAccounts(accounts);
         }
         break;
       }
-      case "chainChanged": {
+      case PROVIDER_EVENTS.chainChanged: {
         const [update] = params;
         if (update && typeof update === "object" && typeof (update as { chainId?: unknown }).chainId === "string") {
           this.#updateChain(update as ChainUpdatePayload);
         }
         break;
       }
-      case "session:locked": {
+      case PROVIDER_EVENTS.sessionLocked: {
         this.#isUnlocked = false;
         this.#updateAccounts([]);
         this.emit("unlockStateChanged", { isUnlocked: false, payload: params[0] });
         break;
       }
-      case "session:unlocked": {
+      case PROVIDER_EVENTS.sessionUnlocked: {
         this.#isUnlocked = true;
         this.emit("unlockStateChanged", { isUnlocked: true, payload: params[0] });
         break;
       }
-      case "disconnect":
+      case PROVIDER_EVENTS.disconnect:
         this.#handleDisconnect(params[0]);
         break;
 

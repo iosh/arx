@@ -13,6 +13,7 @@
     "./types": "./src/types/index.ts",
     "./provider": "./src/provider/index.ts",
     "./host": "./src/host/index.ts",
+    "./inpage": "./src/inpage/index.ts",
     "./registry": "./src/registry/index.ts",
     "./protocol": "./src/protocol/index.ts",
     "./transport": "./src/transport/index.ts"

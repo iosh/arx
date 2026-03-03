@@ -1,4 +1,5 @@
 export * from "./host/index.js";
+export * from "./inpage/index.js";
 export * from "./protocol/index.js";
 export * from "./provider/index.js";
 export * from "./registry/index.js";

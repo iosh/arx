@@ -8,7 +8,7 @@ export default defineConfig({
   manifest: {
     web_accessible_resources: [
       {
-        resources: ["provider.js"],
+        resources: ["inpage.js"],
         matches: ["<all_urls>"],
       },
     ],

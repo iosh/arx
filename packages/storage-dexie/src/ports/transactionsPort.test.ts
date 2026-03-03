@@ -1,24 +1,12 @@
 import "fake-indexeddb/auto";
 
-import { DOMAIN_SCHEMA_VERSION, TransactionRecordSchema } from "@arx/core/storage";
+import { TransactionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ArxStorageDatabase } from "../db.js";
-import { DexieTransactionsPort } from "./transactionsPort.js";
+import { createDexieStorage } from "../createDexieStorage.js";
+import { __closeSharedDatabaseForTests } from "../sharedDb.js";
 
 const DB_NAME = "arx-transactions-port-test";
-let db: ArxStorageDatabase | null = null;
-
-const openDb = async () => {
-  db = new Dexie(DB_NAME) as unknown as ArxStorageDatabase;
-
-  db.version(DOMAIN_SCHEMA_VERSION).stores({
-    transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
-  });
-
-  await db.open();
-  return db;
-};
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -32,18 +20,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (db) {
-    db.close();
-    db = null;
-  }
+  __closeSharedDatabaseForTests(DB_NAME);
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
 
 describe("DexieTransactionsPort", () => {
   it("upsert() + get() roundtrip", async () => {
-    const db = await openDb();
-    const port = new DexieTransactionsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
 
     const record = TransactionRecordSchema.parse({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -68,8 +53,8 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("list() returns newest-first and respects filters + beforeCreatedAt", async () => {
-    const db = await openDb();
-    const port = new DexieTransactionsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
 
     const r1 = TransactionRecordSchema.parse({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -134,8 +119,8 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("findByChainRefAndHash() finds the record by (chainRef, hash)", async () => {
-    const db = await openDb();
-    const port = new DexieTransactionsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
 
     const r = TransactionRecordSchema.parse({
       id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -163,8 +148,8 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("updateIfStatus() updates only when expectedStatus matches", async () => {
-    const db = await openDb();
-    const port = new DexieTransactionsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
 
     const r = TransactionRecordSchema.parse({
       id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
@@ -204,16 +189,15 @@ describe("DexieTransactionsPort", () => {
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
-    const db = await openDb();
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    await storage.__debug.ctx.ready;
 
-    await db.table("transactions").put({
+    await storage.__debug.db.table("transactions").put({
       id: "11111111-1111-4111-8111-111111111111",
       status: "pending",
-    });
+    } as unknown as Record<string, unknown>);
 
-    const port = new DexieTransactionsPort(db);
-
-    const loaded = await port.get("11111111-1111-4111-8111-111111111111");
+    const loaded = await storage.ports.transactions.get("11111111-1111-4111-8111-111111111111");
     expect(loaded).toBeNull();
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -221,7 +205,7 @@ describe("DexieTransactionsPort", () => {
       expect.anything(),
     );
 
-    const after = await db.table("transactions").get("11111111-1111-4111-8111-111111111111");
+    const after = await storage.__debug.db.table("transactions").get("11111111-1111-4111-8111-111111111111");
     expect(after).toBeUndefined();
   });
 });

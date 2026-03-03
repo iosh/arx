@@ -1,14 +1,16 @@
 import type {
   AccountRecord,
+  ChainRegistryEntity,
   KeyringMetaRecord,
   NetworkPreferencesRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
 } from "@arx/core/storage";
-import { type ChainRegistryEntity, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
 import { Dexie, type Table } from "dexie";
 import type { VaultMetaEntity } from "./types.js";
+
+export const DB_SCHEMA_VERSION = 1;
 
 type ChainRegistryRow = ChainRegistryEntity;
 type KeyringMetaRow = KeyringMetaRecord;
@@ -27,13 +29,14 @@ export class ArxStorageDatabase extends Dexie {
 
   constructor(name: string) {
     super(name);
-    this.version(DOMAIN_SCHEMA_VERSION).stores({
+    this.version(DB_SCHEMA_VERSION).stores({
       settings: "&id",
       chains: "&chainRef",
       networkPreferences: "&id",
       accounts: "&accountId, namespace, keyringId",
       permissions: "[origin+namespace], origin",
-      transactions: "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt]",
+      transactions:
+        "&id, status, chainRef, hash, createdAt, updatedAt, [chainRef+createdAt], [status+createdAt], [chainRef+hash]",
 
       vaultMeta: "&id",
 

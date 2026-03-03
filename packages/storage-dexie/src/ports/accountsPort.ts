@@ -1,61 +1,67 @@
 import type { AccountsPort } from "@arx/core/services";
 import { type AccountId, type AccountRecord, AccountRecordSchema } from "@arx/core/storage";
-import type { ArxStorageDatabase } from "../db.js";
+import type { DexieCtx } from "../internal/ctx.js";
+import { parseOrDrop } from "../internal/parseOrDrop.js";
 
 export class DexieAccountsPort implements AccountsPort {
-  private readonly ready: ReturnType<ArxStorageDatabase["open"]>;
-  private readonly table: ArxStorageDatabase["accounts"];
+  constructor(private readonly ctx: DexieCtx) {}
 
-  constructor(private readonly db: ArxStorageDatabase) {
-    this.ready = this.db.open();
-    this.table = this.db.accounts;
+  private get table() {
+    return this.ctx.db.accounts;
   }
+
   async get(accountId: AccountId): Promise<AccountRecord | null> {
-    await this.ready;
+    await this.ctx.ready;
     const row = await this.table.get(accountId);
-    return await this.parseRow({ row, deleteKey: accountId });
+    return await this.parseRow(row, accountId);
   }
 
   async list(): Promise<AccountRecord[]> {
-    await this.ready;
+    await this.ctx.ready;
     const rows = await this.table.toArray();
     const out: AccountRecord[] = [];
     for (const row of rows) {
-      const parsed = await this.parseRow({ row, deleteKey: row.accountId });
+      const deleteKey = typeof (row as { accountId?: unknown }).accountId === "string" ? row.accountId : undefined;
+      const parsed = await this.parseRow(row, deleteKey);
       if (parsed) out.push(parsed);
     }
     return out;
   }
 
   async upsert(record: AccountRecord): Promise<void> {
-    await this.ready;
+    await this.ctx.ready;
     const checked = AccountRecordSchema.parse(record);
     await this.table.put(checked);
   }
 
   async remove(accountId: AccountId): Promise<void> {
-    await this.ready;
+    await this.ctx.ready;
     await this.table.delete(accountId);
   }
 
   async removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void> {
-    await this.ready;
+    await this.ctx.ready;
     await this.table.where("keyringId").equals(keyringId).delete();
   }
 
-  private async parseRow(params: {
-    row: AccountRecord | undefined;
-    deleteKey: AccountId;
-  }): Promise<AccountRecord | null> {
-    const { row, deleteKey } = params;
+  private async parseRow(row: unknown, deleteKey?: AccountId): Promise<AccountRecord | null> {
     if (!row) return null;
 
-    const parsed = AccountRecordSchema.safeParse(row);
-    if (!parsed.success) {
-      console.warn("[storage-dexie] invalid account record, dropping", parsed.error);
-      await this.table.delete(deleteKey);
-      return null;
+    if (!deleteKey) {
+      const parsed = AccountRecordSchema.safeParse(row);
+      if (!parsed.success) {
+        this.ctx.log.warn("[storage-dexie] invalid account record detected, cannot drop", parsed.error);
+        return null;
+      }
+      return parsed.data;
     }
-    return parsed.data;
+
+    return await parseOrDrop({
+      schema: AccountRecordSchema,
+      row,
+      what: "account record",
+      drop: () => this.table.delete(deleteKey),
+      log: this.ctx.log,
+    });
   }
 }

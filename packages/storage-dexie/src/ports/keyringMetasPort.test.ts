@@ -1,25 +1,12 @@
 import "fake-indexeddb/auto";
 
-import { DOMAIN_SCHEMA_VERSION, KeyringMetaRecordSchema } from "@arx/core/storage";
+import { KeyringMetaRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { ArxStorageDatabase } from "../db.js";
-import { DexieKeyringMetasPort } from "./keyringMetasPort.js";
+import { createDexieStorage } from "../createDexieStorage.js";
+import { __closeSharedDatabaseForTests } from "../sharedDb.js";
 
 const DB_NAME = "arx-keyring-metas-port-test";
-let db: ArxStorageDatabase | null = null;
-
-const openDb = async () => {
-  db = new Dexie(DB_NAME) as unknown as ArxStorageDatabase;
-
-  db.version(DOMAIN_SCHEMA_VERSION).stores({
-    keyringMetas: "&id, type, createdAt",
-  });
-
-  await db.open();
-  return db;
-};
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -33,18 +20,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (db) {
-    db.close();
-    db = null;
-  }
+  __closeSharedDatabaseForTests(DB_NAME);
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
 
 describe("DexieKeyringMetasPort", () => {
   it("upsert() + get() roundtrip", async () => {
-    const db = await openDb();
-    const port = new DexieKeyringMetasPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.keyringMetas;
 
     const record = KeyringMetaRecordSchema.parse({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -56,14 +40,13 @@ describe("DexieKeyringMetasPort", () => {
     });
 
     await port.upsert(record);
-
     const loaded = await port.get(record.id);
     expect(loaded).toEqual(record);
   });
 
   it("list() returns all records", async () => {
-    const db = await openDb();
-    const port = new DexieKeyringMetasPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.keyringMetas;
 
     const a = KeyringMetaRecordSchema.parse({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -85,8 +68,8 @@ describe("DexieKeyringMetasPort", () => {
   });
 
   it("remove() deletes the record", async () => {
-    const db = await openDb();
-    const port = new DexieKeyringMetasPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.keyringMetas;
 
     const record = KeyringMetaRecordSchema.parse({
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -101,17 +84,16 @@ describe("DexieKeyringMetasPort", () => {
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
-    const db = await openDb();
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    await storage.__debug.ctx.ready;
 
-    await db.table("keyringMetas").put({
+    await storage.__debug.db.table("keyringMetas").put({
       id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
       type: "hd",
       // missing createdAt on purpose
-    });
+    } as unknown as Record<string, unknown>);
 
-    const port = new DexieKeyringMetasPort(db);
-
-    const loaded = await port.get("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    const loaded = await storage.ports.keyringMetas.get("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
     expect(loaded).toBeNull();
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -119,7 +101,7 @@ describe("DexieKeyringMetasPort", () => {
       expect.anything(),
     );
 
-    const after = await db.table("keyringMetas").get("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    const after = await storage.__debug.db.table("keyringMetas").get("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
     expect(after).toBeUndefined();
   });
 });

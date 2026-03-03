@@ -1,24 +1,12 @@
 import "fake-indexeddb/auto";
 
-import { AccountRecordSchema, DOMAIN_SCHEMA_VERSION } from "@arx/core/storage";
+import { AccountRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ArxStorageDatabase } from "../db.js";
-import { DexieAccountsPort } from "./accountsPort.js";
+import { createDexieStorage } from "../createDexieStorage.js";
+import { __closeSharedDatabaseForTests } from "../sharedDb.js";
 
 const DB_NAME = "arx-accounts-port-test";
-let db: ArxStorageDatabase | null = null;
-
-const openDb = async () => {
-  db = new Dexie(DB_NAME) as unknown as ArxStorageDatabase;
-
-  db.version(DOMAIN_SCHEMA_VERSION).stores({
-    accounts: "&accountId, namespace, keyringId",
-  });
-
-  await db.open();
-  return db;
-};
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -32,18 +20,15 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  if (db) {
-    db.close();
-    db = null;
-  }
+  __closeSharedDatabaseForTests(DB_NAME);
   await Dexie.delete(DB_NAME);
   warnSpy.mockRestore();
 });
 
 describe("DexieAccountsPort", () => {
   it("upsert() + get() roundtrip", async () => {
-    const db = await openDb();
-    const port = new DexieAccountsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.accounts;
 
     const record = AccountRecordSchema.parse({
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -55,14 +40,13 @@ describe("DexieAccountsPort", () => {
     });
 
     await port.upsert(record);
-
     const loaded = await port.get(record.accountId);
     expect(loaded).toEqual(record);
   });
 
   it("list() returns all records", async () => {
-    const db = await openDb();
-    const port = new DexieAccountsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.accounts;
 
     const a = AccountRecordSchema.parse({
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -89,16 +73,14 @@ describe("DexieAccountsPort", () => {
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
-    const db = await openDb();
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    await storage.__debug.ctx.ready;
 
-    await db.table("accounts").put({
-      accountId: "eip155:dddddddddddddddddddddddddddddddddddddddd",
-      // missing required fields on purpose
-    });
+    await storage.__debug.db
+      .table("accounts")
+      .put({ accountId: "eip155:dddddddddddddddddddddddddddddddddddddddd" } as unknown as Record<string, unknown>);
 
-    const port = new DexieAccountsPort(db);
-
-    const loaded = await port.get("eip155:dddddddddddddddddddddddddddddddddddddddd");
+    const loaded = await storage.ports.accounts.get("eip155:dddddddddddddddddddddddddddddddddddddddd");
     expect(loaded).toBeNull();
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -106,13 +88,13 @@ describe("DexieAccountsPort", () => {
       expect.anything(),
     );
 
-    const after = await db.table("accounts").get("eip155:dddddddddddddddddddddddddddddddddddddddd");
+    const after = await storage.__debug.db.table("accounts").get("eip155:dddddddddddddddddddddddddddddddddddddddd");
     expect(after).toBeUndefined();
   });
 
   it("remove() deletes by accountId; removeByKeyringId() deletes all accounts for a keyring", async () => {
-    const db = await openDb();
-    const port = new DexieAccountsPort(db);
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.accounts;
 
     const keyringA = "11111111-1111-4111-8111-111111111111";
     const keyringB = "22222222-2222-4222-8222-222222222222";

@@ -1,14 +1,13 @@
 import "fake-indexeddb/auto";
 
 import {
-  DOMAIN_SCHEMA_VERSION,
   NetworkPreferencesRecordSchema,
   VAULT_META_SNAPSHOT_VERSION,
   VaultMetaSnapshotSchema,
 } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDexieNetworkPreferencesPort, createDexieVaultMetaPort } from "./ports/factories.js";
+import { createDexieStorage } from "./createDexieStorage.js";
 import { __closeSharedDatabaseForTests } from "./sharedDb.js";
 
 const DB_NAME = "arx-storage-index-test";
@@ -30,9 +29,10 @@ afterEach(async () => {
   warnSpy.mockRestore();
 });
 
-describe("@arx/storage-dexie ports", () => {
+describe("@arx/storage-dexie", () => {
   it("NetworkPreferencesPort roundtrips", async () => {
-    const port = createDexieNetworkPreferencesPort({ databaseName: DB_NAME });
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.networkPreferences;
 
     const record = NetworkPreferencesRecordSchema.parse({
       id: "network-preferences",
@@ -48,26 +48,24 @@ describe("@arx/storage-dexie ports", () => {
   });
 
   it("VaultMetaPort drops invalid vault meta on load", async () => {
-    const port = createDexieVaultMetaPort({ databaseName: DB_NAME });
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.vaultMeta;
 
-    const raw = new Dexie(DB_NAME);
-    raw.version(DOMAIN_SCHEMA_VERSION).stores({
-      vaultMeta: "&id",
-    });
-    await raw.open();
-    await raw.table("vaultMeta").put({ id: "vault-meta", version: 1, updatedAt: 0, payload: { bad: true } });
-    await raw.close();
+    await storage.__debug.ctx.ready;
+    await storage.__debug.db.vaultMeta.put({ id: "vault-meta", version: 1, updatedAt: 0, payload: { bad: true } });
 
     const loaded = await port.loadVaultMeta();
     expect(loaded).toBeNull();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("[storage-dexie] invalid vault meta detected"),
+      expect.stringContaining("[storage-dexie] invalid vault meta, dropping"),
       expect.anything(),
     );
   });
 
   it("VaultMetaPort roundtrips", async () => {
-    const port = createDexieVaultMetaPort({ databaseName: DB_NAME });
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.vaultMeta;
+
     const snapshot = VaultMetaSnapshotSchema.parse({
       version: VAULT_META_SNAPSHOT_VERSION,
       updatedAt: 1_000,

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
-import type { BackgroundContext } from "./serviceManager";
+import type { BackgroundContext } from "./runtimeHost";
 import type { ControllerSnapshot } from "./types";
 
 vi.mock("./origin", () => ({
@@ -65,12 +65,8 @@ describe("portRouter privacy", () => {
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
-      connections: new Set(),
-      pendingRequests: new Map(),
-      portContexts: new Map(),
       getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
       getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
-      attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();
@@ -104,12 +100,8 @@ describe("portRouter privacy", () => {
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
-      connections: new Set(),
-      pendingRequests: new Map(),
-      portContexts: new Map(),
       getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
       getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
-      attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();
@@ -145,12 +137,8 @@ describe("portRouter privacy", () => {
 
     const router = createPortRouter({
       extensionOrigin: "ext://",
-      connections: new Set(),
-      pendingRequests: new Map(),
-      portContexts: new Map(),
       getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
       getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(true),
-      attachUiPort: vi.fn(async () => {}),
     });
 
     const port = new FakePort();

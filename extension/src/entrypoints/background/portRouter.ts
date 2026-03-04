@@ -16,31 +16,24 @@ import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
 import { buildRpcContext } from "./rpc";
-import type { BackgroundContext } from "./serviceManager";
+import type { BackgroundContext } from "./runtimeHost";
 import type { ArxRpcContext, ControllerSnapshot, PortContext } from "./types";
-import { UI_CHANNEL } from "./uiBridge";
 
 type PendingEntry = { rpcId: JsonRpcId; jsonrpc: JsonRpcVersion2 };
 
 type PortRouterDeps = {
   extensionOrigin: string;
-  connections: Set<Runtime.Port>;
-  pendingRequests: Map<Runtime.Port, Map<string, PendingEntry>>;
-  portContexts: Map<Runtime.Port, PortContext>;
   getOrInitContext: () => Promise<BackgroundContext>;
   getControllerSnapshot: () => ControllerSnapshot;
-  attachUiPort: (port: Runtime.Port) => Promise<void>;
 };
 
-export const createPortRouter = ({
-  extensionOrigin,
-  connections,
-  pendingRequests,
-  portContexts,
-  getOrInitContext,
-  getControllerSnapshot,
-  attachUiPort,
-}: PortRouterDeps) => {
+export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControllerSnapshot }: PortRouterDeps) => {
+  const connections = new Set<Runtime.Port>();
+  const pendingRequests = new Map<Runtime.Port, Map<string, PendingEntry>>();
+  const portContexts = new Map<Runtime.Port, PortContext>();
+  const messageHandlers = new Map<Runtime.Port, (message: unknown) => void>();
+  const disconnectHandlers = new Map<Runtime.Port, () => void>();
+
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
   const sessionByPort = new Map<Runtime.Port, string>();
@@ -93,6 +86,28 @@ export const createPortRouter = ({
     return { error: String(error) };
   };
 
+  const detachPortListeners = (port: Runtime.Port) => {
+    const onMessage = messageHandlers.get(port);
+    if (onMessage) {
+      try {
+        port.onMessage.removeListener(onMessage);
+      } catch {
+        // ignore
+      }
+      messageHandlers.delete(port);
+    }
+
+    const onDisconnect = disconnectHandlers.get(port);
+    if (onDisconnect) {
+      try {
+        port.onDisconnect.removeListener(onDisconnect);
+      } catch {
+        // ignore
+      }
+      disconnectHandlers.delete(port);
+    }
+  };
+
   const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
     const sessionId = sessionByPort.get(port) ?? null;
     const portId = portIdByPort.get(port) ?? null;
@@ -113,6 +128,7 @@ export const createPortRouter = ({
     }
 
     try {
+      detachPortListeners(port);
       port.disconnect();
     } catch {
       // ignore disconnect failure
@@ -382,10 +398,6 @@ export const createPortRouter = ({
   };
 
   const handleConnect = (port: Runtime.Port) => {
-    if (port.name === UI_CHANNEL) {
-      void attachUiPort(port);
-      return;
-    }
     if (port.name !== CHANNEL) return;
 
     connections.add(port);
@@ -488,14 +500,15 @@ export const createPortRouter = ({
         portIdByPort.delete(port);
       }
 
-      port.onMessage.removeListener(handleMessage);
-      port.onDisconnect.removeListener(handleDisconnect);
+      detachPortListeners(port);
       const disconnectOrigin = getPortOrigin(port, extensionOrigin);
       portLog("disconnect", { origin: disconnectOrigin, remaining: connections.size });
     };
 
     port.onMessage.addListener(handleMessage);
     port.onDisconnect.addListener(handleDisconnect);
+    messageHandlers.set(port, handleMessage);
+    disconnectHandlers.set(port, handleDisconnect);
   };
 
   const syncAllPortContextsForSnapshot = (snapshot: ControllerSnapshot) => {
@@ -503,11 +516,16 @@ export const createPortRouter = ({
   };
 
   const destroy = () => {
+    for (const port of [...connections]) {
+      dropStalePort(port, "destroy");
+    }
     connections.clear();
     pendingRequests.clear();
     portContexts.clear();
     sessionByPort.clear();
     portIdByPort.clear();
+    messageHandlers.clear();
+    disconnectHandlers.clear();
   };
 
   return {

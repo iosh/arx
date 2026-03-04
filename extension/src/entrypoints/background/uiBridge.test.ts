@@ -25,6 +25,8 @@ import {
   type UiSnapshot,
 } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ENTRYPOINTS } from "./constants";
+import { createUiPlatform } from "./platform/uiPlatform";
 import type { UiPort } from "./ui/portHub";
 import { createUiBridge } from "./uiBridge";
 
@@ -612,6 +614,10 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   } as unknown as BackgroundSessionServices;
 
   const browserApi = makeBrowser();
+  const platform = createUiPlatform({
+    browser: browserApi as unknown as Parameters<typeof createUiPlatform>[0]["browser"],
+    entrypoints: ENTRYPOINTS,
+  });
   const persistVaultMeta = vi.fn(async () => {});
   type UiBridgeDeps = Parameters<typeof createUiBridge>[0];
   const bridge = createUiBridge({
@@ -630,6 +636,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     persistVaultMeta,
     keyring,
     attention: { getSnapshot: () => ({ queue: [], count: 0 }) } as unknown as UiBridgeDeps["attention"],
+    platform,
   });
 
   return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi, persistVaultMeta };

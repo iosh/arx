@@ -12,8 +12,7 @@ import { isUiMethodName, type UiRequestEnvelope, uiMethods } from "@arx/core/ui"
 import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/runtime";
 
 import type browserDefaultType from "webextension-polyfill";
-import { ENTRYPOINTS } from "./constants";
-import { createPopupActivator } from "./services/popupActivator";
+import type { UiPlatform } from "./platform/uiPlatform";
 import { createUiPortHub } from "./ui/portHub";
 
 export { UI_CHANNEL } from "@arx/core/ui";
@@ -27,6 +26,7 @@ type BridgeDeps = {
   persistVaultMeta: () => Promise<void>;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
+  platform: Pick<UiPlatform, "openOnboardingTab" | "openNotificationPopup">;
 };
 
 export const createUiBridge = ({
@@ -38,110 +38,10 @@ export const createUiBridge = ({
   persistVaultMeta,
   keyring,
   attention,
+  platform,
 }: BridgeDeps) => {
   const portHub = createUiPortHub();
   const listeners: Array<() => void> = [];
-
-  const onboardingCooldownMs = 500;
-  let lastOnboardingAttemptAt: number | null = null;
-  let onboardingInFlight: Promise<{ activationPath: "focus" | "create" | "debounced"; tabId?: number }> | null = null;
-  let cachedOnboardingTabId: number | null = null;
-
-  const openOnboardingTab = (_reason: string) => {
-    if (onboardingInFlight) return onboardingInFlight;
-
-    const promise = (async () => {
-      const now = Date.now();
-
-      if (lastOnboardingAttemptAt !== null && now - lastOnboardingAttemptAt < onboardingCooldownMs) {
-        return cachedOnboardingTabId
-          ? { activationPath: "debounced" as const, tabId: cachedOnboardingTabId }
-          : { activationPath: "debounced" as const };
-      }
-      lastOnboardingAttemptAt = now;
-
-      const onboardingBaseUrl = runtimeBrowser.runtime.getURL(ENTRYPOINTS.ONBOARDING);
-      const onboardingTargetUrl = onboardingBaseUrl;
-
-      let existingTabs: browserDefaultType.Tabs.Tab[] = [];
-      try {
-        existingTabs = await runtimeBrowser.tabs.query({ url: [`${onboardingBaseUrl}*`] });
-      } catch {
-        const allTabs = await runtimeBrowser.tabs.query({});
-        existingTabs = (allTabs ?? []).filter(
-          (tab) => typeof tab.url === "string" && tab.url.startsWith(onboardingBaseUrl),
-        );
-      }
-
-      const existing = existingTabs.find((tab) => typeof tab.id === "number");
-      if (existing?.id) {
-        cachedOnboardingTabId = existing.id;
-        await runtimeBrowser.tabs.update(existing.id, { active: true });
-        if (typeof existing.windowId === "number") {
-          await runtimeBrowser.windows.update(existing.windowId, { focused: true });
-        }
-        return { activationPath: "focus" as const, tabId: existing.id };
-      }
-
-      const created = await runtimeBrowser.tabs.create({ url: onboardingTargetUrl, active: true });
-      if (typeof created.windowId === "number") {
-        await runtimeBrowser.windows.update(created.windowId, { focused: true });
-      }
-      cachedOnboardingTabId = typeof created.id === "number" ? created.id : null;
-      return typeof created.id === "number"
-        ? { activationPath: "create" as const, tabId: created.id }
-        : { activationPath: "create" as const };
-    })().finally(() => {
-      onboardingInFlight = null;
-    });
-
-    onboardingInFlight = promise;
-    return promise;
-  };
-
-  const notificationActivator = createPopupActivator({ browser: runtimeBrowser, popupPath: ENTRYPOINTS.NOTIFICATION });
-
-  /**
-   * Reject all pending approvals with a 4001 userRejectedRequest error.
-   * Used when the confirmation window is closed to prevent hanging dApp requests.
-   */
-  const rejectAllPendingApprovals = (reason: string, details?: Record<string, unknown>) => {
-    const pending = controllers.approvals.getState().pending;
-    if (pending.length === 0) return;
-
-    const snapshot = [...pending];
-    for (const item of snapshot) {
-      controllers.approvals.reject(
-        item.id,
-        arxError({
-          reason: ArxReasons.ApprovalRejected,
-          message: "User rejected the request.",
-          data: { reason, id: item.id, origin: item.origin, type: item.type, ...details },
-        }),
-      );
-    }
-  };
-
-  const trackedPopupWindows = new Map<number, (removedId: number) => void>();
-  const attachPopupCloseRejection = (windowId: number) => {
-    if (trackedPopupWindows.has(windowId)) return;
-
-    const onRemoved = (removedId: number) => {
-      if (removedId !== windowId) return;
-      runtimeBrowser.windows.onRemoved.removeListener(onRemoved);
-      trackedPopupWindows.delete(windowId);
-      rejectAllPendingApprovals("windowClosed", { windowId });
-    };
-
-    trackedPopupWindows.set(windowId, onRemoved);
-    runtimeBrowser.windows.onRemoved.addListener(onRemoved);
-  };
-
-  const openNotificationPopup = async () => {
-    const result = await notificationActivator.open();
-    if (result.windowId) attachPopupCloseRejection(result.windowId);
-    return result;
-  };
 
   const uiOrigin = new URL(runtimeBrowser.runtime.getURL("")).origin;
 
@@ -153,7 +53,7 @@ export const createUiBridge = ({
     rpcClients,
     rpcRegistry,
     uiOrigin,
-    platform: { openOnboardingTab, openNotificationPopup },
+    platform,
   });
 
   let broadcastHold = 0;
@@ -252,11 +152,6 @@ export const createUiBridge = ({
         console.warn("[uiBridge] failed to remove listener", error);
       }
     });
-
-    for (const listener of trackedPopupWindows.values()) {
-      runtimeBrowser.windows.onRemoved.removeListener(listener);
-    }
-    trackedPopupWindows.clear();
 
     portHub.teardown();
   };

@@ -1,66 +1,81 @@
-import { disableDebugNamespaces, enableDebugNamespaces } from "@arx/core";
-import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider/types";
+import { ATTENTION_STATE_CHANGED } from "@arx/core";
+import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
+import { createApprovalUiListener } from "./listeners/approvalUiListener";
+import { createProviderEventsListener } from "./listeners/providerEventsListener";
 import { getExtensionOrigin } from "./origin";
+import { createUiPlatform } from "./platform/uiPlatform";
 import { createPortRouter } from "./portRouter";
-import { createRuntimeMessageProxy } from "./runtimeMessages";
-import { createServiceManager } from "./serviceManager";
-import type { PortContext } from "./types";
+import { createBackgroundRuntimeHost } from "./runtimeHost";
+import { createUiBridge } from "./uiBridge";
 
 export const createBackgroundApp = () => {
   const extensionOrigin = getExtensionOrigin();
+  const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
+  const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
 
-  const connections = new Set<Runtime.Port>();
-  const pendingRequests = new Map<Runtime.Port, Map<string, { rpcId: JsonRpcId; jsonrpc: JsonRpcVersion2 }>>();
-  const portContexts = new Map<Runtime.Port, PortContext>();
-
-  let portRouter: ReturnType<typeof createPortRouter> | null = null;
-
-  const serviceManager = createServiceManager({
+  const portRouter = createPortRouter({
     extensionOrigin,
-    callbacks: {
-      broadcastEvent: (event, params) => portRouter?.broadcastEvent(event, params),
-      broadcastDisconnect: () => portRouter?.broadcastDisconnect(),
-      syncAllPortContexts: (snapshot) => portRouter?.syncAllPortContexts(snapshot),
-    },
+    getOrInitContext: runtimeHost.getOrInitContext,
+    getControllerSnapshot: runtimeHost.getControllerSnapshot,
   });
 
-  portRouter = createPortRouter({
-    extensionOrigin,
-    connections,
-    pendingRequests,
-    portContexts,
-    getOrInitContext: serviceManager.getOrInitContext,
-    getControllerSnapshot: serviceManager.getControllerSnapshot,
-    attachUiPort: serviceManager.attachUiPort,
-  });
+  const providerEvents = createProviderEventsListener({ runtimeHost, portRouter });
+  const approvalUi = createApprovalUiListener({ runtimeHost, platform: uiPlatform });
 
-  const runtimeMessageProxy = createRuntimeMessageProxy({
-    getOrInitContext: serviceManager.getOrInitContext,
-    persistVaultMeta: serviceManager.persistVaultMeta,
-    runtimeId: browser.runtime.id,
-  });
+  let stopped = false;
+  let uiBridge: ReturnType<typeof createUiBridge> | null = null;
+  let uiBridgePromise: Promise<ReturnType<typeof createUiBridge>> | null = null;
+  let uiBridgeListenersAttached = false;
+  let unsubscribeAttentionStateChanged: (() => void) | null = null;
+
+  const getOrInitUiBridge = async () => {
+    if (stopped) throw new Error("Background app is stopped");
+    if (uiBridge) return uiBridge;
+    if (uiBridgePromise) return await uiBridgePromise;
+
+    uiBridgePromise = (async () => {
+      const ctx = await runtimeHost.getOrInitContext();
+      if (stopped) throw new Error("Background app is stopped");
+      const bridge = createUiBridge({
+        browser,
+        controllers: ctx.controllers,
+        session: ctx.session,
+        rpcClients: ctx.runtime.rpc.clients,
+        rpcRegistry: ctx.runtime.rpc.registry,
+        persistVaultMeta: () => runtimeHost.persistVaultMeta(),
+        keyring: ctx.keyring,
+        attention: ctx.attention,
+        platform: uiPlatform,
+      });
+
+      uiBridge = bridge;
+      if (!uiBridgeListenersAttached) {
+        uiBridgeListenersAttached = true;
+        bridge.attachListeners();
+      }
+
+      unsubscribeAttentionStateChanged ??= ctx.runtime.bus.subscribe(ATTENTION_STATE_CHANGED, () => {
+        uiBridge?.broadcast();
+      });
+
+      return bridge;
+    })().finally(() => {
+      uiBridgePromise = null;
+    });
+
+    return await uiBridgePromise;
+  };
+
+  const attachUiPort = async (port: Runtime.Port) => {
+    const bridge = await getOrInitUiBridge();
+    bridge.attachPort(port as unknown as Parameters<typeof bridge.attachPort>[0]);
+  };
 
   const openOrFocusOnboardingTab = async (): Promise<void> => {
-    const onboardingBaseUrl = browser.runtime.getURL(ENTRYPOINTS.ONBOARDING);
-
-    const tabs = await browser.tabs.query({ url: [`${onboardingBaseUrl}*`] });
-    const existing = (tabs ?? []).find((tab) => typeof tab.id === "number");
-
-    if (existing?.id) {
-      await browser.tabs.update(existing.id, { active: true });
-      if (typeof existing.windowId === "number") {
-        await browser.windows.update(existing.windowId, { focused: true });
-      }
-      return;
-    }
-
-    const created = await browser.tabs.create({ url: onboardingBaseUrl, active: true });
-    if (typeof created.windowId === "number") {
-      await browser.windows.update(created.windowId, { focused: true });
-    }
+    await uiPlatform.openOnboardingTab("install");
   };
 
   const handleOnInstalled = (details: Runtime.OnInstalledDetailsType) => {
@@ -69,33 +84,41 @@ export const createBackgroundApp = () => {
       console.warn("[bg] failed to open onboarding tab on install", error);
     });
   };
-
-  const applyDebugNamespacesFromEnv = () => {
-    const raw: unknown = import.meta.env.VITE_ARX_DEBUG_NAMESPACES;
-    const namespaces = typeof raw === "string" ? raw.trim() : "";
-
-    if (!namespaces) {
-      disableDebugNamespaces();
+  const handleConnect = (port: Runtime.Port) => {
+    if (port.name === UI_CHANNEL) {
+      void attachUiPort(port).catch((error) => {
+        console.warn("[bg] failed to attach UI port", error);
+      });
       return;
     }
-
-    enableDebugNamespaces(namespaces);
+    portRouter.handleConnect(port);
   };
 
   const start = () => {
-    applyDebugNamespacesFromEnv();
-    void serviceManager.getOrInitContext();
-    browser.runtime.onConnect.addListener(portRouter.handleConnect);
-    browser.runtime.onMessage.addListener(runtimeMessageProxy);
+    stopped = false;
+    runtimeHost.applyDebugNamespacesFromEnv();
+    void runtimeHost.getOrInitContext();
+    providerEvents.start();
+    approvalUi.start();
+
+    browser.runtime.onConnect.addListener(handleConnect);
     browser.runtime.onInstalled.addListener(handleOnInstalled);
   };
 
   const stop = () => {
-    browser.runtime.onConnect.removeListener(portRouter.handleConnect);
-    browser.runtime.onMessage.removeListener(runtimeMessageProxy);
+    stopped = true;
     browser.runtime.onInstalled.removeListener(handleOnInstalled);
+    browser.runtime.onConnect.removeListener(handleConnect);
+    providerEvents.destroy();
+    approvalUi.destroy();
     portRouter.destroy();
-    serviceManager.destroy();
+    unsubscribeAttentionStateChanged?.();
+    unsubscribeAttentionStateChanged = null;
+    uiBridge?.teardown();
+    uiBridge = null;
+    uiBridgeListenersAttached = false;
+    runtimeHost.destroy();
+    uiPlatform.teardown();
   };
 
   return { start, stop };

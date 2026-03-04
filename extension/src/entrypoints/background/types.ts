@@ -1,11 +1,5 @@
-import type { RpcInvocationContext, UnlockReason } from "@arx/core";
+import type { RpcInvocationContext } from "@arx/core";
 import type { TransportMeta } from "@arx/provider/types";
-
-export type SessionMessage =
-  | { type: "session:getStatus" }
-  | { type: "session:unlock"; payload: { password: string } }
-  | { type: "session:lock"; payload?: { reason?: UnlockReason } }
-  | { type: "vault:initialize"; payload: { password: string } };
 
 export type PortContext = {
   origin: string;

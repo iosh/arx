@@ -23,6 +23,8 @@ export const bootstrapContent = () => {
     const envelope = data as Envelope | undefined;
     if (!envelope || typeof envelope !== "object" || envelope?.channel !== CHANNEL) return;
     if (typeof envelope.sessionId !== "string") return;
+    if (!sessionId) return;
+    if (envelope.sessionId !== sessionId) return;
 
     switch (envelope.type) {
       case "handshake_ack":
@@ -116,9 +118,8 @@ export const bootstrapContent = () => {
         forwardToBackground(data);
         return;
       case "request":
-        if (!sessionId) {
-          sessionId = data.sessionId;
-        }
+        if (!sessionId) return;
+        if (data.sessionId !== sessionId) return;
         forwardToBackground(data);
         return;
       default:
@@ -127,7 +128,4 @@ export const bootstrapContent = () => {
   };
 
   window.addEventListener("message", handleWindowMessage);
-
-  // Initialize once; port may be recreated later by getOrConnectPort().
-  getOrConnectPort();
 };

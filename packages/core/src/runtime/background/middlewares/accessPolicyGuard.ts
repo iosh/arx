@@ -101,8 +101,8 @@ export const createAccessPolicyGuardMiddleware = ({
       }
 
       throw arxError({
-        reason: ArxReasons.RpcMethodNotFound,
-        message: `Method "${req.method}" is not implemented`,
+        reason: ArxReasons.RpcUnsupportedMethod,
+        message: `Method "${req.method}" is not supported`,
         data: { origin, method: req.method, namespace: rpcContext?.namespace ?? null },
       });
     }

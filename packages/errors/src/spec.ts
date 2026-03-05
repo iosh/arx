@@ -142,6 +142,11 @@ export const ArxErrorSpec = {
     dapp: { code: -32601, message: "Method not found" },
     ui: { message: "Method not found" },
   },
+  RpcUnsupportedMethod: {
+    exposure: "ui_and_dapp",
+    dapp: { code: 4200, message: "Unsupported method" },
+    ui: { message: "Unsupported method" },
+  },
   RpcInternal: {
     exposure: "ui_and_dapp",
     dapp: { code: -32603, message: "Internal error" },

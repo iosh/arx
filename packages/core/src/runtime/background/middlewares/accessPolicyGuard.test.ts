@@ -90,7 +90,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
     expect(attention).not.toHaveBeenCalled();
   });
 
-  it("throws RpcMethodNotFound when definition is missing and not passthrough", async () => {
+  it("throws RpcUnsupportedMethod when definition is missing and not passthrough", async () => {
     const attention = vi.fn();
     await expect(
       run({
@@ -110,7 +110,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isConnected: vi.fn(() => false),
         },
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.RpcMethodNotFound });
+    ).rejects.toMatchObject({ reason: ArxReasons.RpcUnsupportedMethod });
     expect(attention).not.toHaveBeenCalled();
   });
 

@@ -2,7 +2,13 @@ import { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
-export { createEip155Adapter, EIP155_NAMESPACE } from "./handlers/namespaces/index.js";
+export {
+  createEip155Adapter,
+  EIP155_NAMESPACE,
+  EIP155_PASSTHROUGH_CONFIG,
+  EIP155_PASSTHROUGH_FILTER_METHODS,
+  EIP155_PASSTHROUGH_READONLY_METHODS,
+} from "./handlers/namespaces/index.js";
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
 export type {
   HandlerControllers,

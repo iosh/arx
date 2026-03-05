@@ -1,3 +1,5 @@
+import { EIP155_PASSTHROUGH_READONLY_METHODS } from "@arx/core";
+
 export const DEFAULT_NAMESPACE = "eip155" as const;
 
 export const EIP6963_PROVIDER_INFO = {
@@ -32,25 +34,11 @@ export const DEFAULT_APPROVAL_METHODS = new Set<string>([
   "wallet_addEthereumChain",
   "wallet_switchEthereumChain",
   "wallet_requestPermissions",
-  "wallet_watchAsset",
+  // "wallet_watchAsset", // TODO: EIP-747, not supported yet (kept for future)
 ]);
 
 export const DEFAULT_READONLY_METHODS = new Set<string>([
   "eth_chainId",
   "eth_accounts",
-  "net_version",
-  "web3_clientVersion",
-  "eth_blockNumber",
-  "eth_getBalance",
-  "eth_getCode",
-  "eth_call",
-  "eth_getTransactionCount",
-  "eth_getLogs",
-  "eth_getBlockByHash",
-  "eth_getBlockByNumber",
-  "eth_getTransactionByHash",
-  "eth_getTransactionReceipt",
-  "eth_feeHistory",
-  "eth_gasPrice",
-  "eth_maxPriorityFeePerGas",
+  ...EIP155_PASSTHROUGH_READONLY_METHODS,
 ]);

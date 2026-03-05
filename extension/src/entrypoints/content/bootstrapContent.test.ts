@@ -1,6 +1,6 @@
 import { CHANNEL, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { bootstrapContent } from "./bootstrapContent";
 
@@ -94,10 +94,10 @@ vi.mock("webextension-polyfill", () => {
 describe("bootstrapContent", () => {
   let port: FakePort;
   let connectSpy: ReturnType<typeof vi.fn>;
-  let ctx: ReturnType<typeof createDom>;
+  let _ctx: ReturnType<typeof createDom>;
 
   beforeEach(async () => {
-    ctx = createDom();
+    _ctx = createDom();
     port = new FakePort();
 
     const mod = (await import("webextension-polyfill")) as unknown as { default: { runtime: { connect: unknown } } };
@@ -153,4 +153,3 @@ describe("bootstrapContent", () => {
     expect(port.postMessage).toHaveBeenCalledTimes(0);
   });
 });
-

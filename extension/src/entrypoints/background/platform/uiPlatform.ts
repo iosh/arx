@@ -94,7 +94,7 @@ export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiPl
   };
 
   const clearWindowCloseTracks = () => {
-    for (const [windowId, listener] of Array.from(trackedWindows.entries())) {
+    for (const [_windowId, listener] of Array.from(trackedWindows.entries())) {
       browser.windows.onRemoved.removeListener(listener);
     }
     trackedWindows.clear();

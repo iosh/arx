@@ -46,7 +46,7 @@ describe("eip155 passthrough executor", () => {
           origin: ORIGIN,
           request: { method: "eth_getWork", params: [] as JsonRpcParams },
         }),
-      ).rejects.toMatchObject({ code: -32601 });
+      ).rejects.toMatchObject({ code: 4200 });
 
       expect(getClient).not.toHaveBeenCalled();
     } finally {

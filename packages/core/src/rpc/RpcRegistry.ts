@@ -590,8 +590,8 @@ export class RpcRegistry {
       const passthrough = this.passthroughByNamespace.get(namespace);
       if (!passthrough || !passthrough.allowedMethods.has(method)) {
         throw arxError({
-          reason: ArxReasons.RpcMethodNotFound,
-          message: `Method "${method}" is not implemented`,
+          reason: ArxReasons.RpcUnsupportedMethod,
+          message: `Method "${method}" is not supported`,
           data: { namespace, method },
         });
       }

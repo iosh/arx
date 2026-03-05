@@ -46,6 +46,9 @@ const FILTER_METHODS = [
   "eth_getFilterLogs",
 ] as const;
 
+export const EIP155_PASSTHROUGH_READONLY_METHODS = READ_ONLY_METHODS;
+export const EIP155_PASSTHROUGH_FILTER_METHODS = FILTER_METHODS;
+
 export const PASSTHROUGH_CONFIG = {
   allowedMethods: [...READ_ONLY_METHODS, ...FILTER_METHODS],
   allowWhenLocked: READ_ONLY_METHODS,

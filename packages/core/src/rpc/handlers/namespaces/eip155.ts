@@ -1,1 +1,6 @@
-export { createEip155Adapter } from "./eip155/index.js";
+export {
+  createEip155Adapter,
+  EIP155_PASSTHROUGH_FILTER_METHODS,
+  EIP155_PASSTHROUGH_READONLY_METHODS,
+  PASSTHROUGH_CONFIG as EIP155_PASSTHROUGH_CONFIG,
+} from "./eip155/index.js";

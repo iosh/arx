@@ -1,11 +1,11 @@
-import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
+import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
+import type { ChainNamespace } from "../../controllers/account/types.js";
 import { sortPermissionCapabilities } from "../../permissions/capabilities.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
 import type { PermissionRecord } from "../../storage/records.js";
-import type { ChainNamespace } from "../account/types.js";
 import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionMessenger } from "./topics.js";
 import {
   type GrantPermissionOptions,

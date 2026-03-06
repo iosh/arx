@@ -65,7 +65,11 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
     const derived = await runtime.services.keyring.deriveAccount(keyringId);
-    await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: derived.address });
+    await runtime.controllers.accounts.switchActiveForNamespace({
+      namespace: mainnet.namespace,
+      chainRef: mainnet.chainRef,
+      address: derived.address,
+    });
     const activeAddress = derived.address;
 
     try {
@@ -80,7 +84,12 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(runtime.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.controllers.accounts.getSelectedPointer({ chainRef: ALT_CHAIN.chainRef })).toMatchObject({
+      expect(
+        runtime.controllers.accounts.getSelectedPointerForNamespace({
+          namespace: ALT_CHAIN.namespace,
+          chainRef: ALT_CHAIN.chainRef,
+        }),
+      ).toMatchObject({
         chainRef: ALT_CHAIN.chainRef,
         address: activeAddress,
         namespace: "eip155",

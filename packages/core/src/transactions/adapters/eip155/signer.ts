@@ -6,7 +6,7 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
+import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import type { SignedTransactionPayload, TransactionSignContext } from "../types.js";

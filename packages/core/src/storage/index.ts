@@ -26,7 +26,6 @@ export type {
 export {
   AccountIdSchema,
   AccountNamespaceSchema,
-  AccountPayloadHexSchema,
   AccountRecordSchema,
   KeyringMetaRecordSchema,
   NetworkPreferencesRecordSchema,

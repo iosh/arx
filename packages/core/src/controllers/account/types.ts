@@ -6,6 +6,11 @@ export type AccountAddress = string;
 
 export type ChainNamespace = string;
 
+export type NamespaceChainContext = {
+  namespace: ChainNamespace;
+  chainRef: ChainRef;
+};
+
 export type NamespaceAccountsState = {
   accountIds: AccountId[];
   selectedAccountId: AccountId | null;
@@ -30,21 +35,24 @@ export type AccountController = {
   getState(): MultiNamespaceAccountsState;
 
   /**
-   * Returns chain-canonical addresses for the given chainRef.
+   * Returns the namespace-scoped account list rendered for the given chain context.
    */
-  getAccounts(params: { chainRef: ChainRef }): AccountAddress[];
+  getAccountsForNamespace(params: NamespaceChainContext): AccountAddress[];
 
   getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[];
   getSelectedAccountId(namespace: ChainNamespace): AccountId | null;
-  getSelectedPointer(params: { chainRef: ChainRef }): ActivePointer | null;
-  getSelectedAddress(params: { chainRef: ChainRef }): AccountAddress | null;
+  getSelectedPointerForNamespace(params: NamespaceChainContext): ActivePointer | null;
+  getSelectedAddressForNamespace(params: NamespaceChainContext): AccountAddress | null;
 
   /**
-   * Selects the active account for the chain's namespace.
+   * Selects the active account for a namespace.
    * - address omitted/null => reset selection to the namespace default (first account)
    */
-  switchActive(params: { chainRef: ChainRef; address?: string | null }): Promise<ActivePointer | null>;
+  switchActiveForNamespace(params: NamespaceChainContext & { address?: string | null }): Promise<ActivePointer | null>;
 
+  /**
+   * RPC-facing convenience wrapper for chain invocation contexts.
+   */
   requestAccounts(params: { chainRef: ChainRef }): Promise<AccountAddress[]>;
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;

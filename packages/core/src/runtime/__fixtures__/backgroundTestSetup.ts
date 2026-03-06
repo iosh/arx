@@ -652,7 +652,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
               return result;
             }
             case "wallet_requestAccounts":
-              return runtime.controllers.accounts.getAccounts({
+              return runtime.controllers.accounts.getAccountsForNamespace({
+                namespace: task.namespace ?? runtime.controllers.network.getActiveChain().namespace,
                 chainRef: task.chainRef ?? runtime.controllers.network.getActiveChain().chainRef,
               });
             case "wallet_signMessage":

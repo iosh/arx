@@ -1,4 +1,4 @@
-export * from "./account/types.js";
+export * from "./account/index.js";
 
 export * from "./approval/index.js";
 export * from "./chainRegistry/ChainRegistryController.js";

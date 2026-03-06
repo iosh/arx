@@ -302,9 +302,11 @@ export const buildUiSnapshot = (deps: {
   const networkState = controllers.network.getState();
   const resolvedChain = chain.chainRef;
 
-  const accountList = session.unlock.isUnlocked() ? controllers.accounts.getAccounts({ chainRef: resolvedChain }) : [];
+  const accountList = session.unlock.isUnlocked()
+    ? controllers.accounts.getAccountsForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
+    : [];
   const selectedAddress = session.unlock.isUnlocked()
-    ? controllers.accounts.getSelectedAddress({ chainRef: resolvedChain })
+    ? controllers.accounts.getSelectedAddressForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
     : null;
 
   const accountsState = controllers.accounts.getState();

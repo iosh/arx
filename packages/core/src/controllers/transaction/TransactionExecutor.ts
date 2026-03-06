@@ -1,11 +1,11 @@
 import { ArxReasons, isArxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../accounts/accountId.js";
+import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
+import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { AccountController } from "../account/types.js";
 import type { ApprovalController } from "../approval/types.js";
 import { ApprovalTypes } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
@@ -42,7 +42,7 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 type Deps = {
   view: StoreTransactionView;
   network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  accounts: Pick<AccountController, "getSelectedAddress" | "getAccounts">;
+  accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
@@ -64,7 +64,7 @@ export class TransactionExecutor
 {
   #view: StoreTransactionView;
   #network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  #accounts: Pick<AccountController, "getSelectedAddress" | "getAccounts">;
+  #accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
@@ -110,7 +110,10 @@ export class TransactionExecutor
     const id = opts?.id ?? crypto.randomUUID();
     const timestamp = this.#nextTimestamp();
 
-    const fromAddress = this.#findFromAddress(request) ?? this.#accounts.getSelectedAddress({ chainRef }) ?? null;
+    const fromAddress =
+      this.#findFromAddress(request) ??
+      this.#accounts.getSelectedAddressForNamespace({ namespace: derived.namespace, chainRef }) ??
+      null;
     if (!fromAddress) {
       throw new Error("Transaction from address is required");
     }
@@ -123,7 +126,7 @@ export class TransactionExecutor
     const collectedWarnings: TransactionWarning[] = [];
     const collectedIssues: TransactionIssue[] = adapter ? [] : [missingAdapterIssue(derived.namespace)];
 
-    const ownedAccounts = this.#accounts.getAccounts({ chainRef });
+    const ownedAccounts = this.#accounts.getAccountsForNamespace({ namespace: derived.namespace, chainRef });
     if (ownedAccounts.length === 0) {
       collectedIssues.push({
         kind: "issue",

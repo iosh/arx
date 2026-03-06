@@ -2,6 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
+import { parseAccountId } from "../../../accounts/addressing/accountId.js";
 import type { ChainNamespace } from "../../../controllers/account/types.js";
 import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import { keyringErrors } from "../../../keyring/errors.js";
@@ -97,15 +98,20 @@ export const extendConnectedOriginsToChain = async (
   }
 };
 
-export const toUiAccountMeta = (record: AccountRecord) => ({
-  accountId: record.accountId,
-  address: `0x${record.payloadHex}`,
-  keyringId: record.keyringId,
-  derivationIndex: record.derivationIndex,
-  alias: record.alias,
-  createdAt: record.createdAt,
-  hidden: record.hidden,
-});
+export const toUiAccountMeta = (record: AccountRecord) => {
+  const parsed = parseAccountId(record.accountId);
+  const canonicalAddress = record.namespace === "eip155" ? `0x${parsed.payloadHex}` : record.accountId;
+
+  return {
+    accountId: record.accountId,
+    canonicalAddress,
+    keyringId: record.keyringId,
+    derivationIndex: record.derivationIndex,
+    alias: record.alias,
+    createdAt: record.createdAt,
+    hidden: record.hidden,
+  };
+};
 
 export const toUiKeyringMeta = (meta: KeyringMetaRecord) => ({
   id: meta.id,

@@ -1,4 +1,4 @@
-import { getAccountCodec } from "../../accounts/codec.js";
+import { getAccountCodec } from "../../accounts/addressing/codec.js";
 import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
 import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/topics.js";
 import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";

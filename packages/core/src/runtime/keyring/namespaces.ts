@@ -1,4 +1,4 @@
-import type { AccountCodec } from "../../accounts/codec.js";
+import type { AccountCodec } from "../../accounts/addressing/codec.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 

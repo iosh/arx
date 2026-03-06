@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
+import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
@@ -13,6 +13,7 @@ import type {
   ChainNamespace,
   MultiNamespaceAccountsState,
   NamespaceAccountsState,
+  NamespaceChainContext,
 } from "./types.js";
 
 type Options = {
@@ -73,11 +74,11 @@ export class StoreAccountsController implements AccountController {
     return cloneMultiNamespaceAccountsState(this.#state);
   }
 
-  getAccounts(params: { chainRef: ChainRef }): string[] {
-    const { namespace } = parseChainRef(params.chainRef);
+  getAccountsForNamespace(params: NamespaceChainContext): string[] {
+    const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const record = this.#state.namespaces[namespace];
     if (!record) return [];
-    return record.accountIds.map((id) => toCanonicalAddressFromAccountId({ chainRef: params.chainRef, accountId: id }));
+    return record.accountIds.map((id) => toCanonicalAddressFromAccountId({ chainRef, accountId: id }));
   }
 
   getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[] {
@@ -90,21 +91,22 @@ export class StoreAccountsController implements AccountController {
     return record?.selectedAccountId ?? null;
   }
 
-  getSelectedPointer(params: { chainRef: ChainRef }): ActivePointer | null {
-    const { namespace } = parseChainRef(params.chainRef);
+  getSelectedPointerForNamespace(params: NamespaceChainContext): ActivePointer | null {
+    const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const accountId = this.getSelectedAccountId(namespace);
     if (!accountId) return null;
-    const address = toCanonicalAddressFromAccountId({ chainRef: params.chainRef, accountId });
-    return { namespace, chainRef: params.chainRef, accountId, address };
+    const address = toCanonicalAddressFromAccountId({ chainRef, accountId });
+    return { namespace, chainRef, accountId, address };
   }
 
-  getSelectedAddress(params: { chainRef: ChainRef }): string | null {
-    return this.getSelectedPointer(params)?.address ?? null;
+  getSelectedAddressForNamespace(params: NamespaceChainContext): string | null {
+    return this.getSelectedPointerForNamespace(params)?.address ?? null;
   }
 
-  async switchActive(params: { chainRef: ChainRef; address?: string | null }): Promise<ActivePointer | null> {
-    const chainRef = params.chainRef;
-    const { namespace } = parseChainRef(chainRef);
+  async switchActiveForNamespace(
+    params: NamespaceChainContext & { address?: string | null },
+  ): Promise<ActivePointer | null> {
+    const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const address = params.address ?? null;
 
     let nextSelected: AccountId | null = null;
@@ -145,15 +147,27 @@ export class StoreAccountsController implements AccountController {
     });
 
     await this.refresh();
-    return this.getSelectedPointer({ chainRef });
+    return this.getSelectedPointerForNamespace({ namespace, chainRef });
   }
 
   async requestAccounts({ chainRef }: { chainRef: ChainRef }): Promise<string[]> {
-    return this.getAccounts({ chainRef });
+    const { namespace } = parseChainRef(chainRef);
+    return this.getAccountsForNamespace({ namespace, chainRef });
   }
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void {
     return this.#messenger.subscribe(ACCOUNTS_STATE_CHANGED, handler, { replay: "snapshot" });
+  }
+
+  #assertNamespaceChainContext(params: NamespaceChainContext): NamespaceChainContext {
+    const parsed = parseChainRef(params.chainRef);
+    if (parsed.namespace !== params.namespace) {
+      throw new Error(
+        `Account namespace mismatch: chainRef "${params.chainRef}" belongs to namespace "${parsed.namespace}" but "${params.namespace}" was provided`,
+      );
+    }
+
+    return params;
   }
 
   async refresh(): Promise<void> {

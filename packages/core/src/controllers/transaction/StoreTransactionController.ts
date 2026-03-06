@@ -1,8 +1,8 @@
+import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import type { AccountController } from "../account/types.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { NetworkController } from "../network/types.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
@@ -22,7 +22,7 @@ import type {
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   network: Pick<NetworkController, "getActiveChain" | "getChain">;
-  accounts: Pick<AccountController, "getSelectedAddress" | "getAccounts">;
+  accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;

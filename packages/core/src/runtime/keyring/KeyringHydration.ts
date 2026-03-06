@@ -1,4 +1,3 @@
-import { bytesToHex } from "@noble/hashes/utils.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
@@ -249,8 +248,8 @@ export class KeyringHydration {
                   chainRef: config.defaultChainRef,
                   value: derivedAccount.address,
                 });
-                const expected = meta.payloadHex;
-                if (bytesToHex(canonical.bytes) !== expected) {
+                const expectedAccountId = config.codec.toAccountId(canonical);
+                if (expectedAccountId !== meta.accountId) {
                   throw keyringErrors.secretUnavailable();
                 }
               }

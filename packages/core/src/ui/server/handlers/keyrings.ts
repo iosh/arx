@@ -30,7 +30,7 @@ export const createKeyringsHandlers = (
   const selectAccount = async (params: { namespace?: string; address: string }) => {
     const namespace = params.namespace ?? deps.controllers.network.getActiveChain().namespace;
     const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
-    await deps.controllers.accounts.switchActive({ chainRef, address: params.address });
+    await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: params.address });
   };
 
   return {

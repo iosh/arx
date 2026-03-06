@@ -166,8 +166,8 @@ export const initControllers = ({
       getChain: (chainRef) => networkController.getChain(chainRef),
     },
     accounts: {
-      getSelectedAddress: (params) => accountController.getSelectedAddress(params),
-      getAccounts: (params) => accountController.getAccounts(params),
+      getSelectedAddressForNamespace: (params) => accountController.getSelectedAddressForNamespace(params),
+      getAccountsForNamespace: (params) => accountController.getAccountsForNamespace(params),
     },
     approvals: {
       requestApproval: (task, requestContext) => approvalController.requestApproval(task, requestContext),

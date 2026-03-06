@@ -1,4 +1,4 @@
-import { toCanonicalAddressFromAccountId } from "../../accounts/accountId.js";
+import { toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";

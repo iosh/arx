@@ -1,7 +1,7 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { ChainNamespace } from "../../controllers/account/types.js";
 import { PermissionCapabilities } from "../../permissions/capabilities.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
-import type { ChainNamespace } from "../account/types.js";
 
 export { PermissionCapabilities };
 export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof PermissionCapabilities];

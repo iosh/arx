@@ -58,7 +58,7 @@ export const createOnboardingHandlers = (
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
         const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
-        await deps.controllers.accounts.switchActive({ chainRef, address });
+        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
         return { keyringId, address };
       });
     },
@@ -91,7 +91,7 @@ export const createOnboardingHandlers = (
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
         const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
-        await deps.controllers.accounts.switchActive({ chainRef, address });
+        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
         return { keyringId, address };
       });
     },
@@ -123,7 +123,7 @@ export const createOnboardingHandlers = (
         const { keyringId, account } = await deps.keyring.importPrivateKey(privateKey, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
         const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
-        await deps.controllers.accounts.switchActive({ chainRef, address: account.address });
+        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: account.address });
         return { keyringId, account };
       });
     },

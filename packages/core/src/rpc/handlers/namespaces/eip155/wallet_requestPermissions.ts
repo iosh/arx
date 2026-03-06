@@ -125,8 +125,11 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
         const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [chainRef];
         for (const targetChainRef of targetChains) {
           if (descriptor.capability === PermissionCapabilities.Accounts) {
-            const all = controllers.accounts.getAccounts({ chainRef: targetChainRef });
-            const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef: targetChainRef });
+            const all = controllers.accounts.getAccountsForNamespace({ namespace, chainRef: targetChainRef });
+            const preferredAddress = controllers.accounts.getSelectedAddressForNamespace({
+              namespace,
+              chainRef: targetChainRef,
+            });
             const preferred = preferredAddress && all.includes(preferredAddress) ? preferredAddress : null;
             const selected = preferred ?? all[0] ?? null;
             if (!selected) {

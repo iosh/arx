@@ -33,7 +33,6 @@ describe("DexieAccountsPort", () => {
     const record = AccountRecordSchema.parse({
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
-      payloadHex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
       alias: "A",
@@ -51,7 +50,6 @@ describe("DexieAccountsPort", () => {
     const a = AccountRecordSchema.parse({
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
-      payloadHex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
     });
@@ -59,7 +57,6 @@ describe("DexieAccountsPort", () => {
     const b = AccountRecordSchema.parse({
       accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
-      payloadHex: "cccccccccccccccccccccccccccccccccccccccc",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 2000,
       hidden: true,
@@ -102,21 +99,18 @@ describe("DexieAccountsPort", () => {
     const a1 = AccountRecordSchema.parse({
       accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
-      payloadHex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       keyringId: keyringA,
       createdAt: 1000,
     });
     const a2 = AccountRecordSchema.parse({
       accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
-      payloadHex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       keyringId: keyringA,
       createdAt: 2000,
     });
     const b1 = AccountRecordSchema.parse({
       accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
-      payloadHex: "cccccccccccccccccccccccccccccccccccccccc",
       keyringId: keyringB,
       createdAt: 3000,
     });

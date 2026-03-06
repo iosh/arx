@@ -2,7 +2,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import * as Hash from "ox/Hash";
 import * as Hex from "ox/Hex";
 import { describe, expect, it } from "vitest";
-import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
+import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import type { TransactionSignContext } from "../types.js";
 import { createEip155Signer } from "./signer.js";
 

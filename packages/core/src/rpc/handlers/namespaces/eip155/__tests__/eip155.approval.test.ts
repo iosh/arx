@@ -1,6 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../../../../../accounts/accountId.js";
+import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import { ApprovalTypes, PermissionCapabilities } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
@@ -303,7 +303,11 @@ describe("eip155 handlers - approval metadata", () => {
 
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.accounts.switchActiveForNamespace({
+        namespace: mainnet.namespace,
+        chainRef: mainnet.chainRef,
+        address: account.address,
+      });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
@@ -405,7 +409,11 @@ describe("eip155 handlers - approval metadata", () => {
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.accounts.switchActiveForNamespace({
+        namespace: mainnet.namespace,
+        chainRef: mainnet.chainRef,
+        address: account.address,
+      });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,
@@ -466,7 +474,11 @@ describe("eip155 handlers - approval metadata", () => {
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActive({ chainRef: mainnet.chainRef, address: account.address });
+      await runtime.controllers.accounts.switchActiveForNamespace({
+        namespace: mainnet.namespace,
+        chainRef: mainnet.chainRef,
+        address: account.address,
+      });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",
         chainRef: mainnet.chainRef,

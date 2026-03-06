@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../../accounts/accountId.js";
+import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import { ApprovalTypes } from "../../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../../controllers/permission/types.js";
@@ -84,7 +84,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    const preferredAddress = controllers.accounts.getSelectedAddress({ chainRef });
+    const preferredAddress = controllers.accounts.getSelectedAddressForNamespace({ namespace, chainRef });
     const preferred = preferredAddress && uniqueAccounts.includes(preferredAddress) ? preferredAddress : null;
     const selectedAccount = preferred ?? uniqueAccounts[0] ?? null;
     if (!selectedAccount) {

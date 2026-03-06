@@ -635,15 +635,11 @@ export class KeyringService {
   }): AccountRecord {
     const config = this.#getConfig(params.namespace);
     const canonical = this.#toCanonicalAddress(params.namespace, params.address);
-    if (canonical.bytes.length !== 20) throw keyringErrors.invalidAddress();
-
-    const payloadHex = bytesToHex(canonical.bytes);
     const accountId = AccountIdSchema.parse(config.codec.toAccountId(canonical));
 
     return AccountRecordSchema.parse({
       accountId,
       namespace: params.namespace,
-      payloadHex,
       keyringId: params.keyringId,
       derivationIndex: params.derivationIndex,
       alias: params.alias,

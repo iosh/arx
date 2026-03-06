@@ -17,7 +17,11 @@ const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
   const chain = runtime.controllers.network.getActiveChain();
   const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
   const account = await runtime.services.keyring.deriveAccount(keyringId);
-  await runtime.controllers.accounts.switchActive({ chainRef: chain.chainRef, address: account.address });
+  await runtime.controllers.accounts.switchActiveForNamespace({
+    namespace: chain.namespace,
+    chainRef: chain.chainRef,
+    address: account.address,
+  });
   return { chain, address: account.address };
 };
 

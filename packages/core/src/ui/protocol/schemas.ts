@@ -177,7 +177,7 @@ export const UiKeyringMetaSchema = z.object({
 
 export const UiAccountMetaSchema = z.object({
   accountId: AccountIdSchema,
-  address: z.string(),
+  canonicalAddress: z.string(),
   keyringId: z.uuid(),
   derivationIndex: z.number().int().nonnegative().optional(),
   alias: z.string().optional(),

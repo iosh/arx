@@ -15,10 +15,6 @@ import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originSt
 export const AccountNamespaceSchema = z.string().min(1);
 export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
 
-export const AccountPayloadHexSchema = z.string().regex(/^[0-9a-f]{40}$/, {
-  error: "payloadHex must be 40 lowercase hex chars (no 0x)",
-});
-
 // Deterministic account key: <namespace>:<hex bytes>. Used for dedupe and references.
 export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
   error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
@@ -63,7 +59,6 @@ export const AccountRecordSchema = z
   .strictObject({
     accountId: AccountIdSchema,
     namespace: AccountNamespaceSchema,
-    payloadHex: AccountPayloadHexSchema,
     keyringId: z.string().uuid(),
     derivationIndex: z.number().int().min(0).optional(),
     alias: nonEmptyStringSchema.optional(),
@@ -71,11 +66,12 @@ export const AccountRecordSchema = z
     createdAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    const expected = `${value.namespace}:${value.payloadHex}`;
-    if (value.accountId !== expected) {
+    const separatorIndex = value.accountId.indexOf(":");
+    const accountNamespace = separatorIndex >= 0 ? value.accountId.slice(0, separatorIndex) : null;
+    if (accountNamespace !== value.namespace) {
       ctx.addIssue({
         code: "custom",
-        message: `accountId must equal "${expected}"`,
+        message: `accountId namespace must equal "${value.namespace}"`,
         path: ["accountId"],
       });
     }

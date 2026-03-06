@@ -56,7 +56,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     const networkState = controllers.network.getState();
     const isUnlocked = session.unlock.isUnlocked();
     const chainRef = activeChain.chainRef;
-    const accounts = isUnlocked ? controllers.accounts.getAccounts({ chainRef }) : [];
+    const accounts = isUnlocked
+      ? controllers.accounts.getAccountsForNamespace({ namespace: activeChain.namespace, chainRef })
+      : [];
 
     return {
       chain: { chainId: activeChain.chainId, chainRef: activeChain.chainRef },

@@ -249,7 +249,7 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     const rows = await deps.accountsStore.list({ includeHidden: true });
     const all = rows
       .filter((r) => r.namespace === CHAIN.namespace)
-      .map((r) => `0x${String(r.payloadHex ?? "").toLowerCase()}`)
+      .map((r) => toCanonicalAddressFromAccountId({ chainRef: CHAIN.chainRef, accountId: r.accountId }))
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
@@ -282,11 +282,16 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
     }),
-    getAccounts: (params: { chainRef: string }) =>
-      (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((id) => toAddress(params.chainRef, id)).filter(Boolean),
+    getAccountsForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
+      return (state.namespaces[CHAIN.namespace]?.accountIds ?? [])
+        .map((id) => toAddress(params.chainRef, id))
+        .filter(Boolean);
+    },
     getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
     getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
-    getSelectedPointer: (params: { chainRef: string }) => {
+    getSelectedPointerForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
       if (!selected) return null;
       return {
@@ -296,15 +301,16 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
         address: toAddress(params.chainRef, selected),
       };
     },
-    getSelectedAddress: (_params: { chainRef: string }) => {
-      void _params;
+    getSelectedAddressForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      return selected ? toAddress(_params.chainRef, selected) : null;
+      return selected ? toAddress(params.chainRef, selected) : null;
     },
     addAccount: async () => {
       throw new Error("addAccount is not supported in store-backed test controller");
     },
-    switchActive: async (params: { chainRef: string; address?: string | null }) => {
+    switchActiveForNamespace: async (params: { namespace: string; chainRef: string; address?: string | null }) => {
+      void params.namespace;
       const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
       const current = state.namespaces[CHAIN.namespace]?.accountIds ?? [];
       const selectedAccountId = desired && current.includes(desired) ? desired : (current[0] ?? null);
@@ -355,11 +361,16 @@ const createAccountsController = () => {
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
     }),
-    getAccounts: (params: { chainRef: string }) =>
-      (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((id) => toAddress(params.chainRef, id)).filter(Boolean),
+    getAccountsForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
+      return (state.namespaces[CHAIN.namespace]?.accountIds ?? [])
+        .map((id) => toAddress(params.chainRef, id))
+        .filter(Boolean);
+    },
     getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
     getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
-    getSelectedPointer: (params: { chainRef: string }) => {
+    getSelectedPointerForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
       if (!selected) return null;
       return {
@@ -369,10 +380,10 @@ const createAccountsController = () => {
         address: toAddress(params.chainRef, selected),
       };
     },
-    getSelectedAddress: (_params: { chainRef: string }) => {
-      void _params;
+    getSelectedAddressForNamespace: (params: { namespace: string; chainRef: string }) => {
+      void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      return selected ? toAddress(_params.chainRef, selected) : null;
+      return selected ? toAddress(params.chainRef, selected) : null;
     },
     addAccount: async (params: { chainRef: string; address: string; makePrimary?: boolean }) => {
       const ns = CHAIN.namespace;
@@ -384,8 +395,9 @@ const createAccountsController = () => {
       emit();
       return state.namespaces[ns];
     },
-    switchActive: async (params: { chainRef: string; address?: string | null }) => {
+    switchActiveForNamespace: async (params: { namespace: string; chainRef: string; address?: string | null }) => {
       const ns = CHAIN.namespace;
+      void params.namespace;
       const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
       const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
       const selectedAccountId = desired && prev.accountIds.includes(desired) ? desired : (prev.accountIds[0] ?? null);

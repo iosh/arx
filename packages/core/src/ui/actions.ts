@@ -1,5 +1,5 @@
 import type { UiClient } from "./client/index.js";
-import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol.js";
+import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol/index.js";
 
 type UiActionArgs<M extends UiMethodName> =
   undefined extends UiMethodParams<M> ? [params?: UiMethodParams<M>] : [params: UiMethodParams<M>];

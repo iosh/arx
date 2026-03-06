@@ -1,4 +1,4 @@
 export { createUiDispatcher, type UiDispatchEffects, type UiDispatchOutput } from "./dispatcher.js";
-export { createUiHandlers } from "./handlers.js";
+export { createUiHandlers } from "./handlers/index.js";
 export { buildUiSnapshot } from "./snapshot.js";
 export type { UiOnboardingOpenTabResult, UiPlatformAdapter, UiRuntimeDeps } from "./types.js";

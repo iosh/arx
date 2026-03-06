@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "./events.js";
-import { parseUiEnvelope } from "./messages.js";
+import { parseUiEnvelope } from "./protocol/envelopes.js";
+import { UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
 import {
   isUiEventName,
   isUiMethodName,
   parseUiEventPayload,
   parseUiMethodParams,
   parseUiMethodResult,
-} from "./protocol.js";
+} from "./protocol/index.js";
 
 const SNAPSHOT_FIXTURE = {
   chain: {

@@ -1,6 +1,7 @@
 import type { UiErrorPayload } from "@arx/errors";
 import { z } from "zod";
-import { isUiEventName, isUiMethodName, type UiEventName, type UiMethodName } from "./protocol.js";
+import { isUiEventName, isUiMethodName, type UiEventName, type UiMethodName } from "./index.js";
+
 export const UI_CHANNEL = "arx:ui" as const;
 
 export type UiContext = {

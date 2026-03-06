@@ -1,11 +1,16 @@
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ApprovalTask } from "../../controllers/approval/types.js";
 import { ApprovalTypes } from "../../controllers/approval/types.js";
-import type { RequestPermissionsApprovalPayload } from "../../controllers/permission/types.js";
+import type { PermissionsState, RequestPermissionsApprovalPayload } from "../../controllers/permission/types.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import { type UiSnapshot, UiSnapshotSchema } from "../schemas.js";
+import {
+  type UiPermissionsSnapshot,
+  UiPermissionsSnapshotSchema,
+  type UiSnapshot,
+  UiSnapshotSchema,
+} from "../protocol/schemas.js";
 
 type UiWarning = {
   code: string;
@@ -94,7 +99,10 @@ type AddChainPayload = { metadata: ChainMetadata; isUpdate: boolean };
 
 const extractPayload = <T>(payload: unknown): T => payload as T;
 
-const toApprovalSummary = (controllers: HandlerControllers, task: ApprovalTask): UiSnapshot["approvals"][number] => {
+const toApprovalSummary = (
+  controllers: HandlerControllers,
+  task: ApprovalTask,
+): UiSnapshot["approvals"][number] | null => {
   const activeChain = controllers.network.getActiveChain();
   const base = {
     id: task.id,
@@ -246,8 +254,40 @@ const toApprovalSummary = (controllers: HandlerControllers, task: ApprovalTask):
       };
     }
     default:
-      throw new Error(`Unsupported approval type: ${task.type}`);
+      return {
+        ...base,
+        type: "unsupported",
+        payload: {
+          rawType: task.type,
+          ...(task.payload !== undefined ? { rawPayload: task.payload } : {}),
+        },
+      };
   }
+};
+
+const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot => {
+  const origins: UiPermissionsSnapshot["origins"] = {};
+
+  for (const [origin, originState] of Object.entries(state.origins)) {
+    const namespaces: UiPermissionsSnapshot["origins"][string] = {};
+
+    for (const [namespace, namespaceState] of Object.entries(originState)) {
+      const chains: UiPermissionsSnapshot["origins"][string][string]["chains"] = {};
+
+      for (const [chainRef, chainState] of Object.entries(namespaceState.chains)) {
+        chains[chainRef] = {
+          capabilities: [...chainState.capabilities],
+          ...(chainState.accounts ? { accounts: [...chainState.accounts] } : {}),
+        };
+      }
+
+      namespaces[namespace] = { chains };
+    }
+
+    origins[origin] = namespaces;
+  }
+
+  return UiPermissionsSnapshotSchema.parse({ origins });
 };
 
 export const buildUiSnapshot = (deps: {
@@ -274,7 +314,12 @@ export const buildUiSnapshot = (deps: {
   const approvalSummaries = approvalState.pending
     .map((item) => {
       const task = controllers.approvals.get(item.id);
-      return task ? toApprovalSummary(controllers, task) : null;
+      if (!task) return null;
+      try {
+        return toApprovalSummary(controllers, task);
+      } catch {
+        return null;
+      }
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
@@ -328,7 +373,7 @@ export const buildUiSnapshot = (deps: {
     },
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
-    permissions: controllers.permissions.getState(),
+    permissions: toUiPermissionsSnapshot(controllers.permissions.getState()),
     vault: {
       initialized: session.vault.getStatus().hasEnvelope,
     },

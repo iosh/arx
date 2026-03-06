@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../chains/url.js";
-import { PERMISSION_CAPABILITY_VALUES } from "../permissions/capabilities.js";
-import { AccountIdSchema } from "../storage/records.js";
+import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../../chains/url.js";
+import { PERMISSION_CAPABILITY_VALUES } from "../../permissions/capabilities.js";
+import { AccountIdSchema } from "../../storage/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
   message: "Expected a 0x-prefixed hexadecimal string",
@@ -58,7 +58,7 @@ const NamespacePermissionStateSchema = z.object({
 
 const OriginPermissionStateSchema = z.record(z.string().min(1), NamespacePermissionStateSchema);
 
-const PermissionsStateSchema = z.object({
+export const UiPermissionsSnapshotSchema = z.object({
   origins: z.record(z.string().min(1), OriginPermissionStateSchema),
 });
 
@@ -157,6 +157,13 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
       isUpdate: z.boolean(),
     }),
   }),
+  approvalPayloadBase.extend({
+    type: z.literal("unsupported"),
+    payload: z.object({
+      rawType: z.string().min(1),
+      rawPayload: z.unknown().optional(),
+    }),
+  }),
 ]);
 
 export const UiKeyringMetaSchema = z.object({
@@ -207,7 +214,7 @@ export const UiSnapshotSchema = z.object({
     queue: z.array(AttentionRequestSchema),
     count: z.number().int().nonnegative(),
   }),
-  permissions: PermissionsStateSchema,
+  permissions: UiPermissionsSnapshotSchema,
   vault: VaultSnapshotSchema,
   warnings: z.object({
     hdKeyringsNeedingBackup: z.array(HdBackupWarningSchema),
@@ -224,3 +231,4 @@ export type HdBackupWarning = z.infer<typeof HdBackupWarningSchema>;
 export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;
+export type UiPermissionsSnapshot = z.infer<typeof UiPermissionsSnapshotSchema>;

@@ -6,8 +6,7 @@ import type {
   RpcClientRegistry,
   RpcRegistry,
 } from "@arx/core";
-import { isUiMethodName, type UiRequestEnvelope, uiMethods } from "@arx/core/ui";
-import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/runtime";
+import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/server";
 
 import type browserDefaultType from "webextension-polyfill";
 import type { UiPlatform } from "./platform/uiPlatform";
@@ -83,14 +82,8 @@ export const createUiBridge = ({
   };
 
   const maybeWithHold = async (raw: unknown, fn: () => Promise<void>) => {
-    const envelope = raw as Partial<UiRequestEnvelope> | null;
-    const shouldHold =
-      envelope?.type === "ui:request" &&
-      typeof envelope.method === "string" &&
-      isUiMethodName(envelope.method) &&
-      uiMethods[envelope.method].effects?.holdBroadcast === true;
-
-    if (shouldHold) {
+    const effects = dispatcher.getRequestEffects(raw);
+    if (effects?.holdBroadcast) {
       await withBroadcastHold(fn);
       pendingBroadcast = false;
       return;

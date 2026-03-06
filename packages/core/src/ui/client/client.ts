@@ -1,5 +1,5 @@
-import { UI_EVENT_SNAPSHOT_CHANGED } from "../events.js";
-import { parseUiEnvelope, type UiPortEnvelope } from "../messages.js";
+import { parseUiEnvelope, type UiPortEnvelope } from "../protocol/envelopes.js";
+import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import {
   parseUiEventPayload,
   parseUiMethodParams,
@@ -8,8 +8,8 @@ import {
   type UiMethodName,
   type UiMethodParams,
   type UiMethodResult,
-} from "../protocol.js";
-import type { UiSnapshot } from "../schemas.js";
+} from "../protocol/index.js";
+import type { UiSnapshot } from "../protocol/schemas.js";
 import {
   type PendingRequest,
   type UiClient,

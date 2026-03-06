@@ -1,6 +1,6 @@
-import type { UiContext, UiError, UiPortEnvelope } from "../messages.js";
-import type { UiEventName, UiEventPayload, UiMethodName, UiMethodParams, UiMethodResult } from "../protocol.js";
-import type { UiSnapshot } from "../schemas.js";
+import type { UiContext, UiError, UiPortEnvelope } from "../protocol/envelopes.js";
+import type { UiEventName, UiEventPayload, UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
+import type { UiSnapshot } from "../protocol/schemas.js";
 
 export type UiTransport = {
   connect: () => Promise<void>;

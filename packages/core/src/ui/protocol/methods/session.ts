@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_AUTO_LOCK_MS, MIN_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
+import { MAX_AUTO_LOCK_MS, MIN_AUTO_LOCK_MS } from "../../../controllers/unlock/constants.js";
 import { defineMethod } from "./types.js";
 
 const UnlockReasonSchema = z.enum(["manual", "timeout", "blur", "suspend", "reload"]);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "../events.js";
+import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import { createUiClient, type UiTransport } from "./index.js";
 
 const SNAPSHOT_FIXTURE = {

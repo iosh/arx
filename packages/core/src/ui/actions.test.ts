@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { uiActions } from "./actions.js";
-import { uiMethods } from "./methods.js";
-import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol.js";
-import { parseUiMethodParams } from "./protocol.js";
+import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol/index.js";
+import { parseUiMethodParams } from "./protocol/index.js";
+import { uiMethods } from "./protocol/methods.js";
 
 type UiClient = Parameters<typeof uiActions>[0];
 

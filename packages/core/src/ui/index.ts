@@ -1,7 +1,6 @@
 export { uiActions } from "./actions.js";
 export type { UiClient, UiClientOptions, UiProtocolError, UiRemoteError, UiTransport } from "./client/index.js";
 export { createUiClient } from "./client/index.js";
-export { UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./events.js";
 export type {
   UiContext,
   UiError,
@@ -10,10 +9,9 @@ export type {
   UiPortEnvelope,
   UiRequestEnvelope,
   UiResponseEnvelope,
-} from "./messages.js";
-export { parseUiEnvelope, UI_CHANNEL } from "./messages.js";
-export { uiMethods } from "./methods.js";
-
+} from "./protocol/envelopes.js";
+export { parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
+export { UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./protocol/events.js";
 export {
   isUiEventName,
   isUiMethodName,
@@ -26,7 +24,8 @@ export {
   type UiMethodParams,
   type UiMethodResult,
   UiProtocol,
-} from "./protocol.js";
+} from "./protocol/index.js";
+export { uiMethods } from "./protocol/methods.js";
 export type {
   AccountsSnapshot,
   ApprovalSummary,
@@ -37,7 +36,7 @@ export type {
   UiKeyringMetaSchema,
   UiSnapshot,
   VaultSnapshot,
-} from "./schemas.js";
+} from "./protocol/schemas.js";
 export {
   AccountsSnapshotSchema,
   ApprovalSummarySchema,
@@ -48,4 +47,4 @@ export {
   type UiKeyringMeta,
   UiSnapshotSchema,
   VaultSnapshotSchema,
-} from "./schemas.js";
+} from "./protocol/schemas.js";

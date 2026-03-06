@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainRegistryPort } from "../chains/registryPort.js";
 import type { ChainRegistryEntity } from "../storage/index.js";
-import { createUiHandlers } from "../ui/runtime/handlers.js";
+import { createUiHandlers } from "../ui/server/index.js";
 import {
   flushAsync,
   MemoryAccountsPort,

@@ -12,7 +12,6 @@
     ".": "./src/index.ts",
     "./messenger": "./src/messenger/index.ts",
     "./accounts": "./src/accounts/index.ts",
-    "./approvals": "./src/approvals/index.ts",
     "./storage": "./src/storage/index.ts",
     "./chains": "./src/chains/index.ts",
     "./permissions": "./src/permissions/index.ts",

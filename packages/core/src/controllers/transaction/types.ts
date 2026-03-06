@@ -1,5 +1,4 @@
 import type { Hex } from "ox/Hex";
-import type { ApprovalTypes } from "../../approvals/constants.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
@@ -11,6 +10,7 @@ import type {
   TransactionRequest,
   TransactionWarning,
 } from "../../transactions/types.js";
+import type { ApprovalTypes } from "../approval/constants.js";
 import type { ApprovalTask } from "../approval/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";

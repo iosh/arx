@@ -8,6 +8,7 @@ const APPROVAL_TYPE_LABEL = {
   requestPermissions: "Permission Request",
   switchChain: "Switch Network",
   addChain: "Add Network",
+  unsupported: "Unsupported Request",
 } satisfies Record<ApprovalSummary["type"], string>;
 
 export function getApprovalTypeLabel(type: ApprovalSummary["type"]): string {

@@ -8,6 +8,10 @@ import { SignMessagePayload } from "./payloads/SignMessagePayload";
 import { SignTypedDataPayload } from "./payloads/SignTypedDataPayload";
 import { SwitchChainPayload } from "./payloads/SwitchChainPayload";
 
+const assertNever = (value: never): never => {
+  throw new Error(`Unhandled approval type: ${JSON.stringify(value)}`);
+};
+
 export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
   switch (approval.type) {
     case "requestAccounts":
@@ -24,11 +28,16 @@ export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
       return <SwitchChainPayload approval={approval} />;
     case "addChain":
       return <AddChainPayload approval={approval} />;
-    default:
+    case "unsupported":
       return (
         <Card padded bordered>
-          <Paragraph color="$color10">Unknown approval type</Paragraph>
+          <Paragraph color="$color10">Unsupported approval type</Paragraph>
+          <Paragraph color="$color10" fontSize="$2">
+            {approval.payload.rawType}
+          </Paragraph>
         </Card>
       );
   }
+
+  return assertNever(approval);
 }

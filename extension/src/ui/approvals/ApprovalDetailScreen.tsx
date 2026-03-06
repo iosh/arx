@@ -6,7 +6,7 @@ import { getApprovalTypeLabel } from "./labels";
 
 export type ApprovalDetailScreenProps = {
   approval: ApprovalSummary;
-  onApprove: () => void;
+  onApprove?: () => void;
   onReject: () => void;
   onBack: () => void;
   pending: "approve" | "reject" | null;
@@ -35,9 +35,17 @@ export function ApprovalDetailScreen({
         <Button flex={1} onPress={onReject} disabled={pending !== null} backgroundColor="$danger" color="$dangerText">
           {pending === "reject" ? "Rejecting..." : "Reject"}
         </Button>
-        <Button flex={1} onPress={onApprove} disabled={pending !== null} backgroundColor="$accent" color="$accentText">
-          {pending === "approve" ? "Approving..." : "Approve"}
-        </Button>
+        {onApprove ? (
+          <Button
+            flex={1}
+            onPress={onApprove}
+            disabled={pending !== null}
+            backgroundColor="$accent"
+            color="$accentText"
+          >
+            {pending === "approve" ? "Approving..." : "Approve"}
+          </Button>
+        ) : null}
       </XStack>
     </YStack>
   );

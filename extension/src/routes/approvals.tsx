@@ -58,7 +58,7 @@ function ApprovalsPage() {
     return (
       <ApprovalDetailScreen
         approval={selected}
-        onApprove={() => void handleApprove(selected.id)}
+        onApprove={selected.type === "unsupported" ? undefined : () => void handleApprove(selected.id)}
         onReject={() => void handleReject(selected.id)}
         onBack={() => setSelectedId(null)}
         pending={pending}

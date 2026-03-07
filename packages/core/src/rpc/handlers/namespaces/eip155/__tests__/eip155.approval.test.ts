@@ -304,10 +304,10 @@ describe("eip155 handlers - approval metadata", () => {
 
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActiveForNamespace({
+      await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        address: account.address,
+        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",
@@ -410,10 +410,10 @@ describe("eip155 handlers - approval metadata", () => {
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActiveForNamespace({
+      await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        address: account.address,
+        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",
@@ -475,10 +475,10 @@ describe("eip155 handlers - approval metadata", () => {
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
-      await runtime.controllers.accounts.switchActiveForNamespace({
+      await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        address: account.address,
+        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
       await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
         namespace: "eip155",

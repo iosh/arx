@@ -57,7 +57,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     const isUnlocked = session.unlock.isUnlocked();
     const chainRef = activeChain.chainRef;
     const accounts = isUnlocked
-      ? controllers.accounts.getAccountsForNamespace({ namespace: activeChain.namespace, chainRef })
+      ? controllers.accounts
+          .listOwnedForNamespace({ namespace: activeChain.namespace, chainRef })
+          .map((account) => account.displayAddress)
       : [];
 
     return {

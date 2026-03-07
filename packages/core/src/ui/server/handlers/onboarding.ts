@@ -1,4 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   hasAnyAccounts,
@@ -58,7 +59,11 @@ export const createOnboardingHandlers = (
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
+        await deps.controllers.accounts.setActiveAccount({
+          namespace,
+          chainRef,
+          accountId: toAccountIdFromAddress({ chainRef, address }),
+        });
         return { keyringId, address };
       });
     },
@@ -91,7 +96,11 @@ export const createOnboardingHandlers = (
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
+        await deps.controllers.accounts.setActiveAccount({
+          namespace,
+          chainRef,
+          accountId: toAccountIdFromAddress({ chainRef, address }),
+        });
         return { keyringId, address };
       });
     },
@@ -123,7 +132,11 @@ export const createOnboardingHandlers = (
         const { keyringId, account } = await deps.keyring.importPrivateKey(privateKey, opts);
         const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: account.address });
+        await deps.controllers.accounts.setActiveAccount({
+          namespace,
+          chainRef,
+          accountId: toAccountIdFromAddress({ chainRef, address: account.address }),
+        });
         return { keyringId, account };
       });
     },

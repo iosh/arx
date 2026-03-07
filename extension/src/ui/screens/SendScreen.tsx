@@ -98,7 +98,7 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
           </Paragraph>
           {accounts.active ? (
             <AddressDisplay
-              address={accounts.active}
+              address={accounts.active.canonicalAddress}
               namespace={chain.namespace}
               chainRef={chain.chainRef}
               fontSize="$4"

@@ -262,7 +262,6 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     emit();
   };
 
-  // Wrap store writers so controller state stays in sync for unit tests.
   const wrap = <Args extends unknown[], R>(fn: (...args: Args) => Promise<R>) => {
     return async (...args: Args): Promise<R> => {
       const res = await fn(...args);
@@ -274,77 +273,72 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
   deps.accountsStore.remove = wrap(deps.accountsStore.remove);
   deps.accountsStore.removeByKeyringId = wrap(deps.accountsStore.removeByKeyringId);
 
-  // Initial refresh so snapshot sees stored state.
   void refresh();
 
   return {
-    refresh,
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
     }),
-    getAccountsForNamespace: (params: { namespace: string; chainRef: string }) => {
+    listOwnedForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      return (state.namespaces[CHAIN.namespace]?.accountIds ?? [])
-        .map((id) => toAddress(params.chainRef, id))
-        .filter(Boolean);
+      return (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((accountId) => ({
+        accountId,
+        namespace: CHAIN.namespace,
+        canonicalAddress: toAddress(params.chainRef, accountId),
+        displayAddress: toAddress(params.chainRef, accountId),
+      }));
+    },
+    getOwnedAccount: (params: { namespace: string; chainRef: string; accountId: AccountId }) => {
+      void params.namespace;
+      return state.namespaces[CHAIN.namespace]?.accountIds.includes(params.accountId)
+        ? {
+            accountId: params.accountId,
+            namespace: CHAIN.namespace,
+            canonicalAddress: toAddress(params.chainRef, params.accountId),
+            displayAddress: toAddress(params.chainRef, params.accountId),
+          }
+        : null;
     },
     getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
     getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
-    getSelectedPointerForNamespace: (params: { namespace: string; chainRef: string }) => {
+    getActiveAccountForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      if (!selected) return null;
-      return {
-        namespace: CHAIN.namespace,
-        chainRef: params.chainRef,
-        accountId: selected,
-        address: toAddress(params.chainRef, selected),
-      };
+      return selected
+        ? {
+            accountId: selected,
+            namespace: CHAIN.namespace,
+            chainRef: params.chainRef,
+            canonicalAddress: toAddress(params.chainRef, selected),
+            displayAddress: toAddress(params.chainRef, selected),
+          }
+        : null;
     },
-    getSelectedAddressForNamespace: (params: { namespace: string; chainRef: string }) => {
+    setActiveAccount: async (params: { namespace: string; chainRef: string; accountId?: AccountId | null }) => {
       void params.namespace;
-      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      return selected ? toAddress(params.chainRef, selected) : null;
-    },
-    addAccount: async () => {
-      throw new Error("addAccount is not supported in store-backed test controller");
-    },
-    switchActiveForNamespace: async (params: { namespace: string; chainRef: string; address?: string | null }) => {
-      void params.namespace;
-      const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
+      const desired = params.accountId ?? null;
       const current = state.namespaces[CHAIN.namespace]?.accountIds ?? [];
       const selectedAccountId = desired && current.includes(desired) ? desired : (current[0] ?? null);
       state = { namespaces: { [CHAIN.namespace]: { accountIds: [...current], selectedAccountId } } };
       emit();
       return selectedAccountId
         ? {
+            accountId: selectedAccountId,
             namespace: CHAIN.namespace,
             chainRef: params.chainRef,
-            accountId: selectedAccountId,
-            address: toAddress(params.chainRef, selectedAccountId),
+            canonicalAddress: toAddress(params.chainRef, selectedAccountId),
+            displayAddress: toAddress(params.chainRef, selectedAccountId),
           }
         : null;
-    },
-    removeAccount: async () => {
-      throw new Error("removeAccount is not supported in store-backed test controller");
     },
     onStateChanged: (fn: (s: typeof state) => void) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    onSelectedChanged: (fn: unknown) => {
-      void fn;
-      return () => {};
-    },
-    onNamespaceChanged: (fn: unknown) => {
-      void fn;
-      return () => {};
-    },
-  };
+  } satisfies HandlerControllers["accounts"];
 };
 
 const createAccountsController = () => {
-  const toAccountId = (chainRef: ChainRef, address: string) => toAccountIdFromAddress({ chainRef, address });
   const toAddress = (chainRef: ChainRef, accountId: AccountId) =>
     toCanonicalAddressFromAccountId({ chainRef, accountId });
 
@@ -361,81 +355,64 @@ const createAccountsController = () => {
     getState: () => ({
       namespaces: structuredClone(state.namespaces),
     }),
-    getAccountsForNamespace: (params: { namespace: string; chainRef: string }) => {
+    listOwnedForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      return (state.namespaces[CHAIN.namespace]?.accountIds ?? [])
-        .map((id) => toAddress(params.chainRef, id))
-        .filter(Boolean);
+      return (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((accountId) => ({
+        accountId,
+        namespace: CHAIN.namespace,
+        canonicalAddress: toAddress(params.chainRef, accountId),
+        displayAddress: toAddress(params.chainRef, accountId),
+      }));
+    },
+    getOwnedAccount: (params: { namespace: string; chainRef: string; accountId: AccountId }) => {
+      void params.namespace;
+      return state.namespaces[CHAIN.namespace]?.accountIds.includes(params.accountId)
+        ? {
+            accountId: params.accountId,
+            namespace: CHAIN.namespace,
+            canonicalAddress: toAddress(params.chainRef, params.accountId),
+            displayAddress: toAddress(params.chainRef, params.accountId),
+          }
+        : null;
     },
     getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
     getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
-    getSelectedPointerForNamespace: (params: { namespace: string; chainRef: string }) => {
+    getActiveAccountForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
       const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      if (!selected) return null;
-      return {
-        namespace: CHAIN.namespace,
-        chainRef: params.chainRef,
-        accountId: selected,
-        address: toAddress(params.chainRef, selected),
-      };
+      return selected
+        ? {
+            accountId: selected,
+            namespace: CHAIN.namespace,
+            chainRef: params.chainRef,
+            canonicalAddress: toAddress(params.chainRef, selected),
+            displayAddress: toAddress(params.chainRef, selected),
+          }
+        : null;
     },
-    getSelectedAddressForNamespace: (params: { namespace: string; chainRef: string }) => {
-      void params.namespace;
-      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-      return selected ? toAddress(params.chainRef, selected) : null;
-    },
-    addAccount: async (params: { chainRef: string; address: string; makePrimary?: boolean }) => {
-      const ns = CHAIN.namespace;
-      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
-      const id = toAccountId(params.chainRef, params.address);
-      const accountIds = prev.accountIds.includes(id) ? prev.accountIds : [...prev.accountIds, id];
-      const selectedAccountId = params.makePrimary ? id : (prev.selectedAccountId ?? accountIds[0] ?? null);
-      state = { namespaces: { ...state.namespaces, [ns]: { accountIds, selectedAccountId } } };
-      emit();
-      return state.namespaces[ns];
-    },
-    switchActiveForNamespace: async (params: { namespace: string; chainRef: string; address?: string | null }) => {
+    setActiveAccount: async (params: { namespace: string; chainRef: string; accountId?: AccountId | null }) => {
       const ns = CHAIN.namespace;
       void params.namespace;
       const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
-      const desired = params.address ? toAccountId(params.chainRef, params.address) : null;
+      const desired = params.accountId ?? null;
       const selectedAccountId = desired && prev.accountIds.includes(desired) ? desired : (prev.accountIds[0] ?? null);
       state = { namespaces: { ...state.namespaces, [ns]: { ...prev, selectedAccountId } } };
       emit();
       return selectedAccountId
         ? {
+            accountId: selectedAccountId,
             namespace: ns,
             chainRef: params.chainRef,
-            accountId: selectedAccountId,
-            address: toAddress(params.chainRef, selectedAccountId),
+            canonicalAddress: toAddress(params.chainRef, selectedAccountId),
+            displayAddress: toAddress(params.chainRef, selectedAccountId),
           }
         : null;
-    },
-    removeAccount: async (params: { chainRef: string; address: string }) => {
-      const ns = CHAIN.namespace;
-      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
-      const id = toAccountId(params.chainRef, params.address);
-      const accountIds = prev.accountIds.filter((a) => a !== id);
-      const selectedAccountId =
-        prev.selectedAccountId === id ? (accountIds[0] ?? null) : (prev.selectedAccountId ?? accountIds[0] ?? null);
-      state = { namespaces: { ...state.namespaces, [ns]: { accountIds, selectedAccountId } } };
-      emit();
-      return state.namespaces[ns];
     },
     onStateChanged: (fn: (s: typeof state) => void) => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    onSelectedChanged: (fn: unknown) => {
-      void fn;
-      return () => {};
-    },
-    onNamespaceChanged: (fn: unknown) => {
-      void fn;
-      return () => {};
-    },
-  };
+  } satisfies HandlerControllers["accounts"];
 };
 
 const createApprovalsController = () => {

@@ -11,17 +11,23 @@ export type NamespaceChainContext = {
   chainRef: ChainRef;
 };
 
+export type OwnedAccountView = {
+  accountId: AccountId;
+  namespace: ChainNamespace;
+  canonicalAddress: AccountAddress;
+  displayAddress: string;
+};
+
 export type NamespaceAccountsState = {
   accountIds: AccountId[];
   selectedAccountId: AccountId | null;
 };
 
-export type ActivePointer = {
-  namespace: ChainNamespace;
+export type ActiveAccountView = OwnedAccountView & {
   chainRef: ChainRef;
-  accountId: AccountId;
-  address: AccountAddress;
 };
+
+export type ActivePointer = ActiveAccountView;
 
 export type MultiNamespaceAccountsState = {
   namespaces: Record<ChainNamespace, NamespaceAccountsState>;
@@ -34,28 +40,21 @@ export const EMPTY_MULTI_NAMESPACE_STATE: MultiNamespaceAccountsState = {
 export type AccountController = {
   getState(): MultiNamespaceAccountsState;
 
-  /**
-   * Returns the namespace-scoped account list rendered for the given chain context.
-   */
-  getAccountsForNamespace(params: NamespaceChainContext): AccountAddress[];
+  listOwnedForNamespace(params: NamespaceChainContext): OwnedAccountView[];
+  getOwnedAccount(params: NamespaceChainContext & { accountId: AccountId }): OwnedAccountView | null;
 
   getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[];
   getSelectedAccountId(namespace: ChainNamespace): AccountId | null;
-  getSelectedPointerForNamespace(params: NamespaceChainContext): ActivePointer | null;
-  getSelectedAddressForNamespace(params: NamespaceChainContext): AccountAddress | null;
+  getActiveAccountForNamespace(params: NamespaceChainContext): ActiveAccountView | null;
 
   /**
    * Selects the active account for a namespace.
-   * - address omitted/null => reset selection to the namespace default (first account)
+   * - accountId omitted/null => reset selection to the namespace default (first account)
    */
-  switchActiveForNamespace(params: NamespaceChainContext & { address?: string | null }): Promise<ActivePointer | null>;
-
-  /**
-   * RPC-facing convenience wrapper for chain invocation contexts.
-   */
-  requestAccounts(params: { chainRef: ChainRef }): Promise<AccountAddress[]>;
+  setActiveAccount(params: NamespaceChainContext & { accountId?: AccountId | null }): Promise<ActiveAccountView | null>;
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;
 
+  whenReady?: () => Promise<void>;
   destroy?: () => void;
 };

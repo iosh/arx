@@ -32,7 +32,7 @@ function AccountSwitchPage() {
   const router = useRouter();
   const { snapshot, isLoading, switchAccount, markBackedUp, deriveAccount, importPrivateKey, fetchKeyrings } =
     useUiSnapshot();
-  const [pendingAddress, setPendingAddress] = useState<string | null>(null);
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
 
@@ -109,18 +109,18 @@ function AccountSwitchPage() {
     return <LoadingScreen />;
   }
 
-  const handleAccountSwitch = async (address: string | null) => {
-    if (pendingAddress) return;
+  const handleAccountSwitch = async (accountId: string | null) => {
+    if (pendingAccountId) return;
 
     setErrorMessage(null);
-    setPendingAddress(address);
+    setPendingAccountId(accountId);
     try {
-      await switchAccount({ chainRef: snapshot.chain.chainRef, address });
+      await switchAccount({ chainRef: snapshot.chain.chainRef, accountId });
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
-      setPendingAddress(null);
+      setPendingAccountId(null);
     }
   };
   const handleMarkBackedUp = async (keyringId: string) => {
@@ -238,13 +238,13 @@ function AccountSwitchPage() {
         {snapshot.accounts.list.length === 0 ? (
           <Paragraph color="$color10">No accounts available yet.</Paragraph>
         ) : (
-          snapshot.accounts.list.map((address) => {
-            const isActive = snapshot.accounts.active === address;
-            const loading = pendingAddress === address;
+          snapshot.accounts.list.map((account) => {
+            const isActive = snapshot.accounts.active?.accountId === account.accountId;
+            const loading = pendingAccountId === account.accountId;
             return (
-              <Card key={address} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
+              <Card key={account.accountId} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay
-                  address={address}
+                  address={account.canonicalAddress}
                   namespace={snapshot.chain.namespace}
                   chainRef={snapshot.chain.chainRef}
                 />
@@ -252,7 +252,11 @@ function AccountSwitchPage() {
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
                     {isActive ? "Active" : "Available"}
                   </Paragraph>
-                  <Button size="$3" disabled={isActive || loading} onPress={() => void handleAccountSwitch(address)}>
+                  <Button
+                    size="$3"
+                    disabled={isActive || loading}
+                    onPress={() => void handleAccountSwitch(account.accountId)}
+                  >
                     {loading ? "Switching..." : isActive ? "Current" : "Switch"}
                   </Button>
                 </XStack>

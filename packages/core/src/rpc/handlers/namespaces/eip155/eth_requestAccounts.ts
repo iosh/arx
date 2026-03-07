@@ -11,7 +11,9 @@ export const ethRequestAccountsDefinition = defineNoParamsMethod({
   locked: lockedQueue(),
   handler: async ({ origin, controllers, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;
-    const suggested = controllers.accounts.getAccountsForNamespace({ namespace: invocation.namespace, chainRef });
+    const suggested = controllers.accounts
+      .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
+      .map((account) => account.displayAddress);
 
     const task = {
       id: createTaskId("eth_requestAccounts"),

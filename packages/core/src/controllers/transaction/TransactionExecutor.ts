@@ -44,7 +44,7 @@ type Deps = {
   view: StoreTransactionView;
   network: Pick<NetworkController, "getState">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
-  accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
+  accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
@@ -67,7 +67,7 @@ export class TransactionExecutor
   #view: StoreTransactionView;
   #network: Pick<NetworkController, "getState">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
-  #accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
+  #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
@@ -116,7 +116,7 @@ export class TransactionExecutor
 
     const fromAddress =
       this.#findFromAddress(request) ??
-      this.#accounts.getSelectedAddressForNamespace({ namespace: derived.namespace, chainRef }) ??
+      this.#accounts.getActiveAccountForNamespace({ namespace: derived.namespace, chainRef })?.canonicalAddress ??
       null;
     if (!fromAddress) {
       throw new Error("Transaction from address is required");
@@ -130,7 +130,7 @@ export class TransactionExecutor
     const collectedWarnings: TransactionWarning[] = [];
     const collectedIssues: TransactionIssue[] = adapter ? [] : [missingAdapterIssue(derived.namespace)];
 
-    const ownedAccounts = this.#accounts.getAccountsForNamespace({ namespace: derived.namespace, chainRef });
+    const ownedAccounts = this.#accounts.listOwnedForNamespace({ namespace: derived.namespace, chainRef });
     if (ownedAccounts.length === 0) {
       collectedIssues.push({
         kind: "issue",
@@ -140,7 +140,7 @@ export class TransactionExecutor
         data: { chainRef },
       });
     } else {
-      const ownedIds = new Set(ownedAccounts.map((addr) => toAccountIdFromAddress({ chainRef, address: addr })));
+      const ownedIds = new Set(ownedAccounts.map((account) => account.accountId));
       if (!ownedIds.has(fromAccountId)) {
         collectedIssues.push({
           kind: "issue",

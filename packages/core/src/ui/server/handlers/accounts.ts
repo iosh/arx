@@ -1,20 +1,30 @@
 import { parseChainRef } from "../../../chains/caip.js";
-import type { UiSnapshot } from "../../protocol/schemas.js";
+import type { UiOwnedAccountSummary, UiSnapshot } from "../../protocol/schemas.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+
+const toUiOwnedAccountSummary = (account: {
+  accountId: string;
+  canonicalAddress: string;
+  displayAddress: string;
+}): UiOwnedAccountSummary => ({
+  accountId: account.accountId,
+  canonicalAddress: account.canonicalAddress,
+  displayAddress: account.displayAddress,
+});
 
 export const createAccountsHandlers = (
   deps: Pick<UiRuntimeDeps, "controllers">,
-  buildSnapshot: () => UiSnapshot,
+  _buildSnapshot: () => UiSnapshot,
 ): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
-    "ui.accounts.switchActive": async ({ chainRef, address }) => {
+    "ui.accounts.switchActive": async ({ chainRef, accountId }) => {
       const { namespace } = parseChainRef(chainRef);
-      await deps.controllers.accounts.switchActiveForNamespace({
+      const active = await deps.controllers.accounts.setActiveAccount({
         namespace,
         chainRef,
-        address: address ?? null,
+        accountId: accountId ?? null,
       });
-      return buildSnapshot().accounts.active;
+      return active ? toUiOwnedAccountSummary(active) : null;
     },
   };
 };

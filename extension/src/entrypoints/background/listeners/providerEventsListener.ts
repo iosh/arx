@@ -71,6 +71,12 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
           publishAccountsState();
         }),
       );
+
+      subscriptions.push(
+        controllers.permissions.onPermissionsChanged(() => {
+          publishAccountsState();
+        }),
+      );
     })().finally(() => {
       startTask = null;
     });

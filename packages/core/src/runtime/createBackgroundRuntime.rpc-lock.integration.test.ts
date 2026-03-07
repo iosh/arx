@@ -1,5 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
 import { PermissionCapabilities } from "../controllers/index.js";
 import { createRpcHarness, flushAsync, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
 
@@ -17,10 +18,10 @@ const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
   const chain = runtime.services.chainViews.getActiveChainView();
   const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
   const account = await runtime.services.keyring.deriveAccount(keyringId);
-  await runtime.controllers.accounts.switchActiveForNamespace({
+  await runtime.controllers.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
-    address: account.address,
+    accountId: toAccountIdFromAddress({ chainRef: chain.chainRef, address: account.address }),
   });
   return { chain, address: account.address };
 };

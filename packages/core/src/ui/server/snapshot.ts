@@ -306,10 +306,14 @@ export const buildUiSnapshot = (deps: {
   const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked()
-    ? controllers.accounts.getAccountsForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
+    ? controllers.accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
+        accountId: account.accountId,
+        canonicalAddress: account.canonicalAddress,
+        displayAddress: account.displayAddress,
+      }))
     : [];
-  const selectedAddress = session.unlock.isUnlocked()
-    ? controllers.accounts.getSelectedAddressForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
+  const activeAccount = session.unlock.isUnlocked()
+    ? controllers.accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
     : null;
 
   const accountsState = controllers.accounts.getState();
@@ -356,7 +360,13 @@ export const buildUiSnapshot = (deps: {
     accounts: {
       totalCount,
       list: accountList,
-      active: selectedAddress,
+      active: activeAccount
+        ? {
+            accountId: activeAccount.accountId,
+            canonicalAddress: activeAccount.canonicalAddress,
+            displayAddress: activeAccount.displayAddress,
+          }
+        : null,
     },
     session: {
       isUnlocked: session.unlock.isUnlocked(),

@@ -249,6 +249,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     name: "coreReady",
     initialize: async () => {
       await chainDefinitionsController.whenReady();
+      await controllersBase.accounts.whenReady?.();
       if (deferredNetworkInitialState) {
         const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
           const metadata = chainDefinitionsController.getChain(chainRef)?.metadata;

@@ -66,8 +66,8 @@ describe("ui actions", () => {
     void actions.onboarding.importWalletFromPrivateKey({ privateKey: "deadbeef" });
 
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
-    void actions.accounts.switchActive({ chainRef: "eip155:1", address: null });
-    void actions.accounts.switchActive({ chainRef: "eip155:1", address: "0x0" });
+    void actions.accounts.switchActive({ chainRef: "eip155:1", accountId: null });
+    void actions.accounts.switchActive({ chainRef: "eip155:1", accountId: "eip155:0000000000000000000000000000000000000000" });
 
     void actions.networks.switchActive({ chainRef: "eip155:1" });
 
@@ -139,10 +139,10 @@ describe("ui actions", () => {
     await actions.session.unlock({ password: "test123" });
     expect(capturedParams[capturedParams.length - 1]).toEqual({ password: "test123" });
 
-    await actions.accounts.switchActive({ chainRef: "eip155:1", address: null });
+    await actions.accounts.switchActive({ chainRef: "eip155:1", accountId: null });
     expect(capturedParams[capturedParams.length - 1]).toEqual({
       chainRef: "eip155:1",
-      address: null,
+      accountId: null,
     });
   });
 

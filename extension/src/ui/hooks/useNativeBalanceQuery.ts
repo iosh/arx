@@ -10,7 +10,7 @@ export const nativeBalanceQueryKey = (params: { chainRef: string | null; address
 
 export function useNativeBalanceQuery(snapshot: UiSnapshot | null | undefined) {
   const chainRef = snapshot?.chain.chainRef ?? null;
-  const address = snapshot?.accounts.active ?? null;
+  const address = snapshot?.accounts.active?.canonicalAddress ?? null;
 
   const enabled = Boolean(
     snapshot?.session.isUnlocked && snapshot?.chain.namespace === "eip155" && chainRef && address,

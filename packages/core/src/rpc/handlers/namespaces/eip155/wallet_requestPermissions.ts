@@ -125,13 +125,13 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
         const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [chainRef];
         for (const targetChainRef of targetChains) {
           if (descriptor.capability === PermissionCapabilities.Accounts) {
-            const all = controllers.accounts.getAccountsForNamespace({ namespace, chainRef: targetChainRef });
-            const preferredAddress = controllers.accounts.getSelectedAddressForNamespace({
+            const all = controllers.accounts.listOwnedForNamespace({ namespace, chainRef: targetChainRef });
+            const preferred = controllers.accounts.getActiveAccountForNamespace({
               namespace,
               chainRef: targetChainRef,
             });
-            const preferred = preferredAddress && all.includes(preferredAddress) ? preferredAddress : null;
-            const selected = preferred ?? all[0] ?? null;
+            const selected =
+              (preferred && all.find((account) => account.accountId === preferred.accountId)) ?? all[0] ?? null;
             if (!selected) {
               throw arxError({
                 reason: ArxReasons.PermissionDenied,
@@ -143,7 +143,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
             await controllers.permissions.setPermittedAccounts(origin, {
               namespace,
               chainRef: targetChainRef,
-              accounts: [selected],
+              accounts: [selected.canonicalAddress],
             });
             continue;
           }

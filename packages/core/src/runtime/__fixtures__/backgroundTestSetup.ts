@@ -664,10 +664,12 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
             }
             case "wallet_requestAccounts": {
               const activeChain = requireActiveChainMetadata(runtime);
-              return runtime.controllers.accounts.getAccountsForNamespace({
-                namespace: task.namespace ?? activeChain.namespace,
-                chainRef: task.chainRef ?? activeChain.chainRef,
-              });
+              return runtime.controllers.accounts
+                .listOwnedForNamespace({
+                  namespace: task.namespace ?? activeChain.namespace,
+                  chainRef: task.chainRef ?? activeChain.chainRef,
+                })
+                .map((account) => account.displayAddress);
             }
             case "wallet_signMessage":
             case "wallet_signTypedData":

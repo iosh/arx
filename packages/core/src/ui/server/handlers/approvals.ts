@@ -80,9 +80,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
   [ApprovalTypes.RequestAccounts]: async (task, deps) => {
     const { chainRef, namespace } = deriveChainContext(task, deps);
 
-    const accounts = await deps.controllers.accounts.requestAccounts({ chainRef });
-    const uniqueAccounts = [...new Set(accounts)];
-    if (uniqueAccounts.length === 0) {
+    const accounts = deps.controllers.accounts.listOwnedForNamespace({ namespace, chainRef });
+    if (accounts.length === 0) {
       throw arxError({
         reason: ArxReasons.PermissionDenied,
         message: "No accounts available for connection request",
@@ -90,9 +89,9 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    const preferredAddress = deps.controllers.accounts.getSelectedAddressForNamespace({ namespace, chainRef });
-    const preferred = preferredAddress && uniqueAccounts.includes(preferredAddress) ? preferredAddress : null;
-    const selectedAccount = preferred ?? uniqueAccounts[0] ?? null;
+    const activeAccount = deps.controllers.accounts.getActiveAccountForNamespace({ namespace, chainRef });
+    const selectedAccount =
+      (activeAccount && accounts.find((account) => account.accountId === activeAccount.accountId)) ?? accounts[0] ?? null;
     if (!selectedAccount) {
       throw arxError({
         reason: ArxReasons.PermissionDenied,
@@ -105,9 +104,9 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     await deps.controllers.permissions.setPermittedAccounts(task.origin, {
       namespace,
       chainRef,
-      accounts: [selectedAccount],
+      accounts: [selectedAccount.canonicalAddress],
     });
-    return [selectedAccount];
+    return [selectedAccount.displayAddress];
   },
 
   [ApprovalTypes.SignMessage]: async (task, deps) => {

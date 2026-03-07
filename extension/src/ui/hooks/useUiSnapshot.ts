@@ -54,8 +54,8 @@ export const useUiSnapshot = () => {
   });
 
   const switchAccountMutation = useMutation({
-    mutationFn: ({ chainRef, address }: { chainRef: string; address?: string | null }) =>
-      uiClient.accounts.switchActive({ chainRef, address }),
+    mutationFn: ({ chainRef, accountId }: { chainRef: string; accountId?: string | null }) =>
+      uiClient.accounts.switchActive({ chainRef, accountId }),
   });
 
   const switchChainMutation = useMutation({

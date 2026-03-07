@@ -30,10 +30,16 @@ export const ChainSnapshotSchema = z.object({
   }),
 });
 
+export const UiOwnedAccountSummarySchema = z.object({
+  accountId: AccountIdSchema,
+  canonicalAddress: z.string().min(1),
+  displayAddress: z.string().min(1),
+});
+
 export const AccountsSnapshotSchema = z.object({
   totalCount: z.number().int().nonnegative(),
-  list: z.array(z.string()),
-  active: z.string().nullable(),
+  list: z.array(UiOwnedAccountSummarySchema),
+  active: UiOwnedAccountSummarySchema.nullable(),
 });
 
 export const SessionSnapshotSchema = z.object({
@@ -224,6 +230,7 @@ export const UiSnapshotSchema = z.object({
 });
 
 export type ChainSnapshot = z.infer<typeof ChainSnapshotSchema>;
+export type UiOwnedAccountSummary = z.infer<typeof UiOwnedAccountSummarySchema>;
 export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
 export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;

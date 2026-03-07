@@ -1,5 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
+import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   ApprovalTypes,
@@ -66,10 +67,10 @@ describe("eip155 handlers - core error paths", () => {
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
     const derived = await runtime.services.keyring.deriveAccount(keyringId);
-    await runtime.controllers.accounts.switchActiveForNamespace({
+    await runtime.controllers.accounts.setActiveAccount({
       namespace: mainnet.namespace,
       chainRef: mainnet.chainRef,
-      address: derived.address,
+      accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: derived.address }),
     });
     const activeAddress = derived.address;
 
@@ -86,13 +87,13 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(runtime.controllers.network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
       expect(
-        runtime.controllers.accounts.getSelectedPointerForNamespace({
+        runtime.controllers.accounts.getActiveAccountForNamespace({
           namespace: ALT_CHAIN.namespace,
           chainRef: ALT_CHAIN.chainRef,
         }),
       ).toMatchObject({
         chainRef: ALT_CHAIN.chainRef,
-        address: activeAddress,
+        canonicalAddress: activeAddress,
         namespace: "eip155",
       });
     } finally {

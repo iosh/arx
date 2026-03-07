@@ -66,16 +66,22 @@ describe("StoreAccountsController", () => {
     });
     createdControllers.push(controller);
 
-    expect(controller.getAccountIdsForNamespace(namespace)).toEqual([first.accountId, second.accountId]);
-    expect(controller.getAccountsForNamespace({ namespace, chainRef })).toEqual([
-      addressOf("1111111111111111111111111111111111111111"),
-      addressOf("2222222222222222222222222222222222222222"),
+    expect(controller.getAccountIdsForNamespace(namespace)).toEqual([second.accountId, first.accountId]);
+    expect(controller.listOwnedForNamespace({ namespace, chainRef })).toMatchObject([
+      {
+        accountId: second.accountId,
+        canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
+      },
+      {
+        accountId: first.accountId,
+        canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
+      },
     ]);
-    expect(controller.getSelectedPointerForNamespace({ namespace, chainRef })).toEqual({
+    expect(controller.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
       namespace,
       chainRef,
-      accountId: first.accountId,
-      address: addressOf("1111111111111111111111111111111111111111"),
+      accountId: second.accountId,
+      canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
   });
 
@@ -96,16 +102,16 @@ describe("StoreAccountsController", () => {
     createdControllers.push(controller);
 
     await expect(
-      controller.switchActiveForNamespace({
+      controller.setActiveAccount({
         namespace,
         chainRef,
-        address: addressOf("2222222222222222222222222222222222222222"),
+        accountId: second.accountId,
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       namespace,
       chainRef,
       accountId: second.accountId,
-      address: addressOf("2222222222222222222222222222222222222222"),
+      canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
 
     expect(settingsPort.saved.at(-1)).toMatchObject({
@@ -116,15 +122,16 @@ describe("StoreAccountsController", () => {
     });
     expect(controller.getSelectedAccountId(namespace)).toBe(second.accountId);
 
-    await expect(controller.switchActiveForNamespace({ namespace, chainRef, address: null })).resolves.toEqual({
+    await expect(controller.setActiveAccount({ namespace, chainRef, accountId: null })).resolves.toMatchObject({
       namespace,
       chainRef,
       accountId: first.accountId,
-      address: addressOf("1111111111111111111111111111111111111111"),
+      canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
     });
-    expect(controller.getSelectedAddressForNamespace({ namespace, chainRef })).toBe(
-      addressOf("1111111111111111111111111111111111111111"),
-    );
+    expect(controller.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
+      accountId: first.accountId,
+      canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
+    });
   });
 
   it("rejects hidden and unknown accounts when switching", async () => {
@@ -135,20 +142,20 @@ describe("StoreAccountsController", () => {
     createdControllers.push(controller);
 
     await expect(
-      controller.switchActiveForNamespace({
+      controller.setActiveAccount({
         namespace,
         chainRef,
-        address: addressOf("2222222222222222222222222222222222222222"),
+        accountId: hidden.accountId,
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.RpcInvalidParams });
+    ).rejects.toMatchObject({ reason: ArxReasons.PermissionDenied });
 
     await expect(
-      controller.switchActiveForNamespace({
+      controller.setActiveAccount({
         namespace,
         chainRef,
-        address: addressOf("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.RpcInvalidParams });
+    ).rejects.toMatchObject({ reason: ArxReasons.KeyringAccountNotFound });
   });
 
   it("rejects namespace and chainRef mismatch", async () => {
@@ -158,11 +165,11 @@ describe("StoreAccountsController", () => {
     createdControllers.push(controller);
 
     await expect(
-      controller.switchActiveForNamespace({
+      controller.setActiveAccount({
         namespace: "solana",
         chainRef,
-        address: addressOf("1111111111111111111111111111111111111111"),
+        accountId: "solana:1111111111111111111111111111111111111111",
       }),
-    ).rejects.toThrow(/namespace mismatch/i);
+    ).rejects.toMatchObject({ reason: ArxReasons.RpcInvalidRequest });
   });
 });

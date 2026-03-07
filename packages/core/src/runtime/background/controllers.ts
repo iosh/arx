@@ -204,8 +204,8 @@ export const initControllers = ({
       getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),
     },
     accounts: {
-      getSelectedAddressForNamespace: (params) => accountController.getSelectedAddressForNamespace(params),
-      getAccountsForNamespace: (params) => accountController.getAccountsForNamespace(params),
+      getActiveAccountForNamespace: (params) => accountController.getActiveAccountForNamespace(params),
+      listOwnedForNamespace: (params) => accountController.listOwnedForNamespace(params),
     },
     approvals: {
       requestApproval: (task, requestContext) => approvalController.requestApproval(task, requestContext),

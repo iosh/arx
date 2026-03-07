@@ -1,3 +1,4 @@
+import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   assertUnlocked,
@@ -27,10 +28,10 @@ export const createKeyringsHandlers = (
   | "ui.keyrings.exportMnemonic"
   | "ui.keyrings.exportPrivateKey"
 > => {
-  const selectAccount = async (params: { namespace?: string; address: string }) => {
+  const selectAccount = async (params: { namespace?: string; accountId: string }) => {
     const namespace = params.namespace ?? deps.chainViews.getActiveChainView().namespace;
     const chainRef = resolveChainRefForNamespace(deps, namespace);
-    await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: params.address });
+    await deps.controllers.accounts.setActiveAccount({ namespace, chainRef, accountId: params.accountId });
   };
 
   return {
@@ -41,7 +42,13 @@ export const createKeyringsHandlers = (
       if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.confirmNewMnemonic(params.words.join(" "), opts);
-      await selectAccount({ address: result.address, ...(opts.namespace ? { namespace: opts.namespace } : {}) });
+      await selectAccount({
+        accountId: toAccountIdFromAddress({
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          address: result.address,
+        }),
+        ...(opts.namespace ? { namespace: opts.namespace } : {}),
+      });
       return result;
     },
 
@@ -51,7 +58,13 @@ export const createKeyringsHandlers = (
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.importMnemonic(params.words.join(" "), opts);
-      await selectAccount({ address: result.address, ...(opts.namespace ? { namespace: opts.namespace } : {}) });
+      await selectAccount({
+        accountId: toAccountIdFromAddress({
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          address: result.address,
+        }),
+        ...(opts.namespace ? { namespace: opts.namespace } : {}),
+      });
       return result;
     },
 
@@ -62,7 +75,10 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.importPrivateKey(params.privateKey, opts);
       await selectAccount({
-        address: result.account.address,
+        accountId: toAccountIdFromAddress({
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          address: result.account.address,
+        }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
       });
       return result;

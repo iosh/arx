@@ -1,42 +1,43 @@
 import { parseChainRef } from "./caip.js";
-import { eip155Descriptor } from "./eip155/descriptor.js";
+import { eip155AddressCodec } from "./eip155/addressCodec.js";
 import { chainErrors } from "./errors.js";
 import type { ChainRef } from "./ids.js";
 import type {
   CanonicalizeAddressParams,
   CanonicalizedAddressResult,
-  ChainDescriptor,
+  ChainAddressCodec,
   FormatAddressParams,
 } from "./types.js";
-export class ChainDescriptorRegistry {
-  #descriptors = new Map<string, ChainDescriptor>();
 
-  constructor(descriptors: ChainDescriptor[] = []) {
-    for (const descriptor of descriptors) {
-      this.registerDescriptor(descriptor);
+export class ChainAddressCodecRegistry {
+  #codecs = new Map<string, ChainAddressCodec>();
+
+  constructor(codecs: ChainAddressCodec[] = []) {
+    for (const codec of codecs) {
+      this.registerCodec(codec);
     }
   }
 
-  registerDescriptor(descriptor: ChainDescriptor): void {
-    if (this.#descriptors.has(descriptor.namespace)) {
-      throw new Error(`Chain descriptor already registered for namespace "${descriptor.namespace}"`);
+  registerCodec(codec: ChainAddressCodec): void {
+    if (this.#codecs.has(codec.namespace)) {
+      throw new Error(`Chain address codec already registered for namespace "${codec.namespace}"`);
     }
-    this.#descriptors.set(descriptor.namespace, descriptor);
+    this.#codecs.set(codec.namespace, codec);
   }
 
-  unregisterDescriptor(namespace: string): void {
-    this.#descriptors.delete(namespace);
+  unregisterCodec(namespace: string): void {
+    this.#codecs.delete(namespace);
   }
 
-  getDescriptor(chainRef: ChainRef): ChainDescriptor {
+  getCodec(chainRef: ChainRef): ChainAddressCodec {
     const { namespace } = parseChainRef(chainRef);
-    const descriptor = this.#descriptors.get(namespace);
-    if (descriptor) return descriptor;
+    const codec = this.#codecs.get(namespace);
+    if (codec) return codec;
     throw chainErrors.namespaceNotSupported({ chainRef, namespace });
   }
 
   getAddressModule(chainRef: ChainRef) {
-    return this.getDescriptor(chainRef).address;
+    return this.getCodec(chainRef).address;
   }
 
   toCanonicalAddress(params: CanonicalizeAddressParams): CanonicalizedAddressResult {
@@ -52,6 +53,6 @@ export class ChainDescriptorRegistry {
   }
 }
 
-export const createDefaultChainDescriptorRegistry = (): ChainDescriptorRegistry => {
-  return new ChainDescriptorRegistry([eip155Descriptor]);
+export const createDefaultChainAddressCodecRegistry = (): ChainAddressCodecRegistry => {
+  return new ChainAddressCodecRegistry([eip155AddressCodec]);
 };

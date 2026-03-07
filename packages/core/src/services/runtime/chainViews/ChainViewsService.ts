@@ -1,21 +1,21 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
 import type { ChainDefinitionsController } from "../../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
-import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
 import type {
-  ChainService,
   ChainView,
+  ChainViewsService,
+  FindAvailableChainViewParams,
   ProviderMetaSnapshot,
-  ResolveEip155SwitchTargetParams,
+  ResolveEip155SwitchChainParams,
   UiNetworksSnapshot,
 } from "./types.js";
 
-type CreateChainServiceOptions = {
+type CreateChainViewsServiceOptions = {
   chainDefinitions: ChainDefinitionsController;
   network: NetworkController;
-  preferences?: NetworkPreferencesService;
 };
 
 const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
@@ -36,25 +36,66 @@ const toChainView = (metadata: ChainMetadata): ChainView => ({
 
 const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
 
-class DefaultChainService implements ChainService {
+class DefaultChainViewsService implements ChainViewsService {
   readonly #chainDefinitions: ChainDefinitionsController;
   readonly #network: NetworkController;
 
-  constructor(options: CreateChainServiceOptions) {
+  constructor(options: CreateChainViewsServiceOptions) {
     this.#chainDefinitions = options.chainDefinitions;
     this.#network = options.network;
   }
 
   getActiveChainView(): ChainView {
-    return toChainView(this.#network.getActiveChain());
+    const activeChainRef = this.#network.getState().activeChainRef;
+    return toChainView(this.requireChainMetadata(activeChainRef));
   }
 
-  listKnownChainsView(): ChainView[] {
+  requireChainMetadata(chainRef: ChainRef): ChainMetadata {
+    return this.#getRequiredChainMetadata(chainRef);
+  }
+
+  requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata {
+    const entry = this.#chainDefinitions.getChain(chainRef);
+    if (!entry) {
+      throw chainErrors.notFound({ chainRef });
+    }
+
+    const isAvailable = this.#network
+      .getState()
+      .availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
+    if (!isAvailable) {
+      throw chainErrors.notAvailable({ chainRef });
+    }
+
+    return cloneChainMetadata(entry.metadata);
+  }
+
+  findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null {
+    if (params.chainRef) {
+      try {
+        const view = toChainView(this.requireAvailableChainMetadata(params.chainRef));
+        if (params.namespace && view.namespace !== params.namespace) {
+          return null;
+        }
+        return view;
+      } catch {
+        return null;
+      }
+    }
+
+    if (params.namespace) {
+      return this.listAvailableChainViews().find((chain) => chain.namespace === params.namespace) ?? null;
+    }
+
+    return null;
+  }
+
+  listKnownChainViews(): ChainView[] {
     const views = this.#chainDefinitions.getState().chains.map((entry) => toChainView(entry.metadata));
     return sortChainViews(views);
   }
 
-  listAvailableChainsView(): ChainView[] {
+  listAvailableChainViews(): ChainView[] {
     const views = this.#listAvailableMetadata().map(toChainView);
     return sortChainViews(views);
   }
@@ -64,13 +105,13 @@ class DefaultChainService implements ChainService {
 
     return {
       active,
-      known: this.listKnownChainsView(),
-      available: this.listAvailableChainsView(),
+      known: this.listKnownChainViews(),
+      available: this.listAvailableChainViews(),
     };
   }
 
   buildProviderMeta(): ProviderMetaSnapshot {
-    const active = this.#network.getActiveChain();
+    const active = this.#getRequiredChainMetadata(this.#network.getState().activeChainRef);
 
     return {
       activeChain: active.chainRef,
@@ -79,7 +120,7 @@ class DefaultChainService implements ChainService {
     };
   }
 
-  resolveEip155SwitchTarget(params: ResolveEip155SwitchTargetParams): ChainMetadata {
+  resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata {
     const target = this.#listAvailableMetadata().find((item) => {
       if (params.chainRef && item.chainRef === params.chainRef) {
         return true;
@@ -96,10 +137,9 @@ class DefaultChainService implements ChainService {
     });
 
     if (!target) {
-      throw arxError({
-        reason: ArxReasons.ChainNotFound,
-        message: "Requested chain is not registered with ARX",
-        data: { chainId: params.chainId, chainRef: params.chainRef },
+      throw chainErrors.notFound({
+        ...(params.chainId ? { chainId: params.chainId } : {}),
+        ...(params.chainRef ? { chainRef: params.chainRef } : {}),
       });
     }
 
@@ -124,25 +164,18 @@ class DefaultChainService implements ChainService {
   }
 
   #listAvailableMetadata(): ChainMetadata[] {
-    const available: ChainMetadata[] = [];
+    return this.#network.getState().availableChainRefs.map((chainRef) => this.requireAvailableChainMetadata(chainRef));
+  }
 
-    for (const chainRef of this.#network.getState().availableChainRefs) {
-      const networkChain = this.#network.getChain(chainRef);
-      if (networkChain) {
-        available.push(networkChain);
-        continue;
-      }
-
-      const registryChain = this.#chainDefinitions.getChain(chainRef)?.metadata;
-      if (registryChain) {
-        available.push(cloneChainMetadata(registryChain));
-      }
+  #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {
+    const metadata = this.#chainDefinitions.getChain(chainRef)?.metadata;
+    if (!metadata) {
+      throw chainErrors.notFound({ chainRef });
     }
-
-    return available;
+    return cloneChainMetadata(metadata);
   }
 }
 
-export const createChainService = (options: CreateChainServiceOptions): ChainService => {
-  return new DefaultChainService(options);
+export const createChainViewsService = (options: CreateChainViewsServiceOptions): ChainViewsService => {
+  return new DefaultChainViewsService(options);
 };

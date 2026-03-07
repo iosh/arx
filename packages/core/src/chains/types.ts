@@ -22,7 +22,7 @@ export type ChainAddressModule<TMetadata = Record<string, unknown>> = {
   validate?(params: FormatAddressParams<TMetadata>): void;
 };
 
-export type ChainDescriptor<TMetadata = Record<string, unknown>> = {
+export type ChainAddressCodec<TMetadata = Record<string, unknown>> = {
   namespace: string;
   address: ChainAddressModule<TMetadata>;
 };

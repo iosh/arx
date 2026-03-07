@@ -8,6 +8,20 @@ export const chainErrors = {
       data: { value, ...(data ?? {}) },
     }),
 
+  notFound: (params: { chainRef?: string; chainId?: string }) =>
+    arxError({
+      reason: ArxReasons.ChainNotFound,
+      message: "Requested chain is not registered with ARX",
+      data: params,
+    }),
+
+  notAvailable: (params: { chainRef: string }) =>
+    arxError({
+      reason: ArxReasons.ChainNotSupported,
+      message: "Requested chain is not available in network runtime",
+      data: params,
+    }),
+
   namespaceMismatch: (params: { chainRef: string; expected: string; actual: string }) =>
     arxError({
       reason: ArxReasons.ChainNotCompatible,
@@ -18,7 +32,7 @@ export const chainErrors = {
   namespaceNotSupported: (params: { chainRef: string; namespace: string }) =>
     arxError({
       reason: ArxReasons.ChainNotSupported,
-      message: `No chain descriptor registered for "${params.chainRef}"`,
+      message: `No chain address codec registered for "${params.chainRef}"`,
       data: params,
     }),
 

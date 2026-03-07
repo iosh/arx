@@ -27,16 +27,24 @@ export type ProviderMetaSnapshot = {
   supportedChains: ChainRef[];
 };
 
-export type ResolveEip155SwitchTargetParams = {
+export type FindAvailableChainViewParams = {
+  chainRef?: ChainRef;
+  namespace?: string;
+};
+
+export type ResolveEip155SwitchChainParams = {
   chainId?: string;
   chainRef?: string;
 };
 
-export type ChainService = {
+export type ChainViewsService = {
   getActiveChainView(): ChainView;
-  listKnownChainsView(): ChainView[];
-  listAvailableChainsView(): ChainView[];
+  requireChainMetadata(chainRef: ChainRef): ChainMetadata;
+  requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata;
+  findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;
+  listKnownChainViews(): ChainView[];
+  listAvailableChainViews(): ChainView[];
   buildUiNetworksSnapshot(): UiNetworksSnapshot;
   buildProviderMeta(): ProviderMetaSnapshot;
-  resolveEip155SwitchTarget(params: ResolveEip155SwitchTargetParams): ChainMetadata;
+  resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata;
 };

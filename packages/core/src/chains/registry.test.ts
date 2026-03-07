@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "./registry.js";
-import type { ChainDescriptor } from "./types.js";
+import { ChainAddressCodecRegistry, createDefaultChainAddressCodecRegistry } from "./registry.js";
+import type { ChainAddressCodec } from "./types.js";
 
-describe("ChainDescriptorRegistry", () => {
-  it("normalizes address via registered descriptor", () => {
-    const registry = createDefaultChainDescriptorRegistry();
+describe("ChainAddressCodecRegistry", () => {
+  it("normalizes address via registered codec", () => {
+    const registry = createDefaultChainAddressCodecRegistry();
 
     const normalized = registry.toCanonicalAddress({
       chainRef: "eip155:1",
@@ -15,7 +15,7 @@ describe("ChainDescriptorRegistry", () => {
   });
 
   it("formats and validates addresses", () => {
-    const registry = createDefaultChainDescriptorRegistry();
+    const registry = createDefaultChainAddressCodecRegistry();
 
     const formatted = registry.formatAddress({
       chainRef: "eip155:1",
@@ -31,8 +31,8 @@ describe("ChainDescriptorRegistry", () => {
     ).not.toThrow();
   });
 
-  it("allows registering custom descriptor", () => {
-    const descriptor: ChainDescriptor<{ note: string }> = {
+  it("allows registering custom codec", () => {
+    const codec: ChainAddressCodec<{ note: string }> = {
       namespace: "demo",
       address: {
         canonicalize: vi.fn().mockReturnValue({ canonical: "canonical-value", metadata: { note: "normalized" } }),
@@ -41,8 +41,8 @@ describe("ChainDescriptorRegistry", () => {
       },
     };
 
-    const registry = new ChainDescriptorRegistry();
-    registry.registerDescriptor(descriptor);
+    const registry = new ChainAddressCodecRegistry();
+    registry.registerCodec(codec);
 
     const normalized = registry.toCanonicalAddress({ chainRef: "demo:1", value: "input" });
     expect(normalized).toEqual({ canonical: "canonical-value", metadata: { note: "normalized" } });
@@ -52,19 +52,19 @@ describe("ChainDescriptorRegistry", () => {
 
     expect(() => registry.validateAddress({ chainRef: "demo:1", canonical: "canonical-value" })).not.toThrow();
 
-    expect(descriptor.address.canonicalize).toHaveBeenCalledWith({ chainRef: "demo:1", value: "input" });
-    expect(descriptor.address.format).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
-    expect(descriptor.address.validate).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
+    expect(codec.address.canonicalize).toHaveBeenCalledWith({ chainRef: "demo:1", value: "input" });
+    expect(codec.address.format).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
+    expect(codec.address.validate).toHaveBeenCalledWith({ chainRef: "demo:1", canonical: "canonical-value" });
   });
 
-  it("throws when chain descriptor is missing", () => {
-    const registry = createDefaultChainDescriptorRegistry();
+  it("throws when chain address codec is missing", () => {
+    const registry = createDefaultChainAddressCodecRegistry();
 
     expect(() =>
       registry.toCanonicalAddress({
         chainRef: "solana:mainnet",
         value: "0x0000000000000000000000000000000000000000",
       }),
-    ).toThrow(/No chain descriptor registered/);
+    ).toThrow(/No chain address codec registered/);
   });
 });

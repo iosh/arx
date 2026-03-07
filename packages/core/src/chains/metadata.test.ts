@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 import { DEFAULT_CHAIN_METADATA } from "./chains.seed.js";
-import { createChainMetadataListSchema, validateChainMetadata, validateChainMetadataList } from "./metadata.js";
+import {
+  createChainMetadataListSchema,
+  isSameAddChainComparableMetadata,
+  validateChainMetadata,
+  validateChainMetadataList,
+} from "./metadata.js";
 
 const baseEip155Metadata = {
   chainRef: "eip155:1",
@@ -151,5 +156,70 @@ describe("metadata", () => {
 
   it("accepts default chain seed", () => {
     expect(() => validateChainMetadataList(DEFAULT_CHAIN_METADATA)).not.toThrow();
+  });
+
+  it("treats add-chain comparable metadata as equal across ordering and extra fields", () => {
+    const existing = validateChainMetadata({
+      chainRef: "eip155:8453",
+      namespace: "eip155",
+      chainId: "0X2105",
+      displayName: "Base Mainnet",
+      shortName: "base",
+      description: "User added chain",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [
+        {
+          url: "https://secondary.base.org/",
+          type: "authenticated",
+          headers: { Authorization: "Bearer token" },
+        },
+        { url: "https://mainnet.base.org", type: "public" },
+      ],
+      blockExplorers: [
+        { type: "secondary", url: "https://basescan.org/", title: "BaseScan" },
+        { type: "default", url: "https://www.base.org" },
+      ],
+      icon: { url: "https://assets.example.com/base.svg", format: "svg" },
+      features: ["eip155", "wallet_switchEthereumChain"],
+      tags: ["user-added"],
+      extensions: { source: "seed" },
+    });
+
+    const requested = validateChainMetadata({
+      chainRef: "eip155:8453",
+      namespace: "eip155",
+      chainId: "0x2105",
+      displayName: "Base Mainnet",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [{ url: "https://mainnet.base.org/" }, { url: "https://secondary.base.org" }],
+      blockExplorers: [
+        { type: "default", url: "https://www.base.org/" },
+        { type: "default", url: "https://basescan.org" },
+      ],
+    });
+
+    expect(isSameAddChainComparableMetadata(existing, requested)).toBe(true);
+  });
+
+  it("detects add-chain comparable metadata differences", () => {
+    const existing = validateChainMetadata({
+      chainRef: "eip155:8453",
+      namespace: "eip155",
+      chainId: "0x2105",
+      displayName: "Base Mainnet",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [{ url: "https://mainnet.base.org" }],
+    });
+
+    const changed = validateChainMetadata({
+      chainRef: "eip155:8453",
+      namespace: "eip155",
+      chainId: "0x2105",
+      displayName: "Base Mainnet",
+      nativeCurrency: { name: "Base Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [{ url: "https://mainnet.base.org" }],
+    });
+
+    expect(isSameAddChainComparableMetadata(existing, changed)).toBe(false);
   });
 });

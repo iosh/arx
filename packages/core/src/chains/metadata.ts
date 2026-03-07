@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type ParsedChainRef, parseChainRef } from "./caip.js";
-import type { ChainRef } from "./ids.js";
+import { type ChainRef, ChainRefSchema } from "./ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "./url.js";
 
 export type ChainFeature = string;
@@ -124,7 +124,7 @@ const createDuplicateChecker =
   };
 
 const baseSchema: z.ZodType<ChainMetadata> = z.strictObject({
-  chainRef: trimmedString(),
+  chainRef: ChainRefSchema,
   namespace: trimmedString(),
   chainId: chainIdSchema,
   displayName: trimmedString(),
@@ -290,6 +290,32 @@ const uniqStrings = (values: readonly string[] | undefined) => {
   return out;
 };
 
+const normalizeComparableUrl = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    return `${url.protocol}//${url.host}${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return trimmed;
+  }
+};
+
+const normalizeComparableUrlList = (values: readonly string[] | undefined) => {
+  if (!values) return undefined;
+
+  const unique = new Set<string>();
+  for (const value of values) {
+    const normalized = normalizeComparableUrl(value);
+    if (normalized) {
+      unique.add(normalized);
+    }
+  }
+
+  return [...unique].sort();
+};
+
 export const cloneChainMetadata = (metadata: ChainMetadata): ChainMetadata => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
@@ -373,6 +399,35 @@ export const normalizeChainMetadata = (metadata: ChainMetadata): ChainMetadata =
   cloned.tags = uniqStrings(cloned.tags);
 
   return cloned;
+};
+
+export const normalizeAddChainComparableMetadata = (metadata: ChainMetadata): ChainMetadata => {
+  const normalized = normalizeChainMetadata(metadata);
+  const rpcUrls = normalizeComparableUrlList(normalized.rpcEndpoints.map((endpoint) => endpoint.url));
+
+  if (!rpcUrls || rpcUrls.length === 0) {
+    throw new Error(`Chain ${normalized.chainRef} must declare at least one RPC endpoint`);
+  }
+
+  const explorerUrls = normalizeComparableUrlList(normalized.blockExplorers?.map((explorer) => explorer.url));
+
+  return {
+    chainRef: normalized.chainRef,
+    namespace: normalized.namespace,
+    chainId: normalized.namespace === "eip155" ? normalized.chainId.toLowerCase() : normalized.chainId,
+    displayName: normalized.displayName,
+    nativeCurrency: {
+      name: normalized.nativeCurrency.name,
+      symbol: normalized.nativeCurrency.symbol,
+      decimals: normalized.nativeCurrency.decimals,
+    },
+    rpcEndpoints: rpcUrls.map((url) => ({ url })),
+    ...(explorerUrls && explorerUrls.length > 0
+      ? {
+          blockExplorers: explorerUrls.map((url) => ({ type: "default", url })),
+        }
+      : {}),
+  };
 };
 
 const isSameRecord = <T>(
@@ -484,4 +539,8 @@ export const isSameChainMetadata = (previous: ChainMetadata, next: ChainMetadata
   }
 
   return isSameRecord(previous.extensions, next.extensions);
+};
+
+export const isSameAddChainComparableMetadata = (previous: ChainMetadata, next: ChainMetadata) => {
+  return isSameChainMetadata(normalizeAddChainComparableMetadata(previous), normalizeAddChainComparableMetadata(next));
 };

@@ -12,6 +12,7 @@ import {
   ALT_CHAIN,
   createExecutor,
   createRuntime,
+  getActiveChainMetadata,
   ORIGIN,
   setupApprovalResponder,
   setupSwitchChainApprovalResponder,
@@ -55,7 +56,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const execute = createExecutor(runtime);
-    const mainnet = runtime.controllers.network.getActiveChain();
+    const mainnet = getActiveChainMetadata(runtime);
 
     await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
@@ -83,7 +84,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.controllers.network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
       expect(
         runtime.controllers.accounts.getSelectedPointerForNamespace({
           namespace: ALT_CHAIN.namespace,
@@ -122,7 +123,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.controllers.network.getActiveChain().chainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.controllers.network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();
@@ -550,6 +551,81 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
+  it("treats semantically equivalent wallet_addEthereumChain requests as a no-op", async () => {
+    const mainnet: ChainMetadata = {
+      chainRef: "eip155:1",
+      namespace: "eip155",
+      chainId: "0x1",
+      displayName: "Ethereum",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [{ url: "https://rpc.ethereum.example", type: "public" }],
+    };
+
+    const existing: ChainMetadata = {
+      chainRef: ADDED_CHAIN_REF,
+      namespace: "eip155",
+      chainId: "0X2105",
+      displayName: "Base Mainnet",
+      shortName: "base",
+      description: "User added chain",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcEndpoints: [
+        {
+          url: "https://secondary.base.org/",
+          type: "authenticated",
+          headers: { Authorization: "Bearer token" },
+        },
+        { url: "https://mainnet.base.org", type: "public" },
+      ],
+      blockExplorers: [
+        { type: "secondary", url: "https://basescan.org/", title: "BaseScan" },
+        { type: "default", url: "https://www.base.org" },
+      ],
+      icon: { url: "https://assets.example.com/base.svg", format: "svg" },
+      features: ["eip155", "wallet_switchEthereumChain"],
+      tags: ["user-added"],
+      extensions: { source: "seed" },
+    };
+
+    const runtime = createRuntime({
+      chainDefinitions: {
+        seed: [mainnet, ALT_CHAIN as ChainMetadata, existing],
+      },
+    });
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const execute = createExecutor(runtime);
+    let approvalRequested = false;
+    const unsubscribeApproval = runtime.controllers.approvals.onRequest(() => {
+      approvalRequested = true;
+    });
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                ...ADD_CHAIN_PARAMS,
+                rpcUrls: ["https://mainnet.base.org/", "https://secondary.base.org"],
+                blockExplorerUrls: ["https://www.base.org/", "https://basescan.org"],
+              },
+            ] as unknown as JsonRpcParams,
+          },
+        }),
+      ).resolves.toBeNull();
+
+      expect(approvalRequested).toBe(false);
+      expect(runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF)?.metadata).toEqual(existing);
+    } finally {
+      unsubscribeApproval();
+      runtime.lifecycle.destroy();
+    }
+  });
+
   it("rejects negative decimals", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
@@ -599,7 +675,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: chain.chainRef });
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       chainRef: chain.chainRef,
@@ -638,7 +714,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const main = runtime.controllers.network.getActiveChain();
+    const main = getActiveChainMetadata(runtime);
     await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
@@ -677,7 +753,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
@@ -716,7 +792,7 @@ describe("eip155 handlers - core error paths", () => {
       );
 
       const state = runtime.controllers.permissions.getPermissions(ORIGIN);
-      const chainRef = runtime.controllers.network.getActiveChain().chainRef;
+      const chainRef = runtime.controllers.network.getState().activeChainRef;
       expect(state?.eip155?.chains?.[chainRef]?.capabilities ?? []).toEqual(
         expect.arrayContaining([PermissionCapabilities.Basic, PermissionCapabilities.Accounts]),
       );
@@ -755,7 +831,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
     const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 
@@ -790,7 +866,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: chain.chainRef,
@@ -820,7 +896,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: chain.chainRef,
@@ -860,7 +936,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: chain.chainRef,

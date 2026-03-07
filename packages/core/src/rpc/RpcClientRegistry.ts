@@ -59,7 +59,7 @@ export type RpcClientLogEvent =
 export type RpcClientRegistryOptions = {
   network: Pick<
     NetworkController,
-    "getActiveEndpoint" | "reportRpcOutcome" | "onRpcEndpointChanged" | "onChainMetadataChanged"
+    "getActiveEndpoint" | "reportRpcOutcome" | "onRpcEndpointChanged" | "onChainConfigChanged"
   >;
   fetch?: FetchFn;
   abortController?: AbortFactory;
@@ -407,7 +407,7 @@ export class RpcClientRegistry {
       }),
     );
     this.#subscriptions.push(
-      this.#network.onChainMetadataChanged(({ chainRef }) => {
+      this.#network.onChainConfigChanged(({ chainRef }) => {
         this.#purge(chainRef);
       }),
     );

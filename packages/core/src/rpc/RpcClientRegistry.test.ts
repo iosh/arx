@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChainMetadata } from "../chains/metadata.js";
 import type { RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
 import { createEip155RpcClientFactory, type Eip155RpcCapabilities } from "./namespaceClients/eip155.js";
 import {
@@ -15,9 +14,7 @@ const createNetworkStub = () => {
   const endpointListeners = new Set<
     (change: { chainRef: string; previous: RpcEndpointInfo; next: RpcEndpointInfo }) => void
   >();
-  const metadataListeners = new Set<
-    (payload: { chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }) => void
-  >();
+  const configListeners = new Set<(payload: { chainRef: string }) => void>();
 
   const stub: RpcClientRegistryOptions["network"] = {
     getActiveEndpoint: () => currentEndpoint,
@@ -30,10 +27,10 @@ const createNetworkStub = () => {
         endpointListeners.delete(handler);
       };
     },
-    onChainMetadataChanged(handler) {
-      metadataListeners.add(handler);
+    onChainConfigChanged(handler) {
+      configListeners.add(handler);
       return () => {
-        metadataListeners.delete(handler);
+        configListeners.delete(handler);
       };
     },
   };
@@ -44,17 +41,9 @@ const createNetworkStub = () => {
     }
   };
 
-  const emitChainMetadataChanged = (chainRef: string, url: string) => {
-    const metadata: ChainMetadata = {
-      chainRef,
-      namespace: chainRef.split(":")[0] ?? "eip155",
-      chainId: "0x1",
-      displayName: "Stub Chain",
-      nativeCurrency: { name: "Stub", symbol: "STB", decimals: 18 },
-      rpcEndpoints: [{ url }],
-    };
-    for (const handler of metadataListeners) {
-      handler({ chainRef, previous: null, next: metadata });
+  const emitChainConfigChanged = (chainRef: string) => {
+    for (const handler of configListeners) {
+      handler({ chainRef });
     }
   };
 
@@ -65,7 +54,7 @@ const createNetworkStub = () => {
       const previous = currentEndpoint;
       currentEndpoint = { ...currentEndpoint, url, headers };
       emitEndpointChanged(chainRef, previous, currentEndpoint);
-      emitChainMetadataChanged(chainRef, url);
+      emitChainConfigChanged(chainRef);
     },
   };
 };

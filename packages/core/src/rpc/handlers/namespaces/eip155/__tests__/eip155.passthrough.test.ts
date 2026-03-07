@@ -11,7 +11,7 @@ describe("eip155 passthrough executor", () => {
 
     const execute = createExecutor(runtime);
     const params = ["0xabc", "latest"] as JsonRpcParams;
-    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
+    const chainRef = runtime.controllers.network.getState().activeChainRef;
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockResolvedValue("0x64"),
     };
@@ -85,7 +85,7 @@ describe("eip155 passthrough executor", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const chainRef = runtime.controllers.network.getActiveChain().chainRef;
+    const chainRef = runtime.controllers.network.getState().activeChainRef;
     const rpcClient: Pick<RpcClient, "request"> = {
       request: vi.fn().mockRejectedValue(new Error("boom")),
     };

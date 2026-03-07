@@ -9,6 +9,7 @@ import {
   ADDED_CHAIN_REF,
   createExecutor,
   createRuntime,
+  getActiveChainMetadata,
   ORIGIN,
   setupApprovalResponder,
   TEST_MNEMONIC,
@@ -21,7 +22,7 @@ describe("eip155 handlers - approval metadata", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const activeChain = runtime.controllers.network.getActiveChain();
+    const activeChain = getActiveChainMetadata(runtime);
 
     let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
     const originalRequestApproval = runtime.controllers.approvals.requestApproval;
@@ -54,7 +55,7 @@ describe("eip155 handlers - approval metadata", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const activeChain = runtime.controllers.network.getActiveChain();
+    const activeChain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: activeChain.chainRef,
@@ -104,7 +105,7 @@ describe("eip155 handlers - approval metadata", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const activeChain = runtime.controllers.network.getActiveChain();
+    const activeChain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: activeChain.chainRef,
@@ -205,7 +206,7 @@ describe("eip155 handlers - approval metadata", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const activeChain = runtime.controllers.network.getActiveChain();
+    const activeChain = getActiveChainMetadata(runtime);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
       chainRef: activeChain.chainRef,
@@ -299,7 +300,7 @@ describe("eip155 handlers - approval metadata", () => {
 
     try {
       const execute = createExecutor(runtime);
-      const mainnet = runtime.controllers.network.getActiveChain();
+      const mainnet = getActiveChainMetadata(runtime);
 
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
       const account = await runtime.services.keyring.deriveAccount(keyringId);
@@ -396,7 +397,7 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.approvals.resolve(task.id, async () =>
         runtime.controllers.signers.eip155.signPersonalMessage({
           accountId: toAccountIdFromAddress({
-            chainRef: runtime.controllers.network.getActiveChain().chainRef,
+            chainRef: runtime.controllers.network.getState().activeChainRef,
             address: payload.from,
           }),
           message: payload.message,
@@ -405,7 +406,7 @@ describe("eip155 handlers - approval metadata", () => {
       return true;
     });
     try {
-      const mainnet = runtime.controllers.network.getActiveChain();
+      const mainnet = getActiveChainMetadata(runtime);
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
@@ -461,7 +462,7 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.approvals.resolve(task.id, async () =>
         runtime.controllers.signers.eip155.signTypedData({
           accountId: toAccountIdFromAddress({
-            chainRef: runtime.controllers.network.getActiveChain().chainRef,
+            chainRef: runtime.controllers.network.getState().activeChainRef,
             address: payload.from,
           }),
           typedData: payload.typedData,
@@ -470,7 +471,7 @@ describe("eip155 handlers - approval metadata", () => {
       return true;
     });
     try {
-      const mainnet = runtime.controllers.network.getActiveChain();
+      const mainnet = getActiveChainMetadata(runtime);
       const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);

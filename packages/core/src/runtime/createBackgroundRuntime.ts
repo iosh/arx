@@ -1,10 +1,11 @@
-import { createDefaultChainDescriptorRegistry } from "../chains/registry.js";
+import { createDefaultChainAddressCodecRegistry } from "../chains/registry.js";
+import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
 import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
-import { createChainService } from "../services/runtime/chains/index.js";
+import { createChainViewsService } from "../services/runtime/chainViews/index.js";
 import { createAccountsService } from "../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import { createKeyringMetasService } from "../services/store/keyringMetas/KeyringMetasService.js";
@@ -72,7 +73,7 @@ export type BackgroundRuntime = {
   controllers: HandlerControllers;
   services: {
     attention: ReturnType<typeof createAttentionService>;
-    chains: ReturnType<typeof createChainService>;
+    chainViews: ReturnType<typeof createChainViewsService>;
     session: BackgroundSessionServices;
     keyring: KeyringService;
   };
@@ -118,7 +119,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
-  const chainDescriptors = createDefaultChainDescriptorRegistry();
+  const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
   const storageNow = storageOptions?.now ?? Date.now;
@@ -129,8 +130,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(permissionOptions
-      ? { permissions: { ...permissionOptions, chains: chainDescriptors } }
-      : { permissions: { chains: chainDescriptors } }),
+      ? { permissions: { ...permissionOptions, chains: chainAddressCodecs } }
+      : { permissions: { chains: chainAddressCodecs } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainDefinitions: chainDefinitionsOptions,
   };
@@ -175,10 +176,9 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     deferredNetworkInitialState,
   } = controllersInit;
 
-  const chains = createChainService({
+  const chainViews = createChainViewsService({
     chainDefinitions: chainDefinitionsController,
     network: networkController,
-    preferences: networkPreferences,
   });
 
   const rpcClientRegistry = initRpcLayer({
@@ -213,14 +213,14 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const { signers } = registerDefaultTransactionAdapters({
     transactionRegistry,
     rpcClients: rpcClientRegistry,
-    chains: chainDescriptors,
+    chains: chainAddressCodecs,
     keyring: keyringService,
   });
 
   const controllers: HandlerControllers = {
     ...controllersBase,
     networkPreferences,
-    chainDescriptors,
+    chainAddressCodecs,
     clock: {
       now: storageNow,
     },
@@ -250,7 +250,14 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     initialize: async () => {
       await chainDefinitionsController.whenReady();
       if (deferredNetworkInitialState) {
-        networkController.replaceState(deferredNetworkInitialState);
+        const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
+          const metadata = chainDefinitionsController.getChain(chainRef)?.metadata;
+          if (!metadata) {
+            throw new Error(`Deferred network state references missing chain definition ${chainRef}`);
+          }
+          return metadata;
+        });
+        networkController.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
       }
       await controllersBase.permissions.whenReady();
     },
@@ -342,7 +349,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     controllers,
     services: {
       attention,
-      chains,
+      chainViews,
       session: sessionLayer.session,
       keyring: keyringService,
     },

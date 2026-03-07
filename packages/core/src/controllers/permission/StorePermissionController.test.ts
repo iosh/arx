@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createDefaultChainAddressCodecRegistry } from "../../chains/registry.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createPermissionsService } from "../../services/store/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
@@ -54,6 +55,7 @@ describe("StorePermissionController", () => {
       messenger,
       capabilityResolver: () => undefined,
       service,
+      chains: createDefaultChainAddressCodecRegistry(),
     });
 
     await controller.whenReady();
@@ -69,6 +71,7 @@ describe("StorePermissionController", () => {
       messenger,
       capabilityResolver: () => undefined,
       service,
+      chains: createDefaultChainAddressCodecRegistry(),
     });
 
     const originEvents: unknown[] = [];
@@ -95,6 +98,7 @@ describe("StorePermissionController", () => {
       messenger,
       capabilityResolver: () => undefined,
       service,
+      chains: createDefaultChainAddressCodecRegistry(),
     });
 
     await controller.whenReady();
@@ -144,6 +148,7 @@ describe("StorePermissionController", () => {
       messenger,
       capabilityResolver: () => undefined,
       service,
+      chains: createDefaultChainAddressCodecRegistry(),
     });
 
     await controller.whenReady();

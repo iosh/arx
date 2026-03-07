@@ -1,18 +1,21 @@
+import { chainErrors } from "../../chains/errors.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata, RpcEndpoint } from "../../chains/metadata.js";
-import { cloneChainMetadata } from "../../chains/metadata.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
+import { cloneRpcEndpoints, cloneRpcHeaders, fingerprintRpcEndpoints } from "./config.js";
 import type { NetworkMessenger } from "./topics.js";
 import {
   NETWORK_ACTIVE_CHAIN_CHANGED,
-  NETWORK_CHAIN_METADATA_CHANGED,
+  NETWORK_CHAIN_CONFIG_CHANGED,
   NETWORK_RPC_ENDPOINT_CHANGED,
   NETWORK_RPC_HEALTH_CHANGED,
   NETWORK_STATE_CHANGED,
 } from "./topics.js";
 import type {
+  ChainConfigChange,
+  NetworkChainConfig,
   NetworkController,
+  NetworkRuntimeInput,
   NetworkState,
-  NetworkStateInput,
   RpcEndpointChange,
   RpcEndpointHealth,
   RpcEndpointInfo,
@@ -28,9 +31,7 @@ const defaultLogger: RpcEventLogger = () => {};
 
 type NetworkControllerOptions = {
   messenger: NetworkMessenger;
-  initialState: NetworkStateInput;
-  initialChains?: ChainMetadata[];
-  getChainMetadata?: (chainRef: ChainRef) => ChainMetadata | null;
+  initialRuntime: NetworkRuntimeInput;
   defaultStrategy?: RpcStrategyConfig;
   now?: () => number;
   logger?: RpcEventLogger;
@@ -38,16 +39,10 @@ type NetworkControllerOptions = {
 };
 
 type ChainRuntime = {
-  metadata: ChainMetadata;
-  // Used to detect registry-driven metadata changes deterministically.
-  metadataFingerprint: string;
+  endpoints: RpcEndpoint[];
+  configFingerprint: string;
   routing: RpcRoutingState;
   health: RpcEndpointHealth[];
-};
-
-const cloneHeaders = (headers?: Record<string, string>) => {
-  if (!headers) return undefined;
-  return Object.fromEntries(Object.entries(headers));
 };
 
 const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
@@ -75,23 +70,18 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const stableStringifyJson = (value: unknown, seen?: Set<unknown>): string => {
-  // Deterministic JSON-ish stringify for comparisons/fingerprints.
-  // - Sorts plain-object keys.
-  // - Omits undefined/function/symbol object fields (like JSON.stringify).
-  // - Converts undefined/function/symbol array entries to null (like JSON.stringify).
-  // - Handles bigint without throwing.
   const stack = seen ?? new Set<unknown>();
 
   if (value === null) return "null";
   if (value === undefined) return "undefined";
 
-  const t = typeof value;
-  if (t === "bigint") {
+  const valueType = typeof value;
+  if (valueType === "bigint") {
     return JSON.stringify(`__bigint__:${(value as bigint).toString(10)}`);
   }
-  if (t === "string" || t === "number" || t === "boolean") return JSON.stringify(value);
-  if (t === "function" || t === "symbol") return "undefined";
-  if (t !== "object") return JSON.stringify(value);
+  if (valueType === "string" || valueType === "number" || valueType === "boolean") return JSON.stringify(value);
+  if (valueType === "function" || valueType === "symbol") return "undefined";
+  if (valueType !== "object") return JSON.stringify(value);
 
   if (stack.has(value)) {
     return JSON.stringify("[Circular]");
@@ -110,7 +100,6 @@ const stableStringifyJson = (value: unknown, seen?: Set<unknown>): string => {
     }
 
     if (!isPlainObject(value)) {
-      // Align with JSON.stringify semantics for Date / class instances / etc.
       const json = JSON.stringify(value);
       return json === undefined ? "undefined" : json;
     }
@@ -119,23 +108,18 @@ const stableStringifyJson = (value: unknown, seen?: Set<unknown>): string => {
     const keys = Object.keys(record).sort();
     const props: string[] = [];
     for (const key of keys) {
-      const v = record[key];
-      if (v === undefined) continue;
-      const vt = typeof v;
-      if (vt === "function" || vt === "symbol") continue;
-      props.push(`${JSON.stringify(key)}:${stableStringifyJson(v, stack)}`);
+      const nextValue = record[key];
+      if (nextValue === undefined) continue;
+      const nextValueType = typeof nextValue;
+      if (nextValueType === "function" || nextValueType === "symbol") continue;
+      props.push(`${JSON.stringify(key)}:${stableStringifyJson(nextValue, stack)}`);
     }
     return `{${props.join(",")}}`;
   } catch {
-    // Last-resort fallback (e.g. unknown non-JSON value).
     return JSON.stringify(Object.prototype.toString.call(value));
   } finally {
     stack.delete(value);
   }
-};
-
-const fingerprintMetadata = (metadata: ChainMetadata): string => {
-  return stableStringifyJson(cloneChainMetadata(metadata));
 };
 
 const isSameStrategy = (previous: RpcStrategyConfig, next: RpcStrategyConfig) => {
@@ -154,9 +138,7 @@ const isSameRpcEndpoints = (a: readonly RpcEndpoint[], b: readonly RpcEndpoint[]
 export class InMemoryNetworkController implements NetworkController {
   #messenger: NetworkMessenger;
   #chains = new Map<ChainRef, ChainRuntime>();
-  #initialChains = new Map<ChainRef, ChainMetadata>();
   #activeChain: ChainRef;
-  #getChainMetadata: (chainRef: ChainRef) => ChainMetadata | null;
   #defaultStrategy: RpcStrategyConfig;
   #now: () => number;
   #logger: RpcEventLogger;
@@ -165,59 +147,45 @@ export class InMemoryNetworkController implements NetworkController {
 
   constructor({
     messenger,
-    initialState,
-    initialChains = [],
-    getChainMetadata = () => null,
+    initialRuntime,
     defaultStrategy,
     now = Date.now,
     logger = defaultLogger,
     defaultCooldownMs = 5_000,
   }: NetworkControllerOptions) {
     this.#messenger = messenger;
-    this.#getChainMetadata = getChainMetadata;
-    for (const metadata of initialChains) {
-      this.#initialChains.set(metadata.chainRef, cloneChainMetadata(metadata));
-    }
     this.#defaultStrategy = deriveStrategyConfig(defaultStrategy);
     this.#now = now;
     this.#logger = logger;
     this.#defaultCooldownMs = defaultCooldownMs;
-    this.#activeChain = initialState.activeChainRef;
+    this.#activeChain = initialRuntime.state.activeChainRef;
 
-    this.replaceState(initialState);
+    this.replaceState(initialRuntime);
   }
 
   getState(): NetworkState {
     return this.#buildStateSnapshot();
   }
 
-  getActiveChain(): ChainMetadata {
-    return cloneChainMetadata(this.#requireRuntime(this.#activeChain).metadata);
-  }
-
-  getChain(chainRef: ChainRef): ChainMetadata | null {
-    const runtime = this.#chains.get(chainRef);
-    return runtime ? cloneChainMetadata(runtime.metadata) : null;
-  }
-
   getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo {
-    const runtime = this.#requireRuntime(chainRef ?? this.#activeChain);
-    const endpoints = runtime.metadata.rpcEndpoints;
+    const resolvedChainRef = chainRef ?? this.#activeChain;
+    const runtime = this.#requireRuntime(resolvedChainRef);
+    const endpoints = runtime.endpoints;
     if (endpoints.length === 0) {
-      throw new Error(`Chain ${runtime.metadata.chainRef} has no registered RPC endpoints`);
+      throw new Error(`Chain ${resolvedChainRef} has no registered RPC endpoints`);
     }
 
     const index = runtime.routing.activeIndex;
     const endpoint = endpoints[index];
     if (!endpoint) {
-      throw new Error(`Active endpoint index ${index} is out of bounds for ${runtime.metadata.chainRef}`);
+      throw new Error(`Active endpoint index ${index} is out of bounds for ${resolvedChainRef}`);
     }
     return {
       index,
       url: endpoint.url,
       type: endpoint.type,
       weight: endpoint.weight,
-      headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
+      headers: endpoint.headers ? cloneRpcHeaders(endpoint.headers) : undefined,
     };
   }
 
@@ -229,10 +197,8 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_ACTIVE_CHAIN_CHANGED, handler);
   }
 
-  onChainMetadataChanged(
-    handler: (payload: { chainRef: ChainRef; previous: ChainMetadata | null; next: ChainMetadata | null }) => void,
-  ): () => void {
-    return this.#messenger.subscribe(NETWORK_CHAIN_METADATA_CHANGED, handler);
+  onChainConfigChanged(handler: (payload: ChainConfigChange) => void): () => void {
+    return this.#messenger.subscribe(NETWORK_CHAIN_CONFIG_CHANGED, handler);
   }
 
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void {
@@ -243,13 +209,12 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_RPC_HEALTH_CHANGED, handler);
   }
 
-  async switchChain(target: ChainRef): Promise<ChainMetadata> {
+  async switchChain(target: ChainRef): Promise<void> {
     if (this.#activeChain === target) {
-      return this.getActiveChain();
+      return;
     }
-    const runtime = this.#chains.get(target);
-    if (!runtime) {
-      throw new Error(`Unknown chain: ${target}`);
+    if (!this.#chains.has(target)) {
+      throw chainErrors.notAvailable({ chainRef: target });
     }
 
     const previous = this.#activeChain;
@@ -257,13 +222,11 @@ export class InMemoryNetworkController implements NetworkController {
     this.#touch();
     this.#publishState();
     this.#publishActiveChainChanged(previous, target);
-
-    return cloneChainMetadata(runtime.metadata);
   }
 
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void {
     const runtime = this.#requireRuntime(chainRef);
-    const endpoints = runtime.metadata.rpcEndpoints;
+    const endpoints = runtime.endpoints;
     if (endpoints.length === 0) {
       throw new Error(`Cannot report RPC outcome for chain ${chainRef} without endpoints`);
     }
@@ -332,7 +295,7 @@ export class InMemoryNetworkController implements NetworkController {
       health.cooldownUntil = now + cooldown;
     }
 
-    const nextIndex = this.#selectNextEndpoint(runtime, now, targetIndex);
+    const nextIndex = this.#selectNextEndpoint(chainRef, runtime, now, targetIndex);
     const endpointChanged = nextIndex !== previousIndex;
     if (endpointChanged) {
       runtime.routing.activeIndex = nextIndex;
@@ -354,10 +317,8 @@ export class InMemoryNetworkController implements NetworkController {
       },
     });
 
-    // Health always changes on failures.
     this.#publishRpcHealth(chainRef, runtime);
 
-    // Only publish state/endpoints when routing changes.
     if (endpointChanged) {
       this.#touch();
       this.#publishState();
@@ -378,29 +339,41 @@ export class InMemoryNetworkController implements NetworkController {
     this.#publishState();
   }
 
-  replaceState(state: NetworkStateInput): void {
+  replaceState(input: NetworkRuntimeInput): void {
+    const { state, chainConfigs } = input;
+
     if (!state.availableChainRefs.some((chainRef) => chainRef === state.activeChainRef)) {
       throw new Error(`Active chain ${state.activeChainRef} must be present in availableChainRefs`);
+    }
+
+    const chainConfigMap = new Map<ChainRef, NetworkChainConfig>();
+    for (const config of chainConfigs) {
+      if (chainConfigMap.has(config.chainRef)) {
+        throw new Error(`Duplicate network chain config for ${config.chainRef}`);
+      }
+      chainConfigMap.set(config.chainRef, {
+        chainRef: config.chainRef,
+        rpcEndpoints: cloneRpcEndpoints(config.rpcEndpoints),
+      });
     }
 
     const previousActive = this.#activeChain;
     const previousRuntimes = this.#chains;
     let stateChanged = false;
-    const pendingMetadataEvents: Array<{
-      chainRef: ChainRef;
-      previous: ChainMetadata | null;
-      next: ChainMetadata | null;
-    }> = [];
+    const pendingConfigChanges = new Set<ChainRef>();
 
     const nextChains = new Map<ChainRef, ChainRuntime>();
     for (const chainRef of sortChainRefs([...state.availableChainRefs])) {
       const prev = previousRuntimes.get(chainRef) ?? null;
-      const resolvedMetadata = this.#resolveMetadata(chainRef, prev?.metadata ?? null);
-      if (!resolvedMetadata) {
-        throw new Error(`Missing metadata for available chain ${chainRef}`);
+      const chainConfig = chainConfigMap.get(chainRef);
+      if (!chainConfig) {
+        throw new Error(`Network state for ${chainRef} is missing chain config`);
       }
 
-      const metadata = cloneChainMetadata(resolvedMetadata);
+      const endpoints = cloneRpcEndpoints(chainConfig.rpcEndpoints);
+      if (endpoints.length === 0) {
+        throw new Error(`Chain ${chainRef} must expose at least one RPC endpoint`);
+      }
 
       const desiredRouting: RpcRoutingState = {
         activeIndex: state.rpc[chainRef]?.activeIndex ?? 0,
@@ -409,36 +382,25 @@ export class InMemoryNetworkController implements NetworkController {
         ),
       };
 
-      const endpoints = metadata.rpcEndpoints;
-      if (endpoints.length === 0) {
-        throw new Error(`Chain ${chainRef} must expose at least one RPC endpoint`);
-      }
-
-      const safeIndex = Math.min(desiredRouting.activeIndex, Math.max(0, endpoints.length - 1));
-      desiredRouting.activeIndex = safeIndex;
+      desiredRouting.activeIndex = Math.min(desiredRouting.activeIndex, Math.max(0, endpoints.length - 1));
 
       const health =
-        prev &&
-        isSameRpcEndpoints(prev.metadata.rpcEndpoints, metadata.rpcEndpoints) &&
-        prev.health.length === endpoints.length
+        prev && isSameRpcEndpoints(prev.endpoints, endpoints) && prev.health.length === endpoints.length
           ? cloneHealth(prev.health)
           : this.#initialiseHealth(endpoints.length);
 
       const nextRuntime: ChainRuntime = {
-        metadata,
-        metadataFingerprint: fingerprintMetadata(metadata),
+        endpoints,
+        configFingerprint: fingerprintRpcEndpoints(endpoints),
         routing: desiredRouting,
         health,
       };
       nextChains.set(chainRef, nextRuntime);
 
-      const previousFingerprint = prev?.metadataFingerprint ?? null;
-      if (!previousFingerprint) {
+      const previousFingerprint = prev?.configFingerprint ?? null;
+      if (!previousFingerprint || previousFingerprint !== nextRuntime.configFingerprint) {
         stateChanged = true;
-        pendingMetadataEvents.push({ chainRef, previous: null, next: metadata });
-      } else if (prev && previousFingerprint !== nextRuntime.metadataFingerprint) {
-        stateChanged = true;
-        pendingMetadataEvents.push({ chainRef, previous: prev.metadata, next: metadata });
+        pendingConfigChanges.add(chainRef);
       }
 
       if (
@@ -450,10 +412,10 @@ export class InMemoryNetworkController implements NetworkController {
       }
     }
 
-    for (const [chainRef, prev] of previousRuntimes.entries()) {
+    for (const [chainRef] of previousRuntimes.entries()) {
       if (!nextChains.has(chainRef)) {
         stateChanged = true;
-        pendingMetadataEvents.push({ chainRef, previous: prev.metadata, next: null });
+        pendingConfigChanges.add(chainRef);
       }
     }
 
@@ -469,8 +431,8 @@ export class InMemoryNetworkController implements NetworkController {
       this.#publishState();
     }
 
-    for (const event of pendingMetadataEvents) {
-      this.#publishChainMetadataChanged(event.chainRef, event.previous, event.next);
+    for (const chainRef of pendingConfigChanges) {
+      this.#publishChainConfigChanged(chainRef);
     }
 
     if (previousActive !== this.#activeChain) {
@@ -502,15 +464,15 @@ export class InMemoryNetworkController implements NetworkController {
     if (provided === undefined) {
       return runtime.routing.activeIndex;
     }
-    const total = runtime.metadata.rpcEndpoints.length;
+    const total = runtime.endpoints.length;
     if (provided < 0 || provided >= total) {
       return runtime.routing.activeIndex;
     }
     return provided;
   }
 
-  #selectNextEndpoint(runtime: ChainRuntime, now: number, failedIndex: number): number {
-    const total = runtime.metadata.rpcEndpoints.length;
+  #selectNextEndpoint(chainRef: ChainRef, runtime: ChainRuntime, now: number, failedIndex: number): number {
+    const total = runtime.endpoints.length;
     if (total <= 1) return 0;
 
     const strategyId = runtime.routing.strategy.id ?? "round-robin";
@@ -522,9 +484,7 @@ export class InMemoryNetworkController implements NetworkController {
     for (let attempts = 0; attempts < total; attempts += 1) {
       const health = runtime.health[candidate];
       if (!health) {
-        throw new Error(
-          `Invariant violation: missing RPC health entry for chain ${runtime.metadata.chainRef} index ${candidate}`,
-        );
+        throw new Error(`Invariant violation: missing RPC health entry for chain ${chainRef} index ${candidate}`);
       }
       if (!health.cooldownUntil || health.cooldownUntil <= now) {
         return candidate;
@@ -534,9 +494,7 @@ export class InMemoryNetworkController implements NetworkController {
 
     const failedHealth = runtime.health[failedIndex];
     if (!failedHealth) {
-      throw new Error(
-        `Invariant violation: missing RPC health entry for chain ${runtime.metadata.chainRef} index ${failedIndex}`,
-      );
+      throw new Error(`Invariant violation: missing RPC health entry for chain ${chainRef} index ${failedIndex}`);
     }
     if (!failedHealth.cooldownUntil || failedHealth.cooldownUntil <= now) {
       return failedIndex;
@@ -571,7 +529,7 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   #buildEndpointInfo(chainRef: ChainRef, runtime: ChainRuntime, index: number): RpcEndpointInfo {
-    const endpoint = runtime.metadata.rpcEndpoints[index];
+    const endpoint = runtime.endpoints[index];
     if (!endpoint) {
       throw new Error(`Endpoint index ${index} is out of bounds for ${chainRef}`);
     }
@@ -580,7 +538,7 @@ export class InMemoryNetworkController implements NetworkController {
       url: endpoint.url,
       type: endpoint.type,
       weight: endpoint.weight,
-      headers: endpoint.headers ? cloneHeaders(endpoint.headers) : undefined,
+      headers: endpoint.headers ? cloneRpcHeaders(endpoint.headers) : undefined,
     };
   }
 
@@ -593,16 +551,8 @@ export class InMemoryNetworkController implements NetworkController {
     this.#messenger.publish(NETWORK_ACTIVE_CHAIN_CHANGED, { previous, next }, { force: true });
   }
 
-  #publishChainMetadataChanged(chainRef: ChainRef, previous: ChainMetadata | null, next: ChainMetadata | null) {
-    this.#messenger.publish(
-      NETWORK_CHAIN_METADATA_CHANGED,
-      {
-        chainRef,
-        previous: previous ? cloneChainMetadata(previous) : null,
-        next: next ? cloneChainMetadata(next) : null,
-      },
-      { force: true },
-    );
+  #publishChainConfigChanged(chainRef: ChainRef) {
+    this.#messenger.publish(NETWORK_CHAIN_CONFIG_CHANGED, { chainRef }, { force: true });
   }
 
   #publishEndpointChange(chainRef: ChainRef, previous: RpcEndpointInfo, next: RpcEndpointInfo) {
@@ -620,27 +570,11 @@ export class InMemoryNetworkController implements NetworkController {
   #requireRuntime(chainRef: ChainRef): ChainRuntime {
     const runtime = this.#chains.get(chainRef);
     if (!runtime) {
-      throw new Error(`Unknown chain: ${chainRef}`);
+      throw chainErrors.notAvailable({ chainRef });
     }
-    if (runtime.metadata.rpcEndpoints.length === 0) {
+    if (runtime.endpoints.length === 0) {
       throw new Error(`Chain ${chainRef} has no registered RPC endpoints`);
     }
     return runtime;
-  }
-
-  #resolveMetadata(chainRef: ChainRef, previous: ChainMetadata | null): ChainMetadata | null {
-    const fromResolver = this.#getChainMetadata(chainRef);
-    if (fromResolver) {
-      if (fromResolver.chainRef !== chainRef) {
-        throw new Error(`Resolved metadata chainRef mismatch for ${chainRef}`);
-      }
-      return fromResolver;
-    }
-
-    if (previous) {
-      return previous;
-    }
-
-    return this.#initialChains.get(chainRef) ?? null;
   }
 }

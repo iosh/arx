@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { Messenger } from "../../messenger/Messenger.js";
+import { buildNetworkRuntimeInput, createNetworkRuntimeInput } from "./config.js";
 import { InMemoryNetworkController } from "./NetworkController.js";
 import { NETWORK_TOPICS } from "./topics.js";
 import type { NetworkStateInput, RpcEndpointChange, RpcEndpointHealth, RpcOutcomeReport } from "./types.js";
@@ -32,10 +33,13 @@ const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkS
   return { ...base, ...(overrides ?? {}) };
 };
 
+const runtimeFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkStateInput>) => {
+  return buildNetworkRuntimeInput(stateFromMetadata(metadata, overrides), [metadata]);
+};
+
 describe("InMemoryNetworkController", () => {
   it("rotates endpoints and records failures", () => {
     const metadata = createMetadata();
-    const currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const now = 1_000;
@@ -46,9 +50,7 @@ describe("InMemoryNetworkController", () => {
 
     const controller = new InMemoryNetworkController({
       messenger,
-      initialState: stateFromMetadata(metadata),
-      initialChains: [metadata],
-      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
+      initialRuntime: runtimeFromMetadata(metadata),
       now: () => now,
       defaultCooldownMs: 10_000,
       defaultStrategy: { id: "round-robin" },
@@ -82,7 +84,6 @@ describe("InMemoryNetworkController", () => {
     const metadata = createMetadata({
       rpcEndpoints: [{ url: "https://rpc.only.example", type: "public" as const }],
     });
-    const currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     let now = 5_000;
@@ -92,9 +93,7 @@ describe("InMemoryNetworkController", () => {
 
     const controller = new InMemoryNetworkController({
       messenger,
-      initialState: stateFromMetadata(metadata),
-      initialChains: [metadata],
-      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
+      initialRuntime: runtimeFromMetadata(metadata),
       now: () => now,
       defaultCooldownMs: 5_000,
       logger,
@@ -122,20 +121,17 @@ describe("InMemoryNetworkController", () => {
 
   it("clamps routing index when registry metadata changes", () => {
     const metadata = createMetadata();
-    let currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const controller = new InMemoryNetworkController({
       messenger,
-      initialState: stateFromMetadata(metadata, {
+      initialRuntime: runtimeFromMetadata(metadata, {
         rpc: { [metadata.chainRef]: { activeIndex: 1, strategy: { id: "round-robin" } } },
       }),
-      initialChains: [metadata],
-      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
     });
 
-    const updates: Array<{ chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }> = [];
-    controller.onChainMetadataChanged((payload) => updates.push(payload));
+    const updates: Array<{ chainRef: string }> = [];
+    controller.onChainConfigChanged((payload) => updates.push(payload));
 
     const firstEndpoint = metadata.rpcEndpoints[0];
     if (!firstEndpoint) {
@@ -146,15 +142,87 @@ describe("InMemoryNetworkController", () => {
       ...metadata,
       rpcEndpoints: [{ url: firstEndpoint.url, type: "public" as const }],
     };
-    currentMetadata = updated;
 
     controller.replaceState(
-      stateFromMetadata(updated, {
+      runtimeFromMetadata(updated, {
         rpc: { [updated.chainRef]: { activeIndex: 1, strategy: { id: "round-robin" } } },
       }),
     );
 
     expect(controller.getState().rpc[metadata.chainRef]?.activeIndex).toBe(0);
     expect(updates.some((u) => u.chainRef === metadata.chainRef)).toBe(true);
+  });
+
+  it("rejects missing chain configs for available chains", () => {
+    const metadata = createMetadata();
+    const alt = createMetadata({
+      chainRef: "eip155:10",
+      chainId: "0xa",
+      displayName: "Optimism",
+      rpcEndpoints: [{ url: "https://rpc.optimism.example", type: "public" as const }],
+    });
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
+    const controller = new InMemoryNetworkController({
+      messenger,
+      initialRuntime: runtimeFromMetadata(metadata),
+    });
+
+    expect(() =>
+      controller.replaceState(
+        buildNetworkRuntimeInput(
+          {
+            activeChainRef: metadata.chainRef,
+            availableChainRefs: [metadata.chainRef, alt.chainRef],
+            rpc: {
+              [metadata.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
+              [alt.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
+            },
+          },
+          [metadata],
+        ),
+      ),
+    ).toThrow(`Network state for ${alt.chainRef} is missing chain config`);
+  });
+
+  it("rejects duplicate chain configs", () => {
+    const metadata = createMetadata();
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
+    const controller = new InMemoryNetworkController({
+      messenger,
+      initialRuntime: runtimeFromMetadata(metadata),
+    });
+
+    expect(() =>
+      controller.replaceState(
+        createNetworkRuntimeInput({
+          state: stateFromMetadata(metadata),
+          chainConfigs: [
+            { chainRef: metadata.chainRef, rpcEndpoints: [...metadata.rpcEndpoints] },
+            { chainRef: metadata.chainRef, rpcEndpoints: [...metadata.rpcEndpoints] },
+          ],
+        }),
+      ),
+    ).toThrow(`Duplicate network chain config for ${metadata.chainRef}`);
+  });
+
+  it("rejects empty rpc endpoints in chain config", () => {
+    const metadata = createMetadata();
+    const bus = new Messenger();
+    const messenger = bus.scope({ publish: NETWORK_TOPICS });
+    const controller = new InMemoryNetworkController({
+      messenger,
+      initialRuntime: runtimeFromMetadata(metadata),
+    });
+
+    expect(() =>
+      controller.replaceState(
+        createNetworkRuntimeInput({
+          state: stateFromMetadata(metadata),
+          chainConfigs: [{ chainRef: metadata.chainRef, rpcEndpoints: [] }],
+        }),
+      ),
+    ).toThrow(`Chain ${metadata.chainRef} must expose at least one RPC endpoint`);
   });
 });

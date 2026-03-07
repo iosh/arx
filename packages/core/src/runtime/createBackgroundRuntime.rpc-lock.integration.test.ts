@@ -14,7 +14,7 @@ const initializeSession = async (runtime: RpcHarnessInstance["runtime"]) => {
 };
 
 const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
-  const chain = runtime.controllers.network.getActiveChain();
+  const chain = runtime.services.chainViews.getActiveChainView();
   const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
   const account = await runtime.services.keyring.deriveAccount(keyringId);
   await runtime.controllers.accounts.switchActiveForNamespace({

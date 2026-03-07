@@ -1,7 +1,7 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
-import type { NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
+import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../controllers/network/config.js";
+import type { NetworkChainConfig, NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
 import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
@@ -27,6 +27,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   const { network, chainDefinitions, preferences, hydrationEnabled, logger, getIsHydrating } = opts;
 
   let cachedPreferences: NetworkPreferencesRecord | null = null;
+  let preferencesLoaded = !hydrationEnabled;
   let pendingSync = false;
   let suppressActivePersist = false;
 
@@ -34,11 +35,12 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   let unsubscribeRegistry: (() => void) | null = null;
   let unsubscribeNetwork: (() => void) | null = null;
 
-  const readRegistryChains = (): ChainMetadata[] => chainDefinitions.getState().chains.map((entry) => entry.metadata);
+  const readRegistryChainConfigs = (): NetworkChainConfig[] =>
+    buildNetworkChainConfigs(chainDefinitions.getState().chains.map((entry) => entry.metadata));
 
   let syncInFlight: Promise<void> | null = null;
 
-  const computeRpcState = (registryChains: ChainMetadata[], current: ReturnType<typeof network.getState>) => {
+  const computeRpcState = (registryChains: NetworkChainConfig[], current: ReturnType<typeof network.getState>) => {
     const corrections: Record<ChainRef, NetworkRpcPreference> = {};
 
     const rpc = Object.fromEntries(
@@ -68,7 +70,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
   const selectActiveChainRef = (
     current: ReturnType<typeof network.getState>,
-    registryChains: ChainMetadata[],
+    registryChains: NetworkChainConfig[],
   ): ChainRef => {
     if (registryChains.length === 0) {
       return current.activeChainRef;
@@ -109,19 +111,31 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return patch;
   };
 
+  const loadCachedPreferences = async () => {
+    if (!hydrationEnabled) {
+      cachedPreferences = null;
+      preferencesLoaded = true;
+      return;
+    }
+
+    try {
+      cachedPreferences = await preferences.get();
+    } catch (error) {
+      logger("preferences: failed to load", error);
+      cachedPreferences = null;
+    } finally {
+      preferencesLoaded = true;
+    }
+  };
+
   const syncOnceFromRegistry = async () => {
-    const registryChains = readRegistryChains();
+    const registryChains = readRegistryChainConfigs();
     if (registryChains.length === 0) {
       return;
     }
 
-    if (hydrationEnabled) {
-      try {
-        cachedPreferences = await preferences.get();
-      } catch (error) {
-        logger("preferences: failed to load", error);
-        cachedPreferences = null;
-      }
+    if (!preferencesLoaded) {
+      await loadCachedPreferences();
     }
 
     const current = network.getState();
@@ -133,11 +147,16 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
     suppressActivePersist = true;
     try {
-      network.replaceState({
-        activeChainRef: nextActive,
-        availableChainRefs: registryChains.map((chain) => chain.chainRef),
-        rpc,
-      });
+      network.replaceState(
+        createNetworkRuntimeInput({
+          state: {
+            activeChainRef: nextActive,
+            availableChainRefs: registryChains.map((chain) => chain.chainRef),
+            rpc,
+          },
+          chainConfigs: registryChains,
+        }),
+      );
     } finally {
       suppressActivePersist = false;
     }
@@ -238,17 +257,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   };
 
   const loadPreferences = async () => {
-    if (!hydrationEnabled) {
-      cachedPreferences = null;
-      return;
-    }
-
-    try {
-      cachedPreferences = await preferences.get();
-    } catch (error) {
-      logger("preferences: failed to load", error);
-      cachedPreferences = null;
-    }
+    await loadCachedPreferences();
   };
 
   const flushPendingSync = async () => {

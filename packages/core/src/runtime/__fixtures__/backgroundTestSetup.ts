@@ -256,6 +256,15 @@ if (!defaultBaseChainMetadata) {
 }
 export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
 
+const requireActiveChainMetadata = (runtime: CreateBackgroundRuntimeResult): ChainMetadata => {
+  const chainRef = runtime.controllers.network.getState().activeChainRef;
+  const chain = runtime.controllers.chainDefinitions.getChain(chainRef)?.metadata;
+  if (!chain) {
+    throw new Error(`Missing chain metadata for active chain ${chainRef}`);
+  }
+  return chain;
+};
+
 const DEFAULT_FLUSH_TURNS = 8;
 
 export const flushAsync = async (turns = DEFAULT_FLUSH_TURNS) => {
@@ -653,11 +662,13 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
               const result = await runtime.controllers.transactions.approveTransaction(task.id);
               return result;
             }
-            case "wallet_requestAccounts":
+            case "wallet_requestAccounts": {
+              const activeChain = requireActiveChainMetadata(runtime);
               return runtime.controllers.accounts.getAccountsForNamespace({
-                namespace: task.namespace ?? runtime.controllers.network.getActiveChain().namespace,
-                chainRef: task.chainRef ?? runtime.controllers.network.getActiveChain().chainRef,
+                namespace: task.namespace ?? activeChain.namespace,
+                chainRef: task.chainRef ?? activeChain.chainRef,
               });
+            }
             case "wallet_signMessage":
             case "wallet_signTypedData":
               return "0xsignedpayload";
@@ -734,7 +745,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   const engine = runtime.rpc.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
-    const chain = runtime.controllers.network.getActiveChain();
+    const chain = requireActiveChainMetadata(runtime);
     const namespace = overrides?.namespace ?? chain.namespace;
     const chainRef = overrides?.chainRef ?? chain.chainRef;
     return {
@@ -763,7 +774,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         } as const),
     });
     const namespace = deriveMethodNamespace(method, contextPayload);
-    const resolvedChainRef = contextPayload.chainRef ?? runtime.controllers.network.getActiveChain().chainRef;
+    const resolvedChainRef = contextPayload.chainRef ?? runtime.controllers.network.getState().activeChainRef;
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {

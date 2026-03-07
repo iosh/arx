@@ -53,7 +53,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
   const executeMethod = rpcRegistry.createMethodExecutor(controllers, {
     rpcClientRegistry: runtime.rpc.clients,
     services: {
-      chains: runtime.services.chains,
+      chainViews: runtime.services.chainViews,
     },
   });
 
@@ -68,7 +68,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       const rpcContext = invocation?.rpcContext ?? reqWithArx.arx ?? undefined;
       const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
       const chainRef =
-        invocation?.chainRef ?? rpcContext?.chainRef ?? controllers.network.getActiveChain().chainRef ?? null;
+        invocation?.chainRef ?? rpcContext?.chainRef ?? controllers.network.getState().activeChainRef ?? null;
       const namespace =
         invocation?.namespace ??
         rpcContext?.namespace?.split(":")[0] ??

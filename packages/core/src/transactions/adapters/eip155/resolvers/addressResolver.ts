@@ -1,11 +1,11 @@
 import * as Hex from "ox/Hex";
-import type { ChainDescriptorRegistry } from "../../../../chains/registry.js";
+import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import type { TransactionPrepareContext } from "../../types.js";
 import type { AddressResolutionResult, Eip155PreparedTransactionResult } from "../types.js";
 import { pushIssue, readErrorMessage } from "../utils/validation.js";
 
 type AddressResolverDeps = {
-  chains: ChainDescriptorRegistry;
+  chains: ChainAddressCodecRegistry;
 };
 
 // Create factory function instead of direct export

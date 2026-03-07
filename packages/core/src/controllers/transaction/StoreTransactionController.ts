@@ -4,6 +4,7 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
+import type { ChainDefinitionsController } from "../chainDefinitions/types.js";
 import type { NetworkController } from "../network/types.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
@@ -21,7 +22,8 @@ import type {
 
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
-  network: Pick<NetworkController, "getActiveChain" | "getChain">;
+  network: Pick<NetworkController, "getState">;
+  chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
@@ -78,6 +80,7 @@ export class StoreTransactionController implements TransactionController {
     this.#executor = new TransactionExecutor({
       view: this.#view,
       network: options.network,
+      chainDefinitions: options.chainDefinitions,
       accounts: options.accounts,
       approvals: options.approvals,
       registry: options.registry,

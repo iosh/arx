@@ -2,6 +2,7 @@ import { ArxReasons, isArxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountController } from "../../controllers/account/types.js";
+import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
@@ -41,7 +42,8 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 type Deps = {
   view: StoreTransactionView;
-  network: Pick<NetworkController, "getActiveChain" | "getChain">;
+  network: Pick<NetworkController, "getState">;
+  chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   approvals: Pick<ApprovalController, "requestApproval">;
   registry: TransactionAdapterRegistry;
@@ -63,7 +65,8 @@ export class TransactionExecutor
     >
 {
   #view: StoreTransactionView;
-  #network: Pick<NetworkController, "getActiveChain" | "getChain">;
+  #network: Pick<NetworkController, "getState">;
+  #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getSelectedAddressForNamespace" | "getAccountsForNamespace">;
   #approvals: Pick<ApprovalController, "requestApproval">;
   #registry: TransactionAdapterRegistry;
@@ -82,6 +85,7 @@ export class TransactionExecutor
   constructor(deps: Deps) {
     this.#view = deps.view;
     this.#network = deps.network;
+    this.#chainDefinitions = deps.chainDefinitions;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
     this.#registry = deps.registry;
@@ -97,7 +101,7 @@ export class TransactionExecutor
     requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta> {
-    const chainRef = request.chainRef ?? this.#network.getActiveChain()?.chainRef ?? null;
+    const chainRef = request.chainRef ?? this.#network.getState().activeChainRef ?? null;
     if (!chainRef) {
       throw new Error("chainRef is required for transactions");
     }
@@ -456,9 +460,7 @@ export class TransactionExecutor
   }
 
   #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {
-    const explicit = this.#network.getChain(meta.chainRef);
-    const active = this.#network.getActiveChain();
-    const resolved = explicit ?? (active && active.chainRef === meta.chainRef ? active : null);
+    const resolved = this.#chainDefinitions.getChain(meta.chainRef)?.metadata ?? null;
     if (!resolved) return null;
 
     const chainId =

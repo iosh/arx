@@ -1,5 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainMetadata, RpcEndpoint } from "../../chains/metadata.js";
+import type { RpcEndpoint } from "../../chains/metadata.js";
 
 export type RpcStrategyId = "round-robin" | string;
 
@@ -58,10 +58,24 @@ export type NetworkState = {
 
 export type NetworkStateInput = Omit<NetworkState, "revision">;
 
+export type NetworkChainConfig = {
+  chainRef: ChainRef;
+  rpcEndpoints: RpcEndpoint[];
+};
+
+export type NetworkRuntimeInput = {
+  state: NetworkStateInput;
+  chainConfigs: NetworkChainConfig[];
+};
+
 export type RpcEndpointChange = {
   chainRef: ChainRef;
   previous: RpcEndpointInfo;
   next: RpcEndpointInfo;
+};
+
+export type ChainConfigChange = {
+  chainRef: ChainRef;
 };
 
 export type RpcLogEvent = {
@@ -81,18 +95,14 @@ export type RpcEventLogger = (event: RpcLogEvent) => void;
 
 export interface NetworkController {
   getState(): NetworkState;
-  getActiveChain(): ChainMetadata;
-  getChain(chainRef: ChainRef): ChainMetadata | null;
   getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo;
   onStateChanged(handler: (state: NetworkState) => void): () => void;
   onActiveChainChanged(handler: (payload: { previous: ChainRef; next: ChainRef }) => void): () => void;
-  onChainMetadataChanged(
-    handler: (payload: { chainRef: ChainRef; previous: ChainMetadata | null; next: ChainMetadata | null }) => void,
-  ): () => void;
+  onChainConfigChanged(handler: (payload: ChainConfigChange) => void): () => void;
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void;
   onRpcHealthChanged(handler: (update: { chainRef: ChainRef; health: RpcEndpointHealth[] }) => void): () => void;
-  switchChain(target: ChainRef): Promise<ChainMetadata>;
+  switchChain(target: ChainRef): Promise<void>;
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
   setStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
-  replaceState(state: NetworkStateInput): void;
+  replaceState(input: NetworkRuntimeInput): void;
 }

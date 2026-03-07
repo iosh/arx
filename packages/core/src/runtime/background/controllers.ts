@@ -1,6 +1,6 @@
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ChainDescriptorRegistry } from "../../chains/registry.js";
+import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
 import { ACCOUNTS_TOPICS } from "../../controllers/account/topics.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
@@ -10,6 +10,7 @@ import type { ApprovalController } from "../../controllers/approval/types.js";
 import { InMemoryChainDefinitionsController } from "../../controllers/chainDefinitions/ChainDefinitionsController.js";
 import { CHAIN_DEFINITIONS_TOPICS } from "../../controllers/chainDefinitions/topics.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
+import { buildNetworkRuntimeInput } from "../../controllers/network/config.js";
 import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
 import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
 import type {
@@ -60,7 +61,7 @@ export type ControllerLayerOptions = {
   permissions?: {
     initialState?: PermissionsState;
     capabilityResolver?: PermissionCapabilityResolver;
-    chains?: ChainDescriptorRegistry;
+    chains?: ChainAddressCodecRegistry;
   };
   transactions?: {
     registry?: TransactionAdapterRegistry;
@@ -152,13 +153,9 @@ export const initControllers = ({
       };
   const deferredNetworkInitialState = canResolveRequestedInitialState ? null : requestedNetworkInitialState;
 
-  let chainDefinitionsControllerRef: ChainDefinitionsController | null = null;
-
   const networkController = new InMemoryNetworkController({
     messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
-    initialState: bootstrapInitialState,
-    initialChains: bootstrapChains,
-    getChainMetadata: (chainRef) => chainDefinitionsControllerRef?.getChain(chainRef)?.metadata ?? null,
+    initialRuntime: buildNetworkRuntimeInput(bootstrapInitialState, bootstrapChains),
     defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
     ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
@@ -168,6 +165,11 @@ export const initControllers = ({
   const permissionCapabilityResolver =
     permissionOptions?.capabilityResolver ??
     rpcRegistry.createPermissionCapabilityResolver((ctx) => namespaceResolver(ctx));
+  const permissionChains = permissionOptions?.chains;
+
+  if (!permissionChains) {
+    throw new Error("initControllers requires permissions.chains");
+  }
 
   const accountController: AccountController = new StoreAccountsController({
     messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
@@ -188,7 +190,7 @@ export const initControllers = ({
     messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
     capabilityResolver: permissionCapabilityResolver,
     service: permissionsService,
-    ...(permissionOptions?.chains ? { chains: permissionOptions.chains } : {}),
+    chains: permissionChains,
   });
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
@@ -196,8 +198,10 @@ export const initControllers = ({
   const transactionController = new StoreTransactionController({
     messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
     network: {
-      getActiveChain: () => networkController.getActiveChain(),
-      getChain: (chainRef) => networkController.getChain(chainRef),
+      getState: () => networkController.getState(),
+    },
+    chainDefinitions: {
+      getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),
     },
     accounts: {
       getSelectedAddressForNamespace: (params) => accountController.getSelectedAddressForNamespace(params),
@@ -221,7 +225,6 @@ export const initControllers = ({
       ? { schemaVersion: chainDefinitionsOptions.schemaVersion }
       : {}),
   });
-  chainDefinitionsControllerRef = chainDefinitionsController;
 
   const controllersBase: ControllersBase = {
     network: networkController,

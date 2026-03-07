@@ -1,7 +1,7 @@
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ZodType } from "zod";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainDescriptorRegistry } from "../../chains/registry.js";
+import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
@@ -12,7 +12,7 @@ import type {
   PermissionController,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
-import type { ChainService } from "../../services/runtime/chains/types.js";
+import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import type { RequestContext } from "../requestContext.js";
@@ -26,7 +26,7 @@ export type HandlerControllers = {
   permissions: PermissionController;
   transactions: TransactionController;
   chainDefinitions: ChainDefinitionsController;
-  chainDescriptors: ChainDescriptorRegistry;
+  chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {
     now: () => number;
   };
@@ -36,7 +36,7 @@ export type HandlerControllers = {
 };
 
 export type HandlerRuntimeServices = {
-  chains: Pick<ChainService, "resolveEip155SwitchTarget">;
+  chainViews: Pick<ChainViewsService, "resolveEip155SwitchChain">;
 };
 
 export type RpcRequest = {

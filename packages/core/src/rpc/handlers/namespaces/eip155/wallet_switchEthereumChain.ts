@@ -135,7 +135,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       }
     }
 
-    const target = services.chains.resolveEip155SwitchTarget({
+    const target = services.chainViews.resolveEip155SwitchChain({
       ...(normalizedChainId ? { chainId: normalizedChainId } : {}),
       ...(normalizedChainRef ? { chainRef: normalizedChainRef } : {}),
     });

@@ -6,7 +6,7 @@ import { RpcRegistry } from "./RpcRegistry.js";
 const makeControllers = (activeChainRef: string): HandlerControllers => {
   return {
     network: {
-      getActiveChain: () => ({ chainRef: activeChainRef }),
+      getState: () => ({ activeChainRef }),
     },
   } as unknown as HandlerControllers;
 };

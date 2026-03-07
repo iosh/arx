@@ -1,7 +1,7 @@
 import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type ChainDescriptorRegistry, createDefaultChainDescriptorRegistry } from "../../chains/registry.js";
+import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import type { ChainNamespace } from "../../controllers/account/types.js";
 import { sortPermissionCapabilities } from "../../permissions/capabilities.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
@@ -268,7 +268,7 @@ export type StorePermissionControllerOptions = {
   messenger: PermissionMessenger;
   capabilityResolver: PermissionCapabilityResolver;
   service: PermissionsService;
-  chains?: ChainDescriptorRegistry;
+  chains: ChainAddressCodecRegistry;
 };
 
 /**
@@ -280,7 +280,7 @@ export class StorePermissionController implements PermissionController {
   #messenger: PermissionMessenger;
   #capabilityResolver: PermissionCapabilityResolver;
   #service: PermissionsService;
-  #chains: ChainDescriptorRegistry;
+  #chains: ChainAddressCodecRegistry;
   #unsubscribeStore: (() => void) | null = null;
   #destroyed = false;
 
@@ -296,7 +296,7 @@ export class StorePermissionController implements PermissionController {
     this.#messenger = messenger;
     this.#capabilityResolver = capabilityResolver;
     this.#service = service;
-    this.#chains = chains ?? createDefaultChainDescriptorRegistry();
+    this.#chains = chains;
 
     this.#unsubscribeStore = this.#service.subscribeChanged((event) => {
       if (this.#destroyed) return;

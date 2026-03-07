@@ -91,16 +91,31 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
   return runtime;
 };
 
+type TestRuntime = ReturnType<typeof createRuntime>;
+
+export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
+  return runtime.controllers.chainDefinitions.getChain(chainRef)?.metadata ?? null;
+};
+
+export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
+  const chainRef = runtime.controllers.network.getState().activeChainRef;
+  const chain = getChainMetadata(runtime, chainRef);
+  if (!chain) {
+    throw new Error(`Missing chain metadata for active chain ${chainRef}`);
+  }
+  return chain;
+};
+
 // Create method executor from services
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   const execute = runtime.rpc.registry.createMethodExecutor(runtime.controllers, {
     rpcClientRegistry: runtime.rpc.clients,
     services: {
-      chains: runtime.services.chains,
+      chainViews: runtime.services.chainViews,
     },
   });
   return async (args: Parameters<typeof execute>[0]) => {
-    const chainRef = args.context?.chainRef ?? runtime.controllers.network.getActiveChain().chainRef;
+    const chainRef = args.context?.chainRef ?? runtime.controllers.network.getState().activeChainRef;
     const ctx = args.context ?? {};
     const context = {
       ...ctx,
@@ -134,7 +149,8 @@ export const waitForChainInNetwork = async (
   chainRef: ChainRef,
   timeoutMs = 5000,
 ): Promise<ChainMetadata> => {
-  const existing = runtime.controllers.network.getChain(chainRef);
+  const isAvailable = runtime.controllers.network.getState().availableChainRefs.includes(chainRef);
+  const existing = isAvailable ? getChainMetadata(runtime, chainRef) : null;
   if (existing) {
     return existing;
   }
@@ -155,7 +171,8 @@ export const waitForChainInNetwork = async (
     };
 
     const tryResolve = () => {
-      const chain = runtime.controllers.network.getChain(chainRef);
+      const nextIsAvailable = runtime.controllers.network.getState().availableChainRefs.includes(chainRef);
+      const chain = nextIsAvailable ? getChainMetadata(runtime, chainRef) : null;
       if (chain) {
         cleanup();
         resolve(chain);

@@ -350,8 +350,7 @@ export class RpcRegistry {
       return fromMethod;
     }
 
-    const activeChain = controllers.network.getActiveChain();
-    const [activeNamespace] = activeChain.chainRef.split(":");
+    const [activeNamespace] = controllers.network.getState().activeChainRef.split(":");
     if (activeNamespace && this.namespaceDefinitions.has(activeNamespace as Namespace)) {
       return activeNamespace as Namespace;
     }
@@ -454,7 +453,7 @@ export class RpcRegistry {
   ): { namespace: Namespace; chainRef: ChainRef } {
     this.assertContextNamespaceConsistency(method, context);
     const namespace = this.selectNamespace(controllers, method, context);
-    const activeChainRef = controllers.network.getActiveChain().chainRef as ChainRef;
+    const activeChainRef = controllers.network.getState().activeChainRef as ChainRef;
     const chainRef = this.resolveChainRefForInvocation({
       method,
       namespace,

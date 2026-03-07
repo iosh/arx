@@ -1,42 +1,46 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainRegistryPort } from "../../chains/index.js";
 import { type ChainMetadata, isSameChainMetadata } from "../../chains/metadata.js";
+import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import {
-  CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
-  type ChainRegistryEntity,
-  ChainRegistryEntitySchema,
+  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  type ChainDefinitionEntity,
+  ChainDefinitionEntitySchema,
 } from "../../storage/index.js";
 import {
-  cloneChainRegistryEntity,
-  cloneChainRegistryState,
+  cloneChainDefinitionEntity,
+  cloneChainDefinitionsState,
   normalizeAndValidateMetadata,
   parseEntity,
 } from "./state.js";
-import { CHAIN_REGISTRY_STATE_CHANGED, CHAIN_REGISTRY_UPDATED, type ChainRegistryMessenger } from "./topics.js";
+import {
+  CHAIN_DEFINITIONS_STATE_CHANGED,
+  CHAIN_DEFINITIONS_UPDATED,
+  type ChainDefinitionsMessenger,
+} from "./topics.js";
 import type {
-  ChainRegistryController,
-  ChainRegistryState,
-  ChainRegistryUpdate,
-  ChainRegistryUpsertOptions,
-  ChainRegistryUpsertResult,
+  ChainDefinitionsController,
+  ChainDefinitionsState,
+  ChainDefinitionsUpdate,
+  ChainDefinitionsUpsertOptions,
+  ChainDefinitionsUpsertResult,
 } from "./types.js";
 
 type ControllerOptions = {
-  messenger: ChainRegistryMessenger;
-  port: ChainRegistryPort;
+  messenger: ChainDefinitionsMessenger;
+  port: ChainDefinitionsPort;
   now?: () => number;
   logger?: (message: string, error?: unknown) => void;
   seed?: readonly ChainMetadata[];
   schemaVersion?: number;
 };
 
-export class InMemoryChainRegistryController implements ChainRegistryController {
-  #messenger: ChainRegistryMessenger;
-  #port: ChainRegistryPort;
+export class InMemoryChainDefinitionsController implements ChainDefinitionsController {
+  #messenger: ChainDefinitionsMessenger;
+  #port: ChainDefinitionsPort;
   #now: () => number;
   #logger: (message: string, error?: unknown) => void;
   #defaultSchemaVersion: number;
-  #chains = new Map<ChainRef, ChainRegistryEntity>();
+  #chains = new Map<ChainRef, ChainDefinitionEntity>();
   #ready: Promise<void>;
 
   constructor({ messenger, port, now = Date.now, logger = () => {}, seed = [], schemaVersion }: ControllerOptions) {
@@ -44,24 +48,27 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     this.#port = port;
     this.#now = now;
     this.#logger = logger;
-    this.#defaultSchemaVersion = schemaVersion ?? CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION;
+    this.#defaultSchemaVersion = schemaVersion ?? CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION;
     this.#ready = this.#initialize(seed);
   }
 
-  getState(): ChainRegistryState {
-    return cloneChainRegistryState(this.#chains.values());
+  getState(): ChainDefinitionsState {
+    return cloneChainDefinitionsState(this.#chains.values());
   }
 
-  getChain(chainRef: ChainRef): ChainRegistryEntity | null {
+  getChain(chainRef: ChainRef): ChainDefinitionEntity | null {
     const entry = this.#chains.get(chainRef);
-    return entry ? cloneChainRegistryEntity(entry) : null;
+    return entry ? cloneChainDefinitionEntity(entry) : null;
   }
 
-  getChains(): ChainRegistryEntity[] {
-    return cloneChainRegistryState(this.#chains.values()).chains;
+  getChains(): ChainDefinitionEntity[] {
+    return cloneChainDefinitionsState(this.#chains.values()).chains;
   }
 
-  async upsertChain(metadata: ChainMetadata, options?: ChainRegistryUpsertOptions): Promise<ChainRegistryUpsertResult> {
+  async upsertChain(
+    metadata: ChainMetadata,
+    options?: ChainDefinitionsUpsertOptions,
+  ): Promise<ChainDefinitionsUpsertResult> {
     await this.#ready;
 
     // Validate first so normalization cannot throw (e.g. bad payloads cast as ChainMetadata).
@@ -69,10 +76,10 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     const previous = this.#chains.get(normalized.chainRef) ?? null;
     const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
     if (previous && previous.schemaVersion === schemaVersion && isSameChainMetadata(previous.metadata, normalized)) {
-      return { kind: "noop", chain: cloneChainRegistryEntity(previous) };
+      return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
     }
 
-    const entity: ChainRegistryEntity = {
+    const entity: ChainDefinitionEntity = {
       chainRef: normalized.chainRef,
       namespace: normalized.namespace,
       metadata: normalized,
@@ -80,19 +87,19 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
       updatedAt: options?.updatedAt ?? this.#now(),
     };
 
-    const checked = ChainRegistryEntitySchema.parse(entity);
+    const checked = ChainDefinitionEntitySchema.parse(entity);
 
     await this.#port.put(checked);
 
     this.#chains.set(checked.chainRef, checked);
 
-    const result: ChainRegistryUpsertResult =
+    const result: ChainDefinitionsUpsertResult =
       previous === null
-        ? { kind: "added" as const, chain: cloneChainRegistryEntity(checked) }
+        ? { kind: "added" as const, chain: cloneChainDefinitionEntity(checked) }
         : {
             kind: "updated" as const,
-            chain: cloneChainRegistryEntity(checked),
-            previous: cloneChainRegistryEntity(previous),
+            chain: cloneChainDefinitionEntity(checked),
+            previous: cloneChainDefinitionEntity(previous),
           };
 
     this.#publishState();
@@ -100,7 +107,7 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     return result;
   }
 
-  async removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainRegistryEntity }> {
+  async removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }> {
     await this.#ready;
 
     const previous = this.#chains.get(chainRef);
@@ -112,20 +119,20 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
     this.#chains.delete(chainRef);
 
     this.#publishState();
-    this.#messenger.publish(CHAIN_REGISTRY_UPDATED, {
+    this.#messenger.publish(CHAIN_DEFINITIONS_UPDATED, {
       kind: "removed",
       chainRef,
-      previous: cloneChainRegistryEntity(previous),
+      previous: cloneChainDefinitionEntity(previous),
     });
-    return { removed: true, previous: cloneChainRegistryEntity(previous) };
+    return { removed: true, previous: cloneChainDefinitionEntity(previous) };
   }
 
-  onStateChanged(handler: (state: ChainRegistryState) => void): () => void {
-    return this.#messenger.subscribe(CHAIN_REGISTRY_STATE_CHANGED, handler, { replay: "snapshot" });
+  onStateChanged(handler: (state: ChainDefinitionsState) => void): () => void {
+    return this.#messenger.subscribe(CHAIN_DEFINITIONS_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
-  onChainUpdated(handler: (update: ChainRegistryUpdate) => void): () => void {
-    return this.#messenger.subscribe(CHAIN_REGISTRY_UPDATED, handler);
+  onChainUpdated(handler: (update: ChainDefinitionsUpdate) => void): () => void {
+    return this.#messenger.subscribe(CHAIN_DEFINITIONS_UPDATED, handler);
   }
 
   whenReady(): Promise<void> {
@@ -165,18 +172,18 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
         this.#publishState();
       }
     } catch (error) {
-      this.#logger("[chainRegistry] failed to initialize registry", error);
+      this.#logger("[chainDefinitions] failed to initialize registry", error);
       throw error;
     }
   }
 
-  async #sanitizePersisted(entries: ChainRegistryEntity[]): Promise<ChainRegistryEntity[]> {
-    const valid: ChainRegistryEntity[] = [];
+  async #sanitizePersisted(entries: ChainDefinitionEntity[]): Promise<ChainDefinitionEntity[]> {
+    const valid: ChainDefinitionEntity[] = [];
 
     for (const entry of entries) {
-      const parsed = ChainRegistryEntitySchema.safeParse(entry);
+      const parsed = ChainDefinitionEntitySchema.safeParse(entry);
       if (!parsed.success) {
-        this.#logger("[chainRegistry] dropping invalid entry", parsed.error);
+        this.#logger("[chainDefinitions] dropping invalid entry", parsed.error);
         await this.#port.delete(entry.chainRef);
         continue;
       }
@@ -187,15 +194,15 @@ export class InMemoryChainRegistryController implements ChainRegistryController 
   }
 
   #publishState(): void {
-    this.#messenger.publish(CHAIN_REGISTRY_STATE_CHANGED, cloneChainRegistryState(this.#chains.values()));
+    this.#messenger.publish(CHAIN_DEFINITIONS_STATE_CHANGED, cloneChainDefinitionsState(this.#chains.values()));
   }
 
-  #publishUpdate(previous: ChainRegistryEntity | null, next: ChainRegistryEntity): void {
-    const payload: ChainRegistryUpdate =
+  #publishUpdate(previous: ChainDefinitionEntity | null, next: ChainDefinitionEntity): void {
+    const payload: ChainDefinitionsUpdate =
       previous === null
-        ? { kind: "added", chain: cloneChainRegistryEntity(next) }
-        : { kind: "updated", chain: cloneChainRegistryEntity(next), previous: cloneChainRegistryEntity(previous) };
+        ? { kind: "added", chain: cloneChainDefinitionEntity(next) }
+        : { kind: "updated", chain: cloneChainDefinitionEntity(next), previous: cloneChainDefinitionEntity(previous) };
 
-    this.#messenger.publish(CHAIN_REGISTRY_UPDATED, payload);
+    this.#messenger.publish(CHAIN_DEFINITIONS_UPDATED, payload);
   }
 }

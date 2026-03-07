@@ -1,7 +1,7 @@
 export const DOMAIN_SCHEMA_VERSION = 1;
 
-export type { ChainRegistryEntity } from "./schemas/chainRegistry.js";
-export { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION, ChainRegistryEntitySchema } from "./schemas/chainRegistry.js";
+export type { ChainDefinitionEntity } from "./schemas/chainDefinition.js";
+export { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, ChainDefinitionEntitySchema } from "./schemas/chainDefinition.js";
 export {
   RpcEndpointHealthSchema,
   RpcEndpointInfoSchema,

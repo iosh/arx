@@ -6,10 +6,10 @@ import {
   normalizeChainMetadata,
   validateChainMetadata,
 } from "../../chains/metadata.js";
-import { type ChainRegistryEntity, ChainRegistryEntitySchema } from "../../storage/index.js";
-import type { ChainRegistryState } from "./types.js";
+import { type ChainDefinitionEntity, ChainDefinitionEntitySchema } from "../../storage/index.js";
+import type { ChainDefinitionsState } from "./types.js";
 
-export const isSameChainRegistryEntity = (previous: ChainRegistryEntity, next: ChainRegistryEntity) => {
+export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
   if (
     previous.chainRef !== next.chainRef ||
     previous.namespace !== next.namespace ||
@@ -22,7 +22,7 @@ export const isSameChainRegistryEntity = (previous: ChainRegistryEntity, next: C
   return isSameChainMetadata(previous.metadata, next.metadata);
 };
 
-export const cloneChainRegistryEntity = (entity: ChainRegistryEntity): ChainRegistryEntity => ({
+export const cloneChainDefinitionEntity = (entity: ChainDefinitionEntity): ChainDefinitionEntity => ({
   chainRef: entity.chainRef,
   namespace: entity.namespace,
   metadata: cloneChainMetadata(entity.metadata),
@@ -30,11 +30,11 @@ export const cloneChainRegistryEntity = (entity: ChainRegistryEntity): ChainRegi
   updatedAt: entity.updatedAt,
 });
 
-export const cloneChainRegistryState = (entities: Iterable<ChainRegistryEntity>): ChainRegistryState => ({
-  chains: Array.from(entities, cloneChainRegistryEntity).sort((a, b) => a.chainRef.localeCompare(b.chainRef)),
+export const cloneChainDefinitionsState = (entities: Iterable<ChainDefinitionEntity>): ChainDefinitionsState => ({
+  chains: Array.from(entities, cloneChainDefinitionEntity).sort((a, b) => a.chainRef.localeCompare(b.chainRef)),
 });
 
-export const isSameChainRegistryState = (previous?: ChainRegistryState, next?: ChainRegistryState) => {
+export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, next?: ChainDefinitionsState) => {
   if (!previous || !next) return false;
   if (previous.chains.length !== next.chains.length) return false;
 
@@ -42,7 +42,7 @@ export const isSameChainRegistryState = (previous?: ChainRegistryState, next?: C
     const prevChain = previous.chains[i];
     const nextChain = next.chains[i];
     if (!prevChain || !nextChain) return false;
-    if (!isSameChainRegistryEntity(prevChain, nextChain)) return false;
+    if (!isSameChainDefinitionEntity(prevChain, nextChain)) return false;
   }
 
   return true;
@@ -59,8 +59,8 @@ export const parseEntity = (params: {
   metadata: ChainMetadata;
   schemaVersion: number;
   updatedAt: number;
-}): ChainRegistryEntity => {
-  return ChainRegistryEntitySchema.parse({
+}): ChainDefinitionEntity => {
+  return ChainDefinitionEntitySchema.parse({
     chainRef: params.chainRef,
     namespace: params.namespace,
     metadata: params.metadata,

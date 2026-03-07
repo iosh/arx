@@ -1,23 +1,23 @@
-import type { ChainRegistryPort } from "@arx/core/chains";
-import { type ChainRegistryEntity, ChainRegistryEntitySchema } from "@arx/core/storage";
+import type { ChainDefinitionsPort } from "@arx/core/services";
+import { type ChainDefinitionEntity, ChainDefinitionEntitySchema } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 import { parseOrDrop } from "../internal/parseOrDrop.js";
 
-export class DexieChainRegistryPort implements ChainRegistryPort {
+export class DexieChainDefinitionsPort implements ChainDefinitionsPort {
   constructor(private readonly ctx: DexieCtx) {}
 
   private get table() {
     return this.ctx.db.chains;
   }
 
-  async get(chainRef: ChainRegistryEntity["chainRef"]): Promise<ChainRegistryEntity | null> {
+  async get(chainRef: ChainDefinitionEntity["chainRef"]): Promise<ChainDefinitionEntity | null> {
     await this.ctx.ready;
 
     const row = await this.table.get(chainRef);
     if (!row) return null;
 
     return await parseOrDrop({
-      schema: ChainRegistryEntitySchema,
+      schema: ChainDefinitionEntitySchema,
       row,
       what: "chain registry entry",
       drop: () => this.table.delete(chainRef),
@@ -25,11 +25,11 @@ export class DexieChainRegistryPort implements ChainRegistryPort {
     });
   }
 
-  async getAll(): Promise<ChainRegistryEntity[]> {
+  async getAll(): Promise<ChainDefinitionEntity[]> {
     await this.ctx.ready;
 
     const rows = await this.table.toArray();
-    const out: ChainRegistryEntity[] = [];
+    const out: ChainDefinitionEntity[] = [];
 
     for (const row of rows) {
       if (!row) continue;
@@ -37,17 +37,17 @@ export class DexieChainRegistryPort implements ChainRegistryPort {
       // Best-effort delete key extraction; if missing we still validate but cannot drop safely.
       const chainRef = typeof (row as { chainRef?: unknown }).chainRef === "string" ? row.chainRef : null;
       if (!chainRef) {
-        const parsed = ChainRegistryEntitySchema.safeParse(row);
+        const parsed = ChainDefinitionEntitySchema.safeParse(row);
         if (!parsed.success) {
           this.ctx.log.warn("[storage-dexie] invalid chain registry entry detected, cannot drop", parsed.error);
           continue;
         }
-        out.push(parsed.data as ChainRegistryEntity);
+        out.push(parsed.data as ChainDefinitionEntity);
         continue;
       }
 
       const parsed = await parseOrDrop({
-        schema: ChainRegistryEntitySchema,
+        schema: ChainDefinitionEntitySchema,
         row,
         what: "chain registry entry",
         drop: () => this.table.delete(chainRef),
@@ -59,17 +59,17 @@ export class DexieChainRegistryPort implements ChainRegistryPort {
     return out;
   }
 
-  async put(entity: ChainRegistryEntity): Promise<void> {
+  async put(entity: ChainDefinitionEntity): Promise<void> {
     await this.ctx.ready;
-    await this.table.put(ChainRegistryEntitySchema.parse(entity));
+    await this.table.put(ChainDefinitionEntitySchema.parse(entity));
   }
 
-  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
+  async putMany(entities: ChainDefinitionEntity[]): Promise<void> {
     await this.ctx.ready;
-    await this.table.bulkPut(entities.map((e) => ChainRegistryEntitySchema.parse(e)));
+    await this.table.bulkPut(entities.map((e) => ChainDefinitionEntitySchema.parse(e)));
   }
 
-  async delete(chainRef: ChainRegistryEntity["chainRef"]): Promise<void> {
+  async delete(chainRef: ChainDefinitionEntity["chainRef"]): Promise<void> {
     await this.ctx.ready;
     await this.table.delete(chainRef);
   }

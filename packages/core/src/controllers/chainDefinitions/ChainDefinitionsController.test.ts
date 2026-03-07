@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { ChainMetadata, ChainRegistryPort } from "../../chains/index.js";
+import type { ChainDefinitionsPort, ChainMetadata } from "../../chains/index.js";
 import { Messenger } from "../../messenger/Messenger.js";
-import type { ChainRegistryEntity } from "../../storage/index.js";
-import { InMemoryChainRegistryController } from "./ChainRegistryController.js";
-import { CHAIN_REGISTRY_TOPICS } from "./topics.js";
-import type { ChainRegistryState, ChainRegistryUpdate } from "./types.js";
+import type { ChainDefinitionEntity } from "../../storage/index.js";
+import { InMemoryChainDefinitionsController } from "./ChainDefinitionsController.js";
+import { CHAIN_DEFINITIONS_TOPICS } from "./topics.js";
+import type { ChainDefinitionsState, ChainDefinitionsUpdate } from "./types.js";
 
 const createEip155Metadata = (reference: number, overrides: Partial<ChainMetadata> = {}): ChainMetadata => {
   return {
@@ -18,11 +18,11 @@ const createEip155Metadata = (reference: number, overrides: Partial<ChainMetadat
   };
 };
 
-class MemoryChainRegistryPort implements ChainRegistryPort {
-  private readonly entries = new Map<string, ChainRegistryEntity>();
+class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
+  private readonly entries = new Map<string, ChainDefinitionEntity>();
   public deleted: string[] = [];
 
-  constructor(seed?: ChainRegistryEntity[]) {
+  constructor(seed?: ChainDefinitionEntity[]) {
     seed?.forEach((entity) => {
       this.entries.set(entity.chainRef, {
         ...entity,
@@ -31,19 +31,19 @@ class MemoryChainRegistryPort implements ChainRegistryPort {
     });
   }
 
-  async get(chainRef: string): Promise<ChainRegistryEntity | null> {
+  async get(chainRef: string): Promise<ChainDefinitionEntity | null> {
     return this.entries.get(chainRef) ?? null;
   }
 
-  async getAll(): Promise<ChainRegistryEntity[]> {
+  async getAll(): Promise<ChainDefinitionEntity[]> {
     return Array.from(this.entries.values());
   }
 
-  async put(entity: ChainRegistryEntity): Promise<void> {
+  async put(entity: ChainDefinitionEntity): Promise<void> {
     this.entries.set(entity.chainRef, entity);
   }
 
-  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
+  async putMany(entities: ChainDefinitionEntity[]): Promise<void> {
     for (const entity of entities) {
       this.entries.set(entity.chainRef, entity);
     }
@@ -59,14 +59,14 @@ class MemoryChainRegistryPort implements ChainRegistryPort {
   }
 }
 
-describe("InMemoryChainRegistryController", () => {
+describe("InMemoryChainDefinitionsController", () => {
   it("loads seed when storage is empty", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
-    const port = new MemoryChainRegistryPort();
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const port = new MemoryChainDefinitionsPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1), createEip155Metadata(10)];
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed,
@@ -80,18 +80,18 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("upserts metadata and emits update events", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
     const existingMetadata = createEip155Metadata(1);
-    const existingEntity: ChainRegistryEntity = {
+    const existingEntity: ChainDefinitionEntity = {
       chainRef: existingMetadata.chainRef,
       namespace: existingMetadata.namespace,
       metadata: existingMetadata,
       schemaVersion: 1,
       updatedAt: 500,
     };
-    const port = new MemoryChainRegistryPort([existingEntity]);
+    const port = new MemoryChainDefinitionsPort([existingEntity]);
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed: [],
@@ -99,7 +99,7 @@ describe("InMemoryChainRegistryController", () => {
 
     await controller.whenReady();
 
-    const updates: ChainRegistryUpdate[] = [];
+    const updates: ChainDefinitionsUpdate[] = [];
     const unsubscribe = controller.onChainUpdated((update) => {
       updates.push(update);
     });
@@ -128,18 +128,18 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("removes chains and publishes removal", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
     const metadata = createEip155Metadata(137);
-    const entity: ChainRegistryEntity = {
+    const entity: ChainDefinitionEntity = {
       chainRef: metadata.chainRef,
       namespace: metadata.namespace,
       metadata,
       schemaVersion: 1,
       updatedAt: 600,
     };
-    const port = new MemoryChainRegistryPort([entity]);
+    const port = new MemoryChainDefinitionsPort([entity]);
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed: [],
@@ -147,7 +147,7 @@ describe("InMemoryChainRegistryController", () => {
 
     await controller.whenReady();
 
-    const events: ChainRegistryUpdate[] = [];
+    const events: ChainDefinitionsUpdate[] = [];
     controller.onChainUpdated((update) => {
       events.push(update);
     });
@@ -160,8 +160,8 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("drops invalid persisted entries", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
-    const invalid: ChainRegistryEntity = {
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const invalid: ChainDefinitionEntity = {
       chainRef: "eip155:1",
       namespace: "eip155",
       metadata: {
@@ -171,9 +171,9 @@ describe("InMemoryChainRegistryController", () => {
       schemaVersion: 1,
       updatedAt: 400,
     };
-    const port = new MemoryChainRegistryPort([invalid]);
+    const port = new MemoryChainDefinitionsPort([invalid]);
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed: [],
@@ -186,20 +186,20 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("publishes state changes and dedupes identical snapshots", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
-    const port = new MemoryChainRegistryPort();
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const port = new MemoryChainDefinitionsPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1)];
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed,
       now,
     });
 
-    const states: ChainRegistryState[] = [];
-    const updates: ChainRegistryUpdate[] = [];
+    const states: ChainDefinitionsState[] = [];
+    const updates: ChainDefinitionsUpdate[] = [];
 
     controller.onStateChanged((state) => {
       states.push(state);
@@ -236,12 +236,12 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("does not write or emit events for idempotent upserts", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
-    const port = new MemoryChainRegistryPort();
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const port = new MemoryChainDefinitionsPort();
     const now = () => 1_000;
     const seed = [createEip155Metadata(1)];
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed,
@@ -250,8 +250,8 @@ describe("InMemoryChainRegistryController", () => {
 
     await controller.whenReady();
 
-    const states: ChainRegistryState[] = [];
-    const updates: ChainRegistryUpdate[] = [];
+    const states: ChainDefinitionsState[] = [];
+    const updates: ChainDefinitionsUpdate[] = [];
     controller.onStateChanged((state) => states.push(state));
     controller.onChainUpdated((update) => updates.push(update));
     expect(states).toHaveLength(1);
@@ -273,17 +273,17 @@ describe("InMemoryChainRegistryController", () => {
   });
 
   it("returns removed false when chain is missing", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_REGISTRY_TOPICS });
-    const port = new MemoryChainRegistryPort();
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const port = new MemoryChainDefinitionsPort();
 
-    const controller = new InMemoryChainRegistryController({
+    const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
       seed: [],
     });
 
-    const states: ChainRegistryState[] = [];
-    const updates: ChainRegistryUpdate[] = [];
+    const states: ChainDefinitionsState[] = [];
+    const updates: ChainDefinitionsUpdate[] = [];
 
     controller.onStateChanged((state) => {
       states.push(state);

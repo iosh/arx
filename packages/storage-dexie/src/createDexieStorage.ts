@@ -1,6 +1,6 @@
-import type { ChainRegistryPort } from "@arx/core/chains";
 import type {
   AccountsPort,
+  ChainDefinitionsPort,
   KeyringMetasPort,
   NetworkPreferencesPort,
   PermissionsPort,
@@ -12,7 +12,7 @@ import type { VaultMetaPort } from "@arx/core/storage";
 import { ArxStorageDatabase } from "./db.js";
 import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
 import { DexieAccountsPort } from "./ports/accountsPort.js";
-import { DexieChainRegistryPort } from "./ports/chainRegistryPort.js";
+import { DexieChainDefinitionsPort } from "./ports/chainDefinitionsPort.js";
 import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
 import { DexieNetworkPreferencesPort } from "./ports/networkPreferencesPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
@@ -23,7 +23,7 @@ import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
 
 export type DexieStoragePorts = {
   settings: SettingsPort;
-  chainRegistry: ChainRegistryPort;
+  chainDefinitions: ChainDefinitionsPort;
   networkPreferences: NetworkPreferencesPort;
   vaultMeta: VaultMetaPort;
 
@@ -60,7 +60,7 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
   return {
     ports: {
       settings: new DexieSettingsPort(ctx),
-      chainRegistry: new DexieChainRegistryPort(ctx),
+      chainDefinitions: new DexieChainDefinitionsPort(ctx),
       networkPreferences: new DexieNetworkPreferencesPort(ctx),
       vaultMeta: new DexieVaultMetaPort(ctx),
 

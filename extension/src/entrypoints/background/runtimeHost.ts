@@ -17,6 +17,7 @@ export type BackgroundContext = {
   session: ReturnType<typeof createBackgroundRuntime>["services"]["session"];
   keyring: ReturnType<typeof createBackgroundRuntime>["services"]["keyring"];
   attention: ReturnType<typeof createBackgroundRuntime>["services"]["attention"];
+  chains: ReturnType<typeof createBackgroundRuntime>["services"]["chains"];
 };
 
 export type BackgroundRuntimeHost = {
@@ -51,9 +52,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const getControllerSnapshot = (): ControllerSnapshot => {
     if (!context) throw new Error("Background context is not initialized");
-    const { controllers, session } = context;
-    const activeChain = controllers.network.getActiveChain();
-    const networkState = controllers.network.getState();
+    const { controllers, session, chains } = context;
+    const activeChain = chains.getActiveChainView();
     const isUnlocked = session.unlock.isUnlocked();
     const chainRef = activeChain.chainRef;
     const accounts = isUnlocked
@@ -64,11 +64,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       chain: { chainId: activeChain.chainId, chainRef: activeChain.chainRef },
       accounts,
       isUnlocked,
-      meta: {
-        activeChain: activeChain.chainRef,
-        activeNamespace: activeChain.namespace,
-        supportedChains: networkState.knownChains.map((chain) => chain.chainRef),
-      },
+      meta: chains.buildProviderMeta(),
     };
   };
 
@@ -105,7 +101,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         networkPreferences: { port: storage.ports.networkPreferences },
         storage: { vaultMetaPort: storage.ports.vaultMeta },
         settings: { port: storage.ports.settings },
-        chainRegistry: { port: storage.ports.chainRegistry },
+        chainDefinitions: { port: storage.ports.chainDefinitions },
         rpcEngine: {
           env: {
             isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
@@ -129,6 +125,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         session: runtime.services.session,
         keyring: runtime.services.keyring,
         attention: runtime.services.attention,
+        chains: runtime.services.chains,
       };
 
       context = next;

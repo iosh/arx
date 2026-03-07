@@ -5,6 +5,7 @@ import type { PermissionsState, RequestPermissionsApprovalPayload } from "../../
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { ChainService } from "../../services/runtime/chains/types.js";
 import {
   type UiPermissionsSnapshot,
   UiPermissionsSnapshotSchema,
@@ -101,9 +102,10 @@ const extractPayload = <T>(payload: unknown): T => payload as T;
 
 const toApprovalSummary = (
   controllers: HandlerControllers,
+  chains: Pick<ChainService, "getActiveChainView" | "listAvailableChainsView">,
   task: ApprovalTask,
 ): UiSnapshot["approvals"][number] | null => {
-  const activeChain = controllers.network.getActiveChain();
+  const activeChain = chains.getActiveChainView();
   const base = {
     id: task.id,
     origin: task.origin,
@@ -215,7 +217,8 @@ const toApprovalSummary = (
     case ApprovalTypes.SwitchChain: {
       const payload = extractPayload<SwitchChainPayload>(task.payload);
       const requestedChainRef = payload.chainRef ?? task.chainRef ?? activeChain.chainRef;
-      const target = controllers.network.getChain(requestedChainRef) ?? activeChain;
+      const target =
+        chains.listAvailableChainsView().find((item) => item.chainRef === requestedChainRef) ?? activeChain;
 
       return {
         ...base,
@@ -292,14 +295,15 @@ const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot
 
 export const buildUiSnapshot = (deps: {
   controllers: HandlerControllers;
+  chains: Pick<ChainService, "buildUiNetworksSnapshot" | "getActiveChainView" | "listAvailableChainsView">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: { getSnapshot: () => UiSnapshot["attention"] };
 }): UiSnapshot => {
-  const { controllers, session, keyring, attention } = deps;
+  const { controllers, chains, session, keyring, attention } = deps;
 
-  const chain = controllers.network.getActiveChain();
-  const networkState = controllers.network.getState();
+  const chain = chains.getActiveChainView();
+  const networks = chains.buildUiNetworksSnapshot();
   const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked()
@@ -318,7 +322,7 @@ export const buildUiSnapshot = (deps: {
       const task = controllers.approvals.get(item.id);
       if (!task) return null;
       try {
-        return toApprovalSummary(controllers, task);
+        return toApprovalSummary(controllers, chains, task);
       } catch {
         return null;
       }
@@ -340,7 +344,7 @@ export const buildUiSnapshot = (deps: {
       namespace: chain.namespace,
       displayName: chain.displayName,
       shortName: chain.shortName ?? null,
-      icon: chain.icon?.url ?? null,
+      icon: chain.icon,
       nativeCurrency: {
         name: chain.nativeCurrency.name,
         symbol: chain.nativeCurrency.symbol,
@@ -348,20 +352,7 @@ export const buildUiSnapshot = (deps: {
       },
     },
     networks: {
-      active: networkState.activeChain,
-      known: networkState.knownChains.map((metadata) => ({
-        chainRef: metadata.chainRef,
-        chainId: metadata.chainId,
-        namespace: metadata.namespace,
-        displayName: metadata.displayName,
-        shortName: metadata.shortName ?? null,
-        icon: metadata.icon?.url ?? null,
-        nativeCurrency: {
-          name: metadata.nativeCurrency.name,
-          symbol: metadata.nativeCurrency.symbol,
-          decimals: metadata.nativeCurrency.decimals,
-        },
-      })),
+      ...networks,
     },
     accounts: {
       totalCount,

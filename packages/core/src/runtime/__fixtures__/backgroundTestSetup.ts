@@ -3,16 +3,16 @@ import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../../services/store/networkPreferences/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { TransactionsPort } from "../../services/store/transactions/port.js";
-import type { ChainRegistryEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
-import { CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
+import type { ChainDefinitionEntity, VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
+import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION } from "../../storage/index.js";
 import type {
   AccountRecord,
   KeyringMetaRecord,
@@ -382,38 +382,38 @@ export class MemoryVaultMetaPort implements VaultMetaPort {
   }
 }
 
-export const toRegistryEntity = (metadata: ChainMetadata, updatedAt = Date.now()): ChainRegistryEntity => ({
+export const toRegistryEntity = (metadata: ChainMetadata, updatedAt = Date.now()): ChainDefinitionEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata: clone(metadata),
   updatedAt,
-  schemaVersion: CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
+  schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
 });
 
 // Mock chain registry implementation
-export class MemoryChainRegistryPort implements ChainRegistryPort {
-  private entities = new Map<ChainRef, ChainRegistryEntity>();
+export class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
+  private entities = new Map<ChainRef, ChainDefinitionEntity>();
 
-  constructor(seed?: ChainRegistryEntity[]) {
+  constructor(seed?: ChainDefinitionEntity[]) {
     seed?.forEach((entity) => {
       this.entities.set(entity.chainRef, clone(entity));
     });
   }
 
-  async get(chainRef: ChainRef): Promise<ChainRegistryEntity | null> {
+  async get(chainRef: ChainRef): Promise<ChainDefinitionEntity | null> {
     const entity = this.entities.get(chainRef);
     return entity ? clone(entity) : null;
   }
 
-  async getAll(): Promise<ChainRegistryEntity[]> {
+  async getAll(): Promise<ChainDefinitionEntity[]> {
     return Array.from(this.entities.values(), (entity) => clone(entity));
   }
 
-  async put(entity: ChainRegistryEntity): Promise<void> {
+  async put(entity: ChainDefinitionEntity): Promise<void> {
     this.entities.set(entity.chainRef, clone(entity));
   }
 
-  async putMany(entities: ChainRegistryEntity[]): Promise<void> {
+  async putMany(entities: ChainDefinitionEntity[]): Promise<void> {
     entities.forEach((entity) => {
       this.entities.set(entity.chainRef, clone(entity));
     });
@@ -540,7 +540,7 @@ export type TestBackgroundContext = {
   runtime: CreateBackgroundRuntimeResult;
   networkPreferencesPort: MemoryNetworkPreferencesPort;
   vaultMetaPort: MemoryVaultMetaPort;
-  chainRegistryPort: MemoryChainRegistryPort;
+  chainDefinitionsPort: MemoryChainDefinitionsPort;
   transactionsPort: MemoryTransactionsPort;
   settingsPort: MemorySettingsPort;
   destroy: () => void;
@@ -574,7 +574,9 @@ export type SetupBackgroundOptions = {
  */
 export const setupBackground = async (options: SetupBackgroundOptions = {}): Promise<TestBackgroundContext> => {
   const chainSeed = options.chainSeed ?? [createChainMetadata()];
-  const chainRegistryPort = new MemoryChainRegistryPort(chainSeed.map((metadata) => toRegistryEntity(metadata, 0)));
+  const chainDefinitionsPort = new MemoryChainDefinitionsPort(
+    chainSeed.map((metadata) => toRegistryEntity(metadata, 0)),
+  );
   const networkPreferencesPort = new MemoryNetworkPreferencesPort(options.networkPreferencesSeed ?? null);
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
@@ -615,8 +617,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   };
 
   const runtime = createBackgroundRuntime({
-    chainRegistry: {
-      port: chainRegistryPort,
+    chainDefinitions: {
+      port: chainDefinitionsPort,
       seed: chainSeed,
     },
     rpcEngine: options.rpcEngine ?? { env: defaultEnv },
@@ -679,7 +681,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     runtime,
     networkPreferencesPort,
     vaultMetaPort,
-    chainRegistryPort,
+    chainDefinitionsPort,
     transactionsPort,
     settingsPort,
     enableAutoApproval,

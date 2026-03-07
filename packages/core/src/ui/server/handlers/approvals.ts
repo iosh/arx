@@ -5,7 +5,7 @@ import { ApprovalTypes } from "../../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import type { UiMethodResult } from "../../protocol/index.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
-import { extendConnectedOriginsToChain } from "./lib.js";
+import { resolveChainRefForNamespace } from "./lib.js";
 
 type ApprovalTask = {
   id: string;
@@ -18,13 +18,16 @@ type ApprovalTask = {
 
 type ApprovalResult = unknown;
 
-type ApprovalHandlerFn = (task: ApprovalTask, controllers: UiRuntimeDeps["controllers"]) => Promise<ApprovalResult>;
+type ApprovalHandlerFn = (
+  task: ApprovalTask,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
+) => Promise<ApprovalResult>;
 
 const deriveChainContext = (
   task: { chainRef?: string; namespace?: string },
-  controllers: { network: Pick<UiRuntimeDeps["controllers"]["network"], "getActiveChain" | "getState"> },
+  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
 ) => {
-  const active = controllers.network.getActiveChain();
+  const active = deps.chains.getActiveChainView();
 
   if (task.chainRef) {
     const parsed = parseChainRef(task.chainRef);
@@ -43,24 +46,27 @@ const deriveChainContext = (
       return { chainRef: active.chainRef, namespace: task.namespace };
     }
 
-    const known = controllers.network.getState().knownChains.find((c) => c.namespace === task.namespace);
-    if (!known) {
+    try {
+      return {
+        chainRef: resolveChainRefForNamespace(deps, task.namespace),
+        namespace: task.namespace,
+      };
+    } catch (error) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
         message: "Approval task is missing chainRef and cannot be resolved from namespace.",
         data: { namespace: task.namespace },
+        cause: error,
       });
     }
-
-    return { chainRef: known.chainRef, namespace: task.namespace };
   }
 
   return { chainRef: active.chainRef, namespace: active.namespace };
 };
 
 const approvalHandlers: Record<string, ApprovalHandlerFn> = {
-  [ApprovalTypes.SendTransaction]: async (task, controllers) => {
-    const approved = await controllers.transactions.approveTransaction(task.id);
+  [ApprovalTypes.SendTransaction]: async (task, deps) => {
+    const approved = await deps.controllers.transactions.approveTransaction(task.id);
     if (!approved) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
@@ -71,10 +77,10 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return approved;
   },
 
-  [ApprovalTypes.RequestAccounts]: async (task, controllers) => {
-    const { chainRef, namespace } = deriveChainContext(task, controllers);
+  [ApprovalTypes.RequestAccounts]: async (task, deps) => {
+    const { chainRef, namespace } = deriveChainContext(task, deps);
 
-    const accounts = await controllers.accounts.requestAccounts({ chainRef });
+    const accounts = await deps.controllers.accounts.requestAccounts({ chainRef });
     const uniqueAccounts = [...new Set(accounts)];
     if (uniqueAccounts.length === 0) {
       throw arxError({
@@ -84,7 +90,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    const preferredAddress = controllers.accounts.getSelectedAddressForNamespace({ namespace, chainRef });
+    const preferredAddress = deps.controllers.accounts.getSelectedAddressForNamespace({ namespace, chainRef });
     const preferred = preferredAddress && uniqueAccounts.includes(preferredAddress) ? preferredAddress : null;
     const selectedAccount = preferred ?? uniqueAccounts[0] ?? null;
     if (!selectedAccount) {
@@ -95,8 +101,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    await controllers.permissions.grant(task.origin, PermissionCapabilities.Basic, { namespace, chainRef });
-    await controllers.permissions.setPermittedAccounts(task.origin, {
+    await deps.controllers.permissions.grant(task.origin, PermissionCapabilities.Basic, { namespace, chainRef });
+    await deps.controllers.permissions.setPermittedAccounts(task.origin, {
       namespace,
       chainRef,
       accounts: [selectedAccount],
@@ -104,9 +110,9 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return [selectedAccount];
   },
 
-  [ApprovalTypes.SignMessage]: async (task, controllers) => {
+  [ApprovalTypes.SignMessage]: async (task, deps) => {
     const payload = task.payload as { from: string; message: string };
-    const { chainRef, namespace } = deriveChainContext(task, controllers);
+    const { chainRef, namespace } = deriveChainContext(task, deps);
     if (namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
@@ -115,18 +121,18 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    const signature = await controllers.signers.eip155.signPersonalMessage({
+    const signature = await deps.controllers.signers.eip155.signPersonalMessage({
       accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
       message: payload.message,
     });
 
-    await controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, { namespace, chainRef });
+    await deps.controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, { namespace, chainRef });
     return signature;
   },
 
-  [ApprovalTypes.SignTypedData]: async (task, controllers) => {
+  [ApprovalTypes.SignTypedData]: async (task, deps) => {
     const payload = task.payload as { from: string; typedData: unknown };
-    const { chainRef, namespace } = deriveChainContext(task, controllers);
+    const { chainRef, namespace } = deriveChainContext(task, deps);
     if (namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
@@ -137,12 +143,12 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 
     const typedDataStr = typeof payload.typedData === "string" ? payload.typedData : JSON.stringify(payload.typedData);
 
-    const signature = await controllers.signers.eip155.signTypedData({
+    const signature = await deps.controllers.signers.eip155.signTypedData({
       accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
       typedData: typedDataStr,
     });
 
-    await controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, { namespace, chainRef });
+    await deps.controllers.permissions.grant(task.origin, PermissionCapabilities.Sign, { namespace, chainRef });
     return signature;
   },
 
@@ -151,7 +157,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return { granted: payload.requested };
   },
 
-  [ApprovalTypes.SwitchChain]: async (task, controllers) => {
+  [ApprovalTypes.SwitchChain]: async (task, deps) => {
     const payload = task.payload as { chainRef?: string };
     const requested = payload.chainRef ?? task.chainRef;
     if (!requested) {
@@ -162,24 +168,21 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
       });
     }
 
-    const selected = await controllers.network.switchChain(
-      requested as Parameters<typeof controllers.network.switchChain>[0],
-    );
-    await extendConnectedOriginsToChain(controllers, { namespace: selected.namespace, chainRef: selected.chainRef });
+    await deps.controllers.network.switchChain(requested as Parameters<typeof deps.controllers.network.switchChain>[0]);
     return null;
   },
 
-  [ApprovalTypes.AddChain]: async (task, controllers) => {
+  [ApprovalTypes.AddChain]: async (task, deps) => {
     const payload = task.payload as { metadata: unknown };
-    await controllers.chainRegistry.upsertChain(
-      payload.metadata as Parameters<typeof controllers.chainRegistry.upsertChain>[0],
+    await deps.controllers.chainDefinitions.upsertChain(
+      payload.metadata as Parameters<typeof deps.controllers.chainDefinitions.upsertChain>[0],
     );
     return null;
   },
 };
 
 export const createApprovalsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
 ): Pick<UiHandlers, "ui.approvals.approve" | "ui.approvals.reject"> => {
   return {
     "ui.approvals.approve": async ({ id }) => {
@@ -197,9 +200,7 @@ export const createApprovalsHandlers = (
         });
       }
 
-      const result = await deps.controllers.approvals.resolve(task.id, () =>
-        handler(task as ApprovalTask, deps.controllers),
-      );
+      const result = await deps.controllers.approvals.resolve(task.id, () => handler(task as ApprovalTask, deps));
       return { id: task.id, result: result as UiMethodResult<"ui.approvals.approve">["result"] };
     },
 

@@ -505,7 +505,7 @@ const createControllers = () => {
   const networkListeners = new Set<() => void>();
   const network = {
     getActiveChain: () => CHAIN,
-    getState: () => ({ activeChain: CHAIN.chainRef, knownChains: [CHAIN] }),
+    getState: () => ({ activeChainRef: CHAIN.chainRef, availableChainRefs: [CHAIN.chainRef] }),
     switchChain: async (_chainRef: string) => {
       void _chainRef;
     },
@@ -526,8 +526,19 @@ const createControllers = () => {
     processTransaction: async () => {},
     onStateChanged: () => () => {},
   };
-  const chainRegistry = { onStateChanged: () => () => {}, getChain: () => CHAIN };
+  const chainDefinitions = { onStateChanged: () => () => {}, getChain: () => CHAIN };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };
+  const chains = {
+    getActiveChainView: () => CHAIN,
+    listKnownChainsView: () => [CHAIN],
+    listAvailableChainsView: () => [CHAIN],
+    buildUiNetworksSnapshot: () => ({ active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] }),
+    buildProviderMeta: () => ({
+      activeChain: CHAIN.chainRef,
+      activeNamespace: CHAIN.namespace,
+      supportedChains: [CHAIN.chainRef],
+    }),
+  };
 
   return {
     accounts,
@@ -535,8 +546,9 @@ const createControllers = () => {
     permissions,
     network,
     transactions,
-    chainRegistry,
+    chainDefinitions,
     signers,
+    chains,
   } as unknown as HandlerControllers;
 };
 
@@ -635,6 +647,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   const bridge = createUiBridge({
     browser: browserApi as unknown as UiBridgeDeps["browser"],
     controllers,
+    chains: (controllers as unknown as { chains: UiBridgeDeps["chains"] }).chains,
     session,
     rpcClients: {
       getClient: (params?: unknown) => {

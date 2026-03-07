@@ -51,8 +51,8 @@ export type RpcOutcomeReport =
 
 export type NetworkState = {
   revision: number;
-  activeChain: ChainRef;
-  knownChains: ChainMetadata[];
+  activeChainRef: ChainRef;
+  availableChainRefs: ChainRef[];
   rpc: Record<ChainRef, RpcRoutingState>;
 };
 

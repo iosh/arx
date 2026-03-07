@@ -97,7 +97,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;
@@ -135,40 +135,10 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       }
     }
 
-    const state = controllers.network.getState();
-    const target = state.knownChains.find((item) => {
-      if (normalizedChainRef && item.chainRef === normalizedChainRef) return true;
-      if (normalizedChainId) {
-        const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
-        if (candidateChainId && candidateChainId === normalizedChainId) return true;
-      }
-      return false;
+    const target = services.chains.resolveEip155SwitchTarget({
+      ...(normalizedChainId ? { chainId: normalizedChainId } : {}),
+      ...(normalizedChainRef ? { chainRef: normalizedChainRef } : {}),
     });
-
-    if (!target) {
-      throw arxError({
-        reason: ArxReasons.ChainNotFound,
-        message: "Requested chain is not registered with ARX",
-        data: { chainId: rawChainId, chainRef: rawChainRef },
-      });
-    }
-
-    if (target.namespace !== "eip155") {
-      throw arxError({
-        reason: ArxReasons.ChainNotCompatible,
-        message: "Requested chain is not compatible with wallet_switchEthereumChain",
-        data: { chainRef: target.chainRef },
-      });
-    }
-
-    const supportsFeature = target.features?.includes("wallet_switchEthereumChain") ?? false;
-    if (!supportsFeature) {
-      throw arxError({
-        reason: ArxReasons.ChainNotSupported,
-        message: "Requested chain does not support wallet_switchEthereumChain",
-        data: { chainRef: target.chainRef },
-      });
-    }
 
     if (invocation.chainRef === target.chainRef) {
       return null;

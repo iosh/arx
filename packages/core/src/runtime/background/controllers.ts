@@ -1,16 +1,15 @@
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainDescriptorRegistry } from "../../chains/registry.js";
-import type { ChainRegistryPort } from "../../chains/registryPort.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
 import { ACCOUNTS_TOPICS } from "../../controllers/account/topics.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import { InMemoryApprovalController } from "../../controllers/approval/InMemoryApprovalController.js";
 import { APPROVAL_TOPICS } from "../../controllers/approval/topics.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
-import { InMemoryChainRegistryController } from "../../controllers/chainRegistry/ChainRegistryController.js";
-import { CHAIN_REGISTRY_TOPICS } from "../../controllers/chainRegistry/topics.js";
-import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
+import { InMemoryChainDefinitionsController } from "../../controllers/chainDefinitions/ChainDefinitionsController.js";
+import { CHAIN_DEFINITIONS_TOPICS } from "../../controllers/chainDefinitions/topics.js";
+import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
 import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
 import type {
@@ -33,11 +32,12 @@ import type { Messenger } from "../../messenger/Messenger.js";
 import type { Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
+import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import { DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
+import { buildDefaultRoutingState, DEFAULT_CHAIN, DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
 
 type NamespaceResolver = (context?: RpcInvocationContext) => Namespace;
 
@@ -65,8 +65,8 @@ export type ControllerLayerOptions = {
   transactions?: {
     registry?: TransactionAdapterRegistry;
   };
-  chainRegistry?: {
-    port: ChainRegistryPort;
+  chainDefinitions?: {
+    port: ChainDefinitionsPort;
     seed?: ChainMetadata[];
     now?: () => number;
     logger?: (message: string, error?: unknown) => void;
@@ -80,15 +80,16 @@ export type ControllersBase = {
   approvals: ApprovalController;
   permissions: PermissionController;
   transactions: TransactionController;
-  chainRegistry: ChainRegistryController;
+  chainDefinitions: ChainDefinitionsController;
 };
 
 export type ControllersInitResult = {
   controllersBase: ControllersBase;
   transactionRegistry: TransactionAdapterRegistry;
   networkController: NetworkController;
-  chainRegistryController: ChainRegistryController;
+  chainDefinitionsController: ChainDefinitionsController;
   permissionController: PermissionController;
+  deferredNetworkInitialState: NetworkStateInput | null;
 };
 
 export const initControllers = ({
@@ -115,16 +116,49 @@ export const initControllers = ({
     approvals: approvalOptions,
     permissions: permissionOptions,
     transactions: transactionOptions,
-    chainRegistry: chainRegistryOptions,
+    chainDefinitions: chainDefinitionsOptions,
   } = options;
 
-  if (!chainRegistryOptions?.port) {
-    throw new Error("createBackgroundRuntime requires chainRegistry.port");
+  if (!chainDefinitionsOptions?.port) {
+    throw new Error("createBackgroundRuntime requires chainDefinitions.port");
   }
+
+  const seedSource = chainDefinitionsOptions.seed ?? DEFAULT_CHAIN_METADATA;
+  const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
+  const requestedNetworkInitialState = networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT;
+  const bootstrapChains = registrySeed.length > 0 ? registrySeed : [DEFAULT_CHAIN];
+  const bootstrapChainRefs = new Set(bootstrapChains.map((chain) => chain.chainRef));
+  const canResolveRequestedInitialState = requestedNetworkInitialState.availableChainRefs.every((chainRef) =>
+    bootstrapChainRefs.has(chainRef),
+  );
+  const bootstrapActiveChain =
+    bootstrapChains.find((chain) => chain.chainRef === requestedNetworkInitialState.activeChainRef) ??
+    bootstrapChains[0];
+
+  if (!bootstrapActiveChain) {
+    throw new Error("createBackgroundRuntime requires at least one bootstrap chain definition");
+  }
+
+  const bootstrapInitialState: NetworkStateInput = canResolveRequestedInitialState
+    ? requestedNetworkInitialState
+    : {
+        activeChainRef: bootstrapActiveChain.chainRef,
+        availableChainRefs: [bootstrapActiveChain.chainRef],
+        rpc: {
+          [bootstrapActiveChain.chainRef]:
+            requestedNetworkInitialState.rpc[bootstrapActiveChain.chainRef] ??
+            buildDefaultRoutingState(bootstrapActiveChain, networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY),
+        },
+      };
+  const deferredNetworkInitialState = canResolveRequestedInitialState ? null : requestedNetworkInitialState;
+
+  let chainDefinitionsControllerRef: ChainDefinitionsController | null = null;
 
   const networkController = new InMemoryNetworkController({
     messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
-    initialState: networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT,
+    initialState: bootstrapInitialState,
+    initialChains: bootstrapChains,
+    getChainMetadata: (chainRef) => chainDefinitionsControllerRef?.getChain(chainRef)?.metadata ?? null,
     defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
     ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
@@ -177,17 +211,17 @@ export const initControllers = ({
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
   });
 
-  const seedSource = chainRegistryOptions.seed ?? DEFAULT_CHAIN_METADATA;
-  const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
-
-  const chainRegistryController = new InMemoryChainRegistryController({
-    messenger: bus.scope({ name: "chainRegistry", publish: CHAIN_REGISTRY_TOPICS }),
-    port: chainRegistryOptions.port,
+  const chainDefinitionsController = new InMemoryChainDefinitionsController({
+    messenger: bus.scope({ name: "chainDefinitions", publish: CHAIN_DEFINITIONS_TOPICS }),
+    port: chainDefinitionsOptions.port,
     seed: registrySeed,
-    ...(chainRegistryOptions.now ? { now: chainRegistryOptions.now } : {}),
-    ...(chainRegistryOptions.logger ? { logger: chainRegistryOptions.logger } : {}),
-    ...(chainRegistryOptions.schemaVersion !== undefined ? { schemaVersion: chainRegistryOptions.schemaVersion } : {}),
+    ...(chainDefinitionsOptions.now ? { now: chainDefinitionsOptions.now } : {}),
+    ...(chainDefinitionsOptions.logger ? { logger: chainDefinitionsOptions.logger } : {}),
+    ...(chainDefinitionsOptions.schemaVersion !== undefined
+      ? { schemaVersion: chainDefinitionsOptions.schemaVersion }
+      : {}),
   });
+  chainDefinitionsControllerRef = chainDefinitionsController;
 
   const controllersBase: ControllersBase = {
     network: networkController,
@@ -195,14 +229,15 @@ export const initControllers = ({
     approvals: approvalController,
     permissions: permissionController,
     transactions: transactionController,
-    chainRegistry: chainRegistryController,
+    chainDefinitions: chainDefinitionsController,
   };
 
   return {
     controllersBase,
     transactionRegistry,
     networkController,
-    chainRegistryController,
+    chainDefinitionsController,
     permissionController,
+    deferredNetworkInitialState,
   };
 };

@@ -1,5 +1,7 @@
 export * from "./runtime/attention/index.js";
+export * from "./runtime/chains/index.js";
 export * from "./store/accounts/index.js";
+export * from "./store/chainDefinitions/index.js";
 export * from "./store/keyringMetas/index.js";
 export * from "./store/networkPreferences/index.js";
 export * from "./store/permissions/index.js";

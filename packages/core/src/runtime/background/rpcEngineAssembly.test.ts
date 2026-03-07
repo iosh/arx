@@ -3,7 +3,7 @@ import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import {
   MemoryAccountsPort,
-  MemoryChainRegistryPort,
+  MemoryChainDefinitionsPort,
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
@@ -42,7 +42,7 @@ const createPendingRes = (): PendingJsonRpcResponse<Json> => ({
 describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
     const runtime = createBackgroundRuntime({
-      chainRegistry: { port: new MemoryChainRegistryPort() },
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -75,7 +75,7 @@ describe("background rpc engine assembly", () => {
 
   it("encodes existing res.error (error boundary)", async () => {
     const runtime = createBackgroundRuntime({
-      chainRegistry: { port: new MemoryChainRegistryPort() },
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -122,7 +122,7 @@ describe("background rpc engine assembly", () => {
 
   it("respects shouldRequestUnlockAttention hook", async () => {
     const runtime = createBackgroundRuntime({
-      chainRegistry: { port: new MemoryChainRegistryPort() },
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },

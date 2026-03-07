@@ -4,6 +4,7 @@ import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
+import { createChainService } from "../services/runtime/chains/index.js";
 import { createAccountsService } from "../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import { createKeyringMetasService } from "../services/store/keyringMetas/KeyringMetasService.js";
@@ -32,7 +33,7 @@ import type { KeyringService } from "./keyring/KeyringService.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
-export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainRegistry"> & {
+export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainDefinitions"> & {
   messenger?: {
     violationMode?: ViolationMode;
   };
@@ -58,7 +59,7 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chain
       permissions: PermissionsPort;
     };
   };
-  chainRegistry: NonNullable<ControllerLayerOptions["chainRegistry"]>;
+  chainDefinitions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
   settings: {
     port: SettingsPort;
   };
@@ -71,6 +72,7 @@ export type BackgroundRuntime = {
   controllers: HandlerControllers;
   services: {
     attention: ReturnType<typeof createAttentionService>;
+    chains: ReturnType<typeof createChainService>;
     session: BackgroundSessionServices;
     keyring: KeyringService;
   };
@@ -106,7 +108,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     store: storeOptions,
     settings: settingsOptions,
     session: sessionOptions,
-    chainRegistry: chainRegistryOptions,
+    chainDefinitions: chainDefinitionsOptions,
     rpcClients: rpcClientOptions,
   } = options;
 
@@ -130,7 +132,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       ? { permissions: { ...permissionOptions, chains: chainDescriptors } }
       : { permissions: { chains: chainDescriptors } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    chainRegistry: chainRegistryOptions,
+    chainDefinitions: chainDefinitionsOptions,
   };
 
   const settingsService = createSettingsService({ port: settingsOptions.port, now: storageNow });
@@ -165,7 +167,19 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     options: controllerOptions,
   });
 
-  const { controllersBase, transactionRegistry, networkController, chainRegistryController } = controllersInit;
+  const {
+    controllersBase,
+    transactionRegistry,
+    networkController,
+    chainDefinitionsController,
+    deferredNetworkInitialState,
+  } = controllersInit;
+
+  const chains = createChainService({
+    chainDefinitions: chainDefinitionsController,
+    network: networkController,
+    preferences: networkPreferences,
+  });
 
   const rpcClientRegistry = initRpcLayer({
     controllers: controllersBase,
@@ -224,7 +238,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const networkBootstrap = createNetworkBootstrap({
     network: networkController,
-    chainRegistry: chainRegistryController,
+    chainDefinitions: chainDefinitionsController,
     preferences: networkPreferences,
     hydrationEnabled,
     logger: storageLogger,
@@ -234,7 +248,10 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
     initialize: async () => {
-      await chainRegistryController.whenReady();
+      await chainDefinitionsController.whenReady();
+      if (deferredNetworkInitialState) {
+        networkController.replaceState(deferredNetworkInitialState);
+      }
       await controllersBase.permissions.whenReady();
     },
   };
@@ -325,6 +342,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     controllers,
     services: {
       attention,
+      chains,
       session: sessionLayer.session,
       keyring: keyringService,
     },

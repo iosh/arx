@@ -3,8 +3,6 @@ import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import { parseAccountId } from "../../../accounts/addressing/accountId.js";
-import type { ChainNamespace } from "../../../controllers/account/types.js";
-import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import { keyringErrors } from "../../../keyring/errors.js";
 import type { BackgroundSessionServices } from "../../../runtime/background/session.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../../storage/records.js";
@@ -68,34 +66,23 @@ export const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boole
   return Object.values(accountsState.namespaces).some((ns) => ns.accountIds.length > 0);
 };
 
-export const resolveChainRefForNamespace = (controllers: UiRuntimeDeps["controllers"], namespace: string): string => {
-  const active = controllers.network.getActiveChain();
+export const resolveChainRefForNamespace = (
+  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
+  namespace: string,
+): string => {
+  const active = deps.chains.getActiveChainView();
   if (active.namespace === namespace) return active.chainRef;
 
-  const known = controllers.network.getState().knownChains.find((chain) => chain.namespace === namespace);
-  return known?.chainRef ?? active.chainRef;
-};
-
-export const extendConnectedOriginsToChain = async (
-  controllers: UiRuntimeDeps["controllers"],
-  params: { namespace: ChainNamespace; chainRef: string },
-): Promise<void> => {
-  const { namespace, chainRef } = params;
-  const origins = controllers.permissions.listConnectedOrigins({ namespace });
-
-  for (const origin of origins) {
-    try {
-      await controllers.permissions.grant(origin, PermissionCapabilities.Basic, { namespace, chainRef });
-      await controllers.permissions.grant(origin, PermissionCapabilities.Accounts, { namespace, chainRef });
-    } catch (error) {
-      console.debug("[ui] failed to extend connected origin permissions to chain", {
-        origin,
-        namespace,
-        chainRef,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  const available = deps.chains.listAvailableChainsView().find((chain) => chain.namespace === namespace);
+  if (available) {
+    return available.chainRef;
   }
+
+  throw arxError({
+    reason: ArxReasons.RpcInvalidParams,
+    message: `No available chain for namespace "${namespace}"`,
+    data: { namespace },
+  });
 };
 
 export const toUiAccountMeta = (record: AccountRecord) => {

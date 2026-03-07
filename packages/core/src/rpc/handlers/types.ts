@@ -4,7 +4,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainDescriptorRegistry } from "../../chains/registry.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
-import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
+import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type {
   PermissionCapability,
@@ -12,6 +12,7 @@ import type {
   PermissionController,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { ChainService } from "../../services/runtime/chains/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import type { RequestContext } from "../requestContext.js";
@@ -24,7 +25,7 @@ export type HandlerControllers = {
   approvals: ApprovalController;
   permissions: PermissionController;
   transactions: TransactionController;
-  chainRegistry: ChainRegistryController;
+  chainDefinitions: ChainDefinitionsController;
   chainDescriptors: ChainDescriptorRegistry;
   clock: {
     now: () => number;
@@ -32,6 +33,10 @@ export type HandlerControllers = {
   signers: {
     eip155: Eip155Signer;
   };
+};
+
+export type HandlerRuntimeServices = {
+  chains: Pick<ChainService, "resolveEip155SwitchTarget">;
 };
 
 export type RpcRequest = {
@@ -51,6 +56,7 @@ type MethodHandlerContext<P> = {
   request: RpcRequest;
   params: P;
   controllers: HandlerControllers;
+  services: HandlerRuntimeServices;
   invocation: { namespace: Namespace; chainRef: ChainRef };
   rpcContext?: RpcInvocationContext;
 };

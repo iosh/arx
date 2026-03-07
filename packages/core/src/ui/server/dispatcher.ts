@@ -79,6 +79,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
   const buildSnapshotEvent = (): UiEventEnvelope => {
     const snapshot = buildUiSnapshot({
       controllers: deps.controllers,
+      chains: deps.chains,
       session: deps.session,
       keyring: deps.keyring,
       attention: deps.attention,

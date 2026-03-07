@@ -6,6 +6,5 @@ export { createEip155MetadataFromEip3085 } from "./eip155/eip3085.js";
 export * from "./ids.js";
 export * from "./metadata.js";
 export * from "./registry.js";
-export * from "./registryPort.js";
 export * from "./types.js";
 export * from "./url.js";

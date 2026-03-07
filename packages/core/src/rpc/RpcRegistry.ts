@@ -8,6 +8,7 @@ import { createLogger, extendLogger } from "../utils/logger.js";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 import type {
   HandlerControllers,
+  HandlerRuntimeServices,
   MethodDefinition,
   Namespace,
   RpcInvocationContext,
@@ -25,6 +26,7 @@ export type ExecuteWithAdaptersResult<T> = { ok: true; result: T } | { ok: false
 
 type MethodExecutorDependencies = {
   rpcClientRegistry: RpcClientRegistry;
+  services: HandlerRuntimeServices;
 };
 
 type PassthroughPolicy = {
@@ -573,6 +575,7 @@ export class RpcRegistry {
               request: args.request,
               params,
               controllers,
+              services: deps.services,
               invocation: { namespace: args.namespace, chainRef: args.chainRef },
             }
           : {
@@ -580,6 +583,7 @@ export class RpcRegistry {
               request: args.request,
               params,
               controllers,
+              services: deps.services,
               invocation: { namespace: args.namespace, chainRef: args.chainRef },
               rpcContext: args.context,
             };

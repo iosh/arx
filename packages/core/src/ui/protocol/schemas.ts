@@ -188,6 +188,7 @@ export const UiAccountMetaSchema = z.object({
 export const NetworkListSchema = z.object({
   active: z.string().min(1),
   known: z.array(ChainSnapshotSchema),
+  available: z.array(ChainSnapshotSchema),
 });
 const HdBackupWarningSchema = z.object({
   keyringId: z.uuid(),

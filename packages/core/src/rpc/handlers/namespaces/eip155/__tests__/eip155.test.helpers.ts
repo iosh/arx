@@ -41,7 +41,7 @@ export const TEST_MNEMONIC = "test test test test test test test test test test 
 export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Create mock chain registry port
-export const createChainRegistryPort = () => ({
+export const createChainDefinitionsPort = () => ({
   async get() {
     return null;
   },
@@ -56,11 +56,11 @@ export const createChainRegistryPort = () => ({
 
 // Create test services with optional overrides
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
-  const { chainRegistry, session, networkPreferences, rpcEngine, ...rest } = overrides ?? {};
+  const { chainDefinitions, session, networkPreferences, rpcEngine, ...rest } = overrides ?? {};
   const runtime = createBackgroundRuntime({
-    chainRegistry: {
-      port: createChainRegistryPort(),
-      ...(chainRegistry ?? {}),
+    chainDefinitions: {
+      port: createChainDefinitionsPort(),
+      ...(chainDefinitions ?? {}),
     },
     rpcEngine:
       rpcEngine ??
@@ -95,6 +95,9 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   const execute = runtime.rpc.registry.createMethodExecutor(runtime.controllers, {
     rpcClientRegistry: runtime.rpc.clients,
+    services: {
+      chains: runtime.services.chains,
+    },
   });
   return async (args: Parameters<typeof execute>[0]) => {
     const chainRef = args.context?.chainRef ?? runtime.controllers.network.getActiveChain().chainRef;

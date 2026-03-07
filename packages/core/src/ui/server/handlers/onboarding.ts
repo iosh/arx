@@ -10,7 +10,7 @@ import {
 } from "./lib.js";
 
 export const createOnboardingHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "session" | "keyring" | "platform">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chains" | "session" | "keyring" | "platform">,
 ): Pick<
   UiHandlers,
   | "ui.onboarding.openTab"
@@ -57,7 +57,7 @@ export const createOnboardingHandlers = (
 
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
-        const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
+        const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
         return { keyringId, address };
       });
@@ -90,7 +90,7 @@ export const createOnboardingHandlers = (
 
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
-        const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
+        const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address });
         return { keyringId, address };
       });
@@ -122,7 +122,7 @@ export const createOnboardingHandlers = (
 
         const { keyringId, account } = await deps.keyring.importPrivateKey(privateKey, opts);
         const namespace = opts.namespace ?? deps.controllers.network.getActiveChain().namespace;
-        const chainRef = resolveChainRefForNamespace(deps.controllers, namespace);
+        const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: account.address });
         return { keyringId, account };
       });

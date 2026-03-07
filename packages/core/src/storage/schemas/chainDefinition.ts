@@ -2,7 +2,7 @@ import { z } from "zod";
 import { chainMetadataSchema } from "../../chains/metadata.js";
 import { chainRefSchema, epochMillisecondsSchema } from "../validators.js";
 
-const chainRegistryEntitySchema = z
+const chainDefinitionEntitySchema = z
   .strictObject({
     chainRef: chainRefSchema,
     namespace: z.string().min(1),
@@ -19,6 +19,6 @@ const chainRegistryEntitySchema = z
     path: ["metadata", "namespace"],
   });
 
-export const CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION = 1;
-export const ChainRegistryEntitySchema = chainRegistryEntitySchema;
-export type ChainRegistryEntity = z.infer<typeof ChainRegistryEntitySchema>;
+export const CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION = 1;
+export const ChainDefinitionEntitySchema = chainDefinitionEntitySchema;
+export type ChainDefinitionEntity = z.infer<typeof ChainDefinitionEntitySchema>;

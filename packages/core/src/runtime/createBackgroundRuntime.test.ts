@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
-import type { ChainRegistryPort } from "../chains/registryPort.js";
-import type { ChainRegistryEntity } from "../storage/index.js";
+import { ApprovalTypes, PermissionCapabilities } from "../controllers/index.js";
+import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
+import type { ChainDefinitionEntity } from "../storage/index.js";
 import { createUiHandlers } from "../ui/server/index.js";
 import {
   flushAsync,
   MemoryAccountsPort,
-  MemoryChainRegistryPort,
+  MemoryChainDefinitionsPort,
   MemoryKeyringMetasPort,
   MemoryNetworkPreferencesPort,
   MemoryPermissionsPort,
@@ -33,7 +34,7 @@ const ALT_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
-const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainRegistryEntity => ({
+const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinitionEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata,
@@ -45,7 +46,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("hydrates network preferences from NetworkPreferencesPort", async () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainRegistryPort: ChainRegistryPort = new MemoryChainRegistryPort(
+    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
       chainSeed.map((c) => toRegistryEntity(c, 0)),
     );
 
@@ -59,7 +60,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
 
     const runtime = createBackgroundRuntime({
-      chainRegistry: { port: chainRegistryPort, seed: chainSeed },
+      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -91,7 +92,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const networkState = runtime.controllers.network.getState();
-    expect(networkState.activeChain).toBe(ALT_CHAIN.chainRef);
+    expect(networkState.activeChainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
     runtime.lifecycle.destroy();
@@ -100,7 +101,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("persists activeChainRef when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainRegistryPort: ChainRegistryPort = new MemoryChainRegistryPort(
+    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
       chainSeed.map((c) => toRegistryEntity(c, 0)),
     );
 
@@ -112,7 +113,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
 
     const runtime = createBackgroundRuntime({
-      chainRegistry: { port: chainRegistryPort, seed: chainSeed },
+      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -144,6 +145,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createUiHandlers({
       controllers: runtime.controllers,
+      chains: runtime.services.chains,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
       attention: runtime.services.attention,
@@ -162,6 +164,150 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
     await expect(networkPreferencesPort.get()).resolves.toMatchObject({ activeChainRef: ALT_CHAIN.chainRef });
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("does not change permissions when ui.networks.switchActive succeeds", async () => {
+    const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
+    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
+      chainSeed.map((c) => toRegistryEntity(c, 0)),
+    );
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    await runtime.controllers.permissions.grant("https://dapp.example", PermissionCapabilities.Basic, {
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    await runtime.controllers.permissions.setPermittedAccounts("https://dapp.example", {
+      chainRef: MAINNET_CHAIN.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chains: runtime.services.chains,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      rpcClients: runtime.rpc.clients,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    const before = structuredClone(runtime.controllers.permissions.getState());
+    await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
+
+    expect(runtime.controllers.permissions.getState()).toEqual(before);
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("does not change permissions when switch-chain approval is approved", async () => {
+    const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
+    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
+      chainSeed.map((c) => toRegistryEntity(c, 0)),
+    );
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    await runtime.controllers.permissions.grant("https://dapp.example", PermissionCapabilities.Basic, {
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    await runtime.controllers.permissions.setPermittedAccounts("https://dapp.example", {
+      chainRef: MAINNET_CHAIN.chainRef,
+      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    });
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chains: runtime.services.chains,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      rpcClients: runtime.rpc.clients,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    const approvalPromise = runtime.controllers.approvals.requestApproval(
+      {
+        id: "switch-chain-approval",
+        type: ApprovalTypes.SwitchChain,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: ALT_CHAIN.chainRef,
+        createdAt: 1,
+        payload: { chainRef: ALT_CHAIN.chainRef },
+      },
+      {
+        transport: "provider",
+        portId: "port-1",
+        sessionId: "session-1",
+        requestId: "request-1",
+        origin: "https://dapp.example",
+      },
+    );
+
+    await flushAsync();
+
+    const before = structuredClone(runtime.controllers.permissions.getState());
+    await expect(handlers["ui.approvals.approve"]({ id: "switch-chain-approval" })).resolves.toMatchObject({
+      id: "switch-chain-approval",
+      result: null,
+    });
+    await expect(approvalPromise).resolves.toBeNull();
+    expect(runtime.controllers.permissions.getState()).toEqual(before);
 
     runtime.lifecycle.destroy();
   });

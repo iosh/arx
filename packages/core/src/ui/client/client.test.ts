@@ -25,6 +25,17 @@ const SNAPSHOT_FIXTURE = {
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       },
     ],
+    available: [
+      {
+        chainRef: "eip155:1",
+        chainId: "0x1",
+        namespace: "eip155",
+        displayName: "Ethereum",
+        shortName: "eth",
+        icon: null,
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      },
+    ],
   },
   accounts: {
     totalCount: 0,

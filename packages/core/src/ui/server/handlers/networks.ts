@@ -1,5 +1,4 @@
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
-import { extendConnectedOriginsToChain } from "./lib.js";
 
 export const createNetworksHandlers = (
   deps: Pick<UiRuntimeDeps, "controllers">,
@@ -15,11 +14,7 @@ export const createNetworksHandlers = (
 ): Pick<UiHandlers, "ui.networks.switchActive"> => {
   return {
     "ui.networks.switchActive": async ({ chainRef }) => {
-      const selected = await deps.controllers.network.switchChain(chainRef);
-      await extendConnectedOriginsToChain(deps.controllers, {
-        namespace: selected.namespace,
-        chainRef: selected.chainRef,
-      });
+      await deps.controllers.network.switchChain(chainRef);
       return toChainSnapshot();
     },
   };

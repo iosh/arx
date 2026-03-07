@@ -20,8 +20,8 @@ const createMetadata = (overrides?: Partial<ChainMetadata>): ChainMetadata => ({
 
 const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkStateInput>): NetworkStateInput => {
   const base: NetworkStateInput = {
-    activeChain: metadata.chainRef,
-    knownChains: [metadata],
+    activeChainRef: metadata.chainRef,
+    availableChainRefs: [metadata.chainRef],
     rpc: {
       [metadata.chainRef]: {
         activeIndex: 0,
@@ -35,6 +35,7 @@ const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkS
 describe("InMemoryNetworkController", () => {
   it("rotates endpoints and records failures", () => {
     const metadata = createMetadata();
+    const currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const now = 1_000;
@@ -46,6 +47,8 @@ describe("InMemoryNetworkController", () => {
     const controller = new InMemoryNetworkController({
       messenger,
       initialState: stateFromMetadata(metadata),
+      initialChains: [metadata],
+      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
       now: () => now,
       defaultCooldownMs: 10_000,
       defaultStrategy: { id: "round-robin" },
@@ -79,6 +82,7 @@ describe("InMemoryNetworkController", () => {
     const metadata = createMetadata({
       rpcEndpoints: [{ url: "https://rpc.only.example", type: "public" as const }],
     });
+    const currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     let now = 5_000;
@@ -89,6 +93,8 @@ describe("InMemoryNetworkController", () => {
     const controller = new InMemoryNetworkController({
       messenger,
       initialState: stateFromMetadata(metadata),
+      initialChains: [metadata],
+      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
       now: () => now,
       defaultCooldownMs: 5_000,
       logger,
@@ -116,6 +122,7 @@ describe("InMemoryNetworkController", () => {
 
   it("clamps routing index when registry metadata changes", () => {
     const metadata = createMetadata();
+    let currentMetadata = metadata;
     const bus = new Messenger();
     const messenger = bus.scope({ publish: NETWORK_TOPICS });
     const controller = new InMemoryNetworkController({
@@ -123,6 +130,8 @@ describe("InMemoryNetworkController", () => {
       initialState: stateFromMetadata(metadata, {
         rpc: { [metadata.chainRef]: { activeIndex: 1, strategy: { id: "round-robin" } } },
       }),
+      initialChains: [metadata],
+      getChainMetadata: (chainRef) => (chainRef === currentMetadata.chainRef ? currentMetadata : null),
     });
 
     const updates: Array<{ chainRef: string; previous: ChainMetadata | null; next: ChainMetadata | null }> = [];
@@ -137,6 +146,7 @@ describe("InMemoryNetworkController", () => {
       ...metadata,
       rpcEndpoints: [{ url: firstEndpoint.url, type: "public" as const }],
     };
+    currentMetadata = updated;
 
     controller.replaceState(
       stateFromMetadata(updated, {

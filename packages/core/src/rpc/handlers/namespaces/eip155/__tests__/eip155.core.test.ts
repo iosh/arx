@@ -57,7 +57,7 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(runtime);
     const mainnet = runtime.controllers.network.getActiveChain();
 
-    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -106,7 +106,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -135,7 +135,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     try {
@@ -201,7 +201,7 @@ describe("eip155 handlers - core error paths", () => {
       displayName: "Base",
       features: ["eip155"],
     };
-    await runtime.controllers.chainRegistry.upsertChain(baseChain);
+    await runtime.controllers.chainDefinitions.upsertChain(baseChain);
     await waitForChainInNetwork(runtime, baseChain.chainRef);
 
     try {
@@ -287,7 +287,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -346,7 +346,7 @@ describe("eip155 handlers - core error paths", () => {
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type === ApprovalTypes.AddChain) {
         const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
-        await runtime.controllers.chainRegistry.upsertChain(payload.metadata);
+        await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
         await runtime.controllers.approvals.resolve(task.id, async () => null);
         return true;
       }
@@ -368,7 +368,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(networkChain.displayName).toBe("Base Mainnet");
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
 
-      const registryEntry = runtime.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
     } finally {
       teardownApprovalResponder();
@@ -505,7 +505,7 @@ describe("eip155 handlers - core error paths", () => {
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.type === ApprovalTypes.AddChain) {
         const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
-        await runtime.controllers.chainRegistry.upsertChain(payload.metadata);
+        await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
         await runtime.controllers.approvals.resolve(task.id, async () => null);
         return true;
       }
@@ -542,7 +542,7 @@ describe("eip155 handlers - core error paths", () => {
       const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
 
-      const registryEntry = runtime.controllers.chainRegistry.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
       teardownApprovalResponder();
@@ -639,7 +639,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const main = runtime.controllers.network.getActiveChain();
-    await runtime.controllers.chainRegistry.upsertChain(ALT_CHAIN);
+    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });

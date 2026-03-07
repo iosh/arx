@@ -1,6 +1,6 @@
 import type {
   AccountRecord,
-  ChainRegistryEntity,
+  ChainDefinitionEntity,
   KeyringMetaRecord,
   NetworkPreferencesRecord,
   PermissionRecord,
@@ -12,12 +12,12 @@ import type { VaultMetaEntity } from "./types.js";
 
 export const DB_SCHEMA_VERSION = 1;
 
-type ChainRegistryRow = ChainRegistryEntity;
+type ChainDefinitionsRow = ChainDefinitionEntity;
 type KeyringMetaRow = KeyringMetaRecord;
 
 export class ArxStorageDatabase extends Dexie {
   settings!: Table<SettingsRecord, string>;
-  chains!: Table<ChainRegistryRow, string>;
+  chains!: Table<ChainDefinitionsRow, string>;
   networkPreferences!: Table<NetworkPreferencesRecord, string>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, [string, string]>;

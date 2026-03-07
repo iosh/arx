@@ -29,6 +29,8 @@ const defaultLogger: RpcEventLogger = () => {};
 type NetworkControllerOptions = {
   messenger: NetworkMessenger;
   initialState: NetworkStateInput;
+  initialChains?: ChainMetadata[];
+  getChainMetadata?: (chainRef: ChainRef) => ChainMetadata | null;
   defaultStrategy?: RpcStrategyConfig;
   now?: () => number;
   logger?: RpcEventLogger;
@@ -48,7 +50,7 @@ const cloneHeaders = (headers?: Record<string, string>) => {
   return Object.fromEntries(Object.entries(headers));
 };
 
-const sortChains = (chains: ChainMetadata[]) => [...chains].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
+const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
 
 const cloneHealth = (health: RpcEndpointHealth[]): RpcEndpointHealth[] =>
   health.map((entry) => ({
@@ -152,7 +154,9 @@ const isSameRpcEndpoints = (a: readonly RpcEndpoint[], b: readonly RpcEndpoint[]
 export class InMemoryNetworkController implements NetworkController {
   #messenger: NetworkMessenger;
   #chains = new Map<ChainRef, ChainRuntime>();
+  #initialChains = new Map<ChainRef, ChainMetadata>();
   #activeChain: ChainRef;
+  #getChainMetadata: (chainRef: ChainRef) => ChainMetadata | null;
   #defaultStrategy: RpcStrategyConfig;
   #now: () => number;
   #logger: RpcEventLogger;
@@ -162,17 +166,23 @@ export class InMemoryNetworkController implements NetworkController {
   constructor({
     messenger,
     initialState,
+    initialChains = [],
+    getChainMetadata = () => null,
     defaultStrategy,
     now = Date.now,
     logger = defaultLogger,
     defaultCooldownMs = 5_000,
   }: NetworkControllerOptions) {
     this.#messenger = messenger;
+    this.#getChainMetadata = getChainMetadata;
+    for (const metadata of initialChains) {
+      this.#initialChains.set(metadata.chainRef, cloneChainMetadata(metadata));
+    }
     this.#defaultStrategy = deriveStrategyConfig(defaultStrategy);
     this.#now = now;
     this.#logger = logger;
     this.#defaultCooldownMs = defaultCooldownMs;
-    this.#activeChain = initialState.activeChain;
+    this.#activeChain = initialState.activeChainRef;
 
     this.replaceState(initialState);
   }
@@ -369,8 +379,8 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   replaceState(state: NetworkStateInput): void {
-    if (!state.knownChains.some((chain) => chain.chainRef === state.activeChain)) {
-      throw new Error(`Active chain ${state.activeChain} must be present in knownChains`);
+    if (!state.availableChainRefs.some((chainRef) => chainRef === state.activeChainRef)) {
+      throw new Error(`Active chain ${state.activeChainRef} must be present in availableChainRefs`);
     }
 
     const previousActive = this.#activeChain;
@@ -383,9 +393,14 @@ export class InMemoryNetworkController implements NetworkController {
     }> = [];
 
     const nextChains = new Map<ChainRef, ChainRuntime>();
-    for (const metadata of sortChains(state.knownChains.map(cloneChainMetadata))) {
-      const chainRef = metadata.chainRef;
+    for (const chainRef of sortChainRefs([...state.availableChainRefs])) {
       const prev = previousRuntimes.get(chainRef) ?? null;
+      const resolvedMetadata = this.#resolveMetadata(chainRef, prev?.metadata ?? null);
+      if (!resolvedMetadata) {
+        throw new Error(`Missing metadata for available chain ${chainRef}`);
+      }
+
+      const metadata = cloneChainMetadata(resolvedMetadata);
 
       const desiredRouting: RpcRoutingState = {
         activeIndex: state.rpc[chainRef]?.activeIndex ?? 0,
@@ -443,7 +458,7 @@ export class InMemoryNetworkController implements NetworkController {
     }
 
     this.#chains = nextChains;
-    this.#activeChain = state.activeChain;
+    this.#activeChain = state.activeChainRef;
 
     if (previousActive !== this.#activeChain) {
       stateChanged = true;
@@ -538,9 +553,6 @@ export class InMemoryNetworkController implements NetworkController {
   }
 
   #buildStateSnapshot(): NetworkState {
-    const knownChains = sortChains(
-      Array.from(this.#chains.values(), (runtime) => cloneChainMetadata(runtime.metadata)),
-    );
     const rpcEntries = Array.from(this.#chains.entries()).map(([chainRef, runtime]) => {
       const routing: RpcRoutingState = {
         activeIndex: runtime.routing.activeIndex,
@@ -552,8 +564,8 @@ export class InMemoryNetworkController implements NetworkController {
 
     return {
       revision: this.#revision,
-      activeChain: this.#activeChain,
-      knownChains,
+      activeChainRef: this.#activeChain,
+      availableChainRefs: sortChainRefs(Array.from(this.#chains.keys())),
       rpc: Object.fromEntries(rpcEntries),
     };
   }
@@ -614,5 +626,21 @@ export class InMemoryNetworkController implements NetworkController {
       throw new Error(`Chain ${chainRef} has no registered RPC endpoints`);
     }
     return runtime;
+  }
+
+  #resolveMetadata(chainRef: ChainRef, previous: ChainMetadata | null): ChainMetadata | null {
+    const fromResolver = this.#getChainMetadata(chainRef);
+    if (fromResolver) {
+      if (fromResolver.chainRef !== chainRef) {
+        throw new Error(`Resolved metadata chainRef mismatch for ${chainRef}`);
+      }
+      return fromResolver;
+    }
+
+    if (previous) {
+      return previous;
+    }
+
+    return this.#initialChains.get(chainRef) ?? null;
   }
 }

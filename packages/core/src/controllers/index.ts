@@ -1,8 +1,8 @@
 export * from "./account/index.js";
 
 export * from "./approval/index.js";
-export * from "./chainRegistry/ChainRegistryController.js";
-export * from "./chainRegistry/types.js";
+export * from "./chainDefinitions/ChainDefinitionsController.js";
+export * from "./chainDefinitions/types.js";
 export * from "./network/NetworkController.js";
 export * from "./network/types.js";
 export * from "./permission/StorePermissionController.js";

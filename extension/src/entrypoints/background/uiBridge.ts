@@ -1,6 +1,7 @@
 import type {
   AttentionService,
   BackgroundSessionServices,
+  ChainService,
   HandlerControllers,
   KeyringService,
   RpcClientRegistry,
@@ -17,6 +18,14 @@ export { UI_CHANNEL } from "@arx/core/ui";
 type BridgeDeps = {
   browser: typeof browserDefaultType;
   controllers: HandlerControllers;
+  chains: Pick<
+    ChainService,
+    | "buildProviderMeta"
+    | "buildUiNetworksSnapshot"
+    | "getActiveChainView"
+    | "listAvailableChainsView"
+    | "listKnownChainsView"
+  >;
   session: BackgroundSessionServices;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
@@ -29,6 +38,7 @@ type BridgeDeps = {
 export const createUiBridge = ({
   browser: runtimeBrowser,
   controllers,
+  chains,
   session,
   rpcClients,
   rpcRegistry,
@@ -44,6 +54,7 @@ export const createUiBridge = ({
 
   const dispatcher = createUiDispatcher({
     controllers,
+    chains,
     session,
     keyring,
     attention,

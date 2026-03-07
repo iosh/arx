@@ -50,7 +50,12 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
   const controllers = runtime.controllers;
   const rpcRegistry = runtime.rpc.registry;
 
-  const executeMethod = rpcRegistry.createMethodExecutor(controllers, { rpcClientRegistry: runtime.rpc.clients });
+  const executeMethod = rpcRegistry.createMethodExecutor(controllers, {
+    rpcClientRegistry: runtime.rpc.clients,
+    services: {
+      chains: runtime.services.chains,
+    },
+  });
 
   const invocationContext: Middleware = createInvocationContextMiddleware({
     resolve: (method, ctx) => rpcRegistry.resolveInvocationDetails(controllers, method, ctx),

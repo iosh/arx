@@ -12,6 +12,7 @@ export {
 export { namespaceFromContext } from "./handlers/namespaces/utils.js";
 export type {
   HandlerControllers,
+  HandlerRuntimeServices,
   MethodDefinition,
   Namespace,
   RpcInvocationContext,

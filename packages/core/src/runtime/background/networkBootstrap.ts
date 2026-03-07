@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ChainRegistryController } from "../../controllers/chainRegistry/types.js";
+import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
@@ -8,7 +8,7 @@ import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
 
 export type CreateNetworkBootstrapOptions = {
   network: NetworkController;
-  chainRegistry: ChainRegistryController;
+  chainDefinitions: ChainDefinitionsController;
   preferences: NetworkPreferencesService;
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
@@ -24,7 +24,7 @@ export type NetworkBootstrap = {
 };
 
 export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
-  const { network, chainRegistry, preferences, hydrationEnabled, logger, getIsHydrating } = opts;
+  const { network, chainDefinitions, preferences, hydrationEnabled, logger, getIsHydrating } = opts;
 
   let cachedPreferences: NetworkPreferencesRecord | null = null;
   let pendingSync = false;
@@ -34,7 +34,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   let unsubscribeRegistry: (() => void) | null = null;
   let unsubscribeNetwork: (() => void) | null = null;
 
-  const readRegistryChains = (): ChainMetadata[] => chainRegistry.getState().chains.map((entry) => entry.metadata);
+  const readRegistryChains = (): ChainMetadata[] => chainDefinitions.getState().chains.map((entry) => entry.metadata);
 
   let syncInFlight: Promise<void> | null = null;
 
@@ -71,7 +71,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     registryChains: ChainMetadata[],
   ): ChainRef => {
     if (registryChains.length === 0) {
-      return current.activeChain;
+      return current.activeChainRef;
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
@@ -81,8 +81,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       return preferred;
     }
 
-    if (available.has(current.activeChain)) {
-      return current.activeChain;
+    if (available.has(current.activeChainRef)) {
+      return current.activeChainRef;
     }
 
     if (available.has(DEFAULT_CHAIN.chainRef)) {
@@ -134,8 +134,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     suppressActivePersist = true;
     try {
       network.replaceState({
-        activeChain: nextActive,
-        knownChains: registryChains,
+        activeChainRef: nextActive,
+        availableChainRefs: registryChains.map((chain) => chain.chainRef),
         rpc,
       });
     } finally {
@@ -195,7 +195,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
     listenersAttached = true;
 
-    unsubscribeRegistry = chainRegistry.onStateChanged(() => requestSync());
+    unsubscribeRegistry = chainDefinitions.onStateChanged(() => requestSync());
     unsubscribeNetwork = network.onActiveChainChanged(({ next }) => {
       if (getIsHydrating()) {
         return;

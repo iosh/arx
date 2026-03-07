@@ -38,10 +38,10 @@ export {
   TransactionStatusSchema,
 } from "./records.js";
 
-export type { ChainRegistryEntity, VaultMetaSnapshot } from "./schemas.js";
+export type { ChainDefinitionEntity, VaultMetaSnapshot } from "./schemas.js";
 export {
-  CHAIN_REGISTRY_ENTITY_SCHEMA_VERSION,
-  ChainRegistryEntitySchema,
+  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  ChainDefinitionEntitySchema,
   DOMAIN_SCHEMA_VERSION,
   VAULT_META_SNAPSHOT_VERSION,
   VaultMetaSnapshotSchema,

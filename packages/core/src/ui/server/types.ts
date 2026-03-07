@@ -4,7 +4,7 @@ import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
-import type { ChainService } from "../../services/runtime/chains/types.js";
+import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 
 /**
@@ -45,13 +45,15 @@ export type UiHandlers = {
 
 export type UiRuntimeDeps = {
   controllers: HandlerControllers;
-  chains: Pick<
-    ChainService,
+  chainViews: Pick<
+    ChainViewsService,
     | "buildProviderMeta"
     | "buildUiNetworksSnapshot"
+    | "findAvailableChainView"
     | "getActiveChainView"
-    | "listAvailableChainsView"
-    | "listKnownChainsView"
+    | "listAvailableChainViews"
+    | "listKnownChainViews"
+    | "requireAvailableChainMetadata"
   >;
   session: BackgroundSessionServices;
   keyring: KeyringService;

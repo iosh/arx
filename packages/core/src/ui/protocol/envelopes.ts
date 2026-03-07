@@ -1,5 +1,6 @@
 import type { UiErrorPayload } from "@arx/errors";
 import { z } from "zod";
+import { ChainRefSchema } from "../../chains/ids.js";
 import { isUiEventName, isUiMethodName, type UiEventName, type UiMethodName } from "./index.js";
 
 export const UI_CHANNEL = "arx:ui" as const;
@@ -48,7 +49,7 @@ export type UiPortEnvelope = UiRequestEnvelope | UiResponseEnvelope | UiErrorEnv
 const UiContextSchema = z
   .object({
     namespace: z.string().min(1).optional(),
-    chainRef: z.string().min(1).optional(),
+    chainRef: ChainRefSchema.optional(),
   })
   .strict();
 

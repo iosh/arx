@@ -5,15 +5,12 @@ import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createBalancesHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "session" | "rpcClients">,
+  deps: Pick<UiRuntimeDeps, "chainViews" | "session" | "rpcClients">,
 ): Pick<UiHandlers, "ui.balances.getNative"> => {
   return {
     "ui.balances.getNative": async ({ chainRef, address }) => {
       assertUnlocked(deps.session);
-      const chain = deps.controllers.network.getChain(chainRef);
-      if (!chain) {
-        throw arxError({ reason: ArxReasons.ChainNotFound, message: `Unknown chain: ${chainRef}` });
-      }
+      const chain = deps.chainViews.requireAvailableChainMetadata(chainRef);
 
       if (chain.namespace !== "eip155") {
         throw arxError({

@@ -13,30 +13,30 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
-  const { controllers, chains, session, keyring, attention, platform, uiOrigin, rpcClients } = deps;
+  const { controllers, chainViews, session, keyring, attention, platform, uiOrigin, rpcClients } = deps;
   const uiSessionId = crypto.randomUUID();
 
   const buildSnapshot = (): UiSnapshot =>
     buildUiSnapshot({
       controllers,
-      chains,
+      chainViews,
       session,
       keyring,
       attention,
     });
 
-  const toChainSnapshot = () => chains.getActiveChainView();
+  const toChainSnapshot = () => chainViews.getActiveChainView();
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
     ...createAttentionHandlers({ platform }),
-    ...createBalancesHandlers({ controllers, session, rpcClients }),
+    ...createBalancesHandlers({ chainViews, session, rpcClients }),
     ...createSessionHandlers({ session, keyring }),
-    ...createOnboardingHandlers({ controllers, chains, session, keyring, platform }),
+    ...createOnboardingHandlers({ controllers, chainViews, session, keyring, platform }),
     ...createAccountsHandlers({ controllers }, buildSnapshot),
     ...createNetworksHandlers({ controllers }, toChainSnapshot),
-    ...createApprovalsHandlers({ controllers, chains }),
-    ...createKeyringsHandlers({ controllers, chains, session, keyring }),
-    ...createTransactionsHandlers({ controllers, session, uiOrigin }, uiSessionId),
+    ...createApprovalsHandlers({ controllers, chainViews }),
+    ...createKeyringsHandlers({ controllers, chainViews, session, keyring }),
+    ...createTransactionsHandlers({ controllers, chainViews, session, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;
 };

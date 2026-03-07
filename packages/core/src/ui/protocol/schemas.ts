@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChainRefSchema } from "../../chains/ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../../chains/url.js";
 import { PERMISSION_CAPABILITY_VALUES } from "../../permissions/capabilities.js";
 import { AccountIdSchema } from "../../storage/records.js";
@@ -16,7 +17,7 @@ const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PRO
 });
 
 export const ChainSnapshotSchema = z.object({
-  chainRef: z.string().min(1),
+  chainRef: ChainRefSchema,
   chainId: z.string().regex(/^0x[a-fA-F0-9]+$/),
   namespace: z.string().min(1),
   displayName: z.string().min(1),
@@ -53,7 +54,7 @@ const ChainPermissionStateSchema = z.object({
 });
 
 const NamespacePermissionStateSchema = z.object({
-  chains: z.record(z.string().min(1), ChainPermissionStateSchema),
+  chains: z.record(ChainRefSchema, ChainPermissionStateSchema),
 });
 
 const OriginPermissionStateSchema = z.record(z.string().min(1), NamespacePermissionStateSchema);
@@ -66,7 +67,7 @@ const approvalPayloadBase = z.object({
   id: z.string(),
   origin: z.string(),
   namespace: z.string(),
-  chainRef: z.string(),
+  chainRef: ChainRefSchema,
   createdAt: z.number().int(),
 });
 export const ApprovalSummarySchema = z.discriminatedUnion("type", [
@@ -126,7 +127,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
       permissions: z.array(
         z.object({
           capability: z.string(),
-          chainRefs: z.array(z.string()),
+          chainRefs: z.array(ChainRefSchema),
         }),
       ),
     }),
@@ -134,7 +135,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("switchChain"),
     payload: z.object({
-      chainRef: z.string().min(1),
+      chainRef: ChainRefSchema,
       chainId: hexChainIdSchema.optional(),
       displayName: z.string().min(1).optional(),
     }),
@@ -142,7 +143,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("addChain"),
     payload: z.object({
-      chainRef: z.string().min(1),
+      chainRef: ChainRefSchema,
       chainId: hexChainIdSchema,
       displayName: z.string().min(1),
       rpcUrls: z.array(rpcUrlSchema).min(1),
@@ -186,7 +187,7 @@ export const UiAccountMetaSchema = z.object({
 });
 
 export const NetworkListSchema = z.object({
-  active: z.string().min(1),
+  active: ChainRefSchema,
   known: z.array(ChainSnapshotSchema),
   available: z.array(ChainSnapshotSchema),
 });
@@ -199,7 +200,7 @@ export const AttentionRequestSchema = z.object({
   reason: z.enum(["unlock_required", "approval_required"]),
   origin: z.string().min(1),
   method: z.string().min(1),
-  chainRef: z.string().min(1).nullable(),
+  chainRef: ChainRefSchema.nullable(),
   namespace: z.string().min(1).nullable(),
   requestedAt: z.number().int(),
   expiresAt: z.number().int(),

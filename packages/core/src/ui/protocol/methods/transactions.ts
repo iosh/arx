@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChainRefSchema } from "../../../chains/ids.js";
 import { defineMethod } from "./types.js";
 
 export const transactionsMethods = {
@@ -6,7 +7,7 @@ export const transactionsMethods = {
     z.strictObject({
       to: z.string().min(1),
       valueEther: z.string().min(1),
-      chainRef: z.string().min(1).optional(),
+      chainRef: ChainRefSchema.optional(),
     }),
     z.strictObject({
       approvalId: z.string().uuid(),

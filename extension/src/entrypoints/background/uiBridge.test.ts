@@ -528,10 +528,11 @@ const createControllers = () => {
   };
   const chainDefinitions = { onStateChanged: () => () => {}, getChain: () => CHAIN };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };
-  const chains = {
+  const chainViews = {
+    findAvailableChainView: () => CHAIN,
     getActiveChainView: () => CHAIN,
-    listKnownChainsView: () => [CHAIN],
-    listAvailableChainsView: () => [CHAIN],
+    listKnownChainViews: () => [CHAIN],
+    listAvailableChainViews: () => [CHAIN],
     buildUiNetworksSnapshot: () => ({ active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] }),
     buildProviderMeta: () => ({
       activeChain: CHAIN.chainRef,
@@ -548,7 +549,7 @@ const createControllers = () => {
     transactions,
     chainDefinitions,
     signers,
-    chains,
+    chainViews,
   } as unknown as HandlerControllers;
 };
 
@@ -647,7 +648,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   const bridge = createUiBridge({
     browser: browserApi as unknown as UiBridgeDeps["browser"],
     controllers,
-    chains: (controllers as unknown as { chains: UiBridgeDeps["chains"] }).chains,
+    chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
     session,
     rpcClients: {
       getClient: (params?: unknown) => {

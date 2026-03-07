@@ -5,7 +5,7 @@ import type { PermissionsState, RequestPermissionsApprovalPayload } from "../../
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { ChainService } from "../../services/runtime/chains/types.js";
+import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import {
   type UiPermissionsSnapshot,
   UiPermissionsSnapshotSchema,
@@ -102,10 +102,10 @@ const extractPayload = <T>(payload: unknown): T => payload as T;
 
 const toApprovalSummary = (
   controllers: HandlerControllers,
-  chains: Pick<ChainService, "getActiveChainView" | "listAvailableChainsView">,
+  chainViews: Pick<ChainViewsService, "getActiveChainView" | "findAvailableChainView">,
   task: ApprovalTask,
 ): UiSnapshot["approvals"][number] | null => {
-  const activeChain = chains.getActiveChainView();
+  const activeChain = chainViews.getActiveChainView();
   const base = {
     id: task.id,
     origin: task.origin,
@@ -217,8 +217,7 @@ const toApprovalSummary = (
     case ApprovalTypes.SwitchChain: {
       const payload = extractPayload<SwitchChainPayload>(task.payload);
       const requestedChainRef = payload.chainRef ?? task.chainRef ?? activeChain.chainRef;
-      const target =
-        chains.listAvailableChainsView().find((item) => item.chainRef === requestedChainRef) ?? activeChain;
+      const target = chainViews.findAvailableChainView({ chainRef: requestedChainRef }) ?? activeChain;
 
       return {
         ...base,
@@ -295,15 +294,15 @@ const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot
 
 export const buildUiSnapshot = (deps: {
   controllers: HandlerControllers;
-  chains: Pick<ChainService, "buildUiNetworksSnapshot" | "getActiveChainView" | "listAvailableChainsView">;
+  chainViews: Pick<ChainViewsService, "buildUiNetworksSnapshot" | "getActiveChainView" | "findAvailableChainView">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: { getSnapshot: () => UiSnapshot["attention"] };
 }): UiSnapshot => {
-  const { controllers, chains, session, keyring, attention } = deps;
+  const { controllers, chainViews, session, keyring, attention } = deps;
 
-  const chain = chains.getActiveChainView();
-  const networks = chains.buildUiNetworksSnapshot();
+  const chain = chainViews.getActiveChainView();
+  const networks = chainViews.buildUiNetworksSnapshot();
   const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked()
@@ -322,7 +321,7 @@ export const buildUiSnapshot = (deps: {
       const task = controllers.approvals.get(item.id);
       if (!task) return null;
       try {
-        return toApprovalSummary(controllers, chains, task);
+        return toApprovalSummary(controllers, chainViews, task);
       } catch {
         return null;
       }

@@ -6,14 +6,14 @@ import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createTransactionsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "session" | "uiOrigin">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "uiOrigin">,
   uiSessionId: string,
 ): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
   return {
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
 
-      const resolvedChainRef = chainRef ?? deps.controllers.network.getActiveChain().chainRef;
+      const resolvedChainRef = chainRef ?? deps.chainViews.getActiveChainView().chainRef;
 
       const trimmedValue = valueEther.trim();
       let wei: bigint;

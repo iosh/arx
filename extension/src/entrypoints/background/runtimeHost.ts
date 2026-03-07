@@ -17,7 +17,7 @@ export type BackgroundContext = {
   session: ReturnType<typeof createBackgroundRuntime>["services"]["session"];
   keyring: ReturnType<typeof createBackgroundRuntime>["services"]["keyring"];
   attention: ReturnType<typeof createBackgroundRuntime>["services"]["attention"];
-  chains: ReturnType<typeof createBackgroundRuntime>["services"]["chains"];
+  chainViews: ReturnType<typeof createBackgroundRuntime>["services"]["chainViews"];
 };
 
 export type BackgroundRuntimeHost = {
@@ -52,8 +52,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const getControllerSnapshot = (): ControllerSnapshot => {
     if (!context) throw new Error("Background context is not initialized");
-    const { controllers, session, chains } = context;
-    const activeChain = chains.getActiveChainView();
+    const { controllers, session, chainViews } = context;
+    const activeChain = chainViews.getActiveChainView();
     const isUnlocked = session.unlock.isUnlocked();
     const chainRef = activeChain.chainRef;
     const accounts = isUnlocked
@@ -64,7 +64,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       chain: { chainId: activeChain.chainId, chainRef: activeChain.chainRef },
       accounts,
       isUnlocked,
-      meta: chains.buildProviderMeta(),
+      meta: chainViews.buildProviderMeta(),
     };
   };
 
@@ -125,7 +125,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         session: runtime.services.session,
         keyring: runtime.services.keyring,
         attention: runtime.services.attention,
-        chains: runtime.services.chains,
+        chainViews: runtime.services.chainViews,
       };
 
       context = next;

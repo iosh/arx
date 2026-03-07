@@ -9,7 +9,7 @@ import {
 } from "./lib.js";
 
 export const createKeyringsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chains" | "session" | "keyring">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "keyring">,
 ): Pick<
   UiHandlers,
   | "ui.keyrings.confirmNewMnemonic"
@@ -28,7 +28,7 @@ export const createKeyringsHandlers = (
   | "ui.keyrings.exportPrivateKey"
 > => {
   const selectAccount = async (params: { namespace?: string; address: string }) => {
-    const namespace = params.namespace ?? deps.controllers.network.getActiveChain().namespace;
+    const namespace = params.namespace ?? deps.chainViews.getActiveChainView().namespace;
     const chainRef = resolveChainRefForNamespace(deps, namespace);
     await deps.controllers.accounts.switchActiveForNamespace({ namespace, chainRef, address: params.address });
   };

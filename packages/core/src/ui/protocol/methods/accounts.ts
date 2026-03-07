@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { ChainRefSchema } from "../../../chains/ids.js";
 import { defineMethod } from "./types.js";
 
 export const accountsMethods = {
   "ui.accounts.switchActive": defineMethod(
     z.strictObject({
-      chainRef: z.string().min(1),
+      chainRef: ChainRefSchema,
       address: z.string().nullable().optional(),
     }),
     z.string().nullable(),

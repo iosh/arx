@@ -20,14 +20,14 @@ type ApprovalResult = unknown;
 
 type ApprovalHandlerFn = (
   task: ApprovalTask,
-  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews">,
 ) => Promise<ApprovalResult>;
 
 const deriveChainContext = (
   task: { chainRef?: string; namespace?: string },
-  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews">,
 ) => {
-  const active = deps.chains.getActiveChainView();
+  const active = deps.chainViews.getActiveChainView();
 
   if (task.chainRef) {
     const parsed = parseChainRef(task.chainRef);
@@ -182,7 +182,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 };
 
 export const createApprovalsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews">,
 ): Pick<UiHandlers, "ui.approvals.approve" | "ui.approvals.reject"> => {
   return {
     "ui.approvals.approve": async ({ id }) => {

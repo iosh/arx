@@ -66,14 +66,11 @@ export const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boole
   return Object.values(accountsState.namespaces).some((ns) => ns.accountIds.length > 0);
 };
 
-export const resolveChainRefForNamespace = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chains">,
-  namespace: string,
-): string => {
-  const active = deps.chains.getActiveChainView();
+export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chainViews">, namespace: string): string => {
+  const active = deps.chainViews.getActiveChainView();
   if (active.namespace === namespace) return active.chainRef;
 
-  const available = deps.chains.listAvailableChainsView().find((chain) => chain.namespace === namespace);
+  const available = deps.chainViews.findAvailableChainView({ namespace });
   if (available) {
     return available.chainRef;
   }

@@ -68,8 +68,8 @@ const getRequestMeta = (raw: unknown): UiRequestMeta | null => {
   };
 };
 
-const getUiContext = (deps: Pick<UiRuntimeDeps, "controllers">) => {
-  const chain = deps.controllers.network.getActiveChain();
+const getUiContext = (deps: Pick<UiRuntimeDeps, "chainViews">) => {
+  const chain = deps.chainViews.getActiveChainView();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 
@@ -79,7 +79,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
   const buildSnapshotEvent = (): UiEventEnvelope => {
     const snapshot = buildUiSnapshot({
       controllers: deps.controllers,
-      chains: deps.chains,
+      chainViews: deps.chainViews,
       session: deps.session,
       keyring: deps.keyring,
       attention: deps.attention,

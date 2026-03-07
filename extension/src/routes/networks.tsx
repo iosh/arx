@@ -22,7 +22,7 @@ function NetworkSwitchPage() {
     return <LoadingScreen />;
   }
 
-  const activeNetwork = snapshot.networks.known.find((item) => item.chainRef === snapshot.networks.active);
+  const activeNetwork = snapshot.networks.available.find((item) => item.chainRef === snapshot.networks.active);
 
   const handleChainSwitch = async (chainRef: string) => {
     setPendingRef(chainRef);
@@ -49,12 +49,12 @@ function NetworkSwitchPage() {
           Active chain: {activeNetwork?.displayName ?? snapshot.networks.active}
         </Paragraph>
 
-        {snapshot.networks.known.length === 0 ? (
+        {snapshot.networks.available.length === 0 ? (
           <Paragraph color="$mutedText" marginTop="$2">
-            No registered networks.
+            No available networks.
           </Paragraph>
         ) : (
-          snapshot.networks.known.map((item) => {
+          snapshot.networks.available.map((item) => {
             const isActive = snapshot.networks.active === item.chainRef;
             const loading = pendingRef === item.chainRef;
             return (

@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { ChainRefSchema } from "../../../chains/ids.js";
 import { defineMethod } from "./types.js";
 
 const PermissionRequestDescriptorSchema = z.strictObject({
   capability: z.string().min(1),
-  chainRefs: z.array(z.string().min(1)),
+  chainRefs: z.array(ChainRefSchema),
 });
 
 const PermissionApprovalResultSchema = z.strictObject({
@@ -27,14 +28,14 @@ const TransactionErrorSchema = z.strictObject({
 
 const TransactionRequestSchema = z.strictObject({
   namespace: z.string().min(1),
-  chainRef: z.string().min(1).optional(),
+  chainRef: ChainRefSchema.optional(),
   payload: z.record(z.string(), z.unknown()),
 });
 
 const TransactionMetaSchema = z.strictObject({
   id: z.string().min(1),
   namespace: z.string().min(1),
-  chainRef: z.string().min(1),
+  chainRef: ChainRefSchema,
   origin: z.string().min(1),
   from: z.string().min(1).nullable(),
   request: TransactionRequestSchema,

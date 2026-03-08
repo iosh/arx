@@ -115,10 +115,14 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
       void (async () => {
         try {
           const { controllers } = await getContext();
-          await controllers.approvals.expirePendingByRequestContext({
-            portId,
-            sessionId,
-            finalStatusReason: "session_lost",
+          await controllers.approvals.cancelByScope({
+            scope: {
+              transport: "provider",
+              origin: getPortOrigin(port, extensionOrigin),
+              portId,
+              sessionId,
+            },
+            reason: "session_lost",
           });
         } catch (expireError) {
           const origin = getPortOrigin(port, extensionOrigin);
@@ -432,10 +436,14 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
               if (portId) {
                 try {
                   const { controllers } = await getContext();
-                  await controllers.approvals.expirePendingByRequestContext({
-                    portId,
-                    sessionId: expectedSessionId,
-                    finalStatusReason: "session_lost",
+                  await controllers.approvals.cancelByScope({
+                    scope: {
+                      transport: "provider",
+                      origin: getPortOrigin(port, extensionOrigin),
+                      portId,
+                      sessionId: expectedSessionId,
+                    },
+                    reason: "session_lost",
                   });
                 } catch (error) {
                   const origin = getPortOrigin(port, extensionOrigin);
@@ -474,10 +482,14 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
         void (async () => {
           try {
             const { controllers } = await getContext();
-            await controllers.approvals.expirePendingByRequestContext({
-              portId,
-              sessionId,
-              finalStatusReason: "session_lost",
+            await controllers.approvals.cancelByScope({
+              scope: {
+                transport: "provider",
+                origin: getPortOrigin(port, extensionOrigin),
+                portId,
+                sessionId,
+              },
+              reason: "session_lost",
             });
           } catch (error) {
             const origin = getPortOrigin(port, extensionOrigin);

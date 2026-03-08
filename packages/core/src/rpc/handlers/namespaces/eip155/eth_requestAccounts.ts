@@ -1,9 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { requireApprovalRequester } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineNoParamsMethod({
   capability: PermissionCapabilities.Accounts,
@@ -15,24 +15,22 @@ export const ethRequestAccountsDefinition = defineNoParamsMethod({
       .listOwnedForNamespace({ namespace: invocation.namespace, chainRef })
       .map((account) => account.displayAddress);
 
-    const task = {
+    const request = {
       id: createTaskId("eth_requestAccounts"),
-      type: ApprovalTypes.RequestAccounts,
+      kind: ApprovalKinds.RequestAccounts,
       origin,
       namespace: invocation.namespace,
       chainRef,
       createdAt: controllers.clock.now(),
-      payload: {
+      request: {
         chainRef,
         suggestedAccounts: [...suggested],
       },
     };
 
     try {
-      return await controllers.approvals.requestApproval(
-        task,
-        requireRequestContext(rpcContext, "eth_requestAccounts"),
-      );
+      return await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "eth_requestAccounts"))
+        .settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

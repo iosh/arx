@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
-  ApprovalTypes,
+  ApprovalKinds,
   PermissionCapabilities,
   type RequestPermissionsApprovalPayload,
 } from "../../../../../controllers/index.js";
@@ -346,10 +346,10 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(runtime);
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type === ApprovalTypes.AddChain) {
-        const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
+      if (task.kind === ApprovalKinds.AddChain) {
+        const payload = task.request as { metadata: ChainMetadata; isUpdate: boolean };
         await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
-        await runtime.controllers.approvals.resolve(task.id, async () => null);
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
         return true;
       }
       return false;
@@ -418,8 +418,8 @@ describe("eip155 handlers - core error paths", () => {
 
     const rejectionError = Object.assign(new Error("user denied"), { code: 4001 });
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
-      if (task.type === ApprovalTypes.AddChain) {
-        runtime.controllers.approvals.reject(task.id, rejectionError);
+      if (task.kind === ApprovalKinds.AddChain) {
+        void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
         return true;
       }
       return false;
@@ -505,10 +505,10 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(runtime);
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type === ApprovalTypes.AddChain) {
-        const payload = task.payload as { metadata: ChainMetadata; isUpdate: boolean };
+      if (task.kind === ApprovalKinds.AddChain) {
+        const payload = task.request as { metadata: ChainMetadata; isUpdate: boolean };
         await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
-        await runtime.controllers.approvals.resolve(task.id, async () => null);
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
         return true;
       }
       return false;
@@ -598,7 +598,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const execute = createExecutor(runtime);
     let approvalRequested = false;
-    const unsubscribeApproval = runtime.controllers.approvals.onRequest(() => {
+    const unsubscribeApproval = runtime.controllers.approvals.onCreated(() => {
       approvalRequested = true;
     });
 
@@ -763,17 +763,19 @@ describe("eip155 handlers - core error paths", () => {
     await accountsController.refresh?.();
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
-      if (task.type !== ApprovalTypes.RequestPermissions) return false;
-      const payload = task.payload as RequestPermissionsApprovalPayload;
+      if (task.kind !== ApprovalKinds.RequestPermissions) return false;
+      const payload = task.request as RequestPermissionsApprovalPayload;
       expect(payload.requested).toEqual(
         expect.arrayContaining([
           { capability: "wallet_basic", chainRefs: [chain.chainRef] },
           { capability: "eth_accounts", chainRefs: [chain.chainRef] },
         ]),
       );
-      await runtime.controllers.approvals.resolve(task.id, async () => ({
-        granted: payload.requested,
-      }));
+      await runtime.controllers.approvals.resolve({
+        id: task.id,
+        action: "approve",
+        result: { granted: payload.requested },
+      });
       return true;
     });
 
@@ -875,7 +877,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "requestApproval");
+    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "create");
     try {
       await expect(
         execute({
@@ -905,7 +907,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "requestApproval");
+    const requestApprovalSpy = vi.spyOn(runtime.controllers.approvals, "create");
     const typedData = {
       domain: { name: "ARX", version: "1" },
       message: { contents: "hello" },

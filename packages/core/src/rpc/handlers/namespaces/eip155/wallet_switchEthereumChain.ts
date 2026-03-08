@@ -1,11 +1,11 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
-import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { requireApprovalRequester } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
   chainId?: string;
@@ -77,8 +77,6 @@ const WalletSwitchEthereumChainParamsSchema = z
 
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
   capability: PermissionCapabilities.Basic,
-  // Require an existing connection so unrelated pages cannot spam chain switch prompts.
-  // User still approves the switch explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {
@@ -144,21 +142,21 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       return null;
     }
 
-    const task = {
+    const request = {
       id: createTaskId("wallet_switchEthereumChain"),
-      type: ApprovalTypes.SwitchChain,
+      kind: ApprovalKinds.SwitchChain,
       origin,
       namespace: invocation.namespace,
       chainRef: target.chainRef,
       createdAt: controllers.clock.now(),
-      payload: {
+      request: {
         chainRef: target.chainRef,
       },
     };
 
-    return await controllers.approvals.requestApproval(
-      task,
-      requireRequestContext(rpcContext, "wallet_switchEthereumChain"),
-    );
+    return await controllers.approvals.create(
+      request,
+      requireApprovalRequester(rpcContext, "wallet_switchEthereumChain"),
+    ).settled;
   },
 };

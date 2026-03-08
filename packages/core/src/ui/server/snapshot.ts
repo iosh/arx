@@ -1,6 +1,6 @@
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ApprovalTask } from "../../controllers/approval/types.js";
-import { ApprovalTypes } from "../../controllers/approval/types.js";
+import type { ApprovalRecord } from "../../controllers/approval/types.js";
+import { ApprovalKinds } from "../../controllers/approval/types.js";
 import type { PermissionsState, RequestPermissionsApprovalPayload } from "../../controllers/permission/types.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
@@ -103,7 +103,7 @@ const extractPayload = <T>(payload: unknown): T => payload as T;
 const toApprovalSummary = (
   controllers: HandlerControllers,
   chainViews: Pick<ChainViewsService, "getActiveChainView" | "findAvailableChainView">,
-  task: ApprovalTask,
+  task: ApprovalRecord,
 ): UiSnapshot["approvals"][number] | null => {
   const activeChain = chainViews.getActiveChainView();
   const base = {
@@ -114,9 +114,9 @@ const toApprovalSummary = (
     createdAt: task.createdAt,
   };
 
-  switch (task.type) {
-    case ApprovalTypes.RequestAccounts: {
-      const payload = extractPayload<RequestAccountsPayload>(task.payload);
+  switch (task.kind) {
+    case ApprovalKinds.RequestAccounts: {
+      const payload = extractPayload<RequestAccountsPayload>(task.request);
       const suggestedAccounts = Array.isArray(payload.suggestedAccounts)
         ? payload.suggestedAccounts.map((value) => String(value))
         : [];
@@ -127,8 +127,8 @@ const toApprovalSummary = (
         payload: { suggestedAccounts },
       };
     }
-    case ApprovalTypes.SignMessage: {
-      const payload = extractPayload<SignMessagePayload>(task.payload);
+    case ApprovalKinds.SignMessage: {
+      const payload = extractPayload<SignMessagePayload>(task.request);
       return {
         ...base,
         type: "signMessage",
@@ -138,8 +138,8 @@ const toApprovalSummary = (
         },
       };
     }
-    case ApprovalTypes.SignTypedData: {
-      const payload = extractPayload<SignTypedDataPayload>(task.payload);
+    case ApprovalKinds.SignTypedData: {
+      const payload = extractPayload<SignTypedDataPayload>(task.request);
       return {
         ...base,
         type: "signTypedData",
@@ -150,8 +150,8 @@ const toApprovalSummary = (
         },
       };
     }
-    case ApprovalTypes.RequestPermissions: {
-      const payload = extractPayload<RequestPermissionsApprovalPayload>(task.payload);
+    case ApprovalKinds.RequestPermissions: {
+      const payload = extractPayload<RequestPermissionsApprovalPayload>(task.request);
       return {
         ...base,
         type: "requestPermissions",
@@ -163,8 +163,8 @@ const toApprovalSummary = (
         },
       };
     }
-    case ApprovalTypes.SendTransaction: {
-      const payload = extractPayload<SendTransactionPayload>(task.payload);
+    case ApprovalKinds.SendTransaction: {
+      const payload = extractPayload<SendTransactionPayload>(task.request);
       const txMeta = controllers.transactions.getMeta(task.id);
       const txPayload =
         (txMeta?.request?.payload as Record<string, unknown> | undefined) ?? payload.request?.payload ?? {};
@@ -214,8 +214,8 @@ const toApprovalSummary = (
         },
       };
     }
-    case ApprovalTypes.SwitchChain: {
-      const payload = extractPayload<SwitchChainPayload>(task.payload);
+    case ApprovalKinds.SwitchChain: {
+      const payload = extractPayload<SwitchChainPayload>(task.request);
       const requestedChainRef = payload.chainRef ?? task.chainRef ?? activeChain.chainRef;
       const target = chainViews.findAvailableChainView({ chainRef: requestedChainRef }) ?? activeChain;
 
@@ -229,8 +229,8 @@ const toApprovalSummary = (
         },
       };
     }
-    case ApprovalTypes.AddChain: {
-      const payload = extractPayload<AddChainPayload>(task.payload);
+    case ApprovalKinds.AddChain: {
+      const payload = extractPayload<AddChainPayload>(task.request);
       const meta = payload.metadata;
       const rpcUrls = Array.from(new Set(meta.rpcEndpoints.map((ep) => ep.url.trim()).filter(Boolean)));
       const blockExplorerUrl =
@@ -260,8 +260,8 @@ const toApprovalSummary = (
         ...base,
         type: "unsupported",
         payload: {
-          rawType: task.type,
-          ...(task.payload !== undefined ? { rawPayload: task.payload } : {}),
+          rawType: task.kind,
+          ...(task.request !== undefined ? { rawPayload: task.request } : {}),
         },
       };
   }
@@ -306,11 +306,13 @@ export const buildUiSnapshot = (deps: {
   const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked()
-    ? controllers.accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
-        accountId: account.accountId,
-        canonicalAddress: account.canonicalAddress,
-        displayAddress: account.displayAddress,
-      }))
+    ? controllers.accounts
+        .listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
+        .map((account) => ({
+          accountId: account.accountId,
+          canonicalAddress: account.canonicalAddress,
+          displayAddress: account.displayAddress,
+        }))
     : [];
   const activeAccount = session.unlock.isUnlocked()
     ? controllers.accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })

@@ -1,25 +1,25 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import { parseChainRef } from "../../../chains/caip.js";
-import { ApprovalTypes } from "../../../controllers/approval/types.js";
+import { ApprovalKinds } from "../../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import type { UiMethodResult } from "../../protocol/index.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { resolveChainRefForNamespace } from "./lib.js";
 
-type ApprovalTask = {
+type ApprovalRecordLike = {
   id: string;
-  type: string;
+  kind: string;
   origin: string;
   chainRef?: string;
   namespace?: string;
-  payload?: unknown;
+  request?: unknown;
 };
 
 type ApprovalResult = unknown;
 
 type ApprovalHandlerFn = (
-  task: ApprovalTask,
+  task: ApprovalRecordLike,
   deps: Pick<UiRuntimeDeps, "controllers" | "chainViews">,
 ) => Promise<ApprovalResult>;
 
@@ -65,7 +65,7 @@ const deriveChainContext = (
 };
 
 const approvalHandlers: Record<string, ApprovalHandlerFn> = {
-  [ApprovalTypes.SendTransaction]: async (task, deps) => {
+  [ApprovalKinds.SendTransaction]: async (task, deps) => {
     const approved = await deps.controllers.transactions.approveTransaction(task.id);
     if (!approved) {
       throw arxError({
@@ -77,7 +77,7 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return approved;
   },
 
-  [ApprovalTypes.RequestAccounts]: async (task, deps) => {
+  [ApprovalKinds.RequestAccounts]: async (task, deps) => {
     const { chainRef, namespace } = deriveChainContext(task, deps);
 
     const accounts = deps.controllers.accounts.listOwnedForNamespace({ namespace, chainRef });
@@ -91,7 +91,9 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
 
     const activeAccount = deps.controllers.accounts.getActiveAccountForNamespace({ namespace, chainRef });
     const selectedAccount =
-      (activeAccount && accounts.find((account) => account.accountId === activeAccount.accountId)) ?? accounts[0] ?? null;
+      (activeAccount && accounts.find((account) => account.accountId === activeAccount.accountId)) ??
+      accounts[0] ??
+      null;
     if (!selectedAccount) {
       throw arxError({
         reason: ArxReasons.PermissionDenied,
@@ -109,8 +111,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return [selectedAccount.displayAddress];
   },
 
-  [ApprovalTypes.SignMessage]: async (task, deps) => {
-    const payload = task.payload as { from: string; message: string };
+  [ApprovalKinds.SignMessage]: async (task, deps) => {
+    const payload = task.request as { from: string; message: string };
     const { chainRef, namespace } = deriveChainContext(task, deps);
     if (namespace !== "eip155") {
       throw arxError({
@@ -129,8 +131,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return signature;
   },
 
-  [ApprovalTypes.SignTypedData]: async (task, deps) => {
-    const payload = task.payload as { from: string; typedData: unknown };
+  [ApprovalKinds.SignTypedData]: async (task, deps) => {
+    const payload = task.request as { from: string; typedData: unknown };
     const { chainRef, namespace } = deriveChainContext(task, deps);
     if (namespace !== "eip155") {
       throw arxError({
@@ -151,13 +153,13 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return signature;
   },
 
-  [ApprovalTypes.RequestPermissions]: async (task) => {
-    const payload = task.payload as { requested: unknown[] };
+  [ApprovalKinds.RequestPermissions]: async (task) => {
+    const payload = task.request as { requested: unknown[] };
     return { granted: payload.requested };
   },
 
-  [ApprovalTypes.SwitchChain]: async (task, deps) => {
-    const payload = task.payload as { chainRef?: string };
+  [ApprovalKinds.SwitchChain]: async (task, deps) => {
+    const payload = task.request as { chainRef?: string };
     const requested = payload.chainRef ?? task.chainRef;
     if (!requested) {
       throw arxError({
@@ -171,8 +173,8 @@ const approvalHandlers: Record<string, ApprovalHandlerFn> = {
     return null;
   },
 
-  [ApprovalTypes.AddChain]: async (task, deps) => {
-    const payload = task.payload as { metadata: unknown };
+  [ApprovalKinds.AddChain]: async (task, deps) => {
+    const payload = task.request as { metadata: unknown };
     await deps.controllers.chainDefinitions.upsertChain(
       payload.metadata as Parameters<typeof deps.controllers.chainDefinitions.upsertChain>[0],
     );
@@ -190,17 +192,24 @@ export const createApprovalsHandlers = (
         throw arxError({ reason: ArxReasons.RpcInvalidParams, message: "Approval not found", data: { id } });
       }
 
-      const handler = approvalHandlers[task.type];
+      const handler = approvalHandlers[task.kind];
       if (!handler) {
         throw arxError({
           reason: ArxReasons.RpcUnsupportedMethod,
-          message: `Unsupported approval type: ${task.type}`,
-          data: { id, type: task.type },
+          message: `Unsupported approval kind: ${task.kind}`,
+          data: { id, kind: task.kind },
         });
       }
 
-      const result = await deps.controllers.approvals.resolve(task.id, () => handler(task as ApprovalTask, deps));
-      return { id: task.id, result: result as UiMethodResult<"ui.approvals.approve">["result"] };
+      try {
+        const result = await handler(task as ApprovalRecordLike, deps);
+        await deps.controllers.approvals.resolve({ id: task.id, action: "approve", result });
+        return { id: task.id, result: result as UiMethodResult<"ui.approvals.approve">["result"] };
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        await deps.controllers.approvals.cancel({ id: task.id, reason: "internal_error", error: err });
+        throw err;
+      }
     },
 
     "ui.approvals.reject": async ({ id, reason }) => {
@@ -212,10 +221,10 @@ export const createApprovalsHandlers = (
       const err = arxError({
         reason: ArxReasons.ApprovalRejected,
         message: reason ?? "User rejected the request.",
-        data: { id: task.id, origin: task.origin, type: task.type },
+        data: { id: task.id, origin: task.origin, kind: task.kind },
       });
 
-      if (task.type === ApprovalTypes.SendTransaction) {
+      if (task.kind === ApprovalKinds.SendTransaction) {
         try {
           await deps.controllers.transactions.rejectTransaction(task.id, err);
         } catch {
@@ -223,7 +232,12 @@ export const createApprovalsHandlers = (
         }
       }
 
-      deps.controllers.approvals.reject(task.id, err);
+      await deps.controllers.approvals.resolve({
+        id: task.id,
+        action: "reject",
+        ...(reason !== undefined ? { reason } : {}),
+        error: err,
+      });
       return { id: task.id };
     },
   };

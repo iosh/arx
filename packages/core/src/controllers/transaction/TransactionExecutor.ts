@@ -8,7 +8,8 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ApprovalController } from "../approval/types.js";
-import { ApprovalTypes } from "../approval/types.js";
+import { ApprovalKinds } from "../approval/types.js";
+import { toApprovalRequester } from "../approval/utils.js";
 import type { NetworkController } from "../network/types.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
@@ -16,7 +17,7 @@ import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
   TransactionApprovalChainMetadata,
-  TransactionApprovalTask,
+  TransactionApprovalRequest,
   TransactionApprovalTaskPayload,
   TransactionController,
   TransactionError,
@@ -45,7 +46,7 @@ type Deps = {
   network: Pick<NetworkController, "getState">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "requestApproval">;
+  approvals: Pick<ApprovalController, "create">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
   prepare: TransactionPrepareManager;
@@ -68,7 +69,7 @@ export class TransactionExecutor
   #network: Pick<NetworkController, "getState">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  #approvals: Pick<ApprovalController, "requestApproval">;
+  #approvals: Pick<ApprovalController, "create">;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
   #prepare: TransactionPrepareManager;
@@ -166,8 +167,8 @@ export class TransactionExecutor
 
     const storedMeta = this.#view.commitRecord(created).next;
 
-    const task = this.#createApprovalTask(storedMeta);
-    const approvalPromise = this.#approvals.requestApproval(task, requestContext);
+    const approvalRequest = this.#createApprovalRequest(storedMeta);
+    const approvalPromise = this.#approvals.create(approvalRequest, toApprovalRequester(requestContext)).settled;
 
     // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#prepare.queuePrepare(id);
@@ -439,15 +440,15 @@ export class TransactionExecutor
     return null;
   }
 
-  #createApprovalTask(meta: TransactionMeta): TransactionApprovalTask {
+  #createApprovalRequest(meta: TransactionMeta): TransactionApprovalRequest {
     return {
       id: meta.id,
-      type: ApprovalTypes.SendTransaction,
+      kind: ApprovalKinds.SendTransaction,
       origin: meta.origin,
       namespace: meta.request.namespace,
       chainRef: meta.chainRef,
       createdAt: meta.createdAt,
-      payload: {
+      request: {
         chainRef: meta.chainRef,
         origin: meta.origin,
         chain: this.#buildChainMetadata(meta),

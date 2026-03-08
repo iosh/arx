@@ -6,7 +6,7 @@ import type {
   UnlockUnlockedPayload,
 } from "@arx/core";
 import {
-  ApprovalTypes,
+  ApprovalKinds,
   ArxReasons,
   arxError,
   createRpcRegistry,
@@ -418,11 +418,11 @@ const createAccountsController = () => {
 const createApprovalsController = () => {
   type StubTask = {
     id: string;
-    type: string;
+    kind: string;
     origin: string;
     namespace?: string;
     chainRef?: string;
-    payload: unknown;
+    request: unknown;
     createdAt: number;
   };
 
@@ -432,7 +432,7 @@ const createApprovalsController = () => {
   const getState = () => ({
     pending: tasks.map((task) => ({
       id: task.id,
-      type: task.type,
+      kind: task.kind,
       origin: task.origin,
       namespace: task.namespace,
       chainRef: task.chainRef,
@@ -843,11 +843,11 @@ describe("uiBridge", () => {
     approvals.setPendingTasks([
       {
         id,
-        type: ApprovalTypes.RequestAccounts,
+        kind: ApprovalKinds.RequestAccounts,
         origin: "https://example.com",
         namespace: CHAIN.namespace,
         chainRef: CHAIN.chainRef,
-        payload: { suggestedAccounts: [] },
+        request: { suggestedAccounts: [] },
         createdAt: Date.now(),
       },
     ]);

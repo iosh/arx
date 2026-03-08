@@ -653,36 +653,42 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   // Helper function to enable auto-approval for testing
   const enableAutoApproval = () => {
-    const unsubscribe = runtime.controllers.approvals.onRequest(async ({ task }) => {
+    const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
       try {
-        // Keep responses semantically valid for each approval type.
-        await runtime.controllers.approvals.resolve(task.id, async () => {
-          switch (task.type) {
-            case "wallet_sendTransaction": {
-              const result = await runtime.controllers.transactions.approveTransaction(task.id);
-              return result;
-            }
-            case "wallet_requestAccounts": {
-              const activeChain = requireActiveChainMetadata(runtime);
-              return runtime.controllers.accounts
-                .listOwnedForNamespace({
-                  namespace: task.namespace ?? activeChain.namespace,
-                  chainRef: task.chainRef ?? activeChain.chainRef,
-                })
-                .map((account) => account.displayAddress);
-            }
-            case "wallet_signMessage":
-            case "wallet_signTypedData":
-              return "0xsignedpayload";
-            case "wallet_requestPermissions":
-              return { granted: [] };
-            case "wallet_switchEthereumChain":
-            case "wallet_addEthereumChain":
-              return null;
-            default:
-              return null;
+        let result = null;
+        switch (record.kind) {
+          case "sendTransaction": {
+            result = await runtime.controllers.transactions.approveTransaction(record.id);
+            break;
           }
-        });
+          case "requestAccounts": {
+            const activeChain = requireActiveChainMetadata(runtime);
+            result = runtime.controllers.accounts
+              .listOwnedForNamespace({
+                namespace: record.namespace ?? activeChain.namespace,
+                chainRef: record.chainRef ?? activeChain.chainRef,
+              })
+              .map((account) => account.displayAddress);
+            break;
+          }
+          case "signMessage":
+          case "signTypedData": {
+            result = "0xsignedpayload";
+            break;
+          }
+          case "requestPermissions": {
+            result = { granted: [] };
+            break;
+          }
+          // other case into `null`
+          // case "switchChain":
+          // case "addChain":
+          default: {
+            result = null;
+            break;
+          }
+        }
+        await runtime.controllers.approvals.resolve({ id: record.id, action: "approve", result });
       } catch {
         // Ignore errors if approval was already resolved
       }

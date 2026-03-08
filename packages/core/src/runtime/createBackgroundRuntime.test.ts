@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../chains/metadata.js";
-import { ApprovalTypes, PermissionCapabilities } from "../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../controllers/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
 import { createUiHandlers } from "../ui/server/index.js";
@@ -280,15 +280,15 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    const approvalPromise = runtime.controllers.approvals.requestApproval(
+    const approvalPromise = runtime.controllers.approvals.create(
       {
         id: "switch-chain-approval",
-        type: ApprovalTypes.SwitchChain,
+        kind: ApprovalKinds.SwitchChain,
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: ALT_CHAIN.chainRef,
         createdAt: 1,
-        payload: { chainRef: ALT_CHAIN.chainRef },
+        request: { chainRef: ALT_CHAIN.chainRef },
       },
       {
         transport: "provider",
@@ -297,7 +297,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         requestId: "request-1",
         origin: "https://dapp.example",
       },
-    );
+    ).settled;
 
     await flushAsync();
 

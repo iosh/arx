@@ -1,9 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { assertPermittedEip155Account, requireRequestContext } from "./shared.js";
+import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
 
 type PersonalSignParams = { address: string; message: string };
 
@@ -52,14 +52,14 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       controllers,
     });
 
-    const task = {
+    const request = {
       id: createTaskId("personal_sign"),
-      type: ApprovalTypes.SignMessage,
+      kind: ApprovalKinds.SignMessage,
       origin,
       namespace: invocation.namespace,
       chainRef,
       createdAt: controllers.clock.now(),
-      payload: {
+      request: {
         chainRef,
         from,
         message,
@@ -67,12 +67,11 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
     };
 
     try {
-      const signature = await controllers.approvals.requestApproval(
-        task,
-        requireRequestContext(rpcContext, "personal_sign"),
-      );
+      const signature = await controllers.approvals.create(
+        request,
+        requireApprovalRequester(rpcContext, "personal_sign"),
+      ).settled;
 
-      // Grant Sign permission after successful signature
       await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
         namespace: invocation.namespace,
         chainRef,

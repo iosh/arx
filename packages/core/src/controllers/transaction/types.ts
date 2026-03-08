@@ -10,8 +10,7 @@ import type {
   TransactionRequest,
   TransactionWarning,
 } from "../../transactions/types.js";
-import type { ApprovalTypes } from "../approval/constants.js";
-import type { ApprovalTask } from "../approval/types.js";
+import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
@@ -67,7 +66,7 @@ export type TransactionApprovalTaskPayload = {
   issues: TransactionIssue[];
 };
 
-export type TransactionApprovalTask = ApprovalTask<typeof ApprovalTypes.SendTransaction>;
+export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKinds.SendTransaction>;
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;

@@ -1,19 +1,31 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { RequestContext } from "../../rpc/requestContext.js";
-import { APPROVAL_FINISHED, APPROVAL_REQUESTED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
+import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
 import type {
   ApprovalController,
-  ApprovalExecutor,
+  ApprovalCreatedEvent,
+  ApprovalCreateParams,
   ApprovalFinishedEvent,
-  ApprovalRequestedEvent,
-  ApprovalResultByType,
+  ApprovalHandle,
+  ApprovalKind,
+  ApprovalRecord,
+  ApprovalRequester,
+  ApprovalResolveInput,
+  ApprovalResolveResult,
+  ApprovalResultByKind,
   ApprovalState,
-  ApprovalTask,
-  ApprovalType,
-  FinalStatusReason,
+  ApprovalTerminalReason,
   PendingApproval,
 } from "./types.js";
-import { cloneFinishEvent, cloneRequestEvent, cloneState, cloneTask, createDeferred, toSimpleError } from "./utils.js";
+import {
+  cloneCreatedEvent,
+  cloneFinishEvent,
+  cloneRecord,
+  cloneState,
+  createDeferred,
+  deriveApprovalFinalStatus,
+  matchesApprovalScope,
+  toSimpleError,
+} from "./utils.js";
 
 type CreateInMemoryApprovalControllerOptions = {
   messenger: ApprovalMessenger;
@@ -29,7 +41,7 @@ export class InMemoryApprovalController implements ApprovalController {
   #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: ApprovalState = { pending: [] };
-  #tasks: Map<string, ApprovalTask> = new Map();
+  #records: Map<string, ApprovalRecord> = new Map();
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -48,11 +60,11 @@ export class InMemoryApprovalController implements ApprovalController {
     return this.#messenger.subscribe(APPROVAL_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
-  onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void {
-    return this.#messenger.subscribe(APPROVAL_REQUESTED, handler);
+  onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void {
+    return this.#messenger.subscribe(APPROVAL_CREATED, handler);
   }
 
-  onFinish(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void {
+  onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void {
     return this.#messenger.subscribe(APPROVAL_FINISHED, handler);
   }
 
@@ -60,167 +72,167 @@ export class InMemoryApprovalController implements ApprovalController {
     return this.#pending.has(id);
   }
 
-  get(id: string): ApprovalTask | undefined {
-    return this.#tasks.get(id);
+  get(id: string): ApprovalRecord | undefined {
+    const record = this.#records.get(id);
+    return record ? cloneRecord(record) : undefined;
   }
 
-  async requestApproval<K extends ApprovalType>(
-    task: ApprovalTask<K>,
-    requestContext: RequestContext,
-  ): Promise<ApprovalResultByType[K]> {
-    if (!requestContext) throw new Error("Approval requestContext is required");
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K> {
+    if (!requester) throw new Error("Approval requester is required");
 
-    const activeTask = cloneTask(task);
+    const record = cloneRecord({ ...request, requester });
 
-    if (activeTask.origin !== requestContext.origin) {
-      throw new Error("Approval origin mismatch between task and requestContext");
+    if (record.origin !== requester.origin) {
+      throw new Error("Approval origin mismatch between request and requester");
     }
 
-    if (this.#pending.has(activeTask.id)) {
-      throw new Error(`Duplicate approval id "${activeTask.id}"`);
+    if (this.#pending.has(record.id)) {
+      throw new Error(`Duplicate approval id "${record.id}"`);
     }
 
-    const deferred = createDeferred<ApprovalResultByType[K]>();
-    this.#pending.set(activeTask.id, {
-      task: activeTask,
-      requestContext: { ...requestContext },
+    const deferred = createDeferred<ApprovalResultByKind[K]>();
+    this.#pending.set(record.id, {
+      record,
       resolve: deferred.resolve as (value: unknown) => void,
       reject: deferred.reject,
     });
 
-    // TTL to avoid hanging approvals when the user never responds.
     this.#timeouts.set(
-      activeTask.id,
+      record.id,
       setTimeout(() => {
-        this.#expireById(activeTask.id, "timeout");
+        void this.cancel({ id: record.id, reason: "timeout" });
       }, this.#ttlMs),
     );
 
-    this.#tasks.set(activeTask.id, activeTask);
-    this.#enqueue(activeTask);
-    this.#publishRequest({ task: activeTask, requestContext });
+    this.#records.set(record.id, record);
+    this.#enqueue(record);
+    this.#publishCreated({ record });
 
-    return deferred.promise;
+    return { id: record.id, settled: deferred.promise };
   }
 
-  async resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult> {
-    const entry = this.#pending.get(id);
+  async resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult> {
+    const entry = this.#pending.get(input.id);
     if (!entry) {
-      this.#clearTimeout(id);
-      const task = this.#finalizeLocal(id);
-      this.#publishFinish({ id, status: "expired", finalStatusReason: "session_lost", ...this.#taskMeta(task) });
-      throw new Error(`Approval ${id} not found`);
+      throw new Error(`Approval ${input.id} not found`);
     }
 
-    try {
-      const value = await executor();
-
-      this.#pending.delete(id);
-      this.#clearTimeout(id);
-      this.#finalizeLocal(id);
-
-      this.#publishFinish({
-        id,
-        status: "approved",
-        finalStatusReason: "user_approve",
-        ...this.#taskMeta(entry.task),
-        value,
+    if (input.action === "reject") {
+      const error = this.#getRejectionError({
+        id: input.id,
+        provided: input.error,
+        message: input.reason ?? input.error?.message ?? this.#autoRejectMessage,
       });
 
-      entry.resolve(value);
-      return value;
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-
-      this.#pending.delete(id);
-      this.#clearTimeout(id);
-      this.#finalizeLocal(id);
-
-      this.#publishFinish({
-        id,
-        status: "rejected",
-        finalStatusReason: "internal_error",
-        ...this.#taskMeta(entry.task),
-        error: toSimpleError(err),
-      });
-
-      entry.reject(err);
-      throw err;
-    }
-  }
-
-  reject(id: string, reason?: Error): void {
-    const error = this.#getRejectionError({
-      id,
-      provided: reason,
-      message: reason?.message ?? this.#autoRejectMessage,
-    });
-
-    const entry = this.#pending.get(id);
-    if (entry) {
-      this.#pending.delete(id);
-      this.#clearTimeout(id);
-      this.#finalizeLocal(id);
+      this.#pending.delete(input.id);
+      this.#clearTimeout(input.id);
+      this.#finalizeLocal(input.id);
       entry.reject(error);
 
-      this.#publishFinish({
-        id,
+      this.#publishFinished({
+        id: input.id,
         status: "rejected",
-        finalStatusReason: "user_reject",
-        ...this.#taskMeta(entry.task),
+        terminalReason: "user_reject",
+        ...this.#recordMeta(entry.record),
         error: toSimpleError(error),
       });
+
+      return { id: input.id, status: "rejected" };
+    }
+
+    const value = input.result as ApprovalResultByKind[typeof entry.record.kind];
+
+    this.#pending.delete(input.id);
+    this.#clearTimeout(input.id);
+    this.#finalizeLocal(input.id);
+
+    this.#publishFinished({
+      id: input.id,
+      status: "approved",
+      terminalReason: "user_approve",
+      ...this.#recordMeta(entry.record),
+      value,
+    });
+
+    entry.resolve(value);
+    return { id: input.id, status: "approved" };
+  }
+
+  async cancel(input: { id: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void> {
+    const entry = this.#pending.get(input.id);
+    if (!entry) {
+      this.#clearTimeout(input.id);
+      this.#finalizeLocal(input.id);
       return;
     }
 
-    const task = this.#finalizeLocal(id);
-    this.#clearTimeout(id);
-    this.#publishFinish({
-      id,
-      status: "rejected",
-      finalStatusReason: "user_reject",
-      ...this.#taskMeta(task),
+    this.#pending.delete(input.id);
+    this.#clearTimeout(input.id);
+    this.#finalizeLocal(input.id);
+
+    const error =
+      input.error ??
+      this.#getTerminalError({
+        id: input.id,
+        terminalReason: input.reason,
+        meta: this.#recordMeta(entry.record),
+      });
+
+    try {
+      entry.reject(error);
+    } catch (rejectError) {
+      this.#logger?.("approvals: failed to reject cancelled approval", rejectError);
+    }
+
+    this.#publishFinished({
+      id: input.id,
+      status: deriveApprovalFinalStatus(input.reason),
+      terminalReason: input.reason,
+      ...this.#recordMeta(entry.record),
       error: toSimpleError(error),
     });
   }
 
-  async expirePendingByRequestContext(params: {
-    portId: string;
-    sessionId: string;
-    finalStatusReason?: FinalStatusReason;
+  async cancelByScope(input: {
+    scope:
+      | ApprovalRequester
+      | { transport: ApprovalRequester["transport"]; origin: string; portId: string; sessionId: string };
+    reason: ApprovalTerminalReason;
   }): Promise<number> {
-    const reason = params.finalStatusReason ?? "session_lost";
-    const expiredIds: string[] = [];
+    const cancelledIds: string[] = [];
 
     for (const [id, entry] of this.#pending) {
-      const ctx = entry.requestContext;
-      if (ctx.transport !== "provider") continue;
-      if (ctx.portId !== params.portId) continue;
-      if (ctx.sessionId !== params.sessionId) continue;
-      expiredIds.push(id);
+      if (matchesApprovalScope(entry.record.requester, input.scope)) {
+        cancelledIds.push(id);
+      }
     }
 
-    for (const id of expiredIds) {
-      this.#expireById(id, reason);
-    }
+    await Promise.all(
+      cancelledIds.map((id) =>
+        this.cancel({
+          id,
+          reason: input.reason,
+        }),
+      ),
+    );
 
-    return expiredIds.length;
+    return cancelledIds.length;
   }
 
-  #enqueue(task: ApprovalTask) {
-    if (this.#state.pending.some((item) => item.id === task.id)) {
+  #enqueue(record: ApprovalRecord) {
+    if (this.#state.pending.some((item) => item.id === record.id)) {
       return;
     }
 
     const next = [
       ...this.#state.pending,
       {
-        id: task.id,
-        type: task.type,
-        origin: task.origin,
-        namespace: task.namespace,
-        chainRef: task.chainRef,
-        createdAt: task.createdAt,
+        id: record.id,
+        kind: record.kind,
+        origin: record.origin,
+        namespace: record.namespace,
+        chainRef: record.chainRef,
+        createdAt: record.createdAt,
       },
     ].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
@@ -234,11 +246,11 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#publishState();
   }
 
-  #finalizeLocal(id: string): ApprovalTask | undefined {
+  #finalizeLocal(id: string): ApprovalRecord | undefined {
     this.#dequeue(id);
-    const task = this.#tasks.get(id);
-    this.#tasks.delete(id);
-    return task;
+    const record = this.#records.get(id);
+    this.#records.delete(id);
+    return record;
   }
 
   #clearTimeout(id: string) {
@@ -248,41 +260,13 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#timeouts.delete(id);
   }
 
-  #expireById(id: string, finalStatusReason: FinalStatusReason) {
-    const entry = this.#pending.get(id);
-    if (!entry) {
-      this.#clearTimeout(id);
-      return;
-    }
-
-    this.#pending.delete(id);
-    this.#clearTimeout(id);
-    this.#finalizeLocal(id);
-
-    const meta = this.#taskMeta(entry.task);
-    const error = this.#getExpirationError({ id, finalStatusReason, meta });
-
-    try {
-      entry.reject(error);
-    } catch (rejectError) {
-      this.#logger?.("approvals: failed to reject expired approval", rejectError);
-    }
-
-    this.#publishFinish({
-      id,
-      status: "expired",
-      finalStatusReason,
-      ...meta,
-    });
-  }
-
-  #taskMeta(task?: ApprovalTask) {
-    return task
+  #recordMeta(record?: ApprovalRecord) {
+    return record
       ? {
-          type: task.type,
-          origin: task.origin,
-          namespace: task.namespace,
-          chainRef: task.chainRef,
+          kind: record.kind,
+          origin: record.origin,
+          namespace: record.namespace,
+          chainRef: record.chainRef,
         }
       : {};
   }
@@ -291,16 +275,15 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#messenger.publish(APPROVAL_STATE_CHANGED, cloneState(this.#state));
   }
 
-  #publishRequest(event: ApprovalRequestedEvent) {
-    this.#messenger.publish(APPROVAL_REQUESTED, cloneRequestEvent(event));
+  #publishCreated(event: ApprovalCreatedEvent) {
+    this.#messenger.publish(APPROVAL_CREATED, cloneCreatedEvent(event));
   }
 
-  #publishFinish(event: ApprovalFinishedEvent<unknown>) {
+  #publishFinished(event: ApprovalFinishedEvent<unknown>) {
     this.#messenger.publish(APPROVAL_FINISHED, cloneFinishEvent(event));
   }
 
   #getRejectionError(params: { id: string; provided?: Error | undefined; message: string }): Error {
-    // Preserve caller-provided errors (they may carry extra fields like `code`).
     if (params.provided) return params.provided;
 
     return arxError({
@@ -310,32 +293,38 @@ export class InMemoryApprovalController implements ApprovalController {
     });
   }
 
-  #getExpirationError(params: {
+  #getTerminalError(params: {
     id: string;
-    finalStatusReason: FinalStatusReason;
+    terminalReason: ApprovalTerminalReason;
     meta: {
-      type?: string | undefined;
+      kind?: string | undefined;
       origin?: string | undefined;
       namespace?: string | undefined;
       chainRef?: string | undefined;
     };
   }): Error {
-    const data = { id: params.id, finalStatusReason: params.finalStatusReason, ...params.meta };
+    const data = { id: params.id, terminalReason: params.terminalReason, ...params.meta };
 
-    if (params.finalStatusReason === "session_lost") {
+    if (params.terminalReason === "session_lost") {
       return arxError({ reason: ArxReasons.TransportDisconnected, message: "Transport disconnected.", data });
     }
-    if (params.finalStatusReason === "timeout") {
+    if (params.terminalReason === "timeout") {
       return arxError({ reason: ArxReasons.ApprovalTimeout, message: "Request timed out.", data });
     }
-    if (params.finalStatusReason === "locked") {
+    if (params.terminalReason === "locked") {
       return arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked.", data });
     }
-    if (params.finalStatusReason === "internal_error") {
+    if (params.terminalReason === "internal_error") {
       return arxError({ reason: ArxReasons.RpcInternal, message: "Internal error.", data });
     }
-    if (params.finalStatusReason === "user_approve") {
-      return arxError({ reason: ArxReasons.RpcInternal, message: "Unexpected expiration reason.", data });
+    if (params.terminalReason === "window_closed") {
+      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Approval window closed.", data });
+    }
+    if (params.terminalReason === "replaced") {
+      return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request replaced.", data });
+    }
+    if (params.terminalReason === "user_approve") {
+      return arxError({ reason: ArxReasons.RpcInternal, message: "Unexpected approval cancellation.", data });
     }
 
     return arxError({ reason: ArxReasons.ApprovalRejected, message: "Request cancelled.", data });

@@ -25,7 +25,7 @@ export type StoreTransactionControllerOptions = {
   network: Pick<NetworkController, "getState">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "requestApproval">;
+  approvals: Pick<ApprovalController, "create">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
   now?: () => number;

@@ -1,6 +1,6 @@
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import { type ApprovalTask, ApprovalTypes } from "../../../../../controllers/index.js";
+import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/index.js";
 import {
   FakeVault,
   MemoryAccountsPort,
@@ -12,7 +12,6 @@ import {
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
 
-// Shared test constants
 export const ORIGIN = "https://dapp.example";
 
 export const ALT_CHAIN = {
@@ -37,10 +36,8 @@ export const ADDED_CHAIN_REF = "eip155:8453";
 
 export const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 
-// Helper to flush async operations
 export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-// Create mock chain registry port
 export const createChainDefinitionsPort = () => ({
   async get() {
     return null;
@@ -54,7 +51,6 @@ export const createChainDefinitionsPort = () => ({
   async clear() {},
 });
 
-// Create test services with optional overrides
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
   const { chainDefinitions, session, networkPreferences, rpcEngine, ...rest } = overrides ?? {};
   const runtime = createBackgroundRuntime({
@@ -80,7 +76,6 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
         keyringMetas: new MemoryKeyringMetasPort(),
       },
     },
-    // Use FakeVault by default to avoid encryption overhead and warnings
     session: {
       vault: new FakeVault(() => Date.now()),
       ...(session ?? {}),
@@ -106,7 +101,6 @@ export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
   return chain;
 };
 
-// Create method executor from services
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   const execute = runtime.rpc.registry.createMethodExecutor(runtime.controllers, {
     rpcClientRegistry: runtime.rpc.clients,
@@ -179,7 +173,6 @@ export const waitForChainInNetwork = async (
       }
     };
 
-    // Set timeout protection
     timeoutId = setTimeout(() => {
       cleanup();
       reject(new Error(`Timeout waiting for chain ${chainRef} in network controller`));
@@ -195,27 +188,21 @@ export const waitForChainInNetwork = async (
 
 export const setupApprovalResponder = (
   runtime: ReturnType<typeof createRuntime>,
-  responder: (task: ApprovalTask) => Promise<boolean | undefined> | boolean | undefined,
+  responder: (task: ApprovalRecord) => Promise<boolean | undefined> | boolean | undefined,
 ) => {
-  const unsubscribe = runtime.controllers.approvals.onRequest(({ task }) => {
+  const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
     void (async () => {
       try {
-        // Wait a microtask to let requestApproval() complete its setup
         await Promise.resolve();
-
-        await responder(task);
-        // If responder didn't handle the task (returned false or undefined), do nothing.
-        // This matches real system behavior where unhandled approvals stay pending.
+        await responder(record);
       } catch (error) {
-        // Responder threw an error (e.g., assertion failure).
-        // Reject the approval with this error to fail the test immediately
-        // instead of letting it timeout.
         console.error("[setupApprovalResponder] Responder error:", error);
-        if (runtime.controllers.approvals.has(task.id)) {
-          runtime.controllers.approvals.reject(
-            task.id,
-            new Error("setupApprovalResponder: responder did not resolve/reject task"),
-          );
+        if (runtime.controllers.approvals.has(record.id)) {
+          await runtime.controllers.approvals.cancel({
+            id: record.id,
+            reason: "internal_error",
+            error: new Error("setupApprovalResponder: responder did not resolve/reject task"),
+          });
         }
       }
     })();
@@ -226,23 +213,21 @@ export const setupApprovalResponder = (
 
 export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof createRuntime>) => {
   return setupApprovalResponder(runtime, async (task) => {
-    if (task.type !== ApprovalTypes.SwitchChain) {
+    if (task.kind !== ApprovalKinds.SwitchChain) {
       return false;
     }
 
-    const payload = task.payload as { chainRef?: string };
+    const payload = task.request as { chainRef?: string };
     const chainRef = payload.chainRef ?? task.chainRef;
     if (!chainRef) {
       throw new Error("Switch chain approval is missing chainRef");
     }
 
-    await runtime.controllers.approvals.resolve(task.id, async () => {
-      await runtime.controllers.network.switchChain(chainRef);
-      await runtime.controllers.networkPreferences.setActiveChainRef(
-        chainRef as Parameters<typeof runtime.controllers.networkPreferences.setActiveChainRef>[0],
-      );
-      return null;
-    });
+    await runtime.controllers.network.switchChain(chainRef);
+    await runtime.controllers.networkPreferences.setActiveChainRef(
+      chainRef as Parameters<typeof runtime.controllers.networkPreferences.setActiveChainRef>[0],
+    );
+    await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
 
     return true;
   });

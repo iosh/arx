@@ -4,89 +4,118 @@ import type { ChainNamespace } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { PermissionApprovalResult, RequestPermissionsApprovalPayload } from "../permission/types.js";
 import type { TransactionApprovalTaskPayload, TransactionMeta } from "../transaction/types.js";
-import { ApprovalTypes } from "./constants.js";
+import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
-export { ApprovalTypes };
-export type ApprovalType = (typeof ApprovalTypes)[keyof typeof ApprovalTypes];
+export { ApprovalKinds, ApprovalTypes };
+export type { ApprovalKind, ApprovalType };
+export { getApprovalKind, getApprovalType } from "./constants.js";
 
-/**
- * Reason for a terminal approval state.
- *
- * Notes:
- * - This is no longer tied to persistence (approvals are in-memory).
- * - Keep the union reasonably stable for UI/logging and future evolution.
- */
-export type FinalStatusReason =
-  | "timeout"
-  | "session_lost"
-  | "locked"
-  | "user_reject"
+export type ApprovalTerminalReason =
   | "user_approve"
+  | "user_reject"
+  | "timeout"
+  | "locked"
+  | "session_lost"
+  | "window_closed"
   | "replaced"
   | "internal_error";
 
+export type ApprovalFinalStatus = "approved" | "rejected" | "cancelled" | "expired" | "failed";
+
+export type ApprovalScope = Pick<RequestContext, "transport" | "origin" | "portId" | "sessionId">;
+
+export type ApprovalRequester = ApprovalScope & Pick<RequestContext, "requestId">;
+
 export type ApprovalQueueItem = {
   id: string;
-  type: ApprovalType;
+  kind: ApprovalKind;
   origin: string;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
   createdAt: number;
 };
 
-export type ApprovalPayloadByType = {
-  [ApprovalTypes.RequestAccounts]: {
+export type ApprovalRequestByKind = {
+  [ApprovalKinds.RequestAccounts]: {
     chainRef?: ChainRef | undefined;
     suggestedAccounts?: string[] | undefined;
   };
-  [ApprovalTypes.RequestPermissions]: RequestPermissionsApprovalPayload;
-  [ApprovalTypes.SignMessage]: {
+  [ApprovalKinds.RequestPermissions]: RequestPermissionsApprovalPayload;
+  [ApprovalKinds.SignMessage]: {
     chainRef?: ChainRef | undefined;
     from: string;
     message: string;
   };
-  [ApprovalTypes.SignTypedData]: {
+  [ApprovalKinds.SignTypedData]: {
     chainRef?: ChainRef | undefined;
     from: string;
     typedData: string;
   };
-  [ApprovalTypes.SendTransaction]: TransactionApprovalTaskPayload;
-  [ApprovalTypes.SwitchChain]: { chainRef: ChainRef };
-  [ApprovalTypes.AddChain]: { metadata: ChainMetadata; isUpdate: boolean };
+  [ApprovalKinds.SendTransaction]: TransactionApprovalTaskPayload;
+  [ApprovalKinds.SwitchChain]: { chainRef: ChainRef };
+  [ApprovalKinds.AddChain]: { metadata: ChainMetadata; isUpdate: boolean };
 };
 
-export type ApprovalResultByType = {
-  [ApprovalTypes.RequestAccounts]: string[];
-  [ApprovalTypes.RequestPermissions]: PermissionApprovalResult;
-  [ApprovalTypes.SignMessage]: string;
-  [ApprovalTypes.SignTypedData]: string;
-  [ApprovalTypes.SendTransaction]: TransactionMeta;
-  [ApprovalTypes.SwitchChain]: null;
-  [ApprovalTypes.AddChain]: null;
+export type ApprovalDecisionByKind = {
+  [ApprovalKinds.RequestAccounts]: undefined;
+  [ApprovalKinds.RequestPermissions]: undefined;
+  [ApprovalKinds.SignMessage]: undefined;
+  [ApprovalKinds.SignTypedData]: undefined;
+  [ApprovalKinds.SendTransaction]: undefined;
+  [ApprovalKinds.SwitchChain]: undefined;
+  [ApprovalKinds.AddChain]: undefined;
 };
 
-export type ApprovalTask<K extends ApprovalType = ApprovalType> = {
+export type ApprovalResultByKind = {
+  [ApprovalKinds.RequestAccounts]: string[];
+  [ApprovalKinds.RequestPermissions]: PermissionApprovalResult;
+  [ApprovalKinds.SignMessage]: string;
+  [ApprovalKinds.SignTypedData]: string;
+  [ApprovalKinds.SendTransaction]: TransactionMeta;
+  [ApprovalKinds.SwitchChain]: null;
+  [ApprovalKinds.AddChain]: null;
+};
+
+export type ApprovalRequest<K extends ApprovalKind = ApprovalKind> = ApprovalRequestByKind[K];
+
+export type ApprovalDecision<K extends ApprovalKind = ApprovalKind> = ApprovalDecisionByKind[K];
+
+export type ApprovalResult<K extends ApprovalKind = ApprovalKind> = ApprovalResultByKind[K];
+
+export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   id: string;
-  type: K;
+  kind: K;
   origin: string;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
-  payload: ApprovalPayloadByType[K];
+  request: ApprovalRequest<K>;
   createdAt: number;
+};
+
+export type ApprovalRecord<K extends ApprovalKind = ApprovalKind> = ApprovalCreateParams<K> & {
+  requester: ApprovalRequester;
+};
+
+export type ApprovalHandle<K extends ApprovalKind = ApprovalKind> = {
+  id: string;
+  settled: Promise<ApprovalResult<K>>;
+};
+
+export type ApprovalCreatedEvent = {
+  record: ApprovalRecord;
 };
 
 export type ApprovalFinishedEvent<T = unknown> = {
   id: string;
-  status: "approved" | "rejected" | "expired";
-  finalStatusReason: FinalStatusReason;
+  status: ApprovalFinalStatus;
+  terminalReason: ApprovalTerminalReason;
 
-  type?: ApprovalType | undefined;
+  kind?: ApprovalKind | undefined;
   origin?: string | undefined;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
 
   value?: T | undefined;
-
   error?: { name: string; message: string } | undefined;
 };
 
@@ -94,53 +123,44 @@ export type ApprovalState = {
   pending: ApprovalQueueItem[];
 };
 
-export type ApprovalRequestedEvent = {
-  task: ApprovalTask;
-  requestContext: RequestContext;
+export type ApprovalResolveInput =
+  | {
+      id: string;
+      action: "approve";
+      decision?: unknown;
+      result?: unknown;
+    }
+  | {
+      id: string;
+      action: "reject";
+      reason?: string;
+      error?: Error;
+    };
+
+export type ApprovalResolveResult = {
+  id: string;
+  status: ApprovalFinalStatus;
 };
 
-export type ApprovalExecutor<TResult> = () => Promise<TResult>;
-
-/**
- * Internal structure for tracking pending approvals with their resolvers.
- */
-export type PendingApproval<K extends ApprovalType = ApprovalType> = {
-  task: ApprovalTask<K>;
-  requestContext: RequestContext;
-  // We cannot reliably type this by id alone (resolve() takes only id),
-  // and the generic K is not recoverable from the id at runtime.
-  // Keep the resolver value loosely typed and enforce typing at the
-  // requestApproval() callsite boundary instead.
+export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
+  record: ApprovalRecord<K>;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
 };
 
 export type ApprovalController = {
   getState(): ApprovalState;
-  requestApproval<K extends ApprovalType>(
-    task: ApprovalTask<K>,
-    requestContext: RequestContext,
-  ): Promise<ApprovalResultByType[K]>;
+  get(id: string): ApprovalRecord | undefined;
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
-  onRequest(handler: (event: ApprovalRequestedEvent) => void): () => void;
-  onFinish(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
+  onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void;
+  onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
 
   has(id: string): boolean;
 
-  get(id: string): ApprovalTask | undefined;
+  resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 
-  resolve<TResult>(id: string, executor: ApprovalExecutor<TResult>): Promise<TResult>;
+  cancel(input: { id: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
 
-  reject(id: string, reason?: Error): void;
-
-  /**
-   * Best-effort cleanup for session-bound approvals when the backing transport is lost.
-   * Implementations should finalize matching pending approvals as expired(session_lost)
-   * and reject any in-memory resolvers.
-   */
-  expirePendingByRequestContext(params: {
-    portId: string;
-    sessionId: string;
-    finalStatusReason?: FinalStatusReason;
-  }): Promise<number>;
+  cancelByScope(input: { scope: ApprovalScope; reason: ApprovalTerminalReason }): Promise<number>;
 };

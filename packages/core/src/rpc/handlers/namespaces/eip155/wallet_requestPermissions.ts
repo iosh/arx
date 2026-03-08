@@ -2,8 +2,8 @@ import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
-  type ApprovalTask,
-  ApprovalTypes,
+  type ApprovalCreateParams,
+  ApprovalKinds,
   PermissionCapabilities,
   type PermissionCapability,
   type PermissionRequestDescriptor,
@@ -13,7 +13,7 @@ import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { requireApprovalRequester } from "./shared.js";
 
 const toRequestDescriptors = (
   capabilities: readonly PermissionCapability[],
@@ -93,22 +93,22 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
     const namespace = EIP155_NAMESPACE;
 
     const requested = toRequestDescriptors(params, chainRef);
-    const task = {
+    const request = {
       id: createTaskId("wallet_requestPermissions"),
-      type: ApprovalTypes.RequestPermissions,
+      kind: ApprovalKinds.RequestPermissions,
       origin,
       namespace,
       chainRef,
       createdAt: controllers.clock.now(),
-      payload: { requested },
-    } satisfies ApprovalTask<typeof ApprovalTypes.RequestPermissions>;
+      request: { requested },
+    } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
 
     let result: { granted: PermissionRequestDescriptor[] } | null = null;
     try {
-      result = await controllers.approvals.requestApproval(
-        task,
-        requireRequestContext(rpcContext, "wallet_requestPermissions"),
-      );
+      result = await controllers.approvals.create(
+        request,
+        requireApprovalRequester(rpcContext, "wallet_requestPermissions"),
+      ).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
       throw arxError({

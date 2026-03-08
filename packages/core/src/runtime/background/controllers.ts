@@ -208,7 +208,7 @@ export const initControllers = ({
       listOwnedForNamespace: (params) => accountController.listOwnedForNamespace(params),
     },
     approvals: {
-      requestApproval: (task, requestContext) => approvalController.requestApproval(task, requestContext),
+      create: (request, requester) => approvalController.create(request, requester),
     },
     registry: transactionRegistry,
     service: transactionsService,

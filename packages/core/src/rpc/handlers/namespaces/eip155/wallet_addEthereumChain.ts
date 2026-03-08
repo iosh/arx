@@ -5,16 +5,14 @@ import {
   createEip155MetadataFromEip3085,
   isSameAddChainComparableMetadata,
 } from "../../../../chains/index.js";
-import { ApprovalTypes, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createTaskId, toParamsArray } from "../utils.js";
-import { requireRequestContext } from "./shared.js";
+import { requireApprovalRequester } from "./shared.js";
 
 export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
   capability: PermissionCapabilities.Basic,
-  // Require an existing connection so unrelated pages cannot spam chain addition prompts.
-  // User still approves the addition explicitly via the approval flow.
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {
@@ -62,26 +60,25 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
     }
     const isUpdate = Boolean(existing);
 
-    // If the chain already exists and the request does not change anything, treat as a no-op.
-    // This avoids repeated approval prompts for idempotent wallet_addEthereumChain calls.
     if (existing && isSameAddChainComparableMetadata(existing.metadata, metadata)) {
       return null;
     }
 
-    const task = {
+    const request = {
       id: createTaskId("wallet_addEthereumChain"),
-      type: ApprovalTypes.AddChain,
+      kind: ApprovalKinds.AddChain,
       origin,
       namespace: metadata.namespace,
       chainRef: metadata.chainRef,
       createdAt: controllers.clock.now(),
-      payload: {
+      request: {
         metadata,
         isUpdate,
       },
     };
 
-    await controllers.approvals.requestApproval(task, requireRequestContext(rpcContext, "wallet_addEthereumChain"));
+    await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "wallet_addEthereumChain"))
+      .settled;
 
     return null;
   },

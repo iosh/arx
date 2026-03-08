@@ -56,8 +56,8 @@ describe("network config helpers", () => {
     const clonedState = cloneNetworkStateInput(STATE);
 
     STATE.availableChainRefs.push("eip155:10");
-    STATE.rpc[METADATA.chainRef]!.strategy.options = { jitter: false };
-    (METADATA.rpcEndpoints[0]!.headers as Record<string, string>).Authorization = "Changed";
+    STATE.rpc[METADATA.chainRef].strategy.options = { jitter: false };
+    (METADATA.rpcEndpoints[0].headers as Record<string, string>).Authorization = "Changed";
 
     expect(runtime.state).toEqual(clonedState);
     expect(runtime.chainConfigs[0]?.rpcEndpoints[0]?.headers?.Authorization).toBe("Bearer token");

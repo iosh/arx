@@ -1,7 +1,7 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
-import { ApprovalTypes, PermissionCapabilities } from "../../../../../controllers/index.js";
+import { ApprovalKinds, PermissionCapabilities } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
@@ -24,14 +24,11 @@ describe("eip155 handlers - approval metadata", () => {
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
 
-    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
-    const originalRequestApproval = runtime.controllers.approvals.requestApproval;
-    runtime.controllers.approvals.requestApproval = (async (task) => {
-      capturedTask = task;
-      // Return empty array directly instead of calling original method
-      // This test only needs to verify the approval task metadata, not actually approve
-      return [];
-    }) as typeof runtime.controllers.approvals.requestApproval;
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
+    const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
+      capturedTask = record;
+      void runtime.controllers.approvals.resolve({ id: record.id, action: "approve", result: [] });
+    });
 
     try {
       await expect(
@@ -44,7 +41,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
-      runtime.controllers.approvals.requestApproval = originalRequestApproval;
+      unsubscribe();
       runtime.lifecycle.destroy();
     }
   });
@@ -62,19 +59,19 @@ describe("eip155 handlers - approval metadata", () => {
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const rejectionError = Object.assign(
       new Error("The requested method and/or account has not been authorized by the user."),
       { code: 4100 },
     );
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type === ApprovalTypes.RequestAccounts) {
-        await runtime.controllers.approvals.resolve(task.id, async () => []);
+      if (task.kind === ApprovalKinds.RequestAccounts) {
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: [] });
         return true;
       }
-      if (task.type === ApprovalTypes.SignMessage) {
+      if (task.kind === ApprovalKinds.SignMessage) {
         capturedTask = task;
-        runtime.controllers.approvals.reject(task.id, rejectionError);
+        void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
         return true;
       }
       return false;
@@ -112,17 +109,17 @@ describe("eip155 handlers - approval metadata", () => {
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const rejectionError = Object.assign(
       new Error("The requested method and/or account has not been authorized by the user."),
       { code: 4100 },
     );
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
-      if (task.type !== ApprovalTypes.SignTypedData) {
+      if (task.kind !== ApprovalKinds.SignTypedData) {
         return false;
       }
       capturedTask = task;
-      runtime.controllers.approvals.reject(task.id, rejectionError);
+      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
       return true;
     });
 
@@ -162,13 +159,13 @@ describe("eip155 handlers - approval metadata", () => {
 
     const execute = createExecutor(runtime);
 
-    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type !== ApprovalTypes.AddChain) {
+      if (task.kind !== ApprovalKinds.AddChain) {
         return false;
       }
       capturedTask = task;
-      await runtime.controllers.approvals.resolve(task.id, async () => null);
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
       return true;
     });
 
@@ -213,14 +210,14 @@ describe("eip155 handlers - approval metadata", () => {
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
-    let capturedTask: Parameters<typeof runtime.controllers.approvals.requestApproval>[0] | undefined;
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const rejectionError = Object.assign(new Error("User rejected the request."), { code: 4001 });
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
-      if (task.type !== ApprovalTypes.SendTransaction) {
+      if (task.kind !== ApprovalKinds.SendTransaction) {
         return false;
       }
       capturedTask = task;
-      runtime.controllers.approvals.reject(task.id, rejectionError);
+      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
       return true;
     });
 
@@ -287,11 +284,11 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     // Setup auto-approval for transactions
-    const unsubscribe = runtime.controllers.approvals.onRequest(async ({ task }) => {
+    const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record: task }) => {
       try {
-        if (task.type === "wallet_sendTransaction") {
+        if (task.kind === ApprovalKinds.SendTransaction) {
           const result = await runtime.controllers.transactions.approveTransaction(task.id);
-          await runtime.controllers.approvals.resolve(task.id, async () => result);
+          await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result });
         }
       } catch {
         // Ignore errors if approval was already resolved
@@ -390,19 +387,18 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type !== ApprovalTypes.SignMessage) {
+      if (task.kind !== ApprovalKinds.SignMessage) {
         return false;
       }
-      const payload = task.payload as { from: string; message: string };
-      await runtime.controllers.approvals.resolve(task.id, async () =>
-        runtime.controllers.signers.eip155.signPersonalMessage({
-          accountId: toAccountIdFromAddress({
-            chainRef: runtime.controllers.network.getState().activeChainRef,
-            address: payload.from,
-          }),
-          message: payload.message,
+      const payload = task.request as { from: string; message: string };
+      const signature = await runtime.controllers.signers.eip155.signPersonalMessage({
+        accountId: toAccountIdFromAddress({
+          chainRef: runtime.controllers.network.getState().activeChainRef,
+          address: payload.from,
         }),
-      );
+        message: payload.message,
+      });
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: signature });
       return true;
     });
     try {
@@ -455,19 +451,18 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
-      if (task.type !== ApprovalTypes.SignTypedData) {
+      if (task.kind !== ApprovalKinds.SignTypedData) {
         return false;
       }
-      const payload = task.payload as { from: string; typedData: string };
-      await runtime.controllers.approvals.resolve(task.id, async () =>
-        runtime.controllers.signers.eip155.signTypedData({
-          accountId: toAccountIdFromAddress({
-            chainRef: runtime.controllers.network.getState().activeChainRef,
-            address: payload.from,
-          }),
-          typedData: payload.typedData,
+      const payload = task.request as { from: string; typedData: string };
+      const signature = await runtime.controllers.signers.eip155.signTypedData({
+        accountId: toAccountIdFromAddress({
+          chainRef: runtime.controllers.network.getState().activeChainRef,
+          address: payload.from,
         }),
-      );
+        typedData: payload.typedData,
+      });
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: signature });
       return true;
     });
     try {

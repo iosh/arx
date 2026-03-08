@@ -1,7 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
-import type { TransactionController, TransactionMeta } from "../../../../controllers/index.js";
+import { toApprovalRequester } from "../../../../controllers/approval/utils.js";
+import type { ApprovalRequester, TransactionController, TransactionMeta } from "../../../../controllers/index.js";
 import type { PermissionController } from "../../../../controllers/permission/types.js";
 import type { RpcInvocationContext } from "../../types.js";
 
@@ -15,6 +16,13 @@ export const requireRequestContext = (rpcContext: RpcInvocationContext | undefin
     });
   }
   return requestContext;
+};
+
+export const requireApprovalRequester = (
+  rpcContext: RpcInvocationContext | undefined,
+  method: string,
+): ApprovalRequester => {
+  return toApprovalRequester(requireRequestContext(rpcContext, method));
 };
 
 type PermittedAccountDeps = {
@@ -34,7 +42,6 @@ export const assertPermittedEip155Account = (args: {
   const canonical = controllers.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
   const permitted = controllers.permissions.getPermittedAccounts(origin, { namespace: "eip155", chainRef });
 
-  // Treat missing/empty permitted accounts as "not connected" (Accounts capability is scoped to specific accounts).
   if (permitted.length === 0) {
     throw arxError({
       reason: ArxReasons.PermissionNotConnected,

@@ -67,7 +67,10 @@ describe("ui actions", () => {
 
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
     void actions.accounts.switchActive({ chainRef: "eip155:1", accountId: null });
-    void actions.accounts.switchActive({ chainRef: "eip155:1", accountId: "eip155:0000000000000000000000000000000000000000" });
+    void actions.accounts.switchActive({
+      chainRef: "eip155:1",
+      accountId: "eip155:0000000000000000000000000000000000000000",
+    });
 
     void actions.networks.switchActive({ chainRef: "eip155:1" });
 

@@ -1,4 +1,4 @@
-import { ATTENTION_REQUESTED, createLogger, extendLogger } from "@arx/core";
+import { ATTENTION_REQUESTED, createLogger, extendLogger, getApprovalType } from "@arx/core";
 import { rejectPendingApprovals } from "../approvals/rejectPendingApprovals";
 import type { UiPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
@@ -74,7 +74,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
               if (!result.windowId) return;
               platform.trackWindowClose(result.windowId, () => {
                 void rejectPendingApprovals(controllers, {
-                  reason: "windowClosed",
+                  reason: "window_closed",
                   details: { windowId: result.windowId },
                 });
               });
@@ -93,19 +93,20 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       );
 
       subscriptions.push(
-        controllers.approvals.onRequest(({ task, requestContext }) => {
-          if (requestContext.transport !== "provider") {
+        controllers.approvals.onCreated(({ record }) => {
+          if (record.requester.transport !== "provider") {
             return;
           }
 
+          const method = getApprovalType(record.kind);
           const vaultInitialized = session.vault.getStatus().hasEnvelope;
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
               reason: "approval_required",
-              origin: task.origin,
-              method: task.type,
-              chainRef: task.chainRef,
-              namespace: task.namespace,
+              origin: record.origin,
+              method,
+              chainRef: record.chainRef,
+              namespace: record.namespace,
             });
             return;
           }
@@ -113,18 +114,18 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
           void platform
             .openNotificationPopup({
               reason: "approval_required",
-              origin: task.origin,
-              method: task.type,
-              chainRef: task.chainRef ?? null,
-              namespace: task.namespace ?? null,
-              urlSearchParams: { approvalId: task.id },
+              origin: record.origin,
+              method,
+              chainRef: record.chainRef ?? null,
+              namespace: record.namespace ?? null,
+              urlSearchParams: { approvalId: record.id },
             })
             .then((result) => {
               if (disposed) return;
               if (!result.windowId) return;
               platform.trackWindowClose(result.windowId, () => {
                 void rejectPendingApprovals(controllers, {
-                  reason: "windowClosed",
+                  reason: "window_closed",
                   details: { windowId: result.windowId },
                 });
               });
@@ -133,10 +134,10 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
               popupLog("failed to open notification window", {
                 error,
                 reason: "approval_required",
-                origin: task.origin,
-                method: task.type,
-                chainRef: task.chainRef,
-                namespace: task.namespace,
+                origin: record.origin,
+                method,
+                chainRef: record.chainRef,
+                namespace: record.namespace,
               });
             });
         }),
@@ -145,7 +146,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       subscriptions.push(
         session.unlock.onLocked((payload) => {
           void rejectPendingApprovals(controllers, {
-            reason: "sessionLocked",
+            reason: "locked",
             details: { lockReason: payload.reason },
           });
         }),

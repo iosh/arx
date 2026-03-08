@@ -625,6 +625,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   const bridge = createUiBridge({
     browser: browserApi as unknown as UiBridgeDeps["browser"],
     controllers,
+    chainActivation: { activate: vi.fn(async () => {}) } as UiBridgeDeps["chainActivation"],
     chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
     session,
     rpcClients: {

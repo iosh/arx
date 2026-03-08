@@ -20,9 +20,6 @@ export type {
   TransactionRecord,
   TransactionStatus as StorageTransactionStatus,
 } from "./records.js";
-// Explicit exports to keep the public surface intentional.
-// Note: Some record-level types share names with controller types. Export those with aliases
-// to avoid collisions when consumers import from "@arx/core" root exports.
 export {
   AccountIdSchema,
   AccountNamespaceSchema,
@@ -38,10 +35,11 @@ export {
   TransactionStatusSchema,
 } from "./records.js";
 
-export type { ChainDefinitionEntity, VaultMetaSnapshot } from "./schemas.js";
+export type { ChainDefinitionEntity, ChainDefinitionSource, VaultMetaSnapshot } from "./schemas.js";
 export {
   CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   ChainDefinitionEntitySchema,
+  ChainDefinitionSourceSchema,
   DOMAIN_SCHEMA_VERSION,
   VAULT_META_SNAPSHOT_VERSION,
   VaultMetaSnapshotSchema,

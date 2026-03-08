@@ -1,6 +1,7 @@
 import type {
   AttentionService,
   BackgroundSessionServices,
+  ChainActivationService,
   ChainViewsService,
   HandlerControllers,
   KeyringService,
@@ -18,6 +19,7 @@ export { UI_CHANNEL } from "@arx/core/ui";
 type BridgeDeps = {
   browser: typeof browserDefaultType;
   controllers: HandlerControllers;
+  chainActivation: Pick<ChainActivationService, "activate">;
   chainViews: Pick<
     ChainViewsService,
     | "buildProviderMeta"
@@ -40,6 +42,7 @@ type BridgeDeps = {
 export const createUiBridge = ({
   browser: runtimeBrowser,
   controllers,
+  chainActivation,
   chainViews,
   session,
   rpcClients,
@@ -56,6 +59,7 @@ export const createUiBridge = ({
 
   const dispatcher = createUiDispatcher({
     controllers,
+    chainActivation,
     chainViews,
     session,
     keyring,
@@ -115,8 +119,6 @@ export const createUiBridge = ({
       }
     }
 
-    // Reply delivery failure (e.g. the requesting port disconnected) must not
-    // prevent broadcasting the updated snapshot to other connected UI ports.
     portHub.send(port, reply);
 
     if (reply.type === "ui:response" && effects.broadcastSnapshot) {
@@ -143,7 +145,6 @@ export const createUiBridge = ({
       controllers.approvals.onStateChanged(() => requestBroadcast()),
       controllers.permissions.onPermissionsChanged(() => requestBroadcast()),
       controllers.transactions.onStateChanged(() => requestBroadcast()),
-      // Ensure UI stays in sync even when the session lock state changes outside UI-initiated calls.
       session.unlock.onStateChanged(() => requestBroadcast()),
     );
   };

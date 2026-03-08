@@ -3,8 +3,6 @@ import type { ChainMetadata } from "../metadata.js";
 import { validateChainMetadata } from "../metadata.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../url.js";
 
-//https://eips.ethereum.org/EIPS/eip-3085
-
 const trimmed = () =>
   z
     .string()
@@ -29,7 +27,6 @@ const eip3085Schema = z.object({
   }),
   rpcUrls: z.array(rpcUrl).min(1),
   blockExplorerUrls: z.preprocess((value) => (value === null ? undefined : value), z.array(httpUrl).optional()),
-  // TODO add iconUrls
 });
 
 const dedupe = (values: readonly string[]) => Array.from(new Set(values.map((value) => value.trim())));
@@ -75,7 +72,7 @@ export const createEip155MetadataFromEip3085 = (input: unknown): ChainMetadata =
     nativeCurrency: payload.nativeCurrency,
     rpcEndpoints: rpcUrls.map((url) => ({ url, type: "public" as const })),
     blockExplorers: explorers,
-    features: ["eip155", "wallet_addEthereumChain", "wallet_switchEthereumChain"],
+    features: ["eip155"],
     tags: ["user-added"],
     extensions: {
       source: "eip3085",

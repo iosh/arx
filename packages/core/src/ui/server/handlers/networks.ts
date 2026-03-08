@@ -1,7 +1,7 @@
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 
 export const createNetworksHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers">,
+  deps: Pick<UiRuntimeDeps, "chainActivation">,
   toChainSnapshot: () => {
     chainRef: string;
     chainId: string;
@@ -14,7 +14,7 @@ export const createNetworksHandlers = (
 ): Pick<UiHandlers, "ui.networks.switchActive"> => {
   return {
     "ui.networks.switchActive": async ({ chainRef }) => {
-      await deps.controllers.network.switchChain(chainRef);
+      await deps.chainActivation.activate(chainRef);
       return toChainSnapshot();
     },
   };

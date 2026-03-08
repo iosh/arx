@@ -58,7 +58,20 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
         data: { chainRef: metadata.chainRef },
       });
     }
-    const isUpdate = Boolean(existing);
+
+    if (existing?.source === "builtin") {
+      if (isSameAddChainComparableMetadata(existing.metadata, metadata)) {
+        return null;
+      }
+
+      throw arxError({
+        reason: ArxReasons.ChainNotSupported,
+        message: "Requested chain conflicts with a builtin chain definition",
+        data: { chainRef: metadata.chainRef },
+      });
+    }
+
+    const isUpdate = existing?.source === "custom";
 
     if (existing && isSameAddChainComparableMetadata(existing.metadata, metadata)) {
       return null;

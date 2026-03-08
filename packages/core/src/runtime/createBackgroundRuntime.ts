@@ -6,6 +6,7 @@ import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
+import { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../services/runtime/chainViews/index.js";
 import { createAccountsService } from "../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
@@ -74,6 +75,7 @@ export type BackgroundRuntime = {
   controllers: HandlerControllers;
   services: {
     attention: ReturnType<typeof createAttentionService>;
+    chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
     session: BackgroundSessionServices;
     keyring: KeyringService;
@@ -121,6 +123,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
   const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
+  const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
 
   let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
   const storageNow = storageOptions?.now ?? Date.now;
@@ -159,6 +162,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
   const approvalFlowRegistry = createApprovalFlowRegistry();
   let signers: HandlerControllers["signers"] | undefined;
+  let chainActivation: ReturnType<typeof createChainActivationService> | undefined;
 
   const controllersInit = initControllers({
     bus,
@@ -176,13 +180,16 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
           if (!signers) {
             throw new Error("Approval signers are not initialized");
           }
+          if (!chainActivation) {
+            throw new Error("Chain activation service is not initialized");
+          }
 
           return {
             accounts: controllersBase.accounts,
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
             network: controllersBase.network,
-            networkPreferences,
+            chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
             signers,
           };
@@ -201,6 +208,12 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const chainViews = createChainViewsService({
     chainDefinitions: chainDefinitionsController,
     network: networkController,
+  });
+
+  chainActivation = createChainActivationService({
+    network: networkController,
+    preferences: networkPreferences,
+    logger: storageLogger,
   });
 
   const rpcClientRegistry = initRpcLayer({
@@ -266,7 +279,12 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     hydrationEnabled,
     logger: storageLogger,
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
+    getRegisteredNamespaces: () => registeredNamespaces,
   });
+
+  if (!chainActivation) {
+    throw new Error("Chain activation service failed to initialize");
+  }
 
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
@@ -281,7 +299,14 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
           }
           return metadata;
         });
-        networkController.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
+        const allDeferredChainsAdmitted = deferredChains.every((metadata) =>
+          registeredNamespaces.has(metadata.namespace),
+        );
+        if (allDeferredChainsAdmitted) {
+          networkController.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
+        } else {
+          storageLogger("network: skipped deferred initial state with unregistered namespace chain");
+        }
       }
       await controllersBase.permissions.whenReady();
     },
@@ -373,6 +398,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     controllers,
     services: {
       attention,
+      chainActivation,
       chainViews,
       session: sessionLayer.session,
       keyring: keyringService,
@@ -410,7 +436,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     },
   };
 
-  // Assemble the RPC pipeline exactly once per engine instance (default: enabled).
   if (rpcEngineOptions.assemble !== false) {
     createRpcEngineForBackground(runtime, rpcEngineOptions.env);
   }

@@ -59,7 +59,6 @@ describe("eip155 handlers - core error paths", () => {
     const execute = createExecutor(runtime);
     const mainnet = getActiveChainMetadata(runtime);
 
-    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -108,7 +107,6 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -137,7 +135,6 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     try {
@@ -185,39 +182,6 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({ code: -32602 });
-    } finally {
-      runtime.lifecycle.destroy();
-    }
-  });
-
-  it("returns 4902 when chain lacks wallet_switchEthereumChain feature", async () => {
-    const runtime = createRuntime();
-    await runtime.lifecycle.initialize();
-    runtime.lifecycle.start();
-
-    const execute = createExecutor(runtime);
-    const baseChain: ChainMetadata = {
-      ...ALT_CHAIN,
-      chainRef: "eip155:8453",
-      chainId: "0x2105",
-      displayName: "Base",
-      features: ["eip155"],
-    };
-    await runtime.controllers.chainDefinitions.upsertChain(baseChain);
-    await waitForChainInNetwork(runtime, baseChain.chainRef);
-
-    try {
-      await expect(
-        execute({
-          origin: ORIGIN,
-          request: {
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: "0x2105" }] as JsonRpcParams,
-          },
-        }),
-      ).rejects.toMatchObject({
-        code: 4902,
-      });
     } finally {
       runtime.lifecycle.destroy();
     }
@@ -289,7 +253,6 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
@@ -548,7 +511,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("treats semantically equivalent wallet_addEthereumChain requests as a no-op", async () => {
+  it("treats semantically equivalent builtin wallet_addEthereumChain requests as a no-op", async () => {
     const mainnet: ChainMetadata = {
       chainRef: "eip155:1",
       namespace: "eip155",
@@ -616,7 +579,50 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(approvalRequested).toBe(false);
-      expect(runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF)?.metadata).toEqual(existing);
+      expect(runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF)).toMatchObject({
+        source: "builtin",
+        metadata: {
+          chainRef: existing.chainRef,
+          displayName: existing.displayName,
+          features: ["eip155"],
+        },
+      });
+    } finally {
+      unsubscribeApproval();
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects builtin wallet_addEthereumChain conflicts before approval", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const execute = createExecutor(runtime);
+    let approvalRequested = false;
+    const unsubscribeApproval = runtime.controllers.approvals.onCreated(() => {
+      approvalRequested = true;
+    });
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                ...ADD_CHAIN_PARAMS,
+                chainId: "0x1",
+                chainName: "Ethereum",
+                rpcUrls: ["https://malicious.example"],
+              },
+            ] as unknown as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4902 });
+
+      expect(approvalRequested).toBe(false);
     } finally {
       unsubscribeApproval();
       runtime.lifecycle.destroy();
@@ -712,7 +718,6 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const main = getActiveChainMetadata(runtime);
-    await runtime.controllers.chainDefinitions.upsertChain(ALT_CHAIN);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });

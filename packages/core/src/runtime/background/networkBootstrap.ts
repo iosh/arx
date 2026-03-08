@@ -13,6 +13,7 @@ export type CreateNetworkBootstrapOptions = {
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
+  getRegisteredNamespaces: () => ReadonlySet<string>;
 };
 
 export type NetworkBootstrap = {
@@ -24,19 +25,23 @@ export type NetworkBootstrap = {
 };
 
 export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
-  const { network, chainDefinitions, preferences, hydrationEnabled, logger, getIsHydrating } = opts;
+  const { network, chainDefinitions, preferences, hydrationEnabled, logger, getIsHydrating, getRegisteredNamespaces } =
+    opts;
 
   let cachedPreferences: NetworkPreferencesRecord | null = null;
   let preferencesLoaded = !hydrationEnabled;
   let pendingSync = false;
-  let suppressActivePersist = false;
 
   let listenersAttached = false;
   let unsubscribeRegistry: (() => void) | null = null;
-  let unsubscribeNetwork: (() => void) | null = null;
 
   const readRegistryChainConfigs = (): NetworkChainConfig[] =>
-    buildNetworkChainConfigs(chainDefinitions.getState().chains.map((entry) => entry.metadata));
+    buildNetworkChainConfigs(
+      chainDefinitions
+        .getState()
+        .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
+        .map((entry) => entry.metadata),
+    );
 
   let syncInFlight: Promise<void> | null = null;
 
@@ -53,7 +58,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
           return [chain.chainRef, base] as const;
         }
 
-        // Clamp against registry metadata (the source of truth), not the current runtime snapshot.
         const safeIndex = Math.min(pref.activeIndex, Math.max(0, chain.rpcEndpoints.length - 1));
         if (safeIndex !== pref.activeIndex) {
           corrections[chain.chainRef] = { ...pref, activeIndex: safeIndex };
@@ -145,23 +149,17 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     const { rpc, corrections } = computeRpcState(registryChains, current);
     const prunePatch = pruneRpcPreferences(available);
 
-    suppressActivePersist = true;
-    try {
-      network.replaceState(
-        createNetworkRuntimeInput({
-          state: {
-            activeChainRef: nextActive,
-            availableChainRefs: registryChains.map((chain) => chain.chainRef),
-            rpc,
-          },
-          chainConfigs: registryChains,
-        }),
-      );
-    } finally {
-      suppressActivePersist = false;
-    }
+    network.replaceState(
+      createNetworkRuntimeInput({
+        state: {
+          activeChainRef: nextActive,
+          availableChainRefs: registryChains.map((chain) => chain.chainRef),
+          rpc,
+        },
+        chainConfigs: registryChains,
+      }),
+    );
 
-    // Persist any corrections even when the active chain didn't change (e.g. stale preferences fallback).
     if (!getIsHydrating()) {
       const nextPatch: Record<ChainRef, NetworkRpcPreference | null> = {};
       Object.assign(nextPatch, prunePatch);
@@ -215,20 +213,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     listenersAttached = true;
 
     unsubscribeRegistry = chainDefinitions.onStateChanged(() => requestSync());
-    unsubscribeNetwork = network.onActiveChainChanged(({ next }) => {
-      if (getIsHydrating()) {
-        return;
-      }
-      if (suppressActivePersist) {
-        return;
-      }
-      void preferences
-        .setActiveChainRef(next)
-        .then((record) => {
-          cachedPreferences = record;
-        })
-        .catch((error) => logger("preferences: failed to persist activeChainRef", error));
-    });
   };
 
   const detachListeners = () => {
@@ -245,15 +229,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
       unsubscribeRegistry = null;
     }
-
-    if (unsubscribeNetwork) {
-      try {
-        unsubscribeNetwork();
-      } catch (error) {
-        logger("lifecycle: failed to remove network listener", error);
-      }
-      unsubscribeNetwork = null;
-    }
   };
 
   const loadPreferences = async () => {
@@ -263,12 +238,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   const flushPendingSync = async () => {
     if (syncInFlight) {
       await syncInFlight;
-      return;
-    }
-
-    if (pendingSync) {
-      pendingSync = false;
-      await syncOnceFromRegistry();
     }
   };
 

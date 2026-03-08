@@ -1,7 +1,12 @@
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { ChainDefinitionsPort, ChainMetadata } from "../../chains/index.js";
 import { Messenger } from "../../messenger/Messenger.js";
-import type { ChainDefinitionEntity } from "../../storage/index.js";
+import {
+  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  type ChainDefinitionEntity,
+  type ChainDefinitionSource,
+} from "../../storage/index.js";
 import { InMemoryChainDefinitionsController } from "./ChainDefinitionsController.js";
 import { CHAIN_DEFINITIONS_TOPICS } from "./topics.js";
 import type { ChainDefinitionsState, ChainDefinitionsUpdate } from "./types.js";
@@ -18,34 +23,47 @@ const createEip155Metadata = (reference: number, overrides: Partial<ChainMetadat
   };
 };
 
+const toEntity = (
+  metadata: ChainMetadata,
+  source: ChainDefinitionSource,
+  updatedAt = 0,
+  createdByOrigin?: string,
+): ChainDefinitionEntity => ({
+  chainRef: metadata.chainRef,
+  namespace: metadata.namespace,
+  metadata,
+  schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  updatedAt,
+  source,
+  ...(createdByOrigin ? { createdByOrigin } : {}),
+});
+
 class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
   private readonly entries = new Map<string, ChainDefinitionEntity>();
   public deleted: string[] = [];
 
   constructor(seed?: ChainDefinitionEntity[]) {
     seed?.forEach((entity) => {
-      this.entries.set(entity.chainRef, {
-        ...entity,
-        metadata: { ...entity.metadata, rpcEndpoints: [...entity.metadata.rpcEndpoints] },
-      });
+      this.entries.set(entity.chainRef, structuredClone(entity));
     });
   }
 
   async get(chainRef: string): Promise<ChainDefinitionEntity | null> {
-    return this.entries.get(chainRef) ?? null;
+    const entry = this.entries.get(chainRef);
+    return entry ? structuredClone(entry) : null;
   }
 
   async getAll(): Promise<ChainDefinitionEntity[]> {
-    return Array.from(this.entries.values());
+    return Array.from(this.entries.values(), (entry) => structuredClone(entry));
   }
 
   async put(entity: ChainDefinitionEntity): Promise<void> {
-    this.entries.set(entity.chainRef, entity);
+    this.entries.set(entity.chainRef, structuredClone(entity));
   }
 
   async putMany(entities: ChainDefinitionEntity[]): Promise<void> {
     for (const entity of entities) {
-      this.entries.set(entity.chainRef, entity);
+      this.entries.set(entity.chainRef, structuredClone(entity));
     }
   }
 
@@ -60,244 +78,155 @@ class MemoryChainDefinitionsPort implements ChainDefinitionsPort {
 }
 
 describe("InMemoryChainDefinitionsController", () => {
-  it("loads seed when storage is empty", async () => {
+  it("reconciles builtin seed on startup and prunes stale builtin entries", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const port = new MemoryChainDefinitionsPort();
-    const now = () => 1_000;
-    const seed = [createEip155Metadata(1), createEip155Metadata(10)];
+    const mainnet = createEip155Metadata(1, { displayName: "Ethereum" });
+    const optimism = createEip155Metadata(10, { displayName: "Optimism" });
+    const custom = createEip155Metadata(8453, { displayName: "Base" });
+    const staleBuiltin = createEip155Metadata(9999, { displayName: "Stale" });
+
+    const port = new MemoryChainDefinitionsPort([
+      toEntity({ ...mainnet, displayName: "Old Ethereum" }, "builtin", 10),
+      toEntity(staleBuiltin, "builtin", 11),
+      toEntity(custom, "custom", 12, "https://dapp.example"),
+    ]);
 
     const controller = new InMemoryChainDefinitionsController({
       messenger,
       port,
-      seed,
-      now,
+      seed: [mainnet, optimism],
+      now: () => 1_000,
     });
 
     await controller.whenReady();
 
-    expect(controller.getChains()).toHaveLength(seed.length);
-    expect((await port.getAll()).length).toBe(seed.length);
+    expect(controller.getChains()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          chainRef: mainnet.chainRef,
+          source: "builtin",
+          metadata: expect.objectContaining({ displayName: "Ethereum" }),
+        }),
+        expect.objectContaining({ chainRef: optimism.chainRef, source: "builtin" }),
+        expect.objectContaining({
+          chainRef: custom.chainRef,
+          source: "custom",
+          createdByOrigin: "https://dapp.example",
+        }),
+      ]),
+    );
+    expect(controller.getChain(staleBuiltin.chainRef)).toBeNull();
+    expect(port.deleted).toContain(staleBuiltin.chainRef);
   });
 
-  it("upserts metadata and emits update events", async () => {
+  it("upserts custom chains, preserves origin, and emits updates", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const existingMetadata = createEip155Metadata(1);
-    const existingEntity: ChainDefinitionEntity = {
-      chainRef: existingMetadata.chainRef,
-      namespace: existingMetadata.namespace,
-      metadata: existingMetadata,
-      schemaVersion: 1,
-      updatedAt: 500,
-    };
-    const port = new MemoryChainDefinitionsPort([existingEntity]);
-
-    const controller = new InMemoryChainDefinitionsController({
-      messenger,
-      port,
-      seed: [],
-    });
+    const port = new MemoryChainDefinitionsPort();
+    const controller = new InMemoryChainDefinitionsController({ messenger, port, seed: [], now: () => 2_000 });
 
     await controller.whenReady();
 
     const updates: ChainDefinitionsUpdate[] = [];
-    const unsubscribe = controller.onChainUpdated((update) => {
-      updates.push(update);
+    controller.onChainUpdated((update) => updates.push(update));
+
+    const base = createEip155Metadata(8453, { displayName: "Base" });
+    const added = await controller.upsertCustomChain(base, { createdByOrigin: "https://dapp.example" });
+    expect(added).toMatchObject({
+      kind: "added",
+      chain: { source: "custom", createdByOrigin: "https://dapp.example" },
     });
 
-    const updatedMetadata = {
-      ...existingMetadata,
-      displayName: "Updated Chain",
-      rpcEndpoints: [{ url: "https://updated.example", type: "public" as const }],
-    };
+    const updated = await controller.upsertCustomChain(
+      { ...base, displayName: "Base Mainnet" },
+      { updatedAt: 3_000, createdByOrigin: "https://other.example" },
+    );
+    expect(updated).toMatchObject({
+      kind: "updated",
+      chain: { metadata: { displayName: "Base Mainnet" }, createdByOrigin: "https://dapp.example" },
+      previous: { metadata: { displayName: "Base" } },
+    });
 
-    const result = await controller.upsertChain(updatedMetadata, { updatedAt: 2_000 });
-
-    expect(result.kind).toBe("updated");
-    expect(result.chain.metadata.displayName).toBe("Updated Chain");
-    if (result.kind !== "updated") {
-      throw new Error("expected updated result");
-    }
-    expect(result.previous?.metadata.displayName).toBe(existingMetadata.displayName);
-
-    const stored = await port.get(existingMetadata.chainRef);
-    expect(stored?.metadata.displayName).toBe("Updated Chain");
-    expect(updates).toHaveLength(1);
-    expect(updates[0]?.kind).toBe("updated");
-
-    unsubscribe();
+    expect(updates.map((entry) => entry.kind)).toEqual(["added", "updated"]);
+    await expect(port.get(base.chainRef)).resolves.toMatchObject({
+      source: "custom",
+      createdByOrigin: "https://dapp.example",
+      metadata: { displayName: "Base Mainnet" },
+    });
   });
 
-  it("removes chains and publishes removal", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const metadata = createEip155Metadata(137);
-    const entity: ChainDefinitionEntity = {
-      chainRef: metadata.chainRef,
-      namespace: metadata.namespace,
-      metadata,
-      schemaVersion: 1,
-      updatedAt: 600,
-    };
-    const port = new MemoryChainDefinitionsPort([entity]);
-
-    const controller = new InMemoryChainDefinitionsController({
-      messenger,
-      port,
-      seed: [],
-    });
-
-    await controller.whenReady();
-
-    const events: ChainDefinitionsUpdate[] = [];
-    controller.onChainUpdated((update) => {
-      events.push(update);
-    });
-
-    const outcome = await controller.removeChain(metadata.chainRef);
-    expect(outcome.removed).toBe(true);
-    expect(events).toHaveLength(1);
-    expect(events[0]?.kind).toBe("removed");
-    expect(await port.getAll()).toHaveLength(0);
-  });
-
-  it("drops invalid persisted entries", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const invalid: ChainDefinitionEntity = {
-      chainRef: "eip155:1",
-      namespace: "eip155",
-      metadata: {
-        ...createEip155Metadata(1),
-        chainRef: "eip155:999",
-      },
-      schemaVersion: 1,
-      updatedAt: 400,
-    };
-    const port = new MemoryChainDefinitionsPort([invalid]);
-
-    const controller = new InMemoryChainDefinitionsController({
-      messenger,
-      port,
-      seed: [],
-    });
-
-    await controller.whenReady();
-
-    expect(controller.getChains()).toHaveLength(0);
-    expect(port.deleted).toContain("eip155:1");
-  });
-
-  it("publishes state changes and dedupes identical snapshots", async () => {
+  it("dedupes idempotent custom upserts", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
     const port = new MemoryChainDefinitionsPort();
-    const now = () => 1_000;
-    const seed = [createEip155Metadata(1)];
-
-    const controller = new InMemoryChainDefinitionsController({
-      messenger,
-      port,
-      seed,
-      now,
-    });
-
-    const states: ChainDefinitionsState[] = [];
-    const updates: ChainDefinitionsUpdate[] = [];
-
-    controller.onStateChanged((state) => {
-      states.push(state);
-    });
-    controller.onChainUpdated((update) => {
-      updates.push(update);
-    });
-
-    await controller.whenReady();
-
-    expect(states).toHaveLength(1);
-    expect(states[0]?.chains).toHaveLength(1);
-    expect(states[0]?.chains[0]?.chainRef).toBe("eip155:1");
-    expect(states[0]?.chains[0]?.updatedAt).toBe(1_000);
-    expect(updates).toHaveLength(0);
-
-    const optimism = createEip155Metadata(10);
-    const added = await controller.upsertChain(optimism, { updatedAt: 2_000 });
-
-    const firstUpdate = updates[0];
-    expect(firstUpdate?.kind).toBe("added");
-    if (firstUpdate?.kind !== "added") throw new Error("expected added update");
-    expect(firstUpdate.chain.chainRef).toBe(optimism.chainRef);
-    expect(added.kind).toBe("added");
-    expect(states).toHaveLength(2);
-    expect(states[1]?.chains).toHaveLength(2);
-    expect(updates).toHaveLength(1);
-    expect(updates[0]?.kind).toBe("added");
-
-    const noop = await controller.upsertChain(optimism, { updatedAt: 2_000 });
-    expect(noop.kind).toBe("noop");
-    expect(states).toHaveLength(2);
-    expect(updates).toHaveLength(1);
-  });
-
-  it("does not write or emit events for idempotent upserts", async () => {
-    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const port = new MemoryChainDefinitionsPort();
-    const now = () => 1_000;
-    const seed = [createEip155Metadata(1)];
-
-    const controller = new InMemoryChainDefinitionsController({
-      messenger,
-      port,
-      seed,
-      now,
-    });
-
-    await controller.whenReady();
+    const controller = new InMemoryChainDefinitionsController({ messenger, port, seed: [], now: () => 1_000 });
 
     const states: ChainDefinitionsState[] = [];
     const updates: ChainDefinitionsUpdate[] = [];
     controller.onStateChanged((state) => states.push(state));
     controller.onChainUpdated((update) => updates.push(update));
-    expect(states).toHaveLength(1);
+
+    await controller.whenReady();
+
+    const optimism = createEip155Metadata(10, { features: ["eip155", "wallet_switchEthereumChain"] });
+    await controller.upsertCustomChain(optimism, { createdByOrigin: "https://dapp.example" });
     states.length = 0;
+    updates.length = 0;
 
-    const before = await port.getAll();
-    expect(before).toHaveLength(1);
-
-    const firstSeed = seed[0];
-    if (!firstSeed) throw new Error("Missing seed fixture");
-    const result = await controller.upsertChain(firstSeed, { updatedAt: 2_000 });
-    expect(result.kind).toBe("noop");
-
-    const after = await port.getAll();
-    expect(after).toHaveLength(1);
-    expect(after[0]?.updatedAt).toBe(1_000);
+    const result = await controller.upsertCustomChain(optimism, { createdByOrigin: "https://dapp.example" });
+    expect(result).toMatchObject({ kind: "noop", chain: { source: "custom" } });
     expect(states).toHaveLength(0);
     expect(updates).toHaveLength(0);
   });
 
-  it("returns removed false when chain is missing", async () => {
+  it("returns noop for builtin-equivalent custom upserts and rejects builtin conflicts", async () => {
     const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
-    const port = new MemoryChainDefinitionsPort();
-
+    const mainnet = createEip155Metadata(1, {
+      displayName: "Ethereum",
+      features: ["eip155", "wallet_switchEthereumChain"],
+    });
     const controller = new InMemoryChainDefinitionsController({
       messenger,
-      port,
-      seed: [],
-    });
-
-    const states: ChainDefinitionsState[] = [];
-    const updates: ChainDefinitionsUpdate[] = [];
-
-    controller.onStateChanged((state) => {
-      states.push(state);
-    });
-    controller.onChainUpdated((update) => {
-      updates.push(update);
+      port: new MemoryChainDefinitionsPort(),
+      seed: [mainnet],
+      now: () => 1_000,
     });
 
     await controller.whenReady();
 
-    const result = await controller.removeChain("eip155:999");
+    const equivalent = await controller.upsertCustomChain({
+      ...mainnet,
+      features: ["eip155"],
+      rpcEndpoints: [{ url: "https://rpc-1.example/", type: "public" }],
+    });
+    expect(equivalent).toMatchObject({ kind: "noop", chain: { source: "builtin", chainRef: mainnet.chainRef } });
 
-    expect(result).toEqual({ removed: false });
-    expect(states).toHaveLength(0);
-    expect(updates).toHaveLength(0);
+    await expect(
+      controller.upsertCustomChain({
+        ...mainnet,
+        rpcEndpoints: [{ url: "https://malicious.example", type: "public" }],
+      }),
+    ).rejects.toMatchObject({ reason: ArxReasons.ChainNotSupported });
+  });
+
+  it("removes only custom chains", async () => {
+    const messenger = new Messenger().scope({ publish: CHAIN_DEFINITIONS_TOPICS });
+    const mainnet = createEip155Metadata(1);
+    const base = createEip155Metadata(8453);
+    const port = new MemoryChainDefinitionsPort([
+      toEntity(mainnet, "builtin", 10),
+      toEntity(base, "custom", 11, "https://dapp.example"),
+    ]);
+
+    const controller = new InMemoryChainDefinitionsController({ messenger, port, seed: [mainnet] });
+    await controller.whenReady();
+
+    await expect(controller.removeCustomChain(mainnet.chainRef)).resolves.toMatchObject({
+      removed: false,
+      previous: { source: "builtin" },
+    });
+    await expect(controller.removeCustomChain(base.chainRef)).resolves.toMatchObject({
+      removed: true,
+      previous: { source: "custom" },
+    });
+    await expect(controller.removeCustomChain("eip155:999")).resolves.toEqual({ removed: false });
   });
 });

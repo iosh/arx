@@ -4,28 +4,17 @@ import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
+import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 
-/**
- * Result of opening the onboarding tab
- * - activationPath: how the tab was activated/focused
- * - tabId: browser tab ID if created/focused
- */
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
   tabId?: number;
 };
 
-/**
- * Platform-specific adapter for UI operations
- * Implemented differently in extension vs app environments
- */
 export type UiPlatformAdapter = {
-  /** Open or focus the onboarding tab/screen */
   openOnboardingTab: (reason: string) => Promise<UiOnboardingOpenTabResult>;
-
-  /** Open or focus the confirmation/notification popup window (extension only) */
   openNotificationPopup: () => Promise<{
     activationPath: "focus" | "create" | "debounced";
     windowId?: number;
@@ -45,6 +34,7 @@ export type UiHandlers = {
 
 export type UiRuntimeDeps = {
   controllers: HandlerControllers;
+  chainActivation: Pick<ChainActivationService, "activate">;
   chainViews: Pick<
     ChainViewsService,
     | "buildProviderMeta"
@@ -60,10 +50,6 @@ export type UiRuntimeDeps = {
   attention: Pick<AttentionService, "getSnapshot">;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
-  /**
-   * Origin used for UI-initiated requests (e.g. creating approvals from the wallet UI).
-   * Must be a valid URL origin string (e.g. "chrome-extension://<id>").
-   */
   uiOrigin: string;
   platform: UiPlatformAdapter;
 };

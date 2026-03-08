@@ -151,15 +151,6 @@ class DefaultChainViewsService implements ChainViewsService {
       });
     }
 
-    const supportsFeature = target.features?.includes("wallet_switchEthereumChain") ?? false;
-    if (!supportsFeature) {
-      throw arxError({
-        reason: ArxReasons.ChainNotSupported,
-        message: "Requested chain does not support wallet_switchEthereumChain",
-        data: { chainRef: target.chainRef },
-      });
-    }
-
     return cloneChainMetadata(target);
   }
 

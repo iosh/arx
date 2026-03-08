@@ -38,8 +38,9 @@ const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinition
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata,
-  schemaVersion: 1,
+  schemaVersion: 2,
   updatedAt: now,
+  source: "builtin",
 });
 
 describe("createBackgroundRuntime (no snapshots)", () => {
@@ -145,6 +146,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createUiHandlers({
       controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
@@ -207,6 +209,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createUiHandlers({
       controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
@@ -267,6 +270,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createUiHandlers({
       controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       session: runtime.services.session,
       keyring: runtime.services.keyring,

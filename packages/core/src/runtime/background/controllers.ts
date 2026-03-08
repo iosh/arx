@@ -127,10 +127,17 @@ export const initControllers = ({
     throw new Error("createBackgroundRuntime requires chainDefinitions.port");
   }
 
+  const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const seedSource = chainDefinitionsOptions.seed ?? DEFAULT_CHAIN_METADATA;
   const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
+  const admittedRegistrySeed = registrySeed.filter((entry) => registeredNamespaces.has(entry.namespace));
   const requestedNetworkInitialState = networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT;
-  const bootstrapChains = registrySeed.length > 0 ? registrySeed : [DEFAULT_CHAIN];
+  const bootstrapChains =
+    admittedRegistrySeed.length > 0
+      ? admittedRegistrySeed
+      : registeredNamespaces.has(DEFAULT_CHAIN.namespace)
+        ? [DEFAULT_CHAIN]
+        : [];
   const bootstrapChainRefs = new Set(bootstrapChains.map((chain) => chain.chainRef));
   const canResolveRequestedInitialState = requestedNetworkInitialState.availableChainRefs.every((chainRef) =>
     bootstrapChainRefs.has(chainRef),
@@ -140,7 +147,7 @@ export const initControllers = ({
     bootstrapChains[0];
 
   if (!bootstrapActiveChain) {
-    throw new Error("createBackgroundRuntime requires at least one bootstrap chain definition");
+    throw new Error("createBackgroundRuntime requires at least one admitted bootstrap chain definition");
   }
 
   const bootstrapInitialState: NetworkStateInput = canResolveRequestedInitialState

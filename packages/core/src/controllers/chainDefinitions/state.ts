@@ -9,12 +9,16 @@ import {
 import { type ChainDefinitionEntity, ChainDefinitionEntitySchema } from "../../storage/index.js";
 import type { ChainDefinitionsState } from "./types.js";
 
+const WALLET_METHOD_FEATURES = new Set(["wallet_addEthereumChain", "wallet_switchEthereumChain"]);
+
 export const isSameChainDefinitionEntity = (previous: ChainDefinitionEntity, next: ChainDefinitionEntity) => {
   if (
     previous.chainRef !== next.chainRef ||
     previous.namespace !== next.namespace ||
     previous.schemaVersion !== next.schemaVersion ||
-    previous.updatedAt !== next.updatedAt
+    previous.updatedAt !== next.updatedAt ||
+    previous.source !== next.source ||
+    previous.createdByOrigin !== next.createdByOrigin
   ) {
     return false;
   }
@@ -28,6 +32,8 @@ export const cloneChainDefinitionEntity = (entity: ChainDefinitionEntity): Chain
   metadata: cloneChainMetadata(entity.metadata),
   schemaVersion: entity.schemaVersion,
   updatedAt: entity.updatedAt,
+  source: entity.source,
+  ...(entity.createdByOrigin ? { createdByOrigin: entity.createdByOrigin } : {}),
 });
 
 export const cloneChainDefinitionsState = (entities: Iterable<ChainDefinitionEntity>): ChainDefinitionsState => ({
@@ -50,7 +56,14 @@ export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, ne
 
 export const normalizeAndValidateMetadata = (metadata: ChainMetadata) => {
   const validated = validateChainMetadata(metadata);
-  return normalizeChainMetadata(validated);
+  const normalized = normalizeChainMetadata(validated);
+  const nextFeatures = normalized.features?.filter((feature) => !WALLET_METHOD_FEATURES.has(feature));
+
+  return {
+    ...normalized,
+    ...(nextFeatures && nextFeatures.length > 0 ? { features: nextFeatures } : {}),
+    ...(nextFeatures === undefined ? {} : nextFeatures.length === 0 ? { features: undefined } : {}),
+  };
 };
 
 export const parseEntity = (params: {
@@ -59,6 +72,8 @@ export const parseEntity = (params: {
   metadata: ChainMetadata;
   schemaVersion: number;
   updatedAt: number;
+  source: ChainDefinitionEntity["source"];
+  createdByOrigin?: string;
 }): ChainDefinitionEntity => {
   return ChainDefinitionEntitySchema.parse({
     chainRef: params.chainRef,
@@ -66,5 +81,7 @@ export const parseEntity = (params: {
     metadata: params.metadata,
     schemaVersion: params.schemaVersion,
     updatedAt: params.updatedAt,
+    source: params.source,
+    ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
   });
 };

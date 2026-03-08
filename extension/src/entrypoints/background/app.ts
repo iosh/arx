@@ -42,6 +42,7 @@ export const createBackgroundApp = () => {
       const bridge = createUiBridge({
         browser,
         controllers: ctx.controllers,
+        chainActivation: ctx.runtime.services.chainActivation,
         chainViews: ctx.chainViews,
         session: ctx.session,
         rpcClients: ctx.runtime.rpc.clients,

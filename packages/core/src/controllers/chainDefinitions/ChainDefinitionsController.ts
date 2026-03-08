@@ -1,5 +1,6 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../chains/ids.js";
-import { type ChainMetadata, isSameChainMetadata } from "../../chains/metadata.js";
+import { type ChainMetadata, isSameAddChainComparableMetadata, isSameChainMetadata } from "../../chains/metadata.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import {
   CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
@@ -21,8 +22,8 @@ import type {
   ChainDefinitionsController,
   ChainDefinitionsState,
   ChainDefinitionsUpdate,
-  ChainDefinitionsUpsertOptions,
-  ChainDefinitionsUpsertResult,
+  ChainDefinitionsUpsertCustomOptions,
+  ChainDefinitionsUpsertCustomResult,
 } from "./types.js";
 
 type ControllerOptions = {
@@ -32,6 +33,10 @@ type ControllerOptions = {
   logger?: (message: string, error?: unknown) => void;
   seed?: readonly ChainMetadata[];
   schemaVersion?: number;
+};
+
+type ReconcileOptions = {
+  publish: boolean;
 };
 
 export class InMemoryChainDefinitionsController implements ChainDefinitionsController {
@@ -65,54 +70,28 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
     return cloneChainDefinitionsState(this.#chains.values()).chains;
   }
 
-  async upsertChain(
-    metadata: ChainMetadata,
-    options?: ChainDefinitionsUpsertOptions,
-  ): Promise<ChainDefinitionsUpsertResult> {
+  async reconcileBuiltinChains(seed: readonly ChainMetadata[]): Promise<void> {
     await this.#ready;
-
-    // Validate first so normalization cannot throw (e.g. bad payloads cast as ChainMetadata).
-    const normalized = normalizeAndValidateMetadata(metadata);
-    const previous = this.#chains.get(normalized.chainRef) ?? null;
-    const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
-    if (previous && previous.schemaVersion === schemaVersion && isSameChainMetadata(previous.metadata, normalized)) {
-      return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
-    }
-
-    const entity: ChainDefinitionEntity = {
-      chainRef: normalized.chainRef,
-      namespace: normalized.namespace,
-      metadata: normalized,
-      schemaVersion,
-      updatedAt: options?.updatedAt ?? this.#now(),
-    };
-
-    const checked = ChainDefinitionEntitySchema.parse(entity);
-
-    await this.#port.put(checked);
-
-    this.#chains.set(checked.chainRef, checked);
-
-    const result: ChainDefinitionsUpsertResult =
-      previous === null
-        ? { kind: "added" as const, chain: cloneChainDefinitionEntity(checked) }
-        : {
-            kind: "updated" as const,
-            chain: cloneChainDefinitionEntity(checked),
-            previous: cloneChainDefinitionEntity(previous),
-          };
-
-    this.#publishState();
-    this.#publishUpdate(previous, checked);
-    return result;
+    await this.#reconcileBuiltinChains(seed, { publish: true });
   }
 
-  async removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }> {
+  async upsertCustomChain(
+    metadata: ChainMetadata,
+    options?: ChainDefinitionsUpsertCustomOptions,
+  ): Promise<ChainDefinitionsUpsertCustomResult> {
+    await this.#ready;
+    return await this.#upsertCustomChain(metadata, options);
+  }
+
+  async removeCustomChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: ChainDefinitionEntity }> {
     await this.#ready;
 
     const previous = this.#chains.get(chainRef);
     if (!previous) {
       return { removed: false };
+    }
+    if (previous.source !== "custom") {
+      return { removed: false, previous: cloneChainDefinitionEntity(previous) };
     }
 
     await this.#port.delete(chainRef);
@@ -144,28 +123,12 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
       const persisted = await this.#port.getAll();
       const sanitized = await this.#sanitizePersisted(persisted);
 
-      if (sanitized.length === 0 && seed.length > 0) {
-        const seedEntities = seed.map((metadata) => {
-          const normalized = normalizeAndValidateMetadata(metadata);
-          return parseEntity({
-            chainRef: normalized.chainRef,
-            namespace: normalized.namespace,
-            metadata: normalized,
-            schemaVersion: this.#defaultSchemaVersion,
-            updatedAt: this.#now(),
-          });
-        });
-
-        await this.#port.putMany(seedEntities);
-        for (const entity of seedEntities) {
-          this.#chains.set(entity.chainRef, entity);
-        }
-        this.#publishState();
-        return;
-      }
-
       for (const entity of sanitized) {
         this.#chains.set(entity.chainRef, entity);
+      }
+
+      if (seed.length > 0) {
+        await this.#reconcileBuiltinChains(seed, { publish: false });
       }
 
       if (this.#chains.size > 0) {
@@ -191,6 +154,135 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
     }
 
     return valid;
+  }
+
+  async #reconcileBuiltinChains(seed: readonly ChainMetadata[], options: ReconcileOptions): Promise<void> {
+    const nextBuiltinRefs = new Set<ChainRef>();
+    const nextEntries = new Map<ChainRef, ChainDefinitionEntity>();
+    const changedEntries: Array<{ previous: ChainDefinitionEntity | null; next: ChainDefinitionEntity }> = [];
+
+    for (const metadata of seed) {
+      const normalized = normalizeAndValidateMetadata(metadata);
+      if (nextBuiltinRefs.has(normalized.chainRef)) {
+        throw new Error(`Duplicate builtin chain definition for ${normalized.chainRef}`);
+      }
+
+      nextBuiltinRefs.add(normalized.chainRef);
+      const previous = this.#chains.get(normalized.chainRef) ?? null;
+      if (
+        previous &&
+        previous.source === "builtin" &&
+        previous.schemaVersion === this.#defaultSchemaVersion &&
+        isSameChainMetadata(previous.metadata, normalized)
+      ) {
+        continue;
+      }
+
+      const next = parseEntity({
+        chainRef: normalized.chainRef,
+        namespace: normalized.namespace,
+        metadata: normalized,
+        schemaVersion: this.#defaultSchemaVersion,
+        updatedAt: this.#now(),
+        source: "builtin",
+      });
+      nextEntries.set(next.chainRef, next);
+      changedEntries.push({ previous, next });
+    }
+
+    const removedBuiltins = Array.from(this.#chains.values()).filter(
+      (entry) => entry.source === "builtin" && !nextBuiltinRefs.has(entry.chainRef),
+    );
+
+    if (nextEntries.size === 0 && removedBuiltins.length === 0) {
+      return;
+    }
+
+    if (nextEntries.size > 0) {
+      await this.#port.putMany([...nextEntries.values()]);
+      for (const [chainRef, entity] of nextEntries) {
+        this.#chains.set(chainRef, entity);
+      }
+    }
+
+    for (const entry of removedBuiltins) {
+      await this.#port.delete(entry.chainRef);
+      this.#chains.delete(entry.chainRef);
+    }
+
+    if (!options.publish) {
+      return;
+    }
+
+    this.#publishState();
+    for (const { previous, next } of changedEntries) {
+      this.#publishUpdate(previous, next);
+    }
+    for (const removed of removedBuiltins) {
+      this.#messenger.publish(CHAIN_DEFINITIONS_UPDATED, {
+        kind: "removed",
+        chainRef: removed.chainRef,
+        previous: cloneChainDefinitionEntity(removed),
+      });
+    }
+  }
+
+  async #upsertCustomChain(
+    metadata: ChainMetadata,
+    options?: ChainDefinitionsUpsertCustomOptions,
+  ): Promise<ChainDefinitionsUpsertCustomResult> {
+    const normalized = normalizeAndValidateMetadata(metadata);
+    const previous = this.#chains.get(normalized.chainRef) ?? null;
+
+    if (previous?.source === "builtin") {
+      if (isSameAddChainComparableMetadata(previous.metadata, normalized)) {
+        return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
+      }
+
+      throw arxError({
+        reason: ArxReasons.ChainNotSupported,
+        message: "Requested chain conflicts with a builtin chain definition",
+        data: { chainRef: normalized.chainRef },
+      });
+    }
+
+    const schemaVersion = options?.schemaVersion ?? this.#defaultSchemaVersion;
+    const createdByOrigin = previous?.createdByOrigin ?? options?.createdByOrigin;
+    if (
+      previous &&
+      previous.schemaVersion === schemaVersion &&
+      previous.source === "custom" &&
+      previous.createdByOrigin === createdByOrigin &&
+      isSameChainMetadata(previous.metadata, normalized)
+    ) {
+      return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
+    }
+
+    const entity = parseEntity({
+      chainRef: normalized.chainRef,
+      namespace: normalized.namespace,
+      metadata: normalized,
+      schemaVersion,
+      updatedAt: options?.updatedAt ?? this.#now(),
+      source: "custom",
+      ...(createdByOrigin ? { createdByOrigin } : {}),
+    });
+
+    await this.#port.put(entity);
+    this.#chains.set(entity.chainRef, entity);
+
+    const result: ChainDefinitionsUpsertCustomResult =
+      previous === null
+        ? { kind: "added", chain: cloneChainDefinitionEntity(entity) }
+        : {
+            kind: "updated",
+            chain: cloneChainDefinitionEntity(entity),
+            previous: cloneChainDefinitionEntity(previous),
+          };
+
+    this.#publishState();
+    this.#publishUpdate(previous, entity);
+    return result;
   }
 
   #publishState(): void {

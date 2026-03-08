@@ -32,8 +32,7 @@ export const switchChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SwitchCh
       });
     }
 
-    await deps.network.switchChain(requested);
-    await deps.networkPreferences.setActiveChainRef(requested);
+    await deps.chainActivation.activate(requested);
     return null;
   },
 };

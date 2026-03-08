@@ -391,12 +391,19 @@ export class MemoryVaultMetaPort implements VaultMetaPort {
   }
 }
 
-export const toRegistryEntity = (metadata: ChainMetadata, updatedAt = Date.now()): ChainDefinitionEntity => ({
+export const toRegistryEntity = (
+  metadata: ChainMetadata,
+  updatedAt = Date.now(),
+  source: ChainDefinitionEntity["source"] = "builtin",
+  createdByOrigin?: string,
+): ChainDefinitionEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata: clone(metadata),
   updatedAt,
   schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  source,
+  ...(createdByOrigin ? { createdByOrigin } : {}),
 });
 
 // Mock chain registry implementation

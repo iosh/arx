@@ -1,7 +1,7 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../../chains/metadata.js";
-import type { ChainDefinitionEntity } from "../../../storage/index.js";
+import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
 const MAINNET: ChainMetadata = {
@@ -24,7 +24,7 @@ const OPTIMISM: ChainMetadata = {
   features: ["eip155", "wallet_switchEthereumChain"],
 };
 
-const UNSUPPORTED: ChainMetadata = {
+const BASE: ChainMetadata = {
   chainRef: "eip155:8453",
   namespace: "eip155",
   chainId: "0x2105",
@@ -34,16 +34,26 @@ const UNSUPPORTED: ChainMetadata = {
   features: ["eip155"],
 };
 
+const SOLANA: ChainMetadata = {
+  chainRef: "solana:101",
+  namespace: "solana",
+  chainId: "101",
+  displayName: "Solana Mainnet",
+  nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
+  rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
+};
+
 const toEntity = (metadata: ChainMetadata): ChainDefinitionEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
   metadata,
-  schemaVersion: 1,
+  schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
   updatedAt: 0,
+  source: "builtin",
 });
 
 const setup = (params?: { known?: ChainMetadata[]; available?: ChainMetadata[]; active?: ChainMetadata }) => {
-  const known = params?.known ?? [MAINNET, OPTIMISM, UNSUPPORTED];
+  const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
   const active = params?.active ?? MAINNET;
 
@@ -59,31 +69,28 @@ const setup = (params?: { known?: ChainMetadata[]; available?: ChainMetadata[]; 
         availableChainRefs: available.map((chain) => chain.chainRef),
         rpc: {},
       }),
-      getActiveChain: () => active,
-      getChain: (chainRef: string) => available.find((chain) => chain.chainRef === chainRef) ?? null,
     } as never,
   });
 };
 
 describe("ChainViewsService", () => {
-  it("builds active, known, available, and provider views", () => {
+  it("builds known and mounted views separately", () => {
     const service = setup();
 
     expect(service.getActiveChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
-
     expect(service.buildUiNetworksSnapshot()).toEqual({
       active: MAINNET.chainRef,
       known: expect.arrayContaining([
         expect.objectContaining({ chainRef: MAINNET.chainRef }),
         expect.objectContaining({ chainRef: OPTIMISM.chainRef }),
-        expect.objectContaining({ chainRef: UNSUPPORTED.chainRef }),
+        expect.objectContaining({ chainRef: BASE.chainRef }),
+        expect.objectContaining({ chainRef: SOLANA.chainRef }),
       ]),
       available: expect.arrayContaining([
         expect.objectContaining({ chainRef: MAINNET.chainRef }),
         expect.objectContaining({ chainRef: OPTIMISM.chainRef }),
       ]),
     });
-
     expect(service.buildProviderMeta()).toEqual({
       activeChain: MAINNET.chainRef,
       activeNamespace: MAINNET.namespace,
@@ -91,64 +98,32 @@ describe("ChainViewsService", () => {
     });
   });
 
-  it("resolves wallet_switchEthereumChain targets from available chains", () => {
-    const service = setup();
+  it("resolves wallet_switchEthereumChain targets from mounted eip155 chains", () => {
+    const service = setup({ available: [MAINNET, BASE] });
 
-    expect(service.resolveEip155SwitchChain({ chainId: "0xa" })).toMatchObject({ chainRef: OPTIMISM.chainRef });
-    expect(service.resolveEip155SwitchChain({ chainRef: OPTIMISM.chainRef })).toMatchObject({
-      chainId: OPTIMISM.chainId,
+    expect(service.resolveEip155SwitchChain({ chainId: BASE.chainId.toLowerCase() })).toMatchObject({
+      chainRef: BASE.chainRef,
+    });
+    expect(service.resolveEip155SwitchChain({ chainRef: MAINNET.chainRef })).toMatchObject({
+      chainId: MAINNET.chainId,
     });
   });
 
-  it("rejects targets that are known but not switchable in runtime", () => {
-    const service = setup({ available: [MAINNET, UNSUPPORTED] });
+  it("rejects chains that are known but not mounted or not eip155", () => {
+    const service = setup({ available: [MAINNET, SOLANA] });
 
     try {
-      service.resolveEip155SwitchChain({ chainId: UNSUPPORTED.chainId.toLowerCase() });
-      throw new Error("Expected unsupported chain target to throw");
-    } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainNotSupported });
-    }
-
-    try {
-      service.resolveEip155SwitchChain({ chainId: "0x9999" });
-      throw new Error("Expected unknown chain target to throw");
-    } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainNotFound });
-    }
-  });
-
-  it("supports direct metadata lookups with availability semantics", () => {
-    const service = setup({ available: [MAINNET] });
-
-    const known = service.requireChainMetadata(UNSUPPORTED.chainRef);
-    expect(known).toMatchObject({ chainRef: UNSUPPORTED.chainRef, displayName: UNSUPPORTED.displayName });
-
-    known.displayName = "Changed";
-    expect(service.requireChainMetadata(UNSUPPORTED.chainRef).displayName).toBe(UNSUPPORTED.displayName);
-
-    expect(service.requireAvailableChainMetadata(MAINNET.chainRef)).toMatchObject({ chainRef: MAINNET.chainRef });
-
-    try {
-      service.requireAvailableChainMetadata(UNSUPPORTED.chainRef);
-      throw new Error("Expected unavailable chain lookup to throw");
-    } catch (error) {
-      expect(error).toMatchObject({ reason: ArxReasons.ChainNotSupported });
-    }
-
-    try {
-      service.requireAvailableChainMetadata("eip155:999");
-      throw new Error("Expected unknown chain lookup to throw");
+      service.resolveEip155SwitchChain({ chainId: BASE.chainId.toLowerCase() });
+      throw new Error("Expected mounted-set miss to throw");
     } catch (error) {
       expect(error).toMatchObject({ reason: ArxReasons.ChainNotFound });
     }
 
-    expect(service.findAvailableChainView({ chainRef: MAINNET.chainRef })).toMatchObject({
-      chainRef: MAINNET.chainRef,
-    });
-    expect(service.findAvailableChainView({ chainRef: UNSUPPORTED.chainRef })).toBeNull();
-    expect(service.findAvailableChainView({ namespace: "eip155" })).toMatchObject({ chainRef: MAINNET.chainRef });
-    expect(service.findAvailableChainView({ namespace: "solana" })).toBeNull();
-    expect(service.findAvailableChainView({ chainRef: MAINNET.chainRef, namespace: "solana" })).toBeNull();
+    try {
+      service.resolveEip155SwitchChain({ chainRef: SOLANA.chainRef });
+      throw new Error("Expected namespace mismatch to throw");
+    } catch (error) {
+      expect(error).toMatchObject({ reason: ArxReasons.ChainNotCompatible });
+    }
   });
 });

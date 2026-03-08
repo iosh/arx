@@ -14,7 +14,7 @@ export const createNetworksHandlers = (
 ): Pick<UiHandlers, "ui.networks.switchActive"> => {
   return {
     "ui.networks.switchActive": async ({ chainRef }) => {
-      await deps.chainActivation.activate(chainRef);
+      await deps.chainActivation.selectWalletChain(chainRef);
       return toChainSnapshot();
     },
   };

@@ -80,6 +80,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   const resolveActiveChainByNamespace = (
     current: ReturnType<typeof network.getState>,
     registryChains: NetworkChainConfig[],
+    selectedChainRefHint: ChainRef,
   ): Record<string, ChainRef> => {
     const availableByNamespace = new Map<string, ChainRef[]>();
 
@@ -94,12 +95,18 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const next: Record<string, ChainRef> = {};
+    const selectedNamespace = getNamespace(selectedChainRefHint);
     const currentNamespace = getNamespace(current.activeChainRef);
 
     for (const [namespace, chainRefs] of availableByNamespace) {
       const preferred = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
       if (preferred && chainRefs.includes(preferred)) {
         next[namespace] = preferred;
+        continue;
+      }
+
+      if (namespace === selectedNamespace && chainRefs.includes(selectedChainRefHint)) {
+        next[namespace] = selectedChainRefHint;
         continue;
       }
 
@@ -132,6 +139,19 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
+    const preferredSelectedChainRef = cachedPreferences?.selectedChainRef ?? null;
+    if (preferredSelectedChainRef && available.has(preferredSelectedChainRef)) {
+      return preferredSelectedChainRef;
+    }
+
+    const preferredSelectedNamespace = preferredSelectedChainRef ? getNamespace(preferredSelectedChainRef) : null;
+    const preferredSelectedNamespaceActive = preferredSelectedNamespace
+      ? (activeChainByNamespace[preferredSelectedNamespace] ?? null)
+      : null;
+    if (preferredSelectedNamespaceActive && available.has(preferredSelectedNamespaceActive)) {
+      return preferredSelectedNamespaceActive;
+    }
+
     const currentNamespace = getNamespace(current.activeChainRef);
 
     const currentNamespaceActive = activeChainByNamespace[currentNamespace] ?? null;
@@ -200,8 +220,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const current = network.getState();
-    const nextActiveChainByNamespace = resolveActiveChainByNamespace(current, registryChains);
-    const nextActive = selectActiveChainRef(current, registryChains, nextActiveChainByNamespace);
+    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? current.activeChainRef;
+    const nextActiveChainByNamespace = resolveActiveChainByNamespace(current, registryChains, selectedChainRefHint);
+    const nextSelectedChainRef = selectActiveChainRef(current, registryChains, nextActiveChainByNamespace);
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
     const { rpc, corrections } = computeRpcState(registryChains, current);
@@ -210,7 +231,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     network.replaceState(
       createNetworkRuntimeInput({
         state: {
-          activeChainRef: nextActive,
+          activeChainRef: nextSelectedChainRef,
           availableChainRefs: registryChains.map((chain) => chain.chainRef),
           rpc,
         },
@@ -226,6 +247,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
 
       const cachedActive = cachedPreferences?.activeChainByNamespace ?? {};
+      const cachedSelected = cachedPreferences?.selectedChainRef ?? null;
+      const shouldPersistSelected = cachedSelected !== nextSelectedChainRef;
       const shouldPersistActive =
         Object.keys(cachedActive).length !== Object.keys(nextActiveChainByNamespace).length ||
         Object.entries(nextActiveChainByNamespace).some(
@@ -233,9 +256,10 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         );
       const shouldPersistRpc = Object.keys(nextPatch).length > 0;
 
-      if (shouldPersistActive || shouldPersistRpc) {
+      if (shouldPersistSelected || shouldPersistActive || shouldPersistRpc) {
         try {
           cachedPreferences = await preferences.update({
+            ...(shouldPersistSelected ? { selectedChainRef: nextSelectedChainRef } : {}),
             ...(shouldPersistActive ? { activeChainByNamespace: nextActiveChainByNamespace } : {}),
             ...(shouldPersistRpc ? { rpcPatch: nextPatch } : {}),
           });

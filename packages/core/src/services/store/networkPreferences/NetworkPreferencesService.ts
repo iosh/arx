@@ -16,6 +16,7 @@ import type {
 export type CreateNetworkPreferencesServiceOptions = {
   port: NetworkPreferencesPort;
   defaults: {
+    selectedChainRef: ChainRef;
     activeChainByNamespace: Record<string, ChainRef>;
   };
   now?: () => number;
@@ -31,6 +32,7 @@ export const createNetworkPreferencesService = ({
   const run = createSerialQueue();
   let cached: NetworkPreferencesRecord | null = null;
 
+  const getDefaultSelectedChainRef = () => defaults.selectedChainRef;
   const getDefaultActiveChainByNamespace = () => ({ ...defaults.activeChainByNamespace });
 
   const safeParse = (value: unknown): NetworkPreferencesRecord | null => {
@@ -56,6 +58,8 @@ export const createNetworkPreferencesService = ({
 
   const getSnapshot = (): NetworkPreferencesRecord | null => cached;
 
+  const getSelectedChainRef = (): ChainRef => cached?.selectedChainRef ?? getDefaultSelectedChainRef();
+
   const getActiveChainByNamespace = (): Record<string, ChainRef> => {
     return {
       ...getDefaultActiveChainByNamespace(),
@@ -75,6 +79,8 @@ export const createNetworkPreferencesService = ({
     return await run(async () => {
       const base = safeParse(await port.get());
       cached = base;
+
+      const nextSelectedChainRef = params.selectedChainRef ?? base?.selectedChainRef ?? getDefaultSelectedChainRef();
 
       const nextActiveBase =
         params.activeChainByNamespace === undefined
@@ -114,6 +120,7 @@ export const createNetworkPreferencesService = ({
 
       const next: NetworkPreferencesRecord = NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
+        selectedChainRef: nextSelectedChainRef,
         activeChainByNamespace: nextActiveChainByNamespace,
         rpc: nextRpc,
         updatedAt: clock(),
@@ -123,6 +130,10 @@ export const createNetworkPreferencesService = ({
       emitChanged(next);
       return next;
     });
+  };
+
+  const setSelectedChainRef = async (chainRef: ChainRef) => {
+    return update({ selectedChainRef: chainRef });
   };
 
   const setActiveChainRef = async (chainRef: ChainRef) => {
@@ -148,9 +159,11 @@ export const createNetworkPreferencesService = ({
 
     get,
     getSnapshot,
+    getSelectedChainRef,
     getActiveChainByNamespace,
     getActiveChainRef,
     update,
+    setSelectedChainRef,
     setActiveChainRef,
     setRpcPreferences,
     clearRpcPreferences,

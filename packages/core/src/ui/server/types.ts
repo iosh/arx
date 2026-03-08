@@ -34,7 +34,7 @@ export type UiHandlers = {
 
 export type UiRuntimeDeps = {
   controllers: HandlerControllers;
-  chainActivation: Pick<ChainActivationService, "activate">;
+  chainActivation: Pick<ChainActivationService, "selectWalletChain">;
   chainViews: Pick<
     ChainViewsService,
     | "buildProviderMeta"

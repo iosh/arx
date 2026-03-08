@@ -3,7 +3,7 @@ import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { deriveApprovalChainContext, parseNoDecision } from "../shared.js";
+import { ApprovalChainDerivationFallbacks, deriveApprovalChainContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTypedData> = {
@@ -24,7 +24,10 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
   },
   async approve(record, _decision, deps) {
     const payload = record.request;
-    const { chainRef, namespace } = deriveApprovalChainContext(record, deps, payload);
+    const { chainRef, namespace } = deriveApprovalChainContext(record, deps, {
+      request: payload,
+      fallback: ApprovalChainDerivationFallbacks.None,
+    });
 
     if (namespace !== "eip155") {
       throw arxError({

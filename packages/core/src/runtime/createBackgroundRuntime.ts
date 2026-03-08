@@ -144,7 +144,10 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const networkPreferences = createNetworkPreferencesService({
     port: networkPreferencesOptions.port,
-    defaults: { activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef } },
+    defaults: {
+      selectedChainRef: DEFAULT_CHAIN.chainRef,
+      activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef },
+    },
     now: storageNow,
   });
 

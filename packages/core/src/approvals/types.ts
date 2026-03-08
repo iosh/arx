@@ -22,7 +22,7 @@ export type ApprovalFlowDeps = {
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   network: Pick<NetworkController, "getState" | "switchChain">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
-  chainActivation: Pick<ChainActivationService, "activate">;
+  chainActivation: Pick<ChainActivationService, "activateProviderChain">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;
   signers: {
     eip155: Pick<Eip155Signer, "signPersonalMessage" | "signTypedData">;

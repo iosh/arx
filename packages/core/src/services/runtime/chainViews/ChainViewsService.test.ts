@@ -56,11 +56,13 @@ const setup = (params?: {
   known?: ChainMetadata[];
   available?: ChainMetadata[];
   active?: ChainMetadata;
+  selected?: ChainMetadata;
   activeByNamespace?: Record<string, string>;
 }) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
   const active = params?.active ?? MAINNET;
+  const selected = params?.selected ?? active;
 
   return createChainViewsService({
     chainDefinitions: {
@@ -76,6 +78,7 @@ const setup = (params?: {
       }),
     } as never,
     preferences: {
+      getSelectedChainRef: () => selected.chainRef,
       getActiveChainRef: (namespace: string) => params?.activeByNamespace?.[namespace] ?? null,
     } as never,
   });
@@ -111,6 +114,7 @@ describe("ChainViewsService", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
       active: SOLANA,
+      selected: SOLANA,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
@@ -150,5 +154,12 @@ describe("ChainViewsService", () => {
     } catch (error) {
       expect(error).toMatchObject({ reason: ArxReasons.ChainNotCompatible });
     }
+  });
+
+  it("uses selectedChainRef for wallet active views even when runtime legacy active differs", () => {
+    const service = setup({ active: SOLANA, selected: MAINNET, available: [MAINNET, SOLANA] });
+
+    expect(service.getActiveChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
+    expect(service.buildUiNetworksSnapshot().active).toBe(MAINNET.chainRef);
   });
 });

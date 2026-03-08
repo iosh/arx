@@ -4,6 +4,19 @@ import type { ChainRef } from "../chains/ids.js";
 import type { ApprovalDecision, ApprovalKind, ApprovalRecord } from "../controllers/approval/types.js";
 import type { ApprovalFlowDeps } from "./types.js";
 
+export const ApprovalChainDerivationFallbacks = {
+  None: "none",
+  NamespaceActive: "namespace-active",
+} as const;
+
+export type ApprovalChainDerivationFallback =
+  (typeof ApprovalChainDerivationFallbacks)[keyof typeof ApprovalChainDerivationFallbacks];
+
+type DeriveApprovalChainContextOptions = {
+  request?: { chainRef?: ChainRef | undefined };
+  fallback?: ApprovalChainDerivationFallback;
+};
+
 export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
   if (input !== undefined) {
     throw arxError({
@@ -18,20 +31,18 @@ export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown)
 
 export const deriveApprovalChainContext = (
   record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
-  deps: Pick<ApprovalFlowDeps, "network" | "networkPreferences">,
-  request?: { chainRef?: ChainRef | undefined },
+  deps: Pick<ApprovalFlowDeps, "networkPreferences">,
+  options?: DeriveApprovalChainContextOptions,
 ) => {
-  const currentActiveChainRef = deps.network.getState().activeChainRef;
   const inferredNamespace =
-    record.namespace ?? request?.chainRef?.split(":")[0] ?? record.chainRef?.split(":")[0] ?? null;
+    record.namespace ?? options?.request?.chainRef?.split(":")[0] ?? record.chainRef?.split(":")[0] ?? null;
   const namespaceActiveChainRef = inferredNamespace
-    ? deps.networkPreferences.getActiveChainRef(inferredNamespace)
+    ? options?.fallback === ApprovalChainDerivationFallbacks.NamespaceActive
+      ? deps.networkPreferences.getActiveChainRef(inferredNamespace)
+      : null
     : null;
-  const compatibleCurrentActiveChainRef =
-    inferredNamespace && currentActiveChainRef.split(":")[0] !== inferredNamespace ? null : currentActiveChainRef;
 
-  const requestedChainRef =
-    request?.chainRef ?? record.chainRef ?? namespaceActiveChainRef ?? compatibleCurrentActiveChainRef;
+  const requestedChainRef = options?.request?.chainRef ?? record.chainRef ?? namespaceActiveChainRef;
 
   if (!requestedChainRef) {
     throw arxError({

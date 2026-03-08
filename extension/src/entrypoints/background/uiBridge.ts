@@ -19,7 +19,7 @@ export { UI_CHANNEL } from "@arx/core/ui";
 type BridgeDeps = {
   browser: typeof browserDefaultType;
   controllers: HandlerControllers;
-  chainActivation: Pick<ChainActivationService, "activate">;
+  chainActivation: Pick<ChainActivationService, "selectWalletChain">;
   chainViews: Pick<
     ChainViewsService,
     | "buildProviderMeta"

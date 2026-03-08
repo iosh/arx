@@ -18,7 +18,7 @@ import type {
 type CreateChainViewsServiceOptions = {
   chainDefinitions: ChainDefinitionsController;
   network: NetworkController;
-  preferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
+  preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedChainRef">;
 };
 
 const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
@@ -42,7 +42,7 @@ const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chain
 class DefaultChainViewsService implements ChainViewsService {
   readonly #chainDefinitions: ChainDefinitionsController;
   readonly #network: NetworkController;
-  readonly #preferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
+  readonly #preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedChainRef">;
 
   constructor(options: CreateChainViewsServiceOptions) {
     this.#chainDefinitions = options.chainDefinitions;
@@ -51,8 +51,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   getActiveChainView(): ChainView {
-    const activeChainRef = this.#network.getState().activeChainRef;
-    return toChainView(this.requireChainMetadata(activeChainRef));
+    return toChainView(this.requireChainMetadata(this.#resolveSelectedChainRef()));
   }
 
   requireChainMetadata(chainRef: ChainRef): ChainMetadata {
@@ -106,7 +105,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   buildUiNetworksSnapshot(): UiNetworksSnapshot {
-    const active = this.#network.getState().activeChainRef;
+    const active = this.#resolveSelectedChainRef();
 
     return {
       active,
@@ -118,11 +117,11 @@ class DefaultChainViewsService implements ChainViewsService {
   buildProviderMeta(): ProviderMetaSnapshot {
     const availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]);
     const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
+    const selectedChainRef = this.#resolveSelectedChainRef();
+    const selectedNamespace = selectedChainRef.split(":")[0] ?? "";
 
     const activeChain =
-      activeChainByNamespace[DEFAULT_NAMESPACE] ??
-      activeChainByNamespace[this.#network.getState().activeChainRef.split(":")[0] ?? ""] ??
-      this.#network.getState().activeChainRef;
+      activeChainByNamespace[DEFAULT_NAMESPACE] ?? activeChainByNamespace[selectedNamespace] ?? selectedChainRef;
 
     const active = this.#getRequiredChainMetadata(activeChain as ChainRef);
 
@@ -188,8 +187,8 @@ class DefaultChainViewsService implements ChainViewsService {
       }
     }
 
-    const currentActive = this.#network.getState().activeChainRef;
-    const [currentNamespace] = currentActive.split(":");
+    const selectedChainRef = this.#resolveSelectedChainRef();
+    const [selectedNamespace] = selectedChainRef.split(":");
 
     const next: Record<string, ChainRef> = {};
     for (const [namespace, chainRefs] of grouped) {
@@ -199,8 +198,8 @@ class DefaultChainViewsService implements ChainViewsService {
         continue;
       }
 
-      if (currentNamespace === namespace && chainRefs.includes(currentActive)) {
-        next[namespace] = currentActive;
+      if (selectedNamespace === namespace && chainRefs.includes(selectedChainRef)) {
+        next[namespace] = selectedChainRef;
         continue;
       }
 
@@ -211,6 +210,13 @@ class DefaultChainViewsService implements ChainViewsService {
     }
 
     return next;
+  }
+
+  #resolveSelectedChainRef(): ChainRef {
+    const selectedChainRef = this.#preferences.getSelectedChainRef();
+    return this.#chainDefinitions.getChain(selectedChainRef)
+      ? selectedChainRef
+      : this.#network.getState().activeChainRef;
   }
 
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {

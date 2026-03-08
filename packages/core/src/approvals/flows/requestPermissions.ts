@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { deriveApprovalChainContext, parseNoDecision } from "../shared.js";
+import { ApprovalChainDerivationFallbacks, deriveApprovalChainContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestPermissions> = {
@@ -28,10 +28,19 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
 
     for (const descriptor of granted) {
       const targetChainRefs =
-        descriptor.chainRefs.length > 0 ? descriptor.chainRefs : [deriveApprovalChainContext(record, deps).chainRef];
+        descriptor.chainRefs.length > 0
+          ? descriptor.chainRefs
+          : [
+              deriveApprovalChainContext(record, deps, {
+                fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
+              }).chainRef,
+            ];
 
       for (const targetChainRef of targetChainRefs) {
-        const { namespace, chainRef } = deriveApprovalChainContext(record, deps, { chainRef: targetChainRef });
+        const { namespace, chainRef } = deriveApprovalChainContext(record, deps, {
+          request: { chainRef: targetChainRef },
+          fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
+        });
 
         if (descriptor.capability === PermissionCapabilities.Accounts) {
           const accounts = deps.accounts.listOwnedForNamespace({ namespace, chainRef });

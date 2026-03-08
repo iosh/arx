@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
+import { ProviderChainActivationReasons } from "../../services/runtime/chainActivation/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
@@ -32,7 +33,11 @@ export const switchChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SwitchCh
       });
     }
 
-    await deps.chainActivation.activate(requested);
+    await deps.chainActivation.activateProviderChain({
+      namespace: record.namespace ?? requested.split(":")[0] ?? "",
+      chainRef: requested,
+      reason: ProviderChainActivationReasons.SwitchChain,
+    });
     return null;
   },
 };

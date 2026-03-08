@@ -150,8 +150,8 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
       if (!approvalId) throw new Error("Expected approvalId to be set");
-      await runtime.controllers.approvals.resolve({ id: approvalId, action: "approve", result: "0xsignedpayload" });
-      await expect(pending).resolves.toBe("0xsignedpayload");
+      await runtime.controllers.approvals.resolve({ id: approvalId, action: "approve" });
+      await expect(pending).resolves.toMatch(/^0x[0-9a-f]+$/i);
 
       expect(approval).toHaveBeenCalledTimes(1);
     } finally {
@@ -163,9 +163,10 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
   it("allows personal_sign when connected but Sign capability is missing", async () => {
     const harness = await createRpcHarness();
     const { runtime } = harness;
-    const approval = vi
-      .spyOn(runtime.controllers.approvals, "create")
-      .mockReturnValue({ id: "mock-approval", settled: Promise.resolve("0xsignedpayload") } as never);
+    const approval = vi.spyOn(runtime.controllers.approvals, "create");
+    const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
+      void runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
+    });
 
     try {
       await initializeSession(runtime);
@@ -193,7 +194,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
           method: "personal_sign",
           params: [MESSAGE, address] as JsonRpcParams,
         }),
-      ).resolves.toBe("0xsignedpayload");
+      ).resolves.toMatch(/^0x[0-9a-f]+$/i);
 
       expect(approval).toHaveBeenCalledTimes(1);
 
@@ -202,6 +203,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
           ?.capabilities ?? [];
       expect(afterCapabilities).toContain(PermissionCapabilities.Sign);
     } finally {
+      unsubscribe();
       approval.mockRestore();
       harness.destroy();
     }

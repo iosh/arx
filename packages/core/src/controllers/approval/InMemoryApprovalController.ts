@@ -1,4 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import type { ApprovalExecutor } from "../../approvals/types.js";
 import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
 import type {
   ApprovalController,
@@ -32,6 +33,7 @@ type CreateInMemoryApprovalControllerOptions = {
   autoRejectMessage?: string;
   ttlMs?: number;
   logger?: (message: string, error?: unknown) => void;
+  getExecutor?: () => ApprovalExecutor | undefined;
 };
 
 export class InMemoryApprovalController implements ApprovalController {
@@ -39,17 +41,19 @@ export class InMemoryApprovalController implements ApprovalController {
   #autoRejectMessage: string;
   #ttlMs: number;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
+  #getExecutor?: (() => ApprovalExecutor | undefined) | undefined;
 
   #state: ApprovalState = { pending: [] };
   #records: Map<string, ApprovalRecord> = new Map();
   #pending: Map<string, PendingApproval> = new Map();
   #timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-  constructor({ messenger, autoRejectMessage, ttlMs, logger }: CreateInMemoryApprovalControllerOptions) {
+  constructor({ messenger, autoRejectMessage, ttlMs, logger, getExecutor }: CreateInMemoryApprovalControllerOptions) {
     this.#messenger = messenger;
     this.#autoRejectMessage = autoRejectMessage ?? "User rejected the request.";
     this.#ttlMs = ttlMs ?? 5 * 60_000;
     this.#logger = logger;
+    this.#getExecutor = getExecutor;
   }
 
   getState(): ApprovalState {
@@ -124,6 +128,18 @@ export class InMemoryApprovalController implements ApprovalController {
         message: input.reason ?? input.error?.message ?? this.#autoRejectMessage,
       });
 
+      const executor = this.#getExecutor?.();
+      if (executor) {
+        try {
+          await executor.reject(entry.record, {
+            ...(input.reason !== undefined ? { reason: input.reason } : {}),
+            error,
+          });
+        } catch (cleanupError) {
+          this.#logger?.("approvals: reject cleanup failed", cleanupError);
+        }
+      }
+
       this.#pending.delete(input.id);
       this.#clearTimeout(input.id);
       this.#finalizeLocal(input.id);
@@ -140,22 +156,46 @@ export class InMemoryApprovalController implements ApprovalController {
       return { id: input.id, status: "rejected" };
     }
 
-    const value = input.result as ApprovalResultByKind[typeof entry.record.kind];
+    try {
+      const executor = this.#getExecutor?.();
+      if (!executor) {
+        throw new Error(`Approval executor not configured for ${input.id}`);
+      }
 
-    this.#pending.delete(input.id);
-    this.#clearTimeout(input.id);
-    this.#finalizeLocal(input.id);
+      const value = await executor.approve(entry.record, input.decision);
 
-    this.#publishFinished({
-      id: input.id,
-      status: "approved",
-      terminalReason: "user_approve",
-      ...this.#recordMeta(entry.record),
-      value,
-    });
+      this.#pending.delete(input.id);
+      this.#clearTimeout(input.id);
+      this.#finalizeLocal(input.id);
 
-    entry.resolve(value);
-    return { id: input.id, status: "approved" };
+      this.#publishFinished({
+        id: input.id,
+        status: "approved",
+        terminalReason: "user_approve",
+        ...this.#recordMeta(entry.record),
+        value,
+      });
+
+      entry.resolve(value);
+      return { id: input.id, status: "approved", value };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.#pending.delete(input.id);
+      this.#clearTimeout(input.id);
+      this.#finalizeLocal(input.id);
+
+      this.#publishFinished({
+        id: input.id,
+        status: "failed",
+        terminalReason: "internal_error",
+        ...this.#recordMeta(entry.record),
+        error: toSimpleError(err),
+      });
+
+      entry.reject(err);
+      throw err;
+    }
   }
 
   async cancel(input: { id: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void> {
@@ -166,10 +206,6 @@ export class InMemoryApprovalController implements ApprovalController {
       return;
     }
 
-    this.#pending.delete(input.id);
-    this.#clearTimeout(input.id);
-    this.#finalizeLocal(input.id);
-
     const error =
       input.error ??
       this.#getTerminalError({
@@ -177,6 +213,19 @@ export class InMemoryApprovalController implements ApprovalController {
         terminalReason: input.reason,
         meta: this.#recordMeta(entry.record),
       });
+
+    const executor = this.#getExecutor?.();
+    if (executor) {
+      try {
+        await executor.cancel(entry.record, input.reason, error);
+      } catch (cleanupError) {
+        this.#logger?.("approvals: cancel cleanup failed", cleanupError);
+      }
+    }
+
+    this.#pending.delete(input.id);
+    this.#clearTimeout(input.id);
+    this.#finalizeLocal(input.id);
 
     try {
       entry.reject(error);

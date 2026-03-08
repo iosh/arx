@@ -21,22 +21,31 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const account = await runtime.services.keyring.deriveAccount(keyringId);
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: activeChain.namespace,
+      chainRef: activeChain.chainRef,
+      accountId: toAccountIdFromAddress({ chainRef: activeChain.chainRef, address: account.address }),
+    });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
       capturedTask = record;
-      void runtime.controllers.approvals.resolve({ id: record.id, action: "approve", result: [] });
+      void runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
     });
 
     try {
-      await expect(
-        execute({
-          origin: ORIGIN,
-          request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
-        }),
-      ).resolves.toEqual([]);
+      const accounts = (await execute({
+        origin: ORIGIN,
+        request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
+      })) as string[];
+      expect(accounts.map((value) => value.toLowerCase())).toEqual([account.address.toLowerCase()]);
 
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
@@ -66,7 +75,7 @@ describe("eip155 handlers - approval metadata", () => {
     );
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.RequestAccounts) {
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: [] });
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
         return true;
       }
       if (task.kind === ApprovalKinds.SignMessage) {
@@ -165,7 +174,7 @@ describe("eip155 handlers - approval metadata", () => {
         return false;
       }
       capturedTask = task;
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
       return true;
     });
 
@@ -287,8 +296,7 @@ describe("eip155 handlers - approval metadata", () => {
     const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record: task }) => {
       try {
         if (task.kind === ApprovalKinds.SendTransaction) {
-          const result = await runtime.controllers.transactions.approveTransaction(task.id);
-          await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result });
+          await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
         }
       } catch {
         // Ignore errors if approval was already resolved
@@ -390,15 +398,7 @@ describe("eip155 handlers - approval metadata", () => {
       if (task.kind !== ApprovalKinds.SignMessage) {
         return false;
       }
-      const payload = task.request as { from: string; message: string };
-      const signature = await runtime.controllers.signers.eip155.signPersonalMessage({
-        accountId: toAccountIdFromAddress({
-          chainRef: runtime.controllers.network.getState().activeChainRef,
-          address: payload.from,
-        }),
-        message: payload.message,
-      });
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: signature });
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
       return true;
     });
     try {
@@ -454,15 +454,7 @@ describe("eip155 handlers - approval metadata", () => {
       if (task.kind !== ApprovalKinds.SignTypedData) {
         return false;
       }
-      const payload = task.request as { from: string; typedData: string };
-      const signature = await runtime.controllers.signers.eip155.signTypedData({
-        accountId: toAccountIdFromAddress({
-          chainRef: runtime.controllers.network.getState().activeChainRef,
-          address: payload.from,
-        }),
-        typedData: payload.typedData,
-      });
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: signature });
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
       return true;
     });
     try {

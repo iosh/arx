@@ -217,18 +217,7 @@ export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof cre
       return false;
     }
 
-    const payload = task.request as { chainRef?: string };
-    const chainRef = payload.chainRef ?? task.chainRef;
-    if (!chainRef) {
-      throw new Error("Switch chain approval is missing chainRef");
-    }
-
-    await runtime.controllers.network.switchChain(chainRef);
-    await runtime.controllers.networkPreferences.setActiveChainRef(
-      chainRef as Parameters<typeof runtime.controllers.networkPreferences.setActiveChainRef>[0],
-    );
-    await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
-
+    await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
     return true;
   });
 };

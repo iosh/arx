@@ -347,9 +347,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        const payload = task.request as { metadata: ChainMetadata; isUpdate: boolean };
-        await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
         return true;
       }
       return false;
@@ -506,9 +504,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        const payload = task.request as { metadata: ChainMetadata; isUpdate: boolean };
-        await runtime.controllers.chainDefinitions.upsertChain(payload.metadata);
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve", result: null });
+        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
         return true;
       }
       return false;

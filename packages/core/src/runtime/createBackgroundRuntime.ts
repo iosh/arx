@@ -1,3 +1,4 @@
+import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import { createDefaultChainAddressCodecRegistry } from "../chains/registry.js";
 import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
@@ -156,6 +157,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
+  const approvalFlowRegistry = createApprovalFlowRegistry();
+  let signers: HandlerControllers["signers"] | undefined;
 
   const controllersInit = initControllers({
     bus,
@@ -166,6 +169,25 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     permissionsService,
     transactionsService,
     options: controllerOptions,
+    createApprovalExecutor: (controllersBase) =>
+      createApprovalExecutor({
+        registry: approvalFlowRegistry,
+        getDeps: () => {
+          if (!signers) {
+            throw new Error("Approval signers are not initialized");
+          }
+
+          return {
+            accounts: controllersBase.accounts,
+            permissions: controllersBase.permissions,
+            transactions: controllersBase.transactions,
+            network: controllersBase.network,
+            networkPreferences,
+            chainDefinitions: controllersBase.chainDefinitions,
+            signers,
+          };
+        },
+      }),
   });
 
   const {
@@ -210,12 +232,13 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const engine = initEngine(engineOptions);
 
   const keyringService = sessionLayer.keyringService;
-  const { signers } = registerDefaultTransactionAdapters({
+  const registeredAdapters = registerDefaultTransactionAdapters({
     transactionRegistry,
     rpcClients: rpcClientRegistry,
     chains: chainAddressCodecs,
     keyring: keyringService,
   });
+  signers = registeredAdapters.signers;
 
   const controllers: HandlerControllers = {
     ...controllersBase,

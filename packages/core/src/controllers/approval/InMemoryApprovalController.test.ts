@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ApprovalExecutor } from "../../approvals/types.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { InMemoryApprovalController } from "./InMemoryApprovalController.js";
 import { APPROVAL_TOPICS } from "./topics.js";
@@ -28,6 +29,12 @@ const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalK
   } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>;
 };
 
+const createExecutor = (value: unknown): ApprovalExecutor => ({
+  approve: vi.fn(async () => value),
+  reject: vi.fn(async () => {}),
+  cancel: vi.fn(async () => {}),
+});
+
 describe("InMemoryApprovalController", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -44,28 +51,37 @@ describe("InMemoryApprovalController", () => {
 
   it("create() enqueues + resolve(approve) finalizes + resolves the original promise", async () => {
     const messenger = new Messenger();
-    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const value = ["0xabc"];
+    const executor = createExecutor(value);
+    const controller = new InMemoryApprovalController({
+      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      getExecutor: () => executor,
+    });
 
     const request = createRequest({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
     const handle = controller.create(request, requester);
 
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(true);
 
-    const value = ["0xabc"];
-    await controller.resolve({ id: request.id, action: "approve", result: value });
+    await controller.resolve({ id: request.id, action: "approve" });
 
     await expect(handle.settled).resolves.toEqual(value);
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
+    expect(executor.approve).toHaveBeenCalledTimes(1);
   });
 
   it("allows synchronous onCreated handlers to resolve without races", async () => {
     const messenger = new Messenger();
-    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const value = ["0xabc"];
+    const executor = createExecutor(value);
+    const controller = new InMemoryApprovalController({
+      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      getExecutor: () => executor,
+    });
 
     const request = createRequest({ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
-    const value = ["0xabc"];
     const unsubscribe = controller.onCreated(({ record }) => {
-      void controller.resolve({ id: record.id, action: "approve", result: value });
+      void controller.resolve({ id: record.id, action: "approve" });
     });
 
     try {

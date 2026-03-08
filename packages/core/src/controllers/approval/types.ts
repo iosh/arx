@@ -128,7 +128,6 @@ export type ApprovalResolveInput =
       id: string;
       action: "approve";
       decision?: unknown;
-      result?: unknown;
     }
   | {
       id: string;
@@ -137,9 +136,10 @@ export type ApprovalResolveInput =
       error?: Error;
     };
 
-export type ApprovalResolveResult = {
+export type ApprovalResolveResult<T = unknown> = {
   id: string;
   status: ApprovalFinalStatus;
+  value?: T | undefined;
 };
 
 export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {

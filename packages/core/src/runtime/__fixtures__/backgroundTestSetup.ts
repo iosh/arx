@@ -655,40 +655,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const enableAutoApproval = () => {
     const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
       try {
-        let result = null;
-        switch (record.kind) {
-          case "sendTransaction": {
-            result = await runtime.controllers.transactions.approveTransaction(record.id);
-            break;
-          }
-          case "requestAccounts": {
-            const activeChain = requireActiveChainMetadata(runtime);
-            result = runtime.controllers.accounts
-              .listOwnedForNamespace({
-                namespace: record.namespace ?? activeChain.namespace,
-                chainRef: record.chainRef ?? activeChain.chainRef,
-              })
-              .map((account) => account.displayAddress);
-            break;
-          }
-          case "signMessage":
-          case "signTypedData": {
-            result = "0xsignedpayload";
-            break;
-          }
-          case "requestPermissions": {
-            result = { granted: [] };
-            break;
-          }
-          // other case into `null`
-          // case "switchChain":
-          // case "addChain":
-          default: {
-            result = null;
-            break;
-          }
-        }
-        await runtime.controllers.approvals.resolve({ id: record.id, action: "approve", result });
+        await runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
       } catch {
         // Ignore errors if approval was already resolved
       }

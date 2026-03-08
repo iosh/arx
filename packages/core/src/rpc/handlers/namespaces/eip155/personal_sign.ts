@@ -67,22 +67,12 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
     };
 
     try {
-      const signature = await controllers.approvals.create(
-        request,
-        requireApprovalRequester(rpcContext, "personal_sign"),
-      ).settled;
-
-      await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
-        namespace: invocation.namespace,
-        chainRef,
-      });
-
-      return signature;
+      return await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "personal_sign")).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({
-        reason: ArxReasons.ApprovalRejected,
-        message: "User rejected message signing",
+        reason: ArxReasons.RpcInternal,
+        message: "Failed to sign personal message",
         data: { origin },
         cause: error,
       });

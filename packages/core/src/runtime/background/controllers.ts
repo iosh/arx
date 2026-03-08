@@ -1,3 +1,4 @@
+import type { ApprovalExecutor } from "../../approvals/types.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
@@ -102,6 +103,7 @@ export const initControllers = ({
   permissionsService,
   transactionsService,
   options,
+  createApprovalExecutor,
 }: {
   bus: Messenger;
   namespaceResolver: NamespaceResolver;
@@ -111,6 +113,7 @@ export const initControllers = ({
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
   options: ControllerLayerOptions;
+  createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
 }): ControllersInitResult => {
   const {
     network: networkOptions,
@@ -177,6 +180,8 @@ export const initControllers = ({
     settings: settingsService,
   });
 
+  let approvalExecutor: ApprovalExecutor | undefined;
+
   const approvalController = new InMemoryApprovalController({
     messenger: bus.scope({ name: "approvals", publish: APPROVAL_TOPICS }),
     ...(approvalOptions?.autoRejectMessage !== undefined
@@ -184,6 +189,7 @@ export const initControllers = ({
       : {}),
     ...(approvalOptions?.ttlMs !== undefined ? { ttlMs: approvalOptions.ttlMs } : {}),
     ...(approvalOptions?.logger !== undefined ? { logger: approvalOptions.logger } : {}),
+    getExecutor: () => approvalExecutor,
   });
 
   const permissionController = new StorePermissionController({
@@ -234,6 +240,8 @@ export const initControllers = ({
     transactions: transactionController,
     chainDefinitions: chainDefinitionsController,
   };
+
+  approvalExecutor = createApprovalExecutor?.(controllersBase);
 
   return {
     controllersBase,

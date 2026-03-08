@@ -38,22 +38,13 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
     };
 
     try {
-      const signature = await controllers.approvals.create(
-        request,
-        requireApprovalRequester(rpcContext, "eth_signTypedData_v4"),
-      ).settled;
-
-      await controllers.permissions.grant(origin, PermissionCapabilities.Sign, {
-        namespace: invocation.namespace,
-        chainRef,
-      });
-
-      return signature;
+      return await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "eth_signTypedData_v4"))
+        .settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({
-        reason: ArxReasons.ApprovalRejected,
-        message: "User rejected typed data signing",
+        reason: ArxReasons.RpcInternal,
+        message: "Failed to sign typed data",
         data: { origin },
         cause: error,
       });

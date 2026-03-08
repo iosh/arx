@@ -103,12 +103,9 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       request: { requested },
     } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
 
-    let result: { granted: PermissionRequestDescriptor[] } | null = null;
     try {
-      result = await controllers.approvals.create(
-        request,
-        requireApprovalRequester(rpcContext, "wallet_requestPermissions"),
-      ).settled;
+      await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "wallet_requestPermissions"))
+        .settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
       throw arxError({
@@ -119,57 +116,13 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       });
     }
 
-    const grantedDescriptors = result?.granted ?? [];
-    try {
-      for (const descriptor of grantedDescriptors) {
-        const targetChains = descriptor.chainRefs.length ? descriptor.chainRefs : [chainRef];
-        for (const targetChainRef of targetChains) {
-          if (descriptor.capability === PermissionCapabilities.Accounts) {
-            const all = controllers.accounts.listOwnedForNamespace({ namespace, chainRef: targetChainRef });
-            const preferred = controllers.accounts.getActiveAccountForNamespace({
-              namespace,
-              chainRef: targetChainRef,
-            });
-            const selected =
-              (preferred && all.find((account) => account.accountId === preferred.accountId)) ?? all[0] ?? null;
-            if (!selected) {
-              throw arxError({
-                reason: ArxReasons.PermissionDenied,
-                message: "No selectable account available for permission request",
-                data: { origin, chainRef: targetChainRef, capability: descriptor.capability },
-              });
-            }
-
-            await controllers.permissions.setPermittedAccounts(origin, {
-              namespace,
-              chainRef: targetChainRef,
-              accounts: [selected.canonicalAddress],
-            });
-            continue;
-          }
-
-          await controllers.permissions.grant(origin, descriptor.capability, {
-            namespace,
-            chainRef: targetChainRef,
-          });
-        }
-      }
-    } catch (error) {
-      if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
-        message: "Failed to persist granted permissions",
-        data: { origin },
-        cause: error,
-      });
-    }
-
     const permissionGrants = controllers.permissions.listGrants(origin);
-    const getAccounts = (chainRef: string) =>
+    const getAccounts = (targetChainRef: string) =>
       controllers.permissions.getPermittedAccounts(origin, {
         namespace,
-        chainRef: chainRef as ChainRef,
+        chainRef: targetChainRef as ChainRef,
       });
+
     return buildWalletPermissions({ origin, grants: permissionGrants, getAccounts });
   },
 };

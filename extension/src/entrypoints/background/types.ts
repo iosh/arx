@@ -6,7 +6,7 @@ export type PortContext = {
   meta: TransportMeta | null;
   chainRef: string | null;
   chainId: string | null;
-  namespace: string;
+  namespace: string | null;
 };
 
 export type ControllerSnapshot = {

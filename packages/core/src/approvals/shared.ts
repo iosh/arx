@@ -18,10 +18,29 @@ export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown)
 
 export const deriveApprovalChainContext = (
   record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
-  deps: Pick<ApprovalFlowDeps, "network">,
+  deps: Pick<ApprovalFlowDeps, "network" | "networkPreferences">,
   request?: { chainRef?: ChainRef | undefined },
 ) => {
-  const requestedChainRef = request?.chainRef ?? record.chainRef ?? deps.network.getState().activeChainRef;
+  const currentActiveChainRef = deps.network.getState().activeChainRef;
+  const inferredNamespace =
+    record.namespace ?? request?.chainRef?.split(":")[0] ?? record.chainRef?.split(":")[0] ?? null;
+  const namespaceActiveChainRef = inferredNamespace
+    ? deps.networkPreferences.getActiveChainRef(inferredNamespace)
+    : null;
+  const compatibleCurrentActiveChainRef =
+    inferredNamespace && currentActiveChainRef.split(":")[0] !== inferredNamespace ? null : currentActiveChainRef;
+
+  const requestedChainRef =
+    request?.chainRef ?? record.chainRef ?? namespaceActiveChainRef ?? compatibleCurrentActiveChainRef;
+
+  if (!requestedChainRef) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Approval context could not resolve a chainRef.",
+      data: { id: record.id, kind: record.kind, namespace: inferredNamespace },
+    });
+  }
+
   const parsed = parseChainRef(requestedChainRef);
 
   if (record.namespace && record.namespace !== parsed.namespace) {

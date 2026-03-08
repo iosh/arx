@@ -35,6 +35,7 @@ import type { Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
+import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
@@ -102,6 +103,7 @@ export const initControllers = ({
   settingsService,
   permissionsService,
   transactionsService,
+  networkPreferences,
   options,
   createApprovalExecutor,
 }: {
@@ -112,6 +114,7 @@ export const initControllers = ({
   settingsService: SettingsService;
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
+  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   options: ControllerLayerOptions;
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
 }): ControllersInitResult => {
@@ -213,6 +216,7 @@ export const initControllers = ({
     network: {
       getState: () => networkController.getState(),
     },
+    networkPreferences,
     chainDefinitions: {
       getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),
     },

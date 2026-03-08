@@ -16,7 +16,7 @@ import type {
 export type CreateNetworkPreferencesServiceOptions = {
   port: NetworkPreferencesPort;
   defaults: {
-    activeChainRef: ChainRef;
+    activeChainByNamespace: Record<string, ChainRef>;
   };
   now?: () => number;
 };
@@ -29,6 +29,9 @@ export const createNetworkPreferencesService = ({
   const clock = now ?? Date.now;
   const changed = createSignal<NetworkPreferencesChangedPayload>();
   const run = createSerialQueue();
+  let cached: NetworkPreferencesRecord | null = null;
+
+  const getDefaultActiveChainByNamespace = () => ({ ...defaults.activeChainByNamespace });
 
   const safeParse = (value: unknown): NetworkPreferencesRecord | null => {
     const parsed = NetworkPreferencesRecordSchema.safeParse(value);
@@ -36,18 +39,62 @@ export const createNetworkPreferencesService = ({
   };
 
   const emitChanged = (next: NetworkPreferencesRecord) => {
+    cached = next;
     changed.emit({ next });
   };
 
   const get = async (): Promise<NetworkPreferencesRecord | null> => {
     const record = await port.get();
-    if (!record) return null;
-    return safeParse(record);
+    if (!record) {
+      cached = null;
+      return null;
+    }
+    const parsed = safeParse(record);
+    cached = parsed;
+    return parsed;
+  };
+
+  const getSnapshot = (): NetworkPreferencesRecord | null => cached;
+
+  const getActiveChainByNamespace = (): Record<string, ChainRef> => {
+    return {
+      ...getDefaultActiveChainByNamespace(),
+      ...(cached?.activeChainByNamespace ?? {}),
+    };
+  };
+
+  const getActiveChainRef = (namespace: string): ChainRef | null => {
+    const normalized = namespace.trim();
+    if (normalized.length === 0) {
+      return null;
+    }
+    return getActiveChainByNamespace()[normalized] ?? null;
   };
 
   const update = async (params: UpdateNetworkPreferencesParams): Promise<NetworkPreferencesRecord> => {
     return await run(async () => {
       const base = safeParse(await port.get());
+      cached = base;
+
+      const nextActiveBase =
+        params.activeChainByNamespace === undefined
+          ? { ...getDefaultActiveChainByNamespace(), ...(base?.activeChainByNamespace ?? {}) }
+          : { ...params.activeChainByNamespace };
+
+      const nextActiveChainByNamespace: Record<string, ChainRef> = { ...nextActiveBase };
+      if (params.activeChainByNamespacePatch) {
+        for (const [namespace, chainRef] of Object.entries(params.activeChainByNamespacePatch)) {
+          const normalizedNamespace = namespace.trim();
+          if (normalizedNamespace.length === 0) {
+            continue;
+          }
+          if (chainRef === null) {
+            delete nextActiveChainByNamespace[normalizedNamespace];
+            continue;
+          }
+          nextActiveChainByNamespace[normalizedNamespace] = chainRef;
+        }
+      }
 
       const nextRpcBase =
         "clearRpc" in params && params.clearRpc ? {} : params.rpc === undefined ? (base?.rpc ?? {}) : params.rpc;
@@ -67,7 +114,7 @@ export const createNetworkPreferencesService = ({
 
       const next: NetworkPreferencesRecord = NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
-        activeChainRef: params.activeChainRef ?? base?.activeChainRef ?? defaults.activeChainRef,
+        activeChainByNamespace: nextActiveChainByNamespace,
         rpc: nextRpc,
         updatedAt: clock(),
       });
@@ -78,7 +125,13 @@ export const createNetworkPreferencesService = ({
     });
   };
 
-  const setActiveChainRef = async (chainRef: ChainRef) => update({ activeChainRef: chainRef });
+  const setActiveChainRef = async (chainRef: ChainRef) => {
+    const [namespace] = chainRef.split(":");
+    if (!namespace) {
+      throw new Error(`Invalid chainRef: ${chainRef}`);
+    }
+    return update({ activeChainByNamespacePatch: { [namespace]: chainRef } });
+  };
 
   const setRpcPreferences = async (rpc: Record<ChainRef, NetworkRpcPreference>) => update({ rpc });
 
@@ -94,6 +147,9 @@ export const createNetworkPreferencesService = ({
     subscribeChanged: changed.subscribe,
 
     get,
+    getSnapshot,
+    getActiveChainByNamespace,
+    getActiveChainRef,
     update,
     setActiveChainRef,
     setRpcPreferences,

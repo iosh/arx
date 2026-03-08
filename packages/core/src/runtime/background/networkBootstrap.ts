@@ -72,23 +72,80 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return { rpc, corrections };
   };
 
+  const getNamespace = (chainRef: ChainRef): string => {
+    const [namespace] = chainRef.split(":");
+    return namespace ?? DEFAULT_CHAIN.namespace;
+  };
+
+  const resolveActiveChainByNamespace = (
+    current: ReturnType<typeof network.getState>,
+    registryChains: NetworkChainConfig[],
+  ): Record<string, ChainRef> => {
+    const availableByNamespace = new Map<string, ChainRef[]>();
+
+    for (const chain of registryChains) {
+      const namespace = getNamespace(chain.chainRef);
+      const chainRefs = availableByNamespace.get(namespace);
+      if (chainRefs) {
+        chainRefs.push(chain.chainRef);
+      } else {
+        availableByNamespace.set(namespace, [chain.chainRef]);
+      }
+    }
+
+    const next: Record<string, ChainRef> = {};
+    const currentNamespace = getNamespace(current.activeChainRef);
+
+    for (const [namespace, chainRefs] of availableByNamespace) {
+      const preferred = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
+      if (preferred && chainRefs.includes(preferred)) {
+        next[namespace] = preferred;
+        continue;
+      }
+
+      if (namespace === currentNamespace && chainRefs.includes(current.activeChainRef)) {
+        next[namespace] = current.activeChainRef;
+        continue;
+      }
+
+      if (namespace === DEFAULT_CHAIN.namespace && chainRefs.includes(DEFAULT_CHAIN.chainRef)) {
+        next[namespace] = DEFAULT_CHAIN.chainRef;
+        continue;
+      }
+
+      const first = chainRefs[0];
+      if (first) {
+        next[namespace] = first;
+      }
+    }
+
+    return next;
+  };
+
   const selectActiveChainRef = (
     current: ReturnType<typeof network.getState>,
     registryChains: NetworkChainConfig[],
+    activeChainByNamespace: Record<string, ChainRef>,
   ): ChainRef => {
     if (registryChains.length === 0) {
       return current.activeChainRef;
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
+    const currentNamespace = getNamespace(current.activeChainRef);
 
-    const preferred = cachedPreferences?.activeChainRef ?? null;
-    if (preferred && available.has(preferred)) {
-      return preferred;
+    const currentNamespaceActive = activeChainByNamespace[currentNamespace] ?? null;
+    if (currentNamespaceActive && available.has(currentNamespaceActive)) {
+      return currentNamespaceActive;
     }
 
     if (available.has(current.activeChainRef)) {
       return current.activeChainRef;
+    }
+
+    const defaultNamespaceActive = activeChainByNamespace[DEFAULT_CHAIN.namespace] ?? null;
+    if (defaultNamespaceActive && available.has(defaultNamespaceActive)) {
+      return defaultNamespaceActive;
     }
 
     if (available.has(DEFAULT_CHAIN.chainRef)) {
@@ -143,7 +200,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const current = network.getState();
-    const nextActive = selectActiveChainRef(current, registryChains);
+    const nextActiveChainByNamespace = resolveActiveChainByNamespace(current, registryChains);
+    const nextActive = selectActiveChainRef(current, registryChains, nextActiveChainByNamespace);
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
     const { rpc, corrections } = computeRpcState(registryChains, current);
@@ -167,13 +225,18 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         nextPatch[chainRef] = pref;
       }
 
-      const shouldPersistActive = cachedPreferences?.activeChainRef !== nextActive;
+      const cachedActive = cachedPreferences?.activeChainByNamespace ?? {};
+      const shouldPersistActive =
+        Object.keys(cachedActive).length !== Object.keys(nextActiveChainByNamespace).length ||
+        Object.entries(nextActiveChainByNamespace).some(
+          ([namespace, chainRef]) => cachedActive[namespace] !== chainRef,
+        );
       const shouldPersistRpc = Object.keys(nextPatch).length > 0;
 
       if (shouldPersistActive || shouldPersistRpc) {
         try {
           cachedPreferences = await preferences.update({
-            ...(shouldPersistActive ? { activeChainRef: nextActive } : {}),
+            ...(shouldPersistActive ? { activeChainByNamespace: nextActiveChainByNamespace } : {}),
             ...(shouldPersistRpc ? { rpcPatch: nextPatch } : {}),
           });
         } catch (error) {

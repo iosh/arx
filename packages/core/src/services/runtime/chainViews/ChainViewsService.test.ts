@@ -52,7 +52,12 @@ const toEntity = (metadata: ChainMetadata): ChainDefinitionEntity => ({
   source: "builtin",
 });
 
-const setup = (params?: { known?: ChainMetadata[]; available?: ChainMetadata[]; active?: ChainMetadata }) => {
+const setup = (params?: {
+  known?: ChainMetadata[];
+  available?: ChainMetadata[];
+  active?: ChainMetadata;
+  activeByNamespace?: Record<string, string>;
+}) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
   const active = params?.active ?? MAINNET;
@@ -69,6 +74,9 @@ const setup = (params?: { known?: ChainMetadata[]; available?: ChainMetadata[]; 
         availableChainRefs: available.map((chain) => chain.chainRef),
         rpc: {},
       }),
+    } as never,
+    preferences: {
+      getActiveChainRef: (namespace: string) => params?.activeByNamespace?.[namespace] ?? null,
     } as never,
   });
 };
@@ -94,7 +102,24 @@ describe("ChainViewsService", () => {
     expect(service.buildProviderMeta()).toEqual({
       activeChain: MAINNET.chainRef,
       activeNamespace: MAINNET.namespace,
+      activeChainByNamespace: { eip155: MAINNET.chainRef },
       supportedChains: [MAINNET.chainRef, OPTIMISM.chainRef],
+    });
+  });
+
+  it("builds provider meta from namespace-specific active preferences", () => {
+    const service = setup({
+      available: [MAINNET, SOLANA],
+      active: SOLANA,
+      activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+    });
+
+    expect(service.getActiveChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
+    expect(service.buildProviderMeta()).toEqual({
+      activeChain: MAINNET.chainRef,
+      activeNamespace: MAINNET.namespace,
+      activeChainByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+      supportedChains: [MAINNET.chainRef, SOLANA.chainRef],
     });
   });
 

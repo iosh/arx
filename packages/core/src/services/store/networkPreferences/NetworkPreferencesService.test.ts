@@ -20,16 +20,24 @@ const createInMemoryPort = () => {
 describe("NetworkPreferencesService", () => {
   it("returns null when preferences are missing", async () => {
     const { port } = createInMemoryPort();
-    const service = createNetworkPreferencesService({ port, defaults: { activeChainRef: "eip155:1" } });
+    const service = createNetworkPreferencesService({
+      port,
+      defaults: { activeChainByNamespace: { eip155: "eip155:1" } },
+    });
     expect(await service.get()).toBeNull();
+    expect(service.getActiveChainRef("eip155")).toBe("eip155:1");
   });
 
   it("upserts with defaults when missing", async () => {
     const { port } = createInMemoryPort();
-    const service = createNetworkPreferencesService({ port, defaults: { activeChainRef: "eip155:1" }, now: () => 123 });
+    const service = createNetworkPreferencesService({
+      port,
+      defaults: { activeChainByNamespace: { eip155: "eip155:1" } },
+      now: () => 123,
+    });
 
     const next = await service.update({
-      activeChainRef: "eip155:10",
+      activeChainByNamespacePatch: { eip155: "eip155:10" },
       rpcPatch: {
         "eip155:10": { activeIndex: 0, strategy: { id: "sticky" } },
       },
@@ -37,7 +45,7 @@ describe("NetworkPreferencesService", () => {
 
     expect(next).toEqual({
       id: "network-preferences",
-      activeChainRef: "eip155:10",
+      activeChainByNamespace: { eip155: "eip155:10" },
       rpc: { "eip155:10": { activeIndex: 0, strategy: { id: "sticky" } } },
       updatedAt: 123,
     });
@@ -45,7 +53,11 @@ describe("NetworkPreferencesService", () => {
 
   it("patches rpc preferences and supports removals", async () => {
     const { port } = createInMemoryPort();
-    const service = createNetworkPreferencesService({ port, defaults: { activeChainRef: "eip155:1" }, now: () => 500 });
+    const service = createNetworkPreferencesService({
+      port,
+      defaults: { activeChainByNamespace: { eip155: "eip155:1" } },
+      now: () => 500,
+    });
 
     await service.setRpcPreferences({
       "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },

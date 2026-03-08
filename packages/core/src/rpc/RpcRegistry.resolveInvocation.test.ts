@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest";
 import type { HandlerControllers, RpcInvocationContext } from "./handlers/types.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
-const makeControllers = (activeChainRef: string): HandlerControllers => {
+const makeControllers = (
+  activeChainRef: string,
+  activeChainByNamespace?: Record<string, string>,
+): HandlerControllers => {
   return {
     network: {
       getState: () => ({ activeChainRef }),
+    },
+    networkPreferences: {
+      getActiveChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
     },
   } as unknown as HandlerControllers;
 };
@@ -36,6 +42,18 @@ describe("RpcRegistry.resolveInvocation", () => {
 
     const controllers = makeControllers("eip155:1");
     expect(() => registry.resolveInvocation(controllers, "cfx_getStatus", undefined)).toThrow(/Missing chainRef/);
+  });
+
+  it("falls back to the namespace-specific active chain when global active chain is another namespace", () => {
+    const registry = new RpcRegistry();
+    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
+    registry.registerNamespaceAdapter({ namespace: "solana", methodPrefixes: ["sol_"], definitions: {} });
+
+    const controllers = makeControllers("solana:101", { eip155: "eip155:10", solana: "solana:101" });
+    expect(registry.resolveInvocation(controllers, "eth_chainId", undefined)).toEqual({
+      namespace: "eip155",
+      chainRef: "eip155:10",
+    });
   });
 
   it("rejects mismatched context namespace vs chainRef prefix", () => {

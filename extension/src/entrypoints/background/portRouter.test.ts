@@ -45,14 +45,16 @@ class FakePort {
   }
 }
 
-const makeSnapshot = (isUnlocked: boolean) => ({
-  chain: { chainId: "0x1", chainRef: "eip155:1" },
-  accounts: [],
+const makeSnapshot = (isUnlocked: boolean, overrides?: Partial<ControllerSnapshot>): ControllerSnapshot => ({
+  chain: { chainId: "0x1", chainRef: "eip155:1", ...(overrides?.chain ?? {}) },
+  accounts: overrides?.accounts ?? [],
   isUnlocked,
   meta: {
     activeChain: "eip155:1",
     activeNamespace: "eip155",
+    activeChainByNamespace: { eip155: "eip155:1" },
     supportedChains: ["eip155:1"],
+    ...(overrides?.meta ?? {}),
   },
 });
 
@@ -169,6 +171,46 @@ describe("portRouter privacy", () => {
       type: "handshake_ack",
       payload: { handshakeId: "h1", accounts: ["0xabc"], isUnlocked: true },
     });
+    expect(getPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
+      namespace: "eip155",
+      chainRef: "eip155:1",
+    });
+  });
+
+  it("derives permission context from provider meta active chain instead of snapshot.chain", async () => {
+    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
+    const registry = { getRegisteredNamespaces: () => ["eip155", "solana"] } as unknown as RpcRegistry;
+    const getOrInitContext = vi.fn(async () => ({
+      runtime: { rpc: { registry } },
+      controllers: { permissions: { getPermittedAccounts } },
+    }));
+
+    const router = createPortRouter({
+      extensionOrigin: "ext://",
+      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+      getControllerSnapshot: (): ControllerSnapshot =>
+        makeSnapshot(true, {
+          chain: { chainId: "101", chainRef: "solana:101" },
+          meta: {
+            activeChain: "eip155:1",
+            activeNamespace: "eip155",
+            activeChainByNamespace: { eip155: "eip155:1", solana: "solana:101" },
+            supportedChains: ["eip155:1", "solana:101"],
+          },
+        }),
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "s1",
+      type: "handshake",
+      payload: { handshakeId: "h1" },
+    });
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
     expect(getPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
       namespace: "eip155",
       chainRef: "eip155:1",

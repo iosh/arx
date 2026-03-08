@@ -1,5 +1,6 @@
 import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
@@ -23,6 +24,7 @@ import type {
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   network: Pick<NetworkController, "getState">;
+  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
@@ -80,6 +82,7 @@ export class StoreTransactionController implements TransactionController {
     this.#executor = new TransactionExecutor({
       view: this.#view,
       network: options.network,
+      networkPreferences: options.networkPreferences,
       chainDefinitions: options.chainDefinitions,
       accounts: options.accounts,
       approvals: options.approvals,

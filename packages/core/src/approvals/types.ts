@@ -12,6 +12,7 @@ import type { PermissionController } from "../controllers/permission/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
+import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../transactions/adapters/eip155/signer.js";
 import type { ApprovalSummary } from "../ui/protocol/schemas.js";
 
@@ -20,6 +21,7 @@ export type ApprovalFlowDeps = {
   permissions: Pick<PermissionController, "grant" | "setPermittedAccounts">;
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   network: Pick<NetworkController, "getState" | "switchChain">;
+  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainActivation: Pick<ChainActivationService, "activate">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;
   signers: {

@@ -405,11 +405,19 @@ export class RpcRegistry {
     method: string;
     namespace: Namespace;
     contextChainRef: unknown;
-    activeChainRef: ChainRef;
+    activeChainRef: ChainRef | null;
   }): ChainRef {
     const parsed = this.normalizeOptionalChainRef(args.method, args.namespace, args.contextChainRef);
     if (parsed.kind === "present") {
       return parsed.value;
+    }
+
+    if (!args.activeChainRef) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: `Missing chainRef for namespace "${args.namespace}"`,
+        data: { method: args.method, namespace: args.namespace, activeChainRef: null },
+      });
     }
 
     const [activeNamespace] = args.activeChainRef.split(":");
@@ -453,7 +461,11 @@ export class RpcRegistry {
   ): { namespace: Namespace; chainRef: ChainRef } {
     this.assertContextNamespaceConsistency(method, context);
     const namespace = this.selectNamespace(controllers, method, context);
-    const activeChainRef = controllers.network.getState().activeChainRef as ChainRef;
+    const activeChainRef =
+      controllers.networkPreferences.getActiveChainRef(namespace) ??
+      ((controllers.network.getState().activeChainRef.split(":")[0] === namespace
+        ? controllers.network.getState().activeChainRef
+        : null) as ChainRef | null);
     const chainRef = this.resolveChainRefForInvocation({
       method,
       namespace,

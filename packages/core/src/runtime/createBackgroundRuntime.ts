@@ -144,7 +144,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const networkPreferences = createNetworkPreferencesService({
     port: networkPreferencesOptions.port,
-    defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
+    defaults: { activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef } },
     now: storageNow,
   });
 
@@ -172,6 +172,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     settingsService,
     permissionsService,
     transactionsService,
+    networkPreferences,
     options: controllerOptions,
     createApprovalExecutor: (controllersBase) =>
       createApprovalExecutor({
@@ -189,6 +190,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
             network: controllersBase.network,
+            networkPreferences,
             chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
             signers,
@@ -208,6 +210,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const chainViews = createChainViewsService({
     chainDefinitions: chainDefinitionsController,
     network: networkController,
+    preferences: networkPreferences,
   });
 
   chainActivation = createChainActivationService({

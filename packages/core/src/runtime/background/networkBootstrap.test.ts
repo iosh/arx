@@ -101,7 +101,7 @@ const createPreferencesService = (seed: NetworkPreferencesRecord | null, now = (
   const port = new MemoryNetworkPreferencesPort(seed);
   const service = createNetworkPreferencesService({
     port,
-    defaults: { activeChainRef: DEFAULT_CHAIN.chainRef },
+    defaults: { activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef } },
     now,
   });
   return { port, service };
@@ -117,7 +117,7 @@ describe("networkBootstrap", () => {
     ]);
     const { port, service } = createPreferencesService({
       id: "network-preferences",
-      activeChainRef: ALT_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 9, strategy: { id: "sticky" } },
         [SOLANA_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
@@ -147,7 +147,7 @@ describe("networkBootstrap", () => {
       },
     });
     await expect(port.get()).resolves.toMatchObject({
-      activeChainRef: ALT_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
       },
@@ -159,7 +159,7 @@ describe("networkBootstrap", () => {
     const chainDefinitions = createChainDefinitionsStub([{ metadata: DEFAULT_CHAIN }, { metadata: ALT_CHAIN }]);
     const { service } = createPreferencesService({
       id: "network-preferences",
-      activeChainRef: DEFAULT_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: DEFAULT_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
     });
@@ -173,7 +173,11 @@ describe("networkBootstrap", () => {
       getIsHydrating: () => false,
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
-    const chainViews = createChainViewsService({ chainDefinitions, network });
+    const chainViews = createChainViewsService({
+      chainDefinitions,
+      network,
+      preferences: service,
+    });
 
     await bootstrap.loadPreferences();
     bootstrap.start();
@@ -191,7 +195,7 @@ describe("networkBootstrap", () => {
     const chainDefinitions = createChainDefinitionsStub([{ metadata: DEFAULT_CHAIN }, { metadata: ALT_CHAIN }]);
     const { port, service } = createPreferencesService({
       id: "network-preferences",
-      activeChainRef: DEFAULT_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: DEFAULT_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
     });
@@ -214,7 +218,7 @@ describe("networkBootstrap", () => {
     await network.switchChain(ALT_CHAIN.chainRef);
 
     expect(network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
-    await expect(port.get()).resolves.toMatchObject({ activeChainRef: DEFAULT_CHAIN.chainRef });
+    await expect(port.get()).resolves.toMatchObject({ activeChainByNamespace: { eip155: DEFAULT_CHAIN.chainRef } });
 
     bootstrap.destroy();
   });

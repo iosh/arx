@@ -10,7 +10,11 @@ export type NetworkPreferencesChangedHandler = (payload: NetworkPreferencesChang
 
 export type UpdateNetworkPreferencesParams =
   | {
-      activeChainRef?: ChainRef;
+      activeChainByNamespace?: Record<string, ChainRef>;
+
+      // Partial updates applied after `activeChainByNamespace` (if provided) or the stored value (if not).
+      // Use null values to delete a namespace entry.
+      activeChainByNamespacePatch?: Record<string, ChainRef | null>;
 
       // Full replace of rpc preferences.
       rpc?: Record<ChainRef, NetworkRpcPreference>;
@@ -22,7 +26,8 @@ export type UpdateNetworkPreferencesParams =
       clearRpc?: false | undefined;
     }
   | {
-      activeChainRef?: ChainRef;
+      activeChainByNamespace?: Record<string, ChainRef>;
+      activeChainByNamespacePatch?: Record<string, ChainRef | null>;
 
       // Clears all rpc preferences in a self-describing way.
       clearRpc: true;
@@ -35,6 +40,9 @@ export type NetworkPreferencesService = {
   subscribeChanged(handler: NetworkPreferencesChangedHandler): Unsubscribe;
 
   get(): Promise<NetworkPreferencesRecord | null>;
+  getSnapshot(): NetworkPreferencesRecord | null;
+  getActiveChainByNamespace(): Record<string, ChainRef>;
+  getActiveChainRef(namespace: string): ChainRef | null;
   update(params: UpdateNetworkPreferencesParams): Promise<NetworkPreferencesRecord>;
 
   setActiveChainRef(chainRef: ChainRef): Promise<NetworkPreferencesRecord>;

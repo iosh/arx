@@ -172,7 +172,7 @@ export class Eip155ProviderState {
     if (typeof candidate === "string" && candidate.length > 0) {
       return candidate;
     }
-    return this.#meta?.activeChain ?? null;
+    return this.#meta?.activeChainByNamespace?.[DEFAULT_NAMESPACE] ?? this.#meta?.activeChain ?? null;
   }
 
   #parseNumericReference(candidate: string | null | undefined) {
@@ -189,6 +189,10 @@ export class Eip155ProviderState {
         // swallow malformed hex to fall back on CAIP references
       }
     }
-    return this.#parseNumericReference(this.#chainRef) ?? this.#parseNumericReference(this.#meta?.activeChain);
+    return (
+      this.#parseNumericReference(this.#chainRef) ??
+      this.#parseNumericReference(this.#meta?.activeChainByNamespace?.[DEFAULT_NAMESPACE]) ??
+      this.#parseNumericReference(this.#meta?.activeChain)
+    );
   }
 }

@@ -53,7 +53,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
-      activeChainRef: ALT_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
       },
@@ -108,7 +108,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
-      activeChainRef: MAINNET_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       rpc: {},
       updatedAt: 0,
     });
@@ -165,7 +165,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await flushAsync();
 
     expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
-    await expect(networkPreferencesPort.get()).resolves.toMatchObject({ activeChainRef: ALT_CHAIN.chainRef });
+    await expect(networkPreferencesPort.get()).resolves.toMatchObject({
+      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
+    });
 
     runtime.lifecycle.destroy();
   });

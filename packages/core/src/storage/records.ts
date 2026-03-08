@@ -35,13 +35,28 @@ export const NetworkRpcPreferenceSchema = z.strictObject({
 });
 export type NetworkRpcPreference = z.infer<typeof NetworkRpcPreferenceSchema>;
 
-export const NetworkPreferencesRecordSchema = z.strictObject({
-  id: z.literal("network-preferences"),
-  activeChainRef: chainRefSchema,
-  // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
-  rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
-  updatedAt: epochMillisecondsSchema,
-});
+const ActiveChainByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
+
+export const NetworkPreferencesRecordSchema = z
+  .strictObject({
+    id: z.literal("network-preferences"),
+    activeChainByNamespace: ActiveChainByNamespaceSchema.default({}),
+    // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
+    rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
+    updatedAt: epochMillisecondsSchema,
+  })
+  .superRefine((value, ctx) => {
+    for (const [namespace, chainRef] of Object.entries(value.activeChainByNamespace)) {
+      const [chainNamespace] = chainRef.split(":");
+      if (chainNamespace !== namespace) {
+        ctx.addIssue({
+          code: "custom",
+          message: `activeChainByNamespace[${namespace}] must point to the same namespace`,
+          path: ["activeChainByNamespace", namespace],
+        });
+      }
+    }
+  });
 export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
 
 export const KeyringMetaRecordSchema = z.strictObject({

@@ -4,6 +4,7 @@ import { parseChainRef } from "../../chains/caip.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
@@ -44,6 +45,7 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 type Deps = {
   view: StoreTransactionView;
   network: Pick<NetworkController, "getState">;
+  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
@@ -67,6 +69,7 @@ export class TransactionExecutor
 {
   #view: StoreTransactionView;
   #network: Pick<NetworkController, "getState">;
+  #networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
@@ -86,6 +89,7 @@ export class TransactionExecutor
   constructor(deps: Deps) {
     this.#view = deps.view;
     this.#network = deps.network;
+    this.#networkPreferences = deps.networkPreferences;
     this.#chainDefinitions = deps.chainDefinitions;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
@@ -102,7 +106,11 @@ export class TransactionExecutor
     requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta> {
-    const chainRef = request.chainRef ?? this.#network.getState().activeChainRef ?? null;
+    const currentActiveChainRef = this.#network.getState().activeChainRef;
+    const namespaceActiveChainRef = this.#networkPreferences.getActiveChainRef(request.namespace);
+    const compatibleCurrentActiveChainRef =
+      currentActiveChainRef.split(":")[0] === request.namespace ? currentActiveChainRef : null;
+    const chainRef = request.chainRef ?? namespaceActiveChainRef ?? compatibleCurrentActiveChainRef ?? null;
     if (!chainRef) {
       throw new Error("chainRef is required for transactions");
     }

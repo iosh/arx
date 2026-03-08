@@ -1,6 +1,7 @@
 import {
   createBackgroundRuntime,
   createLogger,
+  DEFAULT_NAMESPACE,
   disableDebugNamespaces,
   enableDebugNamespaces,
   extendLogger,
@@ -53,20 +54,22 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const getControllerSnapshot = (): ControllerSnapshot => {
     if (!context) throw new Error("Background context is not initialized");
     const { controllers, session, chainViews } = context;
-    const activeChain = chainViews.getActiveChainView();
+    const meta = chainViews.buildProviderMeta();
+    const providerChainRef = meta.activeChainByNamespace[DEFAULT_NAMESPACE] ?? meta.activeChain;
+    const providerChain = chainViews.requireAvailableChainMetadata(providerChainRef);
     const isUnlocked = session.unlock.isUnlocked();
-    const chainRef = activeChain.chainRef;
+    const chainRef = providerChain.chainRef;
     const accounts = isUnlocked
       ? controllers.accounts
-          .listOwnedForNamespace({ namespace: activeChain.namespace, chainRef })
+          .listOwnedForNamespace({ namespace: providerChain.namespace, chainRef })
           .map((account) => account.displayAddress)
       : [];
 
     return {
-      chain: { chainId: activeChain.chainId, chainRef: activeChain.chainRef },
+      chain: { chainId: providerChain.chainId, chainRef: providerChain.chainRef },
       accounts,
       isUnlocked,
-      meta: chainViews.buildProviderMeta(),
+      meta,
     };
   };
 

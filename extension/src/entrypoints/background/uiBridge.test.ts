@@ -514,6 +514,7 @@ const createControllers = () => {
     buildProviderMeta: () => ({
       activeChain: CHAIN.chainRef,
       activeNamespace: CHAIN.namespace,
+      activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef },
       supportedChains: [CHAIN.chainRef],
     }),
   };

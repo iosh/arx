@@ -40,6 +40,14 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
   let rpcRegistry: RpcRegistry | null = null;
   let registeredNamespaces: ReadonlySet<string> | undefined;
 
+  const deriveNamespaceFromChainRef = (chainRef: string | null | undefined, fallback = DEFAULT_NAMESPACE) => {
+    if (typeof chainRef !== "string" || chainRef.length === 0) {
+      return fallback;
+    }
+    const [namespace] = chainRef.split(":");
+    return namespace || fallback;
+  };
+
   const getContext = async () => {
     const ctx = await getOrInitContext();
     const registry = ctx.runtime.rpc.registry;
@@ -75,7 +83,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
     const portContext = portContexts.get(port);
 
     const chainRef = portContext?.meta?.activeChain ?? portContext?.chainRef ?? snapshot.chain.chainRef;
-    const namespace = portContext?.namespace ?? snapshot.meta.activeNamespace ?? DEFAULT_NAMESPACE;
+    const namespace = deriveNamespaceFromChainRef(chainRef, snapshot.meta.activeNamespace ?? DEFAULT_NAMESPACE);
 
     return controllers.permissions.getPermittedAccounts(origin, { namespace, chainRef });
   };
@@ -301,7 +309,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
       const portContext = portContexts.get(port);
       const rpcContext = buildRpcContext(portContext, portContext?.meta?.activeChain ?? portContext?.chainRef ?? null);
       const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-      const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
+      const namespace = rpcContext?.namespace ?? deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE);
       const chainRef = rpcContext?.chainRef ?? null;
       const error = (rpcRegistry?.encodeErrorWithAdapters(
         arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
@@ -389,7 +397,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
         jsonrpc,
         error: (rpcRegistry?.encodeErrorWithAdapters(error, {
           surface: "dapp",
-          namespace: rpcContext?.namespace ?? DEFAULT_NAMESPACE,
+          namespace: rpcContext?.namespace ?? deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE),
           chainRef: rpcContext?.chainRef ?? null,
           origin,
           method,
@@ -416,7 +424,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getControl
         meta: null,
         chainRef: null,
         chainId: null,
-        namespace: DEFAULT_NAMESPACE,
+        namespace: null,
       });
     }
 

@@ -24,6 +24,7 @@ export type UiNetworksSnapshot = {
 export type ProviderMetaSnapshot = {
   activeChain: ChainRef;
   activeNamespace: string;
+  activeChainByNamespace: Record<string, ChainRef>;
   supportedChains: ChainRef[];
 };
 

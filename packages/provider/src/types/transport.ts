@@ -18,6 +18,7 @@ export type TransportResponse = JsonRpcResponse;
 export type TransportMeta = {
   activeChain: string;
   activeNamespace: string;
+  activeChainByNamespace?: Record<string, string>;
   supportedChains: string[];
 };
 

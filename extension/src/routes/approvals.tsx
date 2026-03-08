@@ -17,7 +17,7 @@ export const Route = createFileRoute("/approvals")({
 function ApprovalsPage() {
   const router = useRouter();
   const { snoozeHeadId } = useApprovalSnooze();
-  const { snapshot, isLoading, approveApproval, rejectApproval } = useUiSnapshot();
+  const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -32,7 +32,7 @@ function ApprovalsPage() {
     setPending("approve");
     setErrorMessage(null);
     try {
-      await approveApproval(id);
+      await resolveApproval({ id, action: "approve" });
       setSelectedId(null);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -45,7 +45,7 @@ function ApprovalsPage() {
     setPending("reject");
     setErrorMessage(null);
     try {
-      await rejectApproval({ id, reason: "User rejected" });
+      await resolveApproval({ id, action: "reject", reason: "User rejected" });
       setSelectedId(null);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));

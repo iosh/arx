@@ -16,7 +16,7 @@ function ApproveUnsupportedByIdPage() {
   const router = useRouter();
   const { id } = Route.useParams();
   const { snoozeHeadId } = useApprovalSnooze();
-  const { snapshot, isLoading, rejectApproval } = useUiSnapshot();
+  const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ function ApproveUnsupportedByIdPage() {
     setPending("reject");
     setErrorMessage(null);
     try {
-      await rejectApproval({ id: approval.id, reason: "Unsupported request" });
+      await resolveApproval({ id: approval.id, action: "reject", reason: "Unsupported request" });
       router.navigate({ to: ROUTES.APPROVALS, replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));

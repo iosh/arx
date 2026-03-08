@@ -50,29 +50,41 @@ const TransactionMetaSchema = z.strictObject({
   updatedAt: z.number().int(),
 });
 
-const ApprovalApproveResultSchema = z.strictObject({
-  id: z.string().min(1),
-  result: z.union([
-    TransactionMetaSchema,
-    z.array(z.string().min(1)),
-    z.string().min(1),
-    PermissionApprovalResultSchema,
-    z.null(),
-  ]),
-});
+const ApprovalResultValueSchema = z.union([
+  TransactionMetaSchema,
+  z.array(z.string().min(1)),
+  z.string().min(1),
+  PermissionApprovalResultSchema,
+  z.null(),
+]);
 
-const ApprovalRejectResultSchema = z.strictObject({
-  id: z.string().min(1),
-});
+const ApprovalResolveParamsSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    id: z.string().min(1),
+    action: z.literal("approve"),
+    decision: z.unknown().optional(),
+  }),
+  z.strictObject({
+    id: z.string().min(1),
+    action: z.literal("reject"),
+    reason: z.string().min(1).optional(),
+  }),
+]);
+
+const ApprovalResolveResultSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    id: z.string().min(1),
+    status: z.literal("approved"),
+    result: ApprovalResultValueSchema,
+  }),
+  z.strictObject({
+    id: z.string().min(1),
+    status: z.literal("rejected"),
+  }),
+]);
 
 export const approvalsMethods = {
-  "ui.approvals.approve": defineMethod(z.strictObject({ id: z.string().min(1) }), ApprovalApproveResultSchema, {
+  "ui.approvals.resolve": defineMethod(ApprovalResolveParamsSchema, ApprovalResolveResultSchema, {
     broadcastSnapshot: true,
   }),
-
-  "ui.approvals.reject": defineMethod(
-    z.strictObject({ id: z.string().min(1), reason: z.string().min(1).optional() }),
-    ApprovalRejectResultSchema,
-    { broadcastSnapshot: true },
-  ),
 } as const;

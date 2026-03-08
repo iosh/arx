@@ -7,7 +7,14 @@ import { sendTransactionApprovalFlow } from "./flows/sendTransaction.js";
 import { signMessageApprovalFlow } from "./flows/signMessage.js";
 import { signTypedDataApprovalFlow } from "./flows/signTypedData.js";
 import { switchChainApprovalFlow } from "./flows/switchChain.js";
-import type { ApprovalExecutor, ApprovalFlow, ApprovalFlowDeps, ApprovalFlowRegistry } from "./types.js";
+import { toUnsupportedApprovalSummary } from "./presentation.js";
+import type {
+  ApprovalExecutor,
+  ApprovalFlow,
+  ApprovalFlowDeps,
+  ApprovalFlowPresenterDeps,
+  ApprovalFlowRegistry,
+} from "./types.js";
 
 const APPROVAL_FLOWS = [
   requestAccountsApprovalFlow,
@@ -40,6 +47,10 @@ export const createApprovalFlowRegistry = (): ApprovalFlowRegistry => {
 
   return {
     get: (kind) => byKind.get(kind) as ApprovalFlow<typeof kind> | undefined,
+    present: (record: ApprovalRecord, deps: ApprovalFlowPresenterDeps) => {
+      const flow = byKind.get(record.kind);
+      return flow ? flow.present(record as never, deps) : toUnsupportedApprovalSummary(record, deps);
+    },
   };
 };
 

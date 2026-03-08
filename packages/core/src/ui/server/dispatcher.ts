@@ -1,4 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { createApprovalFlowRegistry } from "../../approvals/index.js";
 import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import type { UiMethodName } from "../protocol/index.js";
@@ -75,6 +76,7 @@ const getUiContext = (deps: Pick<UiRuntimeDeps, "chainViews">) => {
 
 export const createUiDispatcher = (deps: UiRuntimeDeps) => {
   const handlers = createUiHandlers(deps);
+  const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const buildSnapshotEvent = (): UiEventEnvelope => {
     const snapshot = buildUiSnapshot({
@@ -83,6 +85,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
       session: deps.session,
       keyring: deps.keyring,
       attention: deps.attention,
+      approvalFlowRegistry,
     });
 
     return {

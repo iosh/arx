@@ -1,3 +1,4 @@
+import { createApprovalFlowRegistry } from "../../../approvals/index.js";
 import type { UiSnapshot } from "../../protocol/schemas.js";
 import { buildUiSnapshot } from "../snapshot.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
@@ -15,6 +16,7 @@ import { createTransactionsHandlers } from "./transactions.js";
 export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
   const { controllers, chainViews, session, keyring, attention, platform, uiOrigin, rpcClients } = deps;
   const uiSessionId = crypto.randomUUID();
+  const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const buildSnapshot = (): UiSnapshot =>
     buildUiSnapshot({
@@ -23,6 +25,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       session,
       keyring,
       attention,
+      approvalFlowRegistry,
     });
 
   const toChainSnapshot = () => chainViews.getActiveChainView();
@@ -35,7 +38,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     ...createOnboardingHandlers({ controllers, chainViews, session, keyring, platform }),
     ...createAccountsHandlers({ controllers }, buildSnapshot),
     ...createNetworksHandlers({ controllers }, toChainSnapshot),
-    ...createApprovalsHandlers({ controllers, chainViews }),
+    ...createApprovalsHandlers({ controllers }),
     ...createKeyringsHandlers({ controllers, chainViews, session, keyring }),
     ...createTransactionsHandlers({ controllers, chainViews, session, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;

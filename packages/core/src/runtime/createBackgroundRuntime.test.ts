@@ -302,8 +302,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await flushAsync();
 
     const before = structuredClone(runtime.controllers.permissions.getState());
-    await expect(handlers["ui.approvals.approve"]({ id: "switch-chain-approval" })).resolves.toMatchObject({
+    await expect(
+      handlers["ui.approvals.resolve"]({ id: "switch-chain-approval", action: "approve" }),
+    ).resolves.toMatchObject({
       id: "switch-chain-approval",
+      status: "approved",
       result: null,
     });
     await expect(approvalPromise).resolves.toBeNull();

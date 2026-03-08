@@ -16,7 +16,7 @@ function ApproveSignMessageByIdPage() {
   const router = useRouter();
   const { id } = Route.useParams();
   const { snoozeHeadId } = useApprovalSnooze();
-  const { snapshot, isLoading, approveApproval, rejectApproval } = useUiSnapshot();
+  const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ function ApproveSignMessageByIdPage() {
     setPending("approve");
     setErrorMessage(null);
     try {
-      await approveApproval(approval.id);
+      await resolveApproval({ id: approval.id, action: "approve" });
       router.navigate({ to: ROUTES.APPROVALS, replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -49,7 +49,7 @@ function ApproveSignMessageByIdPage() {
     setPending("reject");
     setErrorMessage(null);
     try {
-      await rejectApproval({ id: approval.id, reason: "User rejected" });
+      await resolveApproval({ id: approval.id, action: "reject", reason: "User rejected" });
       router.navigate({ to: ROUTES.APPROVALS, replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));

@@ -5,7 +5,6 @@ type UiActionArgs<M extends UiMethodName> =
   undefined extends UiMethodParams<M> ? [params?: UiMethodParams<M>] : [params: UiMethodParams<M>];
 
 export const uiActions = (client: UiClient) => {
-  // Typed helper keeps inference strong without maintaining a full method→call mapping.
   const call =
     <M extends UiMethodName>(method: M) =>
     (...args: UiActionArgs<M>): Promise<UiMethodResult<M>> => {
@@ -48,33 +47,28 @@ export const uiActions = (client: UiClient) => {
     networks: {
       switchActive: call("ui.networks.switchActive"),
     },
+
     approvals: {
-      approve: call("ui.approvals.approve"),
-      reject: call("ui.approvals.reject"),
+      resolve: call("ui.approvals.resolve"),
     },
+
     transactions: {
       requestSendTransactionApproval: call("ui.transactions.requestSendTransactionApproval"),
     },
+
     keyrings: {
       confirmNewMnemonic: call("ui.keyrings.confirmNewMnemonic"),
       importMnemonic: call("ui.keyrings.importMnemonic"),
       importPrivateKey: call("ui.keyrings.importPrivateKey"),
-
       deriveAccount: call("ui.keyrings.deriveAccount"),
-
       list: call("ui.keyrings.list"),
-
       getAccountsByKeyring: call("ui.keyrings.getAccountsByKeyring"),
       renameKeyring: call("ui.keyrings.renameKeyring"),
       renameAccount: call("ui.keyrings.renameAccount"),
-
       markBackedUp: call("ui.keyrings.markBackedUp"),
-
       hideHdAccount: call("ui.keyrings.hideHdAccount"),
       unhideHdAccount: call("ui.keyrings.unhideHdAccount"),
-
       removePrivateKeyKeyring: call("ui.keyrings.removePrivateKeyKeyring"),
-
       exportMnemonic: call("ui.keyrings.exportMnemonic"),
       exportPrivateKey: call("ui.keyrings.exportPrivateKey"),
     },

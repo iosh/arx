@@ -62,12 +62,10 @@ export const useUiSnapshot = () => {
     mutationFn: (chainRef: string) => uiClient.networks.switchActive({ chainRef }),
   });
 
-  const approveApprovalMutation = useMutation({
-    mutationFn: (id: string) => uiClient.approvals.approve({ id }),
-  });
-
-  const rejectApprovalMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => uiClient.approvals.reject({ id, reason }),
+  const resolveApprovalMutation = useMutation({
+    mutationFn: (
+      params: { id: string; action: "approve"; decision?: unknown } | { id: string; action: "reject"; reason?: string },
+    ) => uiClient.approvals.resolve(params),
   });
 
   const setAutoLockDurationMutation = useMutation({
@@ -172,8 +170,7 @@ export const useUiSnapshot = () => {
     resetAutoLockTimer: resetAutoLockMutation.mutate,
     switchAccount: switchAccountMutation.mutateAsync,
     switchChain: switchChainMutation.mutateAsync,
-    approveApproval: approveApprovalMutation.mutateAsync,
-    rejectApproval: rejectApprovalMutation.mutateAsync,
+    resolveApproval: resolveApprovalMutation.mutateAsync,
     setAutoLockDuration: setAutoLockDurationMutation.mutateAsync,
     deriveAccount: deriveAccountMutation.mutateAsync,
     importPrivateKey: importPrivateKeyMutation.mutateAsync,

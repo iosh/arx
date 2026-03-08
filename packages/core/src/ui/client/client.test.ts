@@ -125,18 +125,18 @@ describe("ui client runtime", () => {
     });
 
     try {
-      const p = client.call("ui.approvals.reject", { id: "a" });
+      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
 
       const msg = await transport.nextSent();
       expect(msg).toMatchObject({
         type: "ui:request",
         id: "id1",
-        method: "ui.approvals.reject",
-        params: { id: "a" },
+        method: "ui.approvals.resolve",
+        params: { id: "a", action: "reject" },
       });
 
-      transport.emit({ type: "ui:response", id: "id1", result: { id: "a" } });
-      await expect(p).resolves.toEqual({ id: "a" });
+      transport.emit({ type: "ui:response", id: "id1", result: { id: "a", status: "rejected" } });
+      await expect(p).resolves.toEqual({ id: "a", status: "rejected" });
     } finally {
       client.destroy();
     }
@@ -147,7 +147,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.reject", { id: "a" });
+      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
 
       await transport.nextSent();
 
@@ -174,7 +174,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.reject", { id: "a" });
+      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
 
       await transport.nextSent();
 

@@ -80,9 +80,9 @@ describe("ui actions", () => {
       chainRef: "eip155:1",
     });
 
-    void actions.approvals.approve({ id: "id" });
-    void actions.approvals.reject({ id: "id" });
-    void actions.approvals.reject({ id: "id", reason: "reason" });
+    void actions.approvals.resolve({ id: "id", action: "approve" });
+    void actions.approvals.resolve({ id: "id", action: "reject" });
+    void actions.approvals.resolve({ id: "id", action: "reject", reason: "reason" });
 
     void actions.keyrings.confirmNewMnemonic({
       words: Array.from<string>({ length: 12 }).fill("word"),
@@ -161,6 +161,6 @@ describe("ui actions", () => {
     expect(typeof actions.session.unlock).toBe("function");
     expect(typeof actions.accounts.switchActive).toBe("function");
     expect(typeof actions.networks.switchActive).toBe("function");
-    expect(typeof actions.approvals.approve).toBe("function");
+    expect(typeof actions.approvals.resolve).toBe("function");
   });
 });

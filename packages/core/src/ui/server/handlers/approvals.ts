@@ -1,36 +1,30 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import type { ApprovalResolveInput } from "../../../controllers/approval/types.js";
+import type { HandlerControllers } from "../../../rpc/handlers/types.js";
 import type { UiMethodResult } from "../../protocol/index.js";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiHandlers } from "../types.js";
 
-export const createApprovalsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews">,
-): Pick<UiHandlers, "ui.approvals.approve" | "ui.approvals.reject"> => {
-  return {
-    "ui.approvals.approve": async ({ id }) => {
-      const task = deps.controllers.approvals.get(id);
-      if (!task) {
-        throw arxError({ reason: ArxReasons.RpcInvalidParams, message: "Approval not found", data: { id } });
-      }
+type UiResolveApprovalResult = UiMethodResult<"ui.approvals.resolve">;
+type UiResolvedApproved = Extract<UiResolveApprovalResult, { status: "approved" }>;
 
-      const resolved = await deps.controllers.approvals.resolve({ id: task.id, action: "approve" });
+export const createApprovalsHandlers = ({
+  controllers,
+}: {
+  controllers: Pick<HandlerControllers, "approvals">;
+}): Pick<UiHandlers, "ui.approvals.resolve"> => ({
+  "ui.approvals.resolve": async (input) => {
+    const resolved = await controllers.approvals.resolve(input as ApprovalResolveInput);
+
+    if (resolved.status === "approved") {
       return {
         id: resolved.id,
-        result: resolved.value as UiMethodResult<"ui.approvals.approve">["result"],
-      };
-    },
+        status: "approved",
+        result: resolved.value as UiResolvedApproved["result"],
+      } satisfies UiResolveApprovalResult;
+    }
 
-    "ui.approvals.reject": async ({ id, reason }) => {
-      const task = deps.controllers.approvals.get(id);
-      if (!task) {
-        throw arxError({ reason: ArxReasons.RpcInvalidParams, message: "Approval not found", data: { id } });
-      }
-
-      await deps.controllers.approvals.resolve({
-        id: task.id,
-        action: "reject",
-        ...(reason !== undefined ? { reason } : {}),
-      });
-      return { id: task.id };
-    },
-  };
-};
+    return {
+      id: resolved.id,
+      status: "rejected",
+    } satisfies UiResolveApprovalResult;
+  },
+});

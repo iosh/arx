@@ -2,12 +2,23 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
+import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalChainContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMessage> = {
   kind: ApprovalKinds.SignMessage,
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SignMessage, input),
+  present(record, deps) {
+    return {
+      ...createApprovalSummaryBase(record, deps),
+      type: "signMessage",
+      payload: {
+        from: String(record.request.from ?? ""),
+        message: String(record.request.message ?? ""),
+      },
+    };
+  },
   async approve(record, _decision, deps) {
     const payload = record.request;
     const { chainRef, namespace } = deriveApprovalChainContext(record, deps, payload);

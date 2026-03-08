@@ -1,12 +1,22 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
+import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalChainContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestAccounts> = {
   kind: ApprovalKinds.RequestAccounts,
   parseDecision: (input) => parseNoDecision(ApprovalKinds.RequestAccounts, input),
+  present(record, deps) {
+    return {
+      ...createApprovalSummaryBase(record, deps),
+      type: "requestAccounts",
+      payload: {
+        suggestedAccounts: (record.request.suggestedAccounts ?? []).map((value) => String(value)),
+      },
+    };
+  },
   async approve(record, _decision, deps) {
     const payload = record.request;
     const { chainRef, namespace } = deriveApprovalChainContext(record, deps, payload);

@@ -10,19 +10,26 @@ import type { ChainDefinitionsController } from "../controllers/chainDefinitions
 import type { NetworkController } from "../controllers/network/types.js";
 import type { PermissionController } from "../controllers/permission/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
+import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
 import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../transactions/adapters/eip155/signer.js";
+import type { ApprovalSummary } from "../ui/protocol/schemas.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionController, "grant" | "setPermittedAccounts">;
-  transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction">;
+  transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   network: Pick<NetworkController, "getState" | "switchChain">;
   networkPreferences: Pick<NetworkPreferencesService, "setActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertChain">;
   signers: {
     eip155: Pick<Eip155Signer, "signPersonalMessage" | "signTypedData">;
   };
+};
+
+export type ApprovalFlowPresenterDeps = {
+  chainViews: Pick<ChainViewsService, "getActiveChainView" | "findAvailableChainView">;
+  transactions: Pick<ApprovalFlowDeps["transactions"], "getMeta">;
 };
 
 export type ApprovalRejectInput = {
@@ -33,6 +40,7 @@ export type ApprovalRejectInput = {
 export type ApprovalFlow<K extends ApprovalKind = ApprovalKind> = {
   kind: K;
   parseDecision(input: unknown): ApprovalDecision<K>;
+  present(record: ApprovalRecord<K>, deps: ApprovalFlowPresenterDeps): ApprovalSummary;
   approve(record: ApprovalRecord<K>, decision: ApprovalDecision<K>, deps: ApprovalFlowDeps): Promise<ApprovalResult<K>>;
   onReject?(record: ApprovalRecord<K>, input: ApprovalRejectInput, deps: ApprovalFlowDeps): Promise<void>;
   onCancel?(
@@ -45,6 +53,7 @@ export type ApprovalFlow<K extends ApprovalKind = ApprovalKind> = {
 
 export type ApprovalFlowRegistry = {
   get<K extends ApprovalKind>(kind: K): ApprovalFlow<K> | undefined;
+  present(record: ApprovalRecord, deps: ApprovalFlowPresenterDeps): ApprovalSummary;
 };
 
 export type ApprovalExecutor = {

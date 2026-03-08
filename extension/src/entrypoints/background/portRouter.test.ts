@@ -1,6 +1,6 @@
 import type { RpcRegistry } from "@arx/core";
 import { CHANNEL, PROVIDER_EVENTS } from "@arx/provider/protocol";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
@@ -37,6 +37,12 @@ class FakePort {
       fn(msg);
     }
   }
+
+  triggerDisconnect() {
+    for (const fn of this.#disconnectListeners) {
+      fn();
+    }
+  }
 }
 
 const makeSnapshot = (isUnlocked: boolean) => ({
@@ -53,6 +59,10 @@ const makeSnapshot = (isUnlocked: boolean) => ({
 describe("portRouter privacy", () => {
   beforeEach(() => {
     vi.mocked(getPortOrigin).mockReturnValue("https://example.com");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("sends handshake_ack with empty accounts when locked", async () => {
@@ -163,5 +173,52 @@ describe("portRouter privacy", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
     });
+  });
+
+  it("cancels provider-scoped approvals when the port disconnects", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
+
+    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
+    const cancelByScope = vi.fn(async () => 1);
+    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
+    const getOrInitContext = vi.fn(async () => ({
+      runtime: { rpc: { registry } },
+      controllers: {
+        permissions: { getPermittedAccounts },
+        approvals: { cancelByScope },
+      },
+    }));
+
+    const router = createPortRouter({
+      extensionOrigin: "ext://",
+      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(true),
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "session-1",
+      type: "handshake",
+      payload: { handshakeId: "h1" },
+    });
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    port.triggerDisconnect();
+
+    await vi.waitFor(() =>
+      expect(cancelByScope).toHaveBeenCalledWith({
+        scope: {
+          transport: "provider",
+          origin: "https://example.com",
+          portId: "11111111-1111-4111-8111-111111111111",
+          sessionId: "session-1",
+        },
+        reason: "session_lost",
+      }),
+    );
   });
 });

@@ -56,7 +56,7 @@ export type TransactionMeta = {
   updatedAt: number;
 };
 
-export type TransactionApprovalTaskPayload = {
+export type TransactionApprovalRequestPayload = {
   chainRef: ChainRef;
   origin: string;
   chain?: TransactionApprovalChainMetadata | null;

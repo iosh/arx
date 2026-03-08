@@ -4,7 +4,7 @@ import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
@@ -143,7 +143,7 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
     }
 
     const request = {
-      id: createTaskId("wallet_switchEthereumChain"),
+      id: createApprovalId("wallet_switchEthereumChain"),
       kind: ApprovalKinds.SwitchChain,
       origin,
       namespace: invocation.namespace,

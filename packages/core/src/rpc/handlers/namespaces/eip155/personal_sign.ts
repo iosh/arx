@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createApprovalId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
 
 type PersonalSignParams = { address: string; message: string };
@@ -53,7 +53,7 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
     });
 
     const request = {
-      id: createTaskId("personal_sign"),
+      id: createApprovalId("personal_sign"),
       kind: ApprovalKinds.SignMessage,
       origin,
       namespace: invocation.namespace,

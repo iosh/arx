@@ -12,7 +12,7 @@ import { isPermissionCapability } from "../../../../permissions/capabilities.js"
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createApprovalId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 const toRequestDescriptors = (
@@ -94,7 +94,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
 
     const requested = toRequestDescriptors(params, chainRef);
     const request = {
-      id: createTaskId("wallet_requestPermissions"),
+      id: createApprovalId("wallet_requestPermissions"),
       kind: ApprovalKinds.RequestPermissions,
       origin,
       namespace,

@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
 import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
 
 type EthSignTypedDataV4Params = { address: string; typedData: string };
@@ -24,7 +24,7 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
     });
 
     const request = {
-      id: createTaskId("eth_signTypedData_v4"),
+      id: createApprovalId("eth_signTypedData_v4"),
       kind: ApprovalKinds.SignTypedData,
       origin,
       namespace: invocation.namespace,

@@ -1,9 +1,15 @@
+import { ArxReasons } from "@arx/errors";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { InMemoryApprovalController } from "./InMemoryApprovalController.js";
 import { APPROVAL_TOPICS } from "./topics.js";
-import { type ApprovalCreateParams, ApprovalKinds } from "./types.js";
+import {
+  type ApprovalCreatedEvent,
+  type ApprovalCreateParams,
+  type ApprovalFinishedEvent,
+  ApprovalKinds,
+} from "./types.js";
 
 const ORIGIN = "https://dapp.example";
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
@@ -113,7 +119,7 @@ describe("InMemoryApprovalController", () => {
     expect(count).toBe(1);
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
 
-    await expect(handle.settled).rejects.toBeInstanceOf(Error);
+    await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.TransportDisconnected });
   });
 
   it("resolve(reject) preserves caller-provided Error instance", async () => {
@@ -128,6 +134,60 @@ describe("InMemoryApprovalController", () => {
 
     await controller.resolve({ id: request.id, action: "reject", error: custom });
     await expect(handle.settled).rejects.toBe(custom);
+  });
+
+  it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {
+    const messenger = new Messenger();
+    const value = ["0xabc"];
+    const executor = createExecutor(value);
+    const controller = new InMemoryApprovalController({
+      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      getExecutor: () => executor,
+    });
+
+    const createdEvents: ApprovalCreatedEvent[] = [];
+    const finishedEvents: ApprovalFinishedEvent<unknown>[] = [];
+    const unsubscribeCreated = controller.onCreated((event) => createdEvents.push(event));
+    const unsubscribeFinished = controller.onFinished((event) => finishedEvents.push(event));
+
+    try {
+      const approvedRequest = createRequest({ id: "f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0" });
+      await controller.resolve({ id: controller.create(approvedRequest, requester).id, action: "approve" });
+
+      const cancelledRequest = createRequest({ id: "abababab-abab-4aba-8aba-abababababab" });
+      const cancelledHandle = controller.create(cancelledRequest, requester);
+      await controller.cancel({ id: cancelledRequest.id, reason: "locked" });
+      await expect(cancelledHandle.settled).rejects.toMatchObject({ reason: ArxReasons.SessionLocked });
+
+      expect(createdEvents.map((event) => event.record.id)).toEqual([approvedRequest.id, cancelledRequest.id]);
+      expect(finishedEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: approvedRequest.id,
+            status: "approved",
+            terminalReason: "user_approve",
+            kind: approvedRequest.kind,
+            origin: approvedRequest.origin,
+            namespace: approvedRequest.namespace,
+            chainRef: approvedRequest.chainRef,
+            value,
+          }),
+          expect.objectContaining({
+            id: cancelledRequest.id,
+            status: "cancelled",
+            terminalReason: "locked",
+            kind: cancelledRequest.kind,
+            origin: cancelledRequest.origin,
+            namespace: cancelledRequest.namespace,
+            chainRef: cancelledRequest.chainRef,
+            error: expect.objectContaining({ message: "Wallet is locked." }),
+          }),
+        ]),
+      );
+    } finally {
+      unsubscribeCreated();
+      unsubscribeFinished();
+    }
   });
 
   it("expires approvals after ttlMs to avoid hanging requests", async () => {
@@ -145,7 +205,7 @@ describe("InMemoryApprovalController", () => {
 
     vi.advanceTimersByTime(1_000);
 
-    await expect(handle.settled).rejects.toBeInstanceOf(Error);
+    await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.ApprovalTimeout });
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
   });
 });

@@ -1,5 +1,11 @@
-import { ATTENTION_REQUESTED, createLogger, extendLogger, getApprovalType } from "@arx/core";
-import { rejectPendingApprovals } from "../approvals/rejectPendingApprovals";
+import {
+  type ApprovalTerminalReason,
+  ATTENTION_REQUESTED,
+  createLogger,
+  extendLogger,
+  getApprovalType,
+} from "@arx/core";
+import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { UiPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
 
@@ -20,9 +26,17 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
   const log = createLogger("bg:listener");
   const popupLog = extendLogger(log, "notification");
   const subscriptions: Array<() => void> = [];
+  const trackedWindowIds = new Set<number>();
+  const approvalWindowTracker = createApprovalWindowTracker();
   let started = false;
   let disposed = false;
   let startTask: Promise<void> | null = null;
+
+  const clearWindowTracking = () => {
+    trackedWindowIds.clear();
+    approvalWindowTracker.clear();
+    platform.clearWindowCloseTracks();
+  };
 
   const start = () => {
     if (started) return;
@@ -34,6 +48,36 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
     startTask = (async () => {
       const { runtime, controllers, session } = await runtimeHost.getOrInitContext();
       if (disposed) return;
+
+      const cancelApprovalIds = async (approvalIds: string[], reason: ApprovalTerminalReason) => {
+        await Promise.all(
+          approvalIds.map(async (approvalId) => {
+            try {
+              await controllers.approvals.cancel({ id: approvalId, reason });
+            } catch (error) {
+              popupLog("failed to cancel approval", { approvalId, reason, error });
+            }
+          }),
+        );
+      };
+
+      const cancelPendingApprovals = async (reason: ApprovalTerminalReason) => {
+        const approvalIds = controllers.approvals.getState().pending.map((item) => item.id);
+        await cancelApprovalIds(approvalIds, reason);
+      };
+
+      const ensureWindowTracked = (windowId: number) => {
+        if (trackedWindowIds.has(windowId)) {
+          return;
+        }
+
+        trackedWindowIds.add(windowId);
+        platform.trackWindowClose(windowId, () => {
+          trackedWindowIds.delete(windowId);
+          const approvalIds = approvalWindowTracker.takeWindowApprovalIds(windowId);
+          void cancelApprovalIds(approvalIds, "window_closed");
+        });
+      };
 
       subscriptions.push(
         runtime.bus.subscribe(ATTENTION_REQUESTED, (request: AttentionRequestedPayload) => {
@@ -72,12 +116,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
             .then((result) => {
               if (disposed) return;
               if (!result.windowId) return;
-              platform.trackWindowClose(result.windowId, () => {
-                void rejectPendingApprovals(controllers, {
-                  reason: "window_closed",
-                  details: { windowId: result.windowId },
-                });
-              });
+              ensureWindowTracked(result.windowId);
             })
             .catch((error) => {
               popupLog("failed to open notification window", {
@@ -123,12 +162,8 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
             .then((result) => {
               if (disposed) return;
               if (!result.windowId) return;
-              platform.trackWindowClose(result.windowId, () => {
-                void rejectPendingApprovals(controllers, {
-                  reason: "window_closed",
-                  details: { windowId: result.windowId },
-                });
-              });
+              ensureWindowTracked(result.windowId);
+              approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.id });
             })
             .catch((error) => {
               popupLog("failed to open notification window", {
@@ -144,11 +179,14 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       );
 
       subscriptions.push(
-        session.unlock.onLocked((payload) => {
-          void rejectPendingApprovals(controllers, {
-            reason: "locked",
-            details: { lockReason: payload.reason },
-          });
+        controllers.approvals.onFinished(({ id }) => {
+          approvalWindowTracker.deleteApproval(id);
+        }),
+      );
+
+      subscriptions.push(
+        session.unlock.onLocked(() => {
+          void cancelPendingApprovals("locked");
         }),
       );
 
@@ -156,7 +194,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
         controllers.approvals.onStateChanged(() => {
           const pending = controllers.approvals.getState().pending;
           if (pending.length === 0) {
-            platform.clearWindowCloseTracks();
+            clearWindowTracking();
           }
         }),
       );
@@ -164,7 +202,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       subscriptions.push(
         session.unlock.onStateChanged(() => {
           if (session.unlock.isUnlocked()) return;
-          platform.clearWindowCloseTracks();
+          clearWindowTracking();
         }),
       );
     })().finally(() => {
@@ -182,7 +220,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
         // best-effort
       }
     });
-    platform.clearWindowCloseTracks();
+    clearWindowTracking();
   };
 
   return { start, destroy };

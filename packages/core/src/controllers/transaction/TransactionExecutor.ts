@@ -18,7 +18,7 @@ import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js
 import type {
   TransactionApprovalChainMetadata,
   TransactionApprovalRequest,
-  TransactionApprovalTaskPayload,
+  TransactionApprovalRequestPayload,
   TransactionController,
   TransactionError,
   TransactionIssue,
@@ -456,7 +456,7 @@ export class TransactionExecutor
         request: cloneRequest(meta.request),
         warnings: cloneWarnings(meta.warnings),
         issues: cloneIssues(meta.issues),
-      } satisfies TransactionApprovalTaskPayload,
+      } satisfies TransactionApprovalRequestPayload,
     };
   }
 

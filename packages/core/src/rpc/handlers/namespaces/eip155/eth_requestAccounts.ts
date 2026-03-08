@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
-import { createTaskId, isDomainError, isRpcError } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineNoParamsMethod({
@@ -16,7 +16,7 @@ export const ethRequestAccountsDefinition = defineNoParamsMethod({
       .map((account) => account.displayAddress);
 
     const request = {
-      id: createTaskId("eth_requestAccounts"),
+      id: createApprovalId("eth_requestAccounts"),
       kind: ApprovalKinds.RequestAccounts,
       origin,
       namespace: invocation.namespace,

@@ -9,7 +9,7 @@ import type { Namespace, RpcInvocationContext } from "../types.js";
 
 export const EIP155_NAMESPACE = "eip155";
 
-export const createTaskId = (_prefix: string) => {
+export const createApprovalId = (_prefix: string) => {
   return globalThis.crypto.randomUUID();
 };
 

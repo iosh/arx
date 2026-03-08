@@ -8,7 +8,7 @@ import {
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createTaskId, toParamsArray } from "../utils.js";
+import { createApprovalId, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
@@ -65,7 +65,7 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
     }
 
     const request = {
-      id: createTaskId("wallet_addEthereumChain"),
+      id: createApprovalId("wallet_addEthereumChain"),
       kind: ApprovalKinds.AddChain,
       origin,
       namespace: metadata.namespace,

@@ -188,7 +188,7 @@ export const waitForChainInNetwork = async (
 
 export const setupApprovalResponder = (
   runtime: ReturnType<typeof createRuntime>,
-  responder: (task: ApprovalRecord) => Promise<boolean | undefined> | boolean | undefined,
+  responder: (record: ApprovalRecord) => Promise<boolean | undefined> | boolean | undefined,
 ) => {
   const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
     void (async () => {
@@ -201,7 +201,7 @@ export const setupApprovalResponder = (
           await runtime.controllers.approvals.cancel({
             id: record.id,
             reason: "internal_error",
-            error: new Error("setupApprovalResponder: responder did not resolve/reject task"),
+            error: new Error("setupApprovalResponder: responder did not resolve/reject approval"),
           });
         }
       }
@@ -212,12 +212,12 @@ export const setupApprovalResponder = (
 };
 
 export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof createRuntime>) => {
-  return setupApprovalResponder(runtime, async (task) => {
-    if (task.kind !== ApprovalKinds.SwitchChain) {
+  return setupApprovalResponder(runtime, async (record) => {
+    if (record.kind !== ApprovalKinds.SwitchChain) {
       return false;
     }
 
-    await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+    await runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
     return true;
   });
 };

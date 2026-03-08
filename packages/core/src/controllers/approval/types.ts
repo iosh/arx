@@ -3,7 +3,7 @@ import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainNamespace } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { PermissionApprovalResult, RequestPermissionsApprovalPayload } from "../permission/types.js";
-import type { TransactionApprovalTaskPayload, TransactionMeta } from "../transaction/types.js";
+import type { TransactionApprovalRequestPayload, TransactionMeta } from "../transaction/types.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
 export { ApprovalKinds, ApprovalTypes };
@@ -51,7 +51,7 @@ export type ApprovalRequestByKind = {
     from: string;
     typedData: string;
   };
-  [ApprovalKinds.SendTransaction]: TransactionApprovalTaskPayload;
+  [ApprovalKinds.SendTransaction]: TransactionApprovalRequestPayload;
   [ApprovalKinds.SwitchChain]: { chainRef: ChainRef };
   [ApprovalKinds.AddChain]: { metadata: ChainMetadata; isUpdate: boolean };
 };

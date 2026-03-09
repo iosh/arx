@@ -14,7 +14,7 @@ export const syncPortContext = (
 
   portContexts.set(port, {
     origin,
-    namespace: snapshot.namespace,
+    providerNamespace: snapshot.namespace,
     meta: snapshot.meta,
     chainRef: snapshot.chain.chainRef,
     chainId: snapshot.chain.chainId,

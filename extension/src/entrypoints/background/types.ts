@@ -3,7 +3,7 @@ import type { TransportMeta } from "@arx/provider/types";
 
 export type PortContext = {
   origin: string;
-  namespace: string | null;
+  providerNamespace: string | null;
   meta: TransportMeta | null;
   chainRef: string | null;
   chainId: string | null;

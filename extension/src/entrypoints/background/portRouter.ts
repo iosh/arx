@@ -15,7 +15,7 @@ import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provide
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
-import { buildRpcContext } from "./rpc";
+import { buildRpcContext, deriveRpcContextNamespace } from "./rpc";
 import type { BackgroundContext } from "./runtimeHost";
 import type { ArxRpcContext, PortContext, ProviderBridgeSnapshot } from "./types";
 
@@ -186,8 +186,8 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   const listConnectedNamespaces = () => {
     const namespaces = new Set<string>();
     for (const portContext of portContexts.values()) {
-      if (portContext.namespace) {
-        namespaces.add(portContext.namespace);
+      if (portContext.providerNamespace) {
+        namespaces.add(portContext.providerNamespace);
       }
     }
     return [...namespaces];
@@ -203,7 +203,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   };
 
   const findPortSnapshot = (port: Runtime.Port): ProviderBridgeSnapshot | null => {
-    const namespace = portContexts.get(port)?.namespace;
+    const namespace = portContexts.get(port)?.providerNamespace;
     if (!namespace) return null;
     return findProviderSnapshot(namespace);
   };
@@ -211,7 +211,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   const getPortsBoundToNamespaces = (namespaces: Iterable<string>) => {
     const allowed = new Set(namespaces);
     return getConnectedPorts().filter((port) => {
-      const namespace = portContexts.get(port)?.namespace;
+      const namespace = portContexts.get(port)?.providerNamespace;
       return typeof namespace === "string" && allowed.has(namespace);
     });
   };
@@ -228,7 +228,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const { controllers } = await getContext();
     const portContext = portContexts.get(port);
     const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
-    const namespace = portContext?.namespace ?? snapshot.namespace;
+    const namespace = portContext?.providerNamespace ?? snapshot.namespace;
 
     return controllers.permissions.getPermittedAccounts(origin, { namespace, chainRef });
   };
@@ -256,7 +256,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const portContext = portContexts.get(port);
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const namespace = rpcContext?.namespace ?? DEFAULT_NAMESPACE;
+    const namespace = deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE;
     const chainRef = rpcContext?.chainRef ?? null;
     const error =
       overrideError ??
@@ -416,7 +416,9 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         const portContext = portContexts.get(port);
         const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
         const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-        const namespace = rpcContext?.namespace ?? deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE);
+        const namespace =
+          deriveRpcContextNamespace(rpcContext, deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE)) ??
+          DEFAULT_NAMESPACE;
         const chainRef = rpcContext?.chainRef ?? null;
         const error = (rpcRegistry?.encodeErrorWithAdapters(
           arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
@@ -488,7 +490,8 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
       ...(rpcContext && {
         arx: {
           chainRef: rpcContext.chainRef,
-          namespace: rpcContext.namespace,
+          ...(rpcContext.namespace ? { namespace: rpcContext.namespace } : {}),
+          ...(rpcContext.providerNamespace ? { providerNamespace: rpcContext.providerNamespace } : {}),
           requestContext,
           meta: rpcContext.meta,
         } satisfies RpcInvocationContext,
@@ -513,7 +516,11 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         jsonrpc,
         error: (rpcRegistry?.encodeErrorWithAdapters(error, {
           surface: "dapp",
-          namespace: rpcContext?.namespace ?? deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE),
+          namespace:
+            deriveRpcContextNamespace(
+              rpcContext,
+              deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE),
+            ) ?? DEFAULT_NAMESPACE,
           chainRef: rpcContext?.chainRef ?? null,
           origin,
           method,
@@ -537,7 +544,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     if (!portContexts.has(port)) {
       portContexts.set(port, {
         origin,
-        namespace: null,
+        providerNamespace: null,
         meta: null,
         chainRef: null,
         chainId: null,

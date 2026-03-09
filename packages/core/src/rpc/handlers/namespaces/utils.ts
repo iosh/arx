@@ -33,6 +33,10 @@ export const namespaceFromContext = (context?: RpcInvocationContext | null): Nam
     const [candidate] = context.chainRef.split(":");
     return candidate as Namespace | undefined;
   }
+  if (context.providerNamespace) {
+    const [candidate] = context.providerNamespace.split(":");
+    return (candidate || context.providerNamespace) as Namespace;
+  }
   return undefined;
 };
 

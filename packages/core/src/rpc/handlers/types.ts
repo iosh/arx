@@ -47,6 +47,7 @@ export type RpcRequest = {
 export type RpcInvocationContext = {
   chainRef?: ChainRef | null;
   namespace?: Namespace | null;
+  providerNamespace?: Namespace | null;
   requestContext?: RequestContext | null;
   meta?: unknown;
 };

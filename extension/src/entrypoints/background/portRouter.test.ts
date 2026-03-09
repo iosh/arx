@@ -67,8 +67,17 @@ const createRouterHarness = (options?: {
 }) => {
   const getPermittedAccounts = vi.fn(options?.getPermittedAccounts ?? (() => ["0xabc"]));
   const cancelByScope = vi.fn(options?.cancelByScope ?? (async () => 1));
+  const engineHandle = vi.fn((request: unknown, callback: (error: unknown, response?: unknown) => void) => {
+    const payload = request as { id?: unknown; jsonrpc?: unknown };
+    callback(null, {
+      id: payload.id ?? "1",
+      jsonrpc: payload.jsonrpc ?? "2.0",
+      result: null,
+    });
+  });
   const registry = { getRegisteredNamespaces: () => ["eip155", "conflux"] } as unknown as RpcRegistry;
   const getOrInitContext = vi.fn(async () => ({
+    engine: { handle: engineHandle },
     runtime: { rpc: { registry } },
     controllers: {
       permissions: { getPermittedAccounts },
@@ -97,7 +106,7 @@ const createRouterHarness = (options?: {
     },
   });
 
-  return { router, getOrInitContext, getPermittedAccounts, cancelByScope, snapshots };
+  return { router, getOrInitContext, getPermittedAccounts, cancelByScope, engineHandle, snapshots };
 };
 
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
@@ -252,6 +261,39 @@ describe("portRouter privacy and binding", () => {
         },
       }),
     );
+  });
+
+  it("forwards provider-bound requests with providerNamespace in rpc context", async () => {
+    const { router, engineHandle } = createRouterHarness();
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "s1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "s1",
+      type: "request",
+      id: "transport-1",
+      payload: {
+        id: "rpc-1",
+        jsonrpc: "2.0",
+        method: "wallet_requestPermissions",
+      },
+    });
+
+    await vi.waitFor(() => expect(engineHandle).toHaveBeenCalledTimes(1));
+    const request = engineHandle.mock.calls[0]?.[0] as {
+      arx?: { namespace?: string; providerNamespace?: string; chainRef?: string };
+    };
+
+    expect(request.arx).toMatchObject({
+      providerNamespace: "eip155",
+      chainRef: "eip155:1",
+    });
+    expect(request.arx?.namespace).toBeUndefined();
   });
 
   it("cancels provider-scoped approvals when the port disconnects", async () => {

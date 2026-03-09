@@ -170,6 +170,57 @@ describe("background rpc engine assembly", () => {
     expect(typeof res?.error?.message).toBe("string");
   });
 
+  it("uses provider binding for best-effort namespace encoding when explicit namespace is absent", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      store: {
+        ports: {
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
+        },
+      },
+    });
+
+    const encodeSpy = vi.spyOn(runtime.rpc.registry, "encodeErrorWithAdapters");
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
+      isInternalOrigin: () => false,
+    });
+    const errorBoundary = middlewares[0];
+    if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
+
+    const req = {
+      method: "custom_ping",
+      origin: "https://dapp.example",
+      arx: { providerNamespace: "eip155" },
+    } as unknown as Parameters<typeof errorBoundary>[0];
+
+    const res = createPendingRes() as unknown as PendingResWithUnknownError;
+    const next = createNextStubWithSideEffect(() => {
+      res.error = new Error("boom");
+    });
+
+    await errorBoundary(
+      req,
+      res,
+      next as unknown as Parameters<typeof errorBoundary>[2],
+      vi.fn() as unknown as Parameters<typeof errorBoundary>[3],
+    );
+
+    expect(encodeSpy).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        method: "custom_ping",
+      }),
+    );
+  });
+
   it("respects shouldRequestUnlockAttention hook", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },

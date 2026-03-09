@@ -71,6 +71,32 @@ describe("RpcRegistry.resolveInvocation", () => {
     });
   });
 
+  it("uses provider binding when namespace cannot be inferred from explicit context or method prefix", () => {
+    const registry = new RpcRegistry();
+    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
+    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
+
+    const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" }, "eip155:1");
+
+    expect(registry.resolveInvocation(controllers, "custom_ping", { providerNamespace: "conflux" })).toEqual({
+      namespace: "conflux",
+      chainRef: "conflux:1029",
+    });
+  });
+
+  it("keeps method-prefix resolution ahead of provider binding", () => {
+    const registry = new RpcRegistry();
+    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
+    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
+
+    const controllers = makeControllers({ eip155: "eip155:10", conflux: "conflux:1029" }, "eip155:1");
+
+    expect(registry.resolveInvocation(controllers, "eth_chainId", { providerNamespace: "conflux" })).toEqual({
+      namespace: "eip155",
+      chainRef: "eip155:10",
+    });
+  });
+
   it("rejects mismatched context namespace vs chainRef prefix", () => {
     const registry = new RpcRegistry();
     registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
@@ -84,6 +110,28 @@ describe("RpcRegistry.resolveInvocation", () => {
     } catch (error) {
       expect(getReason(error)).toBe(ArxReasons.RpcInvalidRequest);
     }
+  });
+
+  it("rejects mismatched provider binding vs explicit namespace", () => {
+    const registry = new RpcRegistry();
+    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
+    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
+
+    const controllers = makeControllers({ eip155: "eip155:1", conflux: "conflux:1029" }, "eip155:1");
+    const ctx: RpcInvocationContext = { namespace: "eip155", providerNamespace: "conflux" };
+
+    expect(() => registry.resolveInvocation(controllers, "eth_chainId", ctx)).toThrow(/providerNamespace/);
+  });
+
+  it("rejects mismatched provider binding vs chainRef prefix", () => {
+    const registry = new RpcRegistry();
+    registry.registerNamespaceAdapter({ namespace: "eip155", methodPrefixes: ["eth_"], definitions: {} });
+    registry.registerNamespaceAdapter({ namespace: "conflux", methodPrefixes: ["cfx_"], definitions: {} });
+
+    const controllers = makeControllers({ eip155: "eip155:1", conflux: "conflux:1029" }, "eip155:1");
+    const ctx: RpcInvocationContext = { providerNamespace: "conflux", chainRef: "eip155:1" };
+
+    expect(() => registry.resolveInvocation(controllers, "custom_ping", ctx)).toThrow(/providerNamespace/);
   });
 
   it("rejects invalid chainRef identifiers", () => {

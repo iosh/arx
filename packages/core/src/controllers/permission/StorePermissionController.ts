@@ -140,7 +140,9 @@ const tryParseChainRef = (chainRef: string | null | undefined): ParsedPermission
 const deriveNamespaceFromContext = (context?: Parameters<PermissionCapabilityResolver>[1]): ChainNamespace => {
   if (context?.namespace) return context.namespace as ChainNamespace;
   const parsed = tryParseChainRef(context?.chainRef ?? null);
-  return parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE;
+  if (parsed?.namespace) return parsed.namespace;
+  if (context?.providerNamespace) return context.providerNamespace as ChainNamespace;
+  return DEFAULT_PERMISSION_NAMESPACE;
 };
 
 const deriveNamespaceFromOptions = (options: {

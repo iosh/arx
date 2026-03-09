@@ -355,6 +355,20 @@ export class RpcRegistry {
     return this.namespaceDefinitions.has(normalized) ? normalized : null;
   }
 
+  private normalizeLooseNamespaceCandidate(candidate: string | null | undefined): string | null {
+    if (typeof candidate !== "string") {
+      return null;
+    }
+
+    const trimmed = candidate.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const [prefix] = trimmed.split(":");
+    return prefix || trimmed;
+  }
+
   private selectNamespace(method: string, context?: RpcInvocationContext): Namespace | null {
     if (context?.namespace) {
       const normalized = this.normalizeNamespaceCandidate(context.namespace);
@@ -369,6 +383,11 @@ export class RpcRegistry {
     const fromMethod = this.deriveNamespaceFromMethod(method);
     if (fromMethod && this.namespaceDefinitions.has(fromMethod)) {
       return fromMethod;
+    }
+
+    if (context?.providerNamespace) {
+      const normalized = this.normalizeNamespaceCandidate(context.providerNamespace);
+      if (normalized) return normalized;
     }
 
     return null;
@@ -387,6 +406,7 @@ export class RpcRegistry {
         ...(method ? { method } : {}),
         ...(context?.namespace ? { contextNamespace: context.namespace } : {}),
         ...(context?.chainRef ? { chainRef: context.chainRef } : {}),
+        ...(context?.providerNamespace ? { providerNamespace: context.providerNamespace } : {}),
       },
     });
   }
@@ -422,14 +442,31 @@ export class RpcRegistry {
   }
 
   private assertContextNamespaceConsistency(method: string, context?: RpcInvocationContext) {
-    const ctxNamespace = context?.namespace ? context.namespace.split(":")[0] : null;
+    const ctxNamespace = this.normalizeLooseNamespaceCandidate(context?.namespace);
     const ctxChainNamespace = typeof context?.chainRef === "string" ? context.chainRef.split(":")[0] : null;
+    const providerNamespace = this.normalizeLooseNamespaceCandidate(context?.providerNamespace);
 
     if (ctxNamespace && ctxChainNamespace && ctxNamespace !== ctxChainNamespace) {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `Namespace mismatch: namespace="${ctxNamespace}" chainRef="${context?.chainRef}"`,
         data: { method, namespace: ctxNamespace, chainRef: context?.chainRef ?? null },
+      });
+    }
+
+    if (providerNamespace && ctxNamespace && providerNamespace !== ctxNamespace) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: `Namespace mismatch: providerNamespace="${providerNamespace}" namespace="${ctxNamespace}"`,
+        data: { method, providerNamespace, namespace: ctxNamespace },
+      });
+    }
+
+    if (providerNamespace && ctxChainNamespace && providerNamespace !== ctxChainNamespace) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: `Namespace mismatch: providerNamespace="${providerNamespace}" chainRef="${context?.chainRef}"`,
+        data: { method, providerNamespace, chainRef: context?.chainRef ?? null },
       });
     }
   }

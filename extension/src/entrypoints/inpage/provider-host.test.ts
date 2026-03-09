@@ -1,7 +1,8 @@
 import type { ProviderHostWindow } from "@arx/provider/host";
 import { createProviderHost } from "@arx/provider/host";
-import { createProviderRegistry } from "@arx/provider/registry";
+import { createProviderRegistry, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 import { WindowPostMessageTransport } from "@arx/provider/transport";
+import type { EIP1193Provider, Transport } from "@arx/provider/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestDom, MockContentBridge, type TestDomContext } from "./provider-host.test.helpers.js";
 
@@ -21,6 +22,58 @@ type InjectedProvider = {
   request: (args: { method: string; params?: unknown }) => Promise<unknown>;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   once: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
+const createStubTransport = (): Transport => ({
+  connect: async () => {},
+  disconnect: async () => {},
+  isConnected: () => false,
+  getConnectionState: () => ({
+    connected: false,
+    chainId: null,
+    chainRef: null,
+    accounts: [],
+    isUnlocked: null,
+    meta: null,
+  }),
+  request: async () => null,
+  on: () => {},
+  removeListener: () => {},
+});
+
+const createMultiNamespaceRegistry = (): ProviderRegistry => {
+  const createModule = (namespace: string): ProviderModule => {
+    const provider = {
+      request: vi.fn(async () => null),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      isConnected: vi.fn(() => false),
+    } as unknown as EIP1193Provider;
+
+    return {
+      namespace,
+      discovery: {
+        eip6963: {
+          info: {
+            uuid: crypto.randomUUID(),
+            name: `${namespace} wallet`,
+            icon: "data:image/png;base64,AA==",
+            rdns: `wallet.${namespace}.test`,
+          },
+        },
+      },
+      create: (_ctx) => ({
+        raw: provider,
+        injected: provider,
+      }),
+    };
+  };
+
+  const modules: ProviderModule[] = [createModule("eip155"), createModule("conflux")];
+  return {
+    modules,
+    byNamespace: new Map(modules.map((module) => [module.namespace, module])),
+  };
 };
 
 describe("ProviderHost (inpage injection + EIP-6963)", () => {
@@ -49,8 +102,8 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     cleanups.push(() => transport.destroy());
 
     const host = createProviderHost({
-      transport,
       targetWindow: window as unknown as ProviderHostWindow,
+      createTransportForNamespace: () => transport,
       ...(options?.registry ? { registry: options.registry } : {}),
     });
 
@@ -167,6 +220,19 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     expect(announced).toHaveBeenCalledTimes(1);
 
     await waitForTransportConnect(transport);
+  });
+
+  it("rejects reusing the same transport instance across namespaces", () => {
+    const sharedTransport = createStubTransport();
+    const host = createProviderHost({
+      targetWindow: window as unknown as ProviderHostWindow,
+      registry: createMultiNamespaceRegistry(),
+      createTransportForNamespace: () => sharedTransport,
+    });
+
+    expect(() => host.initialize()).toThrow(
+      'createTransportForNamespace must return a distinct transport per namespace; received the same transport for "eip155" and "conflux"',
+    );
   });
 
   it("does not throw for eth_accounts before ready, then returns accounts after handshake", async () => {

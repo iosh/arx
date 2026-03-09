@@ -3,15 +3,15 @@ import type { TransportMeta } from "@arx/provider/types";
 
 export type PortContext = {
   origin: string;
+  namespace: string | null;
   meta: TransportMeta | null;
   chainRef: string | null;
   chainId: string | null;
-  namespace: string | null;
 };
 
-export type ControllerSnapshot = {
+export type ProviderBridgeSnapshot = {
+  namespace: string;
   chain: { chainId: string; chainRef: string };
-  accounts: string[];
   isUnlocked: boolean;
   meta: TransportMeta;
 };

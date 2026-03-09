@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION } from "./version.js";
 export type HandshakePayload = {
   protocolVersion?: ProtocolVersion | number;
   handshakeId: string;
+  namespace: string;
 };
 
 export type HandshakeAckPayload = {

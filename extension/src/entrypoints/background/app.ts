@@ -19,7 +19,7 @@ export const createBackgroundApp = () => {
   const portRouter = createPortRouter({
     extensionOrigin,
     getOrInitContext: runtimeHost.getOrInitContext,
-    getControllerSnapshot: runtimeHost.getControllerSnapshot,
+    getProviderSnapshot: runtimeHost.getProviderSnapshot,
   });
 
   const providerEvents = createProviderEventsListener({ runtimeHost, portRouter });

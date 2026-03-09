@@ -13,6 +13,7 @@ import { createKeyringMetasService } from "../services/store/keyringMetas/Keyrin
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import { createNetworkPreferencesService } from "../services/store/networkPreferences/NetworkPreferencesService.js";
 import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
+import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
 import { createPermissionsService } from "../services/store/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
@@ -76,6 +77,7 @@ export type BackgroundRuntime = {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
+    networkPreferences: NetworkPreferencesService;
     session: BackgroundSessionServices;
     keyring: KeyringService;
   };
@@ -404,6 +406,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       attention,
       chainActivation,
       chainViews,
+      networkPreferences,
       session: sessionLayer.session,
       keyring: keyringService,
     },

@@ -24,10 +24,12 @@ type ChainUpdatePayload = {
 };
 
 export type WindowPostMessageTransportOptions = {
+  namespace?: string;
   handshakeTimeoutMs?: number;
 };
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 8000;
+const DEFAULT_TRANSPORT_NAMESPACE = "eip155";
 
 const isConnectPayload = (value: unknown): value is ConnectPayload => {
   if (!value || typeof value !== "object") return false;
@@ -46,6 +48,7 @@ const createId = (): string => {
 };
 
 export class WindowPostMessageTransport extends EventEmitter implements Transport {
+  #namespace: string;
   #connected = false;
   #chainId: string | null = null;
   #chainRef: string | null = null;
@@ -75,10 +78,11 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
   constructor(options: WindowPostMessageTransportOptions = {}) {
     super();
 
-    const { handshakeTimeoutMs } = options;
+    const { handshakeTimeoutMs, namespace } = options;
     if (handshakeTimeoutMs) {
       this.#handshakeTimeoutMs = handshakeTimeoutMs;
     }
+    this.#namespace = namespace?.trim() || DEFAULT_TRANSPORT_NAMESPACE;
 
     // session is rotated per `connect()` attempt (not per instance lifetime).
     this.#sessionId = createId();
@@ -427,7 +431,11 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
       channel: CHANNEL,
       sessionId: this.#sessionId,
       type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: this.#handshakeId ?? createId() },
+      payload: {
+        protocolVersion: PROTOCOL_VERSION,
+        handshakeId: this.#handshakeId ?? createId(),
+        namespace: this.#namespace,
+      },
     };
     this.#handshakeId = msg.payload.handshakeId;
     window.postMessage(msg, window.location.origin);

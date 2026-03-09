@@ -49,8 +49,7 @@ export const createTestDom = (url = DEFAULT_DAPP_URL): TestDomContext => {
 };
 
 export const buildMeta = (activeChain: string): TransportMeta => ({
-  activeChain,
-  activeNamespace: "eip155",
+  activeChainByNamespace: { eip155: activeChain },
   supportedChains: [activeChain],
 });
 

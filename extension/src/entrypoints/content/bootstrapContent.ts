@@ -1,11 +1,23 @@
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import browser, { type Runtime } from "webextension-polyfill";
 
+type SessionPortEntry = {
+  namespace: string;
+  port: Runtime.Port;
+  onMessage: (data: unknown) => void;
+  onDisconnect: () => void;
+};
+
+const parseHandshakeNamespace = (envelope: Extract<Envelope, { type: "handshake" }>): string | null => {
+  const namespace = envelope.payload.namespace.trim();
+  return namespace ? namespace : null;
+};
+
 export const bootstrapContent = () => {
   const DISCONNECT_ERROR = { code: 4900, message: "Disconnected" } as const;
 
-  let port: Runtime.Port | null = null;
-  let sessionId: string | null = null;
+  const sessions = new Map<string, SessionPortEntry>();
+  const latestSessionByNamespace = new Map<string, string>();
 
   const emitDisconnectEvent = (activeSessionId: string) => {
     window.postMessage(
@@ -19,88 +31,109 @@ export const bootstrapContent = () => {
     );
   };
 
-  const handlePortMessage = (data: unknown) => {
-    const envelope = data as Envelope | undefined;
-    if (!envelope || typeof envelope !== "object" || envelope?.channel !== CHANNEL) return;
-    if (typeof envelope.sessionId !== "string") return;
-    if (!sessionId) return;
-    if (envelope.sessionId !== sessionId) return;
+  const releaseSession = (sessionId: string): SessionPortEntry | null => {
+    const entry = sessions.get(sessionId);
+    if (!entry) return null;
 
-    switch (envelope.type) {
-      case "handshake_ack":
-      case "response":
-      case "event":
-        window.postMessage(envelope, window.location.origin);
-        return;
-      default:
-        return;
-    }
-  };
-
-  const portDisconnectHandlers = new WeakMap<Runtime.Port, () => void>();
-
-  const detachPort = (target: Runtime.Port) => {
-    target.onMessage.removeListener(handlePortMessage);
-    const disconnectHandler = portDisconnectHandlers.get(target);
-    if (disconnectHandler) {
-      target.onDisconnect.removeListener(disconnectHandler);
-      portDisconnectHandlers.delete(target);
-    }
-  };
-
-  const attachPort = (nextPort: Runtime.Port) => {
-    if (port && port !== nextPort) {
-      try {
-        detachPort(port);
-        port.disconnect();
-      } catch {
-        // ignore port cleanup failures
-      }
+    sessions.delete(sessionId);
+    if (latestSessionByNamespace.get(entry.namespace) === sessionId) {
+      latestSessionByNamespace.delete(entry.namespace);
     }
 
-    port = nextPort;
-
-    nextPort.onMessage.addListener(handlePortMessage);
-    const onDisconnect = () => {
-      detachPort(nextPort);
-
-      if (port === nextPort) {
-        port = null;
-      }
-
-      const activeSessionId = sessionId;
-      sessionId = null;
-      if (activeSessionId) {
-        emitDisconnectEvent(activeSessionId);
-      }
-    };
-    portDisconnectHandlers.set(nextPort, onDisconnect);
-    nextPort.onDisconnect.addListener(onDisconnect);
-  };
-
-  const getOrConnectPort = (): Runtime.Port => {
-    if (port) return port;
-    const nextPort = browser.runtime.connect({ name: CHANNEL });
-    attachPort(nextPort);
-    return nextPort;
-  };
-
-  const forwardToBackground = (envelope: Envelope) => {
     try {
-      getOrConnectPort().postMessage(envelope);
+      entry.port.onMessage.removeListener(entry.onMessage);
+      entry.port.onDisconnect.removeListener(entry.onDisconnect);
+    } catch {
+      // ignore cleanup failures
+    }
+
+    return entry;
+  };
+
+  const disconnectPort = (port: Runtime.Port) => {
+    try {
+      port.disconnect();
+    } catch {
+      // ignore disconnect failures
+    }
+  };
+
+  const closeSession = (sessionId: string) => {
+    const entry = releaseSession(sessionId);
+    if (!entry) return;
+    disconnectPort(entry.port);
+  };
+
+  const disconnectSession = (sessionId: string) => {
+    if (!releaseSession(sessionId)) return;
+    emitDisconnectEvent(sessionId);
+  };
+
+  const closeSessionWithDisconnectEvent = (sessionId: string) => {
+    const entry = releaseSession(sessionId);
+    if (!entry) return;
+    disconnectPort(entry.port);
+    emitDisconnectEvent(sessionId);
+  };
+
+  const createSessionPort = (sessionId: string, namespace: string): SessionPortEntry => {
+    const nextPort = browser.runtime.connect({ name: CHANNEL });
+    const entry: SessionPortEntry = {
+      namespace,
+      port: nextPort,
+      onMessage: (data: unknown) => {
+        const envelope = data as Envelope | undefined;
+        if (!envelope || typeof envelope !== "object" || envelope.channel !== CHANNEL) return;
+        if (envelope.sessionId !== sessionId) return;
+
+        switch (envelope.type) {
+          case "handshake_ack":
+          case "response":
+          case "event":
+            window.postMessage(envelope, window.location.origin);
+            return;
+          default:
+            return;
+        }
+      },
+      onDisconnect: () => {
+        disconnectSession(sessionId);
+      },
+    };
+
+    sessions.set(sessionId, entry);
+    latestSessionByNamespace.set(namespace, sessionId);
+    nextPort.onMessage.addListener(entry.onMessage);
+    nextPort.onDisconnect.addListener(entry.onDisconnect);
+    return entry;
+  };
+
+  const getOrCreateSessionPort = (sessionId: string, namespace: string): SessionPortEntry => {
+    const existing = sessions.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const previousSessionId = latestSessionByNamespace.get(namespace);
+    if (previousSessionId && previousSessionId !== sessionId) {
+      closeSession(previousSessionId);
+    }
+
+    return createSessionPort(sessionId, namespace);
+  };
+
+  const postToBackground = (envelope: Envelope) => {
+    const sessionId = envelope.sessionId;
+    const entry = sessions.get(sessionId);
+    if (!entry) return false;
+
+    try {
+      entry.port.postMessage(envelope);
+      return true;
     } catch (error) {
-      const current = port;
-      port = null;
-      try {
-        current?.disconnect();
-      } catch {
-        // ignore disconnect failure
-      }
-      try {
-        getOrConnectPort().postMessage(envelope);
-      } catch (retryError) {
-        console.warn("[arx:content] failed to forward message to background", { error, retryError });
-      }
+      closeSessionWithDisconnectEvent(sessionId);
+      console.warn("[arx:content] failed to forward message to background", { error, sessionId });
+      return false;
     }
   };
 
@@ -109,19 +142,22 @@ export const bootstrapContent = () => {
     if (event.origin !== window.location.origin) return;
 
     const data = event.data as Envelope | undefined;
-    if (!data || typeof data !== "object" || data?.channel !== CHANNEL) return;
+    if (!data || typeof data !== "object" || data.channel !== CHANNEL) return;
     if (typeof data.sessionId !== "string") return;
 
     switch (data.type) {
-      case "handshake":
-        sessionId = data.sessionId;
-        forwardToBackground(data);
+      case "handshake": {
+        const namespace = parseHandshakeNamespace(data);
+        if (!namespace) return;
+        getOrCreateSessionPort(data.sessionId, namespace);
+        postToBackground(data);
         return;
+      }
+
       case "request":
-        if (!sessionId) return;
-        if (data.sessionId !== sessionId) return;
-        forwardToBackground(data);
+        postToBackground(data);
         return;
+
       default:
         return;
     }

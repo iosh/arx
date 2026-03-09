@@ -47,8 +47,7 @@ export class StubTransport extends EventEmitter implements Transport {
 }
 
 export const buildMeta = (overrides?: Partial<TransportMeta>): TransportMeta => ({
-  activeChain: "eip155:1",
-  activeNamespace: "eip155",
+  activeChainByNamespace: { eip155: "eip155:1" },
   supportedChains: ["eip155:1"],
   ...overrides,
 });

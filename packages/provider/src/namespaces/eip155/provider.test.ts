@@ -218,7 +218,10 @@ describe("Eip155Provider: standard events", () => {
     transport.emit("chainChanged", {
       chainId: "0x89",
       chainRef: "eip155:137",
-      meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
+      meta: buildMeta({
+        activeChainByNamespace: { eip155: "eip155:137" },
+        supportedChains: ["eip155:1", "eip155:137"],
+      }),
     });
 
     expect(chainChanged).toHaveBeenCalledTimes(1);
@@ -234,7 +237,7 @@ describe("Eip155Provider: standard events", () => {
     transport.emit("chainChanged", {
       chainId: "0x89",
       chainRef: "eip155:137",
-      meta: buildMeta({ activeChain: "eip155:137" }),
+      meta: buildMeta({ activeChainByNamespace: { eip155: "eip155:137" } }),
     });
 
     expect(networkChanged).toHaveBeenCalledTimes(1);

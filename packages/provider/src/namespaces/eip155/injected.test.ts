@@ -102,7 +102,10 @@ describe("createEip155InjectedProvider", () => {
       transport.emit("chainChanged", {
         chainId: "0x89",
         chainRef: "eip155:137",
-        meta: buildMeta({ activeChain: "eip155:137", supportedChains: ["eip155:1", "eip155:137"] }),
+        meta: buildMeta({
+          activeChainByNamespace: { eip155: "eip155:137" },
+          supportedChains: ["eip155:1", "eip155:137"],
+        }),
       });
       expect(injected.chainId).toBe("0x89");
       expect(injected.networkVersion).toBe("137");

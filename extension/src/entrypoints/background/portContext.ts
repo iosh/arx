@@ -1,37 +1,35 @@
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
-import type { ControllerSnapshot, PortContext } from "./types";
+import type { PortContext, ProviderBridgeSnapshot } from "./types";
 
 export const syncPortContext = (
   port: Runtime.Port,
-  snapshot: ControllerSnapshot,
+  snapshot: ProviderBridgeSnapshot,
   portContexts: Map<Runtime.Port, PortContext>,
   extensionOrigin: string,
-  _registeredNamespaces?: ReadonlySet<string>,
 ) => {
   const existing = portContexts.get(port);
   const resolvedOrigin = getPortOrigin(port, extensionOrigin);
   const origin = existing?.origin && existing.origin !== "unknown://" ? existing.origin : resolvedOrigin;
 
-  const chainRef = snapshot.meta?.activeChain ?? snapshot.chain.chainRef ?? null;
-
   portContexts.set(port, {
     origin,
-    meta: snapshot.meta ?? null,
-    chainRef,
-    chainId: snapshot.chain.chainId ?? null,
-    namespace: existing?.namespace ?? null,
+    namespace: snapshot.namespace,
+    meta: snapshot.meta,
+    chainRef: snapshot.chain.chainRef,
+    chainId: snapshot.chain.chainId,
   });
 };
 
 export const syncAllPortContexts = (
   connections: Iterable<Runtime.Port>,
-  snapshot: ControllerSnapshot,
+  snapshotByPort: (port: Runtime.Port) => ProviderBridgeSnapshot | null,
   portContexts: Map<Runtime.Port, PortContext>,
   extensionOrigin: string,
-  _registeredNamespaces?: ReadonlySet<string>,
 ) => {
   for (const port of connections) {
-    syncPortContext(port, snapshot, portContexts, extensionOrigin, _registeredNamespaces);
+    const snapshot = snapshotByPort(port);
+    if (!snapshot) continue;
+    syncPortContext(port, snapshot, portContexts, extensionOrigin);
   }
 };

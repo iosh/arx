@@ -1,7 +1,6 @@
 import {
   createBackgroundRuntime,
   createLogger,
-  DEFAULT_NAMESPACE,
   disableDebugNamespaces,
   enableDebugNamespaces,
   extendLogger,
@@ -9,7 +8,7 @@ import {
 import browser from "webextension-polyfill";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
-import type { ControllerSnapshot } from "./types";
+import type { ProviderBridgeSnapshot } from "./types";
 
 export type BackgroundContext = {
   runtime: ReturnType<typeof createBackgroundRuntime>;
@@ -19,11 +18,12 @@ export type BackgroundContext = {
   keyring: ReturnType<typeof createBackgroundRuntime>["services"]["keyring"];
   attention: ReturnType<typeof createBackgroundRuntime>["services"]["attention"];
   chainViews: ReturnType<typeof createBackgroundRuntime>["services"]["chainViews"];
+  networkPreferences: ReturnType<typeof createBackgroundRuntime>["services"]["networkPreferences"];
 };
 
 export type BackgroundRuntimeHost = {
   getOrInitContext: () => Promise<BackgroundContext>;
-  getControllerSnapshot: () => ControllerSnapshot;
+  getProviderSnapshot: (namespace: string) => ProviderBridgeSnapshot;
   persistVaultMeta: (target?: BackgroundContext | null) => Promise<void>;
   destroy: () => void;
   applyDebugNamespacesFromEnv: () => void;
@@ -51,24 +51,24 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     }
   };
 
-  const getControllerSnapshot = (): ControllerSnapshot => {
+  const getProviderSnapshot = (namespace: string): ProviderBridgeSnapshot => {
     if (!context) throw new Error("Background context is not initialized");
-    const { controllers, session, chainViews } = context;
-    const meta = chainViews.buildProviderMeta(DEFAULT_NAMESPACE);
-    const providerChain = chainViews.getProviderChainView(DEFAULT_NAMESPACE);
+    const { session, chainViews } = context;
+    const providerMeta = chainViews.buildProviderMeta(namespace);
+    const providerChain = chainViews.getProviderChainView(namespace);
     const isUnlocked = session.unlock.isUnlocked();
-    const chainRef = providerChain.chainRef;
-    const accounts = isUnlocked
-      ? controllers.accounts
-          .listOwnedForNamespace({ namespace: providerChain.namespace, chainRef })
-          .map((account) => account.displayAddress)
-      : [];
+    const supportedChains = providerMeta.supportedChains.filter((chainRef) => chainRef.startsWith(`${namespace}:`));
 
     return {
+      namespace,
       chain: { chainId: providerChain.chainId, chainRef: providerChain.chainRef },
-      accounts,
       isUnlocked,
-      meta,
+      meta: {
+        activeChainByNamespace: {
+          [namespace]: providerMeta.activeChainByNamespace[namespace] ?? providerChain.chainRef,
+        },
+        supportedChains,
+      },
     };
   };
 
@@ -130,6 +130,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         keyring: runtime.services.keyring,
         attention: runtime.services.attention,
         chainViews: runtime.services.chainViews,
+        networkPreferences: runtime.services.networkPreferences,
       };
 
       context = next;
@@ -150,5 +151,5 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     context = null;
   };
 
-  return { getOrInitContext, getControllerSnapshot, persistVaultMeta, destroy, applyDebugNamespacesFromEnv };
+  return { getOrInitContext, getProviderSnapshot, persistVaultMeta, destroy, applyDebugNamespacesFromEnv };
 };

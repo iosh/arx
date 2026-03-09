@@ -195,7 +195,7 @@ const buildHarness = (windowIds: number[]) => {
         unlock,
       },
     })) as unknown as BackgroundRuntimeHost["getOrInitContext"],
-    getControllerSnapshot: vi.fn() as unknown as BackgroundRuntimeHost["getControllerSnapshot"],
+    getProviderSnapshot: vi.fn() as unknown as BackgroundRuntimeHost["getProviderSnapshot"],
     persistVaultMeta: vi.fn() as unknown as BackgroundRuntimeHost["persistVaultMeta"],
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),

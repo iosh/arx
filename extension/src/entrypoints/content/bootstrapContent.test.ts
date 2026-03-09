@@ -116,7 +116,7 @@ describe("bootstrapContent", () => {
       channel: CHANNEL,
       sessionId: "s1",
       type: "handshake",
-      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h1" },
+      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h1", namespace: "eip155" },
     });
 
     expect(connectSpy).toHaveBeenCalledTimes(1);
@@ -151,5 +151,41 @@ describe("bootstrapContent", () => {
 
     expect(connectSpy).toHaveBeenCalledTimes(0);
     expect(port.postMessage).toHaveBeenCalledTimes(0);
+  });
+
+  it("creates isolated ports for different namespace sessions", async () => {
+    const portA = new FakePort();
+    const portB = new FakePort();
+
+    const mod = (await import("webextension-polyfill")) as unknown as { default: { runtime: { connect: unknown } } };
+    connectSpy = vi
+      .fn()
+      .mockReturnValueOnce(portA as unknown as Runtime.Port)
+      .mockReturnValueOnce(portB as unknown as Runtime.Port);
+    mod.default.runtime.connect = connectSpy;
+
+    bootstrapContent();
+
+    dispatchWindowMessage({
+      channel: CHANNEL,
+      sessionId: "s-eth",
+      type: "handshake",
+      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h-eth", namespace: "eip155" },
+    });
+
+    dispatchWindowMessage({
+      channel: CHANNEL,
+      sessionId: "s-cfx",
+      type: "handshake",
+      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h-cfx", namespace: "conflux" },
+    });
+
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    expect(portA.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: CHANNEL, sessionId: "s-eth", type: "handshake" }),
+    );
+    expect(portB.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: CHANNEL, sessionId: "s-cfx", type: "handshake" }),
+    );
   });
 });

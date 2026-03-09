@@ -4,7 +4,7 @@ import {
   type ProviderModule,
   type ProviderRegistry,
 } from "../registry/index.js";
-import type { EIP1193Provider, Transport, TransportMeta, TransportState } from "../types/index.js";
+import type { EIP1193Provider, Transport } from "../types/index.js";
 
 type ProviderHostLogger = Readonly<{
   debug?: (message: string, meta?: unknown) => void;
@@ -23,7 +23,7 @@ export type ProviderHostWindow = Window & {
 
 export type ProviderHostOptions = {
   targetWindow: ProviderHostWindow;
-  transport: Transport;
+  createTransportForNamespace: (namespace: string) => Transport;
   registry?: ProviderRegistry;
   features?: ProviderHostFeatures;
   logger?: ProviderHostLogger;
@@ -36,14 +36,15 @@ type ProviderCacheEntry = Readonly<{
 
 export class ProviderHost {
   #targetWindow: ProviderHostWindow;
-  #transport: Transport;
   #registry: ProviderRegistry;
   #logger: ProviderHostLogger;
+  #createTransportForNamespace: (namespace: string) => Transport;
 
   #features: Required<ProviderHostFeatures>;
 
   // namespace -> provider instance
   #providers = new Map<string, ProviderCacheEntry>();
+  #transports = new Map<string, Transport>();
 
   // windowKey -> injected provider
   #injectedByWindowKey = new Map<string, EIP1193Provider>();
@@ -53,27 +54,23 @@ export class ProviderHost {
 
   #initialized = false;
   #destroyed = false;
-  #connectAttempt = 0;
-  #lastConnectEventAttempt = 0;
 
-  constructor(options: ProviderHostOptions) {
-    this.#targetWindow = options.targetWindow;
-    this.#transport = options.transport;
-    this.#registry = options.registry ?? createProviderRegistry();
-    this.#features = { eip6963: options.features?.eip6963 ?? true };
-    this.#logger = options.logger ?? {};
+  constructor({ targetWindow, createTransportForNamespace, registry, features, logger }: ProviderHostOptions) {
+    this.#targetWindow = targetWindow;
+    this.#registry = registry ?? createProviderRegistry();
+    this.#features = { eip6963: features?.eip6963 ?? true };
+    this.#logger = logger ?? {};
+    this.#createTransportForNamespace = createTransportForNamespace;
   }
 
   initialize() {
     if (this.#initialized || this.#destroyed) return;
     this.#initialized = true;
 
-    this.#registerTransportListeners();
-
     // Eagerly create providers that are meant to be injected and/or discovered.
-    for (const m of this.#registry.modules) {
-      if (m.injection || m.discovery?.eip6963) {
-        this.#getOrCreateProvider(m.namespace);
+    for (const module of this.#registry.modules) {
+      if (module.injection || module.discovery?.eip6963) {
+        this.#getOrCreateProvider(module.namespace);
       }
     }
 
@@ -84,15 +81,14 @@ export class ProviderHost {
     // Dispatch initialized events only when injection succeeds.
     this.#dispatchInitializedEvents();
 
-    void this.#connectToTransport();
+    for (const namespace of this.#transports.keys()) {
+      void this.#connectTransport(namespace);
+    }
   }
 
   destroy() {
     if (this.#destroyed) return;
     this.#destroyed = true;
-
-    this.#transport.removeListener("connect", this.#handleTransportConnect);
-    this.#transport.removeListener("disconnect", this.#handleTransportDisconnect);
 
     if (this.#eip6963Registered) {
       this.#targetWindow.removeEventListener("eip6963:requestProvider", this.#handleProviderRequest);
@@ -108,40 +104,39 @@ export class ProviderHost {
     }
 
     this.#providers.clear();
+
+    for (const transport of this.#transports.values()) {
+      void transport.disconnect().catch(() => {
+        // ignore disconnect failures during teardown
+      });
+      this.#destroyTransport(transport);
+    }
+
+    this.#transports.clear();
     this.#injectedByWindowKey.clear();
     this.#initializedEventsDispatched.clear();
   }
 
-  async #connectToTransport() {
+  async #connectTransport(namespace: string) {
     if (this.#destroyed) return;
-    const attempt = ++this.#connectAttempt;
+    const transport = this.#transports.get(namespace);
+    if (!transport) return;
+
     try {
-      await this.#transport.connect();
+      await transport.connect();
     } catch (error) {
       // Best-effort: never block injection flow.
-      this.#logger.debug?.("[provider-host] transport connect failed", error);
-      return;
+      this.#logger.debug?.(`[provider-host] transport connect failed for namespace "${namespace}"`, error);
     }
-
-    // Most transports will emit "connect" during connect() which also triggers a sync.
-    // As a backstop, sync once here only if no connect event was observed for this attempt.
-    if (this.#lastConnectEventAttempt !== attempt) {
-      this.#syncProvidersFromState(this.#transport.getConnectionState());
-    }
-  }
-
-  #registerTransportListeners() {
-    this.#transport.on("connect", this.#handleTransportConnect);
-    this.#transport.on("disconnect", this.#handleTransportDisconnect);
   }
 
   #hasAnyEip6963Provider() {
-    return this.#registry.modules.some((m) => !!m.discovery?.eip6963);
+    return this.#registry.modules.some((module) => !!module.discovery?.eip6963);
   }
 
   #dispatchInitializedEvents() {
-    for (const m of this.#registry.modules) {
-      const injection = m.injection;
+    for (const module of this.#registry.modules) {
+      const injection = module.injection;
       if (!injection?.initializedEvent) continue;
 
       const injected = this.#injectedByWindowKey.get(injection.windowKey);
@@ -162,7 +157,7 @@ export class ProviderHost {
     const module = this.#registry.byNamespace.get(namespace);
     if (!module) return null;
 
-    const entry = module.create({ transport: this.#transport });
+    const entry = module.create({ transport: this.#getOrCreateTransport(namespace) });
     this.#providers.set(namespace, { module, entry });
 
     if (module.injection) {
@@ -170,6 +165,25 @@ export class ProviderHost {
     }
 
     return entry.injected;
+  }
+
+  #getOrCreateTransport(namespace: string): Transport {
+    const cached = this.#transports.get(namespace);
+    if (cached) {
+      return cached;
+    }
+
+    const transport = this.#createTransportForNamespace(namespace);
+    for (const [existingNamespace, existingTransport] of this.#transports) {
+      if (existingTransport !== transport) {
+        continue;
+      }
+      throw new Error(
+        `createTransportForNamespace must return a distinct transport per namespace; received the same transport for "${existingNamespace}" and "${namespace}"`,
+      );
+    }
+    this.#transports.set(namespace, transport);
+    return transport;
   }
 
   #maybeInjectProvider(windowKey: string, provider: EIP1193Provider, mode: "if_absent" | "never" | undefined) {
@@ -201,32 +215,13 @@ export class ProviderHost {
     }
   }
 
-  #syncProvidersFromState(state: TransportState) {
-    const namespaces = this.#extractNamespaces(state.meta, state.chainRef);
-    for (const ns of namespaces) {
-      this.#getOrCreateProvider(ns);
+  #destroyTransport(transport: Transport) {
+    const candidate = transport as Transport & { destroy?: () => void };
+    try {
+      candidate.destroy?.();
+    } catch {
+      // ignore teardown errors
     }
-    this.#dispatchInitializedEvents();
-  }
-
-  #extractNamespaces(meta: TransportMeta | null | undefined, fallbackChainRef: string | null) {
-    const namespaces = new Set<string>();
-
-    if (meta?.activeNamespace) namespaces.add(meta.activeNamespace);
-
-    if (meta?.supportedChains?.length) {
-      for (const chainRef of meta.supportedChains) {
-        const [namespace] = chainRef.split(":");
-        if (namespace) namespaces.add(namespace);
-      }
-    }
-
-    if (fallbackChainRef) {
-      const [namespace] = fallbackChainRef.split(":");
-      if (namespace) namespaces.add(namespace);
-    }
-
-    return namespaces;
   }
 
   #registerEip6963Listener() {
@@ -237,7 +232,6 @@ export class ProviderHost {
 
   #handleProviderRequest = () => {
     if (this.#destroyed) return;
-    this.#syncProvidersFromState(this.#transport.getConnectionState());
     this.#announceProviders();
   };
 
@@ -258,17 +252,6 @@ export class ProviderHost {
       );
     }
   }
-
-  #handleTransportConnect = () => {
-    if (this.#destroyed) return;
-    this.#lastConnectEventAttempt = this.#connectAttempt;
-    const state = this.#transport.getConnectionState();
-    this.#syncProvidersFromState(state);
-  };
-
-  #handleTransportDisconnect = () => {
-    // no-op: the injected provider surfaces manage their own disconnect semantics.
-  };
 }
 
 export const createProviderHost = (options: ProviderHostOptions) => new ProviderHost(options);

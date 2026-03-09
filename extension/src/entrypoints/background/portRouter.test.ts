@@ -1,11 +1,11 @@
 import type { RpcRegistry } from "@arx/core";
-import { CHANNEL, PROVIDER_EVENTS } from "@arx/provider/protocol";
+import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
 import type { BackgroundContext } from "./runtimeHost";
-import type { ControllerSnapshot } from "./types";
+import type { ProviderBridgeSnapshot } from "./types";
 
 vi.mock("./origin", () => ({
   getPortOrigin: vi.fn(),
@@ -45,20 +45,71 @@ class FakePort {
   }
 }
 
-const makeSnapshot = (isUnlocked: boolean, overrides?: Partial<ControllerSnapshot>): ControllerSnapshot => ({
-  chain: { chainId: "0x1", chainRef: "eip155:1", ...(overrides?.chain ?? {}) },
-  accounts: overrides?.accounts ?? [],
+const makeSnapshot = (
+  namespace: string,
+  isUnlocked: boolean,
+  overrides?: Partial<ProviderBridgeSnapshot>,
+): ProviderBridgeSnapshot => ({
+  namespace,
+  chain: { chainId: "0x1", chainRef: `${namespace}:1`, ...(overrides?.chain ?? {}) },
   isUnlocked,
   meta: {
-    activeChain: "eip155:1",
-    activeNamespace: "eip155",
-    activeChainByNamespace: { eip155: "eip155:1" },
-    supportedChains: ["eip155:1"],
+    activeChainByNamespace: { [namespace]: `${namespace}:1` },
+    supportedChains: [`${namespace}:1`],
     ...(overrides?.meta ?? {}),
   },
 });
 
-describe("portRouter privacy", () => {
+const createRouterHarness = (options?: {
+  getPermittedAccounts?: (origin: string, params: { namespace: string; chainRef: string }) => string[];
+  cancelByScope?: (params: unknown) => Promise<number>;
+  snapshots?: Record<string, ProviderBridgeSnapshot>;
+}) => {
+  const getPermittedAccounts = vi.fn(options?.getPermittedAccounts ?? (() => ["0xabc"]));
+  const cancelByScope = vi.fn(options?.cancelByScope ?? (async () => 1));
+  const registry = { getRegisteredNamespaces: () => ["eip155", "conflux"] } as unknown as RpcRegistry;
+  const getOrInitContext = vi.fn(async () => ({
+    runtime: { rpc: { registry } },
+    controllers: {
+      permissions: { getPermittedAccounts },
+      approvals: { cancelByScope },
+    },
+  }));
+  const snapshots = options?.snapshots ?? {
+    eip155: makeSnapshot("eip155", true, {
+      chain: { chainId: "0x1", chainRef: "eip155:1" },
+      meta: {
+        activeChainByNamespace: { eip155: "eip155:1" },
+        supportedChains: ["eip155:1"],
+      },
+    }),
+  };
+
+  const router = createPortRouter({
+    extensionOrigin: "ext://",
+    getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
+    getProviderSnapshot: (namespace: string) => {
+      const snapshot = snapshots[namespace];
+      if (!snapshot) {
+        throw new Error(`Missing snapshot for ${namespace}`);
+      }
+      return snapshot;
+    },
+  });
+
+  return { router, getOrInitContext, getPermittedAccounts, cancelByScope, snapshots };
+};
+
+const handshake = (port: FakePort, sessionId: string, namespace: string) => {
+  port.triggerMessage({
+    channel: CHANNEL,
+    sessionId,
+    type: "handshake",
+    payload: { handshakeId: `h-${sessionId}`, namespace },
+  });
+};
+
+describe("portRouter privacy and binding", () => {
   beforeEach(() => {
     vi.mocked(getPortOrigin).mockReturnValue("https://example.com");
   });
@@ -68,184 +119,149 @@ describe("portRouter privacy", () => {
   });
 
   it("sends handshake_ack with empty accounts when locked", async () => {
-    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
-    const getOrInitContext = vi.fn(async () => ({
-      runtime: { rpc: { registry } },
-      controllers: { permissions: { getPermittedAccounts } },
-    }));
-
-    const router = createPortRouter({
-      extensionOrigin: "ext://",
-      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
+    const lockedSnapshot = makeSnapshot("eip155", false, {
+      chain: { chainId: "0x1", chainRef: "eip155:1" },
+      meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+    });
+    const { router, getPermittedAccounts } = createRouterHarness({
+      snapshots: { eip155: lockedSnapshot },
     });
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
 
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { handshakeId: "h1" },
-    });
+    handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    const firstCall = vi.mocked(port.postMessage).mock.calls[0];
-    if (!firstCall) throw new Error("Expected port.postMessage to be called");
-    const [ack] = firstCall;
-    expect(ack).toMatchObject({
-      type: "handshake_ack",
-      payload: { handshakeId: "h1", accounts: [], isUnlocked: false },
-    });
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "handshake_ack",
+        payload: expect.objectContaining({
+          handshakeId: "h-s1",
+          chainId: "0x1",
+          chainRef: "eip155:1",
+          accounts: [],
+          isUnlocked: false,
+          meta: lockedSnapshot.meta,
+        }),
+      }),
+    );
     expect(getPermittedAccounts).not.toHaveBeenCalled();
   });
 
   it("broadcasts accountsChanged([]) when locked", async () => {
-    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
-    const getOrInitContext = vi.fn(async () => ({
-      runtime: { rpc: { registry } },
-      controllers: { permissions: { getPermittedAccounts } },
-    }));
-
-    const router = createPortRouter({
-      extensionOrigin: "ext://",
-      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(false),
+    const lockedSnapshot = makeSnapshot("eip155", false, {
+      chain: { chainId: "0x1", chainRef: "eip155:1" },
+      meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+    });
+    const { router, getPermittedAccounts } = createRouterHarness({
+      snapshots: { eip155: lockedSnapshot },
     });
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
-
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { handshakeId: "h1" },
-    });
+    handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
 
-    router.broadcastEvent(PROVIDER_EVENTS.accountsChanged, [["0xignored"]]);
+    router.broadcastAccountsChanged();
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
-    const [, eventMessage] = vi.mocked(port.postMessage).mock.calls.map(([msg]) => msg);
-    expect(eventMessage).toMatchObject({
-      type: "event",
-      payload: { event: PROVIDER_EVENTS.accountsChanged, params: [[]] },
-    });
+    expect(port.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "event",
+        payload: { event: "accountsChanged", params: [[]] },
+      }),
+    );
     expect(getPermittedAccounts).not.toHaveBeenCalled();
   });
 
-  it("sends handshake_ack with permitted accounts when unlocked", async () => {
-    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
-    const getOrInitContext = vi.fn(async () => ({
-      runtime: { rpc: { registry } },
-      controllers: { permissions: { getPermittedAccounts } },
-    }));
-
-    const router = createPortRouter({
-      extensionOrigin: "ext://",
-      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(true),
+  it("sends handshake_ack with permitted accounts from the bound namespace", async () => {
+    const { router, getPermittedAccounts } = createRouterHarness({
+      getPermittedAccounts: () => ["0xabc"],
+      snapshots: {
+        eip155: makeSnapshot("eip155", true, {
+          chain: { chainId: "0x1", chainRef: "eip155:1" },
+          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+        }),
+        conflux: makeSnapshot("conflux", true, {
+          chain: { chainId: "0x405", chainRef: "conflux:1029" },
+          meta: {
+            activeChainByNamespace: { conflux: "conflux:1029" },
+            supportedChains: ["conflux:1029"],
+          },
+        }),
+      },
     });
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
-
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { handshakeId: "h1" },
-    });
+    handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    const firstCall = vi.mocked(port.postMessage).mock.calls[0];
-    if (!firstCall) throw new Error("Expected port.postMessage to be called");
-    const [ack] = firstCall;
-    expect(ack).toMatchObject({
-      type: "handshake_ack",
-      payload: { handshakeId: "h1", accounts: ["0xabc"], isUnlocked: true },
-    });
     expect(getPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
       namespace: "eip155",
       chainRef: "eip155:1",
     });
   });
 
-  it("derives permission context from provider meta active chain instead of snapshot.chain", async () => {
-    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const registry = { getRegisteredNamespaces: () => ["eip155", "solana"] } as unknown as RpcRegistry;
-    const getOrInitContext = vi.fn(async () => ({
-      runtime: { rpc: { registry } },
-      controllers: { permissions: { getPermittedAccounts } },
-    }));
-
-    const router = createPortRouter({
-      extensionOrigin: "ext://",
-      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-      getControllerSnapshot: (): ControllerSnapshot =>
-        makeSnapshot(true, {
-          chain: { chainId: "101", chainRef: "solana:101" },
+  it("routes chainChanged only to ports bound to the matching namespace", async () => {
+    const { router } = createRouterHarness({
+      snapshots: {
+        eip155: makeSnapshot("eip155", true, {
+          chain: { chainId: "0x1", chainRef: "eip155:1" },
+          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+        }),
+        conflux: makeSnapshot("conflux", true, {
+          chain: { chainId: "0x405", chainRef: "conflux:1029" },
           meta: {
-            activeChain: "eip155:1",
-            activeNamespace: "eip155",
-            activeChainByNamespace: { eip155: "eip155:1", solana: "solana:101" },
-            supportedChains: ["eip155:1", "solana:101"],
+            activeChainByNamespace: { conflux: "conflux:1029" },
+            supportedChains: ["conflux:1", "conflux:1029"],
           },
         }),
+      },
     });
 
-    const port = new FakePort();
-    router.handleConnect(port as unknown as Runtime.Port);
+    const evmPort = new FakePort();
+    const confluxPort = new FakePort();
+    router.handleConnect(evmPort as unknown as Runtime.Port);
+    router.handleConnect(confluxPort as unknown as Runtime.Port);
 
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "s1",
-      type: "handshake",
-      payload: { handshakeId: "h1" },
-    });
+    handshake(evmPort, "s-evm", "eip155");
+    handshake(confluxPort, "s-cfx", "conflux");
+    await vi.waitFor(() => expect(evmPort.postMessage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(confluxPort.postMessage).toHaveBeenCalledTimes(1));
 
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    expect(getPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
-      namespace: "eip155",
-      chainRef: "eip155:1",
-    });
+    evmPort.postMessage.mockClear();
+    confluxPort.postMessage.mockClear();
+
+    router.broadcastChainChangedForNamespaces(["conflux"]);
+
+    expect(evmPort.postMessage).not.toHaveBeenCalled();
+    expect(confluxPort.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "event",
+        payload: {
+          event: "chainChanged",
+          params: [
+            expect.objectContaining({
+              chainId: "0x405",
+              chainRef: "conflux:1029",
+            }),
+          ],
+        },
+      }),
+    );
   });
 
   it("cancels provider-scoped approvals when the port disconnects", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
 
-    const getPermittedAccounts = vi.fn(() => ["0xabc"]);
-    const cancelByScope = vi.fn(async () => 1);
-    const registry = { getRegisteredNamespaces: () => ["eip155"] } as unknown as RpcRegistry;
-    const getOrInitContext = vi.fn(async () => ({
-      runtime: { rpc: { registry } },
-      controllers: {
-        permissions: { getPermittedAccounts },
-        approvals: { cancelByScope },
-      },
-    }));
-
-    const router = createPortRouter({
-      extensionOrigin: "ext://",
-      getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-      getControllerSnapshot: (): ControllerSnapshot => makeSnapshot(true),
-    });
+    const { router, cancelByScope } = createRouterHarness();
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
-
-    port.triggerMessage({
-      channel: CHANNEL,
-      sessionId: "session-1",
-      type: "handshake",
-      payload: { handshakeId: "h1" },
-    });
+    handshake(port, "session-1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
 

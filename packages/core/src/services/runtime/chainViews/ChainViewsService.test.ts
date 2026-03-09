@@ -1,5 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
+import { ApprovalChainDerivationFallbacks } from "../../../approvals/chainContext.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { createChainViewsService } from "./ChainViewsService.js";
@@ -88,8 +89,8 @@ describe("ChainViewsService", () => {
   it("builds known and mounted views separately", () => {
     const service = setup();
 
-    expect(service.getActiveChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
-    expect(service.buildUiNetworksSnapshot()).toEqual({
+    expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
+    expect(service.buildWalletNetworksSnapshot()).toEqual({
       active: MAINNET.chainRef,
       known: expect.arrayContaining([
         expect.objectContaining({ chainRef: MAINNET.chainRef }),
@@ -102,12 +103,13 @@ describe("ChainViewsService", () => {
         expect.objectContaining({ chainRef: OPTIMISM.chainRef }),
       ]),
     });
-    expect(service.buildProviderMeta()).toEqual({
+    expect(service.buildProviderMeta("eip155")).toEqual({
       activeChain: MAINNET.chainRef,
       activeNamespace: MAINNET.namespace,
       activeChainByNamespace: { eip155: MAINNET.chainRef },
       supportedChains: [MAINNET.chainRef, OPTIMISM.chainRef],
     });
+    expect(service.getProviderChainView("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
   it("builds provider meta from namespace-specific active preferences", () => {
@@ -118,13 +120,15 @@ describe("ChainViewsService", () => {
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
-    expect(service.getActiveChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
-    expect(service.buildProviderMeta()).toEqual({
+    expect(service.getSelectedChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
+    expect(service.buildProviderMeta("eip155")).toEqual({
       activeChain: MAINNET.chainRef,
       activeNamespace: MAINNET.namespace,
       activeChainByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
       supportedChains: [MAINNET.chainRef, SOLANA.chainRef],
     });
+    expect(service.getProviderChainView("solana")).toMatchObject({ chainRef: SOLANA.chainRef });
+    expect(service.getPreferredChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
   it("resolves wallet_switchEthereumChain targets from mounted eip155 chains", () => {
@@ -159,7 +163,38 @@ describe("ChainViewsService", () => {
   it("uses selectedChainRef for wallet active views even when runtime legacy active differs", () => {
     const service = setup({ active: SOLANA, selected: MAINNET, available: [MAINNET, SOLANA] });
 
-    expect(service.getActiveChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
-    expect(service.buildUiNetworksSnapshot().active).toBe(MAINNET.chainRef);
+    expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
+    expect(service.buildWalletNetworksSnapshot().active).toBe(MAINNET.chainRef);
+  });
+
+  it("derives approval review chains without falling back to wallet selected chain", () => {
+    const service = setup({
+      available: [MAINNET, SOLANA],
+      active: SOLANA,
+      selected: SOLANA,
+      activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+    });
+
+    expect(
+      service.getApprovalReviewChainView({
+        record: {
+          id: "approval-1",
+          kind: "eth_requestAccounts",
+          namespace: "eip155",
+        },
+        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
+      }),
+    ).toMatchObject({ chainRef: MAINNET.chainRef, namespace: MAINNET.namespace });
+
+    expect(() =>
+      service.getApprovalReviewChainView({
+        record: {
+          id: "approval-2",
+          kind: "personal_sign",
+          namespace: "eip155",
+        },
+        fallback: ApprovalChainDerivationFallbacks.None,
+      }),
+    ).toThrow(/could not resolve a chainRef/i);
   });
 });

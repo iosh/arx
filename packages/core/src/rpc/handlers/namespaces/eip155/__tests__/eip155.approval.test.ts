@@ -1,7 +1,8 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
-import { ApprovalKinds, PermissionCapabilities } from "../../../../../controllers/index.js";
+import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
+import { ApprovalKinds, PermissionCapabilities, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
@@ -194,6 +195,56 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
+  it("can present wallet_addEthereumChain approvals before the chain is registered", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const execute = createExecutor(runtime);
+    const registry = createApprovalFlowRegistry();
+
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.AddChain) {
+        return false;
+      }
+
+      capturedTask = task;
+
+      const summary = registry.present(task, {
+        chainViews: runtime.services.chainViews,
+        transactions: runtime.controllers.transactions,
+      });
+
+      expect(summary).toMatchObject({
+        type: "addChain",
+        namespace: "eip155",
+        chainRef: ADDED_CHAIN_REF,
+        payload: {
+          chainRef: ADDED_CHAIN_REF,
+          displayName: ADD_CHAIN_PARAMS.chainName,
+        },
+      });
+
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      return true;
+    });
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_addEthereumChain", params: [ADD_CHAIN_PARAMS] as JsonRpcParams },
+        }),
+      ).resolves.toBeNull();
+
+      expect(capturedTask?.chainRef).toBe(ADDED_CHAIN_REF);
+    } finally {
+      teardownApprovalResponder();
+      runtime.lifecycle.destroy();
+    }
+  });
+
   it("includes namespace metadata for eth_sendTransaction approvals", async () => {
     const registry = new TransactionAdapterRegistry();
     registry.register("eip155", {
@@ -331,20 +382,15 @@ describe("eip155 handlers - approval metadata", () => {
         beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
       expect(beforeCapabilities).not.toContain(PermissionCapabilities.SendTransaction);
 
-      let broadcastMeta: {
-        id: string;
-        status: string;
-        hash: string | null;
-        namespace: string;
-        chainRef: string;
-        from: string | null;
-        warnings: unknown[];
-        issues: unknown[];
-      } | null = null;
-      const unsubscribeTx = runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
-        if (event.nextStatus === "broadcast") {
-          broadcastMeta = event.meta as unknown as NonNullable<typeof broadcastMeta>;
-        }
+      const broadcastMetaPromise = new Promise<TransactionMeta>((resolve) => {
+        const unsubscribeTx = runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
+          if (event.nextStatus !== "broadcast") {
+            return;
+          }
+
+          unsubscribeTx();
+          resolve(event.meta);
+        });
       });
 
       const txHash = (await execute({
@@ -363,10 +409,7 @@ describe("eip155 handlers - approval metadata", () => {
       })) as string;
 
       expect(txHash).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-
-      unsubscribeTx();
-
-      if (!broadcastMeta) throw new Error("Expected broadcast meta to be captured");
+      const broadcastMeta = await broadcastMetaPromise;
       expect(broadcastMeta.id).toEqual(expect.any(String));
       expect(broadcastMeta.status).toBe("broadcast");
       expect(broadcastMeta.hash).toBe(txHash);

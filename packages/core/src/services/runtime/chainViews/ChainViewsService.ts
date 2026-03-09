@@ -1,4 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import {
+  type ApprovalChainContextRecord,
+  type ApprovalChainContextRequest,
+  type ApprovalChainDerivationFallback,
+  deriveApprovalChainContext,
+} from "../../../approvals/chainContext.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
@@ -7,6 +13,7 @@ import type { NetworkController } from "../../../controllers/network/types.js";
 import { DEFAULT_NAMESPACE } from "../../../rpc/index.js";
 import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
 import type {
+  ApprovalReviewChainViewParams,
   ChainView,
   ChainViewsService,
   FindAvailableChainViewParams,
@@ -50,8 +57,26 @@ class DefaultChainViewsService implements ChainViewsService {
     this.#preferences = options.preferences;
   }
 
-  getActiveChainView(): ChainView {
+  getSelectedChainView(): ChainView {
     return toChainView(this.requireChainMetadata(this.#resolveSelectedChainRef()));
+  }
+
+  getPreferredChainViewForNamespace(namespace: string): ChainView {
+    const selected = this.getSelectedChainView();
+    if (selected.namespace === namespace) {
+      return selected;
+    }
+
+    return this.getProviderChainView(namespace);
+  }
+
+  getProviderChainView(namespace: string): ChainView {
+    return toChainView(this.requireAvailableChainMetadata(this.#resolveProviderChainRef(namespace)));
+  }
+
+  getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView {
+    const context = this.#deriveApprovalReviewContext(params.record, params.request, params.fallback);
+    return toChainView(this.requireChainMetadata(context.chainRef));
   }
 
   requireChainMetadata(chainRef: ChainRef): ChainMetadata {
@@ -104,7 +129,7 @@ class DefaultChainViewsService implements ChainViewsService {
     return sortChainViews(views);
   }
 
-  buildUiNetworksSnapshot(): UiNetworksSnapshot {
+  buildWalletNetworksSnapshot(): UiNetworksSnapshot {
     const active = this.#resolveSelectedChainRef();
 
     return {
@@ -114,14 +139,11 @@ class DefaultChainViewsService implements ChainViewsService {
     };
   }
 
-  buildProviderMeta(): ProviderMetaSnapshot {
+  buildProviderMeta(namespace = DEFAULT_NAMESPACE): ProviderMetaSnapshot {
     const availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]);
     const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
-    const selectedChainRef = this.#resolveSelectedChainRef();
-    const selectedNamespace = selectedChainRef.split(":")[0] ?? "";
-
     const activeChain =
-      activeChainByNamespace[DEFAULT_NAMESPACE] ?? activeChainByNamespace[selectedNamespace] ?? selectedChainRef;
+      activeChainByNamespace[namespace] ?? this.#resolveProviderChainRef(namespace, availableChainRefs);
 
     const active = this.#getRequiredChainMetadata(activeChain as ChainRef);
 
@@ -169,6 +191,35 @@ class DefaultChainViewsService implements ChainViewsService {
 
   #listAvailableMetadata(): ChainMetadata[] {
     return this.#network.getState().availableChainRefs.map((chainRef) => this.requireAvailableChainMetadata(chainRef));
+  }
+
+  #deriveApprovalReviewContext(
+    record: ApprovalChainContextRecord,
+    request?: ApprovalChainContextRequest,
+    fallback?: ApprovalChainDerivationFallback,
+  ) {
+    return deriveApprovalChainContext(record, {
+      ...(request ? { request } : {}),
+      ...(fallback ? { fallback } : {}),
+      getNamespaceActiveChainRef: (namespace) => this.#preferences.getActiveChainRef(namespace),
+    });
+  }
+
+  #resolveProviderChainRef(
+    namespace: string,
+    availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]),
+  ): ChainRef {
+    const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
+    const activeChain = activeChainByNamespace[namespace];
+    if (activeChain) {
+      return activeChain;
+    }
+
+    throw arxError({
+      reason: ArxReasons.ChainNotSupported,
+      message: `No available chain for namespace "${namespace}"`,
+      data: { namespace },
+    });
   }
 
   #resolveActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {

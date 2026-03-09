@@ -507,10 +507,13 @@ const createControllers = () => {
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };
   const chainViews = {
     findAvailableChainView: () => CHAIN,
-    getActiveChainView: () => CHAIN,
+    getApprovalReviewChainView: () => CHAIN,
+    getPreferredChainViewForNamespace: () => CHAIN,
+    getProviderChainView: () => CHAIN,
+    getSelectedChainView: () => CHAIN,
     listKnownChainViews: () => [CHAIN],
     listAvailableChainViews: () => [CHAIN],
-    buildUiNetworksSnapshot: () => ({ active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] }),
+    buildWalletNetworksSnapshot: () => ({ active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] }),
     buildProviderMeta: () => ({
       activeChain: CHAIN.chainRef,
       activeNamespace: CHAIN.namespace,

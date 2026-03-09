@@ -29,7 +29,7 @@ export const createKeyringsHandlers = (
   | "ui.keyrings.exportPrivateKey"
 > => {
   const selectAccount = async (params: { namespace?: string; accountId: string }) => {
-    const namespace = params.namespace ?? deps.chainViews.getActiveChainView().namespace;
+    const namespace = params.namespace ?? deps.chainViews.getSelectedChainView().namespace;
     const chainRef = resolveChainRefForNamespace(deps, namespace);
     await deps.controllers.accounts.setActiveAccount({ namespace, chainRef, accountId: params.accountId });
   };
@@ -44,7 +44,10 @@ export const createKeyringsHandlers = (
       const result = await deps.keyring.confirmNewMnemonic(params.words.join(" "), opts);
       await selectAccount({
         accountId: toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          chainRef: resolveChainRefForNamespace(
+            deps,
+            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
+          ),
           address: result.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
@@ -60,7 +63,10 @@ export const createKeyringsHandlers = (
       const result = await deps.keyring.importMnemonic(params.words.join(" "), opts);
       await selectAccount({
         accountId: toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          chainRef: resolveChainRefForNamespace(
+            deps,
+            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
+          ),
           address: result.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
@@ -76,7 +82,10 @@ export const createKeyringsHandlers = (
       const result = await deps.keyring.importPrivateKey(params.privateKey, opts);
       await selectAccount({
         accountId: toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chainViews.getActiveChainView().namespace),
+          chainRef: resolveChainRefForNamespace(
+            deps,
+            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
+          ),
           address: result.account.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),

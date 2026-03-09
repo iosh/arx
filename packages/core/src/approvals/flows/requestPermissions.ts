@@ -10,7 +10,9 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
   parseDecision: (input) => parseNoDecision(ApprovalKinds.RequestPermissions, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps),
+      ...createApprovalSummaryBase(record, deps, {
+        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
+      }),
       type: "requestPermissions",
       payload: {
         permissions: record.request.requested.map((item) => ({

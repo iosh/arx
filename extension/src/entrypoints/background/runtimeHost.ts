@@ -54,9 +54,8 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const getControllerSnapshot = (): ControllerSnapshot => {
     if (!context) throw new Error("Background context is not initialized");
     const { controllers, session, chainViews } = context;
-    const meta = chainViews.buildProviderMeta();
-    const providerChainRef = meta.activeChainByNamespace[DEFAULT_NAMESPACE] ?? meta.activeChain;
-    const providerChain = chainViews.requireAvailableChainMetadata(providerChainRef);
+    const meta = chainViews.buildProviderMeta(DEFAULT_NAMESPACE);
+    const providerChain = chainViews.getProviderChainView(DEFAULT_NAMESPACE);
     const isUnlocked = session.unlock.isUnlocked();
     const chainRef = providerChain.chainRef;
     const accounts = isUnlocked

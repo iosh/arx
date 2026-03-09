@@ -13,7 +13,7 @@ export const createTransactionsHandlers = (
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
 
-      const resolvedChainRef = chainRef ?? deps.chainViews.getActiveChainView().chainRef;
+      const resolvedChainRef = chainRef ?? deps.chainViews.getSelectedChainView().chainRef;
 
       const trimmedValue = valueEther.trim();
       let wei: bigint;

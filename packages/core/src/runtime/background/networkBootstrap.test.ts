@@ -190,7 +190,7 @@ describe("networkBootstrap", () => {
     chainDefinitions.setChains([{ metadata: ALT_CHAIN }]);
 
     expect(network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
-    expect(chainViews.getActiveChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
+    expect(chainViews.getSelectedChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
 
     await bootstrap.flushPendingSync();
     bootstrap.destroy();

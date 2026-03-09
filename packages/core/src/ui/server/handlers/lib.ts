@@ -67,19 +67,7 @@ export const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boole
 };
 
 export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chainViews">, namespace: string): string => {
-  const active = deps.chainViews.getActiveChainView();
-  if (active.namespace === namespace) return active.chainRef;
-
-  const available = deps.chainViews.findAvailableChainView({ namespace });
-  if (available) {
-    return available.chainRef;
-  }
-
-  throw arxError({
-    reason: ArxReasons.RpcInvalidParams,
-    message: `No available chain for namespace "${namespace}"`,
-    data: { namespace },
-  });
+  return deps.chainViews.getPreferredChainViewForNamespace(namespace).chainRef;
 };
 
 export const toUiAccountMeta = (record: AccountRecord) => {

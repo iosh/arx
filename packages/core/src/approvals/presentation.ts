@@ -1,7 +1,7 @@
 import type { ChainRef } from "../chains/ids.js";
 import type { ApprovalRecord } from "../controllers/approval/types.js";
 import type { ApprovalSummary } from "../ui/protocol/schemas.js";
-import type { ApprovalFlowPresenterDeps } from "./types.js";
+import type { ApprovalFlowPresenterDeps, ApprovalSummaryBaseOptions } from "./types.js";
 
 type UiWarning = {
   code: string;
@@ -18,8 +18,9 @@ type UiIssue = {
 };
 
 export const createApprovalSummaryBase = (
-  record: Pick<ApprovalRecord, "id" | "origin" | "namespace" | "chainRef" | "createdAt">,
+  record: Pick<ApprovalRecord, "id" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt">,
   deps: ApprovalFlowPresenterDeps,
+  options?: ApprovalSummaryBaseOptions,
 ): {
   id: string;
   origin: string;
@@ -27,13 +28,17 @@ export const createApprovalSummaryBase = (
   chainRef: ChainRef;
   createdAt: number;
 } => {
-  const activeChain = deps.chainViews.getActiveChainView();
+  const reviewChain = deps.chainViews.getApprovalReviewChainView({
+    record: record as Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
+    ...(options?.request ? { request: options.request } : {}),
+    ...(options?.fallback ? { fallback: options.fallback } : {}),
+  });
 
   return {
     id: record.id,
     origin: record.origin,
-    namespace: record.namespace ?? activeChain.namespace,
-    chainRef: record.chainRef ?? activeChain.chainRef,
+    namespace: reviewChain.namespace,
+    chainRef: reviewChain.chainRef,
     createdAt: record.createdAt,
   };
 };

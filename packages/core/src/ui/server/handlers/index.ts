@@ -29,7 +29,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       approvalFlowRegistry,
     });
 
-  const toChainSnapshot = () => chainViews.getActiveChainView();
+  const toChainSnapshot = () => chainViews.getSelectedChainView();
 
   return {
     ...createSnapshotHandlers(buildSnapshot),

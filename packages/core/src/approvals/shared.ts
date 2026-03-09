@@ -1,19 +1,14 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { parseChainRef } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
 import type { ApprovalDecision, ApprovalKind, ApprovalRecord } from "../controllers/approval/types.js";
+import {
+  type ApprovalChainDerivationFallback,
+  ApprovalChainDerivationFallbacks,
+  deriveApprovalChainContext as deriveApprovalChainContextBase,
+} from "./chainContext.js";
 import type { ApprovalFlowDeps } from "./types.js";
 
-export const ApprovalChainDerivationFallbacks = {
-  None: "none",
-  NamespaceActive: "namespace-active",
-} as const;
-
-export type ApprovalChainDerivationFallback =
-  (typeof ApprovalChainDerivationFallbacks)[keyof typeof ApprovalChainDerivationFallbacks];
-
 type DeriveApprovalChainContextOptions = {
-  request?: { chainRef?: ChainRef | undefined };
+  request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
   fallback?: ApprovalChainDerivationFallback;
 };
 
@@ -34,36 +29,17 @@ export const deriveApprovalChainContext = (
   deps: Pick<ApprovalFlowDeps, "networkPreferences">,
   options?: DeriveApprovalChainContextOptions,
 ) => {
-  const inferredNamespace =
-    record.namespace ?? options?.request?.chainRef?.split(":")[0] ?? record.chainRef?.split(":")[0] ?? null;
-  const namespaceActiveChainRef = inferredNamespace
-    ? options?.fallback === ApprovalChainDerivationFallbacks.NamespaceActive
-      ? deps.networkPreferences.getActiveChainRef(inferredNamespace)
-      : null
-    : null;
-
-  const requestedChainRef = options?.request?.chainRef ?? record.chainRef ?? namespaceActiveChainRef;
-
-  if (!requestedChainRef) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "Approval context could not resolve a chainRef.",
-      data: { id: record.id, kind: record.kind, namespace: inferredNamespace },
-    });
-  }
-
-  const parsed = parseChainRef(requestedChainRef);
-
-  if (record.namespace && record.namespace !== parsed.namespace) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "Approval record has mismatched namespace and chainRef.",
-      data: { id: record.id, kind: record.kind, namespace: record.namespace, chainRef: requestedChainRef },
-    });
-  }
+  const context = deriveApprovalChainContextBase(record, {
+    ...(options?.request ? { request: options.request } : {}),
+    ...(options?.fallback ? { fallback: options.fallback } : {}),
+    getNamespaceActiveChainRef: (namespace) => deps.networkPreferences.getActiveChainRef(namespace),
+  });
 
   return {
-    chainRef: `${parsed.namespace}:${parsed.reference}` as ChainRef,
-    namespace: parsed.namespace,
+    chainRef: context.chainRef,
+    namespace: context.namespace,
   };
 };
+
+export { ApprovalChainDerivationFallbacks };
+export type { ApprovalChainDerivationFallback };

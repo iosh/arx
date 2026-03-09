@@ -1,3 +1,8 @@
+import type {
+  ApprovalChainContextRecord,
+  ApprovalChainContextRequest,
+  ApprovalChainDerivationFallback,
+} from "../../../approvals/chainContext.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 
@@ -38,14 +43,23 @@ export type ResolveEip155SwitchChainParams = {
   chainRef?: string;
 };
 
+export type ApprovalReviewChainViewParams = {
+  record: ApprovalChainContextRecord;
+  request?: ApprovalChainContextRequest;
+  fallback?: ApprovalChainDerivationFallback;
+};
+
 export type ChainViewsService = {
-  getActiveChainView(): ChainView;
+  getSelectedChainView(): ChainView;
   requireChainMetadata(chainRef: ChainRef): ChainMetadata;
   requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata;
+  getPreferredChainViewForNamespace(namespace: string): ChainView;
+  getProviderChainView(namespace: string): ChainView;
+  getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView;
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
-  buildUiNetworksSnapshot(): UiNetworksSnapshot;
-  buildProviderMeta(): ProviderMetaSnapshot;
+  buildWalletNetworksSnapshot(): UiNetworksSnapshot;
+  buildProviderMeta(namespace?: string): ProviderMetaSnapshot;
   resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata;
 };

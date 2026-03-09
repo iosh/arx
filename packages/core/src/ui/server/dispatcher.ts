@@ -70,7 +70,7 @@ const getRequestMeta = (raw: unknown): UiRequestMeta | null => {
 };
 
 const getUiContext = (deps: Pick<UiRuntimeDeps, "chainViews">) => {
-  const chain = deps.chainViews.getActiveChainView();
+  const chain = deps.chainViews.getSelectedChainView();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 

@@ -11,7 +11,10 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SignMessage, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps),
+      ...createApprovalSummaryBase(record, deps, {
+        request: record.request,
+        fallback: ApprovalChainDerivationFallbacks.None,
+      }),
       type: "signMessage",
       payload: {
         from: String(record.request.from ?? ""),

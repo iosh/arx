@@ -57,7 +57,7 @@ export const createOnboardingHandlers = (
         await deps.keyring.waitForReady();
 
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
+        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.setActiveAccount({
           namespace,
@@ -94,7 +94,7 @@ export const createOnboardingHandlers = (
         await deps.keyring.waitForReady();
 
         const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
+        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.setActiveAccount({
           namespace,
@@ -130,7 +130,7 @@ export const createOnboardingHandlers = (
         await deps.keyring.waitForReady();
 
         const { keyringId, account } = await deps.keyring.importPrivateKey(privateKey, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getActiveChainView().namespace;
+        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
         await deps.controllers.accounts.setActiveAccount({
           namespace,

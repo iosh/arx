@@ -38,9 +38,12 @@ export type UiRuntimeDeps = {
   chainViews: Pick<
     ChainViewsService,
     | "buildProviderMeta"
-    | "buildUiNetworksSnapshot"
+    | "buildWalletNetworksSnapshot"
     | "findAvailableChainView"
-    | "getActiveChainView"
+    | "getApprovalReviewChainView"
+    | "getPreferredChainViewForNamespace"
+    | "getProviderChainView"
+    | "getSelectedChainView"
     | "listAvailableChainViews"
     | "listKnownChainViews"
     | "requireAvailableChainMetadata"

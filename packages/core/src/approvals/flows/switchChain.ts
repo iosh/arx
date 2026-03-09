@@ -2,19 +2,26 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { ProviderChainActivationReasons } from "../../services/runtime/chainActivation/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { parseNoDecision } from "../shared.js";
+import { ApprovalChainDerivationFallbacks, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const switchChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SwitchChain> = {
   kind: ApprovalKinds.SwitchChain,
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SwitchChain, input),
   present(record, deps) {
-    const activeChain = deps.chainViews.getActiveChainView();
-    const requestedChainRef = record.request.chainRef ?? record.chainRef ?? activeChain.chainRef;
-    const target = deps.chainViews.findAvailableChainView({ chainRef: requestedChainRef }) ?? activeChain;
+    const reviewChain = deps.chainViews.getApprovalReviewChainView({
+      record,
+      request: record.request,
+      fallback: ApprovalChainDerivationFallbacks.None,
+    });
+    const requestedChainRef = reviewChain.chainRef;
+    const target = deps.chainViews.findAvailableChainView({ chainRef: requestedChainRef }) ?? reviewChain;
 
     return {
-      ...createApprovalSummaryBase(record, deps),
+      ...createApprovalSummaryBase(record, deps, {
+        request: record.request,
+        fallback: ApprovalChainDerivationFallbacks.None,
+      }),
       type: "switchChain",
       payload: {
         chainRef: requestedChainRef,

@@ -64,7 +64,6 @@ export const createChainActivationService = ({
         return true;
       case ChainSelectionSyncPolicies.Never:
         return false;
-      case ChainSelectionSyncPolicies.IfSelectedNamespaceMatches:
       default:
         return network.getState().activeChainRef.split(":")[0] === namespace;
     }

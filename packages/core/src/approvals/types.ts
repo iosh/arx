@@ -15,6 +15,7 @@ import type { ChainViewsService } from "../services/runtime/chainViews/types.js"
 import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../transactions/adapters/eip155/signer.js";
 import type { ApprovalSummary } from "../ui/protocol/schemas.js";
+import type { ApprovalChainDerivationFallback } from "./chainContext.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -30,8 +31,13 @@ export type ApprovalFlowDeps = {
 };
 
 export type ApprovalFlowPresenterDeps = {
-  chainViews: Pick<ChainViewsService, "getActiveChainView" | "findAvailableChainView">;
+  chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
   transactions: Pick<ApprovalFlowDeps["transactions"], "getMeta">;
+};
+
+export type ApprovalSummaryBaseOptions = {
+  request?: { chainRef?: string | undefined };
+  fallback?: ApprovalChainDerivationFallback;
 };
 
 export type ApprovalRejectInput = {

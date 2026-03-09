@@ -10,7 +10,10 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
   parseDecision: (input) => parseNoDecision(ApprovalKinds.RequestAccounts, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps),
+      ...createApprovalSummaryBase(record, deps, {
+        request: record.request,
+        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
+      }),
       type: "requestAccounts",
       payload: {
         suggestedAccounts: (record.request.suggestedAccounts ?? []).map((value) => String(value)),

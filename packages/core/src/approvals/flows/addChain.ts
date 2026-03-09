@@ -1,5 +1,4 @@
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { createApprovalSummaryBase } from "../presentation.js";
 import { parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
@@ -7,13 +6,18 @@ export const addChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.AddChain> =
   kind: ApprovalKinds.AddChain,
   parseDecision: (input) => parseNoDecision(ApprovalKinds.AddChain, input),
   present(record, deps) {
+    void deps;
     const meta = record.request.metadata;
     const rpcUrls = Array.from(new Set(meta.rpcEndpoints.map((entry) => entry.url.trim()).filter(Boolean)));
     const blockExplorerUrl =
       meta.blockExplorers?.find((entry) => entry.type === "default")?.url ?? meta.blockExplorers?.[0]?.url;
 
     return {
-      ...createApprovalSummaryBase(record, deps),
+      id: record.id,
+      origin: record.origin,
+      namespace: record.namespace ?? meta.namespace,
+      chainRef: record.chainRef ?? meta.chainRef,
+      createdAt: record.createdAt,
       type: "addChain",
       payload: {
         chainRef: meta.chainRef,

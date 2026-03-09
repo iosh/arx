@@ -11,7 +11,10 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SignTypedData, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps),
+      ...createApprovalSummaryBase(record, deps, {
+        request: record.request,
+        fallback: ApprovalChainDerivationFallbacks.None,
+      }),
       type: "signTypedData",
       payload: {
         from: String(record.request.from ?? ""),

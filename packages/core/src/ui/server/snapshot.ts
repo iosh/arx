@@ -38,7 +38,10 @@ const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot
 
 export const buildUiSnapshot = (deps: {
   controllers: HandlerControllers;
-  chainViews: Pick<ChainViewsService, "buildUiNetworksSnapshot" | "getActiveChainView" | "findAvailableChainView">;
+  chainViews: Pick<
+    ChainViewsService,
+    "buildWalletNetworksSnapshot" | "findAvailableChainView" | "getApprovalReviewChainView" | "getSelectedChainView"
+  >;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: { getSnapshot: () => UiSnapshot["attention"] };
@@ -46,8 +49,8 @@ export const buildUiSnapshot = (deps: {
 }): UiSnapshot => {
   const { controllers, chainViews, session, keyring, attention, approvalFlowRegistry } = deps;
 
-  const chain = chainViews.getActiveChainView();
-  const networks = chainViews.buildUiNetworksSnapshot();
+  const chain = chainViews.getSelectedChainView();
+  const networks = chainViews.buildWalletNetworksSnapshot();
   const resolvedChain = chain.chainRef;
 
   const accountList = session.unlock.isUnlocked()

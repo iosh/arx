@@ -723,7 +723,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
   const { runtime } = background;
 
-  const deriveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver(runtime.controllers);
+  const deriveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver();
   const engine = runtime.rpc.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
@@ -756,7 +756,9 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         } as const),
     });
     const namespace = deriveMethodNamespace(method, contextPayload);
-    const resolvedChainRef = contextPayload.chainRef ?? runtime.controllers.network.getState().activeChainRef;
+    const resolvedChainRef =
+      contextPayload.chainRef ??
+      (namespace ? runtime.controllers.networkPreferences.getActiveChainRef(namespace) : null);
     return new Promise<unknown>((resolve, reject) => {
       engine.handle(
         {

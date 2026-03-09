@@ -49,7 +49,7 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
 export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = runtime.controllers;
   const rpcRegistry = runtime.rpc.registry;
-  const resolveMethodNamespace = rpcRegistry.createMethodNamespaceResolver(controllers);
+  const resolveMethodNamespace = rpcRegistry.createMethodNamespaceResolver();
 
   const executeMethod = rpcRegistry.createMethodExecutor(controllers, {
     rpcClientRegistry: runtime.rpc.clients,
@@ -68,18 +68,16 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       const invocation = reqWithArx.arxInvocation;
       const rpcContext = invocation?.rpcContext ?? reqWithArx.arx ?? undefined;
       const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
-      const currentActiveChainRef = controllers.network.getState().activeChainRef ?? null;
       const namespace =
         invocation?.namespace ??
         rpcContext?.namespace?.split(":")[0] ??
         (typeof rpcContext?.chainRef === "string" ? rpcContext.chainRef.split(":")[0] : null) ??
         resolveMethodNamespace(req.method, rpcContext) ??
-        "eip155";
+        null;
       const chainRef =
         invocation?.chainRef ??
         rpcContext?.chainRef ??
-        controllers.networkPreferences.getActiveChainRef(namespace) ??
-        (currentActiveChainRef?.split(":")[0] === namespace ? currentActiveChainRef : null) ??
+        (namespace ? controllers.networkPreferences.getActiveChainRef(namespace) : null) ??
         null;
 
       return rpcRegistry.encodeErrorWithAdapters(error, {

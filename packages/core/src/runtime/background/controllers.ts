@@ -42,7 +42,7 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import { buildDefaultRoutingState, DEFAULT_CHAIN, DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
 
-type NamespaceResolver = (context?: RpcInvocationContext) => Namespace;
+type NamespaceResolver = (method: string, context?: RpcInvocationContext) => Namespace | null;
 
 export type ControllerLayerOptions = {
   network?: {
@@ -177,7 +177,7 @@ export const initControllers = ({
 
   const permissionCapabilityResolver =
     permissionOptions?.capabilityResolver ??
-    rpcRegistry.createPermissionCapabilityResolver((ctx) => namespaceResolver(ctx));
+    rpcRegistry.createPermissionCapabilityResolver((method, ctx) => namespaceResolver(method, ctx));
   const permissionChains = permissionOptions?.chains;
 
   if (!permissionChains) {

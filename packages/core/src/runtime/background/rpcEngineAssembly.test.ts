@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
@@ -38,6 +39,8 @@ const createPendingRes = (): PendingJsonRpcResponse<Json> => ({
   id: "1",
   jsonrpc: "2.0",
 });
+
+type PendingResWithUnknownError = Omit<PendingJsonRpcResponse<Json>, "error"> & { error?: unknown };
 
 describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
@@ -102,7 +105,7 @@ describe("background rpc engine assembly", () => {
       arx: { namespace: "eip155", chainRef },
     } as unknown as Parameters<typeof errorBoundary>[0];
 
-    const res = createPendingRes() as unknown as PendingJsonRpcResponse<Json> & { error?: unknown };
+    const res = createPendingRes() as unknown as PendingResWithUnknownError;
     const next = createNextStubWithSideEffect(() => {
       res.error = new Error("boom");
     });
@@ -116,8 +119,55 @@ describe("background rpc engine assembly", () => {
 
     expect(res.error).toBeTruthy();
     expect(res.error).not.toBeInstanceOf(Error);
-    expect(typeof res.error.code).toBe("number");
-    expect(typeof res.error.message).toBe("string");
+    expect(typeof res?.error?.code).toBe("number");
+    expect(typeof res?.error?.message).toBe("string");
+  });
+
+  it("does not consult global active chain when namespace cannot be inferred", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      store: {
+        ports: {
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
+        },
+      },
+    });
+
+    const getStateSpy = vi.spyOn(runtime.controllers.network, "getState");
+
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
+      isInternalOrigin: () => false,
+    });
+    const errorBoundary = middlewares[0];
+    if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
+
+    const req = {
+      method: "custom_ping",
+      origin: "https://dapp.example",
+    } as unknown as Parameters<typeof errorBoundary>[0];
+
+    const res = createPendingRes() as unknown as PendingResWithUnknownError;
+    const next = createNextStubWithSideEffect(() => {
+      res.error = arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Missing namespace context" });
+    });
+
+    await errorBoundary(
+      req,
+      res,
+      next as unknown as Parameters<typeof errorBoundary>[2],
+      vi.fn() as unknown as Parameters<typeof errorBoundary>[3],
+    );
+
+    expect(getStateSpy).not.toHaveBeenCalled();
+    expect(res.error).toBeTruthy();
+    expect(typeof res?.error?.code).toBe("number");
+    expect(typeof res?.error?.message).toBe("string");
   });
 
   it("respects shouldRequestUnlockAttention hook", async () => {

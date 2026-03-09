@@ -1,5 +1,13 @@
-import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter, UiErrorPayload } from "@arx/errors";
-import { type ArxError, ArxReasons, arxError, coerceArxError, isArxError } from "@arx/errors";
+import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter } from "@arx/errors";
+import {
+  type ArxError,
+  ArxReasons,
+  arxError,
+  coerceArxError,
+  encodeDappError as encodeGenericDappError,
+  encodeUiError as encodeGenericUiError,
+  isArxError,
+} from "@arx/errors";
 import { ZodError } from "zod";
 import { normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
@@ -18,8 +26,9 @@ import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry
 
 type NamespaceDefinitions = Record<string, MethodDefinition>;
 
-export type ExecuteWithAdaptersContext = Omit<ErrorEncodeContext, "surface"> & {
+export type ExecuteWithAdaptersContext = Omit<ErrorEncodeContext, "surface" | "namespace"> & {
   surface: ErrorSurface;
+  namespace?: string | null;
 };
 
 export type ExecuteWithAdaptersResult<T> = { ok: true; result: T } | { ok: false; error: unknown };
@@ -61,21 +70,13 @@ const toInternalArxError = (error: unknown, ctx: ExecuteWithAdaptersContext): Ar
   });
 };
 
-const encodeUiInternalFallback = (error: ArxError): UiErrorPayload => {
-  const json = error.toJSON();
+const toGenericEncodeContext = (ctx: ExecuteWithAdaptersContext): ErrorEncodeContext => {
   return {
-    reason: json.reason,
-    message: json.message,
-    ...(json.data !== undefined ? { data: json.data } : {}),
-  };
-};
-
-const encodeDappInternalFallback = (error: ArxError) => {
-  const json = error.toJSON();
-  return {
-    code: -32603,
-    message: json.message || "Internal error",
-    ...(json.data !== undefined ? { data: json.data } : {}),
+    surface: ctx.surface,
+    namespace: typeof ctx.namespace === "string" && ctx.namespace.length > 0 ? ctx.namespace : "unknown",
+    ...(ctx.chainRef ? { chainRef: ctx.chainRef } : {}),
+    ...(ctx.origin ? { origin: ctx.origin } : {}),
+    ...(ctx.method ? { method: ctx.method } : {}),
   };
 };
 
@@ -173,16 +174,25 @@ export class RpcRegistry {
     }
 
     const domain = coerceArxError(error) ?? toInternalArxError(error, ctx);
+    const genericContext = toGenericEncodeContext(ctx);
+
+    if (!ctx.namespace) {
+      return ctx.surface === "ui"
+        ? encodeGenericUiError(domain, genericContext)
+        : encodeGenericDappError(domain, genericContext);
+    }
 
     try {
+      const adapterContext: ErrorEncodeContext = { ...genericContext, namespace: ctx.namespace };
       const adapter = this.getNamespaceProtocolAdapter(ctx.namespace);
       if (ctx.surface === "ui") {
-        return adapter.encodeUiError(domain, ctx);
+        return adapter.encodeUiError(domain, adapterContext);
       }
-      return adapter.encodeDappError(domain, ctx);
-    } catch (adapterError) {
-      const fallback = toInternalArxError(adapterError, ctx);
-      return ctx.surface === "ui" ? encodeUiInternalFallback(fallback) : encodeDappInternalFallback(fallback);
+      return adapter.encodeDappError(domain, adapterContext);
+    } catch {
+      return ctx.surface === "ui"
+        ? encodeGenericUiError(domain, genericContext)
+        : encodeGenericDappError(domain, genericContext);
     }
   }
 
@@ -330,14 +340,25 @@ export class RpcRegistry {
     return null;
   }
 
-  private selectNamespace(controllers: HandlerControllers, method: string, context?: RpcInvocationContext): Namespace {
+  private normalizeNamespaceCandidate(candidate: string | null | undefined): Namespace | null {
+    if (typeof candidate !== "string") {
+      return null;
+    }
+
+    const trimmed = candidate.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const [prefix] = trimmed.split(":");
+    const normalized = (prefix || trimmed) as Namespace;
+    return this.namespaceDefinitions.has(normalized) ? normalized : null;
+  }
+
+  private selectNamespace(method: string, context?: RpcInvocationContext): Namespace | null {
     if (context?.namespace) {
-      // Normalize "eip155:1" -> "eip155" (defensive: context is still evolving).
-      const [candidate] = context.namespace.split(":");
-      const normalized = (candidate || context.namespace) as Namespace;
-      if (this.namespaceDefinitions.has(normalized)) {
-        return normalized;
-      }
+      const normalized = this.normalizeNamespaceCandidate(context.namespace);
+      if (normalized) return normalized;
     }
 
     const fromChain = this.namespaceFromChainRef(context?.chainRef ?? null);
@@ -350,12 +371,24 @@ export class RpcRegistry {
       return fromMethod;
     }
 
-    const [activeNamespace] = controllers.network.getState().activeChainRef.split(":");
-    if (activeNamespace && this.namespaceDefinitions.has(activeNamespace as Namespace)) {
-      return activeNamespace as Namespace;
+    return null;
+  }
+
+  private resolveNamespace(method: string, context?: RpcInvocationContext): Namespace {
+    const namespace = this.selectNamespace(method, context);
+    if (namespace) {
+      return namespace;
     }
 
-    return RpcRegistry.DEFAULT_NAMESPACE;
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: method ? `Missing namespace context for "${method}"` : "Missing namespace context",
+      data: {
+        ...(method ? { method } : {}),
+        ...(context?.namespace ? { contextNamespace: context.namespace } : {}),
+        ...(context?.chainRef ? { chainRef: context.chainRef } : {}),
+      },
+    });
   }
 
   private normalizeOptionalChainRef(
@@ -405,14 +438,14 @@ export class RpcRegistry {
     method: string;
     namespace: Namespace;
     contextChainRef: unknown;
-    activeChainRef: ChainRef | null;
+    namespaceActiveChainRef: ChainRef | null;
   }): ChainRef {
     const parsed = this.normalizeOptionalChainRef(args.method, args.namespace, args.contextChainRef);
     if (parsed.kind === "present") {
       return parsed.value;
     }
 
-    if (!args.activeChainRef) {
+    if (!args.namespaceActiveChainRef) {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `Missing chainRef for namespace "${args.namespace}"`,
@@ -420,16 +453,7 @@ export class RpcRegistry {
       });
     }
 
-    const [activeNamespace] = args.activeChainRef.split(":");
-    if (activeNamespace && activeNamespace === args.namespace) {
-      return args.activeChainRef;
-    }
-
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
-      message: `Missing chainRef for namespace "${args.namespace}"`,
-      data: { method: args.method, namespace: args.namespace, activeChainRef: args.activeChainRef },
-    });
+    return args.namespaceActiveChainRef;
   }
 
   private assertInvocationChainRef(method: string, namespace: Namespace, chainRef: ChainRef) {
@@ -460,17 +484,13 @@ export class RpcRegistry {
     context?: RpcInvocationContext,
   ): { namespace: Namespace; chainRef: ChainRef } {
     this.assertContextNamespaceConsistency(method, context);
-    const namespace = this.selectNamespace(controllers, method, context);
-    const activeChainRef =
-      controllers.networkPreferences.getActiveChainRef(namespace) ??
-      ((controllers.network.getState().activeChainRef.split(":")[0] === namespace
-        ? controllers.network.getState().activeChainRef
-        : null) as ChainRef | null);
+    const namespace = this.resolveNamespace(method, context);
+    const namespaceActiveChainRef = controllers.networkPreferences.getActiveChainRef(namespace);
     const chainRef = this.resolveChainRefForInvocation({
       method,
       namespace,
       contextChainRef: context?.chainRef,
-      activeChainRef,
+      namespaceActiveChainRef,
     });
     this.assertInvocationChainRef(method, namespace, chainRef);
 
@@ -484,9 +504,9 @@ export class RpcRegistry {
     };
   }
 
-  createMethodNamespaceResolver(controllers: HandlerControllers) {
-    return (method: string, context?: RpcInvocationContext): Namespace => {
-      return this.selectNamespace(controllers, method, context);
+  createMethodNamespaceResolver() {
+    return (method: string, context?: RpcInvocationContext): Namespace | null => {
+      return this.selectNamespace(method, context);
     };
   }
 
@@ -496,14 +516,14 @@ export class RpcRegistry {
     };
   }
 
-  createNamespaceResolver(controllers: HandlerControllers) {
-    return (context?: RpcInvocationContext): Namespace => {
-      return this.selectNamespace(controllers, "", context);
+  createNamespaceResolver() {
+    return (context?: RpcInvocationContext): Namespace | null => {
+      return this.selectNamespace("", context);
     };
   }
 
   createPermissionCapabilityResolver(
-    namespaceResolver: (context?: RpcInvocationContext) => Namespace,
+    namespaceResolver: (method: string, context?: RpcInvocationContext) => Namespace | null,
     overrides?: Partial<Record<string, PermissionCapability | null>>,
   ): PermissionCapabilityResolver {
     return (method, context) => {
@@ -511,7 +531,10 @@ export class RpcRegistry {
         const value = overrides[method];
         return value === null ? undefined : value;
       }
-      const namespace = namespaceResolver(context);
+      const namespace = namespaceResolver(method, context);
+      if (!namespace) {
+        return undefined;
+      }
       return this.getDefinitionsForNamespace(namespace)?.[method]?.capability;
     };
   }

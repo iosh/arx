@@ -2,7 +2,6 @@ import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals
 import { createDefaultChainAddressCodecRegistry } from "../chains/registry.js";
 import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
-import { EIP155_NAMESPACE } from "../rpc/handlers/namespaces/utils.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
@@ -84,7 +83,7 @@ export type BackgroundRuntime = {
     engine: ReturnType<typeof initEngine>;
     registry: ReturnType<typeof createRpcRegistry>;
     clients: ReturnType<typeof initRpcLayer>;
-    getActiveNamespace: (context?: RpcInvocationContext) => Namespace;
+    getActiveNamespace: (context?: RpcInvocationContext) => Namespace | null;
   };
   lifecycle: {
     initialize: () => Promise<void>;
@@ -125,7 +124,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
 
-  let namespaceResolverFn: (context?: RpcInvocationContext) => Namespace = () => EIP155_NAMESPACE;
+  const methodNamespaceResolver = rpcRegistry.createMethodNamespaceResolver();
+  const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
 
@@ -169,7 +169,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const controllersInit = initControllers({
     bus,
-    namespaceResolver: (ctx) => namespaceResolverFn(ctx),
+    namespaceResolver: methodNamespaceResolver,
     rpcRegistry,
     accountsService: accountsStore,
     settingsService,
@@ -268,8 +268,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     },
     signers,
   };
-
-  namespaceResolverFn = rpcRegistry.createNamespaceResolver(controllers);
 
   const transactionsLifecycle = createTransactionsLifecycle({
     controller: controllers.transactions,
@@ -413,7 +411,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       engine,
       registry: rpcRegistry,
       clients: rpcClientRegistry,
-      getActiveNamespace: namespaceResolverFn,
+      getActiveNamespace: contextNamespaceResolver,
     },
     lifecycle: {
       initialize: async () =>

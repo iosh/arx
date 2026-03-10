@@ -1,45 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds } from "../controllers/approval/types.js";
-import { ApprovalChainDerivationFallbacks, deriveApprovalChainContext } from "./shared.js";
+import { deriveApprovalReviewContext } from "./shared.js";
 
-describe("deriveApprovalChainContext", () => {
-  it("allows namespace active fallback for connection approvals", () => {
-    const context = deriveApprovalChainContext(
-      {
-        id: "approval-1",
-        kind: ApprovalKinds.RequestPermissions,
-        namespace: "eip155",
-      },
-      {
-        networkPreferences: {
-          getActiveChainRef: (namespace: string) => (namespace === "eip155" ? "eip155:10" : null),
-        },
-      },
-      {
-        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
-      },
-    );
+describe("deriveApprovalReviewContext", () => {
+  it("uses the approval record chain context by default", () => {
+    const context = deriveApprovalReviewContext({
+      id: "approval-1",
+      kind: ApprovalKinds.RequestPermissions,
+      namespace: "eip155",
+      chainRef: "eip155:10",
+    });
 
-    expect(context).toEqual({ namespace: "eip155", chainRef: "eip155:10" });
+    expect(context).toEqual({ namespace: "eip155", reviewChainRef: "eip155:10", source: "record" });
   });
 
-  it("rejects missing chain context for high-risk approvals without request or record chainRef", () => {
+  it("rejects request overrides that cross namespaces", () => {
     expect(() =>
-      deriveApprovalChainContext(
+      deriveApprovalReviewContext(
         {
           id: "approval-2",
           kind: ApprovalKinds.SignMessage,
           namespace: "eip155",
+          chainRef: "eip155:1",
         },
-        {
-          networkPreferences: {
-            getActiveChainRef: () => "eip155:10",
-          },
-        },
-        {
-          fallback: ApprovalChainDerivationFallbacks.None,
-        },
+        { request: { chainRef: "conflux:cfx" } },
       ),
-    ).toThrow(/could not resolve a chainRef/i);
+    ).toThrow(/mismatched namespace and chainref/i);
   });
 });

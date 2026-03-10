@@ -1,8 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { PermissionCapabilities } from "../../controllers/permission/types.js";
+import { PermissionCapabilities, type PermissionRequestDescriptor } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { ApprovalChainDerivationFallbacks, deriveApprovalChainContext, parseNoDecision } from "../shared.js";
+import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestPermissions> = {
@@ -10,9 +10,7 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
   parseDecision: (input) => parseNoDecision(ApprovalKinds.RequestPermissions, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps, {
-        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
-      }),
+      ...createApprovalSummaryBase(record, deps, { request: record.request }),
       type: "requestPermissions",
       payload: {
         permissions: record.request.requested.map((item) => ({
@@ -25,24 +23,15 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
   async approve(record, _decision, deps) {
     const granted = record.request.requested.map((descriptor) => ({
       capability: descriptor.capability,
-      chainRefs: [...descriptor.chainRefs],
+      chainRefs: [...descriptor.chainRefs] as PermissionRequestDescriptor["chainRefs"],
     }));
 
     for (const descriptor of granted) {
-      const targetChainRefs =
-        descriptor.chainRefs.length > 0
-          ? descriptor.chainRefs
-          : [
-              deriveApprovalChainContext(record, deps, {
-                fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
-              }).chainRef,
-            ];
-
-      for (const targetChainRef of targetChainRefs) {
-        const { namespace, chainRef } = deriveApprovalChainContext(record, deps, {
+      for (const targetChainRef of descriptor.chainRefs) {
+        const { namespace, reviewChainRef } = deriveApprovalReviewContext(record, {
           request: { chainRef: targetChainRef },
-          fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
         });
+        const chainRef = reviewChainRef;
 
         if (descriptor.capability === PermissionCapabilities.Accounts) {
           const accounts = deps.accounts.listOwnedForNamespace({ namespace, chainRef });

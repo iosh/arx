@@ -195,7 +195,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
             network: controllersBase.network,
-            networkPreferences,
             chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
             signers,

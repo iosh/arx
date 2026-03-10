@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { createApprovalSummaryBase, toUiIssue, toUiWarning } from "../presentation.js";
-import { ApprovalChainDerivationFallbacks, parseNoDecision } from "../shared.js";
+import { parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const sendTransactionApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SendTransaction> = {
@@ -18,10 +18,7 @@ export const sendTransactionApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Send
     const issuesSource = txMeta?.issues ?? payload.issues ?? [];
 
     return {
-      ...createApprovalSummaryBase(record, deps, {
-        request: payload,
-        fallback: ApprovalChainDerivationFallbacks.None,
-      }),
+      ...createApprovalSummaryBase(record, deps, { request: payload }),
       type: "sendTransaction",
       payload: {
         from: String(txMeta?.from ?? payload.from ?? ""),

@@ -45,12 +45,15 @@ export type PermissionCapabilityResolver = (
   context?: RpcInvocationContext,
 ) => PermissionCapability | undefined;
 
+export type PermissionRequestChainRefs = [ChainRef, ...ChainRef[]];
+
 export type PermissionRequestDescriptor = {
   capability: PermissionCapability;
-  chainRefs: ChainRef[];
+  chainRefs: PermissionRequestChainRefs;
 };
 
 export type RequestPermissionsApprovalPayload = {
+  chainRef: ChainRef;
   requested: PermissionRequestDescriptor[];
 };
 

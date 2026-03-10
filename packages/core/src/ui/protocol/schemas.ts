@@ -133,7 +133,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
       permissions: z.array(
         z.object({
           capability: z.string(),
-          chainRefs: z.array(ChainRefSchema),
+          chainRefs: z.array(ChainRefSchema).min(1),
         }),
       ),
     }),

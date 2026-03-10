@@ -2,8 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import {
   type ApprovalChainContextRecord,
   type ApprovalChainContextRequest,
-  type ApprovalChainDerivationFallback,
-  deriveApprovalChainContext,
+  deriveApprovalReviewContext,
 } from "../../../approvals/chainContext.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
@@ -75,8 +74,8 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView {
-    const context = this.#deriveApprovalReviewContext(params.record, params.request, params.fallback);
-    return toChainView(this.requireChainMetadata(context.chainRef));
+    const context = this.#deriveApprovalReviewContext(params.record, params.request);
+    return toChainView(this.requireChainMetadata(context.reviewChainRef));
   }
 
   requireChainMetadata(chainRef: ChainRef): ChainMetadata {
@@ -193,16 +192,8 @@ class DefaultChainViewsService implements ChainViewsService {
     return this.#network.getState().availableChainRefs.map((chainRef) => this.requireAvailableChainMetadata(chainRef));
   }
 
-  #deriveApprovalReviewContext(
-    record: ApprovalChainContextRecord,
-    request?: ApprovalChainContextRequest,
-    fallback?: ApprovalChainDerivationFallback,
-  ) {
-    return deriveApprovalChainContext(record, {
-      ...(request ? { request } : {}),
-      ...(fallback ? { fallback } : {}),
-      getNamespaceActiveChainRef: (namespace) => this.#preferences.getActiveChainRef(namespace),
-    });
+  #deriveApprovalReviewContext(record: ApprovalChainContextRecord, request?: ApprovalChainContextRequest) {
+    return deriveApprovalReviewContext(record, request ? { request } : undefined);
   }
 
   #resolveProviderChainRef(

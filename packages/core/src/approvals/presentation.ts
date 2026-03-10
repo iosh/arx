@@ -31,7 +31,6 @@ export const createApprovalSummaryBase = (
   const reviewChain = deps.chainViews.getApprovalReviewChainView({
     record: record as Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
     ...(options?.request ? { request: options.request } : {}),
-    ...(options?.fallback ? { fallback: options.fallback } : {}),
   });
 
   return {

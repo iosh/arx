@@ -155,8 +155,8 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
               reason: "approval_required",
               origin: record.origin,
               method,
-              chainRef: record.chainRef ?? null,
-              namespace: record.namespace ?? null,
+              chainRef: record.chainRef,
+              namespace: record.namespace,
               urlSearchParams: { approvalId: record.id },
             })
             .then((result) => {

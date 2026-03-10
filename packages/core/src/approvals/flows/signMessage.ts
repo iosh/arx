@@ -3,7 +3,7 @@ import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { ApprovalChainDerivationFallbacks, deriveApprovalChainContext, parseNoDecision } from "../shared.js";
+import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMessage> = {
@@ -11,10 +11,7 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
   parseDecision: (input) => parseNoDecision(ApprovalKinds.SignMessage, input),
   present(record, deps) {
     return {
-      ...createApprovalSummaryBase(record, deps, {
-        request: record.request,
-        fallback: ApprovalChainDerivationFallbacks.None,
-      }),
+      ...createApprovalSummaryBase(record, deps, { request: record.request }),
       type: "signMessage",
       payload: {
         from: String(record.request.from ?? ""),
@@ -24,10 +21,8 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
   },
   async approve(record, _decision, deps) {
     const payload = record.request;
-    const { chainRef, namespace } = deriveApprovalChainContext(record, deps, {
-      request: payload,
-      fallback: ApprovalChainDerivationFallbacks.None,
-    });
+    const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: payload });
+    const chainRef = reviewChainRef;
 
     if (namespace !== "eip155") {
       throw arxError({

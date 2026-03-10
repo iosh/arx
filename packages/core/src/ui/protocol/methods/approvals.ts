@@ -4,7 +4,7 @@ import { defineMethod } from "./types.js";
 
 const PermissionRequestDescriptorSchema = z.strictObject({
   capability: z.string().min(1),
-  chainRefs: z.array(ChainRefSchema),
+  chainRefs: z.array(ChainRefSchema).min(1),
 });
 
 const PermissionApprovalResultSchema = z.strictObject({

@@ -1,8 +1,4 @@
-import type {
-  ApprovalChainContextRecord,
-  ApprovalChainContextRequest,
-  ApprovalChainDerivationFallback,
-} from "../../../approvals/chainContext.js";
+import type { ApprovalChainContextRecord, ApprovalChainContextRequest } from "../../../approvals/chainContext.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 
@@ -46,7 +42,6 @@ export type ResolveEip155SwitchChainParams = {
 export type ApprovalReviewChainViewParams = {
   record: ApprovalChainContextRecord;
   request?: ApprovalChainContextRequest;
-  fallback?: ApprovalChainDerivationFallback;
 };
 
 export type ChainViewsService = {

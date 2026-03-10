@@ -30,24 +30,24 @@ export type ApprovalQueueItem = {
   id: string;
   kind: ApprovalKind;
   origin: string;
-  namespace?: ChainNamespace | undefined;
-  chainRef?: ChainRef | undefined;
+  namespace: ChainNamespace;
+  chainRef: ChainRef;
   createdAt: number;
 };
 
 export type ApprovalRequestByKind = {
   [ApprovalKinds.RequestAccounts]: {
-    chainRef?: ChainRef | undefined;
+    chainRef: ChainRef;
     suggestedAccounts?: string[] | undefined;
   };
   [ApprovalKinds.RequestPermissions]: RequestPermissionsApprovalPayload;
   [ApprovalKinds.SignMessage]: {
-    chainRef?: ChainRef | undefined;
+    chainRef: ChainRef;
     from: string;
     message: string;
   };
   [ApprovalKinds.SignTypedData]: {
-    chainRef?: ChainRef | undefined;
+    chainRef: ChainRef;
     from: string;
     typedData: string;
   };
@@ -86,8 +86,8 @@ export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   id: string;
   kind: K;
   origin: string;
-  namespace?: ChainNamespace | undefined;
-  chainRef?: ChainRef | undefined;
+  namespace: ChainNamespace;
+  chainRef: ChainRef;
   request: ApprovalRequest<K>;
   createdAt: number;
 };

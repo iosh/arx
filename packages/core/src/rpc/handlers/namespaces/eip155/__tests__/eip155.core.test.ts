@@ -766,6 +766,7 @@ describe("eip155 handlers - core error paths", () => {
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
       const payload = task.request as RequestPermissionsApprovalPayload;
+      expect(payload.chainRef).toBe(chain.chainRef);
       expect(payload.requested).toEqual(
         expect.arrayContaining([
           { capability: "wallet_basic", chainRefs: [chain.chainRef] },

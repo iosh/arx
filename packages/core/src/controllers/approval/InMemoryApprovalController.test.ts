@@ -30,7 +30,7 @@ const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalK
     namespace: "eip155",
     chainRef: "eip155:1",
     createdAt: 1000,
-    request: { suggestedAccounts: ["0xabc"] },
+    request: { chainRef: "eip155:1", suggestedAccounts: ["0xabc"] },
     ...overrides,
   } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>;
 };
@@ -53,6 +53,40 @@ describe("InMemoryApprovalController", () => {
 
     // @ts-expect-error - requester is required
     expect(() => controller.create(request, null)).toThrow(/requester/i);
+  });
+
+  it("create() rejects approvals whose request chainRef does not match the record chainRef", async () => {
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const request = createRequest({
+      request: { chainRef: "eip155:10", suggestedAccounts: ["0xabc"] },
+    });
+
+    expect(() => controller.create(request, requester)).toThrow(/request chainref must match/i);
+  });
+
+  it("create() rejects request-permissions approvals with empty descriptor chainRefs", async () => {
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+    const request = {
+      id: "a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0",
+      kind: ApprovalKinds.RequestPermissions,
+      origin: ORIGIN,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      createdAt: 1000,
+      request: {
+        chainRef: "eip155:1",
+        requested: [
+          {
+            capability: "wallet_basic",
+            chainRefs: [],
+          },
+        ],
+      },
+    } as unknown as ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
+
+    expect(() => controller.create(request, requester)).toThrow(/must include explicit chainrefs/i);
   });
 
   it("create() enqueues + resolve(approve) finalizes + resolves the original promise", async () => {

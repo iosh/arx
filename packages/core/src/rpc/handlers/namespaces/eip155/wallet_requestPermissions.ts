@@ -100,7 +100,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       namespace,
       chainRef,
       createdAt: controllers.clock.now(),
-      request: { requested },
+      request: { chainRef, requested },
     } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
 
     try {

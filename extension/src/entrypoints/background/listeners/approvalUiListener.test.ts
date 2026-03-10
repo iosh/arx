@@ -1,34 +1,15 @@
-import { ApprovalKinds, ATTENTION_REQUESTED } from "@arx/core";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord, ATTENTION_REQUESTED } from "@arx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
 import { createApprovalUiListener } from "./approvalUiListener";
 
-type ApprovalRecordLike = {
-  id: string;
-  kind: string;
-  origin: string;
-  namespace?: string;
-  chainRef?: string;
-  request: Record<string, unknown>;
-  createdAt: number;
-  requester: {
-    transport: "provider" | "ui";
-    origin: string;
-    portId: string;
-    sessionId: string;
-    requestId: string;
-  };
-};
+type ApprovalRecordLike = Pick<
+  ApprovalRecord,
+  "id" | "kind" | "origin" | "namespace" | "chainRef" | "request" | "createdAt" | "requester"
+>;
 
-type ApprovalQueueItemLike = {
-  id: string;
-  kind: string;
-  origin: string;
-  namespace?: string;
-  chainRef?: string;
-  createdAt: number;
-};
+type ApprovalQueueItemLike = Pick<ApprovalQueueItem, "id" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt">;
 
 class FakeBus {
   #handlers = new Map<unknown, Set<(payload: unknown) => void>>();
@@ -153,7 +134,7 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
   origin: overrides?.origin ?? "https://dapp.example",
   namespace: overrides?.namespace ?? "eip155",
   chainRef: overrides?.chainRef ?? "eip155:1",
-  request: overrides?.request ?? {},
+  request: overrides?.request ?? { chainRef: overrides?.chainRef ?? "eip155:1" },
   createdAt: overrides?.createdAt ?? Date.now(),
   requester: {
     transport: overrides?.requester?.transport ?? "provider",

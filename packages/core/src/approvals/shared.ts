@@ -1,15 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ApprovalDecision, ApprovalKind, ApprovalRecord } from "../controllers/approval/types.js";
-import {
-  type ApprovalChainDerivationFallback,
-  ApprovalChainDerivationFallbacks,
-  deriveApprovalChainContext as deriveApprovalChainContextBase,
-} from "./chainContext.js";
-import type { ApprovalFlowDeps } from "./types.js";
+import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
 
-type DeriveApprovalChainContextOptions = {
+type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
-  fallback?: ApprovalChainDerivationFallback;
 };
 
 export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
@@ -24,22 +18,21 @@ export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown)
   return undefined as ApprovalDecision<K>;
 };
 
+export const deriveApprovalReviewContext = (
+  record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
+  options?: DeriveApprovalReviewContextOptions,
+) => {
+  return deriveApprovalReviewContextBase(record, options);
+};
+
 export const deriveApprovalChainContext = (
   record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
-  deps: Pick<ApprovalFlowDeps, "networkPreferences">,
-  options?: DeriveApprovalChainContextOptions,
+  options?: DeriveApprovalReviewContextOptions,
 ) => {
-  const context = deriveApprovalChainContextBase(record, {
-    ...(options?.request ? { request: options.request } : {}),
-    ...(options?.fallback ? { fallback: options.fallback } : {}),
-    getNamespaceActiveChainRef: (namespace) => deps.networkPreferences.getActiveChainRef(namespace),
-  });
+  const context = deriveApprovalReviewContext(record, options);
 
   return {
-    chainRef: context.chainRef,
+    chainRef: context.reviewChainRef,
     namespace: context.namespace,
   };
 };
-
-export { ApprovalChainDerivationFallbacks };
-export type { ApprovalChainDerivationFallback };

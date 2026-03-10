@@ -15,8 +15,8 @@ export const addChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.AddChain> =
     return {
       id: record.id,
       origin: record.origin,
-      namespace: record.namespace ?? meta.namespace,
-      chainRef: record.chainRef ?? meta.chainRef,
+      namespace: record.namespace,
+      chainRef: record.chainRef,
       createdAt: record.createdAt,
       type: "addChain",
       payload: {

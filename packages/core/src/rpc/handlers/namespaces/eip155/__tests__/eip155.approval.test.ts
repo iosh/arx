@@ -4,10 +4,12 @@ import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accou
 import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
 import { ApprovalKinds, PermissionCapabilities, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
+import { MemoryNetworkPreferencesPort } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
+  ALT_CHAIN,
   createExecutor,
   createRuntime,
   getActiveChainMetadata,
@@ -15,6 +17,15 @@ import {
   setupApprovalResponder,
   TEST_MNEMONIC,
 } from "./eip155.test.helpers.js";
+
+const createCrossChainPreferencesPort = () =>
+  new MemoryNetworkPreferencesPort({
+    id: "network-preferences",
+    selectedChainRef: "eip155:1",
+    activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
+    rpc: {},
+    updatedAt: 0,
+  });
 
 describe("eip155 handlers - approval metadata", () => {
   it("includes namespace metadata for eth_requestAccounts approvals", async () => {
@@ -56,16 +67,22 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("includes namespace metadata for personal_sign approvals", async () => {
-    const runtime = createRuntime();
+  it("presents personal_sign approvals on the derived review chain when wallet selected chain differs", async () => {
+    const runtime = createRuntime({
+      networkPreferences: { port: createCrossChainPreferencesPort() },
+    });
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
+    const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
-    const activeChain = getActiveChainMetadata(runtime);
+    const selectedChain = runtime.services.chainViews.getSelectedChainView();
+    const providerChain = runtime.services.chainViews.getProviderChainView("eip155");
+    expect(selectedChain.chainRef).toBe("eip155:1");
+    expect(providerChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
-      chainRef: activeChain.chainRef,
+      chainRef: ALT_CHAIN.chainRef,
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
@@ -81,6 +98,16 @@ describe("eip155 handlers - approval metadata", () => {
       }
       if (task.kind === ApprovalKinds.SignMessage) {
         capturedTask = task;
+        const summary = approvalRegistry.present(task, {
+          chainViews: runtime.services.chainViews,
+          transactions: runtime.controllers.transactions,
+        });
+        expect(summary).toMatchObject({
+          type: "signMessage",
+          namespace: "eip155",
+          chainRef: ALT_CHAIN.chainRef,
+        });
+        expect(summary.chainRef).not.toBe(selectedChain.chainRef);
         void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
         return true;
       }
@@ -95,11 +122,12 @@ describe("eip155 handlers - approval metadata", () => {
             method: "personal_sign",
             params: ["0xdeadbeef", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] as JsonRpcParams,
           },
+          context: { chainRef: ALT_CHAIN.chainRef },
         }),
       ).rejects.toMatchObject({ code: 4100 });
 
       expect(capturedTask?.namespace).toBe("eip155");
-      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+      expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();
@@ -245,7 +273,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("includes namespace metadata for eth_sendTransaction approvals", async () => {
+  it("presents eth_sendTransaction approvals on the derived review chain when wallet selected chain differs", async () => {
     const registry = new TransactionAdapterRegistry();
     registry.register("eip155", {
       prepareTransaction: vi.fn(async () => ({
@@ -257,16 +285,19 @@ describe("eip155 handlers - approval metadata", () => {
       broadcastTransaction: vi.fn(async (_ctx, _signed) => ({ hash: "0x1111" })),
     });
     const runtime = createRuntime({
+      networkPreferences: { port: createCrossChainPreferencesPort() },
       transactions: { registry },
     });
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
+    const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
-    const activeChain = getActiveChainMetadata(runtime);
+    const selectedChain = runtime.services.chainViews.getSelectedChainView();
+    expect(selectedChain.chainRef).toBe("eip155:1");
     await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
       namespace: "eip155",
-      chainRef: activeChain.chainRef,
+      chainRef: ALT_CHAIN.chainRef,
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
@@ -277,6 +308,16 @@ describe("eip155 handlers - approval metadata", () => {
         return false;
       }
       capturedTask = task;
+      const summary = approvalRegistry.present(task, {
+        chainViews: runtime.services.chainViews,
+        transactions: runtime.controllers.transactions,
+      });
+      expect(summary).toMatchObject({
+        type: "sendTransaction",
+        namespace: "eip155",
+        chainRef: ALT_CHAIN.chainRef,
+      });
+      expect(summary.chainRef).not.toBe(selectedChain.chainRef);
       void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
       return true;
     });
@@ -296,11 +337,12 @@ describe("eip155 handlers - approval metadata", () => {
               },
             ] as JsonRpcParams,
           },
+          context: { chainRef: ALT_CHAIN.chainRef },
         }),
       ).rejects.toMatchObject({ code: 4001 });
 
       expect(capturedTask?.namespace).toBe("eip155");
-      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+      expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();

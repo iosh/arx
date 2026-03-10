@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ApprovalExecutor } from "../../approvals/types.js";
+import { parseChainRef } from "../../chains/caip.js";
 import { APPROVAL_CREATED, APPROVAL_FINISHED, APPROVAL_STATE_CHANGED, type ApprovalMessenger } from "./topics.js";
 import type {
   ApprovalController,
@@ -34,6 +35,99 @@ type CreateInMemoryApprovalControllerOptions = {
   ttlMs?: number;
   logger?: (message: string, error?: unknown) => void;
   getExecutor?: () => ApprovalExecutor | undefined;
+};
+
+const getApprovalRequestChainRef = (request: ApprovalCreateParams): ApprovalCreateParams["chainRef"] => {
+  if ("metadata" in request.request) {
+    return request.request.metadata.chainRef;
+  }
+
+  return request.request.chainRef;
+};
+
+const assertApprovalContext = (request: ApprovalCreateParams) => {
+  const recordChain = parseChainRef(request.chainRef);
+  if (recordChain.namespace !== request.namespace) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Approval record namespace must match its chainRef.",
+      data: { id: request.id, kind: request.kind, namespace: request.namespace, chainRef: request.chainRef },
+    });
+  }
+
+  const requestChainRef = getApprovalRequestChainRef(request);
+  if (requestChainRef !== request.chainRef) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Approval request chainRef must match the approval record chainRef.",
+      data: { id: request.id, kind: request.kind, recordChainRef: request.chainRef, requestChainRef },
+    });
+  }
+
+  const requestChain = parseChainRef(requestChainRef);
+  if (requestChain.namespace !== request.namespace) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Approval request namespace must match the approval record namespace.",
+      data: { id: request.id, kind: request.kind, namespace: request.namespace, chainRef: requestChainRef },
+    });
+  }
+
+  if ("requested" in request.request) {
+    if (request.request.requested.length === 0) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "Request-permissions approval must include at least one requested capability.",
+        data: { id: request.id, kind: request.kind, chainRef: request.chainRef, namespace: request.namespace },
+      });
+    }
+
+    for (const descriptor of request.request.requested) {
+      if (descriptor.chainRefs.length === 0) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: "Request-permissions approval descriptors must include explicit chainRefs.",
+          data: {
+            id: request.id,
+            kind: request.kind,
+            chainRef: request.chainRef,
+            namespace: request.namespace,
+            capability: descriptor.capability,
+          },
+        });
+      }
+
+      for (const targetChainRef of descriptor.chainRefs) {
+        const targetChain = parseChainRef(targetChainRef);
+        if (targetChain.namespace !== request.namespace) {
+          throw arxError({
+            reason: ArxReasons.RpcInvalidParams,
+            message: "Request-permissions approval chainRefs must match the approval record namespace.",
+            data: {
+              id: request.id,
+              kind: request.kind,
+              namespace: request.namespace,
+              chainRef: targetChainRef,
+              capability: descriptor.capability,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  if ("metadata" in request.request && request.request.metadata.namespace !== request.namespace) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Add-chain approval metadata namespace must match the approval record namespace.",
+      data: {
+        id: request.id,
+        kind: request.kind,
+        namespace: request.namespace,
+        metadataNamespace: request.request.metadata.namespace,
+      },
+    });
+  }
 };
 
 export class InMemoryApprovalController implements ApprovalController {
@@ -83,6 +177,7 @@ export class InMemoryApprovalController implements ApprovalController {
 
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K> {
     if (!requester) throw new Error("Approval requester is required");
+    assertApprovalContext(request);
 
     const record = cloneRecord({ ...request, requester });
 

@@ -1,7 +1,7 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import { ApprovalChainDerivationFallbacks } from "../../../approvals/chainContext.js";
 import type { ChainMetadata } from "../../../chains/metadata.js";
+import { ApprovalKinds } from "../../../controllers/approval/types.js";
 import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
@@ -179,10 +179,10 @@ describe("ChainViewsService", () => {
       service.getApprovalReviewChainView({
         record: {
           id: "approval-1",
-          kind: "eth_requestAccounts",
+          kind: ApprovalKinds.RequestAccounts,
           namespace: "eip155",
+          chainRef: MAINNET.chainRef,
         },
-        fallback: ApprovalChainDerivationFallbacks.NamespaceActive,
       }),
     ).toMatchObject({ chainRef: MAINNET.chainRef, namespace: MAINNET.namespace });
 
@@ -190,11 +190,12 @@ describe("ChainViewsService", () => {
       service.getApprovalReviewChainView({
         record: {
           id: "approval-2",
-          kind: "personal_sign",
+          kind: ApprovalKinds.SignMessage,
           namespace: "eip155",
+          chainRef: MAINNET.chainRef,
         },
-        fallback: ApprovalChainDerivationFallbacks.None,
+        request: { chainRef: SOLANA.chainRef },
       }),
-    ).toThrow(/could not resolve a chainRef/i);
+    ).toThrow(/mismatched namespace and chainref/i);
   });
 });

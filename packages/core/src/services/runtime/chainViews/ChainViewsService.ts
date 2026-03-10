@@ -140,7 +140,7 @@ class DefaultChainViewsService implements ChainViewsService {
 
   buildProviderMeta(namespace = DEFAULT_NAMESPACE): ProviderMetaSnapshot {
     const availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]);
-    const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
+    const activeChainByNamespace = this.#resolveProviderActiveChainByNamespace(availableChainRefs);
     const activeChain =
       activeChainByNamespace[namespace] ?? this.#resolveProviderChainRef(namespace, availableChainRefs);
 
@@ -200,7 +200,7 @@ class DefaultChainViewsService implements ChainViewsService {
     namespace: string,
     availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]),
   ): ChainRef {
-    const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
+    const activeChainByNamespace = this.#resolveProviderActiveChainByNamespace(availableChainRefs);
     const activeChain = activeChainByNamespace[namespace];
     if (activeChain) {
       return activeChain;
@@ -213,7 +213,7 @@ class DefaultChainViewsService implements ChainViewsService {
     });
   }
 
-  #resolveActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {
+  #resolveProviderActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {
     const grouped = new Map<string, ChainRef[]>();
 
     for (const chainRef of availableChainRefs) {
@@ -229,8 +229,8 @@ class DefaultChainViewsService implements ChainViewsService {
       }
     }
 
-    const selectedChainRef = this.#resolveSelectedChainRef();
-    const [selectedNamespace] = selectedChainRef.split(":");
+    const selectedChainRef = this.#tryResolveSelectedChainRef(availableChainRefs);
+    const [selectedNamespace] = selectedChainRef?.split(":") ?? [];
 
     const next: Record<string, ChainRef> = {};
     for (const [namespace, chainRefs] of grouped) {
@@ -240,7 +240,7 @@ class DefaultChainViewsService implements ChainViewsService {
         continue;
       }
 
-      if (selectedNamespace === namespace && chainRefs.includes(selectedChainRef)) {
+      if (selectedChainRef && selectedNamespace === namespace && chainRefs.includes(selectedChainRef)) {
         next[namespace] = selectedChainRef;
         continue;
       }
@@ -254,20 +254,31 @@ class DefaultChainViewsService implements ChainViewsService {
     return next;
   }
 
+  #tryResolveSelectedChainRef(
+    availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]),
+  ): ChainRef | null {
+    const selectedChainRef = this.#preferences.getSelectedChainRef();
+    if (!this.#chainDefinitions.getChain(selectedChainRef)) {
+      return null;
+    }
+
+    return availableChainRefs.some((availableChainRef) => availableChainRef === selectedChainRef)
+      ? selectedChainRef
+      : null;
+  }
+
   #resolveSelectedChainRef(): ChainRef {
     const selectedChainRef = this.#preferences.getSelectedChainRef();
+    const resolved = this.#tryResolveSelectedChainRef();
+    if (resolved) {
+      return resolved;
+    }
+
     if (!this.#chainDefinitions.getChain(selectedChainRef)) {
       throw chainErrors.notFound({ chainRef: selectedChainRef });
     }
 
-    const isAvailable = this.#network
-      .getState()
-      .availableChainRefs.some((availableChainRef) => availableChainRef === selectedChainRef);
-    if (!isAvailable) {
-      throw chainErrors.notAvailable({ chainRef: selectedChainRef });
-    }
-
-    return selectedChainRef;
+    throw chainErrors.notAvailable({ chainRef: selectedChainRef });
   }
 
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {

@@ -1,5 +1,5 @@
-import { chainErrors } from "../../../chains/errors.js";
 import { parseChainRef } from "../../../chains/caip.js";
+import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
 import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
@@ -37,7 +37,9 @@ export const createChainActivationService = ({
   };
 
   const selectWalletChain = async (chainRef: ChainRef): Promise<void> => {
-    const isAvailable = network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
+    const isAvailable = network
+      .getState()
+      .availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
     if (!isAvailable) {
       throw chainErrors.notAvailable({ chainRef });
     }

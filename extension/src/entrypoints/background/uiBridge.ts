@@ -8,6 +8,7 @@ import type {
   RpcClientRegistry,
   RpcRegistry,
 } from "@arx/core";
+import type { NetworkPreferencesService } from "@arx/core/services";
 import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/server";
 
 import type browserDefaultType from "webextension-polyfill";
@@ -33,6 +34,7 @@ type BridgeDeps = {
     | "listKnownChainViews"
     | "requireAvailableChainMetadata"
   >;
+  networkPreferences: Pick<NetworkPreferencesService, "subscribeChanged">;
   session: BackgroundSessionServices;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
@@ -47,6 +49,7 @@ export const createUiBridge = ({
   controllers,
   chainActivation,
   chainViews,
+  networkPreferences,
   session,
   rpcClients,
   rpcRegistry,
@@ -76,8 +79,21 @@ export const createUiBridge = ({
   let broadcastHold = 0;
   let pendingBroadcast = false;
 
+  const buildSnapshotEventSafely = () => {
+    try {
+      return dispatcher.buildSnapshotEvent();
+    } catch (error) {
+      console.warn("[uiBridge] failed to build snapshot", error);
+      return null;
+    }
+  };
+
   const broadcastSnapshotNow = () => {
-    portHub.broadcast(dispatcher.buildSnapshotEvent());
+    const snapshotEvent = buildSnapshotEventSafely();
+    if (!snapshotEvent) {
+      return;
+    }
+    portHub.broadcast(snapshotEvent);
   };
 
   const requestBroadcast = () => {
@@ -138,7 +154,10 @@ export const createUiBridge = ({
       });
     });
 
-    portHub.send(port, dispatcher.buildSnapshotEvent());
+    const snapshotEvent = buildSnapshotEventSafely();
+    if (snapshotEvent) {
+      portHub.send(port, snapshotEvent);
+    }
   };
 
   const attachListeners = () => {
@@ -148,6 +167,7 @@ export const createUiBridge = ({
       controllers.approvals.onStateChanged(() => requestBroadcast()),
       controllers.permissions.onPermissionsChanged(() => requestBroadcast()),
       controllers.transactions.onStateChanged(() => requestBroadcast()),
+      networkPreferences.subscribeChanged(() => requestBroadcast()),
       session.unlock.onStateChanged(() => requestBroadcast()),
     );
   };

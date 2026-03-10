@@ -622,12 +622,22 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     entrypoints: ENTRYPOINTS,
   });
   const persistVaultMeta = vi.fn(async () => {});
+  const networkPreferencesListeners = new Set<
+    (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
+  >();
+  const networkPreferences = {
+    subscribeChanged: (handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void) => {
+      networkPreferencesListeners.add(handler);
+      return () => networkPreferencesListeners.delete(handler);
+    },
+  };
   type UiBridgeDeps = Parameters<typeof createUiBridge>[0];
   const bridge = createUiBridge({
     browser: browserApi as unknown as UiBridgeDeps["browser"],
     controllers,
     chainActivation: { selectWalletChain: vi.fn(async () => {}) } as UiBridgeDeps["chainActivation"],
     chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
+    networkPreferences: networkPreferences as unknown as UiBridgeDeps["networkPreferences"],
     session,
     rpcClients: {
       getClient: (params?: unknown) => {
@@ -644,7 +654,20 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     platform,
   });
 
-  return { bridge, keyring, vault, unlock, approvals: approvalsController, browser: browserApi, persistVaultMeta };
+  return {
+    bridge,
+    keyring,
+    vault,
+    unlock,
+    approvals: approvalsController,
+    browser: browserApi,
+    persistVaultMeta,
+    emitNetworkPreferencesChanged: () => {
+      for (const handler of networkPreferencesListeners) {
+        handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
+      }
+    },
+  };
 };
 
 const createPort = () => new FakePort();
@@ -682,6 +705,7 @@ describe("uiBridge", () => {
   let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
+  let emitNetworkPreferencesChanged: ReturnType<typeof buildBridge>["emitNetworkPreferencesChanged"];
 
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
@@ -691,6 +715,7 @@ describe("uiBridge", () => {
     unlock = ctx.unlock;
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
+    emitNetworkPreferencesChanged = ctx.emitNetworkPreferencesChanged;
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);
@@ -756,6 +781,82 @@ describe("uiBridge", () => {
     const snapshot = latestSnapshotFromMessages(port.messages);
     expect(snapshot.vault.initialized).toBe(true);
     expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
+  });
+
+  it("recovers snapshot broadcasting after a transient selected-chain resolution failure", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const browserApi = makeBrowser();
+    const platform = createUiPlatform({
+      browser: browserApi as unknown as Parameters<typeof createUiPlatform>[0]["browser"],
+      entrypoints: ENTRYPOINTS,
+    });
+    const controllers = createControllers();
+    const listeners = new Set<(payload: { next: { activeChainByNamespace: Record<string, string> } }) => void>();
+    let snapshotBroken = true;
+
+    const bridge = createUiBridge({
+      browser: browserApi as unknown as Parameters<typeof createUiBridge>[0]["browser"],
+      controllers,
+      chainActivation: { selectWalletChain: vi.fn(async () => {}) } as Parameters<
+        typeof createUiBridge
+      >[0]["chainActivation"],
+      chainViews: {
+        ...(controllers as unknown as { chainViews: Parameters<typeof createUiBridge>[0]["chainViews"] }).chainViews,
+        getSelectedChainView: () => {
+          if (snapshotBroken) {
+            throw new Error("selected chain temporarily unavailable");
+          }
+          return CHAIN;
+        },
+        buildWalletNetworksSnapshot: () => {
+          if (snapshotBroken) {
+            throw new Error("selected chain temporarily unavailable");
+          }
+          return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
+        },
+      },
+      networkPreferences: {
+        subscribeChanged: (
+          handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
+        ) => {
+          listeners.add(handler);
+          return () => listeners.delete(handler);
+        },
+      } as unknown as Parameters<typeof createUiBridge>[0]["networkPreferences"],
+      session: {
+        unlock: new FakeUnlock(true),
+        withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
+        vault: {
+          getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
+        },
+      } as unknown as Parameters<typeof createUiBridge>[0]["session"],
+      rpcClients: {
+        getClient: () =>
+          ({
+            getBalance: vi.fn(async () => "0x0"),
+          }) as never,
+      },
+      rpcRegistry,
+      persistVaultMeta: vi.fn(async () => {}),
+      keyring: keyring,
+      attention: { getSnapshot: () => ({ queue: [], count: 0 }) } as Parameters<typeof createUiBridge>[0]["attention"],
+      platform,
+    });
+
+    const port = createPort();
+    bridge.attachPort(port as unknown as UiPort);
+    bridge.attachListeners();
+
+    expect(port.messages).toEqual([]);
+
+    snapshotBroken = false;
+    for (const handler of listeners) {
+      handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
+    }
+
+    const snapshot = latestSnapshotFromMessages(port.messages);
+    expect(snapshot.chain.chainRef).toBe(CHAIN.chainRef);
+    warnSpy.mockRestore();
   });
 
   it("maps invalid mnemonic to keyring/invalid_mnemonic", async () => {

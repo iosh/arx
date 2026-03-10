@@ -44,6 +44,7 @@ export const createBackgroundApp = () => {
         controllers: ctx.controllers,
         chainActivation: ctx.runtime.services.chainActivation,
         chainViews: ctx.chainViews,
+        networkPreferences: ctx.networkPreferences,
         session: ctx.session,
         rpcClients: ctx.runtime.rpc.clients,
         rpcRegistry: ctx.runtime.rpc.registry,

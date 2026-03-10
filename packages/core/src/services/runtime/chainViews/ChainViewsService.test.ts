@@ -127,6 +127,22 @@ describe("ChainViewsService", () => {
     expect(service.getPreferredChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
+  it("builds provider meta even when wallet selectedChainRef is currently unavailable", () => {
+    const service = setup({
+      available: [MAINNET, SOLANA],
+      selected: BASE,
+      activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+    });
+
+    expect(service.buildProviderMeta("eip155")).toEqual({
+      activeChain: MAINNET.chainRef,
+      activeNamespace: MAINNET.namespace,
+      activeChainByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+      supportedChains: [MAINNET.chainRef, SOLANA.chainRef],
+    });
+    expect(service.getProviderChainView("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
+  });
+
   it("resolves wallet_switchEthereumChain targets from mounted eip155 chains", () => {
     const service = setup({ available: [MAINNET, BASE] });
 

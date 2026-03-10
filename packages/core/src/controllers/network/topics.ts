@@ -7,10 +7,6 @@ export const NETWORK_STATE_CHANGED = stateTopic<NetworkState>("network:stateChan
   isEqual: (prev, next) => prev.revision === next.revision,
 });
 
-export const NETWORK_ACTIVE_CHAIN_CHANGED = eventTopic<{ previous: ChainRef; next: ChainRef }>(
-  "network:activeChainChanged",
-);
-
 export const NETWORK_CHAIN_CONFIG_CHANGED = eventTopic<ChainConfigChange>("network:chainConfigChanged");
 
 export const NETWORK_RPC_ENDPOINT_CHANGED = eventTopic<RpcEndpointChange>("network:rpcEndpointChanged");
@@ -21,7 +17,6 @@ export const NETWORK_RPC_HEALTH_CHANGED = eventTopic<{ chainRef: ChainRef; healt
 
 export const NETWORK_TOPICS = [
   NETWORK_STATE_CHANGED,
-  NETWORK_ACTIVE_CHAIN_CHANGED,
   NETWORK_CHAIN_CONFIG_CHANGED,
   NETWORK_RPC_ENDPOINT_CHANGED,
   NETWORK_RPC_HEALTH_CHANGED,

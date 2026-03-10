@@ -32,7 +32,6 @@ export const cloneRpcRoutingState = (routing: RpcRoutingState): RpcRoutingState 
 });
 
 export const cloneNetworkStateInput = (state: NetworkStateInput): NetworkStateInput => ({
-  activeChainRef: state.activeChainRef,
   availableChainRefs: [...state.availableChainRefs],
   rpc: Object.fromEntries(
     Object.entries(state.rpc).map(([chainRef, routing]) => [chainRef, cloneRpcRoutingState(routing)]),

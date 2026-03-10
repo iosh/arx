@@ -84,7 +84,8 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.controllers.network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
       expect(
         runtime.controllers.accounts.getActiveAccountForNamespace({
           namespace: ALT_CHAIN.namespace,
@@ -122,7 +123,8 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.controllers.network.getState().activeChainRef).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();
@@ -247,7 +249,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("emits activeChainChanged event on successful switch", async () => {
+  it("updates selected and provider chain state on successful switch", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -256,11 +258,6 @@ describe("eip155 handlers - core error paths", () => {
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
-
-    const changes: string[] = [];
-    const unsubscribe = runtime.controllers.network.onActiveChainChanged(({ next }) => {
-      changes.push(next);
-    });
 
     try {
       await execute({
@@ -271,10 +268,10 @@ describe("eip155 handlers - core error paths", () => {
         },
       });
 
-      expect(changes).toContain(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      unsubscribe();
       runtime.lifecycle.destroy();
     }
   });
@@ -797,7 +794,7 @@ describe("eip155 handlers - core error paths", () => {
       );
 
       const state = runtime.controllers.permissions.getPermissions(ORIGIN);
-      const chainRef = runtime.controllers.network.getState().activeChainRef;
+      const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
       expect(state?.eip155?.chains?.[chainRef]?.capabilities ?? []).toEqual(
         expect.arrayContaining([PermissionCapabilities.Basic, PermissionCapabilities.Accounts]),
       );

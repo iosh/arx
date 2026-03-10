@@ -78,7 +78,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
   };
 
   const resolveActiveChainByNamespace = (
-    current: ReturnType<typeof network.getState>,
     registryChains: NetworkChainConfig[],
     selectedChainRefHint: ChainRef,
   ): Record<string, ChainRef> => {
@@ -96,7 +95,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
     const next: Record<string, ChainRef> = {};
     const selectedNamespace = getNamespace(selectedChainRefHint);
-    const currentNamespace = getNamespace(current.activeChainRef);
 
     for (const [namespace, chainRefs] of availableByNamespace) {
       const preferred = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
@@ -107,11 +105,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
 
       if (namespace === selectedNamespace && chainRefs.includes(selectedChainRefHint)) {
         next[namespace] = selectedChainRefHint;
-        continue;
-      }
-
-      if (namespace === currentNamespace && chainRefs.includes(current.activeChainRef)) {
-        next[namespace] = current.activeChainRef;
         continue;
       }
 
@@ -129,13 +122,12 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return next;
   };
 
-  const selectActiveChainRef = (
-    current: ReturnType<typeof network.getState>,
+  const selectSelectedChainRef = (
     registryChains: NetworkChainConfig[],
     activeChainByNamespace: Record<string, ChainRef>,
   ): ChainRef => {
     if (registryChains.length === 0) {
-      return current.activeChainRef;
+      return cachedPreferences?.selectedChainRef ?? DEFAULT_CHAIN.chainRef;
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
@@ -150,17 +142,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       : null;
     if (preferredSelectedNamespaceActive && available.has(preferredSelectedNamespaceActive)) {
       return preferredSelectedNamespaceActive;
-    }
-
-    const currentNamespace = getNamespace(current.activeChainRef);
-
-    const currentNamespaceActive = activeChainByNamespace[currentNamespace] ?? null;
-    if (currentNamespaceActive && available.has(currentNamespaceActive)) {
-      return currentNamespaceActive;
-    }
-
-    if (available.has(current.activeChainRef)) {
-      return current.activeChainRef;
     }
 
     const defaultNamespaceActive = activeChainByNamespace[DEFAULT_CHAIN.namespace] ?? null;
@@ -220,9 +201,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const current = network.getState();
-    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? current.activeChainRef;
-    const nextActiveChainByNamespace = resolveActiveChainByNamespace(current, registryChains, selectedChainRefHint);
-    const nextSelectedChainRef = selectActiveChainRef(current, registryChains, nextActiveChainByNamespace);
+    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? DEFAULT_CHAIN.chainRef;
+    const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains, selectedChainRefHint);
+    const nextSelectedChainRef = selectSelectedChainRef(registryChains, nextActiveChainByNamespace);
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
     const { rpc, corrections } = computeRpcState(registryChains, current);
@@ -231,7 +212,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     network.replaceState(
       createNetworkRuntimeInput({
         state: {
-          activeChainRef: nextSelectedChainRef,
           availableChainRefs: registryChains.map((chain) => chain.chainRef),
           rpc,
         },

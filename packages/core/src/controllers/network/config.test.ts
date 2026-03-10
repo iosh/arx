@@ -24,7 +24,6 @@ const METADATA: ChainMetadata = {
 };
 
 const STATE: NetworkStateInput = {
-  activeChainRef: METADATA.chainRef,
   availableChainRefs: [METADATA.chainRef],
   rpc: {
     [METADATA.chainRef]: {

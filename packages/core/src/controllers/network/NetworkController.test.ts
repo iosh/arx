@@ -21,7 +21,6 @@ const createMetadata = (overrides?: Partial<ChainMetadata>): ChainMetadata => ({
 
 const stateFromMetadata = (metadata: ChainMetadata, overrides?: Partial<NetworkStateInput>): NetworkStateInput => {
   const base: NetworkStateInput = {
-    activeChainRef: metadata.chainRef,
     availableChainRefs: [metadata.chainRef],
     rpc: {
       [metadata.chainRef]: {
@@ -172,7 +171,6 @@ describe("InMemoryNetworkController", () => {
       controller.replaceState(
         buildNetworkRuntimeInput(
           {
-            activeChainRef: metadata.chainRef,
             availableChainRefs: [metadata.chainRef, alt.chainRef],
             rpc: {
               [metadata.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },

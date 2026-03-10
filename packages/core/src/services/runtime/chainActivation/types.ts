@@ -24,7 +24,6 @@ export type ActivateProviderChainParams = {
 };
 
 export type ChainActivationService = {
-  activate(chainRef: ChainRef): Promise<void>;
   selectWalletChain(chainRef: ChainRef): Promise<void>;
   activateProviderChain(params: ActivateProviderChainParams): Promise<void>;
 };

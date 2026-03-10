@@ -4,7 +4,6 @@ import type { RpcEndpoint } from "../../chains/metadata.js";
 import { cloneRpcEndpoints, cloneRpcHeaders, fingerprintRpcEndpoints } from "./config.js";
 import type { NetworkMessenger } from "./topics.js";
 import {
-  NETWORK_ACTIVE_CHAIN_CHANGED,
   NETWORK_CHAIN_CONFIG_CHANGED,
   NETWORK_RPC_ENDPOINT_CHANGED,
   NETWORK_RPC_HEALTH_CHANGED,
@@ -138,7 +137,6 @@ const isSameRpcEndpoints = (a: readonly RpcEndpoint[], b: readonly RpcEndpoint[]
 export class InMemoryNetworkController implements NetworkController {
   #messenger: NetworkMessenger;
   #chains = new Map<ChainRef, ChainRuntime>();
-  #activeChain: ChainRef;
   #defaultStrategy: RpcStrategyConfig;
   #now: () => number;
   #logger: RpcEventLogger;
@@ -158,7 +156,6 @@ export class InMemoryNetworkController implements NetworkController {
     this.#now = now;
     this.#logger = logger;
     this.#defaultCooldownMs = defaultCooldownMs;
-    this.#activeChain = initialRuntime.state.activeChainRef;
 
     this.replaceState(initialRuntime);
   }
@@ -167,18 +164,17 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#buildStateSnapshot();
   }
 
-  getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo {
-    const resolvedChainRef = chainRef ?? this.#activeChain;
-    const runtime = this.#requireRuntime(resolvedChainRef);
+  getActiveEndpoint(chainRef: ChainRef): RpcEndpointInfo {
+    const runtime = this.#requireRuntime(chainRef);
     const endpoints = runtime.endpoints;
     if (endpoints.length === 0) {
-      throw new Error(`Chain ${resolvedChainRef} has no registered RPC endpoints`);
+      throw new Error(`Chain ${chainRef} has no registered RPC endpoints`);
     }
 
     const index = runtime.routing.activeIndex;
     const endpoint = endpoints[index];
     if (!endpoint) {
-      throw new Error(`Active endpoint index ${index} is out of bounds for ${resolvedChainRef}`);
+      throw new Error(`Active endpoint index ${index} is out of bounds for ${chainRef}`);
     }
     return {
       index,
@@ -193,10 +189,6 @@ export class InMemoryNetworkController implements NetworkController {
     return this.#messenger.subscribe(NETWORK_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
-  onActiveChainChanged(handler: (payload: { previous: ChainRef; next: ChainRef }) => void): () => void {
-    return this.#messenger.subscribe(NETWORK_ACTIVE_CHAIN_CHANGED, handler);
-  }
-
   onChainConfigChanged(handler: (payload: ChainConfigChange) => void): () => void {
     return this.#messenger.subscribe(NETWORK_CHAIN_CONFIG_CHANGED, handler);
   }
@@ -207,21 +199,6 @@ export class InMemoryNetworkController implements NetworkController {
 
   onRpcHealthChanged(handler: (update: { chainRef: ChainRef; health: RpcEndpointHealth[] }) => void): () => void {
     return this.#messenger.subscribe(NETWORK_RPC_HEALTH_CHANGED, handler);
-  }
-
-  async switchChain(target: ChainRef): Promise<void> {
-    if (this.#activeChain === target) {
-      return;
-    }
-    if (!this.#chains.has(target)) {
-      throw chainErrors.notAvailable({ chainRef: target });
-    }
-
-    const previous = this.#activeChain;
-    this.#activeChain = target;
-    this.#touch();
-    this.#publishState();
-    this.#publishActiveChainChanged(previous, target);
   }
 
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void {
@@ -342,10 +319,6 @@ export class InMemoryNetworkController implements NetworkController {
   replaceState(input: NetworkRuntimeInput): void {
     const { state, chainConfigs } = input;
 
-    if (!state.availableChainRefs.some((chainRef) => chainRef === state.activeChainRef)) {
-      throw new Error(`Active chain ${state.activeChainRef} must be present in availableChainRefs`);
-    }
-
     const chainConfigMap = new Map<ChainRef, NetworkChainConfig>();
     for (const config of chainConfigs) {
       if (chainConfigMap.has(config.chainRef)) {
@@ -357,7 +330,6 @@ export class InMemoryNetworkController implements NetworkController {
       });
     }
 
-    const previousActive = this.#activeChain;
     const previousRuntimes = this.#chains;
     let stateChanged = false;
     const pendingConfigChanges = new Set<ChainRef>();
@@ -420,11 +392,6 @@ export class InMemoryNetworkController implements NetworkController {
     }
 
     this.#chains = nextChains;
-    this.#activeChain = state.activeChainRef;
-
-    if (previousActive !== this.#activeChain) {
-      stateChanged = true;
-    }
 
     if (stateChanged) {
       this.#touch();
@@ -433,10 +400,6 @@ export class InMemoryNetworkController implements NetworkController {
 
     for (const chainRef of pendingConfigChanges) {
       this.#publishChainConfigChanged(chainRef);
-    }
-
-    if (previousActive !== this.#activeChain) {
-      this.#publishActiveChainChanged(previousActive, this.#activeChain);
     }
   }
 
@@ -522,7 +485,6 @@ export class InMemoryNetworkController implements NetworkController {
 
     return {
       revision: this.#revision,
-      activeChainRef: this.#activeChain,
       availableChainRefs: sortChainRefs(Array.from(this.#chains.keys())),
       rpc: Object.fromEntries(rpcEntries),
     };
@@ -545,10 +507,6 @@ export class InMemoryNetworkController implements NetworkController {
   #publishState(force = false) {
     const snapshot = this.#buildStateSnapshot();
     this.#messenger.publish(NETWORK_STATE_CHANGED, snapshot, { force });
-  }
-
-  #publishActiveChainChanged(previous: ChainRef, next: ChainRef) {
-    this.#messenger.publish(NETWORK_ACTIVE_CHAIN_CHANGED, { previous, next }, { force: true });
   }
 
   #publishChainConfigChanged(chainRef: ChainRef) {

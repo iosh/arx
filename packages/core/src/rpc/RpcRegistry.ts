@@ -486,7 +486,7 @@ export class RpcRegistry {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `Missing chainRef for namespace "${args.namespace}"`,
-        data: { method: args.method, namespace: args.namespace, activeChainRef: null },
+        data: { method: args.method, namespace: args.namespace, namespaceActiveChainRef: null },
       });
     }
 

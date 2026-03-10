@@ -44,7 +44,6 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 type Deps = {
   view: StoreTransactionView;
-  network: Pick<NetworkController, "getState">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -68,7 +67,6 @@ export class TransactionExecutor
     >
 {
   #view: StoreTransactionView;
-  #network: Pick<NetworkController, "getState">;
   #networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -88,7 +86,6 @@ export class TransactionExecutor
 
   constructor(deps: Deps) {
     this.#view = deps.view;
-    this.#network = deps.network;
     this.#networkPreferences = deps.networkPreferences;
     this.#chainDefinitions = deps.chainDefinitions;
     this.#accounts = deps.accounts;
@@ -106,11 +103,8 @@ export class TransactionExecutor
     requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta> {
-    const currentActiveChainRef = this.#network.getState().activeChainRef;
     const namespaceActiveChainRef = this.#networkPreferences.getActiveChainRef(request.namespace);
-    const compatibleCurrentActiveChainRef =
-      currentActiveChainRef.split(":")[0] === request.namespace ? currentActiveChainRef : null;
-    const chainRef = request.chainRef ?? namespaceActiveChainRef ?? compatibleCurrentActiveChainRef ?? null;
+    const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
     if (!chainRef) {
       throw new Error("chainRef is required for transactions");
     }

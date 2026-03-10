@@ -257,10 +257,10 @@ if (!defaultBaseChainMetadata) {
 export const baseChainMetadata = defaultBaseChainMetadata as ChainMetadata;
 
 const requireActiveChainMetadata = (runtime: CreateBackgroundRuntimeResult): ChainMetadata => {
-  const chainRef = runtime.controllers.network.getState().activeChainRef;
+  const chainRef = runtime.services.networkPreferences.getSelectedChainRef();
   const chain = runtime.controllers.chainDefinitions.getChain(chainRef)?.metadata;
   if (!chain) {
-    throw new Error(`Missing chain metadata for active chain ${chainRef}`);
+    throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
   }
   return chain;
 };

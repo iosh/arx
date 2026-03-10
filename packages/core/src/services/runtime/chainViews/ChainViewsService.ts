@@ -57,7 +57,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   getSelectedChainView(): ChainView {
-    return toChainView(this.requireChainMetadata(this.#resolveSelectedChainRef()));
+    return toChainView(this.requireAvailableChainMetadata(this.#resolveSelectedChainRef()));
   }
 
   getPreferredChainViewForNamespace(namespace: string): ChainView {
@@ -256,9 +256,18 @@ class DefaultChainViewsService implements ChainViewsService {
 
   #resolveSelectedChainRef(): ChainRef {
     const selectedChainRef = this.#preferences.getSelectedChainRef();
-    return this.#chainDefinitions.getChain(selectedChainRef)
-      ? selectedChainRef
-      : this.#network.getState().activeChainRef;
+    if (!this.#chainDefinitions.getChain(selectedChainRef)) {
+      throw chainErrors.notFound({ chainRef: selectedChainRef });
+    }
+
+    const isAvailable = this.#network
+      .getState()
+      .availableChainRefs.some((availableChainRef) => availableChainRef === selectedChainRef);
+    if (!isAvailable) {
+      throw chainErrors.notAvailable({ chainRef: selectedChainRef });
+    }
+
+    return selectedChainRef;
   }
 
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {

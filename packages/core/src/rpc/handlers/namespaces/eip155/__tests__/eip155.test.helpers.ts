@@ -93,10 +93,10 @@ export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): Chai
 };
 
 export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
-  const chainRef = runtime.controllers.network.getState().activeChainRef;
+  const chainRef = runtime.services.networkPreferences.getSelectedChainRef();
   const chain = getChainMetadata(runtime, chainRef);
   if (!chain) {
-    throw new Error(`Missing chain metadata for active chain ${chainRef}`);
+    throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
   }
   return chain;
 };
@@ -109,7 +109,10 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
     },
   });
   return async (args: Parameters<typeof execute>[0]) => {
-    const chainRef = args.context?.chainRef ?? runtime.controllers.network.getState().activeChainRef;
+    const chainRef =
+      args.context?.chainRef ??
+      runtime.services.networkPreferences.getActiveChainRef("eip155") ??
+      runtime.services.networkPreferences.getSelectedChainRef();
     const ctx = args.context ?? {};
     const context = {
       ...ctx,

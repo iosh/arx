@@ -482,10 +482,7 @@ const createControllers = () => {
   const networkListeners = new Set<() => void>();
   const network = {
     getActiveChain: () => CHAIN,
-    getState: () => ({ activeChainRef: CHAIN.chainRef, availableChainRefs: [CHAIN.chainRef] }),
-    switchChain: async (_chainRef: string) => {
-      void _chainRef;
-    },
+    getState: () => ({ availableChainRefs: [CHAIN.chainRef] }),
     onStateChanged: (fn: () => void) => {
       networkListeners.add(fn);
       return () => networkListeners.delete(fn);

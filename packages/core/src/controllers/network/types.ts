@@ -51,7 +51,6 @@ export type RpcOutcomeReport =
 
 export type NetworkState = {
   revision: number;
-  activeChainRef: ChainRef;
   availableChainRefs: ChainRef[];
   rpc: Record<ChainRef, RpcRoutingState>;
 };
@@ -95,13 +94,11 @@ export type RpcEventLogger = (event: RpcLogEvent) => void;
 
 export interface NetworkController {
   getState(): NetworkState;
-  getActiveEndpoint(chainRef?: ChainRef): RpcEndpointInfo;
+  getActiveEndpoint(chainRef: ChainRef): RpcEndpointInfo;
   onStateChanged(handler: (state: NetworkState) => void): () => void;
-  onActiveChainChanged(handler: (payload: { previous: ChainRef; next: ChainRef }) => void): () => void;
   onChainConfigChanged(handler: (payload: ChainConfigChange) => void): () => void;
   onRpcEndpointChanged(handler: (change: RpcEndpointChange) => void): () => void;
   onRpcHealthChanged(handler: (update: { chainRef: ChainRef; health: RpcEndpointHealth[] }) => void): () => void;
-  switchChain(target: ChainRef): Promise<void>;
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
   setStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
   replaceState(input: NetworkRuntimeInput): void;

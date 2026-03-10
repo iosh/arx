@@ -1,3 +1,4 @@
+import { chainErrors } from "../../../chains/errors.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
@@ -10,15 +11,14 @@ import {
 } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
-  network: Pick<NetworkController, "getState" | "switchChain">;
-  preferences: Pick<NetworkPreferencesService, "setActiveChainRef" | "update">;
+  network: Pick<NetworkController, "getState">;
+  preferences: Pick<NetworkPreferencesService, "getSelectedChainRef" | "setActiveChainRef" | "update">;
   logger?: (message: string, error?: unknown) => void;
 };
 
 export const createChainActivationService = ({
   network,
   preferences,
-  logger = () => {},
 }: CreateChainActivationServiceOptions): ChainActivationService => {
   const persistProviderChainSelection = async (chainRef: ChainRef) => {
     return await preferences.setActiveChainRef(chainRef);
@@ -37,25 +37,12 @@ export const createChainActivationService = ({
   };
 
   const selectWalletChain = async (chainRef: ChainRef): Promise<void> => {
-    const previousActive = network.getState().activeChainRef;
-    const switched = previousActive !== chainRef;
-
-    if (switched) {
-      await network.switchChain(chainRef);
+    const isAvailable = network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
+    if (!isAvailable) {
+      throw chainErrors.notAvailable({ chainRef });
     }
 
-    try {
-      await persistWalletChainSelection(chainRef);
-    } catch (error) {
-      if (switched) {
-        try {
-          await network.switchChain(previousActive);
-        } catch (rollbackError) {
-          logger("chainActivation: failed to rollback active chain after persistence failure", rollbackError);
-        }
-      }
-      throw error;
-    }
+    await persistWalletChainSelection(chainRef);
   };
 
   const shouldSyncSelectedChain = (policy: ChainSelectionSyncPolicy, namespace: string): boolean => {
@@ -65,7 +52,7 @@ export const createChainActivationService = ({
       case ChainSelectionSyncPolicies.Never:
         return false;
       default:
-        return network.getState().activeChainRef.split(":")[0] === namespace;
+        return preferences.getSelectedChainRef().split(":")[0] === namespace;
     }
   };
 
@@ -90,9 +77,5 @@ export const createChainActivationService = ({
     await persistProviderChainSelection(chainRef);
   };
 
-  const activate = async (chainRef: ChainRef): Promise<void> => {
-    await selectWalletChain(chainRef);
-  };
-
-  return { activate, selectWalletChain, activateProviderChain };
+  return { selectWalletChain, activateProviderChain };
 };

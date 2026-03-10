@@ -35,7 +35,6 @@ export const buildDefaultRoutingState = (
 };
 
 export const DEFAULT_NETWORK_STATE_INPUT: NetworkStateInput = {
-  activeChainRef: DEFAULT_CHAIN.chainRef,
   availableChainRefs: [DEFAULT_CHAIN.chainRef],
   rpc: {
     [DEFAULT_CHAIN.chainRef]: buildDefaultRoutingState(DEFAULT_CHAIN),

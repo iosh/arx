@@ -145,23 +145,22 @@ export const initControllers = ({
   const canResolveRequestedInitialState = requestedNetworkInitialState.availableChainRefs.every((chainRef) =>
     bootstrapChainRefs.has(chainRef),
   );
-  const bootstrapActiveChain =
-    bootstrapChains.find((chain) => chain.chainRef === requestedNetworkInitialState.activeChainRef) ??
+  const bootstrapInitialChain =
+    bootstrapChains.find((chain) => requestedNetworkInitialState.availableChainRefs.includes(chain.chainRef)) ??
     bootstrapChains[0];
 
-  if (!bootstrapActiveChain) {
+  if (!bootstrapInitialChain) {
     throw new Error("createBackgroundRuntime requires at least one admitted bootstrap chain definition");
   }
 
   const bootstrapInitialState: NetworkStateInput = canResolveRequestedInitialState
     ? requestedNetworkInitialState
     : {
-        activeChainRef: bootstrapActiveChain.chainRef,
-        availableChainRefs: [bootstrapActiveChain.chainRef],
+        availableChainRefs: [bootstrapInitialChain.chainRef],
         rpc: {
-          [bootstrapActiveChain.chainRef]:
-            requestedNetworkInitialState.rpc[bootstrapActiveChain.chainRef] ??
-            buildDefaultRoutingState(bootstrapActiveChain, networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY),
+          [bootstrapInitialChain.chainRef]:
+            requestedNetworkInitialState.rpc[bootstrapInitialChain.chainRef] ??
+            buildDefaultRoutingState(bootstrapInitialChain, networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY),
         },
       };
   const deferredNetworkInitialState = canResolveRequestedInitialState ? null : requestedNetworkInitialState;
@@ -213,9 +212,6 @@ export const initControllers = ({
 
   const transactionController = new StoreTransactionController({
     messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
-    network: {
-      getState: () => networkController.getState(),
-    },
     networkPreferences,
     chainDefinitions: {
       getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),

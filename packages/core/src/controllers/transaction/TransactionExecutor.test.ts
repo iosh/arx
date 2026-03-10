@@ -72,9 +72,6 @@ describe("TransactionExecutor", () => {
       view: {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
-      network: {
-        getState: () => ({ activeChainRef: "solana:101" }),
-      } as never,
       networkPreferences: {
         getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,

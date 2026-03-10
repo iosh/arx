@@ -97,7 +97,7 @@ describe("background rpc engine assembly", () => {
     });
     const errorBoundary = middlewares[0];
     if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
-    const chainRef = runtime.controllers.network.getState().activeChainRef;
+    const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
 
     const req = {
       method: "eth_chainId",
@@ -253,7 +253,7 @@ describe("background rpc engine assembly", () => {
     }
     engine.push((_req, _res, _next, end) => end());
 
-    const chainRef = runtime.controllers.network.getState().activeChainRef;
+    const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
     await expect(
       new Promise<void>((resolve, reject) => {
         engine.handle(

@@ -94,13 +94,15 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const networkState = runtime.controllers.network.getState();
-    expect(networkState.activeChainRef).toBe(ALT_CHAIN.chainRef);
+    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+    expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
+    expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
     runtime.lifecycle.destroy();
   });
 
-  it("persists activeChainRef when ui.networks.switchActive succeeds", async () => {
+  it("persists selectedChainRef when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(

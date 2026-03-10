@@ -4,22 +4,23 @@ import { createChainActivationService } from "./ChainActivationService.js";
 import { ChainSelectionSyncPolicies, ProviderChainActivationReasons } from "./types.js";
 
 describe("ChainActivationService", () => {
-  it("selects wallet chain by switching the network and persisting provider selection", async () => {
-    const switchChain = vi.fn().mockResolvedValue(undefined);
+  it("selects wallet chain by persisting wallet and provider selection", async () => {
     const update = vi.fn().mockResolvedValue(undefined);
     const setActiveChainRef = vi.fn().mockResolvedValue(undefined);
 
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain,
+        getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
-      preferences: { update, setActiveChainRef } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update,
+        setActiveChainRef,
+      } as never,
     });
 
     await service.selectWalletChain("eip155:10");
 
-    expect(switchChain).toHaveBeenCalledWith("eip155:10");
     expect(update).toHaveBeenCalledWith({
       selectedChainRef: "eip155:10",
       activeChainByNamespacePatch: { eip155: "eip155:10" },
@@ -27,77 +28,52 @@ describe("ChainActivationService", () => {
     expect(setActiveChainRef).not.toHaveBeenCalled();
   });
 
-  it("keeps legacy activate as an alias for wallet chain selection", async () => {
-    const switchChain = vi.fn().mockResolvedValue(undefined);
-    const update = vi.fn().mockResolvedValue(undefined);
-    const setActiveChainRef = vi.fn().mockResolvedValue(undefined);
-
+  it("rejects wallet selection for chains outside the mounted runtime set", async () => {
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain,
+        getState: () => ({ availableChainRefs: ["eip155:1"] }),
       } as never,
-      preferences: { update, setActiveChainRef } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update: vi.fn(),
+        setActiveChainRef: vi.fn(),
+      } as never,
     });
 
-    await service.activate("eip155:10");
-
-    expect(switchChain).toHaveBeenCalledWith("eip155:10");
-    expect(update).toHaveBeenCalledWith({
-      selectedChainRef: "eip155:10",
-      activeChainByNamespacePatch: { eip155: "eip155:10" },
-    });
-    expect(setActiveChainRef).not.toHaveBeenCalled();
-  });
-
-  it("surfaces non-activatable targets from the network controller", async () => {
-    const switchError = arxError({
+    await expect(service.selectWalletChain("eip155:999")).rejects.toMatchObject({
       reason: ArxReasons.ChainNotSupported,
-      message: "not available",
-      data: { chainRef: "eip155:999" },
     });
-
-    const service = createChainActivationService({
-      network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain: vi.fn().mockRejectedValue(switchError),
-      } as never,
-      preferences: { update: vi.fn(), setActiveChainRef: vi.fn() } as never,
-    });
-
-    await expect(service.activate("eip155:999")).rejects.toMatchObject({ reason: ArxReasons.ChainNotSupported });
   });
 
-  it("rolls back the network switch when preference persistence fails", async () => {
-    const switchChain = vi.fn().mockResolvedValue(undefined);
+  it("surfaces persistence failures when selecting wallet chains", async () => {
     const update = vi.fn().mockRejectedValue(new Error("disk failed"));
-    const logger = vi.fn();
 
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain,
+        getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
-      preferences: { update, setActiveChainRef: vi.fn() } as never,
-      logger,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update,
+        setActiveChainRef: vi.fn(),
+      } as never,
     });
 
-    await expect(service.activate("eip155:10")).rejects.toThrow("disk failed");
-    expect(switchChain).toHaveBeenNthCalledWith(1, "eip155:10");
-    expect(switchChain).toHaveBeenNthCalledWith(2, "eip155:1");
-    expect(logger).not.toHaveBeenCalled();
+    await expect(service.selectWalletChain("eip155:10")).rejects.toThrow("disk failed");
   });
 
   it("activates provider chain without switching selected wallet chain when sync policy is never", async () => {
-    const switchChain = vi.fn().mockResolvedValue(undefined);
     const setActiveChainRef = vi.fn().mockResolvedValue(undefined);
 
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain,
+        getState: () => ({ availableChainRefs: ["eip155:1", "solana:101"] }),
       } as never,
-      preferences: { update: vi.fn(), setActiveChainRef } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update: vi.fn(),
+        setActiveChainRef,
+      } as never,
     });
 
     await service.activateProviderChain({
@@ -107,21 +83,22 @@ describe("ChainActivationService", () => {
       syncSelectedChain: ChainSelectionSyncPolicies.Never,
     });
 
-    expect(switchChain).not.toHaveBeenCalled();
     expect(setActiveChainRef).toHaveBeenCalledWith("solana:101");
   });
 
   it("syncs selected wallet chain for provider activation when selected namespace matches", async () => {
-    const switchChain = vi.fn().mockResolvedValue(undefined);
     const update = vi.fn().mockResolvedValue(undefined);
     const setActiveChainRef = vi.fn().mockResolvedValue(undefined);
 
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain,
+        getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
-      preferences: { update, setActiveChainRef } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update,
+        setActiveChainRef,
+      } as never,
     });
 
     await service.activateProviderChain({
@@ -130,7 +107,6 @@ describe("ChainActivationService", () => {
       reason: ProviderChainActivationReasons.SwitchChain,
     });
 
-    expect(switchChain).toHaveBeenCalledWith("eip155:10");
     expect(update).toHaveBeenCalledWith({
       selectedChainRef: "eip155:10",
       activeChainByNamespacePatch: { eip155: "eip155:10" },
@@ -141,10 +117,13 @@ describe("ChainActivationService", () => {
   it("rejects provider activations whose chainRef namespace mismatches the request namespace", async () => {
     const service = createChainActivationService({
       network: {
-        getState: () => ({ activeChainRef: "eip155:1" }),
-        switchChain: vi.fn(),
+        getState: () => ({ availableChainRefs: ["eip155:1", "solana:101"] }),
       } as never,
-      preferences: { update: vi.fn(), setActiveChainRef: vi.fn() } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update: vi.fn(),
+        setActiveChainRef: vi.fn(),
+      } as never,
     });
 
     await expect(
@@ -154,5 +133,29 @@ describe("ChainActivationService", () => {
         reason: ProviderChainActivationReasons.SwitchChain,
       }),
     ).rejects.toThrow(/namespace mismatch/i);
+  });
+
+  it("preserves not-available errors when syncing provider activation into wallet selection", async () => {
+    const service = createChainActivationService({
+      network: {
+        getState: () => ({ availableChainRefs: ["eip155:1"] }),
+      } as never,
+      preferences: {
+        getSelectedChainRef: () => "eip155:1",
+        update: vi.fn(),
+        setActiveChainRef: vi.fn(),
+      } as never,
+    });
+
+    await expect(
+      service.activateProviderChain({
+        namespace: "eip155",
+        chainRef: "eip155:999",
+        reason: ProviderChainActivationReasons.SwitchChain,
+      }),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.ChainNotSupported,
+      data: { chainRef: "eip155:999" },
+    });
   });
 });

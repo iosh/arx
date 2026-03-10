@@ -56,14 +56,12 @@ const toEntity = (metadata: ChainMetadata): ChainDefinitionEntity => ({
 const setup = (params?: {
   known?: ChainMetadata[];
   available?: ChainMetadata[];
-  active?: ChainMetadata;
   selected?: ChainMetadata;
   activeByNamespace?: Record<string, string>;
 }) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
-  const active = params?.active ?? MAINNET;
-  const selected = params?.selected ?? active;
+  const selected = params?.selected ?? MAINNET;
 
   return createChainViewsService({
     chainDefinitions: {
@@ -73,7 +71,6 @@ const setup = (params?: {
     network: {
       getState: () => ({
         revision: 1,
-        activeChainRef: active.chainRef,
         availableChainRefs: available.map((chain) => chain.chainRef),
         rpc: {},
       }),
@@ -115,7 +112,6 @@ describe("ChainViewsService", () => {
   it("builds provider meta from namespace-specific active preferences", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      active: SOLANA,
       selected: SOLANA,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
@@ -160,17 +156,15 @@ describe("ChainViewsService", () => {
     }
   });
 
-  it("uses selectedChainRef for wallet active views even when runtime legacy active differs", () => {
-    const service = setup({ active: SOLANA, selected: MAINNET, available: [MAINNET, SOLANA] });
+  it("throws when selectedChainRef is not mounted in the runtime", () => {
+    const service = setup({ selected: BASE, available: [MAINNET, SOLANA] });
 
-    expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef });
-    expect(service.buildWalletNetworksSnapshot().active).toBe(MAINNET.chainRef);
+    expect(() => service.getSelectedChainView()).toThrow(/not available/i);
   });
 
   it("derives approval review chains without falling back to wallet selected chain", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      active: SOLANA,
       selected: SOLANA,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });

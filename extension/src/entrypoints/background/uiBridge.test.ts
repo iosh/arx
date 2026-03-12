@@ -518,6 +518,9 @@ const createControllers = () => {
       supportedChains: [CHAIN.chainRef],
     }),
   };
+  const permissionViews = {
+    buildUiPermissionsSnapshot: () => ({ origins: {} }),
+  };
 
   return {
     accounts,
@@ -528,6 +531,7 @@ const createControllers = () => {
     chainDefinitions,
     signers,
     chainViews,
+    permissionViews,
   } as unknown as HandlerControllers;
 };
 
@@ -637,6 +641,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     controllers,
     chainActivation: { selectWalletChain: vi.fn(async () => {}) } as UiBridgeDeps["chainActivation"],
     chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
+    permissionViews: (controllers as unknown as { permissionViews: UiBridgeDeps["permissionViews"] }).permissionViews,
     networkPreferences: networkPreferences as unknown as UiBridgeDeps["networkPreferences"],
     session,
     rpcClients: {
@@ -815,6 +820,9 @@ describe("uiBridge", () => {
           return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
         },
       },
+      permissionViews: (controllers as unknown as {
+        permissionViews: Parameters<typeof createUiBridge>[0]["permissionViews"];
+      }).permissionViews,
       networkPreferences: {
         subscribeChanged: (
           handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,

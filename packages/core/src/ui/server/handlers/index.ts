@@ -14,8 +14,18 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
-  const { controllers, chainActivation, chainViews, session, keyring, attention, platform, uiOrigin, rpcClients } =
-    deps;
+  const {
+    controllers,
+    chainActivation,
+    chainViews,
+    permissionViews,
+    session,
+    keyring,
+    attention,
+    platform,
+    uiOrigin,
+    rpcClients,
+  } = deps;
   const uiSessionId = crypto.randomUUID();
   const approvalFlowRegistry = createApprovalFlowRegistry();
 
@@ -23,6 +33,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     buildUiSnapshot({
       controllers,
       chainViews,
+      permissionViews,
       session,
       keyring,
       attention,

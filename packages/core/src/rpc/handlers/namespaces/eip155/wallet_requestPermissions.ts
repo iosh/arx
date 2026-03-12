@@ -1,6 +1,5 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
-import { toCanonicalAddressFromAccountId } from "../../../../accounts/addressing/accountId.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalCreateParams,
@@ -10,7 +9,6 @@ import {
   type PermissionRequestDescriptor,
 } from "../../../../controllers/index.js";
 import { isPermissionCapability } from "../../../../permissions/capabilities.js";
-import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -93,7 +91,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;
     const namespace = invocation.namespace;
 
@@ -121,10 +119,6 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       });
     }
 
-    const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
-    const getAccounts = (targetChainRef: string, accountIds: readonly string[]) =>
-      accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef: targetChainRef, accountId }));
-
-    return buildWalletPermissions({ origin, authorization, getAccounts });
+    return services.permissionViews.buildWalletPermissions(origin, { namespace, chainRef });
   },
 };

@@ -1,6 +1,10 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
+import {
+  toAccountIdFromAddress,
+  toCanonicalAddressFromAccountId,
+  toDisplayAddressFromAccountId,
+} from "../../../../../accounts/addressing/accountId.js";
 import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
 import { ApprovalKinds, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
@@ -50,6 +54,36 @@ const connectOrigin = async (args: {
       ...Array<{ chainRef: string; accountIds: string[] }>,
     ],
   });
+
+  const accountsController = runtime.controllers.accounts as typeof runtime.controllers.accounts & {
+    __testOwnedAccounts?: Map<string, ReturnType<typeof runtime.controllers.accounts.getOwnedAccount>>;
+    __originalGetOwnedAccount?: typeof runtime.controllers.accounts.getOwnedAccount;
+  };
+
+  if (!accountsController.__testOwnedAccounts) {
+    accountsController.__testOwnedAccounts = new Map();
+  }
+
+  if (!accountsController.__originalGetOwnedAccount) {
+    const original = accountsController.getOwnedAccount.bind(accountsController);
+    accountsController.__originalGetOwnedAccount = original;
+    accountsController.getOwnedAccount = (params) => {
+      const key = `${params.chainRef}:${params.accountId}`;
+      return accountsController.__testOwnedAccounts?.get(key) ?? original(params);
+    };
+  }
+
+  for (const chainRef of chainRefs) {
+    for (const address of addresses) {
+      const accountId = toAccountIdFromAddress({ chainRef, address });
+      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
+        accountId,
+        namespace,
+        canonicalAddress: toCanonicalAddressFromAccountId({ chainRef, accountId }),
+        displayAddress: toDisplayAddressFromAccountId({ chainRef, accountId }),
+      });
+    }
+  }
 };
 
 describe("eip155 handlers - approval metadata", () => {

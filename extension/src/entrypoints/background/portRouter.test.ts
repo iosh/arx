@@ -1,4 +1,4 @@
-import type { RpcRegistry } from "@arx/core";
+import { createDefaultChainAddressCodecRegistry, type RpcRegistry } from "@arx/core";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -61,24 +61,25 @@ const makeSnapshot = (
 });
 
 const createRouterHarness = (options?: {
-  getChainAuthorization?: (
+  listPermittedAccounts?: (
     origin: string,
-    params: { namespace: string; chainRef: string },
-  ) => { origin: string; namespace: string; chainRef: string; accountIds: string[] } | null;
+    params: { chainRef: string },
+  ) => Array<{ accountId: string; canonicalAddress: string; displayAddress: string }>;
   cancelByScope?: (params: unknown) => Promise<number>;
   snapshots?: Record<string, ProviderBridgeSnapshot>;
 }) => {
-  const getChainAuthorization = vi.fn(
-    options?.getChainAuthorization ??
+  const listPermittedAccounts = vi.fn(
+    options?.listPermittedAccounts ??
       ((_origin, params) =>
-        params.namespace === "eip155" && params.chainRef === "eip155:1"
-          ? {
-              origin: "https://example.com",
-              namespace: "eip155",
-              chainRef: "eip155:1",
-              accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-            }
-          : null),
+        params.chainRef === "eip155:1"
+          ? [
+              {
+                accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              },
+            ]
+          : []),
   );
   const cancelByScope = vi.fn(options?.cancelByScope ?? (async () => 1));
   const engineHandle = vi.fn((request: unknown, callback: (error: unknown, response?: unknown) => void) => {
@@ -90,13 +91,15 @@ const createRouterHarness = (options?: {
     });
   });
   const registry = { getRegisteredNamespaces: () => ["eip155", "conflux"] } as unknown as RpcRegistry;
+  const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
   const getOrInitContext = vi.fn(async () => ({
     engine: { handle: engineHandle },
     runtime: { rpc: { registry } },
     controllers: {
-      permissions: { getChainAuthorization },
       approvals: { cancelByScope },
+      chainAddressCodecs,
     },
+    permissionViews: { listPermittedAccounts },
   }));
   const snapshots = options?.snapshots ?? {
     eip155: makeSnapshot("eip155", true, {
@@ -120,7 +123,7 @@ const createRouterHarness = (options?: {
     },
   });
 
-  return { router, getOrInitContext, getChainAuthorization, cancelByScope, engineHandle, snapshots };
+  return { router, getOrInitContext, listPermittedAccounts, cancelByScope, engineHandle, snapshots };
 };
 
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
@@ -146,7 +149,7 @@ describe("portRouter privacy and binding", () => {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
-    const { router, getChainAuthorization } = createRouterHarness({
+    const { router, listPermittedAccounts } = createRouterHarness({
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -169,7 +172,7 @@ describe("portRouter privacy and binding", () => {
         }),
       }),
     );
-    expect(getChainAuthorization).not.toHaveBeenCalled();
+    expect(listPermittedAccounts).not.toHaveBeenCalled();
   });
 
   it("broadcasts accountsChanged([]) when locked", async () => {
@@ -177,7 +180,7 @@ describe("portRouter privacy and binding", () => {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
-    const { router, getChainAuthorization } = createRouterHarness({
+    const { router, listPermittedAccounts } = createRouterHarness({
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -196,17 +199,18 @@ describe("portRouter privacy and binding", () => {
         payload: { event: "accountsChanged", params: [[]] },
       }),
     );
-    expect(getChainAuthorization).not.toHaveBeenCalled();
+    expect(listPermittedAccounts).not.toHaveBeenCalled();
   });
 
   it("sends handshake_ack with permitted accounts from the bound chain", async () => {
-    const { router, getChainAuthorization } = createRouterHarness({
-      getChainAuthorization: () => ({
-        origin: "https://example.com",
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-      }),
+    const { router, listPermittedAccounts } = createRouterHarness({
+      listPermittedAccounts: () => [
+        {
+          accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+      ],
       snapshots: {
         eip155: makeSnapshot("eip155", true, {
           chain: { chainId: "0x1", chainRef: "eip155:1" },
@@ -227,15 +231,14 @@ describe("portRouter privacy and binding", () => {
     handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    expect(getChainAuthorization).toHaveBeenCalledWith("https://example.com", {
-      namespace: "eip155",
+    expect(listPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
       chainRef: "eip155:1",
     });
     expect(port.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "handshake_ack",
         payload: expect.objectContaining({
-          accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+          accounts: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
         }),
       }),
     );

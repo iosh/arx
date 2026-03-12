@@ -1,10 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toCanonicalAddressFromAccountId } from "../../../../accounts/addressing/accountId.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import { toApprovalRequester } from "../../../../controllers/approval/utils.js";
 import type { ApprovalRequester, TransactionController, TransactionMeta } from "../../../../controllers/index.js";
-import type { PermissionController } from "../../../../controllers/permission/types.js";
+import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
 import type { RpcInvocationContext } from "../../types.js";
 
 export const requireRequestContext = (rpcContext: RpcInvocationContext | undefined, method: string) => {
@@ -27,7 +26,7 @@ export const requireApprovalRequester = (
 };
 
 type PermittedAccountDeps = {
-  permissions: Pick<PermissionController, "getChainAuthorization">;
+  permissionViews: Pick<PermissionViewsService, "listPermittedAccounts">;
   chainAddressCodecs: Pick<ChainAddressCodecRegistry, "toCanonicalAddress">;
 };
 
@@ -41,11 +40,11 @@ export const assertPermittedEip155Account = (args: {
   const { origin, method, chainRef, address, controllers } = args;
 
   const canonical = controllers.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
-  const authorization = controllers.permissions.getChainAuthorization(origin, { namespace: "eip155", chainRef });
-  const permitted =
-    authorization?.accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId })) ?? [];
+  const permitted = controllers.permissionViews
+    .listPermittedAccounts(origin, { chainRef })
+    .map((account) => account.canonicalAddress);
 
-  if (!authorization || permitted.length === 0) {
+  if (permitted.length === 0) {
     throw arxError({
       reason: ArxReasons.PermissionNotConnected,
       message: `Origin "${origin}" is not connected`,

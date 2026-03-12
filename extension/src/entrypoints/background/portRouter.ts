@@ -10,7 +10,6 @@ import {
   type JsonRpcRequest,
   type RpcRegistry,
 } from "@arx/core";
-import { toCanonicalAddressFromAccountId } from "@arx/core/accounts";
 import { CHANNEL, type Envelope, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
@@ -218,16 +217,12 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const origin = getPortOrigin(port, extensionOrigin);
     if (origin === "unknown://") return [];
 
-    const { controllers } = await getContext();
+    const { controllers, permissionViews } = await getContext();
     const portContext = portContexts.get(port);
     const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
-    const namespace = portContext?.providerNamespace ?? snapshot.namespace;
-    const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
-    if (!authorization || authorization.accountIds.length === 0) {
-      return [];
-    }
-
-    return authorization.accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId }));
+    return permissionViews.listPermittedAccounts(origin, { chainRef }).map((account) =>
+      controllers.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }),
+    );
   };
 
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {

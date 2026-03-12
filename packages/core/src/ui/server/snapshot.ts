@@ -1,40 +1,13 @@
 import type { ApprovalFlowRegistry } from "../../approvals/types.js";
-import type { PermissionsState } from "../../controllers/permission/types.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
+import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import {
-  type UiPermissionsSnapshot,
-  UiPermissionsSnapshotSchema,
   type UiSnapshot,
   UiSnapshotSchema,
 } from "../protocol/schemas.js";
-
-const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot => {
-  const origins: UiPermissionsSnapshot["origins"] = {};
-
-  for (const [origin, originState] of Object.entries(state.origins)) {
-    const namespaces: UiPermissionsSnapshot["origins"][string] = {};
-
-    for (const [namespace, namespaceState] of Object.entries(originState)) {
-      namespaces[namespace] = {
-        chains: Object.fromEntries(
-          Object.entries(namespaceState.chains).map(([chainRef, chainState]) => [
-            chainRef,
-            {
-              accountIds: [...chainState.accountIds],
-            },
-          ]),
-        ),
-      };
-    }
-
-    origins[origin] = namespaces;
-  }
-
-  return UiPermissionsSnapshotSchema.parse({ origins });
-};
 
 export const buildUiSnapshot = (deps: {
   controllers: HandlerControllers;
@@ -42,12 +15,13 @@ export const buildUiSnapshot = (deps: {
     ChainViewsService,
     "buildWalletNetworksSnapshot" | "findAvailableChainView" | "getApprovalReviewChainView" | "getSelectedChainView"
   >;
+  permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: { getSnapshot: () => UiSnapshot["attention"] };
   approvalFlowRegistry: Pick<ApprovalFlowRegistry, "present">;
 }): UiSnapshot => {
-  const { controllers, chainViews, session, keyring, attention, approvalFlowRegistry } = deps;
+  const { controllers, chainViews, permissionViews, session, keyring, attention, approvalFlowRegistry } = deps;
 
   const chain = chainViews.getSelectedChainView();
   const networks = chainViews.buildWalletNetworksSnapshot();
@@ -130,7 +104,7 @@ export const buildUiSnapshot = (deps: {
     },
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
-    permissions: toUiPermissionsSnapshot(controllers.permissions.getState()),
+    permissions: permissionViews.buildUiPermissionsSnapshot(),
     vault: {
       initialized: session.vault.getStatus().hasEnvelope,
     },

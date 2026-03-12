@@ -2,6 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
+import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import {
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -276,5 +277,77 @@ describe("background rpc engine assembly", () => {
     ).resolves.toBeUndefined();
 
     expect(attentionSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserves PermissionDenied semantics for capability-guarded methods", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      store: {
+        ports: {
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+          permissions: new MemoryPermissionsPort(),
+        },
+      },
+    });
+
+    runtime.rpc.registry.registerNamespaceDefinitions(
+      "eip155",
+      {
+        arx_secureTest: {
+          capability: PermissionCapabilities.Sign,
+          locked: { type: "allow" },
+          handler: vi.fn(),
+        },
+      },
+      { replace: false },
+    );
+
+    const middlewares = createBackgroundRpcMiddlewares(runtime, {
+      isInternalOrigin: () => false,
+    });
+    const invocationContext = middlewares[2];
+    const accessPolicyGuard = middlewares[3];
+    if (!invocationContext || !accessPolicyGuard) {
+      throw new Error("Expected invocationContext and accessPolicyGuard middlewares");
+    }
+
+    const engine = new JsonRpcEngine();
+    engine.push(invocationContext);
+    engine.push(accessPolicyGuard);
+    engine.push((_req, _res, _next, end) => end());
+
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        engine.handle(
+          {
+            id: 1,
+            jsonrpc: "2.0",
+            method: "arx_secureTest",
+            origin: "https://dapp.example",
+            arx: { namespace: "eip155", chainRef: "eip155:1" },
+          } as Parameters<JsonRpcEngine["handle"]>[0],
+          (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          },
+        );
+      }),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.PermissionDenied,
+      data: expect.objectContaining({
+        capability: PermissionCapabilities.Sign,
+        method: "arx_secureTest",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+      }),
+    });
   });
 });

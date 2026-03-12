@@ -5,6 +5,7 @@ import type {
   ChainViewsService,
   HandlerControllers,
   KeyringService,
+  PermissionViewsService,
   RpcClientRegistry,
   RpcRegistry,
 } from "@arx/core";
@@ -34,6 +35,7 @@ type BridgeDeps = {
     | "listKnownChainViews"
     | "requireAvailableChainMetadata"
   >;
+  permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
   networkPreferences: Pick<NetworkPreferencesService, "subscribeChanged">;
   session: BackgroundSessionServices;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
@@ -49,6 +51,7 @@ export const createUiBridge = ({
   controllers,
   chainActivation,
   chainViews,
+  permissionViews,
   networkPreferences,
   session,
   rpcClients,
@@ -67,6 +70,7 @@ export const createUiBridge = ({
     controllers,
     chainActivation,
     chainViews,
+    permissionViews,
     session,
     keyring,
     attention,

@@ -13,6 +13,7 @@ import type {
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
+import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import type { RequestContext } from "../requestContext.js";
@@ -37,6 +38,10 @@ export type HandlerControllers = {
 
 export type HandlerRuntimeServices = {
   chainViews: Pick<ChainViewsService, "resolveEip155SwitchChain">;
+  permissionViews: Pick<
+    PermissionViewsService,
+    "buildWalletPermissions" | "getConnectionSnapshot" | "listPermittedAccounts"
+  >;
 };
 
 export type RpcRequest = {

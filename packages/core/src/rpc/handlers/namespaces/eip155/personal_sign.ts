@@ -41,7 +41,7 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
 
     return { address, message };
   },
-  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const { address, message } = params;
     const chainRef = invocation.chainRef;
     const from = assertPermittedEip155Account({
@@ -49,7 +49,10 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       method: "personal_sign",
       chainRef,
       address,
-      controllers,
+      controllers: {
+        permissionViews: services.permissionViews,
+        chainAddressCodecs: controllers.chainAddressCodecs,
+      },
     });
 
     const request = {

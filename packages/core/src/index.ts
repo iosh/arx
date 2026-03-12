@@ -19,6 +19,7 @@ export * from "./runtime/index.js";
 export * from "./services/runtime/attention/index.js";
 export * from "./services/runtime/chainActivation/index.js";
 export * from "./services/runtime/chainViews/index.js";
+export * from "./services/runtime/permissionViews/index.js";
 export * from "./storage/index.js";
 export * from "./utils/logger.js";
 export * from "./vault/index.js";

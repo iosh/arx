@@ -18,6 +18,7 @@ export type BackgroundContext = {
   keyring: ReturnType<typeof createBackgroundRuntime>["services"]["keyring"];
   attention: ReturnType<typeof createBackgroundRuntime>["services"]["attention"];
   chainViews: ReturnType<typeof createBackgroundRuntime>["services"]["chainViews"];
+  permissionViews: ReturnType<typeof createBackgroundRuntime>["services"]["permissionViews"];
   networkPreferences: ReturnType<typeof createBackgroundRuntime>["services"]["networkPreferences"];
 };
 
@@ -130,6 +131,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         keyring: runtime.services.keyring,
         attention: runtime.services.attention,
         chainViews: runtime.services.chainViews,
+        permissionViews: runtime.services.permissionViews,
         networkPreferences: runtime.services.networkPreferences,
       };
 

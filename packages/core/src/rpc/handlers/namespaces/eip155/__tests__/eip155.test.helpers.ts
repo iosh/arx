@@ -106,6 +106,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
     rpcClientRegistry: runtime.rpc.clients,
     services: {
       chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
     },
   });
   return async (args: Parameters<typeof execute>[0]) => {

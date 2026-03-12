@@ -59,6 +59,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
     rpcClientRegistry: runtime.rpc.clients,
     services: {
       chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
     },
   });
 
@@ -121,9 +122,8 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       if (!capability) return;
 
       const { namespace, chainRef } = rpcRegistry.resolveInvocation(controllers, method, context);
-      const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
 
-      if (!authorization || authorization.accountIds.length === 0) {
+      if (!runtime.services.permissionViews.getConnectionSnapshot(origin, { chainRef }).isConnected) {
         throw arxError({
           reason: ArxReasons.PermissionDenied,
           message: `Origin "${origin}" lacks permission for ${method}`,
@@ -132,9 +132,8 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       }
     },
     isConnected: (origin, options) => {
-      const { namespace, chainRef } = options;
-      const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
-      return !!authorization && authorization.accountIds.length > 0;
+      const { chainRef } = options;
+      return runtime.services.permissionViews.getConnectionSnapshot(origin, { chainRef }).isConnected;
     },
     ...(envHooks.shouldRequestUnlockAttention
       ? { shouldRequestUnlockAttention: envHooks.shouldRequestUnlockAttention }

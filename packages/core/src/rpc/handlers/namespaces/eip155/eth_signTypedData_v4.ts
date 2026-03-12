@@ -12,7 +12,7 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => parseTypedDataParams(toParamsArray(params)),
-  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const { address, typedData } = params;
     const chainRef = invocation.chainRef;
     const from = assertPermittedEip155Account({
@@ -20,7 +20,10 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
       method: "eth_signTypedData_v4",
       chainRef,
       address,
-      controllers,
+      controllers: {
+        permissionViews: services.permissionViews,
+        chainAddressCodecs: controllers.chainAddressCodecs,
+      },
     });
 
     const request = {

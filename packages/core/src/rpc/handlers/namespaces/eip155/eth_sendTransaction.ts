@@ -32,7 +32,7 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
 
     return paramsArray as unknown as EthSendTransactionParams;
   },
-  handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
+  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;
 
     const txRequest = buildEip155TransactionRequest(params, chainRef);
@@ -41,7 +41,10 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
       method: "eth_sendTransaction",
       chainRef,
       address: txRequest.payload.from,
-      controllers,
+      controllers: {
+        permissionViews: services.permissionViews,
+        chainAddressCodecs: controllers.chainAddressCodecs,
+      },
     });
     txRequest.payload.from = from;
 

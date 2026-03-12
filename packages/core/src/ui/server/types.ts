@@ -6,6 +6,7 @@ import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
+import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 
 export type UiOnboardingOpenTabResult = {
@@ -48,6 +49,7 @@ export type UiRuntimeDeps = {
     | "listKnownChainViews"
     | "requireAvailableChainMetadata"
   >;
+  permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;

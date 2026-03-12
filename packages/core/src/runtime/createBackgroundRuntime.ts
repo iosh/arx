@@ -7,6 +7,7 @@ import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapter
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
 import { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../services/runtime/chainViews/index.js";
+import { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import { createAccountsService } from "../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import { createKeyringMetasService } from "../services/store/keyringMetas/KeyringMetasService.js";
@@ -77,6 +78,7 @@ export type BackgroundRuntime = {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
+    permissionViews: ReturnType<typeof createPermissionViewsService>;
     networkPreferences: NetworkPreferencesService;
     session: BackgroundSessionServices;
     keyring: KeyringService;
@@ -269,6 +271,11 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     signers,
   };
 
+  const permissionViews = createPermissionViewsService({
+    accounts: controllers.accounts,
+    permissions: controllers.permissions,
+  });
+
   const transactionsLifecycle = createTransactionsLifecycle({
     controller: controllers.transactions,
     service: transactionsService,
@@ -404,6 +411,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       attention,
       chainActivation,
       chainViews,
+      permissionViews,
       networkPreferences,
       session: sessionLayer.session,
       keyring: keyringService,

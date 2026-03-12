@@ -61,11 +61,25 @@ const makeSnapshot = (
 });
 
 const createRouterHarness = (options?: {
-  getPermittedAccounts?: (origin: string, params: { namespace: string; chainRef: string }) => string[];
+  getChainAuthorization?: (
+    origin: string,
+    params: { namespace: string; chainRef: string },
+  ) => { origin: string; namespace: string; chainRef: string; accountIds: string[] } | null;
   cancelByScope?: (params: unknown) => Promise<number>;
   snapshots?: Record<string, ProviderBridgeSnapshot>;
 }) => {
-  const getPermittedAccounts = vi.fn(options?.getPermittedAccounts ?? (() => ["0xabc"]));
+  const getChainAuthorization = vi.fn(
+    options?.getChainAuthorization ??
+      ((_origin, params) =>
+        params.namespace === "eip155" && params.chainRef === "eip155:1"
+          ? {
+              origin: "https://example.com",
+              namespace: "eip155",
+              chainRef: "eip155:1",
+              accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+            }
+          : null),
+  );
   const cancelByScope = vi.fn(options?.cancelByScope ?? (async () => 1));
   const engineHandle = vi.fn((request: unknown, callback: (error: unknown, response?: unknown) => void) => {
     const payload = request as { id?: unknown; jsonrpc?: unknown };
@@ -80,7 +94,7 @@ const createRouterHarness = (options?: {
     engine: { handle: engineHandle },
     runtime: { rpc: { registry } },
     controllers: {
-      permissions: { getPermittedAccounts },
+      permissions: { getChainAuthorization },
       approvals: { cancelByScope },
     },
   }));
@@ -106,7 +120,7 @@ const createRouterHarness = (options?: {
     },
   });
 
-  return { router, getOrInitContext, getPermittedAccounts, cancelByScope, engineHandle, snapshots };
+  return { router, getOrInitContext, getChainAuthorization, cancelByScope, engineHandle, snapshots };
 };
 
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
@@ -132,7 +146,7 @@ describe("portRouter privacy and binding", () => {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
-    const { router, getPermittedAccounts } = createRouterHarness({
+    const { router, getChainAuthorization } = createRouterHarness({
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -155,7 +169,7 @@ describe("portRouter privacy and binding", () => {
         }),
       }),
     );
-    expect(getPermittedAccounts).not.toHaveBeenCalled();
+    expect(getChainAuthorization).not.toHaveBeenCalled();
   });
 
   it("broadcasts accountsChanged([]) when locked", async () => {
@@ -163,7 +177,7 @@ describe("portRouter privacy and binding", () => {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
-    const { router, getPermittedAccounts } = createRouterHarness({
+    const { router, getChainAuthorization } = createRouterHarness({
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -182,12 +196,17 @@ describe("portRouter privacy and binding", () => {
         payload: { event: "accountsChanged", params: [[]] },
       }),
     );
-    expect(getPermittedAccounts).not.toHaveBeenCalled();
+    expect(getChainAuthorization).not.toHaveBeenCalled();
   });
 
-  it("sends handshake_ack with permitted accounts from the bound namespace", async () => {
-    const { router, getPermittedAccounts } = createRouterHarness({
-      getPermittedAccounts: () => ["0xabc"],
+  it("sends handshake_ack with permitted accounts from the bound chain", async () => {
+    const { router, getChainAuthorization } = createRouterHarness({
+      getChainAuthorization: () => ({
+        origin: "https://example.com",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      }),
       snapshots: {
         eip155: makeSnapshot("eip155", true, {
           chain: { chainId: "0x1", chainRef: "eip155:1" },
@@ -208,10 +227,18 @@ describe("portRouter privacy and binding", () => {
     handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    expect(getPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
+    expect(getChainAuthorization).toHaveBeenCalledWith("https://example.com", {
       namespace: "eip155",
       chainRef: "eip155:1",
     });
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "handshake_ack",
+        payload: expect.objectContaining({
+          accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+        }),
+      }),
+    );
   });
 
   it("routes chainChanged only to ports bound to the matching namespace", async () => {

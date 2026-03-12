@@ -1,22 +1,21 @@
-import type { ChainRef } from "../../../../chains/ids.js";
+import { toCanonicalAddressFromAccountId } from "../../../../accounts/addressing/accountId.js";
 import { PermissionCapabilities } from "../../../../controllers/index.js";
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedAllow } from "../../locked.js";
 import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
-import { EIP155_NAMESPACE } from "../utils.js";
 
 export const walletGetPermissionsDefinition = defineNoParamsMethod({
-  capability: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedAllow(),
-  handler: ({ origin, controllers }) => {
-    const grants = controllers.permissions.listGrants(origin);
-    const getAccounts = (chainRef: string) =>
-      controllers.permissions.getPermittedAccounts(origin, {
-        namespace: EIP155_NAMESPACE,
-        chainRef: chainRef as ChainRef,
-      });
+  handler: ({ origin, controllers, invocation }) => {
+    const authorization = controllers.permissions.getChainAuthorization(origin, {
+      namespace: invocation.namespace,
+      chainRef: invocation.chainRef,
+    });
+    const getAccounts = (chainRef: string, accountIds: readonly string[]) =>
+      accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId }));
 
-    return buildWalletPermissions({ origin, grants, getAccounts });
+    return buildWalletPermissions({ origin, authorization, getAccounts });
   },
 });

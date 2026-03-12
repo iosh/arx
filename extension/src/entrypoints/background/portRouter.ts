@@ -10,6 +10,7 @@ import {
   type JsonRpcRequest,
   type RpcRegistry,
 } from "@arx/core";
+import { toCanonicalAddressFromAccountId } from "@arx/core/accounts";
 import { CHANNEL, type Envelope, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
@@ -43,14 +44,6 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   const portLog = extendLogger(runtimeLog, "port");
   const sessionByPort = new Map<Runtime.Port, string>();
   let rpcRegistry: RpcRegistry | null = null;
-
-  const deriveNamespaceFromChainRef = (chainRef: string | null | undefined, fallback = DEFAULT_NAMESPACE) => {
-    if (typeof chainRef !== "string" || chainRef.length === 0) {
-      return fallback;
-    }
-    const [namespace] = chainRef.split(":");
-    return namespace || fallback;
-  };
 
   const getContext = async () => {
     const ctx = await getOrInitContext();
@@ -229,8 +222,12 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const portContext = portContexts.get(port);
     const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
     const namespace = portContext?.providerNamespace ?? snapshot.namespace;
+    const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
+    if (!authorization || authorization.accountIds.length === 0) {
+      return [];
+    }
 
-    return controllers.permissions.getPermittedAccounts(origin, { namespace, chainRef });
+    return authorization.accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId }));
   };
 
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
@@ -416,9 +413,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         const portContext = portContexts.get(port);
         const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
         const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-        const namespace =
-          deriveRpcContextNamespace(rpcContext, deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE)) ??
-          DEFAULT_NAMESPACE;
+        const namespace = deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE;
         const chainRef = rpcContext?.chainRef ?? null;
         const error = (rpcRegistry?.encodeErrorWithAdapters(
           arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
@@ -516,11 +511,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         jsonrpc,
         error: (rpcRegistry?.encodeErrorWithAdapters(error, {
           surface: "dapp",
-          namespace:
-            deriveRpcContextNamespace(
-              rpcContext,
-              deriveNamespaceFromChainRef(rpcContext?.chainRef, DEFAULT_NAMESPACE),
-            ) ?? DEFAULT_NAMESPACE,
+          namespace: deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE,
           chainRef: rpcContext?.chainRef ?? null,
           origin,
           method,

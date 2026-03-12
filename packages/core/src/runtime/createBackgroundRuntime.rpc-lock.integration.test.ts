@@ -1,7 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
-import { PermissionCapabilities } from "../controllers/index.js";
 import { createRpcHarness, flushAsync, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
 
 const PASSWORD = "secret-pass";
@@ -104,19 +103,14 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       await initializeSession(runtime);
       const { chain, address } = await deriveAccount(runtime);
 
-      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      await runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
         namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      });
-      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      });
-
-      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        accounts: [address],
+        chains: [
+          {
+            chainRef: chain.chainRef,
+            accountIds: [toAccountIdFromAddress({ chainRef: chain.chainRef, address })],
+          },
+        ],
       });
 
       runtime.services.session.unlock.lock("manual");
@@ -141,10 +135,6 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(approvalId).toBeTruthy();
 
       await runtime.services.session.unlock.unlock({ password: PASSWORD });
-      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-      });
 
       const accounts = (await harness.callRpc({ method: "eth_accounts" })) as string[];
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
@@ -160,7 +150,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
     }
   });
 
-  it("allows personal_sign when connected but Sign capability is missing", async () => {
+  it("allows personal_sign when connected without mutating durable permissions", async () => {
     const harness = await createRpcHarness();
     const { runtime } = harness;
     const approval = vi.spyOn(runtime.controllers.approvals, "create");
@@ -172,21 +162,16 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       await initializeSession(runtime);
       const { chain, address } = await deriveAccount(runtime);
 
-      // Simulate a connected origin (Accounts capability present), but do NOT grant Sign capability.
-      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
+      await runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
         namespace: chain.namespace,
-        chainRef: chain.chainRef,
+        chains: [
+          {
+            chainRef: chain.chainRef,
+            accountIds: [toAccountIdFromAddress({ chainRef: chain.chainRef, address })],
+          },
+        ],
       });
-      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-        namespace: chain.namespace,
-        chainRef: chain.chainRef,
-        accounts: [address],
-      });
-
-      const beforeCapabilities =
-        runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
-          ?.capabilities ?? [];
-      expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);
+      const beforeState = runtime.controllers.permissions.getState();
 
       await expect(
         harness.callRpc({
@@ -197,11 +182,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       ).resolves.toMatch(/^0x[0-9a-f]+$/i);
 
       expect(approval).toHaveBeenCalledTimes(1);
-
-      const afterCapabilities =
-        runtime.controllers.permissions.getState().origins[ORIGIN]?.[chain.namespace]?.chains[chain.chainRef]
-          ?.capabilities ?? [];
-      expect(afterCapabilities).toContain(PermissionCapabilities.Sign);
+      expect(runtime.controllers.permissions.getState()).toEqual(beforeState);
     } finally {
       unsubscribe();
       approval.mockRestore();

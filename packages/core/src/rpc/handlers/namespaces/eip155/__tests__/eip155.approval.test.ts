@@ -2,7 +2,7 @@ import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
-import { ApprovalKinds, PermissionCapabilities, type TransactionMeta } from "../../../../../controllers/index.js";
+import { ApprovalKinds, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { MemoryNetworkPreferencesPort } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
@@ -27,7 +27,95 @@ const createCrossChainPreferencesPort = () =>
     updatedAt: 0,
   });
 
+const connectOrigin = async (args: {
+  runtime: ReturnType<typeof createRuntime>;
+  origin?: string;
+  chainRefs: [string, ...string[]];
+  addresses: [string, ...string[]];
+}) => {
+  const { runtime, origin = ORIGIN, chainRefs, addresses } = args;
+  const [firstChainRef] = chainRefs;
+  const [namespace] = firstChainRef.split(":");
+
+  await runtime.controllers.permissions.upsertAuthorization(origin, {
+    namespace,
+    chains: chainRefs.map((chainRef, index) => ({
+      chainRef,
+      accountIds:
+        index === 0
+          ? (addresses.map((address) => toAccountIdFromAddress({ chainRef, address })) as [string, ...string[]])
+          : [],
+    })) as [
+      { chainRef: string; accountIds: [string, ...string[]] },
+      ...Array<{ chainRef: string; accountIds: string[] }>,
+    ],
+  });
+};
+
 describe("eip155 handlers - approval metadata", () => {
+  it("presents requestPermissions approvals as chain-scoped access requests", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const approvalRegistry = createApprovalFlowRegistry();
+    const execute = createExecutor(runtime);
+    const activeChain = getActiveChainMetadata(runtime);
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+
+    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountsController.refresh?.();
+
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
+    const rejectionError = Object.assign(
+      new Error("The requested method and/or account has not been authorized by the user."),
+      { code: 4100 },
+    );
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.RequestPermissions) {
+        return false;
+      }
+
+      capturedTask = task;
+      const summary = approvalRegistry.present(task, {
+        chainViews: runtime.services.chainViews,
+        transactions: runtime.controllers.transactions,
+      });
+
+      expect(summary).toEqual({
+        id: task.id,
+        type: "requestPermissions",
+        origin: ORIGIN,
+        namespace: activeChain.namespace,
+        chainRef: activeChain.chainRef,
+        createdAt: task.createdAt,
+        payload: {
+          requestedAccesses: [{ capability: "eth_accounts", chainRef: activeChain.chainRef }],
+        },
+      });
+
+      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+      return true;
+    });
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] as JsonRpcParams },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+
+      expect(capturedTask?.namespace).toBe(activeChain.namespace);
+      expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
+    } finally {
+      teardownApprovalResponder();
+      runtime.lifecycle.destroy();
+    }
+  });
+
   it("includes namespace metadata for eth_requestAccounts approvals", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
@@ -80,10 +168,10 @@ describe("eip155 handlers - approval metadata", () => {
     const providerChain = runtime.services.chainViews.getProviderChainView("eip155");
     expect(selectedChain.chainRef).toBe("eip155:1");
     expect(providerChain.chainRef).toBe(ALT_CHAIN.chainRef);
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: ALT_CHAIN.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [ALT_CHAIN.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -141,10 +229,10 @@ describe("eip155 handlers - approval metadata", () => {
 
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: activeChain.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [activeChain.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -295,10 +383,10 @@ describe("eip155 handlers - approval metadata", () => {
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
     expect(selectedChain.chainRef).toBe("eip155:1");
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: ALT_CHAIN.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [ALT_CHAIN.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -407,22 +495,13 @@ describe("eip155 handlers - approval metadata", () => {
         chainRef: mainnet.chainRef,
         accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
-      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        accounts: [account.address],
-      });
-
-      // Grant basic capability only; transaction capability should be added after a successful send.
-      await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
+      await connectOrigin({
+        runtime,
+        chainRefs: [mainnet.chainRef],
+        addresses: [account.address],
       });
 
       const beforePermissions = runtime.controllers.permissions.getState();
-      const beforeCapabilities =
-        beforePermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
-      expect(beforeCapabilities).not.toContain(PermissionCapabilities.SendTransaction);
 
       const broadcastMetaPromise = new Promise<TransactionMeta>((resolve) => {
         const unsubscribeTx = runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (event) => {
@@ -461,10 +540,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(broadcastMeta.warnings).toEqual([]);
       expect(broadcastMeta.issues).toEqual([]);
       expect(rpcMocks.sendRawTransaction).toHaveBeenCalledTimes(1);
-
-      const afterPermissions = runtime.controllers.permissions.getState();
-      const afterCapabilities = afterPermissions.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
-      expect(afterCapabilities).toContain(PermissionCapabilities.SendTransaction);
+      expect(runtime.controllers.permissions.getState()).toEqual(beforePermissions);
     } finally {
       unsubscribe();
       runtime.lifecycle.destroy();
@@ -496,10 +572,10 @@ describe("eip155 handlers - approval metadata", () => {
         chainRef: mainnet.chainRef,
         accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
-      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        accounts: [account.address],
+      await connectOrigin({
+        runtime,
+        chainRefs: [mainnet.chainRef],
+        addresses: [account.address],
       });
 
       const execute = createExecutor(runtime);
@@ -552,16 +628,12 @@ describe("eip155 handlers - approval metadata", () => {
         chainRef: mainnet.chainRef,
         accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
       });
-      await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-        namespace: "eip155",
-        chainRef: mainnet.chainRef,
-        accounts: [account.address],
+      await connectOrigin({
+        runtime,
+        chainRefs: [mainnet.chainRef],
+        addresses: [account.address],
       });
-
-      // Ensure Sign capability is not present before the first typed data signature.
       const beforeState = runtime.controllers.permissions.getState();
-      const beforeCapabilities = beforeState.origins[ORIGIN]?.eip155?.chains[mainnet.chainRef]?.capabilities ?? [];
-      expect(beforeCapabilities).not.toContain(PermissionCapabilities.Sign);
 
       const execute = createExecutor(runtime);
       const payload = {
@@ -594,6 +666,7 @@ describe("eip155 handlers - approval metadata", () => {
           typedData,
         }),
       ).resolves.toBe(signature);
+      expect(runtime.controllers.permissions.getState()).toEqual(beforeState);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();

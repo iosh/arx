@@ -121,7 +121,6 @@ export const initControllers = ({
   const {
     network: networkOptions,
     approvals: approvalOptions,
-    permissions: permissionOptions,
     transactions: transactionOptions,
     chainDefinitions: chainDefinitionsOptions,
   } = options;
@@ -174,15 +173,6 @@ export const initControllers = ({
     ...(networkOptions?.logger ? { logger: networkOptions.logger } : {}),
   });
 
-  const permissionCapabilityResolver =
-    permissionOptions?.capabilityResolver ??
-    rpcRegistry.createPermissionCapabilityResolver((method, ctx) => namespaceResolver(method, ctx));
-  const permissionChains = permissionOptions?.chains;
-
-  if (!permissionChains) {
-    throw new Error("initControllers requires permissions.chains");
-  }
-
   const accountController: AccountController = new StoreAccountsController({
     messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
     accounts: accountsService,
@@ -203,9 +193,7 @@ export const initControllers = ({
 
   const permissionController = new StorePermissionController({
     messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
-    capabilityResolver: permissionCapabilityResolver,
     service: permissionsService,
-    chains: permissionChains,
   });
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();

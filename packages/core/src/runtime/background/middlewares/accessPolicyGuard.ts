@@ -27,7 +27,7 @@ type AccessPolicyGuardDeps = {
   }): void;
 
   assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
-  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean;
+  isConnected(origin: string, options: { namespace: ChainNamespace; chainRef: ChainRef }): boolean;
 };
 
 const assertNever = (value: never): never => {
@@ -160,16 +160,15 @@ export const createAccessPolicyGuardMiddleware = ({
       }
       case PermissionChecks.Connected: {
         const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? null;
-        const namespaceForDebug =
-          (invocation?.namespace ?? rpcContext?.namespace ?? (chainRef ? chainRef.split(":")[0] : null)) || null;
+        const namespace = invocation?.namespace ?? rpcContext?.namespace ?? null;
 
         const connected =
           origin !== UNKNOWN_ORIGIN &&
+          namespace !== null &&
           chainRef !== null &&
           chainRef.length > 0 &&
           isConnected(origin, {
-            // Avoid mismatch throws by letting the permission controller derive namespace from chainRef.
-            namespace: null,
+            namespace,
             chainRef: chainRef as ChainRef,
           });
 
@@ -181,7 +180,7 @@ export const createAccessPolicyGuardMiddleware = ({
               origin,
               method: req.method,
               chainRef,
-              namespace: namespaceForDebug,
+              namespace,
             },
           });
         }

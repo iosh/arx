@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
 import type { AttentionService, RequestAttentionParams } from "../../services/runtime/attention/index.js";
@@ -50,6 +51,9 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
   const controllers = runtime.controllers;
   const rpcRegistry = runtime.rpc.registry;
   const resolveMethodNamespace = rpcRegistry.createMethodNamespaceResolver();
+  const resolvePermissionCapability = rpcRegistry.createPermissionCapabilityResolver((method, ctx) =>
+    resolveMethodNamespace(method, ctx),
+  );
 
   const executeMethod = rpcRegistry.createMethodExecutor(controllers, {
     rpcClientRegistry: runtime.rpc.clients,
@@ -68,12 +72,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       const invocation = reqWithArx.arxInvocation;
       const rpcContext = invocation?.rpcContext ?? reqWithArx.arx ?? undefined;
       const origin = invocation?.origin ?? reqWithArx.origin ?? UNKNOWN_ORIGIN;
-      const namespace =
-        invocation?.namespace ??
-        rpcContext?.namespace?.split(":")[0] ??
-        (typeof rpcContext?.chainRef === "string" ? rpcContext.chainRef.split(":")[0] : null) ??
-        resolveMethodNamespace(req.method, rpcContext) ??
-        null;
+      const namespace = invocation?.namespace ?? resolveMethodNamespace(req.method, rpcContext) ?? null;
       const chainRef =
         invocation?.chainRef ??
         rpcContext?.chainRef ??
@@ -117,8 +116,26 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
         namespace: args.namespace,
       });
     },
-    assertPermission: (origin, method, context) => controllers.permissions.assertPermission(origin, method, context),
-    isConnected: (origin, options) => controllers.permissions.isConnected(origin, options),
+    assertPermission: async (origin, method, context) => {
+      const capability = resolvePermissionCapability(method, context);
+      if (!capability) return;
+
+      const { namespace, chainRef } = rpcRegistry.resolveInvocation(controllers, method, context);
+      const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
+
+      if (!authorization || authorization.accountIds.length === 0) {
+        throw arxError({
+          reason: ArxReasons.PermissionDenied,
+          message: `Origin "${origin}" lacks permission for ${method}`,
+          data: { origin, method, namespace, chainRef, capability },
+        });
+      }
+    },
+    isConnected: (origin, options) => {
+      const { namespace, chainRef } = options;
+      const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
+      return !!authorization && authorization.accountIds.length > 0;
+    },
     ...(envHooks.shouldRequestUnlockAttention
       ? { shouldRequestUnlockAttention: envHooks.shouldRequestUnlockAttention }
       : {}),

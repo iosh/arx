@@ -57,11 +57,6 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
         throw new TransactionResolutionError(broadcastMeta);
       }
 
-      await controllers.permissions.grant(origin, PermissionCapabilities.SendTransaction, {
-        namespace: broadcastMeta.namespace,
-        chainRef: broadcastMeta.chainRef,
-      });
-
       return broadcastMeta.hash;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) {

@@ -1,6 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
@@ -45,11 +44,27 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
       });
     }
 
-    await deps.permissions.grant(record.origin, PermissionCapabilities.Basic, { namespace, chainRef });
-    await deps.permissions.setPermittedAccounts(record.origin, {
+    const existing = deps.permissions.getAuthorization(record.origin, { namespace });
+    const nextChains = new Map<string, string[]>(
+      Object.entries(existing?.chains ?? {}).map(([existingChainRef, chainState]) => [
+        existingChainRef,
+        [...chainState.accountIds],
+      ]),
+    );
+    const currentAccountIds = nextChains.get(chainRef) ?? [];
+    nextChains.set(chainRef, [...new Set([...currentAccountIds, selectedAccount.accountId])]);
+
+    await deps.permissions.upsertAuthorization(record.origin, {
       namespace,
-      chainRef,
-      accounts: [selectedAccount.canonicalAddress],
+      chains: [...nextChains.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([entryChainRef, accountIds]) => ({
+          chainRef: entryChainRef as typeof chainRef,
+          accountIds,
+        })) as [
+        { chainRef: typeof chainRef; accountIds: string[] },
+        ...Array<{ chainRef: typeof chainRef; accountIds: string[] }>,
+      ],
     });
 
     return [selectedAccount.displayAddress];

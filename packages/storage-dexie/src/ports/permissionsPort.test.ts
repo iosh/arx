@@ -1,6 +1,5 @@
 import "fake-indexeddb/auto";
 
-import { PermissionCapabilities } from "@arx/core";
 import { PermissionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,15 +27,24 @@ afterEach(async () => {
 });
 
 describe("DexiePermissionsPort", () => {
+  const createRecord = (args: {
+    origin?: string;
+    chains: Array<{ chainRef: string; accountIds: string[] }>;
+    updatedAt?: number;
+  }) =>
+    PermissionRecordSchema.parse({
+      origin: args.origin ?? "https://dapp.example",
+      namespace: "eip155",
+      chains: args.chains,
+      updatedAt: args.updatedAt ?? 1000,
+    });
+
   it("upsert() + get() roundtrip", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.permissions;
 
-    const record = PermissionRecordSchema.parse({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
-      updatedAt: 1000,
+    const record = createRecord({
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     await port.upsert(record);
@@ -47,14 +55,11 @@ describe("DexiePermissionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.permissions;
 
-    const record = PermissionRecordSchema.parse({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      grants: [
-        { capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] },
-        { capability: PermissionCapabilities.Sign, chainRefs: ["eip155:1"] },
+    const record = createRecord({
+      chains: [
+        { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { chainRef: "eip155:137", accountIds: [] },
       ],
-      updatedAt: 1000,
     });
 
     await port.upsert(record);
@@ -78,18 +83,13 @@ describe("DexiePermissionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.permissions;
 
-    const a1 = PermissionRecordSchema.parse({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
-      updatedAt: 1000,
+    const a1 = createRecord({
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
-    const b1 = PermissionRecordSchema.parse({
+    const b1 = createRecord({
       origin: "https://other.example",
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
-      updatedAt: 1000,
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);
@@ -103,18 +103,13 @@ describe("DexiePermissionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.permissions;
 
-    const a1 = PermissionRecordSchema.parse({
-      origin: "https://dapp.example",
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
-      updatedAt: 1000,
+    const a1 = createRecord({
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
-    const b1 = PermissionRecordSchema.parse({
+    const b1 = createRecord({
       origin: "https://other.example",
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
-      updatedAt: 1000,
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);
@@ -133,7 +128,7 @@ describe("DexiePermissionsPort", () => {
     await storage.__debug.db.table("permissions").put({
       origin: "https://dapp.example",
       namespace: "eip155",
-      // missing required fields on purpose (grants/updatedAt)
+      // missing required fields on purpose (chains/updatedAt)
     } as unknown as Record<string, unknown>);
 
     const loaded = await storage.ports.permissions.get({ origin: "https://dapp.example", namespace: "eip155" });

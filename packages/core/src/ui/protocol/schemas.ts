@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../chains/ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../../chains/url.js";
-import { PERMISSION_CAPABILITY_VALUES } from "../../permissions/capabilities.js";
 import { AccountIdSchema } from "../../storage/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
@@ -52,11 +51,8 @@ export const VaultSnapshotSchema = z.object({
   initialized: z.boolean(),
 });
 
-const PermissionCapabilitySchema = z.enum(PERMISSION_CAPABILITY_VALUES);
-
 const ChainPermissionStateSchema = z.object({
-  capabilities: z.array(PermissionCapabilitySchema),
-  accounts: z.array(z.string().min(1)).optional(),
+  accountIds: z.array(AccountIdSchema),
 });
 
 const NamespacePermissionStateSchema = z.object({
@@ -130,12 +126,14 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("requestPermissions"),
     payload: z.object({
-      permissions: z.array(
-        z.object({
-          capability: z.string(),
-          chainRefs: z.array(ChainRefSchema).min(1),
-        }),
-      ),
+      requestedAccesses: z
+        .array(
+          z.object({
+            capability: z.string(),
+            chainRef: ChainRefSchema,
+          }),
+        )
+        .min(1),
     }),
   }),
   approvalPayloadBase.extend({

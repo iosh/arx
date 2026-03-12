@@ -79,7 +79,7 @@ describe("InMemoryApprovalController", () => {
         chainRef: "eip155:1",
         requested: [
           {
-            capability: "wallet_basic",
+            capability: "eth_accounts",
             chainRefs: [],
           },
         ],

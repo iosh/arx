@@ -5,7 +5,7 @@ const APPROVAL_TYPE_LABEL = {
   signMessage: "Sign Message",
   signTypedData: "Sign Typed Data",
   sendTransaction: "Send Transaction",
-  requestPermissions: "Permission Request",
+  requestPermissions: "Account Access",
   switchChain: "Switch Network",
   addChain: "Add Network",
   unsupported: "Unsupported Request",

@@ -1,5 +1,6 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
+import { toCanonicalAddressFromAccountId } from "../../../../accounts/addressing/accountId.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalCreateParams,
@@ -12,7 +13,7 @@ import { isPermissionCapability } from "../../../../permissions/capabilities.js"
 import { buildWalletPermissions } from "../../../permissions.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createApprovalId, EIP155_NAMESPACE, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 const toRequestDescriptors = (
@@ -51,15 +52,19 @@ const WalletRequestPermissionsParamsSchema = z
       });
     }
 
-    const unique = new Set<string>(entries);
-    unique.add(PermissionCapabilities.Basic);
-
     const out: PermissionCapability[] = [];
-    for (const capability of unique) {
+    for (const capability of new Set<string>(entries)) {
       if (!isPermissionCapability(capability)) {
         throw arxError({
           reason: ArxReasons.RpcInvalidParams,
           message: `wallet_requestPermissions does not support capability "${capability}"`,
+          data: { capability },
+        });
+      }
+      if (capability !== PermissionCapabilities.Accounts) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: `wallet_requestPermissions only supports "${PermissionCapabilities.Accounts}"`,
           data: { capability },
         });
       }
@@ -70,7 +75,7 @@ const WalletRequestPermissionsParamsSchema = z
   });
 
 export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
-  capability: PermissionCapabilities.Basic,
+  capability: PermissionCapabilities.Accounts,
   permissionCheck: PermissionChecks.None,
   locked: lockedQueue(),
   parseParams: (params, _rpcContext) => {
@@ -90,7 +95,7 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
   },
   handler: async ({ origin, params, controllers, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;
-    const namespace = EIP155_NAMESPACE;
+    const namespace = invocation.namespace;
 
     const requested = toRequestDescriptors(params, chainRef);
     const request = {
@@ -116,13 +121,10 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
       });
     }
 
-    const permissionGrants = controllers.permissions.listGrants(origin);
-    const getAccounts = (targetChainRef: string) =>
-      controllers.permissions.getPermittedAccounts(origin, {
-        namespace,
-        chainRef: targetChainRef as ChainRef,
-      });
+    const authorization = controllers.permissions.getChainAuthorization(origin, { namespace, chainRef });
+    const getAccounts = (targetChainRef: string, accountIds: readonly string[]) =>
+      accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef: targetChainRef, accountId }));
 
-    return buildWalletPermissions({ origin, grants: permissionGrants, getAccounts });
+    return buildWalletPermissions({ origin, authorization, getAccounts });
   },
 };

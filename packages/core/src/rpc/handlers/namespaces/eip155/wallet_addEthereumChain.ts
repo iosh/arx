@@ -5,15 +5,13 @@ import {
   createEip155MetadataFromEip3085,
   isSameAddChainComparableMetadata,
 } from "../../../../chains/index.js";
-import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import type { MethodDefinition } from "../../types.js";
 import { createApprovalId, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
 export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
-  capability: PermissionCapabilities.Basic,
-  permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {
     const [raw] = toParamsArray(params);

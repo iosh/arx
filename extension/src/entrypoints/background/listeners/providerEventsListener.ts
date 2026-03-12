@@ -149,7 +149,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       );
 
       subscriptions.push(
-        controllers.permissions.onPermissionsChanged(() => {
+        controllers.permissions.onStateChanged(() => {
           publishAccountsState();
         }),
       );

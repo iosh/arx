@@ -1,29 +1,41 @@
-import { toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
+import { ArxReasons, arxError } from "@arx/errors";
+import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
-import type { ChainNamespace } from "../../controllers/account/types.js";
-import { sortPermissionCapabilities } from "../../permissions/capabilities.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
-import type { PermissionRecord } from "../../storage/records.js";
+import type { AccountId, PermissionRecord } from "../../storage/records.js";
 import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionMessenger } from "./topics.js";
-import {
-  type GrantPermissionOptions,
-  type NamespacePermissionState,
-  type OriginPermissionState,
-  type OriginPermissions,
-  PermissionCapabilities,
-  type PermissionCapability,
-  type PermissionCapabilityResolver,
-  type PermissionController,
-  type PermissionGrant,
-  type PermissionsState,
+import type {
+  AuthorizationChainInput,
+  ChainPermissionAuthorization,
+  ChainPermissionState,
+  MutatePermittedChainsOptions,
+  OriginPermissionState,
+  OriginPermissions,
+  PermissionAuthorization,
+  PermissionController,
+  PermissionsState,
+  SetChainAccountIdsOptions,
+  UpsertAuthorizationOptions,
 } from "./types.js";
 
-const DEFAULT_PERMISSION_NAMESPACE: ChainNamespace = "eip155";
+const sortStrings = <T extends string>(values: readonly T[]): T[] => {
+  return [...values].sort((left, right) => left.localeCompare(right));
+};
 
-const sortChains = <T extends string>(chains: readonly T[]): T[] => {
-  return [...chains].sort((a, b) => a.localeCompare(b));
+const uniqSorted = <T extends string>(values: readonly T[]): T[] => {
+  return sortStrings([...new Set(values)]);
+};
+
+const cloneChainStates = (chains: Record<ChainRef, ChainPermissionState>): Record<ChainRef, ChainPermissionState> => {
+  return Object.fromEntries(
+    Object.entries(chains).map(([chainRef, chainState]) => [
+      chainRef,
+      {
+        accountIds: [...chainState.accountIds],
+      },
+    ]),
+  ) as Record<ChainRef, ChainPermissionState>;
 };
 
 const cloneState = (state: PermissionsState): PermissionsState => ({
@@ -34,16 +46,8 @@ const cloneState = (state: PermissionsState): PermissionsState => ({
         Object.entries(originState).map(([namespace, namespaceState]) => [
           namespace,
           {
-            chains: Object.fromEntries(
-              Object.entries(namespaceState.chains).map(([chainRef, chainState]) => [
-                chainRef,
-                {
-                  capabilities: [...chainState.capabilities],
-                  ...(chainState.accounts ? { accounts: [...chainState.accounts] } : {}),
-                },
-              ]),
-            ),
-          } satisfies NamespacePermissionState,
+            chains: cloneChainStates(namespaceState.chains),
+          },
         ]),
       ) as OriginPermissionState,
     ]),
@@ -54,26 +58,18 @@ type OriginHashMap = Map<string, string>;
 
 type StablePermissionRecordSnapshot = {
   namespace: string;
-  grants: Array<{ capability: string; chainRefs: ChainRef[] }>;
-  accountIds: string[];
+  chains: AuthorizationChainInput[];
 };
 
-const stablePermissionRecordSnapshot = (record: PermissionRecord): StablePermissionRecordSnapshot => {
-  const grants = [...record.grants]
-    .map((g) => ({
-      capability: String(g.capability),
-      chainRefs: uniqSorted((g.chainRefs as ChainRef[]).map((c) => String(c) as ChainRef)),
+const stablePermissionRecordSnapshot = (record: PermissionRecord): StablePermissionRecordSnapshot => ({
+  namespace: String(record.namespace),
+  chains: [...record.chains]
+    .map((chain) => ({
+      chainRef: String(chain.chainRef) as ChainRef,
+      accountIds: uniqSorted((chain.accountIds as AccountId[]).map((value) => String(value) as AccountId)),
     }))
-    .sort((a, b) => a.capability.localeCompare(b.capability));
-
-  const accountIds = (record.accountIds ?? []).map(String).sort((a, b) => a.localeCompare(b));
-
-  return {
-    namespace: String(record.namespace),
-    grants,
-    accountIds,
-  };
-};
+    .sort((left, right) => left.chainRef.localeCompare(right.chainRef)),
+});
 
 const stablePermissionRecordValue = (record: PermissionRecord): string => {
   return JSON.stringify(stablePermissionRecordSnapshot(record));
@@ -89,13 +85,11 @@ const selectLatestByNamespace = (records: readonly PermissionRecord[]): Map<stri
       continue;
     }
 
-    // Deterministic rule for safety against dirty stores:
-    // - Prefer higher updatedAt (latest write)
-    // - Tie-break by stable value for consistent results across list orders.
     if (record.updatedAt > current.updatedAt) {
       winners.set(record.namespace, record);
       continue;
     }
+
     if (record.updatedAt === current.updatedAt) {
       const nextValue = stablePermissionRecordValue(record);
       const currentValue = stablePermissionRecordValue(current);
@@ -110,142 +104,28 @@ const selectLatestByNamespace = (records: readonly PermissionRecord[]): Map<stri
 
 const hashOriginRecords = (records: PermissionRecord[]): string => {
   const winners = selectLatestByNamespace(records);
-
-  // Use a stable JSON representation to avoid delimiter-collision footguns.
   const stable = [...winners.values()]
     .map(stablePermissionRecordSnapshot)
-    .sort((a, b) => a.namespace.localeCompare(b.namespace));
+    .sort((left, right) => left.namespace.localeCompare(right.namespace));
 
   return JSON.stringify(stable);
 };
 
-type ParsedPermissionChainRef = {
-  namespace: ChainNamespace;
-  value: ChainRef;
-};
-
-const tryParseChainRef = (chainRef: string | null | undefined): ParsedPermissionChainRef | null => {
-  if (!chainRef || typeof chainRef !== "string") return null;
-  try {
-    const parsed = parseCaipChainRef(chainRef as ChainRef);
-    return {
-      namespace: parsed.namespace as ChainNamespace,
-      value: `${parsed.namespace}:${parsed.reference}` as ChainRef,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const deriveNamespaceFromContext = (context?: Parameters<PermissionCapabilityResolver>[1]): ChainNamespace => {
-  if (context?.namespace) return context.namespace as ChainNamespace;
-  const parsed = tryParseChainRef(context?.chainRef ?? null);
-  if (parsed?.namespace) return parsed.namespace;
-  if (context?.providerNamespace) return context.providerNamespace as ChainNamespace;
-  return DEFAULT_PERMISSION_NAMESPACE;
-};
-
-const deriveNamespaceFromOptions = (options: {
-  namespace?: ChainNamespace | null;
-  chainRef: ChainRef;
-}): { namespace: ChainNamespace; chainRef: ChainRef } => {
-  const parsed = tryParseChainRef(options.chainRef);
-  const namespace = (options.namespace ?? parsed?.namespace ?? DEFAULT_PERMISSION_NAMESPACE) as ChainNamespace;
-  const normalized = parsed?.value ?? options.chainRef;
-
-  if (options.namespace && parsed && parsed.namespace !== options.namespace) {
-    throw new Error(
-      `Permission namespace mismatch: chainRef "${parsed.value}" belongs to namespace "${parsed.namespace}" but "${options.namespace}" was provided`,
-    );
-  }
-
-  return { namespace, chainRef: normalized };
-};
-
-const uniqSorted = <T extends string>(values: readonly T[]): T[] => {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
-};
-
-const upsertGrantChains = (
-  grants: PermissionRecord["grants"],
-  params: { capability: PermissionCapability; chainRef: ChainRef },
-): PermissionRecord["grants"] => {
-  const next: PermissionRecord["grants"] = [];
-  let updated = false;
-
-  for (const grant of grants) {
-    if (grant.capability !== params.capability) {
-      next.push(grant);
-      continue;
-    }
-    updated = true;
-    const chainRefs = uniqSorted([...(grant.chainRefs as ChainRef[]), params.chainRef]);
-    next.push({ ...grant, chainRefs });
-  }
-
-  if (!updated) {
-    next.push({
-      capability: params.capability,
-      chainRefs: [params.chainRef],
-    } as PermissionRecord["grants"][number]);
-  }
-
-  // Keep deterministic order for stable snapshots/tests.
-  next.sort((a, b) => String(a.capability).localeCompare(String(b.capability)));
-  return next;
-};
-
 const buildOriginStateFromRecords = (records: PermissionRecord[]): OriginPermissionState => {
-  // One record per (origin, namespace). If the store is dirty, pick a deterministic winner.
   const byNamespace = selectLatestByNamespace(records);
-
   const originState: OriginPermissionState = {};
 
   for (const record of byNamespace.values()) {
-    const namespace = record.namespace as ChainNamespace;
-
-    const chainMap = new Map<
-      ChainRef,
-      {
-        capabilities: Set<PermissionCapability>;
-        accounts?: string[];
-      }
-    >();
-
-    for (const grant of record.grants) {
-      const capability = grant.capability as PermissionCapability;
-      for (const chainRef of grant.chainRefs as ChainRef[]) {
-        const entry = chainMap.get(chainRef) ?? { capabilities: new Set<PermissionCapability>() };
-        entry.capabilities.add(capability);
-        chainMap.set(chainRef, entry);
-      }
-    }
-
-    // EIP-155 only: attach accounts ONLY to chains that have the Accounts capability caveat.
-    if (namespace === "eip155" && record.accountIds?.length) {
-      const accountsGrant = record.grants.find((g) => g.capability === PermissionCapabilities.Accounts);
-      const permittedChains = (accountsGrant?.chainRefs ?? []) as ChainRef[];
-
-      for (const chainRef of permittedChains) {
-        const accounts = record.accountIds.map((accountId) => toCanonicalAddressFromAccountId({ chainRef, accountId }));
-        const entry = chainMap.get(chainRef) ?? { capabilities: new Set<PermissionCapability>() };
-        entry.capabilities.add(PermissionCapabilities.Accounts);
-        entry.accounts = [...accounts];
-        chainMap.set(chainRef, entry);
-      }
-    }
-
-    const chains: NamespacePermissionState["chains"] = {};
-    for (const chainRef of sortChains([...chainMap.keys()])) {
-      const entry = chainMap.get(chainRef);
-      if (!entry) continue;
-      chains[chainRef] = {
-        capabilities: sortPermissionCapabilities([...entry.capabilities]),
-        ...(entry.accounts ? { accounts: [...entry.accounts] } : {}),
-      };
-    }
-
-    originState[namespace] = { chains };
+    originState[record.namespace] = {
+      chains: Object.fromEntries(
+        stablePermissionRecordSnapshot(record).chains.map((chain) => [
+          chain.chainRef,
+          {
+            accountIds: [...chain.accountIds],
+          },
+        ]),
+      ) as Record<ChainRef, ChainPermissionState>,
+    };
   }
 
   return originState;
@@ -254,35 +134,135 @@ const buildOriginStateFromRecords = (records: PermissionRecord[]): OriginPermiss
 const buildStateFromRecords = (records: PermissionRecord[]): PermissionsState => {
   const origins = new Map<string, PermissionRecord[]>();
   for (const record of records) {
-    const list = origins.get(record.origin) ?? [];
-    list.push(record);
-    origins.set(record.origin, list);
+    const current = origins.get(record.origin) ?? [];
+    current.push(record);
+    origins.set(record.origin, current);
   }
 
   const state: PermissionsState = { origins: {} };
   for (const [origin, originRecords] of origins.entries()) {
     state.origins[origin] = buildOriginStateFromRecords(originRecords);
   }
+
   return state;
+};
+
+const assertNamespace = (namespace: string) => {
+  const normalized = namespace.trim();
+  if (!normalized) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: "Permission namespace is required",
+      data: { namespace },
+    });
+  }
+
+  return normalized;
+};
+
+const normalizeChainRef = (namespace: string, chainRef: ChainRef): ChainRef => {
+  const parsed = parseCaipChainRef(chainRef);
+  if (parsed.namespace !== namespace) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `Permission chainRef "${chainRef}" does not belong to namespace "${namespace}"`,
+      data: { namespace, chainRef },
+    });
+  }
+  return `${parsed.namespace}:${parsed.reference}` as ChainRef;
+};
+
+const normalizeAccountIds = (namespace: string, accountIds: readonly AccountId[]): AccountId[] => {
+  return uniqSorted(
+    accountIds.map((value) => {
+      const accountId = String(value) as AccountId;
+      if (getAccountIdNamespace(accountId) !== namespace) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidRequest,
+          message: `Permission accountId "${accountId}" does not belong to namespace "${namespace}"`,
+          data: { namespace, accountId },
+        });
+      }
+      return accountId;
+    }),
+  );
+};
+
+const normalizeChains = (
+  namespace: string,
+  chains: readonly AuthorizationChainInput[],
+): [AuthorizationChainInput, ...AuthorizationChainInput[]] => {
+  if (chains.length === 0) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: "Permission chains must not be empty",
+      data: { namespace },
+    });
+  }
+
+  const seen = new Set<ChainRef>();
+  const normalized = chains.map((chain) => {
+    const normalizedChainRef = normalizeChainRef(namespace, chain.chainRef);
+    if (seen.has(normalizedChainRef)) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: `Permission chain "${normalizedChainRef}" is duplicated`,
+        data: { namespace, chainRef: normalizedChainRef },
+      });
+    }
+    seen.add(normalizedChainRef);
+
+    return {
+      chainRef: normalizedChainRef,
+      accountIds: normalizeAccountIds(namespace, chain.accountIds),
+    };
+  });
+
+  return normalized.sort((left, right) => left.chainRef.localeCompare(right.chainRef)) as [
+    AuthorizationChainInput,
+    ...AuthorizationChainInput[],
+  ];
+};
+
+const toChainMap = (chains: readonly AuthorizationChainInput[]): Record<ChainRef, ChainPermissionState> => {
+  return Object.fromEntries(
+    chains.map((chain) => [
+      chain.chainRef,
+      {
+        accountIds: [...chain.accountIds],
+      },
+    ]),
+  ) as Record<ChainRef, ChainPermissionState>;
+};
+
+const sameAuthorizationRecord = (record: PermissionRecord | null, next: readonly AuthorizationChainInput[]) => {
+  if (!record) return false;
+  return (
+    JSON.stringify(stablePermissionRecordSnapshot(record).chains) ===
+    JSON.stringify(normalizeChains(record.namespace, next))
+  );
+};
+
+const toAuthorization = (
+  origin: string,
+  namespace: string,
+  chains: Record<ChainRef, ChainPermissionState>,
+): PermissionAuthorization => {
+  return {
+    origin,
+    namespace,
+    chains: cloneChainStates(chains),
+  };
 };
 
 export type StorePermissionControllerOptions = {
   messenger: PermissionMessenger;
-  capabilityResolver: PermissionCapabilityResolver;
   service: PermissionsService;
-  chains: ChainAddressCodecRegistry;
 };
 
-/**
- * Store-backed permissions controller:
- * - Single source of truth: PermissionsService (backed by the `permissions` table)
- * - In-memory state is a derived view for UI snapshot / sync reads.
- */
 export class StorePermissionController implements PermissionController {
   #messenger: PermissionMessenger;
-  #capabilityResolver: PermissionCapabilityResolver;
   #service: PermissionsService;
-  #chains: ChainAddressCodecRegistry;
   #unsubscribeStore: (() => void) | null = null;
   #destroyed = false;
 
@@ -294,18 +274,15 @@ export class StorePermissionController implements PermissionController {
   #pendingFullSync = false;
   #pendingOrigins: Set<string> = new Set();
 
-  constructor({ messenger, capabilityResolver, service, chains }: StorePermissionControllerOptions) {
+  constructor({ messenger, service }: StorePermissionControllerOptions) {
     this.#messenger = messenger;
-    this.#capabilityResolver = capabilityResolver;
     this.#service = service;
-    this.#chains = chains;
 
     this.#unsubscribeStore = this.#service.subscribeChanged((event) => {
       if (this.#destroyed) return;
       void this.#queueSyncFromStore({ origin: event?.origin ?? null }).catch(() => {});
     });
 
-    // lifecycle.initialize() awaits whenReady(); keep constructor side-effects best-effort.
     this.#ready = this.#queueSyncFromStore();
     this.#publishState();
   }
@@ -313,6 +290,7 @@ export class StorePermissionController implements PermissionController {
   destroy() {
     this.#destroyed = true;
     if (!this.#unsubscribeStore) return;
+
     try {
       this.#unsubscribeStore();
     } catch {
@@ -325,204 +303,179 @@ export class StorePermissionController implements PermissionController {
     return this.#ready;
   }
 
-  listGrants(origin: string): PermissionGrant[] {
-    const originState = this.#state.origins[origin];
-    if (!originState) return [];
-
-    const grants: PermissionGrant[] = [];
-
-    for (const [namespace, namespaceState] of Object.entries(originState)) {
-      for (const [chainRef, chainState] of Object.entries(namespaceState.chains)) {
-        grants.push({
-          origin,
-          namespace: namespace as ChainNamespace,
-          chainRef: chainRef as ChainRef,
-          capabilities: [...chainState.capabilities],
-          ...(chainState.accounts?.length ? { accounts: [...chainState.accounts] } : {}),
-        });
-      }
-    }
-
-    grants.sort((a, b) => a.namespace.localeCompare(b.namespace) || a.chainRef.localeCompare(b.chainRef));
-    return grants;
-  }
-
   getState(): PermissionsState {
     return cloneState(this.#state);
   }
 
-  listConnectedOrigins(options: { namespace: ChainNamespace }): string[] {
-    const namespace = options.namespace;
-    const connected: string[] = [];
+  getAuthorization(origin: string, options: { namespace: string }): PermissionAuthorization | null {
+    const namespace = assertNamespace(options.namespace);
+    const entry = this.#state.origins[origin]?.[namespace];
+    if (!entry) return null;
 
-    for (const [origin, originState] of Object.entries(this.#state.origins)) {
-      const nsState = originState[namespace];
-      if (!nsState) continue;
-      const anyConnected = Object.values(nsState.chains).some((chain) => {
-        if (!chain.capabilities.includes(PermissionCapabilities.Accounts)) return false;
-        if (namespace === "eip155") {
-          // Treat missing accounts as not-connected to avoid spreading dirty state.
-          return (chain.accounts?.length ?? 0) > 0;
-        }
-        return true;
-      });
-      if (anyConnected) connected.push(origin);
-    }
-
-    connected.sort((a, b) => a.localeCompare(b));
-    return connected;
+    return toAuthorization(origin, namespace, entry.chains);
   }
 
-  getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[] {
-    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
-    if (namespace !== "eip155") return [];
-
-    const chainState = this.#state.origins[origin]?.[namespace]?.chains?.[chainRef];
-    if (!chainState) return [];
-    if (!chainState.capabilities.includes(PermissionCapabilities.Accounts)) return [];
-    return [...(chainState.accounts ?? [])];
-  }
-
-  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean {
-    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
-    const chainState = this.#state.origins[origin]?.[namespace]?.chains?.[chainRef];
-    if (!chainState?.capabilities.includes(PermissionCapabilities.Accounts)) return false;
-    if (namespace === "eip155") {
-      // Treat missing accounts as not-connected to avoid spreading dirty state.
-      return (chainState.accounts?.length ?? 0) > 0;
-    }
-    return true;
-  }
-
-  async setPermittedAccounts(
+  getChainAuthorization(
     origin: string,
-    options: { namespace?: ChainNamespace | null; chainRef: ChainRef; accounts: string[] },
-  ): Promise<void> {
-    const { namespace, chainRef } = deriveNamespaceFromOptions(options);
+    options: { namespace: string; chainRef: ChainRef },
+  ): ChainPermissionAuthorization | null {
+    const namespace = assertNamespace(options.namespace);
+    const chainRef = normalizeChainRef(namespace, options.chainRef);
+    const chain = this.#state.origins[origin]?.[namespace]?.chains[chainRef];
+    if (!chain) return null;
 
-    if (namespace !== "eip155") {
-      throw new Error(`setPermittedAccounts is only supported for namespace "eip155" (got "${namespace}")`);
-    }
-
-    const seen = new Set<string>();
-    const uniqueAccounts: string[] = [];
-    for (const raw of options.accounts) {
-      if (typeof raw !== "string") continue;
-      const trimmed = raw.trim();
-      if (!trimmed) continue;
-
-      const canonical = this.#chains.toCanonicalAddress({ chainRef, value: trimmed }).canonical;
-      if (seen.has(canonical)) continue;
-      seen.add(canonical);
-      uniqueAccounts.push(canonical);
-    }
-
-    if (uniqueAccounts.length === 0) {
-      throw new Error("setPermittedAccounts requires at least one account");
-    }
-
-    const accountIds = uniqueAccounts.map((address) => toAccountIdFromAddress({ chainRef, address }));
-
-    const existing = await this.#service.get({ origin, namespace });
-    const nextGrants = upsertGrantChains(existing?.grants ?? [], {
-      capability: PermissionCapabilities.Accounts,
-      chainRef,
-    });
-
-    await this.#service.upsert({
+    return {
       origin,
       namespace,
-      grants: nextGrants,
-      accountIds,
-    });
-
-    await this.#queueSyncFromStore();
+      chainRef,
+      accountIds: [...chain.accountIds],
+    };
   }
 
-  async assertPermission(
-    origin: string,
-    method: string,
-    context?: Parameters<PermissionCapabilityResolver>[1],
-  ): Promise<void> {
-    const capability = this.#capabilityResolver(method, context);
-    if (!capability) return;
+  listAuthorizations(origin: string): PermissionAuthorization[] {
+    const namespaces = this.#state.origins[origin];
+    if (!namespaces) return [];
 
-    const namespace = deriveNamespaceFromContext(context);
-    const parsedChain = tryParseChainRef(context?.chainRef ?? null);
-    const nsState = this.#state.origins[origin]?.[namespace];
-    if (!nsState) {
-      throw new Error(`Origin "${origin}" lacks capability "${capability}" for namespace "${namespace}"`);
+    return sortStrings(Object.keys(namespaces)).flatMap((namespace) => {
+      const entry = namespaces[namespace];
+      if (!entry) return [];
+
+      return [toAuthorization(origin, namespace, entry.chains)];
+    });
+  }
+
+  async upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization> {
+    const namespace = assertNamespace(options.namespace);
+    const chains = normalizeChains(namespace, options.chains);
+
+    const existing = await this.#service.get({ origin, namespace });
+    if (!sameAuthorizationRecord(existing, chains)) {
+      await this.#service.upsert({
+        origin,
+        namespace,
+        chains,
+      });
+      await this.#queueSyncFromStore({ origin });
     }
 
-    if (parsedChain) {
-      const chainRef = parsedChain.value;
-      const chainState = nsState.chains?.[chainRef];
-      if (!chainState || !chainState.capabilities.includes(capability)) {
-        throw new Error(`Origin "${origin}" lacks capability "${capability}" for ${namespace} on chain "${chainRef}"`);
-      }
+    return toAuthorization(origin, namespace, toChainMap(chains));
+  }
+
+  async setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization> {
+    const namespace = assertNamespace(options.namespace);
+    const existing = await this.#service.get({ origin, namespace });
+    if (!existing) {
+      throw arxError({
+        reason: ArxReasons.PermissionNotConnected,
+        message: `Origin "${origin}" is not connected to namespace "${namespace}"`,
+        data: { origin, namespace },
+      });
+    }
+
+    const chainRef = normalizeChainRef(namespace, options.chainRef);
+    const accountIds = normalizeAccountIds(namespace, options.accountIds);
+    const nextChains = [...stablePermissionRecordSnapshot(existing).chains];
+    const targetIndex = nextChains.findIndex((chain) => chain.chainRef === chainRef);
+
+    if (targetIndex < 0) {
+      throw arxError({
+        reason: ArxReasons.PermissionNotConnected,
+        message: `Origin "${origin}" is not connected to chain "${chainRef}"`,
+        data: { origin, namespace, chainRef },
+      });
+    }
+
+    nextChains[targetIndex] = { chainRef, accountIds };
+
+    if (!sameAuthorizationRecord(existing, nextChains)) {
+      await this.#service.upsert({
+        origin,
+        namespace,
+        chains: normalizeChains(namespace, nextChains),
+      });
+      await this.#queueSyncFromStore({ origin });
+    }
+
+    return toAuthorization(origin, namespace, toChainMap(nextChains));
+  }
+
+  async addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization> {
+    const namespace = assertNamespace(options.namespace);
+    const existing = await this.#service.get({ origin, namespace });
+    if (!existing) {
+      throw arxError({
+        reason: ArxReasons.PermissionNotConnected,
+        message: `Origin "${origin}" is not connected to namespace "${namespace}"`,
+        data: { origin, namespace },
+      });
+    }
+
+    const nextChains = [...stablePermissionRecordSnapshot(existing).chains];
+    const existingChainRefs = new Set(nextChains.map((chain) => chain.chainRef));
+    for (const chainRef of options.chainRefs) {
+      const normalizedChainRef = normalizeChainRef(namespace, chainRef);
+      if (existingChainRefs.has(normalizedChainRef)) continue;
+      existingChainRefs.add(normalizedChainRef);
+      nextChains.push({
+        chainRef: normalizedChainRef,
+        accountIds: [],
+      });
+    }
+
+    if (!sameAuthorizationRecord(existing, nextChains)) {
+      await this.#service.upsert({
+        origin,
+        namespace,
+        chains: normalizeChains(namespace, nextChains),
+      });
+      await this.#queueSyncFromStore({ origin });
+    }
+
+    return toAuthorization(origin, namespace, toChainMap(nextChains));
+  }
+
+  async revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void> {
+    const namespace = assertNamespace(options.namespace);
+    const existing = await this.#service.get({ origin, namespace });
+    if (!existing) {
       return;
     }
 
-    // Fallback for contexts without an explicit chainRef.
-    const any = Object.values(nsState.chains).some((chain) => chain.capabilities.includes(capability));
-    if (!any) {
-      throw new Error(`Origin "${origin}" lacks capability "${capability}" for namespace "${namespace}"`);
+    const revokeSet = new Set(options.chainRefs.map((chainRef) => normalizeChainRef(namespace, chainRef)));
+    const remaining = stablePermissionRecordSnapshot(existing).chains.filter((chain) => !revokeSet.has(chain.chainRef));
+
+    if (remaining.length === 0) {
+      await this.#service.remove({ origin, namespace });
+      await this.#queueSyncFromStore({ origin });
+      return;
+    }
+
+    if (!sameAuthorizationRecord(existing, remaining)) {
+      await this.#service.upsert({
+        origin,
+        namespace,
+        chains: normalizeChains(namespace, remaining),
+      });
+      await this.#queueSyncFromStore({ origin });
     }
   }
 
-  async grant(origin: string, capability: PermissionCapability, options?: GrantPermissionOptions): Promise<void> {
-    const chainRef = options?.chainRef ?? null;
-    if (!chainRef) throw new Error("StorePermissionController.grant requires a chainRef");
-    const { namespace, chainRef: normalized } = deriveNamespaceFromOptions({
-      namespace: options?.namespace ?? null,
-      chainRef: chainRef as ChainRef,
-    });
-
-    const existing = await this.#service.get({ origin, namespace });
-    const nextGrants = upsertGrantChains(existing?.grants ?? [], { capability, chainRef: normalized });
-
-    // Accounts require an explicit accountIds payload (via setPermittedAccounts) unless already present.
-    // If accountIds already exist, we allow grant(Accounts) to extend the permitted chains list (used by chain switching).
-    if (capability === PermissionCapabilities.Accounts && (!existing?.accountIds || existing.accountIds.length === 0)) {
-      throw new Error("Accounts permission must be granted via setPermittedAccounts");
-    }
-
-    const includeAccounts = nextGrants.some((g) => g.capability === PermissionCapabilities.Accounts);
-    const accountIds = includeAccounts ? existing?.accountIds : undefined;
-    if (includeAccounts && (!accountIds || accountIds.length === 0)) {
-      throw new Error("Invariant violation: existing Accounts permission is missing accountIds");
-    }
-
-    await this.#service.upsert({
-      origin,
-      namespace,
-      grants: nextGrants,
-      ...(includeAccounts ? { accountIds } : {}),
-    });
-
-    await this.#queueSyncFromStore();
-  }
-
-  async clear(origin: string): Promise<void> {
+  async clearOrigin(origin: string): Promise<void> {
     await this.#service.clearOrigin(origin);
-    await this.#queueSyncFromStore();
+    await this.#queueSyncFromStore({ origin });
   }
 
-  getPermissions(origin: string): OriginPermissionState | undefined {
-    const namespaces = this.#state.origins[origin];
-    return namespaces ? cloneState({ origins: { [origin]: namespaces } }).origins[origin] : undefined;
-  }
-
-  onPermissionsChanged(handler: (state: PermissionsState) => void): () => void {
+  onStateChanged(handler: (state: PermissionsState) => void): () => void {
     return this.#messenger.subscribe(PERMISSION_STATE_CHANGED, handler, { replay: "snapshot" });
   }
 
-  onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void {
+  onOriginChanged(handler: (payload: OriginPermissions) => void): () => void {
     return this.#messenger.subscribe(PERMISSION_ORIGIN_CHANGED, handler);
   }
 
   async #queueSyncFromStore(params?: { origin?: string | null }): Promise<void> {
     if (this.#destroyed) return;
+
     const origin = params?.origin ?? null;
     if (origin) {
       this.#pendingOrigins.add(origin);
@@ -537,7 +490,6 @@ export class StorePermissionController implements PermissionController {
 
     this.#syncPromise = (async () => {
       try {
-        // Drain sync requests; prefer a single full sync if requested.
         while (this.#pendingFullSync || this.#pendingOrigins.size > 0) {
           if (this.#pendingFullSync) {
             this.#pendingFullSync = false;
@@ -546,10 +498,10 @@ export class StorePermissionController implements PermissionController {
             continue;
           }
 
-          const origins = [...this.#pendingOrigins].sort();
+          const origins = sortStrings([...this.#pendingOrigins]);
           this.#pendingOrigins.clear();
-          for (const origin of origins) {
-            await this.#syncOriginFromStore(origin);
+          for (const queuedOrigin of origins) {
+            await this.#syncOriginFromStore(queuedOrigin);
           }
         }
       } finally {
@@ -584,7 +536,9 @@ export class StorePermissionController implements PermissionController {
     for (const origin of allOrigins) {
       const prevHash = this.#originHash.get(origin) ?? "";
       const nextHash = nextHashes.get(origin) ?? "";
-      if (prevHash !== nextHash) changedOrigins.push(origin);
+      if (prevHash !== nextHash) {
+        changedOrigins.push(origin);
+      }
     }
 
     if (changedOrigins.length === 0) return;
@@ -593,7 +547,7 @@ export class StorePermissionController implements PermissionController {
     this.#originHash = nextHashes;
     this.#publishState();
 
-    for (const origin of changedOrigins.sort((a, b) => a.localeCompare(b))) {
+    for (const origin of sortStrings(changedOrigins)) {
       this.#publishOrigin({ origin, namespaces: nextState.origins[origin] ?? {} });
     }
   }
@@ -627,6 +581,7 @@ export class StorePermissionController implements PermissionController {
 
   #publishOrigin(payload: OriginPermissions) {
     if (this.#destroyed) return;
+
     const clonedNamespaces =
       cloneState({ origins: { [payload.origin]: payload.namespaces } }).origins[payload.origin] ?? {};
     this.#messenger.publish(

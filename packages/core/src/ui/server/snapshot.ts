@@ -18,16 +18,16 @@ const toUiPermissionsSnapshot = (state: PermissionsState): UiPermissionsSnapshot
     const namespaces: UiPermissionsSnapshot["origins"][string] = {};
 
     for (const [namespace, namespaceState] of Object.entries(originState)) {
-      const chains: UiPermissionsSnapshot["origins"][string][string]["chains"] = {};
-
-      for (const [chainRef, chainState] of Object.entries(namespaceState.chains)) {
-        chains[chainRef] = {
-          capabilities: [...chainState.capabilities],
-          ...(chainState.accounts ? { accounts: [...chainState.accounts] } : {}),
-        };
-      }
-
-      namespaces[namespace] = { chains };
+      namespaces[namespace] = {
+        chains: Object.fromEntries(
+          Object.entries(namespaceState.chains).map(([chainRef, chainState]) => [
+            chainRef,
+            {
+              accountIds: [...chainState.accountIds],
+            },
+          ]),
+        ),
+      };
     }
 
     origins[origin] = namespaces;

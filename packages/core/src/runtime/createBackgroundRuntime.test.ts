@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../chains/metadata.js";
-import { ApprovalKinds, PermissionCapabilities } from "../controllers/index.js";
+import { ApprovalKinds } from "../controllers/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
 import { createUiHandlers } from "../ui/server/index.js";
@@ -206,12 +207,19 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.grant("https://dapp.example", PermissionCapabilities.Basic, {
-      chainRef: MAINNET_CHAIN.chainRef,
-    });
-    await runtime.controllers.permissions.setPermittedAccounts("https://dapp.example", {
-      chainRef: MAINNET_CHAIN.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await runtime.controllers.permissions.upsertAuthorization("https://dapp.example", {
+      namespace: MAINNET_CHAIN.namespace,
+      chains: [
+        {
+          chainRef: MAINNET_CHAIN.chainRef,
+          accountIds: [
+            toAccountIdFromAddress({
+              chainRef: MAINNET_CHAIN.chainRef,
+              address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }),
+          ],
+        },
+      ],
     });
 
     const handlers = createUiHandlers({
@@ -267,12 +275,19 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.grant("https://dapp.example", PermissionCapabilities.Basic, {
-      chainRef: MAINNET_CHAIN.chainRef,
-    });
-    await runtime.controllers.permissions.setPermittedAccounts("https://dapp.example", {
-      chainRef: MAINNET_CHAIN.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await runtime.controllers.permissions.upsertAuthorization("https://dapp.example", {
+      namespace: MAINNET_CHAIN.namespace,
+      chains: [
+        {
+          chainRef: MAINNET_CHAIN.chainRef,
+          accountIds: [
+            toAccountIdFromAddress({
+              chainRef: MAINNET_CHAIN.chainRef,
+              address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }),
+          ],
+        },
+      ],
     });
 
     const handlers = createUiHandlers({

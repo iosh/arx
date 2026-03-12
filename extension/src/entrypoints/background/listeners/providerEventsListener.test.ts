@@ -65,7 +65,7 @@ const buildHarness = () => {
           onStateChanged: () => () => {},
         },
         permissions: {
-          onPermissionsChanged: () => () => {},
+          onStateChanged: () => () => {},
         },
       },
       session: {

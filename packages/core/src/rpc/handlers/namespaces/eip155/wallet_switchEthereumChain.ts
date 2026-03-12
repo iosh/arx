@@ -1,9 +1,9 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
-import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import type { MethodDefinition } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { requireApprovalRequester } from "./shared.js";
 
@@ -76,8 +76,6 @@ const WalletSwitchEthereumChainParamsSchema = z
   .transform(normalizeWalletSwitchEthereumChainParams);
 
 export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
-  capability: PermissionCapabilities.Basic,
-  permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
   parseParams: (params) => {
     try {

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { PERMISSION_CAPABILITY_VALUES, PermissionCapabilities } from "../permissions/capabilities.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
@@ -115,51 +114,61 @@ export const AccountRecordSchema = z
   });
 export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 
-export const PermissionCapabilitySchema = z.enum(PERMISSION_CAPABILITY_VALUES);
-export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
-
-export const PermissionGrantSchema = z.strictObject({
-  capability: PermissionCapabilitySchema,
-  // Chain list where this capability applies (EIP-2255-style caveat).
-  chainRefs: z.array(chainRefSchema).min(1),
+export const PermissionChainScopeSchema = z.strictObject({
+  chainRef: chainRefSchema,
+  // Empty means the origin is connected to the chain but has no account access on it.
+  accountIds: z.array(AccountIdSchema),
 });
-export type PermissionGrantRecord = z.infer<typeof PermissionGrantSchema>;
+export type PermissionChainScope = z.infer<typeof PermissionChainScopeSchema>;
 
 export const PermissionRecordSchema = z
   .strictObject({
     origin: originStringSchema,
     namespace: z.string().min(1),
-    // One entity per (origin, namespace). Each capability carries its own permitted chains.
-    grants: z.array(PermissionGrantSchema),
-    // EIP-155 only: persisted as AccountIds to stay chain-agnostic.
-    accountIds: z.array(AccountIdSchema).min(1).optional(),
+    // One durable authorization entity per (origin, namespace).
+    chains: z.array(PermissionChainScopeSchema).min(1),
     updatedAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    const capabilities = value.grants.map((g) => g.capability);
-    const unique = new Set(capabilities);
-    if (unique.size !== capabilities.length) {
+    const uniqueChains = new Set(value.chains.map((chain) => chain.chainRef));
+    if (uniqueChains.size !== value.chains.length) {
       ctx.addIssue({
         code: "custom",
-        message: "grants must not contain duplicate capabilities",
-        path: ["grants"],
+        message: "chains must not contain duplicate chainRef values",
+        path: ["chains"],
       });
     }
 
-    const hasAccountsGrant = capabilities.includes(PermissionCapabilities.Accounts);
-    if (hasAccountsGrant && !value.accountIds) {
-      ctx.addIssue({
-        code: "custom",
-        message: "accountIds is required when grants contains Accounts",
-        path: ["accountIds"],
-      });
-    }
-    if (!hasAccountsGrant && value.accountIds !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "accountIds must be omitted when grants does not contain Accounts",
-        path: ["accountIds"],
-      });
+    for (const [index, chain] of value.chains.entries()) {
+      const [chainNamespace] = chain.chainRef.split(":");
+      if (chainNamespace !== value.namespace) {
+        ctx.addIssue({
+          code: "custom",
+          message: `chains[${index}].chainRef must belong to namespace "${value.namespace}"`,
+          path: ["chains", index, "chainRef"],
+        });
+      }
+
+      const uniqueAccounts = new Set(chain.accountIds);
+      if (uniqueAccounts.size !== chain.accountIds.length) {
+        ctx.addIssue({
+          code: "custom",
+          message: `chains[${index}].accountIds must not contain duplicates`,
+          path: ["chains", index, "accountIds"],
+        });
+      }
+
+      for (const [accountIndex, accountId] of chain.accountIds.entries()) {
+        const separatorIndex = accountId.indexOf(":");
+        const accountNamespace = separatorIndex >= 0 ? accountId.slice(0, separatorIndex) : null;
+        if (accountNamespace !== value.namespace) {
+          ctx.addIssue({
+            code: "custom",
+            message: `chains[${index}].accountIds[${accountIndex}] must belong to namespace "${value.namespace}"`,
+            path: ["chains", index, "accountIds", accountIndex],
+          });
+        }
+      }
     }
   });
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;

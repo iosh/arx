@@ -31,7 +31,10 @@ export function AccountCard({
   const [hideBalance, setHideBalance] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const namespace = useMemo(() => chainRef.split(":")[0] ?? "eip155", [chainRef]);
+  const namespace = useMemo(() => {
+    const [prefix] = chainRef.split(":");
+    return prefix || chainRef;
+  }, [chainRef]);
   const copyValue = useMemo(() => address?.trim() ?? null, [address]);
 
   useEffect(() => {

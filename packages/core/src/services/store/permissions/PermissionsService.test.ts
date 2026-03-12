@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { PermissionCapabilities } from "../../../controllers/permission/types.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../../storage/records.js";
 import { createPermissionsService } from "./PermissionsService.js";
 import type { PermissionsPort } from "./port.js";
 
 const ORIGIN = "https://dapp.example";
 const NAMESPACE = "eip155";
+
+const createRecord = (args: {
+  origin?: string;
+  chains: Array<{ chainRef: string; accountIds: string[] }>;
+  updatedAt: number;
+}) =>
+  PermissionRecordSchema.parse({
+    origin: args.origin ?? ORIGIN,
+    namespace: NAMESPACE,
+    chains: args.chains,
+    updatedAt: args.updatedAt,
+  });
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
   const toKey = (record: PermissionRecord) => `${record.origin}::${record.namespace}`;
@@ -62,16 +73,16 @@ describe("PermissionsService", () => {
     await service.upsert({
       origin: ORIGIN,
       namespace: NAMESPACE,
-      grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
+      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     t = 2000;
     await service.upsert({
       origin: ORIGIN,
       namespace: NAMESPACE,
-      grants: [
-        { capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] },
-        { capability: PermissionCapabilities.Sign, chainRefs: ["eip155:1"] },
+      chains: [
+        { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { chainRef: "eip155:137", accountIds: [] },
       ],
     });
 
@@ -81,9 +92,9 @@ describe("PermissionsService", () => {
     const current = await service.get({ origin: ORIGIN, namespace: NAMESPACE });
     expect(current).not.toBeNull();
     if (!current) throw new Error("Expected permission record to exist");
-    expect(current.grants.map((g) => g.capability)).toEqual([
-      PermissionCapabilities.Basic,
-      PermissionCapabilities.Sign,
+    expect(current.chains).toEqual([
+      { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+      { chainRef: "eip155:137", accountIds: [] },
     ]);
     expect(current.updatedAt).toBe(2000);
   });
@@ -98,16 +109,13 @@ describe("PermissionsService", () => {
 
   it("clearOrigin() removes all records for the origin and emits changed", async () => {
     const seed = [
-      PermissionRecordSchema.parse({
-        origin: ORIGIN,
-        namespace: NAMESPACE,
-        grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
+      createRecord({
+        chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
         updatedAt: 1,
       }),
-      PermissionRecordSchema.parse({
+      createRecord({
         origin: "https://other.example",
-        namespace: NAMESPACE,
-        grants: [{ capability: PermissionCapabilities.Basic, chainRefs: ["eip155:1"] }],
+        chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
         updatedAt: 1,
       }),
     ];

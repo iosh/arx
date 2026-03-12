@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PermissionCapabilities, type PermissionGrant } from "../controllers/permission/types.js";
+import type { ChainPermissionAuthorization } from "../controllers/permission/types.js";
 import { buildWalletPermissions } from "./permissions.js";
 
 const ORIGIN = "https://dapp.example";
@@ -9,36 +9,33 @@ describe("buildWalletPermissions", () => {
     expect(buildWalletPermissions({ origin: ORIGIN })).toEqual([]);
   });
 
-  it("emits chain caveat per capability", () => {
-    const grants: PermissionGrant[] = [
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", capabilities: [PermissionCapabilities.Basic] },
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:137", capabilities: [PermissionCapabilities.Basic] },
-    ];
+  it("returns only the eth_accounts descriptor for the current chain", () => {
+    const authorization: ChainPermissionAuthorization = {
+      origin: ORIGIN,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    };
 
-    expect(buildWalletPermissions({ origin: ORIGIN, grants })).toEqual([
+    const getAccounts = vi.fn((chainRef: string) => (chainRef === "eip155:1" ? ["0xabc", "0xabc", "0xdef"] : []));
+
+    expect(buildWalletPermissions({ origin: ORIGIN, authorization, getAccounts })).toEqual([
       {
         invoker: ORIGIN,
-        parentCapability: "wallet_basic",
-        caveats: [{ type: "arx:permittedChains", value: ["eip155:1", "eip155:137"] }],
+        parentCapability: "eth_accounts",
+        caveats: [{ type: "restrictReturnedAccounts", value: ["0xabc", "0xdef"] }],
       },
     ]);
   });
 
-  it("adds restrictReturnedAccounts for eth_accounts", () => {
-    const grants: PermissionGrant[] = [
-      { origin: ORIGIN, namespace: "eip155", chainRef: "eip155:1", capabilities: [PermissionCapabilities.Accounts] },
-    ];
-    const getAccounts = vi.fn((chainRef: string) => (chainRef === "eip155:1" ? ["0xabc", "0xabc", "0xdef"] : []));
+  it("returns empty list when the current chain has no account access", () => {
+    const authorization: ChainPermissionAuthorization = {
+      origin: ORIGIN,
+      namespace: "eip155",
+      chainRef: "eip155:137",
+      accountIds: [],
+    };
 
-    expect(buildWalletPermissions({ origin: ORIGIN, grants, getAccounts })).toEqual([
-      {
-        invoker: ORIGIN,
-        parentCapability: "eth_accounts",
-        caveats: [
-          { type: "arx:permittedChains", value: ["eip155:1"] },
-          { type: "restrictReturnedAccounts", value: ["0xabc", "0xdef"] },
-        ],
-      },
-    ]);
+    expect(buildWalletPermissions({ origin: ORIGIN, authorization })).toEqual([]);
   });
 });

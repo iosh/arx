@@ -1,7 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
@@ -40,7 +39,6 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
       typedData: payload.typedData,
     });
 
-    await deps.permissions.grant(record.origin, PermissionCapabilities.Sign, { namespace, chainRef });
     return signature;
   },
 };

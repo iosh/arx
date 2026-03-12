@@ -1,5 +1,4 @@
 export const PermissionCapabilities = {
-  Basic: "wallet_basic",
   Accounts: "eth_accounts",
   Sign: "wallet_sign",
   SendTransaction: "wallet_sendTransaction",
@@ -9,7 +8,6 @@ export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof 
 
 // Keep tuple literals for z.enum typing & stable ordering.
 export const PERMISSION_CAPABILITY_VALUES = [
-  PermissionCapabilities.Basic,
   PermissionCapabilities.Accounts,
   PermissionCapabilities.Sign,
   PermissionCapabilities.SendTransaction,

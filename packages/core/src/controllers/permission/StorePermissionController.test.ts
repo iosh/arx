@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultChainAddressCodecRegistry } from "../../chains/registry.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createPermissionsService } from "../../services/store/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
-import type { PermissionsService } from "../../services/store/permissions/types.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
 import { StorePermissionController } from "./StorePermissionController.js";
 import { PERMISSION_TOPICS } from "./topics.js";
-import { PermissionCapabilities } from "./types.js";
 
 const ORIGIN = "https://dapp.example";
-const CHAIN_REF = "eip155:1";
+const NAMESPACE = "eip155";
+const MAINNET = "eip155:1";
+const POLYGON = "eip155:137";
+const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const OTHER_ACCOUNT_ID = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+const createRecord = (chains: Array<{ chainRef: string; accountIds: string[] }>, updatedAt: number) =>
+  PermissionRecordSchema.parse({
+    origin: ORIGIN,
+    namespace: NAMESPACE,
+    chains,
+    updatedAt,
+  });
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
   const toKey = (record: PermissionRecord) => `${record.origin}::${record.namespace}`;
@@ -46,112 +55,109 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
 };
 
 describe("StorePermissionController", () => {
-  it("grant() requires chainRef", async () => {
-    const { port } = createInMemoryPort();
-    const service = createPermissionsService({ port, now: () => 1000 });
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-
-    const controller = new StorePermissionController({
-      messenger,
-      capabilityResolver: () => undefined,
-      service,
-      chains: createDefaultChainAddressCodecRegistry(),
-    });
-
-    await controller.whenReady();
-    await expect(controller.grant(ORIGIN, PermissionCapabilities.Basic)).rejects.toThrow(/chainRef/i);
-  });
-
-  it("grant() writes to the store and publishes originChanged", async () => {
+  it("upsertAuthorization() writes one authorization record and publishes originChanged", async () => {
     const { port, store } = createInMemoryPort();
     const service = createPermissionsService({ port, now: () => 1000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
 
     const controller = new StorePermissionController({
       messenger,
-      capabilityResolver: () => undefined,
       service,
-      chains: createDefaultChainAddressCodecRegistry(),
     });
 
     const originEvents: unknown[] = [];
-    controller.onOriginPermissionsChanged((payload) => {
+    controller.onOriginChanged((payload) => {
       originEvents.push(payload);
     });
 
     await controller.whenReady();
-    await controller.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: CHAIN_REF });
+    await controller.upsertAuthorization(ORIGIN, {
+      namespace: NAMESPACE,
+      chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
+    });
 
     expect(store.size).toBe(1);
-
-    const state = controller.getState();
-    expect(state.origins[ORIGIN]?.eip155?.chains[CHAIN_REF]?.capabilities).toEqual([PermissionCapabilities.Sign]);
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      chains: {
+        [MAINNET]: {
+          accountIds: [ACCOUNT_ID],
+        },
+      },
+    });
     expect(originEvents.length).toBeGreaterThan(0);
   });
 
-  it("isConnected() requires non-empty accounts for eip155", async () => {
-    const { port } = createInMemoryPort();
-    const service = createPermissionsService({ port, now: () => 1000 });
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+  it("setChainAccountIds() updates only the targeted chain authorization", async () => {
+    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
 
-    const controller = new StorePermissionController({
-      messenger,
-      capabilityResolver: () => undefined,
-      service,
-      chains: createDefaultChainAddressCodecRegistry(),
-    });
+    const { port } = createInMemoryPort(seed);
+    const service = createPermissionsService({ port, now: () => 2000 });
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const controller = new StorePermissionController({ messenger, service });
 
     await controller.whenReady();
-    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(false);
-
-    await controller.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: CHAIN_REF,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await controller.setChainAccountIds(ORIGIN, {
+      namespace: NAMESPACE,
+      chainRef: MAINNET,
+      accountIds: [OTHER_ACCOUNT_ID],
     });
 
-    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(true);
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      chains: {
+        [MAINNET]: {
+          accountIds: [OTHER_ACCOUNT_ID],
+        },
+      },
+    });
   });
 
-  it("isConnected() treats Accounts capability without accounts as not connected (dirty store defense)", async () => {
+  it("addPermittedChains() merges chains into the existing authorization", async () => {
+    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
+
+    const { port } = createInMemoryPort(seed);
+    const service = createPermissionsService({ port, now: () => 2000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-
-    const dirtyRecord = {
-      origin: ORIGIN,
-      namespace: "eip155",
-      grants: [{ capability: PermissionCapabilities.Accounts, chainRefs: [CHAIN_REF] }],
-      // Intentionally omit accountIds (this can happen if older versions wrote incomplete rows).
-      updatedAt: 1000,
-    } as unknown as PermissionRecord;
-
-    const service = {
-      subscribeChanged() {
-        return () => {};
-      },
-      async get() {
-        return null;
-      },
-      async listAll() {
-        return [dirtyRecord];
-      },
-      async listByOrigin() {
-        return [dirtyRecord];
-      },
-      async upsert() {
-        return dirtyRecord;
-      },
-      async remove() {},
-      async clearOrigin() {},
-    } as unknown as PermissionsService;
-
-    const controller = new StorePermissionController({
-      messenger,
-      capabilityResolver: () => undefined,
-      service,
-      chains: createDefaultChainAddressCodecRegistry(),
-    });
+    const controller = new StorePermissionController({ messenger, service });
 
     await controller.whenReady();
-    expect(controller.isConnected(ORIGIN, { namespace: "eip155", chainRef: CHAIN_REF })).toBe(false);
+    await controller.addPermittedChains(ORIGIN, {
+      namespace: NAMESPACE,
+      chainRefs: [POLYGON],
+    });
+
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      chains: {
+        [MAINNET]: {
+          accountIds: [ACCOUNT_ID],
+        },
+        [POLYGON]: {
+          accountIds: [],
+        },
+      },
+    });
+  });
+
+  it("revokePermittedChains() deletes the authorization when the last chain is removed", async () => {
+    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
+
+    const { port, store } = createInMemoryPort(seed);
+    const service = createPermissionsService({ port, now: () => 2000 });
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const controller = new StorePermissionController({ messenger, service });
+
+    await controller.whenReady();
+    await controller.revokePermittedChains(ORIGIN, {
+      namespace: NAMESPACE,
+      chainRefs: [MAINNET],
+    });
+
+    expect(store.size).toBe(0);
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toBeNull();
   });
 });

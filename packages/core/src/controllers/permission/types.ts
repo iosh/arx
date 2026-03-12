@@ -1,15 +1,19 @@
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainNamespace } from "../../controllers/account/types.js";
 import { PermissionCapabilities } from "../../permissions/capabilities.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
+import type { AccountId } from "../../storage/records.js";
+import type { ChainNamespace } from "../account/types.js";
 
 export { PermissionCapabilities };
 export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof PermissionCapabilities];
 
+export type PermissionCapabilityResolver = (
+  method: string,
+  context?: RpcInvocationContext,
+) => PermissionCapability | undefined;
+
 export type ChainPermissionState = {
-  capabilities: PermissionCapability[];
-  // EIP-155 only for now; keep per-chain to avoid leaking accounts to non-connected chains.
-  accounts?: string[];
+  accountIds: AccountId[];
 };
 
 export type NamespacePermissionState = {
@@ -27,23 +31,39 @@ export type PermissionsState = {
   origins: Record<string, OriginPermissionState>;
 };
 
-export type PermissionGrant = {
+export type PermissionAuthorization = {
+  origin: string;
+  namespace: ChainNamespace;
+  chains: Record<ChainRef, ChainPermissionState>;
+};
+
+export type ChainPermissionAuthorization = {
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  capabilities: PermissionCapability[];
-  accounts?: string[];
+  accountIds: AccountId[];
 };
 
-export type GrantPermissionOptions = {
-  namespace?: ChainNamespace | null;
-  chainRef?: ChainRef | null;
+export type AuthorizationChainInput = {
+  chainRef: ChainRef;
+  accountIds: AccountId[];
 };
 
-export type PermissionCapabilityResolver = (
-  method: string,
-  context?: RpcInvocationContext,
-) => PermissionCapability | undefined;
+export type UpsertAuthorizationOptions = {
+  namespace: ChainNamespace;
+  chains: [AuthorizationChainInput, ...AuthorizationChainInput[]];
+};
+
+export type SetChainAccountIdsOptions = {
+  namespace: ChainNamespace;
+  chainRef: ChainRef;
+  accountIds: AccountId[];
+};
+
+export type MutatePermittedChainsOptions = {
+  namespace: ChainNamespace;
+  chainRefs: [ChainRef, ...ChainRef[]];
+};
 
 export type PermissionRequestChainRefs = [ChainRef, ...ChainRef[]];
 
@@ -63,25 +83,23 @@ export type PermissionApprovalResult = {
 
 export type PermissionController = {
   whenReady(): Promise<void>;
-  listGrants(origin: string): PermissionGrant[];
 
   getState(): PermissionsState;
-  listConnectedOrigins(options: { namespace: ChainNamespace }): string[];
-
-  getPermittedAccounts(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): string[];
-  setPermittedAccounts(
+  getAuthorization(origin: string, options: { namespace: ChainNamespace }): PermissionAuthorization | null;
+  getChainAuthorization(
     origin: string,
-    options: { namespace?: ChainNamespace | null; chainRef: ChainRef; accounts: string[] },
-  ): Promise<void>;
-  isConnected(origin: string, options: { namespace?: ChainNamespace | null; chainRef: ChainRef }): boolean;
+    options: { namespace: ChainNamespace; chainRef: ChainRef },
+  ): ChainPermissionAuthorization | null;
+  listAuthorizations(origin: string): PermissionAuthorization[];
 
-  assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
-  grant(origin: string, capability: PermissionCapability, options?: GrantPermissionOptions): Promise<void>;
-  clear(origin: string): Promise<void>;
-  getPermissions(origin: string): OriginPermissionState | undefined;
-  onPermissionsChanged(handler: (state: PermissionsState) => void): () => void;
-  onOriginPermissionsChanged(handler: (payload: OriginPermissions) => void): () => void;
+  upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization>;
+  setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization>;
+  addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization>;
+  revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void>;
+  clearOrigin(origin: string): Promise<void>;
 
-  // Optional lifecycle hook for store-backed implementations.
+  onStateChanged(handler: (state: PermissionsState) => void): () => void;
+  onOriginChanged(handler: (payload: OriginPermissions) => void): () => void;
+
   destroy?(): void;
 };

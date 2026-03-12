@@ -2,11 +2,7 @@ import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
-import {
-  ApprovalKinds,
-  PermissionCapabilities,
-  type RequestPermissionsApprovalPayload,
-} from "../../../../../controllers/index.js";
+import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../controllers/index.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
@@ -22,6 +18,31 @@ import {
 } from "./eip155.test.helpers.js";
 
 // TODO: add eth_requestAccounts rejection test once approval  -> account flow is implemented
+
+const connectOrigin = async (args: {
+  runtime: ReturnType<typeof createRuntime>;
+  origin?: string;
+  chainRefs: [string, ...string[]];
+  addresses: [string, ...string[]];
+}) => {
+  const { runtime, origin = ORIGIN, chainRefs, addresses } = args;
+  const [firstChainRef] = chainRefs;
+  const [namespace] = firstChainRef.split(":");
+
+  await runtime.controllers.permissions.upsertAuthorization(origin, {
+    namespace,
+    chains: chainRefs.map((chainRef, index) => ({
+      chainRef,
+      accountIds:
+        index === 0
+          ? (addresses.map((address) => toAccountIdFromAddress({ chainRef, address })) as [string, ...string[]])
+          : [],
+    })) as [
+      { chainRef: string; accountIds: [string, ...string[]] },
+      ...Array<{ chainRef: string; accountIds: string[] }>,
+    ],
+  });
+};
 
 describe("eip155 handlers - core error paths", () => {
   it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
@@ -676,10 +697,10 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: chain.chainRef });
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      chainRef: chain.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     const execute = createExecutor(runtime);
@@ -692,16 +713,8 @@ describe("eip155 handlers - core error paths", () => {
       expect(result).toEqual([
         {
           invoker: ORIGIN,
-          parentCapability: "wallet_basic",
-          caveats: [{ type: "arx:permittedChains", value: [chain.chainRef] }],
-        },
-        {
-          invoker: ORIGIN,
           parentCapability: "eth_accounts",
-          caveats: [
-            { type: "arx:permittedChains", value: [chain.chainRef] },
-            { type: "restrictReturnedAccounts", value: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-          ],
+          caveats: [{ type: "restrictReturnedAccounts", value: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
         },
       ]);
     } finally {
@@ -709,7 +722,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("does not leak capability chains across different grants", async () => {
+  it("wallet_getPermissions and eth_accounts do not leak account access across permitted chains", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -717,11 +730,11 @@ describe("eip155 handlers - core error paths", () => {
     const main = getActiveChainMetadata(runtime);
     await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
-    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, { chainRef: main.chainRef });
-    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Basic, {
-      chainRef: ALT_CHAIN.chainRef,
+    await connectOrigin({
+      runtime,
+      chainRefs: [main.chainRef, ALT_CHAIN.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
-    await runtime.controllers.permissions.grant(ORIGIN, PermissionCapabilities.Sign, { chainRef: ALT_CHAIN.chainRef });
 
     const execute = createExecutor(runtime);
     try {
@@ -730,18 +743,29 @@ describe("eip155 handlers - core error paths", () => {
         request: { method: "wallet_getPermissions", params: [] as JsonRpcParams },
       });
 
-      expect(result).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            parentCapability: "wallet_basic",
-            caveats: [{ type: "arx:permittedChains", value: [main.chainRef, ALT_CHAIN.chainRef] }],
-          }),
-          expect.objectContaining({
-            parentCapability: "wallet_sign",
-            caveats: [{ type: "arx:permittedChains", value: [ALT_CHAIN.chainRef] }],
-          }),
-        ]),
-      );
+      expect(result).toEqual([
+        {
+          invoker: ORIGIN,
+          parentCapability: "eth_accounts",
+          caveats: [{ type: "restrictReturnedAccounts", value: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+        },
+      ]);
+
+      await runtime.services.networkPreferences.setActiveChainRef(ALT_CHAIN.chainRef);
+
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_getPermissions", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([]);
+
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "eth_accounts", params: [] as JsonRpcParams },
+        }),
+      ).resolves.toEqual([]);
     } finally {
       runtime.lifecycle.destroy();
     }
@@ -764,12 +788,7 @@ describe("eip155 handlers - core error paths", () => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
       const payload = task.request as RequestPermissionsApprovalPayload;
       expect(payload.chainRef).toBe(chain.chainRef);
-      expect(payload.requested).toEqual(
-        expect.arrayContaining([
-          { capability: "wallet_basic", chainRefs: [chain.chainRef] },
-          { capability: "eth_accounts", chainRefs: [chain.chainRef] },
-        ]),
-      );
+      expect(payload.requested).toEqual([{ capability: "eth_accounts", chainRefs: [chain.chainRef] }]);
       await runtime.controllers.approvals.resolve({
         id: task.id,
         action: "approve",
@@ -785,19 +804,84 @@ describe("eip155 handlers - core error paths", () => {
         request: { method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] as JsonRpcParams },
       });
 
-      expect(Array.isArray(result)).toBe(true);
-      expect(result).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ parentCapability: "wallet_basic" }),
-          expect.objectContaining({ parentCapability: "eth_accounts" }),
-        ]),
-      );
+      expect(result).toEqual([
+        expect.objectContaining({
+          parentCapability: "eth_accounts",
+        }),
+      ]);
 
-      const state = runtime.controllers.permissions.getPermissions(ORIGIN);
-      const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
-      expect(state?.eip155?.chains?.[chainRef]?.capabilities ?? []).toEqual(
-        expect.arrayContaining([PermissionCapabilities.Basic, PermissionCapabilities.Accounts]),
-      );
+      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
+      expect(Object.keys(authorization?.chains ?? {})).toEqual([chain.chainRef]);
+      expect(authorization?.chains[chain.chainRef]?.accountIds.length ?? 0).toBeGreaterThan(0);
+    } finally {
+      teardown();
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects unsupported capabilities in wallet_requestPermissions", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const execute = createExecutor(runtime);
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_requestPermissions", params: [{ wallet_basic: {} }] as JsonRpcParams },
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+    } finally {
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("preserves existing multi-account authorization on repeated eth_requestAccounts approval", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = getActiveChainMetadata(runtime);
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const first = await runtime.services.keyring.deriveAccount(keyringId);
+    const second = await runtime.services.keyring.deriveAccount(keyringId);
+
+    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountsController.refresh?.();
+
+    const firstAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: first.address });
+    const secondAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: second.address });
+    const expectedAccountIds = [firstAccountId, secondAccountId].sort();
+
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: chain.namespace,
+      chainRef: chain.chainRef,
+      accountId: firstAccountId,
+    });
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: [first.address, second.address],
+    });
+
+    const teardown = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.RequestAccounts) return false;
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      return true;
+    });
+
+    const execute = createExecutor(runtime);
+    try {
+      await execute({
+        origin: ORIGIN,
+        request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
+      });
+
+      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
+      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual(expectedAccountIds);
     } finally {
       teardown();
       runtime.lifecycle.destroy();
@@ -825,7 +909,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("returns permitted accounts for eth_accounts after connection persists per-chain accounts", async () => {
+  it("returns permitted accounts for eth_accounts after connection persists authorization", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -837,10 +921,10 @@ describe("eip155 handlers - core error paths", () => {
     const a1 = "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa";
     const a2 = "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB";
 
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: chain.chainRef,
-      accounts: [a1, a2],
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: [a1, a2],
     });
 
     const execute = createExecutor(runtime);
@@ -869,10 +953,10 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: chain.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     const execute = createExecutor(runtime);
@@ -899,10 +983,10 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: chain.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     const execute = createExecutor(runtime);
@@ -939,10 +1023,10 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.controllers.permissions.setPermittedAccounts(ORIGIN, {
-      namespace: "eip155",
-      chainRef: chain.chainRef,
-      accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
 
     const execute = createExecutor(runtime);

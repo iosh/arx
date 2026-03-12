@@ -34,6 +34,7 @@ export const UiOwnedAccountSummarySchema = z.object({
   canonicalAddress: z.string().min(1),
   displayAddress: z.string().min(1),
 });
+export const ApprovalSelectableAccountSchema = UiOwnedAccountSummarySchema;
 
 export const AccountsSnapshotSchema = z.object({
   totalCount: z.number().int().nonnegative(),
@@ -75,7 +76,10 @@ const approvalPayloadBase = z.object({
 export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("requestAccounts"),
-    payload: z.object({ suggestedAccounts: z.array(z.string()) }),
+    payload: z.object({
+      selectableAccounts: z.array(ApprovalSelectableAccountSchema),
+      recommendedAccountId: AccountIdSchema.nullable(),
+    }),
   }),
   approvalPayloadBase.extend({
     type: z.literal("signMessage"),
@@ -126,6 +130,8 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
   approvalPayloadBase.extend({
     type: z.literal("requestPermissions"),
     payload: z.object({
+      selectableAccounts: z.array(ApprovalSelectableAccountSchema),
+      recommendedAccountId: AccountIdSchema.nullable(),
       requestedAccesses: z
         .array(
           z.object({
@@ -229,6 +235,7 @@ export const UiSnapshotSchema = z.object({
 
 export type ChainSnapshot = z.infer<typeof ChainSnapshotSchema>;
 export type UiOwnedAccountSummary = z.infer<typeof UiOwnedAccountSummarySchema>;
+export type ApprovalSelectableAccount = z.infer<typeof ApprovalSelectableAccountSchema>;
 export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
 export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;

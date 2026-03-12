@@ -67,6 +67,17 @@ describe("eip155 handlers - approval metadata", () => {
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
+    const selectableAccounts = runtime.controllers.accounts.listOwnedForNamespace({
+      namespace: activeChain.namespace,
+      chainRef: activeChain.chainRef,
+    });
+    expect(selectableAccounts.length).toBeGreaterThan(0);
+    const [selectableAccount] = selectableAccounts;
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: activeChain.namespace,
+      chainRef: activeChain.chainRef,
+      accountId: selectableAccount.accountId,
+    });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const rejectionError = Object.assign(
@@ -80,6 +91,7 @@ describe("eip155 handlers - approval metadata", () => {
 
       capturedTask = task;
       const summary = approvalRegistry.present(task, {
+        accounts: runtime.controllers.accounts,
         chainViews: runtime.services.chainViews,
         transactions: runtime.controllers.transactions,
       });
@@ -92,6 +104,12 @@ describe("eip155 handlers - approval metadata", () => {
         chainRef: activeChain.chainRef,
         createdAt: task.createdAt,
         payload: {
+          selectableAccounts: selectableAccounts.map((account) => ({
+            accountId: account.accountId,
+            canonicalAddress: account.canonicalAddress,
+            displayAddress: account.displayAddress,
+          })),
+          recommendedAccountId: selectableAccount.accountId,
           requestedAccesses: [{ capability: "eth_accounts", chainRef: activeChain.chainRef }],
         },
       });
@@ -128,16 +146,21 @@ describe("eip155 handlers - approval metadata", () => {
     const activeChain = getActiveChainMetadata(runtime);
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
     const account = await runtime.services.keyring.deriveAccount(keyringId);
+    const accountId = toAccountIdFromAddress({ chainRef: activeChain.chainRef, address: account.address });
     await runtime.controllers.accounts.setActiveAccount({
       namespace: activeChain.namespace,
       chainRef: activeChain.chainRef,
-      accountId: toAccountIdFromAddress({ chainRef: activeChain.chainRef, address: account.address }),
+      accountId,
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
       capturedTask = record;
-      void runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
+      void runtime.controllers.approvals.resolve({
+        id: record.id,
+        action: "approve",
+        decision: { accountIds: [accountId] },
+      });
     });
 
     try {
@@ -187,6 +210,7 @@ describe("eip155 handlers - approval metadata", () => {
       if (task.kind === ApprovalKinds.SignMessage) {
         capturedTask = task;
         const summary = approvalRegistry.present(task, {
+          accounts: runtime.controllers.accounts,
           chainViews: runtime.services.chainViews,
           transactions: runtime.controllers.transactions,
         });
@@ -328,6 +352,7 @@ describe("eip155 handlers - approval metadata", () => {
       capturedTask = task;
 
       const summary = registry.present(task, {
+        accounts: runtime.controllers.accounts,
         chainViews: runtime.services.chainViews,
         transactions: runtime.controllers.transactions,
       });
@@ -397,6 +422,7 @@ describe("eip155 handlers - approval metadata", () => {
       }
       capturedTask = task;
       const summary = approvalRegistry.present(task, {
+        accounts: runtime.controllers.accounts,
         chainViews: runtime.services.chainViews,
         transactions: runtime.controllers.transactions,
       });

@@ -779,10 +779,17 @@ describe("eip155 handlers - core error paths", () => {
     const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const account = await runtime.services.keyring.deriveAccount(keyringId);
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
+    const accountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: account.address });
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: chain.namespace,
+      chainRef: chain.chainRef,
+      accountId,
+    });
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
@@ -792,7 +799,7 @@ describe("eip155 handlers - core error paths", () => {
       await runtime.controllers.approvals.resolve({
         id: task.id,
         action: "approve",
-        result: { granted: payload.requested },
+        decision: { accountIds: [accountId] },
       });
       return true;
     });
@@ -812,7 +819,7 @@ describe("eip155 handlers - core error paths", () => {
 
       const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
       expect(Object.keys(authorization?.chains ?? {})).toEqual([chain.chainRef]);
-      expect(authorization?.chains[chain.chainRef]?.accountIds.length ?? 0).toBeGreaterThan(0);
+      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual([accountId]);
     } finally {
       teardown();
       runtime.lifecycle.destroy();
@@ -837,7 +844,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("preserves existing multi-account authorization on repeated eth_requestAccounts approval", async () => {
+  it("replaces targeted chain authorization on repeated eth_requestAccounts approval", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -854,7 +861,6 @@ describe("eip155 handlers - core error paths", () => {
 
     const firstAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: first.address });
     const secondAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: second.address });
-    const expectedAccountIds = [firstAccountId, secondAccountId].sort();
 
     await runtime.controllers.accounts.setActiveAccount({
       namespace: chain.namespace,
@@ -869,7 +875,11 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestAccounts) return false;
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({
+        id: task.id,
+        action: "approve",
+        decision: { accountIds: [secondAccountId] },
+      });
       return true;
     });
 
@@ -881,7 +891,50 @@ describe("eip155 handlers - core error paths", () => {
       });
 
       const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
-      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual(expectedAccountIds);
+      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual([secondAccountId]);
+    } finally {
+      teardown();
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects unselectable accounts during eth_requestAccounts approval", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = getActiveChainMetadata(runtime);
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    await runtime.services.keyring.deriveAccount(keyringId);
+
+    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountsController.refresh?.();
+
+    const teardown = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.RequestAccounts) return false;
+      void runtime.controllers.approvals
+        .resolve({
+          id: task.id,
+          action: "approve",
+          decision: { accountIds: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
+        })
+        .catch(() => {});
+      return true;
+    });
+
+    const execute = createExecutor(runtime);
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "eth_requestAccounts", params: [] as JsonRpcParams },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+
+      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
+      expect(authorization).toBeNull();
     } finally {
       teardown();
       runtime.lifecycle.destroy();

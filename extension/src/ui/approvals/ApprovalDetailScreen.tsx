@@ -1,4 +1,5 @@
 import type { ApprovalSummary } from "@arx/core/ui";
+import type { ReactNode } from "react";
 import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
 import { ApprovalPayload } from "./ApprovalPayload";
@@ -11,6 +12,8 @@ export type ApprovalDetailScreenProps = {
   onBack: () => void;
   pending: "approve" | "reject" | null;
   errorMessage: string | null;
+  approveDisabled?: boolean;
+  children?: ReactNode;
 };
 
 export function ApprovalDetailScreen({
@@ -20,6 +23,8 @@ export function ApprovalDetailScreen({
   onBack,
   pending,
   errorMessage,
+  approveDisabled = false,
+  children,
 }: ApprovalDetailScreenProps) {
   const footer = (
     <YStack gap="$2">
@@ -39,7 +44,7 @@ export function ApprovalDetailScreen({
           <Button
             flex={1}
             onPress={onApprove}
-            disabled={pending !== null}
+            disabled={pending !== null || approveDisabled}
             backgroundColor="$accent"
             color="$accentText"
           >
@@ -69,7 +74,10 @@ export function ApprovalDetailScreen({
       </Card>
 
       <ScrollView flex={1} minHeight={0}>
-        <ApprovalPayload approval={approval} />
+        <YStack gap="$3">
+          <ApprovalPayload approval={approval} />
+          {children}
+        </YStack>
       </ScrollView>
     </Screen>
   );

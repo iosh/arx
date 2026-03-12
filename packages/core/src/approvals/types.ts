@@ -26,6 +26,7 @@ export type ApprovalFlowDeps = {
 };
 
 export type ApprovalFlowPresenterDeps = {
+  accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
   transactions: Pick<ApprovalFlowDeps["transactions"], "getMeta">;
 };

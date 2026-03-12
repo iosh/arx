@@ -97,7 +97,6 @@ export type ControllersInitResult = {
 
 export const initControllers = ({
   bus,
-  namespaceResolver,
   rpcRegistry,
   accountsService,
   settingsService,

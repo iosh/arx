@@ -1,4 +1,4 @@
-import type { UiSnapshot } from "@arx/core/ui";
+import type { UiMethodParams, UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { uiClient } from "../lib/uiBridgeClient";
@@ -63,9 +63,7 @@ export const useUiSnapshot = () => {
   });
 
   const resolveApprovalMutation = useMutation({
-    mutationFn: (
-      params: { id: string; action: "approve"; decision?: unknown } | { id: string; action: "reject"; reason?: string },
-    ) => uiClient.approvals.resolve(params),
+    mutationFn: (params: UiMethodParams<"ui.approvals.resolve">) => uiClient.approvals.resolve(params),
   });
 
   const setAutoLockDurationMutation = useMutation({

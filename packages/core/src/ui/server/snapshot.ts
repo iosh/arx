@@ -77,6 +77,7 @@ export const buildUiSnapshot = (deps: {
 
       try {
         return approvalFlowRegistry.present(record, {
+          accounts: controllers.accounts,
           chainViews,
           transactions: controllers.transactions,
         });

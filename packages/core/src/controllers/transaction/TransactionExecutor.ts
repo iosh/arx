@@ -11,7 +11,6 @@ import type { TransactionAdapterRegistry } from "../../transactions/adapters/reg
 import type { ApprovalController } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import { toApprovalRequester } from "../approval/utils.js";
-import type { NetworkController } from "../network/types.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";

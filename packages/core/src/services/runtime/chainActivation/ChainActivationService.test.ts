@@ -1,4 +1,4 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { createChainActivationService } from "./ChainActivationService.js";
 import { ChainSelectionSyncPolicies, ProviderChainActivationReasons } from "./types.js";

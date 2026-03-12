@@ -2,17 +2,32 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { PermissionCapabilities, type PermissionRequestDescriptor } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
-import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
+import {
+  deriveApprovalReviewContext,
+  getApprovalSelectableAccounts,
+  parseAccountSelectionDecision,
+  resolveApprovalSelectedAccounts,
+} from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
 export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestPermissions> = {
   kind: ApprovalKinds.RequestPermissions,
-  parseDecision: (input) => parseNoDecision(ApprovalKinds.RequestPermissions, input),
+  parseDecision: (input) => parseAccountSelectionDecision(ApprovalKinds.RequestPermissions, input),
   present(record, deps) {
+    const { selectableAccounts, recommendedAccountId } = getApprovalSelectableAccounts(record, deps, {
+      request: record.request,
+    });
+
     return {
       ...createApprovalSummaryBase(record, deps, { request: record.request }),
       type: "requestPermissions",
       payload: {
+        selectableAccounts: selectableAccounts.map((account) => ({
+          accountId: account.accountId,
+          canonicalAddress: account.canonicalAddress,
+          displayAddress: account.displayAddress,
+        })),
+        recommendedAccountId,
         requestedAccesses: record.request.requested.flatMap((item) =>
           item.chainRefs.map((chainRef) => ({
             capability: item.capability,
@@ -22,7 +37,7 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       },
     };
   },
-  async approve(record, _decision, deps) {
+  async approve(record, decision, deps) {
     const granted = record.request.requested.map((descriptor) => ({
       capability: descriptor.capability,
       chainRefs: [...descriptor.chainRefs] as PermissionRequestDescriptor["chainRefs"],
@@ -62,14 +77,11 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     const { reviewChainRef } = deriveApprovalReviewContext(record, {
       request: { chainRef: primaryChainRef },
     });
-    const accounts = deps.accounts.listOwnedForNamespace({ namespace, chainRef: reviewChainRef });
-    const activeAccount = deps.accounts.getActiveAccountForNamespace({ namespace, chainRef: reviewChainRef });
-    const selectedAccount =
-      (activeAccount && accounts.find((account) => account.accountId === activeAccount.accountId)) ??
-      accounts[0] ??
-      null;
+    const { selectableAccounts } = getApprovalSelectableAccounts(record, deps, {
+      request: { chainRef: primaryChainRef },
+    });
 
-    if (!selectedAccount) {
+    if (selectableAccounts.length === 0) {
       throw arxError({
         reason: ArxReasons.PermissionDenied,
         message: "No selectable account available for permission request",
@@ -77,12 +89,22 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       });
     }
 
+    const selectedAccounts = resolveApprovalSelectedAccounts({
+      record,
+      namespace,
+      chainRef: reviewChainRef,
+      decision,
+      selectableAccounts,
+    });
+
     const nextChains = new Map<string, string[]>(
       Object.entries(existing?.chains ?? {}).map(([chainRef, chainState]) => [chainRef, [...chainState.accountIds]]),
     );
     for (const chainRef of requestedChainRefs) {
-      const current = nextChains.get(chainRef) ?? [];
-      nextChains.set(chainRef, [...new Set([...current, selectedAccount.accountId])]);
+      nextChains.set(
+        chainRef,
+        selectedAccounts.map((account) => account.accountId),
+      );
     }
 
     await deps.permissions.upsertAuthorization(record.origin, {

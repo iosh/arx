@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ApprovalDetailScreen, useApprovalSnooze } from "@/ui/approvals";
+import { ApprovalAccountSelector, ApprovalDetailScreen, useApprovalSnooze } from "@/ui/approvals";
 import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
@@ -19,6 +19,7 @@ function ApproveRequestAccountsByIdPage() {
   const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   const approval = snapshot?.approvals.find((a) => a.id === id);
   const isMatching = approval?.type === "requestAccounts";
@@ -30,12 +31,34 @@ function ApproveRequestAccountsByIdPage() {
     router.navigate({ to: ROUTES.APPROVALS, replace: true });
   }, [approval, isMatching, router, snapshot]);
 
+  useEffect(() => {
+    if (!approval || !isMatching) return;
+
+    const selectableIds = new Set(approval.payload.selectableAccounts.map((account) => account.accountId));
+    setSelectedAccountId((current) => {
+      if (current && selectableIds.has(current)) {
+        return current;
+      }
+
+      return approval.payload.recommendedAccountId ?? approval.payload.selectableAccounts[0]?.accountId ?? null;
+    });
+  }, [approval, isMatching]);
+
   const handleApprove = async () => {
     if (!approval || !isMatching) return;
+    if (!selectedAccountId) {
+      setErrorMessage("Choose an account to continue.");
+      return;
+    }
+
     setPending("approve");
     setErrorMessage(null);
     try {
-      await resolveApproval({ id: approval.id, action: "approve" });
+      await resolveApproval({
+        id: approval.id,
+        action: "approve",
+        decision: { accountIds: [selectedAccountId] },
+      });
       router.navigate({ to: ROUTES.APPROVALS, replace: true });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -77,6 +100,13 @@ function ApproveRequestAccountsByIdPage() {
       }}
       pending={pending}
       errorMessage={errorMessage}
-    />
+      approveDisabled={!selectedAccountId}
+    >
+      <ApprovalAccountSelector
+        approval={approval}
+        selectedAccountId={selectedAccountId}
+        onSelect={setSelectedAccountId}
+      />
+    </ApprovalDetailScreen>
   );
 }

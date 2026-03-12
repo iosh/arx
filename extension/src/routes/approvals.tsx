@@ -1,11 +1,9 @@
 import type { ApprovalSummary } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
 import { Card, Paragraph, YStack } from "tamagui";
-import { ApprovalDetailScreen, getApprovalTypeLabel, useApprovalSnooze } from "@/ui/approvals";
+import { getApprovalRoutePath, getApprovalTypeLabel, useApprovalSnooze } from "@/ui/approvals";
 import { Button, ListItem, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
-import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 
@@ -17,54 +15,10 @@ export const Route = createFileRoute("/approvals")({
 function ApprovalsPage() {
   const router = useRouter();
   const { snoozeHeadId } = useApprovalSnooze();
-  const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { snapshot, isLoading } = useUiSnapshot();
 
   if (isLoading || !snapshot) {
     return <LoadingScreen />;
-  }
-
-  const selected = snapshot.approvals.find((a) => a.id === selectedId);
-
-  const handleApprove = async (id: string) => {
-    setPending("approve");
-    setErrorMessage(null);
-    try {
-      await resolveApproval({ id, action: "approve" });
-      setSelectedId(null);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    setPending("reject");
-    setErrorMessage(null);
-    try {
-      await resolveApproval({ id, action: "reject", reason: "User rejected" });
-      setSelectedId(null);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setPending(null);
-    }
-  };
-
-  if (selected) {
-    return (
-      <ApprovalDetailScreen
-        approval={selected}
-        onApprove={selected.type === "unsupported" ? undefined : () => void handleApprove(selected.id)}
-        onReject={() => void handleReject(selected.id)}
-        onBack={() => setSelectedId(null)}
-        pending={pending}
-        errorMessage={errorMessage}
-      />
-    );
   }
 
   return (
@@ -94,7 +48,11 @@ function ApprovalsPage() {
       ) : (
         <YStack gap="$2">
           {snapshot.approvals.map((approval) => (
-            <ApprovalListItem key={approval.id} approval={approval} onSelect={() => setSelectedId(approval.id)} />
+            <ApprovalListItem
+              key={approval.id}
+              approval={approval}
+              onSelect={() => router.navigate({ to: getApprovalRoutePath(approval) })}
+            />
           ))}
         </YStack>
       )}

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
+import { AccountIdSchema } from "../../../storage/records.js";
 import { defineMethod } from "./types.js";
 
 const PermissionRequestDescriptorSchema = z.strictObject({
@@ -10,6 +11,20 @@ const PermissionRequestDescriptorSchema = z.strictObject({
 const PermissionApprovalResultSchema = z.strictObject({
   granted: z.array(PermissionRequestDescriptorSchema),
 });
+
+const ApprovalAccountSelectionDecisionSchema = z
+  .strictObject({
+    accountIds: z.array(AccountIdSchema).min(1),
+  })
+  .superRefine((value, ctx) => {
+    if (new Set(value.accountIds).size !== value.accountIds.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "decision.accountIds must not contain duplicates",
+        path: ["accountIds"],
+      });
+    }
+  });
 
 const TransactionDiagnosticSchema = z.strictObject({
   kind: z.enum(["warning", "issue"]).optional(),
@@ -62,7 +77,7 @@ const ApprovalResolveParamsSchema = z.discriminatedUnion("action", [
   z.strictObject({
     id: z.string().min(1),
     action: z.literal("approve"),
-    decision: z.unknown().optional(),
+    decision: ApprovalAccountSelectionDecisionSchema.optional(),
   }),
   z.strictObject({
     id: z.string().min(1),

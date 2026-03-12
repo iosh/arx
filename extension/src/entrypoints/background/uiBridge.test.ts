@@ -705,7 +705,7 @@ describe("uiBridge", () => {
   let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
-  let emitNetworkPreferencesChanged: ReturnType<typeof buildBridge>["emitNetworkPreferencesChanged"];
+  let _emitNetworkPreferencesChanged: ReturnType<typeof buildBridge>["emitNetworkPreferencesChanged"];
 
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
@@ -715,7 +715,7 @@ describe("uiBridge", () => {
     unlock = ctx.unlock;
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
-    emitNetworkPreferencesChanged = ctx.emitNetworkPreferencesChanged;
+    _emitNetworkPreferencesChanged = ctx.emitNetworkPreferencesChanged;
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);

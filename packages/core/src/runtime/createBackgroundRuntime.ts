@@ -1,9 +1,17 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { createDefaultChainAddressCodecRegistry } from "../chains/registry.js";
 import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
+import {
+  assembleRuntimeNamespaces,
+  BUILTIN_NAMESPACE_MANIFESTS,
+  collectChainSeedsFromManifests,
+  createChainAddressCodecRegistryFromManifests,
+  createKeyringNamespacesFromManifests,
+  type NamespaceManifest,
+  registerRpcModulesFromManifests,
+} from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import { createRpcRegistry, type RpcInvocationContext, registerBuiltinRpcAdapters } from "../rpc/index.js";
+import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
 import { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../services/runtime/chainViews/index.js";
@@ -26,7 +34,6 @@ import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
 import { createNetworkBootstrap } from "./background/networkBootstrap.js";
-import { registerDefaultTransactionAdapters } from "./background/registerDefaultTransactionAdapters.js";
 import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
 import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
@@ -69,6 +76,9 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chain
   };
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
+  namespaces?: {
+    manifests?: readonly NamespaceManifest[];
+  };
 };
 
 export type BackgroundRuntime = {
@@ -99,7 +109,6 @@ export type BackgroundRuntime = {
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const rpcRegistry = createRpcRegistry();
-  registerBuiltinRpcAdapters(rpcRegistry);
 
   const {
     messenger: messengerOptions,
@@ -117,7 +126,11 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     session: sessionOptions,
     chainDefinitions: chainDefinitionsOptions,
     rpcClients: rpcClientOptions,
+    namespaces: namespacesOptions,
   } = options;
+
+  const namespaceManifests = namespacesOptions?.manifests ?? BUILTIN_NAMESPACE_MANIFESTS;
+  registerRpcModulesFromManifests(rpcRegistry, namespaceManifests);
 
   const storageLogger = storageOptions?.logger ?? (() => {});
   const bus = new Messenger({
@@ -125,8 +138,15 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
-  const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
+  const chainAddressCodecs = createChainAddressCodecRegistryFromManifests(namespaceManifests);
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
+  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? collectChainSeedsFromManifests(namespaceManifests);
+  const resolvedSessionOptions = sessionOptions?.keyringNamespaces
+    ? sessionOptions
+    : {
+        ...sessionOptions,
+        keyringNamespaces: createKeyringNamespacesFromManifests(namespaceManifests),
+      };
 
   const methodNamespaceResolver = rpcRegistry.createMethodNamespaceResolver();
   const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
@@ -141,7 +161,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       ? { permissions: { ...permissionOptions, chains: chainAddressCodecs } }
       : { permissions: { chains: chainAddressCodecs } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    chainDefinitions: chainDefinitionsOptions,
+    chainDefinitions: { ...chainDefinitionsOptions, seed: chainDefinitionSeed },
   };
 
   const settingsService = createSettingsService({ port: settingsOptions.port, now: storageNow });
@@ -226,6 +246,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const rpcClientRegistry = initRpcLayer({
     controllers: controllersBase,
+    namespaceManifests,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
@@ -247,19 +268,20 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
     getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
-    ...(sessionOptions ? { sessionOptions } : {}),
+    ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
   });
 
   const engine = initEngine(engineOptions);
 
   const keyringService = sessionLayer.keyringService;
-  const registeredAdapters = registerDefaultTransactionAdapters({
+  const assembledRuntimeNamespaces = assembleRuntimeNamespaces({
+    manifests: namespaceManifests,
     transactionRegistry,
     rpcClients: rpcClientRegistry,
     chains: chainAddressCodecs,
     keyring: keyringService,
   });
-  signers = registeredAdapters.signers;
+  signers = assembledRuntimeNamespaces.signers;
 
   const controllers: HandlerControllers = {
     ...controllersBase,

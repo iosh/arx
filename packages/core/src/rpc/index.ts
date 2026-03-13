@@ -1,4 +1,3 @@
-import { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
 import { RpcRegistry } from "./RpcRegistry.js";
 
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
@@ -38,15 +37,3 @@ export { type RequestContext, RequestContextSchema } from "./requestContext.js";
 export const DEFAULT_NAMESPACE = RpcRegistry.DEFAULT_NAMESPACE;
 
 export const createRpcRegistry = (): RpcRegistry => new RpcRegistry();
-
-export const registerBuiltinRpcAdapters = (registry: RpcRegistry): void => {
-  const registered = new Set(registry.getRegisteredNamespaceAdapters().map((entry) => entry.namespace));
-
-  for (const module of BUILTIN_RPC_NAMESPACE_MODULES) {
-    if (!registered.has(module.namespace)) {
-      registry.registerNamespaceAdapter(module.adapter);
-      registered.add(module.namespace);
-    }
-    registry.registerNamespaceProtocolAdapter(module.namespace, module.protocolAdapter);
-  }
-};

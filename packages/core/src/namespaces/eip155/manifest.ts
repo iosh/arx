@@ -1,5 +1,6 @@
 import { eip155Codec } from "../../accounts/addressing/codec.js";
-import { EIP155_CHAIN_METADATA, eip155AddressCodec } from "../../chains/index.js";
+import { EIP155_CHAIN_METADATA } from "../../chains/chains.seed.js";
+import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
 import type { Eip155RpcCapabilities, Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";

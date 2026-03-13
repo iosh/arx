@@ -1,10 +1,10 @@
-import type { ChainRef } from "../../../../../chains/ids.js";
-import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import {
   toAccountIdFromAddress,
   toCanonicalAddressFromAccountId,
   toDisplayAddressFromAccountId,
 } from "../../../../../accounts/addressing/accountId.js";
+import type { ChainRef } from "../../../../../chains/ids.js";
+import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/index.js";
 import {
   FakeVault,

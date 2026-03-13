@@ -1,5 +1,5 @@
+import { BUILTIN_NAMESPACE_MANIFESTS } from "../namespaces/builtin.js";
 import { parseChainRef } from "./caip.js";
-import { eip155AddressCodec } from "./eip155/addressCodec.js";
 import { chainErrors } from "./errors.js";
 import type { ChainRef } from "./ids.js";
 import type {
@@ -54,5 +54,5 @@ export class ChainAddressCodecRegistry {
 }
 
 export const createDefaultChainAddressCodecRegistry = (): ChainAddressCodecRegistry => {
-  return new ChainAddressCodecRegistry([eip155AddressCodec]);
+  return new ChainAddressCodecRegistry(BUILTIN_NAMESPACE_MANIFESTS.map((manifest) => manifest.core.chainAddressCodec));
 };

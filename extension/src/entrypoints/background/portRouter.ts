@@ -220,9 +220,11 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const { controllers, permissionViews } = await getContext();
     const portContext = portContexts.get(port);
     const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
-    return permissionViews.listPermittedAccounts(origin, { chainRef }).map((account) =>
-      controllers.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }),
-    );
+    return permissionViews
+      .listPermittedAccounts(origin, { chainRef })
+      .map((account) =>
+        controllers.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }),
+      );
   };
 
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {

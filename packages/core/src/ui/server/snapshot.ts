@@ -4,10 +4,7 @@ import type { BackgroundSessionServices } from "../../runtime/background/session
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import {
-  type UiSnapshot,
-  UiSnapshotSchema,
-} from "../protocol/schemas.js";
+import { type UiSnapshot, UiSnapshotSchema } from "../protocol/schemas.js";
 
 export const buildUiSnapshot = (deps: {
   controllers: HandlerControllers;

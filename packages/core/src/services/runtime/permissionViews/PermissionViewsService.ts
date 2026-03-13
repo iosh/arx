@@ -134,8 +134,11 @@ class DefaultPermissionViewsService implements PermissionViewsService {
             sortChainRefs(Object.keys(namespaceState.chains) as ChainRef[]).map((chainRef) => [
               chainRef,
               {
-                accountIds: this.#resolveAccounts(namespace, chainRef, namespaceState.chains[chainRef]?.accountIds ?? [])
-                  .map((account) => account.accountId),
+                accountIds: this.#resolveAccounts(
+                  namespace,
+                  chainRef,
+                  namespaceState.chains[chainRef]?.accountIds ?? [],
+                ).map((account) => account.accountId),
               },
             ]),
           ),

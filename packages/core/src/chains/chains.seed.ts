@@ -180,6 +180,11 @@ export const EIP155_TESTNETS = [
   },
 ] as const satisfies readonly ChainMetadata[];
 
+export const EIP155_CHAIN_METADATA = [
+  ...EIP155_MAINNETS,
+  ...EIP155_TESTNETS,
+] as const satisfies readonly ChainMetadata[];
+
 export const CONFLUX_NETWORKS = [
   {
     chainRef: "conflux:cfx",
@@ -233,7 +238,6 @@ export const CONFLUX_NETWORKS = [
 ] as const satisfies readonly ChainMetadata[];
 
 export const DEFAULT_CHAIN_METADATA = [
-  ...EIP155_MAINNETS,
-  ...EIP155_TESTNETS,
+  ...EIP155_CHAIN_METADATA,
   // ...CONFLUX_NETWORKS,
 ] as const satisfies readonly ChainMetadata[];

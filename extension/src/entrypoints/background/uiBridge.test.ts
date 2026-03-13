@@ -820,9 +820,11 @@ describe("uiBridge", () => {
           return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
         },
       },
-      permissionViews: (controllers as unknown as {
-        permissionViews: Parameters<typeof createUiBridge>[0]["permissionViews"];
-      }).permissionViews,
+      permissionViews: (
+        controllers as unknown as {
+          permissionViews: Parameters<typeof createUiBridge>[0]["permissionViews"];
+        }
+      ).permissionViews,
       networkPreferences: {
         subscribeChanged: (
           handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,

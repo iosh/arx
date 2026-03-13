@@ -1,11 +1,9 @@
-import { getAccountCodec } from "../../accounts/addressing/codec.js";
 import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
 import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/topics.js";
 import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
-import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import type { Messenger } from "../../messenger/Messenger.js";
-import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
+import { createBuiltinKeyringNamespaces } from "../../namespaces/builtin.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
@@ -18,7 +16,6 @@ import type { NamespaceConfig } from "../keyring/namespaces.js";
 import type { ControllersBase } from "./controllers.js";
 
 const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
-const DEFAULT_EIP155_CHAIN_REF = "eip155:1" as const;
 
 type VaultFactory = () => VaultService;
 type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
@@ -272,17 +269,7 @@ export const initSessionLayer = ({
 
   const unlock = unlockFactory(unlockOptions);
 
-  const defaultKeyringNamespaces: NamespaceConfig[] = [
-    {
-      namespace: EIP155_NAMESPACE,
-      defaultChainRef: DEFAULT_EIP155_CHAIN_REF,
-      codec: getAccountCodec(EIP155_NAMESPACE),
-      factories: {
-        hd: () => new EvmHdKeyring(),
-        "private-key": () => new EvmPrivateKeyKeyring(),
-      },
-    },
-  ];
+  const defaultKeyringNamespaces: NamespaceConfig[] = createBuiltinKeyringNamespaces();
 
   const keyringService = new KeyringService({
     now: storageNow,

@@ -1,16 +1,13 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import {
-  toAccountIdFromAddress,
-  toCanonicalAddressFromAccountId,
-  toDisplayAddressFromAccountId,
-} from "../../../../../accounts/addressing/accountId.js";
+import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../controllers/index.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
   ALT_CHAIN,
+  connectOrigin,
   createExecutor,
   createRuntime,
   getActiveChainMetadata,
@@ -20,63 +17,6 @@ import {
   TEST_MNEMONIC,
   waitForChainInNetwork,
 } from "./eip155.test.helpers.js";
-
-// TODO: add eth_requestAccounts rejection test once approval  -> account flow is implemented
-
-const connectOrigin = async (args: {
-  runtime: ReturnType<typeof createRuntime>;
-  origin?: string;
-  chainRefs: [string, ...string[]];
-  addresses: [string, ...string[]];
-}) => {
-  const { runtime, origin = ORIGIN, chainRefs, addresses } = args;
-  const [firstChainRef] = chainRefs;
-  const [namespace] = firstChainRef.split(":");
-
-  await runtime.controllers.permissions.upsertAuthorization(origin, {
-    namespace,
-    chains: chainRefs.map((chainRef, index) => ({
-      chainRef,
-      accountIds:
-        index === 0
-          ? (addresses.map((address) => toAccountIdFromAddress({ chainRef, address })) as [string, ...string[]])
-          : [],
-    })) as [
-      { chainRef: string; accountIds: [string, ...string[]] },
-      ...Array<{ chainRef: string; accountIds: string[] }>,
-    ],
-  });
-
-  const accountsController = runtime.controllers.accounts as typeof runtime.controllers.accounts & {
-    __testOwnedAccounts?: Map<string, ReturnType<typeof runtime.controllers.accounts.getOwnedAccount>>;
-    __originalGetOwnedAccount?: typeof runtime.controllers.accounts.getOwnedAccount;
-  };
-
-  if (!accountsController.__testOwnedAccounts) {
-    accountsController.__testOwnedAccounts = new Map();
-  }
-
-  if (!accountsController.__originalGetOwnedAccount) {
-    const original = accountsController.getOwnedAccount.bind(accountsController);
-    accountsController.__originalGetOwnedAccount = original;
-    accountsController.getOwnedAccount = (params) => {
-      const key = `${params.chainRef}:${params.accountId}`;
-      return accountsController.__testOwnedAccounts?.get(key) ?? original(params);
-    };
-  }
-
-  for (const chainRef of chainRefs) {
-    for (const address of addresses) {
-      const accountId = toAccountIdFromAddress({ chainRef, address });
-      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
-        accountId,
-        namespace,
-        canonicalAddress: toCanonicalAddressFromAccountId({ chainRef, accountId }),
-        displayAddress: toDisplayAddressFromAccountId({ chainRef, accountId }),
-      });
-    }
-  }
-};
 
 describe("eip155 handlers - core error paths", () => {
   it("return 4902 for wallet_switchEthereumChain when the chain is unknown", async () => {
@@ -874,6 +814,49 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
+      runtime.lifecycle.destroy();
+    }
+  });
+
+  it("rejects unselectable accounts during wallet_requestPermissions approval", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = getActiveChainMetadata(runtime);
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    await runtime.services.keyring.deriveAccount(keyringId);
+
+    const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
+    await accountsController.refresh?.();
+
+    const teardown = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.RequestPermissions) return false;
+      void runtime.controllers.approvals
+        .resolve({
+          id: task.id,
+          action: "approve",
+          decision: { accountIds: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
+        })
+        .catch(() => {});
+      return true;
+    });
+
+    const execute = createExecutor(runtime);
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: { method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] as JsonRpcParams },
+        }),
+      ).rejects.toMatchObject({ code: 4100 });
+
+      const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: chain.namespace });
+      expect(authorization).toBeNull();
+    } finally {
+      teardown();
       runtime.lifecycle.destroy();
     }
   });

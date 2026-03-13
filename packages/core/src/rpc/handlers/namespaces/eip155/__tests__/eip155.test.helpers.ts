@@ -1,5 +1,10 @@
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
+import {
+  toAccountIdFromAddress,
+  toCanonicalAddressFromAccountId,
+  toDisplayAddressFromAccountId,
+} from "../../../../../accounts/addressing/accountId.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/index.js";
 import {
   FakeVault,
@@ -87,6 +92,11 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
 };
 
 type TestRuntime = ReturnType<typeof createRuntime>;
+type TestOwnedAccount = ReturnType<TestRuntime["controllers"]["accounts"]["getOwnedAccount"]>;
+type TestAccountsController = TestRuntime["controllers"]["accounts"] & {
+  __testOwnedAccounts?: Map<string, TestOwnedAccount>;
+  __originalGetOwnedAccount?: TestRuntime["controllers"]["accounts"]["getOwnedAccount"];
+};
 
 export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
   return runtime.controllers.chainDefinitions.getChain(chainRef)?.metadata ?? null;
@@ -99,6 +109,58 @@ export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
     throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
   }
   return chain;
+};
+
+export const connectOrigin = async (args: {
+  runtime: TestRuntime;
+  origin?: string;
+  chainRefs: [ChainRef, ...ChainRef[]];
+  addresses: [string, ...string[]];
+}) => {
+  const { runtime, origin = ORIGIN, chainRefs, addresses } = args;
+  const [firstChainRef] = chainRefs;
+  const [namespace] = firstChainRef.split(":");
+
+  await runtime.controllers.permissions.upsertAuthorization(origin, {
+    namespace,
+    chains: chainRefs.map((chainRef, index) => ({
+      chainRef,
+      accountIds:
+        index === 0
+          ? (addresses.map((address) => toAccountIdFromAddress({ chainRef, address })) as [string, ...string[]])
+          : [],
+    })) as [
+      { chainRef: ChainRef; accountIds: [string, ...string[]] },
+      ...Array<{ chainRef: ChainRef; accountIds: string[] }>,
+    ],
+  });
+
+  const accountsController = runtime.controllers.accounts as TestAccountsController;
+
+  if (!accountsController.__testOwnedAccounts) {
+    accountsController.__testOwnedAccounts = new Map();
+  }
+
+  if (!accountsController.__originalGetOwnedAccount) {
+    const original = accountsController.getOwnedAccount.bind(accountsController);
+    accountsController.__originalGetOwnedAccount = original;
+    accountsController.getOwnedAccount = (params) => {
+      const key = `${params.chainRef}:${params.accountId}`;
+      return accountsController.__testOwnedAccounts?.get(key) ?? original(params);
+    };
+  }
+
+  for (const chainRef of chainRefs) {
+    for (const address of addresses) {
+      const accountId = toAccountIdFromAddress({ chainRef, address });
+      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
+        accountId,
+        namespace,
+        canonicalAddress: toCanonicalAddressFromAccountId({ chainRef, accountId }),
+        displayAddress: toDisplayAddressFromAccountId({ chainRef, accountId }),
+      });
+    }
+  }
 };
 
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {

@@ -23,7 +23,16 @@ const buildMap = (modules: ReadonlyArray<ProviderModule>) => {
   return byNamespace;
 };
 
-export const createProviderRegistry = (options: ProviderRegistryOptions = {}): ProviderRegistry => {
-  const modules = createBuiltinProviderModules(options);
+export {
+  BUILTIN_PROVIDER_MODULE_FACTORIES,
+  BUILTIN_PROVIDER_MODULES,
+  createBuiltinProviderModules,
+} from "../namespaces/builtin.js";
+
+export const createProviderRegistryFromModules = (modules: ReadonlyArray<ProviderModule>): ProviderRegistry => {
   return { modules, byNamespace: buildMap(modules) };
+};
+
+export const createProviderRegistry = (options: ProviderRegistryOptions = {}): ProviderRegistry => {
+  return createProviderRegistryFromModules(createBuiltinProviderModules(options));
 };

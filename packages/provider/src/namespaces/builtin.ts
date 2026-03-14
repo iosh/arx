@@ -6,6 +6,8 @@ type BuiltinProviderModuleFactory<TNamespace extends string = string, TOptions =
   create: (options?: TOptions) => ProviderModule;
 }>;
 
+// Compatibility helper for callers without a platform composition root.
+// Real platforms should decide which provider modules are installed and pass them explicitly.
 export const BUILTIN_PROVIDER_MODULE_FACTORIES = [
   {
     namespace: "eip155",

@@ -4,8 +4,8 @@ import type { Eip155TransactionRequest } from "../../types.js";
 import type { TransactionAdapter } from "../types.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
 import { createEip155PrepareTransaction } from "./prepareTransaction.js";
-import { normalizeEip155TransactionRequest } from "./request.js";
 import { createEip155ReceiptService } from "./receipt.js";
+import { normalizeEip155TransactionRequest } from "./request.js";
 import type { Eip155Signer } from "./signer.js";
 
 type AdapterDeps = {

@@ -6,6 +6,7 @@ import {
   extendLogger,
 } from "@arx/core";
 import browser from "webextension-polyfill";
+import { INSTALLED_NAMESPACE_MANIFESTS } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
 import type { ProviderBridgeSnapshot } from "./types";
@@ -112,6 +113,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
             isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
             shouldRequestUnlockAttention: () => true,
           },
+        },
+        namespaces: {
+          manifests: INSTALLED_NAMESPACE_MANIFESTS,
         },
       });
 

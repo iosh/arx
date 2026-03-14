@@ -1,10 +1,5 @@
-import {
-  createBackgroundRuntime,
-  createLogger,
-  disableDebugNamespaces,
-  enableDebugNamespaces,
-  extendLogger,
-} from "@arx/core";
+import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
+import { createBackgroundRuntime } from "@arx/core/runtime";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACE_MANIFESTS } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";

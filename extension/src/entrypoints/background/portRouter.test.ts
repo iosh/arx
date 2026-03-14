@@ -1,4 +1,5 @@
-import { createDefaultChainAddressCodecRegistry, type RpcRegistry } from "@arx/core";
+import { createDefaultChainAddressCodecRegistry } from "@arx/core/chains";
+import type { RpcRegistry } from "@arx/core/rpc";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";

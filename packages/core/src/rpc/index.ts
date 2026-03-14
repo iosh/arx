@@ -1,5 +1,15 @@
 import { RpcRegistry } from "./RpcRegistry.js";
 
+export type {
+  Json,
+  JsonRpcError,
+  JsonRpcParams,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  JsonRpcSuccess,
+  JsonRpcVersion2,
+} from "@metamask/utils";
+
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 export {
   createEip155Adapter,

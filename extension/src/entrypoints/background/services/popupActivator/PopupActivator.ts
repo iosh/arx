@@ -1,4 +1,4 @@
-import { createLogger } from "@arx/core";
+import { createLogger } from "@arx/core/logger";
 import type browserDefault from "webextension-polyfill";
 import { ARX_UI_INNER_SIZE } from "@/ui/lib/uiWindow";
 

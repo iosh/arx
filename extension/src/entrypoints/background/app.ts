@@ -1,4 +1,4 @@
-import { ATTENTION_STATE_CHANGED } from "@arx/core";
+import { ATTENTION_STATE_CHANGED } from "@arx/core/services";
 import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";

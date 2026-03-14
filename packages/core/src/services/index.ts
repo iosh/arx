@@ -1,4 +1,5 @@
 export * from "./runtime/attention/index.js";
+export * from "./runtime/chainActivation/index.js";
 export * from "./runtime/chainViews/index.js";
 export * from "./runtime/permissionViews/index.js";
 export * from "./store/accounts/index.js";

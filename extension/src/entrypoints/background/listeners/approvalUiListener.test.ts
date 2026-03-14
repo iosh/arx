@@ -1,4 +1,5 @@
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord, ATTENTION_REQUESTED } from "@arx/core";
+import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/controllers/approval";
+import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";

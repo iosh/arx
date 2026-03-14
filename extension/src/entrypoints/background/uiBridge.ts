@@ -1,16 +1,14 @@
+import type { AccountCodecRegistry } from "@arx/core/accounts";
+import type { NamespaceRuntimeBindingsRegistry } from "@arx/core/namespaces";
+import type { HandlerControllers, RpcRegistry } from "@arx/core/rpc";
+import type { BackgroundSessionServices, KeyringService } from "@arx/core/runtime";
 import type {
-  AccountCodecRegistry,
   AttentionService,
-  BackgroundSessionServices,
   ChainActivationService,
   ChainViewsService,
-  HandlerControllers,
-  KeyringService,
-  NamespaceRuntimeBindingsRegistry,
+  NetworkPreferencesService,
   PermissionViewsService,
-  RpcRegistry,
-} from "@arx/core";
-import type { NetworkPreferencesService } from "@arx/core/services";
+} from "@arx/core/services";
 import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/server";
 
 import type browserDefaultType from "webextension-polyfill";

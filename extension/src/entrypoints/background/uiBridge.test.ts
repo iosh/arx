@@ -1,21 +1,13 @@
-import type {
-  BackgroundSessionServices,
-  HandlerControllers,
-  UnlockLockedPayload,
-  UnlockReason,
-  UnlockUnlockedPayload,
-} from "@arx/core";
-import {
-  ApprovalKinds,
-  ArxReasons,
-  arxError,
-  BUILTIN_NAMESPACE_MANIFESTS,
-  createRpcRegistry,
-  KeyringService,
-  registerRpcModulesFromManifests,
-} from "@arx/core";
 import { getAccountCodec, toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
+import { ApprovalKinds } from "@arx/core/controllers/approval";
+import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
+import { ArxReasons, arxError } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
+import { BUILTIN_NAMESPACE_MANIFESTS, registerRpcModulesFromManifests } from "@arx/core/namespaces";
+import type { HandlerControllers } from "@arx/core/rpc";
+import { createRpcRegistry } from "@arx/core/rpc";
+import type { BackgroundSessionServices } from "@arx/core/runtime";
+import { KeyringService } from "@arx/core/runtime";
 import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,

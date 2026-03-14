@@ -1,4 +1,4 @@
-import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core";
+import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
 import {
   createBuiltinProviderModules,
   createProviderRegistryFromModules,

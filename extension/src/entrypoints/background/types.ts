@@ -1,4 +1,4 @@
-import type { RpcInvocationContext } from "@arx/core";
+import type { RpcInvocationContext } from "@arx/core/rpc";
 import type { TransportMeta } from "@arx/provider/types";
 
 export type PortContext = {

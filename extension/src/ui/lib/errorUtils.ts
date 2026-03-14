@@ -1,4 +1,4 @@
-import { type ArxReason, ArxReasons } from "@arx/core";
+import { type ArxReason, ArxReasons } from "@arx/core/errors";
 
 export type WalletError = Error & {
   reason?: ArxReason;

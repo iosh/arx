@@ -1,10 +1,6 @@
-import {
-  type ApprovalTerminalReason,
-  ATTENTION_REQUESTED,
-  createLogger,
-  extendLogger,
-  getApprovalType,
-} from "@arx/core";
+import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/controllers/approval";
+import { createLogger, extendLogger } from "@arx/core/logger";
+import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { UiPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";

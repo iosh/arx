@@ -1,14 +1,6 @@
-import type { RpcInvocationContext } from "@arx/core";
-import {
-  ArxReasons,
-  arxError,
-  createLogger,
-  extendLogger,
-  type JsonRpcError,
-  type JsonRpcParams,
-  type JsonRpcRequest,
-  type RpcRegistry,
-} from "@arx/core";
+import { ArxReasons, arxError } from "@arx/core/errors";
+import { createLogger, extendLogger } from "@arx/core/logger";
+import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, RpcInvocationContext, RpcRegistry } from "@arx/core/rpc";
 import { CHANNEL, type Envelope, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";

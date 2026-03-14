@@ -1,6 +1,5 @@
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { MultiNamespaceAccountsState } from "../../controllers/account/types.js";
 import type {
   NetworkState,
   NetworkStateInput,
@@ -44,12 +43,6 @@ export const DEFAULT_NETWORK_STATE_INPUT: NetworkStateInput = {
 export const DEFAULT_NETWORK_STATE: NetworkState = {
   revision: 0,
   ...DEFAULT_NETWORK_STATE_INPUT,
-};
-
-export const DEFAULT_ACCOUNTS_STATE: MultiNamespaceAccountsState = {
-  namespaces: {
-    eip155: { accountIds: [], selectedAccountId: null },
-  },
 };
 
 export const DEFAULT_PERMISSIONS_STATE: PermissionsState = {

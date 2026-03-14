@@ -162,7 +162,7 @@ export const HomeScreen = ({
         <YStack paddingHorizontal="$4">
           <AccountCard
             address={accounts.active?.canonicalAddress ?? null}
-            chainRef={chain.chainRef}
+            displayAddress={accounts.active?.displayAddress ?? null}
             balanceWei={nativeBalanceWei}
             balanceLoading={nativeBalanceLoading}
             balanceError={nativeBalanceError}

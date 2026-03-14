@@ -101,8 +101,7 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
           {accounts.active ? (
             <AddressDisplay
               address={accounts.active.canonicalAddress}
-              namespace={chain.namespace}
-              chainRef={chain.chainRef}
+              displayAddress={accounts.active.displayAddress}
               fontSize="$4"
               fontWeight="600"
             />

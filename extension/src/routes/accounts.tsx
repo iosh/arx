@@ -243,11 +243,7 @@ function AccountSwitchPage() {
             const loading = pendingAccountId === account.accountId;
             return (
               <Card key={account.accountId} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
-                <AddressDisplay
-                  address={account.canonicalAddress}
-                  namespace={snapshot.chain.namespace}
-                  chainRef={snapshot.chain.chainRef}
-                />
+                <AddressDisplay address={account.canonicalAddress} displayAddress={account.displayAddress} />
                 <XStack alignItems="center" justifyContent="space-between">
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
                     {isActive ? "Active" : "Available"}

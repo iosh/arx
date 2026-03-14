@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { buildEip155TransactionRequest, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
   assertPermittedEip155Account,
   isTransactionResolutionError,
@@ -10,6 +10,7 @@ import {
   TransactionResolutionError,
   waitForTransactionBroadcast,
 } from "./shared.js";
+import { buildEip155TransactionRequest } from "./transactionRequest.js";
 
 type RpcLikeError = Error & { code: number; data?: unknown };
 

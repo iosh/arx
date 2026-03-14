@@ -37,8 +37,7 @@ export function ApprovalAccountSelector({
               <Card key={account.accountId} padded bordered borderColor={isSelected ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay
                   address={account.canonicalAddress}
-                  namespace={approval.namespace}
-                  chainRef={approval.chainRef}
+                  displayAddress={account.displayAddress}
                   copyable={false}
                 />
                 <XStack alignItems="center" justifyContent="space-between" gap="$2">

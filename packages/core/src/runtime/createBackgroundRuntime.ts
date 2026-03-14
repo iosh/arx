@@ -1,11 +1,7 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
-import {
-  BUILTIN_NAMESPACE_MANIFESTS,
-  type NamespaceManifest,
-  type NamespaceRuntimeBindingsRegistry,
-} from "../namespaces/index.js";
+import type { NamespaceManifest, NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
@@ -29,6 +25,7 @@ import {
   initializeRuntimeBootstrapPhase,
   initializeRuntimeCapabilityPhase,
   initializeRuntimeSessionPhase,
+  resolveRuntimeNamespaceManifests,
 } from "./background/runtimePhases.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
@@ -122,7 +119,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     namespaces: namespacesOptions,
   } = options;
 
-  const namespaceManifests = namespacesOptions?.manifests ?? BUILTIN_NAMESPACE_MANIFESTS;
+  const namespaceManifests = resolveRuntimeNamespaceManifests(namespacesOptions?.manifests);
   const bootstrapPhase = initializeRuntimeBootstrapPhase({
     rpcRegistry,
     namespaceManifests,

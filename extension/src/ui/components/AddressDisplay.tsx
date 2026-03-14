@@ -1,5 +1,4 @@
 import { Check, Copy } from "lucide-react";
-import { from as addressFrom } from "ox/Address";
 import { useEffect, useMemo, useState } from "react";
 import { Paragraph, type TextProps, XStack } from "tamagui";
 import { copyToClipboard } from "@/ui/lib/clipboard";
@@ -8,8 +7,7 @@ import { Button } from "./Button";
 
 export type AddressDisplayProps = {
   address: string;
-  namespace: string;
-  chainRef?: string | null;
+  displayAddress?: string | null;
   copyable?: boolean;
   toastOnCopied?: boolean;
 
@@ -33,61 +31,34 @@ function deriveExpandedFontSize(fontSize: TextProps["fontSize"] | undefined): Te
   return fontSize;
 }
 
-function isEip155AddressContext(namespace: string, chainRef?: string | null) {
-  if (typeof chainRef === "string") {
-    const [chainNamespace] = chainRef.split(":");
-    if (chainNamespace) {
-      return chainNamespace === "eip155";
-    }
-  }
+const HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
-  return namespace === "eip155";
+function resolveDisplayAddress(address: string, displayAddress?: string | null) {
+  const formatted = displayAddress?.trim();
+  return formatted && formatted.length > 0 ? formatted : address.trim();
 }
 
-function formatFullAddress(address: string, namespace: string, chainRef?: string | null) {
-  const trimmed = address.trim();
-
-  if (isEip155AddressContext(namespace, chainRef)) {
-    try {
-      return addressFrom(trimmed, { checksum: true });
-    } catch {
-      return trimmed;
-    }
+function formatShortAddress(address: string) {
+  if (HEX_ADDRESS_PATTERN.test(address)) {
+    if (address.length <= 2 + 6 + 1 + 4) return address;
+    return `${address.slice(0, 2 + 6)}…${address.slice(-4)}`;
   }
 
-  return trimmed;
-}
-
-function formatShortAddress(address: string, namespace: string, chainRef?: string | null) {
-  const full = formatFullAddress(address, namespace, chainRef);
-
-  if (isEip155AddressContext(namespace, chainRef)) {
-    const ensured = full.startsWith("0x") ? full : `0x${full}`;
-    if (ensured.length <= 2 + 6 + 1 + 4) return ensured;
-    return `${ensured.slice(0, 2 + 6)}…${ensured.slice(-4)}`;
+  const namespaceSeparator = address.indexOf(":");
+  if (namespaceSeparator > 0) {
+    const prefix = address.slice(0, namespaceSeparator + 1);
+    const rest = address.slice(namespaceSeparator + 1);
+    if (rest.length <= 8 + 1 + 6) return address;
+    return `${prefix}${rest.slice(0, 8)}…${rest.slice(-6)}`;
   }
 
-  // TODO: Replace with shortCfxAddress() tool when available
-  if (namespace === "conflux") {
-    const idx = full.indexOf(":");
-    if (idx > 0) {
-      const prefix = full.slice(0, idx + 1); // "cfx:" / "cfxtest:" / ...
-      const rest = full.slice(idx + 1);
-      if (rest.length <= 8 + 1 + 6) return full;
-      return `${prefix}${rest.slice(0, 8)}…${rest.slice(-6)}`;
-    }
-    if (full.length <= 10 + 1 + 6) return full;
-    return `${full.slice(0, 10)}…${full.slice(-6)}`;
-  }
-
-  if (full.length <= 8 + 1 + 6) return full;
-  return `${full.slice(0, 8)}…${full.slice(-6)}`;
+  if (address.length <= 8 + 1 + 6) return address;
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }
 
 export function AddressDisplay({
   address,
-  namespace,
-  chainRef,
+  displayAddress,
   copyable = true,
   toastOnCopied = false,
   interactive = true,
@@ -99,8 +70,8 @@ export function AddressDisplay({
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const full = useMemo(() => formatFullAddress(address, namespace, chainRef), [address, chainRef, namespace]);
-  const short = useMemo(() => formatShortAddress(address, namespace, chainRef), [address, chainRef, namespace]);
+  const full = useMemo(() => resolveDisplayAddress(address, displayAddress), [address, displayAddress]);
+  const short = useMemo(() => formatShortAddress(full), [full]);
 
   useEffect(() => {
     if (!copied) return;

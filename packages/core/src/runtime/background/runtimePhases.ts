@@ -3,6 +3,7 @@ import type { ApprovalExecutor } from "../../approvals/types.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   assembleRuntimeNamespaces,
+  BUILTIN_NAMESPACE_MANIFESTS,
   collectChainSeedsFromManifests,
   createAccountCodecRegistryFromManifests,
   createChainAddressCodecRegistryFromManifests,
@@ -87,6 +88,12 @@ export type RuntimeCapabilityPhase = {
   permissionViews: ReturnType<typeof createPermissionViewsService>;
   transactionsLifecycle: ReturnType<typeof createTransactionsLifecycle>;
   networkBootstrap: ReturnType<typeof createNetworkBootstrap>;
+};
+
+export const resolveRuntimeNamespaceManifests = (
+  manifests?: readonly NamespaceManifest[],
+): readonly NamespaceManifest[] => {
+  return manifests ?? BUILTIN_NAMESPACE_MANIFESTS;
 };
 
 export const initializeRuntimeBootstrapPhase = ({

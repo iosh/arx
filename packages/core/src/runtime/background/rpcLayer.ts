@@ -1,8 +1,4 @@
-import {
-  BUILTIN_NAMESPACE_MANIFESTS,
-  type NamespaceManifest,
-  registerRpcClientFactoriesFromManifests,
-} from "../../namespaces/index.js";
+import { type NamespaceManifest, registerRpcClientFactoriesFromManifests } from "../../namespaces/index.js";
 import {
   type RpcClientFactory,
   RpcClientRegistry,
@@ -22,7 +18,7 @@ export const initRpcLayer = ({
 }: {
   controllers: ControllersBase;
   rpcClientOptions?: RpcLayerOptions;
-  namespaceManifests?: readonly NamespaceManifest[];
+  namespaceManifests: readonly NamespaceManifest[];
 }) => {
   const rpcClientRegistry = new RpcClientRegistry({
     ...(rpcClientOptions?.options ?? {}),
@@ -34,7 +30,7 @@ export const initRpcLayer = ({
     },
   });
 
-  registerRpcClientFactoriesFromManifests(rpcClientRegistry, namespaceManifests ?? BUILTIN_NAMESPACE_MANIFESTS);
+  registerRpcClientFactoriesFromManifests(rpcClientRegistry, namespaceManifests);
 
   for (const entry of rpcClientOptions?.factories ?? []) {
     rpcClientRegistry.registerFactory(entry.namespace, entry.factory);

@@ -8,7 +8,7 @@ import { Button } from "./Button";
 
 export type AccountCardProps = {
   address: string | null;
-  chainRef: string;
+  displayAddress: string | null;
   balanceWei: string | null;
   balanceLoading: boolean;
   balanceError: string | null;
@@ -19,7 +19,7 @@ export type AccountCardProps = {
 
 export function AccountCard({
   address,
-  chainRef,
+  displayAddress,
   balanceWei,
   balanceLoading,
   balanceError,
@@ -30,12 +30,7 @@ export function AccountCard({
   const theme = useTheme();
   const [hideBalance, setHideBalance] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const namespace = useMemo(() => {
-    const [prefix] = chainRef.split(":");
-    return prefix || chainRef;
-  }, [chainRef]);
-  const copyValue = useMemo(() => address?.trim() ?? null, [address]);
+  const copyValue = useMemo(() => displayAddress?.trim() || address?.trim() || null, [address, displayAddress]);
 
   useEffect(() => {
     if (!copied) return;
@@ -87,8 +82,7 @@ export function AccountCard({
             {address ? (
               <AddressDisplay
                 address={address}
-                namespace={namespace}
-                chainRef={chainRef}
+                displayAddress={displayAddress}
                 copyable={false}
                 interactive={false}
                 fontSize="$3"

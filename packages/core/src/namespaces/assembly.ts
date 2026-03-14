@@ -1,3 +1,4 @@
+import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accounts/addressing/codec.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { HandlerControllers } from "../rpc/handlers/types.js";
@@ -6,7 +7,12 @@ import type { RpcRegistry } from "../rpc/RpcRegistry.js";
 import type { KeyringService } from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { NamespaceManifest } from "./types.js";
+import type {
+  NamespaceApprovalBindings,
+  NamespaceManifest,
+  NamespaceRuntimeBindingsRegistry,
+  NamespaceUiBindings,
+} from "./types.js";
 
 const assertUniqueNamespaces = (manifests: readonly NamespaceManifest[]): void => {
   const seen = new Set<string>();
@@ -18,6 +24,18 @@ const assertUniqueNamespaces = (manifests: readonly NamespaceManifest[]): void =
   }
 };
 
+const createNamespaceRuntimeBindingsRegistry = (params: {
+  approvalByNamespace: ReadonlyMap<string, NamespaceApprovalBindings>;
+  uiByNamespace: ReadonlyMap<string, NamespaceUiBindings>;
+}): NamespaceRuntimeBindingsRegistry => {
+  const { approvalByNamespace, uiByNamespace } = params;
+
+  return {
+    getApproval: (namespace) => approvalByNamespace.get(namespace),
+    getUi: (namespace) => uiByNamespace.get(namespace),
+  };
+};
+
 export const collectChainSeedsFromManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
   return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map((chain) => ({ ...chain })) ?? []);
 };
@@ -27,6 +45,13 @@ export const createChainAddressCodecRegistryFromManifests = (
 ): ChainAddressCodecRegistry => {
   assertUniqueNamespaces(manifests);
   return new ChainAddressCodecRegistry(manifests.map((manifest) => manifest.core.chainAddressCodec));
+};
+
+export const createAccountCodecRegistryFromManifests = (
+  manifests: readonly NamespaceManifest[],
+): AccountCodecRegistry => {
+  assertUniqueNamespaces(manifests);
+  return createAccountCodecRegistry(manifests.map((manifest) => manifest.core.accountCodec));
 };
 
 export const createKeyringNamespacesFromManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
@@ -85,16 +110,40 @@ export const assembleRuntimeNamespaces = (params: {
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   chains: ChainAddressCodecRegistry;
   keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
-}): { signers: HandlerControllers["signers"] } => {
+}): { signers: HandlerControllers["signers"]; bindings: NamespaceRuntimeBindingsRegistry } => {
   const { manifests, transactionRegistry, rpcClients, chains, keyring } = params;
   assertUniqueNamespaces(manifests);
 
   const signerByNamespace = new Map<string, unknown>();
+  const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();
+  const uiByNamespace = new Map<string, NamespaceUiBindings>();
 
   for (const manifest of manifests) {
     const createSigner = manifest.runtime?.createSigner;
     if (!createSigner) continue;
     signerByNamespace.set(manifest.namespace, createSigner({ keyring }));
+  }
+
+  for (const manifest of manifests) {
+    const createApprovalBindings = manifest.runtime?.createApprovalBindings;
+    if (createApprovalBindings) {
+      const signer = signerByNamespace.get(manifest.namespace);
+      if (!signer) {
+        throw new Error(`Approval bindings for namespace "${manifest.namespace}" require a signer binding`);
+      }
+      approvalByNamespace.set(manifest.namespace, createApprovalBindings({ signer }));
+    }
+
+    const createUiBindings = manifest.runtime?.createUiBindings;
+    if (createUiBindings) {
+      uiByNamespace.set(
+        manifest.namespace,
+        createUiBindings({
+          rpcClients,
+          chains,
+        }),
+      );
+    }
   }
 
   for (const manifest of manifests) {
@@ -118,5 +167,9 @@ export const assembleRuntimeNamespaces = (params: {
 
   return {
     signers: toHandlerSigners(signerByNamespace),
+    bindings: createNamespaceRuntimeBindingsRegistry({
+      approvalByNamespace,
+      uiByNamespace,
+    }),
   };
 };

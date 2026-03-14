@@ -25,11 +25,11 @@ export const toAccountIdFromAddress = (params: { chainRef: ChainRef; address: st
   return codec.toAccountId(canonical);
 };
 
-export const toCanonicalAddressFromAccountId = (params: { chainRef: ChainRef; accountId: AccountId }): string => {
-  const { namespace } = parseChainRef(params.chainRef);
+export const toCanonicalAddressFromAccountId = (params: { accountId: AccountId }): string => {
+  const { namespace } = parseAccountId(params.accountId);
   const codec = getAccountCodec(namespace);
   const canonical = codec.fromAccountId(params.accountId);
-  return codec.toCanonicalString({ chainRef: params.chainRef, canonical });
+  return codec.toCanonicalString({ canonical });
 };
 
 export const toDisplayAddressFromAccountId = (params: { chainRef: ChainRef; accountId: AccountId }): string => {

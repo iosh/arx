@@ -9,9 +9,10 @@ import {
   ApprovalKinds,
   ArxReasons,
   arxError,
+  BUILTIN_NAMESPACE_MANIFESTS,
   createRpcRegistry,
   KeyringService,
-  registerBuiltinRpcAdapters,
+  registerRpcModulesFromManifests,
 } from "@arx/core";
 import { getAccountCodec, toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
@@ -31,7 +32,7 @@ import type { UiPort } from "./ui/portHub";
 import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
-registerBuiltinRpcAdapters(rpcRegistry);
+registerRpcModulesFromManifests(rpcRegistry, BUILTIN_NAMESPACE_MANIFESTS);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
@@ -233,8 +234,7 @@ const createMemoryAccountsStore = () => {
 
 const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
   const toAccountId = (chainRef: ChainRef, address: string) => toAccountIdFromAddress({ chainRef, address });
-  const toAddress = (chainRef: ChainRef, accountId: AccountId) =>
-    toCanonicalAddressFromAccountId({ chainRef, accountId });
+  const toAddress = (_chainRef: ChainRef, accountId: AccountId) => toCanonicalAddressFromAccountId({ accountId });
 
   let state = {
     namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
@@ -249,7 +249,7 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     const rows = await deps.accountsStore.list({ includeHidden: true });
     const all = rows
       .filter((r) => r.namespace === CHAIN.namespace)
-      .map((r) => toCanonicalAddressFromAccountId({ chainRef: CHAIN.chainRef, accountId: r.accountId }))
+      .map((r) => toCanonicalAddressFromAccountId({ accountId: r.accountId }))
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
@@ -339,8 +339,7 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
 };
 
 const createAccountsController = () => {
-  const toAddress = (chainRef: ChainRef, accountId: AccountId) =>
-    toCanonicalAddressFromAccountId({ chainRef, accountId });
+  const toAddress = (_chainRef: ChainRef, accountId: AccountId) => toCanonicalAddressFromAccountId({ accountId });
 
   let state = {
     namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
@@ -643,15 +642,17 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
     permissionViews: (controllers as unknown as { permissionViews: UiBridgeDeps["permissionViews"] }).permissionViews,
     networkPreferences: networkPreferences as unknown as UiBridgeDeps["networkPreferences"],
+    accountCodecs: {
+      get: (namespace: string) => getAccountCodec(namespace),
+      toAccountIdFromAddress: ({ chainRef, address }: { chainRef: ChainRef; address: string }) =>
+        toAccountIdFromAddress({ chainRef, address }),
+    } as unknown as UiBridgeDeps["accountCodecs"],
     session,
-    rpcClients: {
-      getClient: (params?: unknown) => {
-        void params;
-        return {
-          getBalance: vi.fn(async () => "0x0"),
-        } as unknown;
-      },
-    } as unknown as UiBridgeDeps["rpcClients"],
+    namespaceBindings: {
+      getUi: () => ({
+        getNativeBalance: vi.fn(async () => 0n),
+      }),
+    } as unknown as UiBridgeDeps["namespaceBindings"],
     rpcRegistry,
     persistVaultMeta,
     keyring,
@@ -833,6 +834,11 @@ describe("uiBridge", () => {
           return () => listeners.delete(handler);
         },
       } as unknown as Parameters<typeof createUiBridge>[0]["networkPreferences"],
+      accountCodecs: {
+        get: (namespace: string) => getAccountCodec(namespace),
+        toAccountIdFromAddress: ({ chainRef, address }: { chainRef: ChainRef; address: string }) =>
+          toAccountIdFromAddress({ chainRef, address }),
+      } as Parameters<typeof createUiBridge>[0]["accountCodecs"],
       session: {
         unlock: new FakeUnlock(true),
         withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
@@ -840,12 +846,11 @@ describe("uiBridge", () => {
           getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
         },
       } as unknown as Parameters<typeof createUiBridge>[0]["session"],
-      rpcClients: {
-        getClient: () =>
-          ({
-            getBalance: vi.fn(async () => "0x0"),
-          }) as never,
-      },
+      namespaceBindings: {
+        getUi: () => ({
+          getNativeBalance: vi.fn(async () => 0n),
+        }),
+      } as Parameters<typeof createUiBridge>[0]["namespaceBindings"],
       rpcRegistry,
       persistVaultMeta: vi.fn(async () => {}),
       keyring: keyring,

@@ -1,4 +1,3 @@
-import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   assertUnlocked,
@@ -10,7 +9,7 @@ import {
 } from "./lib.js";
 
 export const createKeyringsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "keyring">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "accountCodecs" | "session" | "keyring">,
 ): Pick<
   UiHandlers,
   | "ui.keyrings.confirmNewMnemonic"
@@ -43,7 +42,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.confirmNewMnemonic(params.words.join(" "), opts);
       await selectAccount({
-        accountId: toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountIdFromAddress({
           chainRef: resolveChainRefForNamespace(
             deps,
             opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
@@ -62,7 +61,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.importMnemonic(params.words.join(" "), opts);
       await selectAccount({
-        accountId: toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountIdFromAddress({
           chainRef: resolveChainRefForNamespace(
             deps,
             opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
@@ -81,7 +80,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyring.importPrivateKey(params.privateKey, opts);
       await selectAccount({
-        accountId: toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountIdFromAddress({
           chainRef: resolveChainRefForNamespace(
             deps,
             opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
@@ -107,7 +106,7 @@ export const createKeyringsHandlers = (
     "ui.keyrings.getAccountsByKeyring": async (params) => {
       assertUnlocked(deps.session);
       const records = deps.keyring.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
-      return records.map(toUiAccountMeta);
+      return records.map((record) => toUiAccountMeta(deps, record));
     },
 
     "ui.keyrings.renameKeyring": async (params) => {

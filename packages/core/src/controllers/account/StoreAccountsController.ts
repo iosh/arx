@@ -1,9 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import {
-  getAccountIdNamespace,
-  toCanonicalAddressFromAccountId,
-  toDisplayAddressFromAccountId,
-} from "../../accounts/addressing/accountId.js";
+import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
@@ -24,6 +21,7 @@ type Options = {
   messenger: AccountMessenger;
   accounts: AccountsService;
   settings: SettingsService;
+  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId" | "toDisplayAddressFromAccountId">;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -31,6 +29,7 @@ export class StoreAccountsController implements AccountController {
   #messenger: AccountMessenger;
   #accounts: AccountsService;
   #settings: SettingsService;
+  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId" | "toDisplayAddressFromAccountId">;
   #logger?: ((message: string, error?: unknown) => void) | undefined;
 
   #state: MultiNamespaceAccountsState = { namespaces: {} };
@@ -39,10 +38,11 @@ export class StoreAccountsController implements AccountController {
   #unsubscribeAccounts: (() => void) | null = null;
   #unsubscribeSettings: (() => void) | null = null;
 
-  constructor({ messenger, accounts, settings, logger }: Options) {
+  constructor({ messenger, accounts, settings, accountCodecs, logger }: Options) {
     this.#messenger = messenger;
     this.#accounts = accounts;
     this.#settings = settings;
+    this.#accountCodecs = accountCodecs;
     this.#logger = logger;
 
     this.#unsubscribeAccounts = this.#accounts.subscribeChanged(() => {
@@ -195,8 +195,11 @@ export class StoreAccountsController implements AccountController {
     return {
       accountId: params.accountId,
       namespace: params.namespace,
-      canonicalAddress: toCanonicalAddressFromAccountId({ chainRef: params.chainRef, accountId: params.accountId }),
-      displayAddress: toDisplayAddressFromAccountId({ chainRef: params.chainRef, accountId: params.accountId }),
+      canonicalAddress: this.#accountCodecs.toCanonicalAddressFromAccountId({ accountId: params.accountId }),
+      displayAddress: this.#accountCodecs.toDisplayAddressFromAccountId({
+        chainRef: params.chainRef,
+        accountId: params.accountId,
+      }),
     };
   }
 

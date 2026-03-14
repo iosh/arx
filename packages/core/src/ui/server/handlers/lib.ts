@@ -2,7 +2,6 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
-import { parseAccountId } from "../../../accounts/addressing/accountId.js";
 import { keyringErrors } from "../../../keyring/errors.js";
 import type { BackgroundSessionServices } from "../../../runtime/background/session.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../../storage/records.js";
@@ -70,9 +69,13 @@ export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chainView
   return deps.chainViews.getPreferredChainViewForNamespace(namespace).chainRef;
 };
 
-export const toUiAccountMeta = (record: AccountRecord) => {
-  const parsed = parseAccountId(record.accountId);
-  const canonicalAddress = record.namespace === "eip155" ? `0x${parsed.payloadHex}` : record.accountId;
+export const toUiAccountMeta = (deps: Pick<UiRuntimeDeps, "accountCodecs">, record: AccountRecord) => {
+  const codec = deps.accountCodecs.get(record.namespace);
+  if (!codec) {
+    throw new Error(`No account codec registered for namespace "${record.namespace}"`);
+  }
+  const canonical = codec.fromAccountId(record.accountId);
+  const canonicalAddress = codec.toCanonicalString({ canonical });
 
   return {
     accountId: record.accountId,

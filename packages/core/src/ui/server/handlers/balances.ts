@@ -1,18 +1,16 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import * as Hex from "ox/Hex";
-import type { Eip155RpcCapabilities } from "../../../rpc/namespaceClients/eip155.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createBalancesHandlers = (
-  deps: Pick<UiRuntimeDeps, "chainViews" | "session" | "rpcClients">,
+  deps: Pick<UiRuntimeDeps, "chainViews" | "session" | "namespaceBindings">,
 ): Pick<UiHandlers, "ui.balances.getNative"> => {
   return {
     "ui.balances.getNative": async ({ chainRef, address }) => {
       assertUnlocked(deps.session);
       const chain = deps.chainViews.requireAvailableChainMetadata(chainRef);
-
-      if (chain.namespace !== "eip155") {
+      const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
+      if (!uiBindings) {
         throw arxError({
           reason: ArxReasons.ChainNotSupported,
           message: `Native balance is not supported for namespace "${chain.namespace}" yet.`,
@@ -20,12 +18,9 @@ export const createBalancesHandlers = (
         });
       }
 
-      const rpc = deps.rpcClients.getClient<Eip155RpcCapabilities>("eip155", chainRef);
-      const balanceHex = await rpc.getBalance(address, { blockTag: "latest", timeoutMs: 15_000 });
-      Hex.assert(balanceHex as Hex.Hex, { strict: false });
-      const amountWei = Hex.toBigInt(balanceHex as Hex.Hex);
+      const amount = await uiBindings.getNativeBalance({ chainRef, address });
 
-      return { chainRef, address, amountWei: amountWei.toString(10), fetchedAt: Date.now() };
+      return { chainRef, address, amountWei: amount.toString(10), fetchedAt: Date.now() };
     },
   };
 };

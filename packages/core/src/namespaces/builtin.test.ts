@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILTIN_RPC_NAMESPACE_MODULES } from "../rpc/namespaces/builtin.js";
+import { createAccountCodecRegistryFromManifests } from "./assembly.js";
 import { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
 
 describe("builtin namespace manifests", () => {
@@ -20,5 +21,11 @@ describe("builtin namespace manifests", () => {
     const namespaces = createBuiltinKeyringNamespaces();
     expect(namespaces.map((entry) => entry.namespace)).toEqual(["eip155"]);
     expect(namespaces[0]).not.toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.keyring);
+  });
+
+  it("can derive account codec registry entries from builtin manifests", () => {
+    const registry = createAccountCodecRegistryFromManifests(BUILTIN_NAMESPACE_MANIFESTS);
+    expect(registry.list().map((codec) => codec.namespace)).toEqual(["eip155"]);
+    expect(registry.require("eip155")).toBe(BUILTIN_NAMESPACE_MANIFESTS[0]?.core.accountCodec);
   });
 });

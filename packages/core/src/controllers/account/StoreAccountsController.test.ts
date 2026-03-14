@@ -1,5 +1,6 @@
 import { ArxReasons } from "@arx/errors";
 import { afterEach, describe, expect, it } from "vitest";
+import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { Messenger } from "../../messenger/index.js";
 import { MemoryAccountsPort, MemorySettingsPort } from "../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createAccountsService } from "../../services/store/accounts/index.js";
@@ -33,6 +34,7 @@ const createController = async (params?: { accounts?: AccountRecord[]; settings?
     messenger: messenger.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
     accounts,
     settings,
+    accountCodecs: createAccountCodecRegistry([eip155Codec]),
   });
 
   await controller.refresh();

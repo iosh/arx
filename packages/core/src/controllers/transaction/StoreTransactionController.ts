@@ -1,3 +1,4 @@
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
@@ -22,6 +23,7 @@ import type {
 
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
+  accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress" | "toCanonicalAddressFromAccountId">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -59,6 +61,7 @@ export class StoreTransactionController implements TransactionController {
     this.#view = new StoreTransactionView({
       messenger: options.messenger,
       service: options.service,
+      accountCodecs: options.accountCodecs,
       stateLimit,
       logger,
     });
@@ -79,6 +82,7 @@ export class StoreTransactionController implements TransactionController {
 
     this.#executor = new TransactionExecutor({
       view: this.#view,
+      accountCodecs: options.accountCodecs,
       networkPreferences: options.networkPreferences,
       chainDefinitions: options.chainDefinitions,
       accounts: options.accounts,

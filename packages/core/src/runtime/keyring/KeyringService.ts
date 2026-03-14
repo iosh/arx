@@ -568,7 +568,7 @@ export class KeyringService {
 
     const config = this.#getConfig(indexed.namespace);
     const canonical = config.codec.fromAccountId(accountId);
-    const canonicalString = config.codec.toCanonicalString({ chainRef: config.defaultChainRef, canonical });
+    const canonicalString = config.codec.toCanonicalString({ canonical });
     return runtime.instance.exportPrivateKey(canonicalString);
   }
 
@@ -659,7 +659,7 @@ export class KeyringService {
   #toCanonicalString(namespace: string, address: string): string {
     const config = this.#getConfig(namespace);
     const canonical = this.#toCanonicalAddress(namespace, address);
-    return config.codec.toCanonicalString({ chainRef: config.defaultChainRef, canonical });
+    return config.codec.toCanonicalString({ canonical });
   }
 
   #toAccountId(namespace: string, address: string): AccountId {

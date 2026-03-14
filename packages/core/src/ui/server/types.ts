@@ -1,6 +1,7 @@
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { RpcRegistry } from "../../rpc/index.js";
-import type { RpcClientRegistry } from "../../rpc/RpcClientRegistry.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
@@ -50,10 +51,11 @@ export type UiRuntimeDeps = {
     | "requireAvailableChainMetadata"
   >;
   permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
+  accountCodecs: Pick<AccountCodecRegistry, "get" | "toAccountIdFromAddress">;
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
-  rpcClients: Pick<RpcClientRegistry, "getClient">;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   uiOrigin: string;
   platform: UiPlatformAdapter;

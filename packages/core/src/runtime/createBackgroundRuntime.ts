@@ -1,3 +1,4 @@
+import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
@@ -5,9 +6,11 @@ import {
   assembleRuntimeNamespaces,
   BUILTIN_NAMESPACE_MANIFESTS,
   collectChainSeedsFromManifests,
+  createAccountCodecRegistryFromManifests,
   createChainAddressCodecRegistryFromManifests,
   createKeyringNamespacesFromManifests,
   type NamespaceManifest,
+  type NamespaceRuntimeBindingsRegistry,
   registerRpcModulesFromManifests,
 } from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
@@ -89,7 +92,9 @@ export type BackgroundRuntime = {
     chainActivation: ReturnType<typeof createChainActivationService>;
     chainViews: ReturnType<typeof createChainViewsService>;
     permissionViews: ReturnType<typeof createPermissionViewsService>;
+    accountCodecs: AccountCodecRegistry;
     networkPreferences: NetworkPreferencesService;
+    namespaceBindings: NamespaceRuntimeBindingsRegistry;
     session: BackgroundSessionServices;
     keyring: KeyringService;
   };
@@ -138,6 +143,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
+  const accountCodecs = createAccountCodecRegistryFromManifests(namespaceManifests);
   const chainAddressCodecs = createChainAddressCodecRegistryFromManifests(namespaceManifests);
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const chainDefinitionSeed = chainDefinitionsOptions.seed ?? collectChainSeedsFromManifests(namespaceManifests);
@@ -188,13 +194,12 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
   const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
   const approvalFlowRegistry = createApprovalFlowRegistry();
-  let signers: HandlerControllers["signers"] | undefined;
-  let chainActivation: ReturnType<typeof createChainActivationService> | undefined;
 
   const controllersInit = initControllers({
     bus,
     namespaceResolver: methodNamespaceResolver,
     rpcRegistry,
+    accountCodecs,
     accountsService: accountsStore,
     settingsService,
     permissionsService,
@@ -205,11 +210,11 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       createApprovalExecutor({
         registry: approvalFlowRegistry,
         getDeps: () => {
-          if (!signers) {
-            throw new Error("Approval signers are not initialized");
-          }
           if (!chainActivation) {
             throw new Error("Chain activation service is not initialized");
+          }
+          if (!namespaceBindings) {
+            throw new Error("Namespace approval bindings are not initialized");
           }
 
           return {
@@ -218,7 +223,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
             transactions: controllersBase.transactions,
             chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
-            signers,
+            namespaceBindings,
           };
         },
       }),
@@ -238,7 +243,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     preferences: networkPreferences,
   });
 
-  chainActivation = createChainActivationService({
+  const chainActivation = createChainActivationService({
     network: networkController,
     preferences: networkPreferences,
     logger: storageLogger,
@@ -281,7 +286,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     chains: chainAddressCodecs,
     keyring: keyringService,
   });
-  signers = assembledRuntimeNamespaces.signers;
+  const signers = assembledRuntimeNamespaces.signers;
+  const namespaceBindings = assembledRuntimeNamespaces.bindings;
 
   const controllers: HandlerControllers = {
     ...controllersBase,
@@ -314,10 +320,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
     getRegisteredNamespaces: () => registeredNamespaces,
   });
-
-  if (!chainActivation) {
-    throw new Error("Chain activation service failed to initialize");
-  }
 
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
@@ -434,7 +436,9 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       chainActivation,
       chainViews,
       permissionViews,
+      accountCodecs,
       networkPreferences,
+      namespaceBindings,
       session: sessionLayer.session,
       keyring: keyringService,
     },

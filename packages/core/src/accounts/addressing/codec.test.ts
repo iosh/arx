@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_CODECS, getAccountCodec } from "./codec.js";
+import { createAccountCodecRegistry, eip155Codec, getAccountCodec } from "./codec.js";
 
 describe("accounts/addressing codec registry", () => {
-  it("exposes registered codecs through a stable registry", () => {
-    expect(Object.keys(ACCOUNT_CODECS)).toEqual(["eip155"]);
-    expect(getAccountCodec("eip155")).toBe(ACCOUNT_CODECS.eip155);
+  it("exposes registered codecs through registry lookup", () => {
+    const registry = createAccountCodecRegistry([eip155Codec]);
+
+    expect(registry.list().map((codec) => codec.namespace)).toEqual(["eip155"]);
+    expect(registry.require("eip155")).toBe(eip155Codec);
+    expect(getAccountCodec("eip155")).toBe(eip155Codec);
   });
 
   it("throws for unsupported namespaces", () => {
-    expect(() => getAccountCodec("solana")).toThrow(/No account codec registered/);
+    const registry = createAccountCodecRegistry();
+    expect(() => registry.require("solana")).toThrow(/No account codec registered/);
   });
 });

@@ -1,4 +1,5 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { ChainAddressCodec } from "../chains/types.js";
@@ -17,11 +18,30 @@ export type NamespaceCoreManifest = {
   chainSeeds?: readonly ChainMetadata[];
 };
 
+export type NamespaceApprovalBindings = {
+  signMessage?: (params: { chainRef: ChainRef; address: string; message: string }) => Promise<string>;
+  signTypedData?: (params: { chainRef: ChainRef; address: string; typedData: string }) => Promise<string>;
+};
+
+export type NamespaceUiBindings = {
+  getNativeBalance: (params: { chainRef: ChainRef; address: string }) => Promise<bigint>;
+};
+
+export type NamespaceRuntimeBindingsRegistry = {
+  getApproval(namespace: string): NamespaceApprovalBindings | undefined;
+  getUi(namespace: string): NamespaceUiBindings | undefined;
+};
+
 export type NamespaceRuntimeManifest = {
   clientFactory?: RpcClientFactory;
   createSigner?: (params: {
     keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
   }) => unknown;
+  createApprovalBindings?: (params: { signer: unknown }) => NamespaceApprovalBindings;
+  createUiBindings?: (params: {
+    rpcClients: Pick<RpcClientRegistry, "getClient">;
+    chains: ChainAddressCodecRegistry;
+  }) => NamespaceUiBindings;
   createTransactionAdapter?: (params: {
     rpcClients: Pick<RpcClientRegistry, "getClient">;
     chains: ChainAddressCodecRegistry;

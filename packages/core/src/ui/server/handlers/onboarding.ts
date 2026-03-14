@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   hasAnyAccounts,
@@ -11,7 +10,7 @@ import {
 } from "./lib.js";
 
 export const createOnboardingHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "keyring" | "platform">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "accountCodecs" | "session" | "keyring" | "platform">,
 ): Pick<
   UiHandlers,
   | "ui.onboarding.openTab"
@@ -62,7 +61,7 @@ export const createOnboardingHandlers = (
         await deps.controllers.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: toAccountIdFromAddress({ chainRef, address }),
+          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
         });
         return { keyringId, address };
       });
@@ -99,7 +98,7 @@ export const createOnboardingHandlers = (
         await deps.controllers.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: toAccountIdFromAddress({ chainRef, address }),
+          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
         });
         return { keyringId, address };
       });
@@ -135,7 +134,7 @@ export const createOnboardingHandlers = (
         await deps.controllers.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: toAccountIdFromAddress({ chainRef, address: account.address }),
+          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address: account.address }),
         });
         return { keyringId, account };
       });

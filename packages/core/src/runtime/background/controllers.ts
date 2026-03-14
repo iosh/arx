@@ -1,3 +1,4 @@
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
@@ -98,6 +99,7 @@ export type ControllersInitResult = {
 export const initControllers = ({
   bus,
   rpcRegistry,
+  accountCodecs,
   accountsService,
   settingsService,
   permissionsService,
@@ -109,6 +111,7 @@ export const initControllers = ({
   bus: Messenger;
   namespaceResolver: NamespaceResolver;
   rpcRegistry: RpcRegistry;
+  accountCodecs: AccountCodecRegistry;
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsService: PermissionsService;
@@ -176,6 +179,7 @@ export const initControllers = ({
     messenger: bus.scope({ name: "accounts", publish: ACCOUNTS_TOPICS }),
     accounts: accountsService,
     settings: settingsService,
+    accountCodecs,
   });
 
   let approvalExecutor: ApprovalExecutor | undefined;
@@ -199,6 +203,7 @@ export const initControllers = ({
 
   const transactionController = new StoreTransactionController({
     messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
+    accountCodecs,
     networkPreferences,
     chainDefinitions: {
       getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),

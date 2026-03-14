@@ -1,5 +1,5 @@
 import { ArxReasons, isArxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
@@ -43,6 +43,7 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 type Deps = {
   view: StoreTransactionView;
+  accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -66,6 +67,7 @@ export class TransactionExecutor
     >
 {
   #view: StoreTransactionView;
+  #accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress">;
   #networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -85,6 +87,7 @@ export class TransactionExecutor
 
   constructor(deps: Deps) {
     this.#view = deps.view;
+    this.#accountCodecs = deps.accountCodecs;
     this.#networkPreferences = deps.networkPreferences;
     this.#chainDefinitions = deps.chainDefinitions;
     this.#accounts = deps.accounts;
@@ -124,7 +127,7 @@ export class TransactionExecutor
       throw new Error("Transaction from address is required");
     }
 
-    const fromAccountId = toAccountIdFromAddress({ chainRef, address: fromAddress });
+    const fromAccountId = this.#accountCodecs.toAccountIdFromAddress({ chainRef, address: fromAddress });
     const normalizedRequest = normalizeRequest(request, chainRef);
 
     // Avoid RPC/slow work before the approval is enqueued.

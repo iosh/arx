@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
+import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
 import type { TransactionMeta } from "./types.js";
@@ -72,6 +73,7 @@ describe("TransactionExecutor", () => {
       view: {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
+      accountCodecs: createAccountCodecRegistry([eip155Codec]),
       networkPreferences: {
         getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,

@@ -6,7 +6,7 @@ import * as PersonalMessage from "ox/PersonalMessage";
 import * as TransactionEnvelopeEip1559 from "ox/TransactionEnvelopeEip1559";
 import * as TransactionEnvelopeLegacy from "ox/TransactionEnvelopeLegacy";
 import * as TypedData from "ox/TypedData";
-import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
+import { eip155Codec } from "../../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { KeyringService } from "../../../runtime/keyring/KeyringService.js";
 import type { SignedTransactionPayload, TransactionSignContext } from "../types.js";
@@ -148,6 +148,11 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
   return Hex.from(output);
 };
 
+const toEip155AccountId = (params: { chainRef: string; address: string }) => {
+  const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
+  return eip155Codec.toAccountId(canonical);
+};
+
 const assertUnlockedAccount = async (keyring: SignerDeps["keyring"], accountId: string) => {
   // hasAccountId relies on in-memory indices that are populated during hydration.
   // Waiting avoids false "locked" errors during unlock/hydration races.
@@ -230,7 +235,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
       });
     }
 
-    const fromAccountId = toAccountIdFromAddress({ chainRef: context.chainRef, address: context.from });
+    const fromAccountId = toEip155AccountId({ chainRef: context.chainRef, address: context.from });
     await assertUnlockedAccount(deps.keyring, fromAccountId);
     const prepared = preparedInput as Eip155PreparedTransaction;
     const chainId = deriveChainId(context, preparedInput);

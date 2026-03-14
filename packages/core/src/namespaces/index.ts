@@ -1,6 +1,7 @@
 export {
   assembleRuntimeNamespaces,
   collectChainSeedsFromManifests,
+  createAccountCodecRegistryFromManifests,
   createChainAddressCodecRegistryFromManifests,
   createKeyringNamespacesFromManifests,
   registerRpcClientFactoriesFromManifests,
@@ -8,4 +9,11 @@ export {
 } from "./assembly.js";
 export { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";
 export { eip155NamespaceManifest } from "./eip155/manifest.js";
-export type { NamespaceCoreManifest, NamespaceManifest, NamespaceRuntimeManifest } from "./types.js";
+export type {
+  NamespaceApprovalBindings,
+  NamespaceCoreManifest,
+  NamespaceManifest,
+  NamespaceRuntimeBindingsRegistry,
+  NamespaceRuntimeManifest,
+  NamespaceUiBindings,
+} from "./types.js";

@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
@@ -25,8 +24,8 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
     const payload = record.request;
     const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: payload });
     const chainRef = reviewChainRef;
-
-    if (namespace !== "eip155") {
+    const approvalBindings = deps.namespaceBindings.getApproval(namespace);
+    if (!approvalBindings?.signTypedData) {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
         message: `SignTypedData is not supported for namespace "${namespace}".`,
@@ -34,8 +33,9 @@ export const signTypedDataApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignTy
       });
     }
 
-    const signature = await deps.signers.eip155.signTypedData({
-      accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
+    const signature = await approvalBindings.signTypedData({
+      chainRef,
+      address: payload.from,
       typedData: payload.typedData,
     });
 

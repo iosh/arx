@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
@@ -154,10 +154,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
       attention: runtime.services.attention,
-      rpcClients: runtime.rpc.clients,
+      namespaceBindings: runtime.services.namespaceBindings,
       rpcRegistry: runtime.rpc.registry,
       uiOrigin: "chrome-extension://arx",
       platform: {
@@ -228,10 +229,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
       attention: runtime.services.attention,
-      rpcClients: runtime.rpc.clients,
+      namespaceBindings: runtime.services.namespaceBindings,
       rpcRegistry: runtime.rpc.registry,
       uiOrigin: "chrome-extension://arx",
       platform: {
@@ -297,10 +299,11 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chainActivation: runtime.services.chainActivation,
       chainViews: runtime.services.chainViews,
       permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
       session: runtime.services.session,
       keyring: runtime.services.keyring,
       attention: runtime.services.attention,
-      rpcClients: runtime.rpc.clients,
+      namespaceBindings: runtime.services.namespaceBindings,
       rpcRegistry: runtime.rpc.registry,
       uiOrigin: "chrome-extension://arx",
       platform: {
@@ -340,6 +343,84 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
     await expect(approvalPromise).resolves.toBeNull();
     expect(runtime.controllers.permissions.getState()).toEqual(before);
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("resolves ui.balances.getNative via namespace runtime bindings", async () => {
+    const getBalance = vi.fn(async () => "0xde0b6b3a7640000");
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      rpcClients: {
+        factories: [
+          {
+            namespace: "eip155",
+            factory: () =>
+              ({
+                request: vi.fn(),
+                getBalance,
+              }) as never,
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
+      chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      namespaceBindings: runtime.services.namespaceBindings,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    await expect(
+      handlers["ui.balances.getNative"]({
+        chainRef: MAINNET_CHAIN.chainRef,
+        address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).resolves.toMatchObject({
+      chainRef: MAINNET_CHAIN.chainRef,
+      address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      amountWei: "1000000000000000000",
+    });
+    expect(getBalance).toHaveBeenCalledWith("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", {
+      blockTag: "latest",
+      timeoutMs: 15_000,
+    });
 
     runtime.lifecycle.destroy();
   });

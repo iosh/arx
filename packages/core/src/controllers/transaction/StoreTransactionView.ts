@@ -1,4 +1,4 @@
-import { toCanonicalAddressFromAccountId } from "../../accounts/addressing/accountId.js";
+import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
@@ -16,6 +16,7 @@ import { cloneMeta, cloneRequest } from "./utils.js";
 type Options = {
   messenger: TransactionMessenger;
   service: TransactionsService;
+  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId">;
   stateLimit: number;
   logger?: (message: string, data?: unknown) => void;
 };
@@ -29,6 +30,7 @@ type Options = {
 export class StoreTransactionView {
   #messenger: TransactionMessenger;
   #service: TransactionsService;
+  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId">;
   #stateLimit: number;
   #logger: (message: string, data?: unknown) => void;
   #unsubscribeStore: (() => void) | null = null;
@@ -42,9 +44,10 @@ export class StoreTransactionView {
   #syncWanted = false;
   #syncInFlight: Promise<void> | null = null;
 
-  constructor({ messenger, service, stateLimit, logger }: Options) {
+  constructor({ messenger, service, accountCodecs, stateLimit, logger }: Options) {
     this.#messenger = messenger;
     this.#service = service;
+    this.#accountCodecs = accountCodecs;
     this.#stateLimit = stateLimit;
     this.#logger = logger ?? (() => {});
 
@@ -194,7 +197,7 @@ export class StoreTransactionView {
 
   #safeFromAccountIdToAddress(record: TransactionRecord): string | null {
     try {
-      return toCanonicalAddressFromAccountId({ chainRef: record.chainRef, accountId: record.fromAccountId });
+      return this.#accountCodecs.toCanonicalAddressFromAccountId({ accountId: record.fromAccountId });
     } catch (error) {
       if (!this.#fromDecodeLogged.has(record.id)) {
         this.#fromDecodeLogged.add(record.id);

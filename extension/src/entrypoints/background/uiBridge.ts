@@ -1,12 +1,13 @@
 import type {
+  AccountCodecRegistry,
   AttentionService,
   BackgroundSessionServices,
   ChainActivationService,
   ChainViewsService,
   HandlerControllers,
   KeyringService,
+  NamespaceRuntimeBindingsRegistry,
   PermissionViewsService,
-  RpcClientRegistry,
   RpcRegistry,
 } from "@arx/core";
 import type { NetworkPreferencesService } from "@arx/core/services";
@@ -37,8 +38,9 @@ type BridgeDeps = {
   >;
   permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
   networkPreferences: Pick<NetworkPreferencesService, "subscribeChanged">;
+  accountCodecs: Pick<AccountCodecRegistry, "get" | "toAccountIdFromAddress">;
   session: BackgroundSessionServices;
-  rpcClients: Pick<RpcClientRegistry, "getClient">;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   persistVaultMeta: () => Promise<void>;
   keyring: KeyringService;
@@ -53,8 +55,9 @@ export const createUiBridge = ({
   chainViews,
   permissionViews,
   networkPreferences,
+  accountCodecs,
   session,
-  rpcClients,
+  namespaceBindings,
   rpcRegistry,
   persistVaultMeta,
   keyring,
@@ -71,10 +74,11 @@ export const createUiBridge = ({
     chainActivation,
     chainViews,
     permissionViews,
+    accountCodecs,
     session,
     keyring,
     attention,
-    rpcClients,
+    namespaceBindings,
     rpcRegistry,
     uiOrigin,
     platform,

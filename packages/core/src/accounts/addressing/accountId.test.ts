@@ -16,7 +16,6 @@ describe("accounts/addressing accountId helpers", () => {
   it("converts accountId back to canonical chain address", () => {
     expect(
       toCanonicalAddressFromAccountId({
-        chainRef,
         accountId: "eip155:aabbccddeeff00112233445566778899aabbccdd",
       }),
     ).toBe("0xaabbccddeeff00112233445566778899aabbccdd");
@@ -31,12 +30,11 @@ describe("accounts/addressing accountId helpers", () => {
     ).toBe("0x52908400098527886E0F7030069857D2E4169EE7");
   });
 
-  it("rejects accountIds from another namespace", () => {
+  it("rejects accountIds for unsupported namespaces", () => {
     expect(() =>
       toCanonicalAddressFromAccountId({
-        chainRef,
         accountId: "solana:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
-    ).toThrow(/namespace mismatch/i);
+    ).toThrow(/No account codec registered/i);
   });
 });

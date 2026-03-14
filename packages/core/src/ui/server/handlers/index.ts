@@ -19,12 +19,13 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     chainActivation,
     chainViews,
     permissionViews,
+    accountCodecs,
     session,
     keyring,
     attention,
     platform,
     uiOrigin,
-    rpcClients,
+    namespaceBindings,
   } = deps;
   const uiSessionId = crypto.randomUUID();
   const approvalFlowRegistry = createApprovalFlowRegistry();
@@ -45,13 +46,13 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
   return {
     ...createSnapshotHandlers(buildSnapshot),
     ...createAttentionHandlers({ platform }),
-    ...createBalancesHandlers({ chainViews, session, rpcClients }),
+    ...createBalancesHandlers({ chainViews, session, namespaceBindings }),
     ...createSessionHandlers({ session, keyring }),
-    ...createOnboardingHandlers({ controllers, chainViews, session, keyring, platform }),
+    ...createOnboardingHandlers({ controllers, chainViews, accountCodecs, session, keyring, platform }),
     ...createAccountsHandlers({ controllers }, buildSnapshot),
     ...createNetworksHandlers({ chainActivation }, toChainSnapshot),
     ...createApprovalsHandlers({ controllers }),
-    ...createKeyringsHandlers({ controllers, chainViews, session, keyring }),
+    ...createKeyringsHandlers({ controllers, chainViews, accountCodecs, session, keyring }),
     ...createTransactionsHandlers({ controllers, chainViews, session, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;
 };

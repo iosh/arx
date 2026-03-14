@@ -9,9 +9,9 @@ import type {
 import type { ChainDefinitionsController } from "../controllers/chainDefinitions/types.js";
 import type { PermissionController } from "../controllers/permission/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
+import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
-import type { Eip155Signer } from "../transactions/adapters/eip155/signer.js";
 import type { ApprovalSummary } from "../ui/protocol/schemas.js";
 
 export type ApprovalFlowDeps = {
@@ -20,9 +20,7 @@ export type ApprovalFlowDeps = {
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   chainActivation: Pick<ChainActivationService, "activateProviderChain">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;
-  signers: {
-    eip155: Pick<Eip155Signer, "signPersonalMessage" | "signTypedData">;
-  };
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };
 
 export type ApprovalFlowPresenterDeps = {

@@ -1,5 +1,4 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
@@ -22,8 +21,8 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
     const payload = record.request;
     const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: payload });
     const chainRef = reviewChainRef;
-
-    if (namespace !== "eip155") {
+    const approvalBindings = deps.namespaceBindings.getApproval(namespace);
+    if (!approvalBindings?.signMessage) {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,
         message: `SignMessage is not supported for namespace "${namespace}".`,
@@ -31,8 +30,9 @@ export const signMessageApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SignMess
       });
     }
 
-    const signature = await deps.signers.eip155.signPersonalMessage({
-      accountId: toAccountIdFromAddress({ chainRef, address: payload.from }),
+    const signature = await approvalBindings.signMessage({
+      chainRef,
+      address: payload.from,
       message: payload.message,
     });
 

@@ -156,7 +156,7 @@ export const connectOrigin = async (args: {
       accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
         accountId,
         namespace,
-        canonicalAddress: toCanonicalAddressFromAccountId({ chainRef, accountId }),
+        canonicalAddress: toCanonicalAddressFromAccountId({ accountId }),
         displayAddress: toDisplayAddressFromAccountId({ chainRef, accountId }),
       });
     }

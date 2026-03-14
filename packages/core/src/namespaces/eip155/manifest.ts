@@ -1,3 +1,4 @@
+import * as Hex from "ox/Hex";
 import { eip155Codec } from "../../accounts/addressing/codec.js";
 import { EIP155_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
@@ -21,6 +22,11 @@ if (!EIP155_CLIENT_FACTORY) {
   throw new Error("eip155Module must provide a clientFactory");
 }
 
+const toEip155AccountId = (params: { chainRef: string; address: string }) => {
+  const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
+  return eip155Codec.toAccountId(canonical);
+};
+
 export const eip155NamespaceManifest: NamespaceManifest = {
   namespace: EIP155_NAMESPACE,
   core: {
@@ -42,6 +48,29 @@ export const eip155NamespaceManifest: NamespaceManifest = {
   runtime: {
     clientFactory: EIP155_CLIENT_FACTORY,
     createSigner: ({ keyring }) => createEip155Signer({ keyring }),
+    createApprovalBindings: ({ signer }) => {
+      const typedSigner = signer as Pick<Eip155Signer, "signPersonalMessage" | "signTypedData">;
+      return {
+        signMessage: async ({ chainRef, address, message }) =>
+          await typedSigner.signPersonalMessage({
+            accountId: toEip155AccountId({ chainRef, address }),
+            message,
+          }),
+        signTypedData: async ({ chainRef, address, typedData }) =>
+          await typedSigner.signTypedData({
+            accountId: toEip155AccountId({ chainRef, address }),
+            typedData,
+          }),
+      };
+    },
+    createUiBindings: ({ rpcClients }) => ({
+      getNativeBalance: async ({ chainRef, address }) => {
+        const rpc = rpcClients.getClient<Eip155RpcCapabilities>(EIP155_NAMESPACE, chainRef) as Eip155RpcClient;
+        const balanceHex = await rpc.getBalance(address, { blockTag: "latest", timeoutMs: 15_000 });
+        Hex.assert(balanceHex as Hex.Hex, { strict: false });
+        return Hex.toBigInt(balanceHex as Hex.Hex);
+      },
+    }),
     createTransactionAdapter: ({ rpcClients, chains, signer }) => {
       const typedSigner = signer as Pick<Eip155Signer, "signTransaction">;
       const rpcClientFactory = (chainRef: string) =>

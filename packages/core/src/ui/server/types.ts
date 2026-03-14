@@ -9,6 +9,7 @@ import type { ChainActivationService } from "../../services/runtime/chainActivat
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
+import type { UiSnapshot } from "../protocol/schemas.js";
 
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
@@ -33,6 +34,15 @@ export type UiHandlerFn<M extends UiMethodName> =
 export type UiHandlers = {
   [M in UiMethodName]: UiHandlerFn<M>;
 };
+
+export type UiSnapshotBuilder = () => UiSnapshot;
+
+export type UiResolvedContext = {
+  namespace: string;
+  chainRef: string;
+};
+
+export type UiContextResolver = () => UiResolvedContext;
 
 export type UiRuntimeDeps = {
   controllers: HandlerControllers;
@@ -59,4 +69,15 @@ export type UiRuntimeDeps = {
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   uiOrigin: string;
   platform: UiPlatformAdapter;
+};
+
+export type UiHandlerDeps = Omit<UiRuntimeDeps, "rpcRegistry"> & {
+  buildSnapshot: UiSnapshotBuilder;
+  uiSessionId: string;
+};
+
+export type UiServerRuntime = {
+  buildSnapshot: UiSnapshotBuilder;
+  getUiContext: UiContextResolver;
+  handlers: UiHandlers;
 };

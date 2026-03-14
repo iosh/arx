@@ -1,5 +1,5 @@
 import { parseChainRef } from "../../../chains/caip.js";
-import type { UiOwnedAccountSummary, UiSnapshot } from "../../protocol/schemas.js";
+import type { UiOwnedAccountSummary } from "../../protocol/schemas.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 
 const toUiOwnedAccountSummary = (account: {
@@ -14,7 +14,6 @@ const toUiOwnedAccountSummary = (account: {
 
 export const createAccountsHandlers = (
   deps: Pick<UiRuntimeDeps, "controllers">,
-  _buildSnapshot: () => UiSnapshot,
 ): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
     "ui.accounts.switchActive": async ({ chainRef, accountId }) => {

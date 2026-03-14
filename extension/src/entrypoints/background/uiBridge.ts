@@ -9,11 +9,18 @@ import type {
   NetworkPreferencesService,
   PermissionViewsService,
 } from "@arx/core/services";
-import { createUiDispatcher, type UiDispatchOutput } from "@arx/core/ui/server";
+import { UI_EVENT_SNAPSHOT_CHANGED } from "@arx/core/ui";
+import {
+  createUiDispatcher,
+  createUiServerRuntime,
+  getUiRequestEffects,
+  type UiDispatchOutput,
+} from "@arx/core/ui/server";
 
 import type browserDefaultType from "webextension-polyfill";
 import type { UiPlatform } from "./platform/uiPlatform";
 import { createUiPortHub } from "./ui/portHub";
+import { createUiSnapshotBroadcaster } from "./ui/snapshotBroadcaster";
 
 export { UI_CHANNEL } from "@arx/core/ui";
 
@@ -67,7 +74,7 @@ export const createUiBridge = ({
 
   const uiOrigin = new URL(runtimeBrowser.runtime.getURL("")).origin;
 
-  const dispatcher = createUiDispatcher({
+  const uiRuntime = createUiServerRuntime({
     controllers,
     chainActivation,
     chainViews,
@@ -78,56 +85,38 @@ export const createUiBridge = ({
     attention,
     namespaceBindings,
     rpcRegistry,
-    uiOrigin,
     platform,
+    uiOrigin,
   });
-
-  let broadcastHold = 0;
-  let pendingBroadcast = false;
+  const dispatcher = createUiDispatcher({
+    handlers: uiRuntime.handlers,
+    getUiContext: uiRuntime.getUiContext,
+    rpcRegistry,
+  });
 
   const buildSnapshotEventSafely = () => {
     try {
-      return dispatcher.buildSnapshotEvent();
+      return {
+        type: "ui:event" as const,
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: uiRuntime.buildSnapshot(),
+        context: uiRuntime.getUiContext(),
+      };
     } catch (error) {
       console.warn("[uiBridge] failed to build snapshot", error);
       return null;
     }
   };
 
-  const broadcastSnapshotNow = () => {
-    const snapshotEvent = buildSnapshotEventSafely();
-    if (!snapshotEvent) {
-      return;
-    }
-    portHub.broadcast(snapshotEvent);
-  };
-
-  const requestBroadcast = () => {
-    if (broadcastHold > 0) {
-      pendingBroadcast = true;
-      return;
-    }
-    broadcastSnapshotNow();
-  };
-
-  const withBroadcastHold = async <T>(fn: () => Promise<T>): Promise<T> => {
-    broadcastHold += 1;
-    try {
-      return await fn();
-    } finally {
-      broadcastHold -= 1;
-      if (broadcastHold === 0 && pendingBroadcast) {
-        pendingBroadcast = false;
-        broadcastSnapshotNow();
-      }
-    }
-  };
+  const snapshotBroadcaster = createUiSnapshotBroadcaster({
+    portHub,
+    buildSnapshotEvent: buildSnapshotEventSafely,
+  });
 
   const maybeWithHold = async (raw: unknown, fn: () => Promise<void>) => {
-    const effects = dispatcher.getRequestEffects(raw);
+    const effects = getUiRequestEffects(raw);
     if (effects?.holdBroadcast) {
-      await withBroadcastHold(fn);
-      pendingBroadcast = false;
+      await snapshotBroadcaster.withBroadcastHold(fn);
       return;
     }
     await fn();
@@ -147,7 +136,7 @@ export const createUiBridge = ({
     portHub.send(port, reply);
 
     if (reply.type === "ui:response" && effects.broadcastSnapshot) {
-      requestBroadcast();
+      snapshotBroadcaster.requestBroadcast();
     }
   };
 
@@ -160,21 +149,18 @@ export const createUiBridge = ({
       });
     });
 
-    const snapshotEvent = buildSnapshotEventSafely();
-    if (snapshotEvent) {
-      portHub.send(port, snapshotEvent);
-    }
+    snapshotBroadcaster.sendInitialSnapshot(port);
   };
 
   const attachListeners = () => {
     listeners.push(
-      controllers.accounts.onStateChanged(() => requestBroadcast()),
-      controllers.network.onStateChanged(() => requestBroadcast()),
-      controllers.approvals.onStateChanged(() => requestBroadcast()),
-      controllers.permissions.onStateChanged(() => requestBroadcast()),
-      controllers.transactions.onStateChanged(() => requestBroadcast()),
-      networkPreferences.subscribeChanged(() => requestBroadcast()),
-      session.unlock.onStateChanged(() => requestBroadcast()),
+      controllers.accounts.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
+      controllers.network.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
+      controllers.approvals.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
+      controllers.permissions.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
+      controllers.transactions.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
+      networkPreferences.subscribeChanged(() => snapshotBroadcaster.requestBroadcast()),
+      session.unlock.onStateChanged(() => snapshotBroadcaster.requestBroadcast()),
     );
   };
 
@@ -193,7 +179,7 @@ export const createUiBridge = ({
   return {
     attachPort,
     attachListeners,
-    broadcast: requestBroadcast,
+    broadcast: snapshotBroadcaster.requestBroadcast,
     teardown,
   };
 };

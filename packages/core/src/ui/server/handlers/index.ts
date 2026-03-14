@@ -1,7 +1,4 @@
-import { createApprovalFlowRegistry } from "../../../approvals/index.js";
-import type { UiSnapshot } from "../../protocol/schemas.js";
-import { buildUiSnapshot } from "../snapshot.js";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiHandlerDeps, UiHandlers } from "../types.js";
 import { createAccountsHandlers } from "./accounts.js";
 import { createApprovalsHandlers } from "./approvals.js";
 import { createAttentionHandlers } from "./attention.js";
@@ -13,34 +10,20 @@ import { createSessionHandlers } from "./session.js";
 import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
-export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
+export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
   const {
     controllers,
     chainActivation,
     chainViews,
-    permissionViews,
     accountCodecs,
     session,
     keyring,
-    attention,
+    namespaceBindings,
     platform,
     uiOrigin,
-    namespaceBindings,
+    buildSnapshot,
+    uiSessionId,
   } = deps;
-  const uiSessionId = crypto.randomUUID();
-  const approvalFlowRegistry = createApprovalFlowRegistry();
-
-  const buildSnapshot = (): UiSnapshot =>
-    buildUiSnapshot({
-      controllers,
-      chainViews,
-      permissionViews,
-      session,
-      keyring,
-      attention,
-      namespaceBindings,
-      approvalFlowRegistry,
-    });
 
   const toChainSnapshot = () => chainViews.getSelectedChainView();
 
@@ -50,7 +33,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     ...createBalancesHandlers({ chainViews, session, namespaceBindings }),
     ...createSessionHandlers({ session, keyring }),
     ...createOnboardingHandlers({ controllers, chainViews, accountCodecs, session, keyring, platform }),
-    ...createAccountsHandlers({ controllers }, buildSnapshot),
+    ...createAccountsHandlers({ controllers }),
     ...createNetworksHandlers({ chainActivation }, toChainSnapshot),
     ...createApprovalsHandlers({ controllers }),
     ...createKeyringsHandlers({ controllers, chainViews, accountCodecs, session, keyring }),

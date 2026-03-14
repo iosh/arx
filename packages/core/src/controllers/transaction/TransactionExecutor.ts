@@ -36,7 +36,6 @@ import {
   coerceTransactionError,
   isUserRejectedError,
   missingAdapterIssue,
-  normalizeRequest,
 } from "./utils.js";
 
 const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
@@ -153,10 +152,27 @@ export class TransactionExecutor
     }
 
     const fromAccountId = this.#accountCodecs.toAccountIdFromAddress({ chainRef, address: fromAddress });
-    const normalizedRequest = normalizeRequest(request, chainRef);
-
     // Avoid RPC/slow work before the approval is enqueued.
     const adapter = this.#registry.get(derived.namespace);
+    const normalizedCandidate = adapter?.normalizeRequest?.(request, chainRef) ?? {
+      ...request,
+      chainRef,
+    };
+    if (normalizedCandidate.namespace !== derived.namespace) {
+      throw new Error(
+        `Transaction adapter normalized request namespace mismatch: expected=${derived.namespace} actual=${normalizedCandidate.namespace}`,
+      );
+    }
+    if (normalizedCandidate.chainRef !== undefined && normalizedCandidate.chainRef !== chainRef) {
+      throw new Error(
+        `Transaction adapter normalized request chainRef mismatch: expected=${chainRef} actual=${normalizedCandidate.chainRef}`,
+      );
+    }
+
+    const normalizedRequest: TransactionRequest = {
+      ...normalizedCandidate,
+      chainRef,
+    };
     const collectedWarnings: TransactionWarning[] = [];
     const collectedIssues: TransactionIssue[] = adapter ? [] : [missingAdapterIssue(derived.namespace)];
 

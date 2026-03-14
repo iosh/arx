@@ -30,6 +30,7 @@ export type TransactionError = {
 export type TransactionReceipt = Record<string, unknown>;
 
 export type TransactionPrepared = Record<string, unknown>;
+export type TransactionPayload = Record<string, unknown>;
 
 export type Eip155TransactionPayload = {
   chainId?: Hex;
@@ -44,13 +45,13 @@ export type Eip155TransactionPayload = {
   nonce?: Hex;
 };
 export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
+export type Eip155TransactionRequest = TransactionRequest<"eip155", Eip155TransactionPayload>;
 
-export type TransactionPayloadMap = {
-  eip155: Eip155TransactionPayload;
-};
-
-export type TransactionRequest<TNamespace extends string = keyof TransactionPayloadMap | string> = {
+export type TransactionRequest<
+  TNamespace extends string = string,
+  TPayload extends TransactionPayload = TransactionPayload,
+> = {
   namespace: TNamespace;
   chainRef?: ChainRef | undefined;
-  payload: TNamespace extends keyof TransactionPayloadMap ? TransactionPayloadMap[TNamespace] : Record<string, unknown>;
+  payload: TPayload;
 };

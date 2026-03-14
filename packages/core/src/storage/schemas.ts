@@ -15,10 +15,11 @@ export {
 } from "./schemas/rpc.js";
 export {
   Eip155TransactionPayloadSchema,
-  GenericTransactionRequestSchema,
+  Eip155TransactionRequestSchema,
   TransactionDiagnosticSchema,
   TransactionErrorSchema,
   TransactionIssueSchema,
+  TransactionPayloadSchema,
   TransactionReceiptSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,

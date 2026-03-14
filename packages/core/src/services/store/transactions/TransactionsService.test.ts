@@ -78,6 +78,36 @@ describe("TransactionsService", () => {
     expect(changed).toBe(1);
   });
 
+  it("createPending() accepts namespace-specific payloads without shared schema branches", async () => {
+    const { port } = createInMemoryPort();
+    const service = createTransactionsService({ port, now: () => 1000 });
+
+    const created = await service.createPending({
+      id: "22222222-2222-4222-8222-222222222222",
+      namespace: "cosmos",
+      chainRef: "cosmos:cosmoshub-4",
+      origin: "https://dapp.example",
+      fromAccountId: "cosmos:aa",
+      request: {
+        namespace: "cosmos",
+        chainRef: "cosmos:cosmoshub-4",
+        payload: {
+          memo: "delegate",
+          fee: { amount: "2500", denom: "uatom" },
+        },
+      },
+    });
+
+    expect(created.request).toEqual({
+      namespace: "cosmos",
+      chainRef: "cosmos:cosmoshub-4",
+      payload: {
+        memo: "delegate",
+        fee: { amount: "2500", denom: "uatom" },
+      },
+    });
+  });
+
   it("transition() throws on invalid status transitions", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1000 });

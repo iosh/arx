@@ -229,4 +229,128 @@ describe("TransactionExecutor", () => {
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(result).toMatchObject({ chainRef, namespace: "eip155" });
   });
+
+  it("delegates request normalization to the namespace adapter before persistence", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountId = toAccountIdFromAddress({ chainRef, address: from });
+
+    const createdRecord: TransactionRecord = {
+      id: REQUEST_ID,
+      namespace: "eip155",
+      chainRef,
+      origin: "https://dapp.example",
+      fromAccountId: accountId,
+      status: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+          chainId: "0xa",
+        },
+      },
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const normalizeRequest = vi.fn((request, resolvedChainRef) => ({
+      ...request,
+      chainRef: resolvedChainRef,
+      payload: {
+        ...(request.payload as Record<string, unknown>),
+        chainId: "0xa",
+      },
+    }));
+    const createPending = vi.fn(async () => createdRecord);
+    const queuePrepare = vi.fn();
+    const approvalResult = toMeta(createdRecord, from);
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
+      } as never,
+      accountCodecs: createAccountCodecRegistry([eip155Codec]),
+      networkPreferences: {
+        getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      } as never,
+      chainDefinitions: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountId,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: () => ({ settled: Promise.resolve(approvalResult) }),
+      } as never,
+      registry: {
+        get: () => ({
+          normalizeRequest,
+        }),
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare,
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    await executor.requestTransactionApproval(
+      "https://dapp.example",
+      {
+        namespace: "eip155",
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      REQUEST_CONTEXT,
+      { id: REQUEST_ID },
+    );
+
+    expect(normalizeRequest).toHaveBeenCalledWith(
+      {
+        namespace: "eip155",
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      chainRef,
+    );
+    expect(createPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chainRef,
+        request: {
+          namespace: "eip155",
+          chainRef,
+          payload: expect.objectContaining({
+            chainId: "0xa",
+          }),
+        },
+      }),
+    );
+  });
 });

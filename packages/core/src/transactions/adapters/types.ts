@@ -32,6 +32,7 @@ export type ReplacementResolution = {
   status: "replaced";
 };
 export type TransactionAdapter = {
+  normalizeRequest?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
   prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
   signTransaction(
     context: TransactionSignContext,

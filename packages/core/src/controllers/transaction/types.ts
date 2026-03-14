@@ -91,13 +91,14 @@ export type TransactionController = {
 };
 
 export type {
+  Eip155TransactionRequest,
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
   TransactionDiagnostic,
   TransactionDiagnosticSeverity,
   TransactionError,
   TransactionIssue,
-  TransactionPayloadMap,
+  TransactionPayload,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,

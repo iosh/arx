@@ -1,6 +1,4 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
-import * as Hex from "ox/Hex";
-import { parseChainRef } from "../../chains/caip.js";
 import type { TransactionPrepareContext, TransactionSignContext } from "../../transactions/adapters/types.js";
 import type {
   TransactionError,
@@ -23,15 +21,9 @@ const deepClone = <T>(value: T): T => {
 };
 
 export const cloneRequest = (request: TransactionRequest): TransactionRequest => {
-  if (request.namespace === "eip155") {
-    return {
-      ...request,
-      payload: deepClone(request.payload),
-    };
-  }
   return {
     ...request,
-    payload: deepClone(request.payload as Record<string, unknown>),
+    payload: deepClone(request.payload),
   };
 };
 
@@ -161,25 +153,4 @@ export const buildSignContext = (meta: TransactionMeta): TransactionSignContext 
     });
   }
   return { ...ctx, from: ctx.from };
-};
-
-export const deriveEip155HexChainIdFromChainRef = (chainRef: string): `0x${string}` => {
-  const parsed = parseChainRef(chainRef);
-  if (parsed.namespace !== "eip155" || !/^\d+$/.test(parsed.reference)) {
-    throw new Error(`Cannot derive eip155 chainId from chainRef "${chainRef}"`);
-  }
-  return Hex.fromNumber(BigInt(parsed.reference)) as `0x${string}`;
-};
-
-export const normalizeRequest = (request: TransactionRequest, chainRef: string): TransactionRequest => {
-  const out: TransactionRequest = { ...request, chainRef };
-  if (out.namespace !== "eip155") return out;
-
-  const payload = { ...(out.payload as Record<string, unknown>) } as { chainId?: unknown };
-  if (typeof payload.chainId === "string" && payload.chainId.startsWith("0x")) {
-    return { ...out, payload } as TransactionRequest;
-  }
-
-  const chainId = deriveEip155HexChainIdFromChainRef(chainRef);
-  return { ...out, payload: { ...payload, chainId } } as TransactionRequest;
 };

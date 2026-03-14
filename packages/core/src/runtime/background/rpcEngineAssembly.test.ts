@@ -3,6 +3,7 @@ import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { PermissionCapabilities } from "../../controllers/permission/types.js";
+import { eip155NamespaceManifest } from "../../namespaces/index.js";
 import {
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -42,11 +43,13 @@ const createPendingRes = (): PendingJsonRpcResponse<Json> => ({
 });
 
 type PendingResWithUnknownError = Omit<PendingJsonRpcResponse<Json>, "error"> & { error?: unknown };
+const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
 
 describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -80,6 +83,7 @@ describe("background rpc engine assembly", () => {
   it("encodes existing res.error (error boundary)", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -127,6 +131,7 @@ describe("background rpc engine assembly", () => {
   it("does not consult global active chain when namespace cannot be inferred", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -174,6 +179,7 @@ describe("background rpc engine assembly", () => {
   it("uses provider binding for best-effort namespace encoding when explicit namespace is absent", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -225,6 +231,7 @@ describe("background rpc engine assembly", () => {
   it("respects shouldRequestUnlockAttention hook", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
@@ -282,6 +289,7 @@ describe("background rpc engine assembly", () => {
   it("preserves PermissionDenied semantics for capability-guarded methods", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
       networkPreferences: { port: new MemoryNetworkPreferencesPort() },
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },

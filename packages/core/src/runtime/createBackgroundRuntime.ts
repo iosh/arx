@@ -25,7 +25,6 @@ import {
   initializeRuntimeBootstrapPhase,
   initializeRuntimeCapabilityPhase,
   initializeRuntimeSessionPhase,
-  resolveRuntimeNamespaceManifests,
 } from "./background/runtimePhases.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
@@ -64,8 +63,8 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chain
   };
   session?: SessionOptions;
   rpcClients?: RpcLayerOptions;
-  namespaces?: {
-    manifests?: readonly NamespaceManifest[];
+  namespaces: {
+    manifests: readonly NamespaceManifest[];
   };
 };
 
@@ -119,7 +118,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     namespaces: namespacesOptions,
   } = options;
 
-  const namespaceManifests = resolveRuntimeNamespaceManifests(namespacesOptions?.manifests);
+  const namespaceManifests = namespacesOptions.manifests;
   const bootstrapPhase = initializeRuntimeBootstrapPhase({
     rpcRegistry,
     namespaceManifests,

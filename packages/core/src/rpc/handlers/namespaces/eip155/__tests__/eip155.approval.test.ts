@@ -122,7 +122,11 @@ describe("eip155 handlers - approval metadata", () => {
     const activeChain = getActiveChainMetadata(runtime);
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
     const account = await runtime.services.keyring.deriveAccount(keyringId);
-    const accountId = toAccountIdFromAddress({ chainRef: activeChain.chainRef, address: account.address });
+    const accountId = toAccountIdFromAddress({
+      chainRef: activeChain.chainRef,
+      address: account.address,
+      accountCodecs: runtime.services.accountCodecs,
+    });
     await runtime.controllers.accounts.setActiveAccount({
       namespace: activeChain.namespace,
       chainRef: activeChain.chainRef,
@@ -495,7 +499,11 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+        accountId: toAccountIdFromAddress({
+          chainRef: mainnet.chainRef,
+          address: account.address,
+          accountCodecs: runtime.services.accountCodecs,
+        }),
       });
       await connectOrigin({
         runtime,
@@ -572,7 +580,11 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+        accountId: toAccountIdFromAddress({
+          chainRef: mainnet.chainRef,
+          address: account.address,
+          accountCodecs: runtime.services.accountCodecs,
+        }),
       });
       await connectOrigin({
         runtime,
@@ -598,7 +610,11 @@ describe("eip155 handlers - approval metadata", () => {
       }>("eip155");
       await expect(
         signer.signPersonalMessage({
-          accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+          accountId: toAccountIdFromAddress({
+            chainRef: mainnet.chainRef,
+            address: account.address,
+            accountCodecs: runtime.services.accountCodecs,
+          }),
           message,
         }),
       ).resolves.toBe(signature);
@@ -631,7 +647,11 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+        accountId: toAccountIdFromAddress({
+          chainRef: mainnet.chainRef,
+          address: account.address,
+          accountCodecs: runtime.services.accountCodecs,
+        }),
       });
       await connectOrigin({
         runtime,
@@ -670,7 +690,11 @@ describe("eip155 handlers - approval metadata", () => {
       }>("eip155");
       await expect(
         signer.signTypedData({
-          accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
+          accountId: toAccountIdFromAddress({
+            chainRef: mainnet.chainRef,
+            address: account.address,
+            accountCodecs: runtime.services.accountCodecs,
+          }),
           typedData,
         }),
       ).resolves.toBe(signature);

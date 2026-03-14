@@ -14,6 +14,7 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
+  TEST_NAMESPACE_MANIFESTS,
 } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "../../../../../runtime/createBackgroundRuntime.js";
 
@@ -62,6 +63,9 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
     chainDefinitions: {
       port: createChainDefinitionsPort(),
       ...(chainDefinitions ?? {}),
+    },
+    namespaces: {
+      manifests: TEST_NAMESPACE_MANIFESTS,
     },
     rpcEngine:
       rpcEngine ??
@@ -127,7 +131,13 @@ export const connectOrigin = async (args: {
       chainRef,
       accountIds:
         index === 0
-          ? (addresses.map((address) => toAccountIdFromAddress({ chainRef, address })) as [string, ...string[]])
+          ? (addresses.map((address) =>
+              toAccountIdFromAddress({
+                chainRef,
+                address,
+                accountCodecs: runtime.services.accountCodecs,
+              }),
+            ) as [string, ...string[]])
           : [],
     })) as [
       { chainRef: ChainRef; accountIds: [string, ...string[]] },
@@ -152,12 +162,23 @@ export const connectOrigin = async (args: {
 
   for (const chainRef of chainRefs) {
     for (const address of addresses) {
-      const accountId = toAccountIdFromAddress({ chainRef, address });
+      const accountId = toAccountIdFromAddress({
+        chainRef,
+        address,
+        accountCodecs: runtime.services.accountCodecs,
+      });
       accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
         accountId,
         namespace,
-        canonicalAddress: toCanonicalAddressFromAccountId({ accountId }),
-        displayAddress: toDisplayAddressFromAccountId({ chainRef, accountId }),
+        canonicalAddress: toCanonicalAddressFromAccountId({
+          accountId,
+          accountCodecs: runtime.services.accountCodecs,
+        }),
+        displayAddress: toDisplayAddressFromAccountId({
+          chainRef,
+          accountId,
+          accountCodecs: runtime.services.accountCodecs,
+        }),
       });
     }
   }

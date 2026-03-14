@@ -1,8 +1,12 @@
 import type { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
+import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
+import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
+import { ChainAddressCodecRegistry } from "../../chains/registry.js";
+import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
@@ -39,6 +43,9 @@ export const TEST_AUTO_LOCK_DURATION = 1_000;
 export const TEST_INITIAL_TIME = 5_000;
 export const TEST_RECEIPT_POLL_INTERVAL = 3_000;
 export const TEST_RECEIPT_MAX_DELAY = 30_000;
+export const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
+export const TEST_ACCOUNT_CODECS = createAccountCodecRegistry([eip155Codec]);
+export const TEST_CHAIN_ADDRESS_CODECS = new ChainAddressCodecRegistry([eip155AddressCodec]);
 
 // Utility types
 export type RpcTimers = {
@@ -636,6 +643,9 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     chainDefinitions: {
       port: chainDefinitionsPort,
       seed: chainSeed,
+    },
+    namespaces: {
+      manifests: TEST_NAMESPACE_MANIFESTS,
     },
     rpcEngine: options.rpcEngine ?? { env: defaultEnv },
     networkPreferences: {

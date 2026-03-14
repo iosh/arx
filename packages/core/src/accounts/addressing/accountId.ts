@@ -1,7 +1,7 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type AccountId, AccountIdSchema } from "../../storage/records.js";
-import { getAccountCodec } from "./builtin.js";
+import type { AccountCodecRegistry } from "./codec.js";
 
 export const parseAccountId = (accountId: AccountId): { namespace: string; payloadHex: string } => {
   const parsed = AccountIdSchema.parse(accountId);
@@ -18,23 +18,36 @@ export const parseAccountId = (accountId: AccountId): { namespace: string; paylo
 
 export const getAccountIdNamespace = (accountId: AccountId): string => parseAccountId(accountId).namespace;
 
-export const toAccountIdFromAddress = (params: { chainRef: ChainRef; address: string }): AccountId => {
+type AccountCodecLookup = Pick<AccountCodecRegistry, "require">;
+
+export const toAccountIdFromAddress = (params: {
+  chainRef: ChainRef;
+  address: string;
+  accountCodecs: AccountCodecLookup;
+}): AccountId => {
   const { namespace } = parseChainRef(params.chainRef);
-  const codec = getAccountCodec(namespace);
+  const codec = params.accountCodecs.require(namespace);
   const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
   return codec.toAccountId(canonical);
 };
 
-export const toCanonicalAddressFromAccountId = (params: { accountId: AccountId }): string => {
+export const toCanonicalAddressFromAccountId = (params: {
+  accountId: AccountId;
+  accountCodecs: AccountCodecLookup;
+}): string => {
   const { namespace } = parseAccountId(params.accountId);
-  const codec = getAccountCodec(namespace);
+  const codec = params.accountCodecs.require(namespace);
   const canonical = codec.fromAccountId(params.accountId);
   return codec.toCanonicalString({ canonical });
 };
 
-export const toDisplayAddressFromAccountId = (params: { chainRef: ChainRef; accountId: AccountId }): string => {
+export const toDisplayAddressFromAccountId = (params: {
+  chainRef: ChainRef;
+  accountId: AccountId;
+  accountCodecs: AccountCodecLookup;
+}): string => {
   const { namespace } = parseChainRef(params.chainRef);
-  const codec = getAccountCodec(namespace);
+  const codec = params.accountCodecs.require(namespace);
   const canonical = codec.fromAccountId(params.accountId);
   return codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
 };

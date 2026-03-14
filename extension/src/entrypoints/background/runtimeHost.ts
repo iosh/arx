@@ -1,7 +1,7 @@
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import { createBackgroundRuntime } from "@arx/core/runtime";
 import browser from "webextension-polyfill";
-import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
+import { INSTALLED_NAMESPACE_MANIFESTS } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
 import type { ProviderBridgeSnapshot } from "./types";
@@ -110,7 +110,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
           },
         },
         namespaces: {
-          manifests: INSTALLED_NAMESPACES.manifests,
+          manifests: INSTALLED_NAMESPACE_MANIFESTS,
         },
       });
 

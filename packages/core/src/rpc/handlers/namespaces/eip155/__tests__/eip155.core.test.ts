@@ -64,7 +64,11 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: mainnet.namespace,
       chainRef: mainnet.chainRef,
-      accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: derived.address }),
+      accountId: toAccountIdFromAddress({
+        chainRef: mainnet.chainRef,
+        address: derived.address,
+        accountCodecs: runtime.services.accountCodecs,
+      }),
     });
     const activeAddress = derived.address;
 
@@ -758,7 +762,11 @@ describe("eip155 handlers - core error paths", () => {
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
-    const accountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: account.address });
+    const accountId = toAccountIdFromAddress({
+      chainRef: chain.chainRef,
+      address: account.address,
+      accountCodecs: runtime.services.accountCodecs,
+    });
     await runtime.controllers.accounts.setActiveAccount({
       namespace: chain.namespace,
       chainRef: chain.chainRef,
@@ -876,8 +884,16 @@ describe("eip155 handlers - core error paths", () => {
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
 
-    const firstAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: first.address });
-    const secondAccountId = toAccountIdFromAddress({ chainRef: chain.chainRef, address: second.address });
+    const firstAccountId = toAccountIdFromAddress({
+      chainRef: chain.chainRef,
+      address: first.address,
+      accountCodecs: runtime.services.accountCodecs,
+    });
+    const secondAccountId = toAccountIdFromAddress({
+      chainRef: chain.chainRef,
+      address: second.address,
+      accountCodecs: runtime.services.accountCodecs,
+    });
 
     await runtime.controllers.accounts.setActiveAccount({
       namespace: chain.namespace,

@@ -1,4 +1,3 @@
-import { BUILTIN_NAMESPACE_MANIFESTS } from "../namespaces/builtin.js";
 import { parseChainRef } from "./caip.js";
 import { chainErrors } from "./errors.js";
 import type { ChainRef } from "./ids.js";
@@ -52,7 +51,3 @@ export class ChainAddressCodecRegistry {
     this.getAddressModule(params.chainRef).validate?.(params);
   }
 }
-
-export const createDefaultChainAddressCodecRegistry = (): ChainAddressCodecRegistry => {
-  return new ChainAddressCodecRegistry(BUILTIN_NAMESPACE_MANIFESTS.map((manifest) => manifest.core.chainAddressCodec));
-};

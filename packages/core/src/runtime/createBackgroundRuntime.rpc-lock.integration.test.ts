@@ -20,7 +20,11 @@ const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
   await runtime.controllers.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
-    accountId: toAccountIdFromAddress({ chainRef: chain.chainRef, address: account.address }),
+    accountId: toAccountIdFromAddress({
+      chainRef: chain.chainRef,
+      address: account.address,
+      accountCodecs: runtime.services.accountCodecs,
+    }),
   });
   return { chain, address: account.address };
 };
@@ -108,7 +112,13 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [toAccountIdFromAddress({ chainRef: chain.chainRef, address })],
+            accountIds: [
+              toAccountIdFromAddress({
+                chainRef: chain.chainRef,
+                address,
+                accountCodecs: runtime.services.accountCodecs,
+              }),
+            ],
           },
         ],
       });
@@ -167,7 +177,13 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [toAccountIdFromAddress({ chainRef: chain.chainRef, address })],
+            accountIds: [
+              toAccountIdFromAddress({
+                chainRef: chain.chainRef,
+                address,
+                accountCodecs: runtime.services.accountCodecs,
+              }),
+            ],
           },
         ],
       });

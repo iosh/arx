@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { ChainAddressCodecRegistry, createDefaultChainAddressCodecRegistry } from "./registry.js";
+import { eip155AddressCodec } from "./eip155/addressCodec.js";
+import { ChainAddressCodecRegistry } from "./registry.js";
 import type { ChainAddressCodec } from "./types.js";
+
+const createTestRegistry = () => new ChainAddressCodecRegistry([eip155AddressCodec]);
 
 describe("ChainAddressCodecRegistry", () => {
   it("normalizes address via registered codec", () => {
-    const registry = createDefaultChainAddressCodecRegistry();
+    const registry = createTestRegistry();
 
     const normalized = registry.toCanonicalAddress({
       chainRef: "eip155:1",
@@ -15,7 +18,7 @@ describe("ChainAddressCodecRegistry", () => {
   });
 
   it("formats and validates addresses", () => {
-    const registry = createDefaultChainAddressCodecRegistry();
+    const registry = createTestRegistry();
 
     const formatted = registry.formatAddress({
       chainRef: "eip155:1",
@@ -58,7 +61,7 @@ describe("ChainAddressCodecRegistry", () => {
   });
 
   it("throws when chain address codec is missing", () => {
-    const registry = createDefaultChainAddressCodecRegistry();
+    const registry = createTestRegistry();
 
     expect(() =>
       registry.toCanonicalAddress({

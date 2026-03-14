@@ -6,7 +6,7 @@ import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
-import { createUiHandlers } from "../ui/server/index.js";
+import { createUiServerRuntime } from "../ui/server/index.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -37,6 +37,8 @@ const ALT_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
+const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
+
 const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinitionEntity => ({
   chainRef: metadata.chainRef,
   namespace: metadata.namespace,
@@ -49,6 +51,26 @@ const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinition
 const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   await runtime.services.session.vault.initialize({ password: "test" });
   await runtime.services.session.unlock.unlock({ password: "test" });
+};
+
+const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
+  return createUiServerRuntime({
+    controllers: runtime.controllers,
+    chainActivation: runtime.services.chainActivation,
+    chainViews: runtime.services.chainViews,
+    permissionViews: runtime.services.permissionViews,
+    accountCodecs: runtime.services.accountCodecs,
+    session: runtime.services.session,
+    keyring: runtime.services.keyring,
+    attention: runtime.services.attention,
+    namespaceBindings: runtime.services.namespaceBindings,
+    rpcRegistry: runtime.rpc.registry,
+    uiOrigin: "chrome-extension://arx",
+    platform: {
+      openOnboardingTab: async () => ({ activationPath: "create" }),
+      openNotificationPopup: async () => ({ activationPath: "create" }),
+    },
+  }).handlers;
 };
 
 describe("createBackgroundRuntime (no snapshots)", () => {
@@ -71,6 +93,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -127,6 +150,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -156,23 +180,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     expect(networkPreferencesPort.saved.length).toBe(0);
     await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
@@ -195,6 +203,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -225,29 +234,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             toAccountIdFromAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              accountCodecs: runtime.services.accountCodecs,
             }),
           ],
         },
       ],
     });
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     const before = structuredClone(runtime.controllers.permissions.getState());
     await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
@@ -265,6 +259,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -295,29 +290,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             toAccountIdFromAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              accountCodecs: runtime.services.accountCodecs,
             }),
           ],
         },
       ],
     });
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     const approvalPromise = runtime.controllers.approvals.create(
       {
@@ -361,6 +341,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
         seed: [MAINNET_CHAIN],
       },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -395,23 +376,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     await expect(
       handlers["ui.balances.getNative"]({
@@ -481,23 +446,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
       chainCapabilities: {
@@ -550,23 +499,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     await expect(
       handlers["ui.transactions.requestSendTransactionApproval"]({
@@ -641,23 +574,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       .spyOn(runtime.controllers.transactions, "createTransactionApproval")
       .mockImplementation(async (_origin, request, _requestContext, opts) => ({ id: opts?.id, request }) as never);
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     const { approvalId } = await handlers["ui.transactions.requestSendTransactionApproval"]({
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -699,6 +616,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
         seed: [MAINNET_CHAIN],
       },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
       rpcEngine: {
         env: {
           isInternalOrigin: () => false,
@@ -725,23 +643,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       new Error("create approval failed"),
     );
 
-    const handlers = createUiHandlers({
-      controllers: runtime.controllers,
-      chainActivation: runtime.services.chainActivation,
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-      accountCodecs: runtime.services.accountCodecs,
-      session: runtime.services.session,
-      keyring: runtime.services.keyring,
-      attention: runtime.services.attention,
-      namespaceBindings: runtime.services.namespaceBindings,
-      rpcRegistry: runtime.rpc.registry,
-      uiOrigin: "chrome-extension://arx",
-      platform: {
-        openOnboardingTab: async () => ({ activationPath: "create" }),
-        openNotificationPopup: async () => ({ activationPath: "create" }),
-      },
-    });
+    const handlers = createHandlersForRuntime(runtime);
 
     await expect(
       handlers["ui.transactions.requestSendTransactionApproval"]({

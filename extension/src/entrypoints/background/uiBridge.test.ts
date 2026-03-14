@@ -1,9 +1,14 @@
-import { getAccountCodec, toAccountIdFromAddress, toCanonicalAddressFromAccountId } from "@arx/core/accounts";
+import {
+  createAccountCodecRegistry,
+  eip155Codec,
+  toAccountIdFromAddress,
+  toCanonicalAddressFromAccountId,
+} from "@arx/core/accounts";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
 import { ArxReasons, arxError } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
-import { BUILTIN_NAMESPACE_MANIFESTS, registerRpcModulesFromManifests } from "@arx/core/namespaces";
+import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
 import type { HandlerControllers } from "@arx/core/rpc";
 import { createRpcRegistry } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
@@ -24,7 +29,8 @@ import type { UiPort } from "./ui/portHub";
 import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
-registerRpcModulesFromManifests(rpcRegistry, BUILTIN_NAMESPACE_MANIFESTS);
+registerRpcModulesFromManifests(rpcRegistry, [eip155NamespaceManifest]);
+const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
 const PASSWORD = "secret";
@@ -225,8 +231,10 @@ const createMemoryAccountsStore = () => {
 };
 
 const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
-  const toAccountId = (chainRef: ChainRef, address: string) => toAccountIdFromAddress({ chainRef, address });
-  const toAddress = (_chainRef: ChainRef, accountId: AccountId) => toCanonicalAddressFromAccountId({ accountId });
+  const toAccountId = (chainRef: ChainRef, address: string) =>
+    toAccountIdFromAddress({ chainRef, address, accountCodecs });
+  const toAddress = (_chainRef: ChainRef, accountId: AccountId) =>
+    toCanonicalAddressFromAccountId({ accountId, accountCodecs });
 
   let state = {
     namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
@@ -241,7 +249,7 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     const rows = await deps.accountsStore.list({ includeHidden: true });
     const all = rows
       .filter((r) => r.namespace === CHAIN.namespace)
-      .map((r) => toCanonicalAddressFromAccountId({ accountId: r.accountId }))
+      .map((r) => toCanonicalAddressFromAccountId({ accountId: r.accountId, accountCodecs }))
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
@@ -331,7 +339,8 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
 };
 
 const createAccountsController = () => {
-  const toAddress = (_chainRef: ChainRef, accountId: AccountId) => toCanonicalAddressFromAccountId({ accountId });
+  const toAddress = (_chainRef: ChainRef, accountId: AccountId) =>
+    toCanonicalAddressFromAccountId({ accountId, accountCodecs });
 
   let state = {
     namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
@@ -573,7 +582,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
       {
         namespace: CHAIN.namespace,
         defaultChainRef: CHAIN.chainRef,
-        codec: getAccountCodec(CHAIN.namespace),
+        codec: accountCodecs.require(CHAIN.namespace),
         factories: {
           hd: () => new EvmHdKeyring(),
           "private-key": () => new EvmPrivateKeyKeyring(),
@@ -634,11 +643,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
     permissionViews: (controllers as unknown as { permissionViews: UiBridgeDeps["permissionViews"] }).permissionViews,
     networkPreferences: networkPreferences as unknown as UiBridgeDeps["networkPreferences"],
-    accountCodecs: {
-      get: (namespace: string) => getAccountCodec(namespace),
-      toAccountIdFromAddress: ({ chainRef, address }: { chainRef: ChainRef; address: string }) =>
-        toAccountIdFromAddress({ chainRef, address }),
-    } as unknown as UiBridgeDeps["accountCodecs"],
+    accountCodecs: accountCodecs as unknown as UiBridgeDeps["accountCodecs"],
     session,
     namespaceBindings: {
       getUi: () => ({
@@ -827,11 +832,7 @@ describe("uiBridge", () => {
           return () => listeners.delete(handler);
         },
       } as unknown as Parameters<typeof createUiBridge>[0]["networkPreferences"],
-      accountCodecs: {
-        get: (namespace: string) => getAccountCodec(namespace),
-        toAccountIdFromAddress: ({ chainRef, address }: { chainRef: ChainRef; address: string }) =>
-          toAccountIdFromAddress({ chainRef, address }),
-      } as Parameters<typeof createUiBridge>[0]["accountCodecs"],
+      accountCodecs: accountCodecs as Parameters<typeof createUiBridge>[0]["accountCodecs"],
       session: {
         unlock: new FakeUnlock(true),
         withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
@@ -899,7 +900,11 @@ describe("uiBridge", () => {
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 
-    const derivedAccountId = toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address: derived.address });
+    const derivedAccountId = toAccountIdFromAddress({
+      chainRef: CHAIN.chainRef,
+      address: derived.address,
+      accountCodecs,
+    });
 
     const hideRes = await send("ui.keyrings.hideHdAccount", { accountId: derivedAccountId });
     expectResponse(hideRes.envelope, hideRes.id);
@@ -912,7 +917,7 @@ describe("uiBridge", () => {
     expect(exported.words.join(" ")).toBe(TEST_MNEMONIC);
 
     const exportPk = await send("ui.keyrings.exportPrivateKey", {
-      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address }),
+      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address, accountCodecs }),
       password: PASSWORD,
     });
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
@@ -940,7 +945,11 @@ describe("uiBridge", () => {
     const spy = vi.spyOn(keyring, "exportPrivateKeyByAccountId").mockResolvedValue(secret);
 
     const exportPk = await send("ui.keyrings.exportPrivateKey", {
-      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address: createResult.address }),
+      accountId: toAccountIdFromAddress({
+        chainRef: CHAIN.chainRef,
+        address: createResult.address,
+        accountCodecs,
+      }),
       password: PASSWORD,
     });
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };

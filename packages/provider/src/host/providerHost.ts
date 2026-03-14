@@ -1,9 +1,4 @@
-import {
-  createProviderRegistry,
-  type ProviderEntry,
-  type ProviderModule,
-  type ProviderRegistry,
-} from "../registry/index.js";
+import type { ProviderEntry, ProviderModule, ProviderRegistry } from "../registry/index.js";
 import type { EIP1193Provider, Transport } from "../types/index.js";
 
 type ProviderHostLogger = Readonly<{
@@ -24,7 +19,7 @@ export type ProviderHostWindow = Window & {
 export type ProviderHostOptions = {
   targetWindow: ProviderHostWindow;
   createTransportForNamespace: (namespace: string) => Transport;
-  registry?: ProviderRegistry;
+  registry: ProviderRegistry;
   features?: ProviderHostFeatures;
   logger?: ProviderHostLogger;
 };
@@ -57,7 +52,7 @@ export class ProviderHost {
 
   constructor({ targetWindow, createTransportForNamespace, registry, features, logger }: ProviderHostOptions) {
     this.#targetWindow = targetWindow;
-    this.#registry = registry ?? createProviderRegistry();
+    this.#registry = registry;
     this.#features = { eip6963: features?.eip6963 ?? true };
     this.#logger = logger ?? {};
     this.#createTransportForNamespace = createTransportForNamespace;

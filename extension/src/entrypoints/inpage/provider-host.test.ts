@@ -133,8 +133,8 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
+      registry: options?.registry ?? createProviderRegistry(),
       createTransportForNamespace: () => transport,
-      ...(options?.registry ? { registry: options.registry } : {}),
     });
 
     return { transport, host };

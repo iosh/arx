@@ -10,6 +10,13 @@ import {
   INSTALLED_PROVIDER_MODULES,
 } from "./installed";
 
+const createTestProviderModule = (namespace: string): ProviderModule => ({
+  namespace,
+  create: () => {
+    throw new Error("not used in test");
+  },
+});
+
 describe("installed namespaces composition root", () => {
   it("keeps installed manifests and provider modules aligned by namespace", () => {
     const installedNamespaces = INSTALLED_NAMESPACE_SPECS.map((spec) => spec.namespace);
@@ -46,8 +53,16 @@ describe("installed namespaces composition root", () => {
 
     expect(() =>
       defineInstalledNamespaceSpecs([
-        { namespace: "eip155", manifest: eip155NamespaceManifest },
-        { namespace: "eip155", manifest: eip155NamespaceManifest },
+        {
+          namespace: "eip155",
+          manifest: eip155NamespaceManifest,
+          providerModule: createTestProviderModule("eip155"),
+        },
+        {
+          namespace: "eip155",
+          manifest: eip155NamespaceManifest,
+          providerModule: createTestProviderModule("eip155"),
+        },
       ] as const),
     ).toThrow(/Duplicate installed namespace "eip155"/);
 
@@ -56,6 +71,7 @@ describe("installed namespaces composition root", () => {
         {
           namespace: "conflux",
           manifest: eip155NamespaceManifest,
+          providerModule: createTestProviderModule("conflux"),
         },
       ] as const),
     ).toThrow(/must use a manifest with the same namespace/);

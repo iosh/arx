@@ -1,4 +1,4 @@
-import { createDefaultChainAddressCodecRegistry } from "@arx/core/chains";
+import { ChainAddressCodecRegistry, eip155AddressCodec } from "@arx/core/chains";
 import type { RpcRegistry } from "@arx/core/rpc";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,7 +92,7 @@ const createRouterHarness = (options?: {
     });
   });
   const registry = { getRegisteredNamespaces: () => ["eip155", "conflux"] } as unknown as RpcRegistry;
-  const chainAddressCodecs = createDefaultChainAddressCodecRegistry();
+  const chainAddressCodecs = new ChainAddressCodecRegistry([eip155AddressCodec]);
   const getOrInitContext = vi.fn(async () => ({
     engine: { handle: engineHandle },
     runtime: { rpc: { registry } },

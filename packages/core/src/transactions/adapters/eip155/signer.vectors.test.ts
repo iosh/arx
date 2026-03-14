@@ -3,17 +3,19 @@ import * as Hash from "ox/Hash";
 import * as Hex from "ox/Hex";
 import { describe, expect, it } from "vitest";
 import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
+import { createAccountCodecRegistry, eip155Codec } from "../../../accounts/addressing/codec.js";
 import type { TransactionSignContext } from "../types.js";
 import { createEip155Signer } from "./signer.js";
 
 const toQuantity = (value: bigint) => `0x${value === 0n ? "0" : value.toString(16)}` as const;
+const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 describe("eip155 signer (vectors)", () => {
   it("signPersonalMessage vector (raw bytes)", async () => {
     const privateKey = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" as const;
     const address = "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address });
+    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
@@ -41,7 +43,7 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0x1111111111111111111111111111111111111111111111111111111111111111" as const;
     const address = "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address });
+    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
@@ -94,7 +96,7 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
     const address = "0x8fd379246834eac74B8419FfdA202CF8051F7A03" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address });
+    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
@@ -143,7 +145,7 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
     const address = "0x88f9B82462f6C4bf4a0Fb15e5c3971559a316e7f" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address });
+    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {

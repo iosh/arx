@@ -5,7 +5,7 @@ import { createProviderRegistryFromModules, type ProviderModule, type ProviderRe
 export type InstalledNamespaceSpec = Readonly<{
   namespace: string;
   manifest: NamespaceManifest;
-  providerModule?: ProviderModule;
+  providerModule: ProviderModule;
 }>;
 
 export type InstalledNamespacesComposition = Readonly<{
@@ -32,7 +32,7 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
       );
     }
 
-    if (spec.providerModule && spec.providerModule.namespace !== spec.namespace) {
+    if (spec.providerModule.namespace !== spec.namespace) {
       throw new Error(
         `Installed namespace "${spec.namespace}" must use a provider module with the same namespace; received "${spec.providerModule.namespace}"`,
       );
@@ -46,9 +46,7 @@ export const createInstalledNamespacesComposition = (
   specs: readonly InstalledNamespaceSpec[],
 ): InstalledNamespacesComposition => {
   const manifests: readonly NamespaceManifest[] = specs.map((spec) => spec.manifest);
-  const providerModules: readonly ProviderModule[] = specs.flatMap((spec) =>
-    spec.providerModule ? [spec.providerModule] : [],
-  );
+  const providerModules: readonly ProviderModule[] = specs.map((spec) => spec.providerModule);
 
   return {
     specs,

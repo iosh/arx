@@ -13,6 +13,7 @@ const REQUEST_CONTEXT = {
   sessionId: "session-1",
   requestId: "request-1",
 };
+const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const toMeta = (record: TransactionRecord, from: string): TransactionMeta => ({
   id: record.id,
@@ -37,7 +38,7 @@ describe("TransactionExecutor", () => {
   it("can create a transaction approval without waiting for settlement", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from });
+    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,
@@ -73,7 +74,7 @@ describe("TransactionExecutor", () => {
       view: {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
-      accountCodecs: createAccountCodecRegistry([eip155Codec]),
+      accountCodecs,
       networkPreferences: {
         getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,
@@ -135,7 +136,7 @@ describe("TransactionExecutor", () => {
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from });
+    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,
@@ -233,7 +234,7 @@ describe("TransactionExecutor", () => {
   it("delegates request normalization to the namespace adapter before persistence", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from });
+    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,

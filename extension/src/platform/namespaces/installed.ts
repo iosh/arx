@@ -8,6 +8,13 @@ export type InstalledNamespaceSpec = Readonly<{
   providerModule?: ProviderModule;
 }>;
 
+export type InstalledNamespacesComposition = Readonly<{
+  specs: readonly InstalledNamespaceSpec[];
+  manifests: readonly NamespaceManifest[];
+  providerModules: readonly ProviderModule[];
+  createProviderRegistry: () => ProviderRegistry;
+}>;
+
 export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly InstalledNamespaceSpec[]>(
   specs: TSpecs,
 ): TSpecs => {
@@ -35,22 +42,38 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
   return specs;
 };
 
-export const INSTALLED_NAMESPACE_SPECS = defineInstalledNamespaceSpecs([
-  {
-    namespace: eip155NamespaceManifest.namespace,
-    manifest: eip155NamespaceManifest,
-    providerModule: createEip155Module(),
-  },
-] as const);
+export const createInstalledNamespacesComposition = (
+  specs: readonly InstalledNamespaceSpec[],
+): InstalledNamespacesComposition => {
+  const manifests: readonly NamespaceManifest[] = specs.map((spec) => spec.manifest);
+  const providerModules: readonly ProviderModule[] = specs.flatMap((spec) =>
+    spec.providerModule ? [spec.providerModule] : [],
+  );
 
-export const INSTALLED_NAMESPACE_MANIFESTS: readonly NamespaceManifest[] = INSTALLED_NAMESPACE_SPECS.map(
-  (spec) => spec.manifest,
+  return {
+    specs,
+    manifests,
+    providerModules,
+    createProviderRegistry: () => createProviderRegistryFromModules(providerModules),
+  };
+};
+
+export const INSTALLED_NAMESPACES = createInstalledNamespacesComposition(
+  defineInstalledNamespaceSpecs([
+    {
+      namespace: eip155NamespaceManifest.namespace,
+      manifest: eip155NamespaceManifest,
+      providerModule: createEip155Module(),
+    },
+  ] as const),
 );
 
-export const INSTALLED_PROVIDER_MODULES: readonly ProviderModule[] = INSTALLED_NAMESPACE_SPECS.flatMap((spec) =>
-  spec.providerModule ? [spec.providerModule] : [],
-);
+export const INSTALLED_NAMESPACE_SPECS: readonly InstalledNamespaceSpec[] = INSTALLED_NAMESPACES.specs;
+
+export const INSTALLED_NAMESPACE_MANIFESTS: readonly NamespaceManifest[] = INSTALLED_NAMESPACES.manifests;
+
+export const INSTALLED_PROVIDER_MODULES: readonly ProviderModule[] = INSTALLED_NAMESPACES.providerModules;
 
 export const createInstalledProviderRegistry = (): ProviderRegistry => {
-  return createProviderRegistryFromModules(INSTALLED_PROVIDER_MODULES);
+  return INSTALLED_NAMESPACES.createProviderRegistry();
 };

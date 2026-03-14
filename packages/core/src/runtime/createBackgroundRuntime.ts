@@ -1,23 +1,17 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
+import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
 import {
-  assembleRuntimeNamespaces,
   BUILTIN_NAMESPACE_MANIFESTS,
-  collectChainSeedsFromManifests,
-  createAccountCodecRegistryFromManifests,
-  createChainAddressCodecRegistryFromManifests,
-  createKeyringNamespacesFromManifests,
   type NamespaceManifest,
   type NamespaceRuntimeBindingsRegistry,
-  registerRpcModulesFromManifests,
 } from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
-import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/attention/index.js";
-import { createChainActivationService } from "../services/runtime/chainActivation/index.js";
-import { createChainViewsService } from "../services/runtime/chainViews/index.js";
-import { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
+import type { createAttentionService } from "../services/runtime/attention/index.js";
+import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
+import type { createChainViewsService } from "../services/runtime/chainViews/index.js";
+import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
@@ -26,16 +20,17 @@ import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
-import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
-import { type EngineOptions, initEngine } from "./background/engine.js";
-import { createNetworkBootstrap } from "./background/networkBootstrap.js";
+import type { ControllerLayerOptions } from "./background/controllers.js";
+import type { EngineOptions, initEngine } from "./background/engine.js";
 import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
-import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
-import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
+import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "./background/runtimeLifecyclePlan.js";
-import { initRuntimeStoreServices } from "./background/runtimeStoreServices.js";
-import { type BackgroundSessionServices, initSessionLayer, type SessionOptions } from "./background/session.js";
-import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
+import {
+  initializeRuntimeBootstrapPhase,
+  initializeRuntimeCapabilityPhase,
+  initializeRuntimeSessionPhase,
+} from "./background/runtimePhases.js";
+import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
@@ -128,208 +123,111 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   } = options;
 
   const namespaceManifests = namespacesOptions?.manifests ?? BUILTIN_NAMESPACE_MANIFESTS;
-  registerRpcModulesFromManifests(rpcRegistry, namespaceManifests);
-
-  const storageLogger = storageOptions?.logger ?? (() => {});
-  const bus = new Messenger({
-    violationMode: messengerOptions?.violationMode ?? "throw",
-    onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
-    onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
+  const bootstrapPhase = initializeRuntimeBootstrapPhase({
+    rpcRegistry,
+    namespaceManifests,
+    ...(messengerOptions ? { messengerOptions } : {}),
+    ...(storageOptions ? { storageOptions } : {}),
+    ...(networkOptions ? { networkOptions } : {}),
+    ...(accountOptions ? { accountOptions } : {}),
+    ...(approvalOptions ? { approvalOptions } : {}),
+    ...(permissionOptions ? { permissionOptions } : {}),
+    ...(transactionOptions ? { transactionOptions } : {}),
+    chainDefinitionsOptions,
+    ...(sessionOptions ? { sessionOptions } : {}),
   });
-  const accountCodecs = createAccountCodecRegistryFromManifests(namespaceManifests);
-  const chainAddressCodecs = createChainAddressCodecRegistryFromManifests(namespaceManifests);
-  const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
-  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? collectChainSeedsFromManifests(namespaceManifests);
-  const resolvedSessionOptions = sessionOptions?.keyringNamespaces
-    ? sessionOptions
-    : {
-        ...sessionOptions,
-        keyringNamespaces: createKeyringNamespacesFromManifests(namespaceManifests),
-      };
+  const approvalFlowRegistry = createApprovalFlowRegistry();
+  let sessionPhase: ReturnType<typeof initializeRuntimeSessionPhase> | null = null;
+  let capabilityPhase: ReturnType<typeof initializeRuntimeCapabilityPhase> | null = null;
 
-  const methodNamespaceResolver = rpcRegistry.createMethodNamespaceResolver();
-  const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
-  const storageNow = storageOptions?.now ?? Date.now;
-  const hydrationEnabled = storageOptions?.hydrate ?? true;
-
-  const controllerOptions: ControllerLayerOptions = {
-    ...(networkOptions ? { network: networkOptions } : {}),
-    ...(accountOptions ? { accounts: accountOptions } : {}),
-    ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
-    ...(permissionOptions
-      ? { permissions: { ...permissionOptions, chains: chainAddressCodecs } }
-      : { permissions: { chains: chainAddressCodecs } }),
-    ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    chainDefinitions: { ...chainDefinitionsOptions, seed: chainDefinitionSeed },
+  const requireSessionPhase = () => {
+    if (!sessionPhase) {
+      throw new Error("Runtime session phase is not initialized");
+    }
+    return sessionPhase;
   };
 
-  const { settingsService, networkPreferences, transactionsService, permissionsService, accountsStore, keyringMetas } =
-    initRuntimeStoreServices({
-      settingsPort: settingsOptions.port,
-      networkPreferencesPort: networkPreferencesOptions.port,
-      ports: storeOptions.ports,
-      now: storageNow,
-    });
-  const approvalFlowRegistry = createApprovalFlowRegistry();
+  const requireCapabilityPhase = () => {
+    if (!capabilityPhase) {
+      throw new Error("Runtime capability phase is not initialized");
+    }
+    return capabilityPhase;
+  };
 
-  const controllersInit = initControllers({
-    bus,
-    namespaceResolver: methodNamespaceResolver,
-    rpcRegistry,
-    accountCodecs,
-    accountsService: accountsStore,
-    settingsService,
-    permissionsService,
-    transactionsService,
-    networkPreferences,
-    options: controllerOptions,
+  sessionPhase = initializeRuntimeSessionPhase({
+    bootstrapPhase,
+    settingsPort: settingsOptions.port,
+    networkPreferencesPort: networkPreferencesOptions.port,
+    storePorts: storeOptions.ports,
+    ...(engineOptions ? { engineOptions } : {}),
+    ...(storageOptions?.vaultMetaPort ? { vaultMetaPort: storageOptions.vaultMetaPort } : {}),
     createApprovalExecutor: (controllersBase) =>
       createApprovalExecutor({
         registry: approvalFlowRegistry,
         getDeps: () => {
-          if (!chainActivation) {
-            throw new Error("Chain activation service is not initialized");
-          }
-          if (!namespaceBindings) {
-            throw new Error("Namespace approval bindings are not initialized");
-          }
+          const activeSessionPhase = requireSessionPhase();
+          const activeCapabilityPhase = requireCapabilityPhase();
 
           return {
             accounts: controllersBase.accounts,
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
-            chainActivation,
+            chainActivation: activeSessionPhase.chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
-            namespaceBindings,
+            namespaceBindings: activeCapabilityPhase.namespaceBindings,
           };
         },
       }),
   });
 
-  const {
-    controllersBase,
-    transactionRegistry,
-    networkController,
-    chainDefinitionsController,
-    deferredNetworkInitialState,
-  } = controllersInit;
-
-  const chainViews = createChainViewsService({
-    chainDefinitions: chainDefinitionsController,
-    network: networkController,
-    preferences: networkPreferences,
-  });
-
-  const chainActivation = createChainActivationService({
-    network: networkController,
-    preferences: networkPreferences,
-    logger: storageLogger,
-  });
-
-  const rpcClientRegistry = initRpcLayer({
-    controllers: controllersBase,
-    namespaceManifests,
+  capabilityPhase = initializeRuntimeCapabilityPhase({
+    bootstrapPhase,
+    sessionPhase,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
-  const vaultMetaPort = storageOptions?.vaultMetaPort;
-  const attention = createAttentionService({
-    messenger: bus.scope({ name: "attention", publish: ATTENTION_TOPICS }),
-    now: storageNow,
-  });
-
-  const runtimeLifecycle = createRuntimeLifecycle("createBackgroundRuntime");
-  const sessionLayer = initSessionLayer({
-    bus,
-    controllers: controllersBase,
-    accountsStore,
-    keyringMetas,
-    storageLogger,
-    storageNow,
-    hydrationEnabled,
-    getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
-    getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
-    ...(vaultMetaPort ? { vaultMetaPort } : {}),
-    ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
-  });
-
-  const engine = initEngine(engineOptions);
-
-  const keyringService = sessionLayer.keyringService;
-  const assembledRuntimeNamespaces = assembleRuntimeNamespaces({
-    manifests: namespaceManifests,
-    transactionRegistry,
-    rpcClients: rpcClientRegistry,
-    chains: chainAddressCodecs,
-    keyring: keyringService,
-  });
-  const signers = assembledRuntimeNamespaces.signers;
-  const namespaceBindings = assembledRuntimeNamespaces.bindings;
-
   const controllers: HandlerControllers = {
-    ...controllersBase,
-    networkPreferences,
-    chainAddressCodecs,
+    ...sessionPhase.controllersBase,
+    networkPreferences: sessionPhase.networkPreferences,
+    chainAddressCodecs: bootstrapPhase.chainAddressCodecs,
     clock: {
-      now: storageNow,
+      now: bootstrapPhase.storageNow,
     },
-    signers,
+    signers: capabilityPhase.signers,
   };
-
-  const permissionViews = createPermissionViewsService({
-    accounts: controllers.accounts,
-    permissions: controllers.permissions,
-  });
-
-  const transactionsLifecycle = createTransactionsLifecycle({
-    controller: controllers.transactions,
-    service: transactionsService,
-    unlock: sessionLayer.session.unlock,
-    logger: storageLogger,
-  });
-
-  const networkBootstrap = createNetworkBootstrap({
-    network: networkController,
-    chainDefinitions: chainDefinitionsController,
-    preferences: networkPreferences,
-    hydrationEnabled,
-    logger: storageLogger,
-    getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
-    getRegisteredNamespaces: () => registeredNamespaces,
-  });
   const lifecycle = createBackgroundRuntimeLifecycle({
-    runtimeLifecycle,
-    controllersBase,
-    deferredNetworkInitialState,
-    registeredNamespaces,
-    transactionsLifecycle,
-    networkBootstrap,
-    sessionLayer,
-    rpcClientRegistry,
-    engine,
-    bus,
-    logger: storageLogger,
+    runtimeLifecycle: sessionPhase.runtimeLifecycle,
+    controllersBase: sessionPhase.controllersBase,
+    deferredNetworkInitialState: sessionPhase.deferredNetworkInitialState,
+    registeredNamespaces: bootstrapPhase.registeredNamespaces,
+    transactionsLifecycle: capabilityPhase.transactionsLifecycle,
+    networkBootstrap: capabilityPhase.networkBootstrap,
+    sessionLayer: sessionPhase.sessionLayer,
+    rpcClientRegistry: capabilityPhase.rpcClientRegistry,
+    engine: sessionPhase.engine,
+    bus: bootstrapPhase.bus,
+    logger: bootstrapPhase.storageLogger,
   });
 
   const runtime: BackgroundRuntime = {
-    bus,
+    bus: bootstrapPhase.bus,
     controllers,
     services: {
-      attention,
-      chainActivation,
-      chainViews,
-      permissionViews,
-      accountCodecs,
-      networkPreferences,
-      namespaceBindings,
-      session: sessionLayer.session,
-      keyring: keyringService,
+      attention: sessionPhase.attention,
+      chainActivation: sessionPhase.chainActivation,
+      chainViews: sessionPhase.chainViews,
+      permissionViews: capabilityPhase.permissionViews,
+      accountCodecs: bootstrapPhase.accountCodecs,
+      networkPreferences: sessionPhase.networkPreferences,
+      namespaceBindings: capabilityPhase.namespaceBindings,
+      session: sessionPhase.sessionLayer.session,
+      keyring: sessionPhase.keyringService,
     },
     rpc: {
-      engine,
+      engine: sessionPhase.engine,
       registry: rpcRegistry,
-      clients: rpcClientRegistry,
-      getActiveNamespace: contextNamespaceResolver,
+      clients: capabilityPhase.rpcClientRegistry,
+      getActiveNamespace: bootstrapPhase.contextNamespaceResolver,
     },
     lifecycle,
   };

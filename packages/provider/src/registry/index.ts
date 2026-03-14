@@ -1,4 +1,4 @@
-import { createEip155Module, type Eip155ModuleOptions } from "../namespaces/eip155/module.js";
+import { type BuiltinProviderModulesOptions, createBuiltinProviderModules } from "../namespaces/builtin.js";
 import type { ProviderModule, ProviderRegistry } from "./types.js";
 
 export type {
@@ -10,10 +10,7 @@ export type {
   ProviderRegistry,
 } from "./types.js";
 
-export type ProviderRegistryOptions = {
-  eip155?: Eip155ModuleOptions;
-  // future: conflux?: ConfluxModuleOptions;
-};
+export type ProviderRegistryOptions = BuiltinProviderModulesOptions;
 
 const buildMap = (modules: ReadonlyArray<ProviderModule>) => {
   const byNamespace = new Map<string, ProviderModule>();
@@ -27,6 +24,6 @@ const buildMap = (modules: ReadonlyArray<ProviderModule>) => {
 };
 
 export const createProviderRegistry = (options: ProviderRegistryOptions = {}): ProviderRegistry => {
-  const modules = [createEip155Module(options.eip155)] as const;
+  const modules = createBuiltinProviderModules(options);
   return { modules, byNamespace: buildMap(modules) };
 };

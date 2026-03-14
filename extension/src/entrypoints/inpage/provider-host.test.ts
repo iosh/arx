@@ -17,7 +17,7 @@ const isEip6963Info = (value: unknown): value is { uuid: string; name: string; i
   return true;
 };
 
-type WindowWithEthereum = Window & { ethereum?: unknown };
+type WindowWithBuiltinProviders = Window & { ethereum?: unknown; conflux?: unknown };
 type InjectedProvider = {
   request: (args: { method: string; params?: unknown }) => Promise<unknown>;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
@@ -70,6 +70,36 @@ const createMultiNamespaceRegistry = (): ProviderRegistry => {
   };
 
   const modules: ProviderModule[] = [createModule("eip155"), createModule("conflux")];
+  return {
+    modules,
+    byNamespace: new Map(modules.map((module) => [module.namespace, module])),
+  };
+};
+
+const createInjectedMultiNamespaceRegistry = (): ProviderRegistry => {
+  const createModule = (namespace: string, windowKey: string): ProviderModule => {
+    const provider = {
+      request: vi.fn(async () => null),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      isConnected: vi.fn(() => false),
+    } as unknown as EIP1193Provider;
+
+    return {
+      namespace,
+      injection: {
+        windowKey,
+        mode: "if_absent",
+        initializedEvent: `${windowKey}#initialized`,
+      },
+      create: () => ({
+        raw: provider,
+        injected: provider,
+      }),
+    };
+  };
+
+  const modules: ProviderModule[] = [createModule("eip155", "ethereum"), createModule("conflux", "conflux")];
   return {
     modules,
     byNamespace: new Map(modules.map((module) => [module.namespace, module])),
@@ -136,7 +166,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     host.initialize();
     host.initialize();
 
-    const w = window as WindowWithEthereum;
+    const w = window as WindowWithBuiltinProviders;
     expect(w.ethereum).toBeDefined();
     expect(initialized).toHaveBeenCalledTimes(1);
 
@@ -148,7 +178,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
   it("does not override an existing window.ethereum (no throw, no ethereum#initialized)", async () => {
     const existing = { name: "Other Wallet" };
-    (window as WindowWithEthereum).ethereum = existing;
+    (window as WindowWithBuiltinProviders).ethereum = existing;
 
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
@@ -161,7 +191,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
     host.initialize();
 
-    expect((window as WindowWithEthereum).ethereum).toBe(existing);
+    expect((window as WindowWithBuiltinProviders).ethereum).toBe(existing);
     expect(initialized).toHaveBeenCalledTimes(0);
 
     // EIP-6963 announcements are emitted in response to requestProvider.
@@ -194,7 +224,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.info)).toBe(true);
-    expect(detail?.provider).toBe((window as WindowWithEthereum).ethereum);
+    expect(detail?.provider).toBe((window as WindowWithBuiltinProviders).ethereum);
     expect(detail?.info?.name).toBe("ARX Wallet");
     expect(detail?.info?.rdns).toBe("com.arx.wallet");
     expect(isEip6963Info(detail?.info)).toBe(true);
@@ -220,6 +250,27 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     expect(announced).toHaveBeenCalledTimes(1);
 
     await waitForTransportConnect(transport);
+  });
+
+  it("injects multiple provider window keys when the registry includes another namespace", () => {
+    const host = createProviderHost({
+      targetWindow: window as unknown as ProviderHostWindow,
+      registry: createInjectedMultiNamespaceRegistry(),
+      createTransportForNamespace: () => createStubTransport(),
+    });
+    cleanups.push(() => host.destroy());
+
+    const ethereumInitialized = onWindowEvent("ethereum#initialized");
+    const confluxInitialized = onWindowEvent("conflux#initialized");
+
+    host.initialize();
+
+    const w = window as WindowWithBuiltinProviders;
+    expect(w.ethereum).toBeDefined();
+    expect(w.conflux).toBeDefined();
+    expect(w.ethereum).not.toBe(w.conflux);
+    expect(ethereumInitialized).toHaveBeenCalledTimes(1);
+    expect(confluxInitialized).toHaveBeenCalledTimes(1);
   });
 
   it("rejects reusing the same transport instance across namespaces", () => {
@@ -248,7 +299,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const { host, transport } = createHarness({ registry });
     host.initialize();
 
-    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
+    const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
 
     await bridge.waitForHandshake();
@@ -271,7 +322,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     host.initialize();
     await connected;
 
-    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
+    const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
 
     const chainChanged = new Promise<string>((resolve) =>
       provider.once("chainChanged", (...args: unknown[]) => resolve(args[0] as string)),
@@ -300,7 +351,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     host.initialize();
     await connected;
 
-    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
+    const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
 
     const onAccountsChanged = vi.fn();
     provider.on("accountsChanged", onAccountsChanged);
@@ -325,13 +376,13 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     host.initialize();
     await firstConnect;
 
-    const provider = (window as WindowWithEthereum).ethereum as unknown as InjectedProvider;
+    const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
 
     const onDisconnect = new Promise<void>((resolve) => transport.once("disconnect", () => resolve()));
     bridge.emitDisconnect();
     await onDisconnect;
 
     await transport.connect();
-    expect((window as WindowWithEthereum).ethereum).toBe(provider);
+    expect((window as WindowWithBuiltinProviders).ethereum).toBe(provider);
   });
 });

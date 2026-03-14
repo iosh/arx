@@ -11,6 +11,7 @@ import type {
   NamespaceApprovalBindings,
   NamespaceManifest,
   NamespaceRuntimeBindingsRegistry,
+  NamespaceSignerRegistry,
   NamespaceUiBindings,
 } from "./types.js";
 
@@ -93,14 +94,17 @@ export const registerRpcClientFactoriesFromManifests = (
   }
 };
 
-const toHandlerSigners = (signerByNamespace: ReadonlyMap<string, unknown>): HandlerControllers["signers"] => {
-  const eip155 = signerByNamespace.get("eip155");
-  if (!eip155) {
-    throw new Error('Missing signer binding for namespace "eip155"');
-  }
-
+const createNamespaceSignerRegistry = (signerByNamespace: ReadonlyMap<string, unknown>): NamespaceSignerRegistry => {
   return {
-    eip155: eip155 as HandlerControllers["signers"]["eip155"],
+    get: <TSigner = unknown>(namespace: string) => signerByNamespace.get(namespace) as TSigner | undefined,
+    require: <TSigner = unknown>(namespace: string) => {
+      const signer = signerByNamespace.get(namespace);
+      if (!signer) {
+        throw new Error(`Missing signer binding for namespace "${namespace}"`);
+      }
+      return signer as TSigner;
+    },
+    listNamespaces: () => [...signerByNamespace.keys()],
   };
 };
 
@@ -166,7 +170,7 @@ export const assembleRuntimeNamespaces = (params: {
   }
 
   return {
-    signers: toHandlerSigners(signerByNamespace),
+    signers: createNamespaceSignerRegistry(signerByNamespace),
     bindings: createNamespaceRuntimeBindingsRegistry({
       approvalByNamespace,
       uiByNamespace,

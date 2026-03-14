@@ -32,6 +32,12 @@ export type NamespaceRuntimeBindingsRegistry = {
   getUi(namespace: string): NamespaceUiBindings | undefined;
 };
 
+export type NamespaceSignerRegistry = {
+  get<TSigner = unknown>(namespace: string): TSigner | undefined;
+  require<TSigner = unknown>(namespace: string): TSigner;
+  listNamespaces(): string[];
+};
+
 export type NamespaceRuntimeManifest = {
   clientFactory?: RpcClientFactory;
   createSigner?: (params: {

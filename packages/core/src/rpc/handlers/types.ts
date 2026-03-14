@@ -12,10 +12,10 @@ import type {
   PermissionController,
 } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import type { RequestContext } from "../requestContext.js";
 import { NoParamsSchema } from "./params.js";
 
@@ -31,9 +31,7 @@ export type HandlerControllers = {
   clock: {
     now: () => number;
   };
-  signers: {
-    eip155: Eip155Signer;
-  };
+  signers: NamespaceSignerRegistry;
 };
 
 export type HandlerRuntimeServices = {

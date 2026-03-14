@@ -593,8 +593,11 @@ describe("eip155 handlers - approval metadata", () => {
 
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
+      const signer = runtime.controllers.signers.require<{
+        signPersonalMessage: (params: { accountId: string; message: string }) => Promise<string>;
+      }>("eip155");
       await expect(
-        runtime.controllers.signers.eip155.signPersonalMessage({
+        signer.signPersonalMessage({
           accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
           message,
         }),
@@ -662,8 +665,11 @@ describe("eip155 handlers - approval metadata", () => {
 
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
+      const signer = runtime.controllers.signers.require<{
+        signTypedData: (params: { accountId: string; typedData: string }) => Promise<string>;
+      }>("eip155");
       await expect(
-        runtime.controllers.signers.eip155.signTypedData({
+        signer.signTypedData({
           accountId: toAccountIdFromAddress({ chainRef: mainnet.chainRef, address: account.address }),
           typedData,
         }),

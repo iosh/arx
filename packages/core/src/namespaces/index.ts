@@ -15,5 +15,6 @@ export type {
   NamespaceManifest,
   NamespaceRuntimeBindingsRegistry,
   NamespaceRuntimeManifest,
+  NamespaceSignerRegistry,
   NamespaceUiBindings,
 } from "./types.js";

@@ -1,16 +1,16 @@
-import { ArxReasons, arxError } from "@arx/core/errors";
 import { createLogger, extendLogger } from "@arx/core/logger";
-import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, RpcInvocationContext, RpcRegistry } from "@arx/core/rpc";
-import { CHANNEL, type Envelope, PROTOCOL_VERSION, PROVIDER_EVENTS } from "@arx/provider/protocol";
-import type { JsonRpcId, JsonRpcVersion2, TransportResponse } from "@arx/provider/types";
+import type { RpcRegistry } from "@arx/core/rpc";
+import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
+import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
-import { buildRpcContext, deriveRpcContextNamespace } from "./rpc";
+import { createProviderDisconnectFinalizer } from "./provider/disconnectFinalizer";
+import { createProviderEventBroadcaster } from "./provider/eventBroadcaster";
+import { createProviderRequestExecutor } from "./provider/requestExecutor";
+import { createProviderSessionRegistry } from "./provider/sessionRegistry";
 import type { BackgroundContext } from "./runtimeHost";
-import type { ArxRpcContext, PortContext, ProviderBridgeSnapshot } from "./types";
-
-type PendingEntry = { rpcId: JsonRpcId; jsonrpc: JsonRpcVersion2 };
+import type { PortContext, ProviderBridgeSnapshot } from "./types";
 
 type PortRouterDeps = {
   extensionOrigin: string;
@@ -23,47 +23,36 @@ const parseHandshakeNamespace = (envelope: Extract<Envelope, { type: "handshake"
   return namespace.length > 0 ? namespace : null;
 };
 
+const toErrorDetails = (error: unknown): Record<string, string> => {
+  if (!error) return {};
+  if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
+  return { error: String(error) };
+};
+
 export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProviderSnapshot }: PortRouterDeps) => {
-  const connections = new Set<Runtime.Port>();
-  const pendingRequests = new Map<Runtime.Port, Map<string, PendingEntry>>();
-  const portContexts = new Map<Runtime.Port, PortContext>();
   const messageHandlers = new Map<Runtime.Port, (message: unknown) => void>();
   const disconnectHandlers = new Map<Runtime.Port, () => void>();
 
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
-  const sessionByPort = new Map<Runtime.Port, string>();
   let rpcRegistry: RpcRegistry | null = null;
 
   const getContext = async () => {
     const ctx = await getOrInitContext();
-    const registry = ctx.runtime.rpc.registry;
-    rpcRegistry = registry;
+    rpcRegistry = ctx.runtime.rpc.registry;
     return ctx;
   };
 
-  const portIdByPort = new Map<Runtime.Port, string>();
+  const getRpcRegistry = () => rpcRegistry;
+
   const createPortId = (): string => {
     return globalThis.crypto.randomUUID();
   };
 
-  const getPendingRequestMap = (port: Runtime.Port) => {
-    let requestMap = pendingRequests.get(port);
-    if (!requestMap) {
-      requestMap = new Map();
-      pendingRequests.set(port, requestMap);
-    }
-    return requestMap;
-  };
-
-  const clearPendingForPort = (port: Runtime.Port) => {
-    pendingRequests.delete(port);
-  };
-
-  const toErrorDetails = (error: unknown): Record<string, string> => {
-    if (!error) return {};
-    if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
-    return { error: String(error) };
+  const sessionRegistry = createProviderSessionRegistry({ createPortId });
+  const portContextStore = {
+    readPortContext: (port: Runtime.Port) => sessionRegistry.readPortContext(port),
+    writePortContext: (port: Runtime.Port, context: PortContext) => sessionRegistry.writePortContext(port, context),
   };
 
   const detachPortListeners = (port: Runtime.Port) => {
@@ -88,7 +77,11 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     }
   };
 
-  const getSessionIdForPort = (port: Runtime.Port) => sessionByPort.get(port) ?? null;
+  const getConnectedPorts = () => {
+    return sessionRegistry.listConnectedPorts();
+  };
+
+  const getSessionIdForPort = (port: Runtime.Port) => sessionRegistry.readSessionId(port);
 
   const postEnvelope = (port: Runtime.Port, envelope: Envelope): boolean => {
     try {
@@ -101,79 +94,8 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     }
   };
 
-  const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
-    const sessionId = sessionByPort.get(port) ?? null;
-    const portId = portIdByPort.get(port) ?? null;
-    if (sessionId && portId) {
-      void (async () => {
-        try {
-          const { controllers } = await getContext();
-          await controllers.approvals.cancelByScope({
-            scope: {
-              transport: "provider",
-              origin: getPortOrigin(port, extensionOrigin),
-              portId,
-              sessionId,
-            },
-            reason: "session_lost",
-          });
-        } catch (expireError) {
-          const origin = getPortOrigin(port, extensionOrigin);
-          portLog("failed to expire approvals on dropStalePort", { origin, ...toErrorDetails(expireError) });
-        }
-      })();
-    }
-
-    try {
-      detachPortListeners(port);
-      port.disconnect();
-    } catch {
-      // ignore disconnect failure
-    }
-    connections.delete(port);
-    pendingRequests.delete(port);
-    portContexts.delete(port);
-    sessionByPort.delete(port);
-    portIdByPort.delete(port);
-    const origin = getPortOrigin(port, extensionOrigin);
-    portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
-  };
-
-  const postEnvelopeOrDrop = (port: Runtime.Port, envelope: Envelope, reason: string): boolean => {
-    const ok = postEnvelope(port, envelope);
-    if (!ok) dropStalePort(port, reason);
-    return ok;
-  };
-
-  const broadcastSafe = (
-    shouldInclude: (port: Runtime.Port) => boolean,
-    send: (port: Runtime.Port) => boolean,
-    reason: string,
-  ) => {
-    const stalePorts: Runtime.Port[] = [];
-    for (const port of getConnectedPorts()) {
-      if (!shouldInclude(port)) continue;
-      if (!send(port)) {
-        stalePorts.push(port);
-      }
-    }
-    for (const port of stalePorts) {
-      dropStalePort(port, reason);
-    }
-  };
-
-  const getConnectedPorts = () => {
-    return [...connections];
-  };
-
   const listConnectedNamespaces = () => {
-    const namespaces = new Set<string>();
-    for (const portContext of portContexts.values()) {
-      if (portContext.providerNamespace) {
-        namespaces.add(portContext.providerNamespace);
-      }
-    }
-    return [...namespaces];
+    return sessionRegistry.listConnectedNamespaces();
   };
 
   const findProviderSnapshot = (namespace: string): ProviderBridgeSnapshot | null => {
@@ -186,17 +108,17 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   };
 
   const findPortSnapshot = (port: Runtime.Port): ProviderBridgeSnapshot | null => {
-    const namespace = portContexts.get(port)?.providerNamespace;
+    const namespace = sessionRegistry.readPortContext(port)?.providerNamespace;
     if (!namespace) return null;
     return findProviderSnapshot(namespace);
   };
 
   const getPortsBoundToNamespaces = (namespaces: Iterable<string>) => {
-    const allowed = new Set(namespaces);
-    return getConnectedPorts().filter((port) => {
-      const namespace = portContexts.get(port)?.providerNamespace;
-      return typeof namespace === "string" && allowed.has(namespace);
-    });
+    return sessionRegistry.listPortsBoundToNamespaces(namespaces);
+  };
+
+  const syncPortContextsForPorts = (ports: Runtime.Port[]) => {
+    syncAllPortContexts(ports, findPortSnapshot, portContextStore, extensionOrigin);
   };
 
   const getPermittedAccountsForPort = async (
@@ -209,7 +131,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     if (origin === "unknown://") return [];
 
     const { controllers, permissionViews } = await getContext();
-    const portContext = portContexts.get(port);
+    const portContext = sessionRegistry.readPortContext(port);
     const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
     return permissionViews
       .listPermittedAccounts(origin, { chainRef })
@@ -218,9 +140,48 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
       );
   };
 
+  const disconnectFinalizer = createProviderDisconnectFinalizer({
+    extensionOrigin,
+    getContext,
+    getRpcRegistry,
+    getSessionIdForPort,
+    getPortId: (port) => sessionRegistry.readPortId(port),
+    getPortContext: (port) => sessionRegistry.readPortContext(port),
+    getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
+    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
+    detachPortListeners,
+    postEnvelope,
+    removePortState: (port) => sessionRegistry.removePortState(port),
+    portLog,
+  });
+
+  const postEnvelopeOrDrop = (port: Runtime.Port, envelope: Envelope, reason: string): boolean => {
+    const ok = postEnvelope(port, envelope);
+    if (!ok) {
+      disconnectFinalizer.dropStalePort(port, reason);
+    }
+    return ok;
+  };
+
+  const eventBroadcaster = createProviderEventBroadcaster({
+    getConnectedPorts,
+    getSessionIdForPort,
+    getPortsBoundToNamespaces,
+    findPortSnapshot,
+    syncPortContextsForPorts,
+    postEnvelope,
+    dropStalePort: disconnectFinalizer.dropStalePort,
+    getPermittedAccountsForPort,
+  });
+
+  const getOrCreatePortId = (port: Runtime.Port) => {
+    return sessionRegistry.allocatePortId(port);
+  };
+
   const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
     const sessionId = getSessionIdForPort(port);
     if (!sessionId) return;
+
     postEnvelopeOrDrop(
       port,
       {
@@ -234,140 +195,24 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     );
   };
 
-  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
-    const requestMap = pendingRequests.get(port);
-    if (!requestMap) return;
-
-    const portContext = portContexts.get(port);
-    const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
-    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const namespace = deriveRpcContextNamespace(rpcContext);
-    const chainRef = rpcContext?.chainRef ?? null;
-    const error =
-      overrideError ??
-      ((rpcRegistry?.encodeErrorWithAdapters(
-        arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
-        { surface: "dapp", namespace, chainRef, origin, method: PROVIDER_EVENTS.disconnect },
-      ) ?? ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError);
-
-    for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
-      sendReply(port, messageId, {
-        id: rpcId,
-        jsonrpc,
-        error,
-      });
-    }
-
-    clearPendingForPort(port);
-  };
-
-  const syncPortContextsForPorts = (ports: Runtime.Port[]) => {
-    syncAllPortContexts(ports, findPortSnapshot, portContexts, extensionOrigin);
-  };
-
-  const broadcastMetaChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPorts = getPortsBoundToNamespaces(namespaces);
-    syncPortContextsForPorts(targetPorts);
-    const targetPortSet = new Set(targetPorts);
-
-    broadcastSafe(
-      (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
-      (port) => {
-        const sessionId = getSessionIdForPort(port);
-        const snapshot = findPortSnapshot(port);
-        if (!sessionId || !snapshot) return false;
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId,
-          type: "event",
-          payload: { event: PROVIDER_EVENTS.metaChanged, params: [snapshot.meta] },
-        });
-      },
-      "broadcast_meta_changed_failed",
-    );
-  };
-
-  const broadcastChainChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPorts = getPortsBoundToNamespaces(namespaces);
-    syncPortContextsForPorts(targetPorts);
-    const targetPortSet = new Set(targetPorts);
-
-    broadcastSafe(
-      (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
-      (port) => {
-        const sessionId = getSessionIdForPort(port);
-        const snapshot = findPortSnapshot(port);
-        if (!sessionId || !snapshot) return false;
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId,
-          type: "event",
-          payload: {
-            event: PROVIDER_EVENTS.chainChanged,
-            params: [
-              {
-                chainId: snapshot.chain.chainId,
-                chainRef: snapshot.chain.chainRef,
-                isUnlocked: snapshot.isUnlocked,
-                meta: snapshot.meta,
-              },
-            ],
-          },
-        });
-      },
-      "broadcast_chain_changed_failed",
-    );
-  };
-
-  const sendAccountsChanged = () => {
-    for (const port of getConnectedPorts()) {
-      const sessionId = getSessionIdForPort(port);
-      const snapshot = findPortSnapshot(port);
-      if (!sessionId || !snapshot) continue;
-
-      void (async () => {
-        try {
-          const accounts = await getPermittedAccountsForPort(port, snapshot);
-          const ok = postEnvelope(port, {
-            channel: CHANNEL,
-            sessionId,
-            type: "event",
-            payload: { event: PROVIDER_EVENTS.accountsChanged, params: [accounts] },
-          });
-          if (!ok) {
-            dropStalePort(port, "broadcast_accounts_changed_failed");
-          }
-        } catch (error) {
-          dropStalePort(port, "broadcast_accounts_changed_error", error);
-        }
-      })();
-    }
-  };
-
-  const broadcastEvent = (event: string, params: unknown[]) => {
-    broadcastSafe(
-      (port) => !!getSessionIdForPort(port),
-      (port) => {
-        const sessionId = getSessionIdForPort(port);
-        if (!sessionId) return true;
-        return postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId,
-          type: "event",
-          payload: { event, params },
-        });
-      },
-      "broadcast_event_failed",
-    );
-  };
+  const requestExecutor = createProviderRequestExecutor({
+    extensionOrigin,
+    getContext,
+    getRpcRegistry,
+    getPortContext: (port) => sessionRegistry.readPortContext(port),
+    getOrCreatePortId,
+    getPendingRequestMap: (port) => sessionRegistry.openPendingRequestMap(port),
+    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
+    sendReply,
+  });
 
   const sendHandshakeAck = async (
     port: Runtime.Port,
     envelope: Extract<Envelope, { type: "handshake" }>,
     snapshot: ProviderBridgeSnapshot,
   ) => {
-    syncPortContext(port, snapshot, portContexts, extensionOrigin);
-    sessionByPort.set(port, envelope.sessionId);
+    syncPortContext(port, snapshot, portContextStore, extensionOrigin);
+    sessionRegistry.writeSessionId(port, envelope.sessionId);
 
     const accounts = await getPermittedAccountsForPort(port, snapshot);
 
@@ -391,144 +236,18 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     );
   };
 
-  const broadcastDisconnectForPorts = (ports: Runtime.Port[]) => {
-    const targetPortSet = new Set(ports);
-    broadcastSafe(
-      (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
-      (port) => {
-        const sessionId = getSessionIdForPort(port);
-        if (!sessionId) return true;
-        const portContext = portContexts.get(port);
-        const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
-        const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-        const namespace = deriveRpcContextNamespace(rpcContext);
-        const chainRef = rpcContext?.chainRef ?? null;
-        const error = (rpcRegistry?.encodeErrorWithAdapters(
-          arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
-          {
-            surface: "dapp",
-            namespace,
-            chainRef,
-            origin,
-            method: PROVIDER_EVENTS.disconnect,
-          },
-        ) ?? ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError;
-        rejectPendingWithDisconnect(port, error);
-        const success = postEnvelope(port, {
-          channel: CHANNEL,
-          sessionId,
-          type: "event",
-          payload: { event: PROVIDER_EVENTS.disconnect, params: [error] },
-        });
-        if (success) {
-          const eventOrigin = getPortOrigin(port, extensionOrigin);
-          portLog("broadcastDisconnect", { origin: eventOrigin, errorCode: error.code, namespace });
-        }
-        return success;
-      },
-      "broadcast_disconnect_failed",
-    );
-  };
-
-  const broadcastDisconnect = () => {
-    broadcastDisconnectForPorts(getConnectedPorts());
-  };
-
-  const broadcastDisconnectForNamespaces = (namespaces: Iterable<string>) => {
-    broadcastDisconnectForPorts(getPortsBoundToNamespaces(namespaces));
-  };
-
-  const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { engine } = await getContext();
-    const { id: rpcId, jsonrpc, method } = envelope.payload;
-    const pendingRequestMap = getPendingRequestMap(port);
-    pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
-
-    const portContext = portContexts.get(port);
-    const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
-
-    const portId =
-      portIdByPort.get(port) ??
-      (() => {
-        const next = createPortId();
-        portIdByPort.set(port, next);
-        return next;
-      })();
-
-    const requestContext = {
-      transport: "provider" as const,
-      portId,
-      sessionId: envelope.sessionId,
-      requestId: String(rpcId),
-      origin,
-    };
-
-    const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
-      id: envelope.payload.id,
-      jsonrpc: envelope.payload.jsonrpc,
-      method: envelope.payload.method,
-      params: envelope.payload.params as JsonRpcParams,
-      origin,
-      ...(rpcContext && {
-        arx: {
-          chainRef: rpcContext.chainRef,
-          ...(rpcContext.namespace ? { namespace: rpcContext.namespace } : {}),
-          ...(rpcContext.providerNamespace ? { providerNamespace: rpcContext.providerNamespace } : {}),
-          requestContext,
-          meta: rpcContext.meta,
-        } satisfies RpcInvocationContext,
-      }),
-    };
-
-    try {
-      const response = await new Promise<TransportResponse>((resolve, reject) => {
-        engine.handle(request, (error, result) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve(result as TransportResponse);
-        });
-      });
-
-      sendReply(port, envelope.id, response);
-    } catch (error) {
-      sendReply(port, envelope.id, {
-        id: rpcId,
-        jsonrpc,
-        error: (rpcRegistry?.encodeErrorWithAdapters(error, {
-          surface: "dapp",
-          namespace: deriveRpcContextNamespace(rpcContext),
-          chainRef: rpcContext?.chainRef ?? null,
-          origin,
-          method,
-        }) ?? ({ code: -32603, message: "Internal error" } as const)) as JsonRpcError,
-      });
-    } finally {
-      pendingRequestMap.delete(envelope.id);
-      if (pendingRequestMap.size === 0) clearPendingForPort(port);
-    }
-  };
-
   const handleConnect = (port: Runtime.Port) => {
     if (port.name !== CHANNEL) return;
 
-    connections.add(port);
-    if (!portIdByPort.has(port)) {
-      portIdByPort.set(port, createPortId());
-    }
     const origin = getPortOrigin(port, extensionOrigin);
-    portLog("connect", { origin, portName: port.name, total: connections.size });
-    if (!portContexts.has(port)) {
-      portContexts.set(port, {
-        origin,
-        providerNamespace: null,
-        meta: null,
-        chainRef: null,
-        chainId: null,
-      });
-    }
+    sessionRegistry.registerConnectedPort(port, {
+      origin,
+      providerNamespace: null,
+      meta: null,
+      chainRef: null,
+      chainId: null,
+    });
+    portLog("connect", { origin, portName: port.name, total: sessionRegistry.countConnectedPorts() });
 
     const handleMessage = (message: unknown) => {
       const envelope = message as Envelope | undefined;
@@ -539,16 +258,14 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
           void (async () => {
             const namespace = parseHandshakeNamespace(envelope);
             if (!namespace) {
-              dropStalePort(port, "handshake_missing_namespace");
+              disconnectFinalizer.dropStalePort(port, "handshake_missing_namespace");
               return;
             }
 
-            // Allow session rotation: each connect attempt inpage may start a new sessionId.
-            // If the session changes, drop any background-side pending tracking for the old session.
             const expectedSessionId = getSessionIdForPort(port);
             if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
-              clearPendingForPort(port);
-              const portId = portIdByPort.get(port);
+              sessionRegistry.dropPendingRequests(port);
+              const portId = sessionRegistry.readPortId(port);
               if (portId) {
                 try {
                   const { controllers } = await getContext();
@@ -574,7 +291,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
             await getContext();
             const snapshot = findProviderSnapshot(namespace);
             if (!snapshot) {
-              dropStalePort(port, "handshake_snapshot_unavailable");
+              disconnectFinalizer.dropStalePort(port, "handshake_snapshot_unavailable");
               return;
             }
 
@@ -586,14 +303,13 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         case "request": {
           const expectedSessionId = getSessionIdForPort(port);
           if (!expectedSessionId) {
-            dropStalePort(port, "request_without_handshake");
+            disconnectFinalizer.dropStalePort(port, "request_without_handshake");
             return;
           }
           if (envelope.sessionId !== expectedSessionId) {
-            // Stale request from a previous session; ignore.
             return;
           }
-          handleRpcRequest(port, envelope);
+          void requestExecutor.handleRpcRequest(port, envelope);
           break;
         }
 
@@ -603,44 +319,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     };
 
     const handleDisconnect = () => {
-      const sessionId = getSessionIdForPort(port);
-      const portId = portIdByPort.get(port) ?? null;
-      if (sessionId && portId) {
-        void (async () => {
-          try {
-            const { controllers } = await getContext();
-            await controllers.approvals.cancelByScope({
-              scope: {
-                transport: "provider",
-                origin: getPortOrigin(port, extensionOrigin),
-                portId,
-                sessionId,
-              },
-              reason: "session_lost",
-            });
-          } catch (error) {
-            const eventOrigin = getPortOrigin(port, extensionOrigin);
-            portLog("failed to expire approvals on disconnect", { origin: eventOrigin, ...toErrorDetails(error) });
-          }
-        })();
-      }
-
-      try {
-        rejectPendingWithDisconnect(port);
-      } catch (error) {
-        const eventOrigin = getPortOrigin(port, extensionOrigin);
-        portLog("disconnect cleanup error", { origin: eventOrigin, ...toErrorDetails(error) });
-      } finally {
-        connections.delete(port);
-        pendingRequests.delete(port);
-        portContexts.delete(port);
-        sessionByPort.delete(port);
-        portIdByPort.delete(port);
-      }
-
-      detachPortListeners(port);
-      const disconnectOrigin = getPortOrigin(port, extensionOrigin);
-      portLog("disconnect", { origin: disconnectOrigin, remaining: connections.size });
+      disconnectFinalizer.finalizePortDisconnect(port);
     };
 
     port.onMessage.addListener(handleMessage);
@@ -649,15 +328,19 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     disconnectHandlers.set(port, handleDisconnect);
   };
 
+  const broadcastDisconnect = () => {
+    disconnectFinalizer.broadcastDisconnectForPorts(getConnectedPorts());
+  };
+
+  const broadcastDisconnectForNamespaces = (namespaces: Iterable<string>) => {
+    disconnectFinalizer.broadcastDisconnectForPorts(getPortsBoundToNamespaces(namespaces));
+  };
+
   const destroy = () => {
     for (const port of getConnectedPorts()) {
-      dropStalePort(port, "destroy");
+      disconnectFinalizer.dropStalePort(port, "destroy");
     }
-    connections.clear();
-    pendingRequests.clear();
-    portContexts.clear();
-    sessionByPort.clear();
-    portIdByPort.clear();
+    sessionRegistry.clearAllState();
     messageHandlers.clear();
     disconnectHandlers.clear();
   };
@@ -665,10 +348,10 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   return {
     handleConnect,
     listConnectedNamespaces,
-    broadcastEvent,
-    broadcastAccountsChanged: sendAccountsChanged,
-    broadcastMetaChangedForNamespaces,
-    broadcastChainChangedForNamespaces,
+    broadcastEvent: eventBroadcaster.broadcastEvent,
+    broadcastAccountsChanged: eventBroadcaster.broadcastAccountsChanged,
+    broadcastMetaChangedForNamespaces: eventBroadcaster.broadcastMetaChangedForNamespaces,
+    broadcastChainChangedForNamespaces: eventBroadcaster.broadcastChainChangedForNamespaces,
     broadcastDisconnect,
     broadcastDisconnectForNamespaces,
     destroy,

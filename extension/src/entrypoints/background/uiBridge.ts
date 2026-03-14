@@ -40,7 +40,7 @@ type BridgeDeps = {
   networkPreferences: Pick<NetworkPreferencesService, "subscribeChanged">;
   accountCodecs: Pick<AccountCodecRegistry, "get" | "toAccountIdFromAddress">;
   session: BackgroundSessionServices;
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   persistVaultMeta: () => Promise<void>;
   keyring: KeyringService;

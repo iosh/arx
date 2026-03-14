@@ -63,7 +63,12 @@ export class TransactionExecutor
   implements
     Pick<
       TransactionController,
-      "requestTransactionApproval" | "approveTransaction" | "rejectTransaction" | "processTransaction" | "resumePending"
+      | "createTransactionApproval"
+      | "requestTransactionApproval"
+      | "approveTransaction"
+      | "rejectTransaction"
+      | "processTransaction"
+      | "resumePending"
     >
 {
   #view: StoreTransactionView;
@@ -99,12 +104,32 @@ export class TransactionExecutor
     this.#now = deps.now;
   }
 
+  async createTransactionApproval(
+    origin: string,
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    opts?: { id?: string },
+  ): Promise<TransactionMeta> {
+    const { createdMeta } = await this.#enqueueTransactionApproval(origin, request, requestContext, opts);
+    return createdMeta;
+  }
+
   async requestTransactionApproval(
     origin: string,
     request: TransactionRequest,
     requestContext: RequestContext,
     opts?: { id?: string },
   ): Promise<TransactionMeta> {
+    const { settled } = await this.#enqueueTransactionApproval(origin, request, requestContext, opts);
+    return await settled;
+  }
+
+  async #enqueueTransactionApproval(
+    origin: string,
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    opts?: { id?: string },
+  ): Promise<{ createdMeta: TransactionMeta; settled: Promise<TransactionMeta> }> {
     const namespaceActiveChainRef = this.#networkPreferences.getActiveChainRef(request.namespace);
     const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
     if (!chainRef) {
@@ -177,7 +202,10 @@ export class TransactionExecutor
     // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#prepare.queuePrepare(id);
 
-    return approvalPromise;
+    return {
+      createdMeta: storedMeta,
+      settled: approvalPromise,
+    };
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {

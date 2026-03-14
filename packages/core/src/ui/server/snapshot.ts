@@ -1,4 +1,5 @@
 import type { ApprovalFlowRegistry } from "../../approvals/types.js";
+import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
@@ -16,13 +17,24 @@ export const buildUiSnapshot = (deps: {
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: { getSnapshot: () => UiSnapshot["attention"] };
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
   approvalFlowRegistry: Pick<ApprovalFlowRegistry, "present">;
 }): UiSnapshot => {
-  const { controllers, chainViews, permissionViews, session, keyring, attention, approvalFlowRegistry } = deps;
+  const {
+    controllers,
+    chainViews,
+    permissionViews,
+    session,
+    keyring,
+    attention,
+    namespaceBindings,
+    approvalFlowRegistry,
+  } = deps;
 
   const chain = chainViews.getSelectedChainView();
   const networks = chainViews.buildWalletNetworksSnapshot();
   const resolvedChain = chain.chainRef;
+  const uiBindings = namespaceBindings.getUi(chain.namespace);
 
   const accountList = session.unlock.isUnlocked()
     ? controllers.accounts
@@ -79,6 +91,11 @@ export const buildUiSnapshot = (deps: {
         symbol: chain.nativeCurrency.symbol,
         decimals: chain.nativeCurrency.decimals,
       },
+    },
+    chainCapabilities: {
+      nativeBalance: Boolean(uiBindings?.getNativeBalance),
+      sendTransaction:
+        Boolean(uiBindings?.createSendTransactionRequest) && namespaceBindings.hasTransaction(chain.namespace),
     },
     networks: {
       ...networks,

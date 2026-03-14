@@ -48,6 +48,11 @@ export const SessionSnapshotSchema = z.object({
   nextAutoLockAt: z.number().int().nullable(),
 });
 
+export const UiChainCapabilitiesSchema = z.object({
+  nativeBalance: z.boolean(),
+  sendTransaction: z.boolean(),
+});
+
 export const VaultSnapshotSchema = z.object({
   initialized: z.boolean(),
 });
@@ -218,6 +223,7 @@ export const AttentionRequestSchema = z.object({
 
 export const UiSnapshotSchema = z.object({
   chain: ChainSnapshotSchema,
+  chainCapabilities: UiChainCapabilitiesSchema,
   networks: NetworkListSchema,
   accounts: AccountsSnapshotSchema,
   session: SessionSnapshotSchema,
@@ -238,6 +244,7 @@ export type UiOwnedAccountSummary = z.infer<typeof UiOwnedAccountSummarySchema>;
 export type ApprovalSelectableAccount = z.infer<typeof ApprovalSelectableAccountSchema>;
 export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
 export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
+export type UiChainCapabilities = z.infer<typeof UiChainCapabilitiesSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;

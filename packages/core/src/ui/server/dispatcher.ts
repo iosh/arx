@@ -86,6 +86,7 @@ export const createUiDispatcher = (deps: UiRuntimeDeps) => {
       session: deps.session,
       keyring: deps.keyring,
       attention: deps.attention,
+      namespaceBindings: deps.namespaceBindings,
       approvalFlowRegistry,
     });
 

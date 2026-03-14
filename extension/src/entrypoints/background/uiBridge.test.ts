@@ -652,6 +652,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
       getUi: () => ({
         getNativeBalance: vi.fn(async () => 0n),
       }),
+      hasTransaction: () => false,
     } as unknown as UiBridgeDeps["namespaceBindings"],
     rpcRegistry,
     persistVaultMeta,
@@ -850,6 +851,7 @@ describe("uiBridge", () => {
         getUi: () => ({
           getNativeBalance: vi.fn(async () => 0n),
         }),
+        hasTransaction: () => false,
       } as Parameters<typeof createUiBridge>[0]["namespaceBindings"],
       rpcRegistry,
       persistVaultMeta: vi.fn(async () => {}),

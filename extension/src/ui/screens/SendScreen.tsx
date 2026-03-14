@@ -24,6 +24,7 @@ type SendScreenProps = {
 
 export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel }: SendScreenProps) {
   const { chain, accounts } = snapshot;
+  const sendSupported = snapshot.chainCapabilities.sendTransaction;
   const [to, setTo] = useState("");
   const [valueEther, setValueEther] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -53,10 +54,11 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
     return { normalizedTo, toError, valueError };
   }, [to, valueEther]);
 
-  const canSubmit = !errors.toError && !errors.valueError && accounts.active && !pending;
+  const canSubmit = sendSupported && !errors.toError && !errors.valueError && accounts.active && !pending;
 
   const handleSubmit = () => {
     setSubmitted(true);
+    if (!sendSupported) return;
     if (!accounts.active) return;
     if (errors.toError || errors.valueError) return;
     onSubmit({ to: errors.normalizedTo, valueEther: valueEther.trim() });
@@ -119,7 +121,7 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
             autoCorrect={false}
             value={to}
             onChangeText={(next) => setTo(next)}
-            disabled={pending}
+            disabled={pending || !sendSupported}
             errorText={submitted ? (errors.toError ?? undefined) : undefined}
           />
 
@@ -131,10 +133,16 @@ export function SendScreen({ snapshot, pending, errorMessage, onSubmit, onCancel
             inputMode="decimal"
             value={valueEther}
             onChangeText={(next) => setValueEther(next)}
-            disabled={pending}
+            disabled={pending || !sendSupported}
             errorText={submitted ? (errors.valueError ?? undefined) : undefined}
           />
         </YStack>
+
+        {!sendSupported ? (
+          <Paragraph color="$mutedText" fontSize="$3">
+            Send is not supported on this network yet.
+          </Paragraph>
+        ) : null}
 
         {errorMessage ? (
           <Paragraph color="$danger" fontSize="$3">

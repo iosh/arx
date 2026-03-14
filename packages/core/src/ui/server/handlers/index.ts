@@ -38,6 +38,7 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
       session,
       keyring,
       attention,
+      namespaceBindings,
       approvalFlowRegistry,
     });
 
@@ -53,6 +54,6 @@ export const createUiHandlers = (deps: UiRuntimeDeps): UiHandlers => {
     ...createNetworksHandlers({ chainActivation }, toChainSnapshot),
     ...createApprovalsHandlers({ controllers }),
     ...createKeyringsHandlers({ controllers, chainViews, accountCodecs, session, keyring }),
-    ...createTransactionsHandlers({ controllers, chainViews, session, uiOrigin }, uiSessionId),
+    ...createTransactionsHandlers({ controllers, chainViews, session, namespaceBindings, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;
 };

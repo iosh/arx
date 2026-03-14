@@ -12,6 +12,10 @@ const SNAPSHOT_FIXTURE = {
     icon: null,
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   },
+  chainCapabilities: {
+    nativeBalance: true,
+    sendTransaction: true,
+  },
   networks: {
     active: "eip155:1",
     known: [

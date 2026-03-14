@@ -28,12 +28,14 @@ const assertUniqueNamespaces = (manifests: readonly NamespaceManifest[]): void =
 const createNamespaceRuntimeBindingsRegistry = (params: {
   approvalByNamespace: ReadonlyMap<string, NamespaceApprovalBindings>;
   uiByNamespace: ReadonlyMap<string, NamespaceUiBindings>;
+  transactionNamespaces: ReadonlySet<string>;
 }): NamespaceRuntimeBindingsRegistry => {
-  const { approvalByNamespace, uiByNamespace } = params;
+  const { approvalByNamespace, uiByNamespace, transactionNamespaces } = params;
 
   return {
     getApproval: (namespace) => approvalByNamespace.get(namespace),
     getUi: (namespace) => uiByNamespace.get(namespace),
+    hasTransaction: (namespace) => transactionNamespaces.has(namespace),
   };
 };
 
@@ -169,11 +171,14 @@ export const assembleRuntimeNamespaces = (params: {
     transactionRegistry.register(manifest.namespace, adapter);
   }
 
+  const transactionNamespaces = new Set(transactionRegistry.listNamespaces());
+
   return {
     signers: createNamespaceSignerRegistry(signerByNamespace),
     bindings: createNamespaceRuntimeBindingsRegistry({
       approvalByNamespace,
       uiByNamespace,
+      transactionNamespaces,
     }),
   };
 };

@@ -10,7 +10,7 @@ export const createBalancesHandlers = (
       assertUnlocked(deps.session);
       const chain = deps.chainViews.requireAvailableChainMetadata(chainRef);
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
-      if (!uiBindings) {
+      if (!uiBindings?.getNativeBalance) {
         throw arxError({
           reason: ArxReasons.ChainNotSupported,
           message: `Native balance is not supported for namespace "${chain.namespace}" yet.`,

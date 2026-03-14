@@ -99,6 +99,15 @@ export class StoreTransactionController implements TransactionController {
     return this.#view.getMeta(id);
   }
 
+  createTransactionApproval(
+    origin: string,
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    opts?: { id?: string },
+  ): Promise<TransactionMeta> {
+    return this.#executor.createTransactionApproval(origin, request, requestContext, opts);
+  }
+
   requestTransactionApproval(
     origin: string,
     request: TransactionRequest,

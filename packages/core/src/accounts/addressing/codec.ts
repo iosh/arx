@@ -140,9 +140,3 @@ export const eip155Codec: AccountCodec = {
 
 export const createAccountCodecRegistry = (codecs: readonly AccountCodec[] = []): AccountCodecRegistry =>
   new AccountCodecRegistry(codecs);
-
-export const BUILTIN_ACCOUNT_CODEC_REGISTRY = createAccountCodecRegistry([eip155Codec]);
-
-export const getAccountCodec = (namespace: string): AccountCodec => {
-  return BUILTIN_ACCOUNT_CODEC_REGISTRY.require(namespace);
-};

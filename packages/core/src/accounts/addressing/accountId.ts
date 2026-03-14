@@ -1,7 +1,7 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type AccountId, AccountIdSchema } from "../../storage/records.js";
-import { getAccountCodec } from "./codec.js";
+import { getAccountCodec } from "./builtin.js";
 
 export const parseAccountId = (accountId: AccountId): { namespace: string; payloadHex: string } => {
   const parsed = AccountIdSchema.parse(accountId);

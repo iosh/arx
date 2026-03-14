@@ -8,6 +8,7 @@ import type { RpcClientFactory, RpcClientRegistry } from "../rpc/RpcClientRegist
 import type { KeyringService } from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
+import type { TransactionRequest } from "../transactions/types.js";
 
 export type NamespaceCoreManifest = {
   namespace: string;
@@ -24,12 +25,14 @@ export type NamespaceApprovalBindings = {
 };
 
 export type NamespaceUiBindings = {
-  getNativeBalance: (params: { chainRef: ChainRef; address: string }) => Promise<bigint>;
+  getNativeBalance?: (params: { chainRef: ChainRef; address: string }) => Promise<bigint>;
+  createSendTransactionRequest?: (params: { chainRef: ChainRef; to: string; valueWei: bigint }) => TransactionRequest;
 };
 
 export type NamespaceRuntimeBindingsRegistry = {
   getApproval(namespace: string): NamespaceApprovalBindings | undefined;
   getUi(namespace: string): NamespaceUiBindings | undefined;
+  hasTransaction(namespace: string): boolean;
 };
 
 export type NamespaceSignerRegistry = {

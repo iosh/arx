@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
+import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
+import type { TransactionRequest } from "../transactions/types.js";
 import { createUiHandlers } from "../ui/server/index.js";
 import {
   flushAsync,
@@ -43,6 +45,11 @@ const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinition
   updatedAt: now,
   source: "builtin",
 });
+
+const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgroundRuntime>) => {
+  await runtime.services.session.vault.initialize({ password: "test" });
+  await runtime.services.session.unlock.unlock({ password: "test" });
+};
 
 describe("createBackgroundRuntime (no snapshots)", () => {
   it("hydrates network preferences from NetworkPreferencesPort", async () => {
@@ -386,8 +393,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
-    await runtime.services.session.vault.initialize({ password: "test" });
-    await runtime.services.session.unlock.unlock({ password: "test" });
+    await initializeUnlockedSession(runtime);
 
     const handlers = createUiHandlers({
       controllers: runtime.controllers,
@@ -421,6 +427,329 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       blockTag: "latest",
       timeoutMs: 15_000,
     });
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("derives selected-chain UI capabilities from namespace runtime bindings", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createTransactionAdapter: undefined,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+                createSendTransactionRequest: () => ({
+                  namespace: "eip155",
+                  chainRef: MAINNET_CHAIN.chainRef,
+                  payload: {
+                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    value: "0x0",
+                  },
+                }),
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
+      chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      namespaceBindings: runtime.services.namespaceBindings,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
+      chainCapabilities: {
+        nativeBalance: true,
+        sendTransaction: false,
+      },
+    });
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("fails closed when ui.transactions.requestSendTransactionApproval is unsupported for the selected namespace", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
+      chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      namespaceBindings: runtime.services.namespaceBindings,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    await expect(
+      handlers["ui.transactions.requestSendTransactionApproval"]({
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        valueEther: "0.01",
+        chainRef: MAINNET_CHAIN.chainRef,
+      }),
+    ).rejects.toMatchObject({
+      reason: "ChainNotSupported",
+    });
+
+    expect(runtime.controllers.approvals.getState().pending).toEqual([]);
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("builds send-transaction requests through namespace UI bindings", async () => {
+    const createSendTransactionRequest = vi.fn(
+      ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
+        ({
+          namespace: "eip155",
+          chainRef,
+          payload: {
+            to,
+            value: `0x${valueWei.toString(16)}` as `0x${string}`,
+          },
+        }) satisfies TransactionRequest,
+    );
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+                createSendTransactionRequest,
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    const createTransactionApproval = vi
+      .spyOn(runtime.controllers.transactions, "createTransactionApproval")
+      .mockImplementation(async (_origin, request, _requestContext, opts) => ({ id: opts?.id, request }) as never);
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
+      chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      namespaceBindings: runtime.services.namespaceBindings,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    const { approvalId } = await handlers["ui.transactions.requestSendTransactionApproval"]({
+      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      valueEther: "0.01",
+      chainRef: MAINNET_CHAIN.chainRef,
+    });
+    await flushAsync();
+
+    expect(createSendTransactionRequest).toHaveBeenCalledWith({
+      chainRef: MAINNET_CHAIN.chainRef,
+      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      valueWei: 10_000_000_000_000_000n,
+    });
+    expect(createTransactionApproval).toHaveBeenCalledWith(
+      "chrome-extension://arx",
+      {
+        namespace: "eip155",
+        chainRef: MAINNET_CHAIN.chainRef,
+        payload: {
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x2386f26fc10000",
+        },
+      },
+      expect.objectContaining({
+        transport: "ui",
+        portId: "ui",
+        requestId: approvalId,
+        origin: "chrome-extension://arx",
+      }),
+      { id: approvalId },
+    );
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("propagates transaction approval creation errors to the UI handler", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    vi.spyOn(runtime.controllers.transactions, "createTransactionApproval").mockRejectedValue(
+      new Error("create approval failed"),
+    );
+
+    const handlers = createUiHandlers({
+      controllers: runtime.controllers,
+      chainActivation: runtime.services.chainActivation,
+      chainViews: runtime.services.chainViews,
+      permissionViews: runtime.services.permissionViews,
+      accountCodecs: runtime.services.accountCodecs,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+      attention: runtime.services.attention,
+      namespaceBindings: runtime.services.namespaceBindings,
+      rpcRegistry: runtime.rpc.registry,
+      uiOrigin: "chrome-extension://arx",
+      platform: {
+        openOnboardingTab: async () => ({ activationPath: "create" }),
+        openNotificationPopup: async () => ({ activationPath: "create" }),
+      },
+    });
+
+    await expect(
+      handlers["ui.transactions.requestSendTransactionApproval"]({
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        valueEther: "0.01",
+        chainRef: MAINNET_CHAIN.chainRef,
+      }),
+    ).rejects.toThrow("create approval failed");
 
     runtime.lifecycle.destroy();
   });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createAccountCodecRegistry, eip155Codec, getAccountCodec } from "./codec.js";
+import { getAccountCodec } from "./builtin.js";
+import { createAccountCodecRegistry, eip155Codec } from "./codec.js";
 
 describe("accounts/addressing codec registry", () => {
   it("exposes registered codecs through registry lookup", () => {

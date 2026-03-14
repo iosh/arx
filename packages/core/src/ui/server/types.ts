@@ -55,7 +55,7 @@ export type UiRuntimeDeps = {
   session: BackgroundSessionServices;
   keyring: KeyringService;
   attention: Pick<AttentionService, "getSnapshot">;
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi">;
+  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
   rpcRegistry: Pick<RpcRegistry, "encodeErrorWithAdapters">;
   uiOrigin: string;
   platform: UiPlatformAdapter;

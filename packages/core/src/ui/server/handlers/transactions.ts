@@ -1,12 +1,11 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import * as Hex from "ox/Hex";
 import * as Value from "ox/Value";
 import type { TransactionRequest } from "../../../transactions/types.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createTransactionsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "uiOrigin">,
+  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "namespaceBindings" | "uiOrigin">,
   uiSessionId: string,
 ): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
   return {
@@ -14,6 +13,17 @@ export const createTransactionsHandlers = (
       assertUnlocked(deps.session);
 
       const resolvedChainRef = chainRef ?? deps.chainViews.getSelectedChainView().chainRef;
+      const chain = deps.chainViews.requireAvailableChainMetadata(resolvedChainRef);
+      const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
+      const sendSupported =
+        Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);
+      if (!sendSupported || !uiBindings?.createSendTransactionRequest) {
+        throw arxError({
+          reason: ArxReasons.ChainNotSupported,
+          message: `Send transaction is not supported for namespace "${chain.namespace}" yet.`,
+          data: { chainRef: resolvedChainRef, namespace: chain.namespace },
+        });
+      }
 
       const trimmedValue = valueEther.trim();
       let wei: bigint;
@@ -36,20 +46,20 @@ export const createTransactionsHandlers = (
         origin: deps.uiOrigin,
       };
 
-      const request: TransactionRequest = {
-        namespace: "eip155",
+      const request: TransactionRequest = uiBindings.createSendTransactionRequest({
         chainRef: resolvedChainRef,
-        payload: {
-          to,
-          value: Hex.fromNumber(wei),
-        },
-      };
+        to,
+        valueWei: wei,
+      });
 
-      void deps.controllers.transactions
-        .requestTransactionApproval(deps.uiOrigin, request, requestContext, { id: approvalId })
-        .catch(() => {});
+      const created = await deps.controllers.transactions.createTransactionApproval(
+        deps.uiOrigin,
+        request,
+        requestContext,
+        { id: approvalId },
+      );
 
-      return { approvalId };
+      return { approvalId: created.id };
     },
   };
 };

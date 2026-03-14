@@ -34,6 +34,104 @@ const toMeta = (record: TransactionRecord, from: string): TransactionMeta => ({
 });
 
 describe("TransactionExecutor", () => {
+  it("can create a transaction approval without waiting for settlement", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountId = toAccountIdFromAddress({ chainRef, address: from });
+
+    const createdRecord: TransactionRecord = {
+      id: REQUEST_ID,
+      namespace: "eip155",
+      chainRef,
+      origin: "https://dapp.example",
+      fromAccountId: accountId,
+      status: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+          chainId: "0xa",
+        },
+      },
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const createPending = vi.fn(async () => createdRecord);
+    const queuePrepare = vi.fn();
+    let settleApproval: ((value: TransactionMeta) => void) | null = null;
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
+      } as never,
+      accountCodecs: createAccountCodecRegistry([eip155Codec]),
+      networkPreferences: {
+        getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      } as never,
+      chainDefinitions: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountId,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: () => ({
+          settled: new Promise<TransactionMeta>((resolve) => {
+            settleApproval = resolve;
+          }),
+        }),
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare,
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    const result = await executor.createTransactionApproval(
+      "https://dapp.example",
+      {
+        namespace: "eip155",
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      REQUEST_CONTEXT,
+      { id: REQUEST_ID },
+    );
+
+    expect(result).toMatchObject({ id: REQUEST_ID, status: "pending", chainRef, namespace: "eip155" });
+    expect(createPending).toHaveBeenCalledTimes(1);
+    expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(settleApproval).toBeTypeOf("function");
+  });
+
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

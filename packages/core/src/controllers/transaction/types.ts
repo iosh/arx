@@ -70,6 +70,12 @@ export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKin
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
+  createTransactionApproval(
+    origin: string,
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    opts?: { id?: string },
+  ): Promise<TransactionMeta>;
   requestTransactionApproval(
     origin: string,
     request: TransactionRequest,

@@ -34,6 +34,4 @@ export type { ExecuteWithAdaptersContext, ExecuteWithAdaptersResult } from "./Rp
 export { RpcRegistry } from "./RpcRegistry.js";
 export { type RequestContext, RequestContextSchema } from "./requestContext.js";
 
-export const DEFAULT_NAMESPACE = RpcRegistry.DEFAULT_NAMESPACE;
-
 export const createRpcRegistry = (): RpcRegistry => new RpcRegistry();

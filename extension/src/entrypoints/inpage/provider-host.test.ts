@@ -128,7 +128,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
   };
 
   const createHarness = (options?: { registry?: ReturnType<typeof createProviderRegistry> }) => {
-    const transport = new WindowPostMessageTransport();
+    const transport = new WindowPostMessageTransport({ namespace: "eip155" });
     cleanups.push(() => transport.destroy());
 
     const host = createProviderHost({

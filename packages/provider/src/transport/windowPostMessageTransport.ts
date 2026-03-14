@@ -29,7 +29,6 @@ export type WindowPostMessageTransportOptions = {
 };
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 8000;
-const DEFAULT_TRANSPORT_NAMESPACE = "eip155";
 
 const isConnectPayload = (value: unknown): value is ConnectPayload => {
   if (!value || typeof value !== "object") return false;
@@ -82,7 +81,11 @@ export class WindowPostMessageTransport extends EventEmitter implements Transpor
     if (handshakeTimeoutMs) {
       this.#handshakeTimeoutMs = handshakeTimeoutMs;
     }
-    this.#namespace = namespace?.trim() || DEFAULT_TRANSPORT_NAMESPACE;
+    const resolvedNamespace = namespace?.trim();
+    if (!resolvedNamespace) {
+      throw new Error("WindowPostMessageTransport requires a non-empty namespace");
+    }
+    this.#namespace = resolvedNamespace;
 
     // session is rotated per `connect()` attempt (not per instance lifetime).
     this.#sessionId = createId();

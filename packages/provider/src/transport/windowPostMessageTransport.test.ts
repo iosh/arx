@@ -6,8 +6,8 @@ import { WindowPostMessageTransport } from "./windowPostMessageTransport.js";
 
 describe("WindowPostMessageTransport", () => {
   const instances: WindowPostMessageTransport[] = [];
-  const createTransport = () => {
-    const instance = new WindowPostMessageTransport();
+  const createTransport = (namespace = "eip155") => {
+    const instance = new WindowPostMessageTransport({ namespace });
     instances.push(instance);
     return instance;
   };
@@ -123,6 +123,11 @@ describe("WindowPostMessageTransport", () => {
   };
 
   describe("handshake", () => {
+    it("requires an explicit namespace", () => {
+      expect(() => new WindowPostMessageTransport()).toThrow(/requires a non-empty namespace/i);
+      expect(() => new WindowPostMessageTransport({ namespace: "   " })).toThrow(/requires a non-empty namespace/i);
+    });
+
     it("returns empty state before handshake", () => {
       const t = createTransport();
       expect(t.getConnectionState()).toEqual({
@@ -213,7 +218,7 @@ describe("WindowPostMessageTransport", () => {
     it("ignores malformed handshake_ack payload without crashing", async () => {
       vi.useFakeTimers();
       try {
-        const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 20 });
+        const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 20 });
         instances.push(t);
 
         const postMessageSpy = vi.spyOn(window, "postMessage");
@@ -252,7 +257,7 @@ describe("WindowPostMessageTransport", () => {
     it("times out connect() when handshake_ack never arrives", async () => {
       vi.useFakeTimers();
       try {
-        const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 20 });
+        const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 20 });
         instances.push(t);
         const pending = t.connect().catch((err) => err);
         await vi.advanceTimersByTimeAsync(25);
@@ -265,7 +270,7 @@ describe("WindowPostMessageTransport", () => {
 
     it("dedupes inflight connect() calls and posts one handshake", async () => {
       const postMessageSpy = vi.spyOn(window, "postMessage");
-      const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 1_000 });
+      const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 1_000 });
       instances.push(t);
 
       const p1 = t.connect().catch((err) => err);
@@ -286,7 +291,7 @@ describe("WindowPostMessageTransport", () => {
 
     it("retryConnect() resends handshake while inflight", async () => {
       const postMessageSpy = vi.spyOn(window, "postMessage");
-      const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 1_000 });
+      const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 1_000 });
       instances.push(t);
 
       const p1 = t.connect().catch((err) => err);
@@ -313,7 +318,7 @@ describe("WindowPostMessageTransport", () => {
     it("ignores late handshake_ack after connect() timeout", async () => {
       vi.useFakeTimers();
       try {
-        const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 20 });
+        const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 20 });
         instances.push(t);
 
         const pending = t.connect().catch((err) => err);
@@ -337,7 +342,7 @@ describe("WindowPostMessageTransport", () => {
     it("allows reconnect after a timeout via a new connect()", async () => {
       vi.useFakeTimers();
       try {
-        const t = new WindowPostMessageTransport({ handshakeTimeoutMs: 20 });
+        const t = new WindowPostMessageTransport({ namespace: "eip155", handshakeTimeoutMs: 20 });
         instances.push(t);
         const postMessageSpy = vi.spyOn(window, "postMessage");
 

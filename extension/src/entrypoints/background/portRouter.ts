@@ -3,7 +3,6 @@ import {
   ArxReasons,
   arxError,
   createLogger,
-  DEFAULT_NAMESPACE,
   extendLogger,
   type JsonRpcError,
   type JsonRpcParams,
@@ -250,7 +249,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     const portContext = portContexts.get(port);
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const namespace = deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE;
+    const namespace = deriveRpcContextNamespace(rpcContext);
     const chainRef = rpcContext?.chainRef ?? null;
     const error =
       overrideError ??
@@ -410,7 +409,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         const portContext = portContexts.get(port);
         const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
         const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-        const namespace = deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE;
+        const namespace = deriveRpcContextNamespace(rpcContext);
         const chainRef = rpcContext?.chainRef ?? null;
         const error = (rpcRegistry?.encodeErrorWithAdapters(
           arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
@@ -508,7 +507,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
         jsonrpc,
         error: (rpcRegistry?.encodeErrorWithAdapters(error, {
           surface: "dapp",
-          namespace: deriveRpcContextNamespace(rpcContext, DEFAULT_NAMESPACE) ?? DEFAULT_NAMESPACE,
+          namespace: deriveRpcContextNamespace(rpcContext),
           chainRef: rpcContext?.chainRef ?? null,
           origin,
           method,

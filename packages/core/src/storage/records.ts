@@ -35,12 +35,11 @@ export const NetworkRpcPreferenceSchema = z.strictObject({
 export type NetworkRpcPreference = z.infer<typeof NetworkRpcPreferenceSchema>;
 
 const ActiveChainByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
-const LEGACY_NETWORK_PREFERENCES_DEFAULT_NAMESPACE = "eip155";
 
 export const NetworkPreferencesRecordSchema = z
   .strictObject({
     id: z.literal("network-preferences"),
-    selectedChainRef: chainRefSchema.optional(),
+    selectedChainRef: chainRefSchema,
     activeChainByNamespace: ActiveChainByNamespaceSchema.default({}),
     // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
     rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
@@ -57,26 +56,6 @@ export const NetworkPreferencesRecordSchema = z
         });
       }
     }
-  })
-  .transform((value, ctx) => {
-    const selectedChainRef =
-      value.selectedChainRef ??
-      value.activeChainByNamespace[LEGACY_NETWORK_PREFERENCES_DEFAULT_NAMESPACE] ??
-      Object.values(value.activeChainByNamespace)[0];
-
-    if (!selectedChainRef) {
-      ctx.addIssue({
-        code: "custom",
-        message: "selectedChainRef is required when network preferences exist",
-        path: ["selectedChainRef"],
-      });
-      return z.NEVER;
-    }
-
-    return {
-      ...value,
-      selectedChainRef,
-    };
   });
 export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
 

@@ -9,7 +9,6 @@ import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
 import type { ChainDefinitionsController } from "../../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
-import { DEFAULT_NAMESPACE } from "../../../rpc/index.js";
 import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
 import type {
   ApprovalReviewChainViewParams,
@@ -138,7 +137,7 @@ class DefaultChainViewsService implements ChainViewsService {
     };
   }
 
-  buildProviderMeta(namespace = DEFAULT_NAMESPACE): ProviderMetaSnapshot {
+  buildProviderMeta(namespace: string): ProviderMetaSnapshot {
     const availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]);
     const activeChainByNamespace = this.#resolveProviderActiveChainByNamespace(availableChainRefs);
     const activeChain =

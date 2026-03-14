@@ -81,8 +81,6 @@ const toGenericEncodeContext = (ctx: ExecuteWithAdaptersContext): ErrorEncodeCon
 };
 
 export class RpcRegistry {
-  static readonly DEFAULT_NAMESPACE: Namespace = "eip155";
-
   private readonly namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
   private readonly namespacePrefixes = new Map<string, Namespace>();
   private readonly namespaceAdapters = new Map<Namespace, NamespaceAdapter>();

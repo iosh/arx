@@ -33,15 +33,21 @@ function deriveExpandedFontSize(fontSize: TextProps["fontSize"] | undefined): Te
   return fontSize;
 }
 
-function isEvmNamespace(namespace: string, chainRef?: string | null) {
-  if (namespace === "eip155") return true;
-  return typeof chainRef === "string" && chainRef.startsWith("eip155:");
+function isEip155AddressContext(namespace: string, chainRef?: string | null) {
+  if (typeof chainRef === "string") {
+    const [chainNamespace] = chainRef.split(":");
+    if (chainNamespace) {
+      return chainNamespace === "eip155";
+    }
+  }
+
+  return namespace === "eip155";
 }
 
 function formatFullAddress(address: string, namespace: string, chainRef?: string | null) {
   const trimmed = address.trim();
 
-  if (isEvmNamespace(namespace, chainRef)) {
+  if (isEip155AddressContext(namespace, chainRef)) {
     try {
       return addressFrom(trimmed, { checksum: true });
     } catch {
@@ -55,7 +61,7 @@ function formatFullAddress(address: string, namespace: string, chainRef?: string
 function formatShortAddress(address: string, namespace: string, chainRef?: string | null) {
   const full = formatFullAddress(address, namespace, chainRef);
 
-  if (isEvmNamespace(namespace, chainRef)) {
+  if (isEip155AddressContext(namespace, chainRef)) {
     const ensured = full.startsWith("0x") ? full : `0x${full}`;
     if (ensured.length <= 2 + 6 + 1 + 4) return ensured;
     return `${ensured.slice(0, 2 + 6)}…${ensured.slice(-4)}`;

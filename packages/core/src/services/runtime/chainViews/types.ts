@@ -55,6 +55,6 @@ export type ChainViewsService = {
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
-  buildProviderMeta(namespace?: string): ProviderMetaSnapshot;
+  buildProviderMeta(namespace: string): ProviderMetaSnapshot;
   resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata;
 };

@@ -1,6 +1,5 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { buildNetworkRuntimeInput } from "../controllers/network/config.js";
 import { Messenger, type ViolationMode } from "../messenger/Messenger.js";
 import {
   assembleRuntimeNamespaces,
@@ -19,28 +18,22 @@ import { ATTENTION_TOPICS, createAttentionService } from "../services/runtime/at
 import { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../services/runtime/chainViews/index.js";
 import { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
-import { createAccountsService } from "../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
-import { createKeyringMetasService } from "../services/store/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
-import { createNetworkPreferencesService } from "../services/store/networkPreferences/NetworkPreferencesService.js";
 import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
 import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
-import { createPermissionsService } from "../services/store/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
-import { createSettingsService } from "../services/store/settings/SettingsService.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
-import { createTransactionsService } from "../services/store/transactions/TransactionsService.js";
 import type { VaultMetaPort } from "../storage/index.js";
-import { DEFAULT_CHAIN } from "./background/constants.js";
 import { type ControllerLayerOptions, initControllers } from "./background/controllers.js";
 import { type EngineOptions, initEngine } from "./background/engine.js";
 import { createNetworkBootstrap } from "./background/networkBootstrap.js";
 import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
 import { initRpcLayer, type RpcLayerOptions } from "./background/rpcLayer.js";
 import { createRuntimeLifecycle } from "./background/runtimeLifecycle.js";
-import { type RuntimePlugin, runPluginHooks, startPlugins } from "./background/runtimePlugins.js";
+import { createBackgroundRuntimeLifecycle } from "./background/runtimeLifecyclePlan.js";
+import { initRuntimeStoreServices } from "./background/runtimeStoreServices.js";
 import { type BackgroundSessionServices, initSessionLayer, type SessionOptions } from "./background/session.js";
 import { createTransactionsLifecycle } from "./background/transactionsLifecycle.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
@@ -170,29 +163,13 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     chainDefinitions: { ...chainDefinitionsOptions, seed: chainDefinitionSeed },
   };
 
-  const settingsService = createSettingsService({ port: settingsOptions.port, now: storageNow });
-
-  const networkPreferences = createNetworkPreferencesService({
-    port: networkPreferencesOptions.port,
-    defaults: {
-      selectedChainRef: DEFAULT_CHAIN.chainRef,
-      activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef },
-    },
-    now: storageNow,
-  });
-
-  const transactionsService = createTransactionsService({
-    port: storeOptions.ports.transactions,
-    now: storageNow,
-  });
-
-  const permissionsService = createPermissionsService({
-    port: storeOptions.ports.permissions,
-    now: storageNow,
-  });
-
-  const accountsStore = createAccountsService({ port: storeOptions.ports.accounts });
-  const keyringMetas = createKeyringMetasService({ port: storeOptions.ports.keyringMetas });
+  const { settingsService, networkPreferences, transactionsService, permissionsService, accountsStore, keyringMetas } =
+    initRuntimeStoreServices({
+      settingsPort: settingsOptions.port,
+      networkPreferencesPort: networkPreferencesOptions.port,
+      ports: storeOptions.ports,
+      now: storageNow,
+    });
   const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const controllersInit = initControllers({
@@ -320,113 +297,19 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
     getRegisteredNamespaces: () => registeredNamespaces,
   });
-
-  const coreReadyPlugin: RuntimePlugin = {
-    name: "coreReady",
-    initialize: async () => {
-      await chainDefinitionsController.whenReady();
-      await controllersBase.accounts.whenReady?.();
-      if (deferredNetworkInitialState) {
-        const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
-          const metadata = chainDefinitionsController.getChain(chainRef)?.metadata;
-          if (!metadata) {
-            throw new Error(`Deferred network state references missing chain definition ${chainRef}`);
-          }
-          return metadata;
-        });
-        const allDeferredChainsAdmitted = deferredChains.every((metadata) =>
-          registeredNamespaces.has(metadata.namespace),
-        );
-        if (allDeferredChainsAdmitted) {
-          networkController.replaceState(buildNetworkRuntimeInput(deferredNetworkInitialState, deferredChains));
-        } else {
-          storageLogger("network: skipped deferred initial state with unregistered namespace chain");
-        }
-      }
-      await controllersBase.permissions.whenReady();
-    },
-  };
-
-  const transactionsPlugin: RuntimePlugin = {
-    name: "transactionsLifecycle",
-    initialize: () => transactionsLifecycle.initialize(),
-    start: () => transactionsLifecycle.start(),
-    destroy: () => transactionsLifecycle.destroy(),
-  };
-
-  const networkBootstrapPlugin: RuntimePlugin = {
-    name: "networkBootstrap",
-    initialize: () => networkBootstrap.loadPreferences(),
-    hydrate: async () => {
-      networkBootstrap.requestSync();
-    },
-    afterHydration: () => networkBootstrap.flushPendingSync(),
-    start: () => networkBootstrap.start(),
-    destroy: () => networkBootstrap.destroy(),
-  };
-
-  const sessionPlugin: RuntimePlugin = {
-    name: "sessionLayer",
-    hydrate: () => sessionLayer.hydrateVaultMeta(),
-    start: () => sessionLayer.attachSessionListeners(),
-    destroy: () => {
-      sessionLayer.cleanupVaultPersistTimer();
-      sessionLayer.detachSessionListeners();
-      sessionLayer.destroySessionLayer();
-    },
-  };
-
-  const accountsControllerPlugin: RuntimePlugin = {
-    name: "accountsController",
-    destroy: () => {
-      try {
-        controllersBase.accounts.destroy?.();
-      } catch (error) {
-        storageLogger("lifecycle: failed to destroy accounts controller", error);
-      }
-    },
-  };
-
-  const permissionsControllerPlugin: RuntimePlugin = {
-    name: "permissionsController",
-    destroy: () => {
-      try {
-        controllersBase.permissions.destroy?.();
-      } catch (error) {
-        storageLogger("lifecycle: failed to destroy permissions controller", error);
-      }
-    },
-  };
-
-  const rpcClientsPlugin: RuntimePlugin = {
-    name: "rpcClients",
-    destroy: () => rpcClientRegistry.destroy(),
-  };
-
-  const enginePlugin: RuntimePlugin = {
-    name: "rpcEngine",
-    destroy: () => engine.destroy(),
-  };
-
-  const busPlugin: RuntimePlugin = {
-    name: "messenger",
-    destroy: () => bus.clear(),
-  };
-
-  const initializeOrder = [coreReadyPlugin, transactionsPlugin, networkBootstrapPlugin] as const;
-  const hydrateOrder = [networkBootstrapPlugin, sessionPlugin] as const;
-  const afterHydrationOrder = [networkBootstrapPlugin] as const;
-  const startOrder = [networkBootstrapPlugin, sessionPlugin, transactionsPlugin] as const;
-  const destroyOrder = [
-    transactionsPlugin,
-    sessionPlugin,
-    networkBootstrapPlugin,
-    accountsControllerPlugin,
-    permissionsControllerPlugin,
-    rpcClientsPlugin,
-    enginePlugin,
-    busPlugin,
-  ] as const;
+  const lifecycle = createBackgroundRuntimeLifecycle({
+    runtimeLifecycle,
+    controllersBase,
+    deferredNetworkInitialState,
+    registeredNamespaces,
+    transactionsLifecycle,
+    networkBootstrap,
+    sessionLayer,
+    rpcClientRegistry,
+    engine,
+    bus,
+    logger: storageLogger,
+  });
 
   const runtime: BackgroundRuntime = {
     bus,
@@ -448,31 +331,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       clients: rpcClientRegistry,
       getActiveNamespace: contextNamespaceResolver,
     },
-    lifecycle: {
-      initialize: async () =>
-        runtimeLifecycle.initialize(async () => {
-          await runPluginHooks([...initializeOrder], "initialize");
-          await runtimeLifecycle.withHydration(async () => {
-            await runPluginHooks([...hydrateOrder], "hydrate");
-          });
-          await runPluginHooks([...afterHydrationOrder], "afterHydration");
-        }),
-      start: () =>
-        runtimeLifecycle.start(() => {
-          startPlugins([...startOrder]);
-        }),
-      destroy: () =>
-        runtimeLifecycle.destroy(() => {
-          for (const plugin of destroyOrder) {
-            try {
-              plugin.destroy?.();
-            } catch {
-              // best-effort
-            }
-          }
-        }),
-      getIsInitialized: () => runtimeLifecycle.getIsInitialized(),
-    },
+    lifecycle,
   };
 
   if (rpcEngineOptions.assemble !== false) {

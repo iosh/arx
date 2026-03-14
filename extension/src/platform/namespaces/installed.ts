@@ -1,10 +1,6 @@
 import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
-import {
-  createBuiltinProviderModules,
-  createProviderRegistryFromModules,
-  type ProviderModule,
-  type ProviderRegistry,
-} from "@arx/provider/registry";
+import { createEip155Module } from "@arx/provider/namespaces";
+import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 
 export type InstalledNamespaceSpec = Readonly<{
   namespace: string;
@@ -12,24 +8,40 @@ export type InstalledNamespaceSpec = Readonly<{
   providerModule?: ProviderModule;
 }>;
 
-const builtinProviderModules = createBuiltinProviderModules();
-const builtinProviderModuleByNamespace = new Map(builtinProviderModules.map((module) => [module.namespace, module]));
+export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly InstalledNamespaceSpec[]>(
+  specs: TSpecs,
+): TSpecs => {
+  const seen = new Set<string>();
 
-const requireBuiltinProviderModule = (namespace: string): ProviderModule => {
-  const module = builtinProviderModuleByNamespace.get(namespace);
-  if (!module) {
-    throw new Error(`Missing builtin provider module for installed namespace "${namespace}"`);
+  for (const spec of specs) {
+    if (seen.has(spec.namespace)) {
+      throw new Error(`Duplicate installed namespace "${spec.namespace}"`);
+    }
+    seen.add(spec.namespace);
+
+    if (spec.manifest.namespace !== spec.namespace) {
+      throw new Error(
+        `Installed namespace "${spec.namespace}" must use a manifest with the same namespace; received "${spec.manifest.namespace}"`,
+      );
+    }
+
+    if (spec.providerModule && spec.providerModule.namespace !== spec.namespace) {
+      throw new Error(
+        `Installed namespace "${spec.namespace}" must use a provider module with the same namespace; received "${spec.providerModule.namespace}"`,
+      );
+    }
   }
-  return module;
+
+  return specs;
 };
 
-export const INSTALLED_NAMESPACE_SPECS = [
+export const INSTALLED_NAMESPACE_SPECS = defineInstalledNamespaceSpecs([
   {
     namespace: eip155NamespaceManifest.namespace,
     manifest: eip155NamespaceManifest,
-    providerModule: requireBuiltinProviderModule(eip155NamespaceManifest.namespace),
+    providerModule: createEip155Module(),
   },
-] as const satisfies readonly InstalledNamespaceSpec[];
+] as const);
 
 export const INSTALLED_NAMESPACE_MANIFESTS: readonly NamespaceManifest[] = INSTALLED_NAMESPACE_SPECS.map(
   (spec) => spec.manifest,

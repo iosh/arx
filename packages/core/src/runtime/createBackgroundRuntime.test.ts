@@ -6,7 +6,7 @@ import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
-import { createUiServerRuntime } from "../ui/server/index.js";
+import { createUiServerRuntime } from "../ui/server/runtime.js";
 import {
   flushAsync,
   MemoryAccountsPort,

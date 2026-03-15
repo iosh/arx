@@ -170,12 +170,12 @@ const buildHarness = (windowIds: number[]) => {
 
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitProviderBridgeAccess: vi.fn(async () => {
-      throw new Error("Provider bridge contract should not be requested in approvalUiListener tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitProviderBridgeAccess"],
-    getOrInitUiBridgeAccess: vi.fn(async () => {
-      throw new Error("UI bridge contract should not be requested in approvalUiListener tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitUiBridgeAccess"],
+    getOrInitProviderAccess: vi.fn(async () => {
+      throw new Error("Provider bridge access should not be requested in approvalUiListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitProviderAccess"],
+    getOrInitUiAccess: vi.fn(async () => {
+      throw new Error("UI bridge access should not be requested in approvalUiListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
     getOrInitApprovalUiAccess: vi.fn(async () => ({
       subscribeAttentionRequested: (handler: (payload: unknown) => void) => bus.subscribe(ATTENTION_REQUESTED, handler),
       subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
@@ -189,7 +189,6 @@ const buildHarness = (windowIds: number[]) => {
       hasInitializedVault: () => true,
       isUnlocked: () => unlock.isUnlocked(),
     })) as unknown as BackgroundRuntimeHost["getOrInitApprovalUiAccess"],
-    persistVaultMeta: vi.fn() as unknown as BackgroundRuntimeHost["persistVaultMeta"],
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),
   };

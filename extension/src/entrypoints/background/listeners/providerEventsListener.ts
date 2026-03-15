@@ -99,7 +99,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
     if (startTask) return;
 
     startTask = (async () => {
-      const providerAccess = await runtimeHost.getOrInitProviderBridgeAccess();
+      const providerAccess = await runtimeHost.getOrInitProviderAccess();
       if (disposed) return;
       readProviderSnapshot = (namespace: string) => {
         try {

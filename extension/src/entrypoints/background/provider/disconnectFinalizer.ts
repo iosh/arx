@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/core/errors";
 import type { JsonRpcError } from "@arx/core/rpc";
-import type { ProviderRuntimeSurface } from "@arx/core/runtime";
+import type { ProviderRuntimeAccess } from "@arx/core/runtime";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
@@ -10,7 +10,7 @@ import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
-  getProviderBridgeAccess: () => ProviderRuntimeSurface | null;
+  getProviderAccess: () => ProviderRuntimeAccess | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
@@ -25,7 +25,7 @@ type ProviderDisconnectFinalizerDeps = {
 export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinalizerDeps) => {
   const {
     extensionOrigin,
-    getProviderBridgeAccess,
+    getProviderAccess,
     getSessionIdForPort,
     getPortContext,
     getPendingRequestMap,
@@ -45,14 +45,14 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     const portContext = getPortContext(port);
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const providerBridgeAccess = getProviderBridgeAccess();
+    const providerAccess = getProviderAccess();
     const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
 
-    if (!providerBridgeAccess) {
+    if (!providerAccess) {
       return { code: 4900, message: "Disconnected" } as const;
     }
 
-    return providerBridgeAccess.encodeRpcError(disconnectError, {
+    return providerAccess.encodeRpcError(disconnectError, {
       origin,
       method: PROVIDER_EVENTS.disconnect,
       rpcContext,

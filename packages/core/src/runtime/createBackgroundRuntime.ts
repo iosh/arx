@@ -28,8 +28,8 @@ import {
 } from "./background/runtimePhases.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
-import { createProviderRuntimeSurface } from "./surfaces/provider/index.js";
-import type { ProviderRuntimeSurface } from "./surfaces/provider/types.js";
+import { createProviderRuntimeAccess } from "./provider/index.js";
+import type { ProviderRuntimeAccess } from "./provider/types.js";
 
 export type { BackgroundSessionServices } from "./background/session.js";
 
@@ -96,9 +96,7 @@ export type BackgroundRuntime = {
     destroy: () => void;
     getIsInitialized: () => boolean;
   };
-  surfaces: {
-    provider: ProviderRuntimeSurface;
-  };
+  providerAccess: ProviderRuntimeAccess;
 };
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
@@ -233,9 +231,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     lifecycle,
   } as BackgroundRuntime;
 
-  runtime.surfaces = {
-    provider: createProviderRuntimeSurface(runtime),
-  };
+  runtime.providerAccess = createProviderRuntimeAccess(runtime);
 
   if (rpcEngineOptions.assemble !== false) {
     createRpcEngineForBackground(runtime, rpcEngineOptions.env);

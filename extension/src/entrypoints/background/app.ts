@@ -19,7 +19,7 @@ export const createBackgroundApp = () => {
 
   const portRouter = createPortRouter({
     extensionOrigin,
-    getOrInitProviderBridgeAccess: runtimeHost.getOrInitProviderBridgeAccess,
+    getOrInitProviderAccess: runtimeHost.getOrInitProviderAccess,
   });
 
   const providerEvents = createProviderEventsListener({ runtimeHost, portRouter });
@@ -28,8 +28,6 @@ export const createBackgroundApp = () => {
   let stopped = false;
   let uiBridge: ReturnType<typeof createUiBridge> | null = null;
   let uiBridgePromise: Promise<ReturnType<typeof createUiBridge>> | null = null;
-  let uiBridgeListenersAttached = false;
-  let unsubscribeAttentionStateChanged: (() => void) | null = null;
 
   const getOrInitUiBridge = async () => {
     if (stopped) throw new Error("Background app is stopped");
@@ -37,24 +35,14 @@ export const createBackgroundApp = () => {
     if (uiBridgePromise) return await uiBridgePromise;
 
     uiBridgePromise = (async () => {
-      const uiBridgeAccess = await runtimeHost.getOrInitUiBridgeAccess();
-      if (stopped) throw new Error("Background app is stopped");
-      const bridge = createUiBridge({
-        browser,
+      const uiAccess = await runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
-        ...uiBridgeAccess.uiBridgeRuntimeInputs,
+        uiOrigin: new URL(browser.runtime.getURL("")).origin,
       });
+      if (stopped) throw new Error("Background app is stopped");
+      const bridge = createUiBridge({ uiAccess });
 
       uiBridge = bridge;
-      if (!uiBridgeListenersAttached) {
-        uiBridgeListenersAttached = true;
-        bridge.attachListeners();
-      }
-
-      unsubscribeAttentionStateChanged ??= uiBridgeAccess.subscribeAttentionStateChanged(() => {
-        uiBridge?.broadcast();
-      });
-
       return bridge;
     })().finally(() => {
       uiBridgePromise = null;
@@ -106,11 +94,8 @@ export const createBackgroundApp = () => {
     providerEvents.destroy();
     approvalUi.destroy();
     portRouter.destroy();
-    unsubscribeAttentionStateChanged?.();
-    unsubscribeAttentionStateChanged = null;
     uiBridge?.teardown();
     uiBridge = null;
-    uiBridgeListenersAttached = false;
     runtimeHost.destroy();
     uiPlatform.teardown();
   };

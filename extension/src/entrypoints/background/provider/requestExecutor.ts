@@ -1,5 +1,5 @@
 import type { JsonRpcParams, JsonRpcRequest, RpcInvocationContext } from "@arx/core/rpc";
-import type { ProviderRuntimeSurface } from "@arx/core/runtime";
+import type { ProviderRuntimeAccess } from "@arx/core/runtime";
 import type { Envelope } from "@arx/provider/protocol";
 import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
@@ -10,7 +10,7 @@ import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
   extensionOrigin: string;
-  getProviderBridgeAccess: () => Promise<ProviderRuntimeSurface>;
+  getProviderAccess: () => Promise<ProviderRuntimeAccess>;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
@@ -21,7 +21,7 @@ type ProviderRequestExecutorDeps = {
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
   const {
     extensionOrigin,
-    getProviderBridgeAccess,
+    getProviderAccess,
     getPortContext,
     getOrCreatePortId,
     getPendingRequestMap,
@@ -64,16 +64,16 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       }),
     };
 
-    let providerBridgeAccess: ProviderRuntimeSurface | null = null;
+    let providerAccess: ProviderRuntimeAccess | null = null;
 
     try {
-      providerBridgeAccess = await getProviderBridgeAccess();
-      const response = await providerBridgeAccess.executeRpcRequest(request);
+      providerAccess = await getProviderAccess();
+      const response = await providerAccess.executeRpcRequest(request);
 
       sendReply(port, envelope.id, response as TransportResponse);
     } catch (error) {
-      const rpcError = providerBridgeAccess
-        ? providerBridgeAccess.encodeRpcError(error, {
+      const rpcError = providerAccess
+        ? providerAccess.encodeRpcError(error, {
             origin,
             method,
             rpcContext: request.arx,

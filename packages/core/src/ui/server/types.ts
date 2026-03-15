@@ -8,6 +8,7 @@ import type { AttentionService } from "../../services/runtime/attention/index.js
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
+import type { UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 
@@ -80,4 +81,16 @@ export type UiServerRuntime = {
   buildSnapshot: UiSnapshotBuilder;
   getUiContext: UiContextResolver;
   handlers: UiHandlers;
+};
+
+export type UiRuntimeDispatchResult = {
+  reply: UiPortEnvelope;
+  shouldBroadcastSnapshot: boolean;
+};
+
+export type UiRuntimeAccess = {
+  buildSnapshotEvent: () => UiEventEnvelope;
+  dispatchRequest: (raw: unknown) => Promise<UiRuntimeDispatchResult | null>;
+  shouldHoldBroadcast: (raw: unknown) => boolean;
+  subscribeStateChanged: (listener: () => void) => () => void;
 };

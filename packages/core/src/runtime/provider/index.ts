@@ -1,5 +1,6 @@
-export { createProviderRuntimeSurface } from "./createProviderRuntimeSurface.js";
+export { createProviderRuntimeAccess } from "./createProviderRuntimeAccess.js";
 export type {
+  ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
@@ -8,5 +9,4 @@ export type {
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSessionScope,
   ProviderRuntimeSnapshot,
-  ProviderRuntimeSurface,
 } from "./types.js";

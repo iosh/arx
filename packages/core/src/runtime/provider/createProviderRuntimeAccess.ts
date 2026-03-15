@@ -1,13 +1,13 @@
-import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../../rpc/index.js";
-import type { BackgroundRuntime } from "../../createBackgroundRuntime.js";
+import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
+import type { BackgroundRuntime } from "../createBackgroundRuntime.js";
 import type {
+  ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSnapshot,
-  ProviderRuntimeSurface,
 } from "./types.js";
 
 type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
@@ -16,7 +16,7 @@ type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
 
 const UNKNOWN_ORIGIN = "unknown://";
 
-export const createProviderRuntimeSurface = (runtime: BackgroundRuntime): ProviderRuntimeSurface => {
+export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): ProviderRuntimeAccess => {
   const resolveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver();
 
   const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {

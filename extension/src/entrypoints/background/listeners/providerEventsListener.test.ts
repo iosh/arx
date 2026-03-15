@@ -54,7 +54,7 @@ const buildHarness = () => {
 
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitProviderBridgeAccess: vi.fn(async () => ({
+    getOrInitProviderAccess: vi.fn(async () => ({
       buildSnapshot: (namespace: string) => {
         const snapshot = snapshots[namespace];
         if (!snapshot) {
@@ -88,13 +88,12 @@ const buildHarness = () => {
       encodeRpcError: vi.fn(),
       listPermittedAccounts: vi.fn(),
       cancelSessionApprovals: vi.fn(),
-    })) as unknown as BackgroundRuntimeHost["getOrInitProviderBridgeAccess"],
-    persistVaultMeta: vi.fn(),
-    getOrInitUiBridgeAccess: vi.fn(async () => {
-      throw new Error("UI bridge contract should not be requested in providerEventsListener tests");
-    }),
+    })) as unknown as BackgroundRuntimeHost["getOrInitProviderAccess"],
+    getOrInitUiAccess: vi.fn(async () => {
+      throw new Error("UI bridge access should not be requested in providerEventsListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
     getOrInitApprovalUiAccess: vi.fn(async () => {
-      throw new Error("Approval UI contract should not be requested in providerEventsListener tests");
+      throw new Error("Approval UI access should not be requested in providerEventsListener tests");
     }),
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),
@@ -135,7 +134,7 @@ describe("providerEventsListener", () => {
 
     harness.listener.start();
     await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
-    expect(harness.runtimeHost.getOrInitProviderBridgeAccess).toHaveBeenCalledTimes(1);
+    expect(harness.runtimeHost.getOrInitProviderAccess).toHaveBeenCalledTimes(1);
 
     harness.emitNetworkStateChanged();
 

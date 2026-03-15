@@ -1,7 +1,8 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import { createBackgroundRuntime, type ProviderRuntimeSurface } from "@arx/core/runtime";
-import { ATTENTION_REQUESTED, ATTENTION_STATE_CHANGED, type AttentionRequest } from "@arx/core/services";
+import { createBackgroundRuntime, type ProviderRuntimeAccess } from "@arx/core/runtime";
+import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
+import { createUiRuntimeAccess, type UiPlatformAdapter, type UiRuntimeAccess } from "@arx/core/ui/server";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACE_MANIFESTS } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -13,32 +14,16 @@ type BackgroundRuntimeCache = {
 
 export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
-  getOrInitProviderBridgeAccess: () => Promise<ProviderRuntimeSurface>;
-  getOrInitUiBridgeAccess: () => Promise<BackgroundUiBridgeAccess>;
+  getOrInitProviderAccess: () => Promise<ProviderRuntimeAccess>;
+  getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
   getOrInitApprovalUiAccess: () => Promise<BackgroundApprovalUiAccess>;
-  persistVaultMeta: () => Promise<void>;
   destroy: () => void;
   applyDebugNamespacesFromEnv: () => void;
 };
 
-export type BackgroundUiBridgeRuntimeInputs = {
-  controllers: ReturnType<typeof createBackgroundRuntime>["controllers"];
-  chainActivation: ReturnType<typeof createBackgroundRuntime>["services"]["chainActivation"];
-  chainViews: ReturnType<typeof createBackgroundRuntime>["services"]["chainViews"];
-  permissionViews: ReturnType<typeof createBackgroundRuntime>["services"]["permissionViews"];
-  networkPreferences: ReturnType<typeof createBackgroundRuntime>["services"]["networkPreferences"];
-  accountCodecs: ReturnType<typeof createBackgroundRuntime>["services"]["accountCodecs"];
-  session: ReturnType<typeof createBackgroundRuntime>["services"]["session"];
-  namespaceBindings: ReturnType<typeof createBackgroundRuntime>["services"]["namespaceBindings"];
-  rpcRegistry: ReturnType<typeof createBackgroundRuntime>["rpc"]["registry"];
-  keyring: ReturnType<typeof createBackgroundRuntime>["services"]["keyring"];
-  attention: ReturnType<typeof createBackgroundRuntime>["services"]["attention"];
-  persistVaultMeta: () => Promise<void>;
-};
-
-export type BackgroundUiBridgeAccess = {
-  uiBridgeRuntimeInputs: BackgroundUiBridgeRuntimeInputs;
-  subscribeAttentionStateChanged: (listener: () => void) => () => void;
+export type BackgroundUiAccessParams = {
+  platform: UiPlatformAdapter;
+  uiOrigin: string;
 };
 
 type BackgroundRuntimeApprovals = ReturnType<typeof createBackgroundRuntime>["controllers"]["approvals"];
@@ -71,24 +56,13 @@ export type BackgroundApprovalUiAccess = {
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
+  let uiAccess: UiRuntimeAccess | null = null;
+  let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
+  let uiAccessParams: BackgroundUiAccessParams | null = null;
   let destroyed = false;
 
   const runtimeLog = createLogger("bg:runtime");
   const hostLog = extendLogger(runtimeLog, "host");
-
-  const persistVaultMeta = async () => {
-    const active = runtimeCache;
-    if (!active) {
-      hostLog("persistVaultMeta before runtime initialized");
-      return;
-    }
-
-    try {
-      await active.runtime.services.session.persistVaultMeta();
-    } catch (error) {
-      hostLog("persistVaultMeta failed", error);
-    }
-  };
 
   const applyDebugNamespacesFromEnv = () => {
     const raw: unknown = import.meta.env.VITE_ARX_DEBUG_NAMESPACES;
@@ -161,31 +135,51 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     }
   };
 
-  const getOrInitUiBridgeAccess = async (): Promise<BackgroundUiBridgeAccess> => {
-    const active = await getOrInitRuntimeCache();
+  const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
+    if (!uiAccessParams) return;
+    if (uiAccessParams.platform === next.platform && uiAccessParams.uiOrigin === next.uiOrigin) return;
 
-    return {
-      uiBridgeRuntimeInputs: {
-        controllers: active.runtime.controllers,
-        chainActivation: active.runtime.services.chainActivation,
-        chainViews: active.runtime.services.chainViews,
-        permissionViews: active.runtime.services.permissionViews,
-        networkPreferences: active.runtime.services.networkPreferences,
-        accountCodecs: active.runtime.services.accountCodecs,
-        session: active.runtime.services.session,
-        namespaceBindings: active.runtime.services.namespaceBindings,
-        rpcRegistry: active.runtime.rpc.registry,
-        keyring: active.runtime.services.keyring,
-        attention: active.runtime.services.attention,
-        persistVaultMeta,
-      },
-      subscribeAttentionStateChanged: (listener) => active.runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
-    };
+    throw new Error("Background runtime host UI access parameters must remain stable across calls");
   };
 
-  const getOrInitProviderBridgeAccess = async (): Promise<ProviderRuntimeSurface> => {
+  const getOrInitUiAccess = async ({ platform, uiOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
+    if (destroyed) {
+      throw new Error("Background runtime host is destroyed");
+    }
+    assertUiAccessParamsMatch({ platform, uiOrigin });
+    if (uiAccess) return uiAccess;
+    if (uiAccessPromise) return await uiAccessPromise;
+    uiAccessParams = { platform, uiOrigin };
+
+    uiAccessPromise = (async () => {
+      const active = await getOrInitRuntimeCache();
+      const access = createUiRuntimeAccess({
+        runtime: active.runtime,
+        platform,
+        uiOrigin,
+      });
+
+      if (destroyed) {
+        throw new Error("Background runtime host is destroyed");
+      }
+
+      uiAccess = access;
+      return access;
+    })();
+
+    try {
+      return await uiAccessPromise;
+    } catch (error) {
+      uiAccessParams = null;
+      throw error;
+    } finally {
+      uiAccessPromise = null;
+    }
+  };
+
+  const getOrInitProviderAccess = async (): Promise<ProviderRuntimeAccess> => {
     const active = await getOrInitRuntimeCache();
-    return active.runtime.surfaces.provider;
+    return active.runtime.providerAccess;
   };
 
   const getOrInitApprovalUiAccess = async (): Promise<BackgroundApprovalUiAccess> => {
@@ -207,16 +201,17 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const destroy = () => {
     destroyed = true;
+    uiAccess = null;
+    uiAccessParams = null;
     runtimeCache?.runtime.lifecycle.destroy();
     runtimeCache = null;
   };
 
   return {
     initializeRuntime,
-    getOrInitProviderBridgeAccess,
-    getOrInitUiBridgeAccess,
+    getOrInitProviderAccess,
+    getOrInitUiAccess,
     getOrInitApprovalUiAccess,
-    persistVaultMeta,
     destroy,
     applyDebugNamespacesFromEnv,
   };

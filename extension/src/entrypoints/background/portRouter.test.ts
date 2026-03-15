@@ -1,5 +1,5 @@
 import type { JsonRpcResponse } from "@arx/core/rpc";
-import type { ProviderRuntimeSurface } from "@arx/core/runtime";
+import type { ProviderRuntimeAccess } from "@arx/core/runtime";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -61,11 +61,11 @@ const makeSnapshot = (
 });
 
 const createRouterHarness = (options?: {
-  buildConnectionState?: ProviderRuntimeSurface["buildConnectionState"];
-  listPermittedAccounts?: ProviderRuntimeSurface["listPermittedAccounts"];
-  cancelSessionApprovals?: ProviderRuntimeSurface["cancelSessionApprovals"];
-  executeRpcRequest?: ProviderRuntimeSurface["executeRpcRequest"];
-  encodeRpcError?: ProviderRuntimeSurface["encodeRpcError"];
+  buildConnectionState?: ProviderRuntimeAccess["buildConnectionState"];
+  listPermittedAccounts?: ProviderRuntimeAccess["listPermittedAccounts"];
+  cancelSessionApprovals?: ProviderRuntimeAccess["cancelSessionApprovals"];
+  executeRpcRequest?: ProviderRuntimeAccess["executeRpcRequest"];
+  encodeRpcError?: ProviderRuntimeAccess["encodeRpcError"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
 }) => {
   const listPermittedAccounts = vi.fn(
@@ -120,7 +120,7 @@ const createRouterHarness = (options?: {
       }),
   );
 
-  const providerBridgeAccess: ProviderRuntimeSurface = {
+  const providerAccess: ProviderRuntimeAccess = {
     buildSnapshot: vi.fn((namespace: string) => {
       const snapshot = snapshots[namespace];
       if (!snapshot) {
@@ -142,16 +142,16 @@ const createRouterHarness = (options?: {
     cancelSessionApprovals,
   };
 
-  const getOrInitProviderBridgeAccess = vi.fn(async () => providerBridgeAccess);
+  const getOrInitProviderAccess = vi.fn(async () => providerAccess);
   const router = createPortRouter({
     extensionOrigin: "ext://",
-    getOrInitProviderBridgeAccess,
+    getOrInitProviderAccess,
   });
 
   return {
     router,
-    getOrInitProviderBridgeAccess,
-    providerBridgeAccess,
+    getOrInitProviderAccess,
+    providerAccess,
     buildConnectionState,
     listPermittedAccounts,
     cancelSessionApprovals,
@@ -288,7 +288,7 @@ describe("portRouter privacy and binding", () => {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
-    const { router, buildConnectionState, listPermittedAccounts, providerBridgeAccess } = createRouterHarness({
+    const { router, buildConnectionState, listPermittedAccounts, providerAccess } = createRouterHarness({
       snapshots: { eip155: unlockedSnapshot },
       buildConnectionState: async () => ({
         snapshot: lockedSnapshot,
@@ -307,7 +307,7 @@ describe("portRouter privacy and binding", () => {
       origin: "https://example.com",
     });
     expect(listPermittedAccounts).not.toHaveBeenCalled();
-    expect(providerBridgeAccess.buildSnapshot).not.toHaveBeenCalled();
+    expect(providerAccess.buildSnapshot).not.toHaveBeenCalled();
     expect(port.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "handshake_ack",

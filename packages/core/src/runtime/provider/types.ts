@@ -1,13 +1,13 @@
-import type { ChainRef } from "../../../chains/ids.js";
-import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../../controllers/unlock/types.js";
+import type { ChainRef } from "../../chains/ids.js";
+import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import type {
   JsonRpcError,
   JsonRpcParams,
   JsonRpcRequest,
   JsonRpcResponse,
   RpcInvocationContext,
-} from "../../../rpc/index.js";
-import type { NetworkPreferencesChangedHandler } from "../../../services/store/networkPreferences/types.js";
+} from "../../rpc/index.js";
+import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
 
 export type ProviderRuntimeMeta = {
   activeChainByNamespace: Record<string, ChainRef>;
@@ -56,7 +56,7 @@ export type ProviderRuntimeSessionScope = {
   sessionId: string;
 };
 
-export type ProviderRuntimeSurface = {
+export type ProviderRuntimeAccess = {
   buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
   buildConnectionState(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
   getActiveChainByNamespace(): Record<string, ChainRef>;

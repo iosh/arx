@@ -22,6 +22,7 @@ import {
   type UiPortEnvelope,
   type UiSnapshot,
 } from "@arx/core/ui";
+import { createUiRuntimeAccess } from "@arx/core/ui/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
@@ -626,6 +627,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     entrypoints: ENTRYPOINTS,
   });
   const persistVaultMeta = vi.fn(async () => {});
+  const attentionStateHandlers = new Set<() => void>();
   const networkPreferencesListeners = new Set<
     (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
   >();
@@ -635,28 +637,42 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
       return () => networkPreferencesListeners.delete(handler);
     },
   };
-  type UiBridgeDeps = Parameters<typeof createUiBridge>[0];
-  const bridge = createUiBridge({
-    browser: browserApi as unknown as UiBridgeDeps["browser"],
-    controllers,
-    chainActivation: { selectWalletChain: vi.fn(async () => {}) } as UiBridgeDeps["chainActivation"],
-    chainViews: (controllers as unknown as { chainViews: UiBridgeDeps["chainViews"] }).chainViews,
-    permissionViews: (controllers as unknown as { permissionViews: UiBridgeDeps["permissionViews"] }).permissionViews,
-    networkPreferences: networkPreferences as unknown as UiBridgeDeps["networkPreferences"],
-    accountCodecs: accountCodecs as unknown as UiBridgeDeps["accountCodecs"],
-    session,
-    namespaceBindings: {
-      getUi: () => ({
-        getNativeBalance: vi.fn(async () => 0n),
-      }),
-      hasTransaction: () => false,
-    } as unknown as UiBridgeDeps["namespaceBindings"],
-    rpcRegistry,
-    persistVaultMeta,
-    keyring,
-    attention: { getSnapshot: () => ({ queue: [], count: 0 }) } as unknown as UiBridgeDeps["attention"],
+  const uiAccess = createUiRuntimeAccess({
+    runtime: {
+      bus: {
+        subscribe: (_topic: unknown, handler: () => void) => {
+          attentionStateHandlers.add(handler);
+          return () => attentionStateHandlers.delete(handler);
+        },
+      },
+      controllers,
+      services: {
+        chainActivation: { selectWalletChain: vi.fn(async () => {}) },
+        chainViews: (controllers as unknown as { chainViews: unknown }).chainViews,
+        permissionViews: (controllers as unknown as { permissionViews: unknown }).permissionViews,
+        networkPreferences,
+        accountCodecs,
+        session: {
+          ...session,
+          persistVaultMeta,
+        },
+        namespaceBindings: {
+          getUi: () => ({
+            getNativeBalance: vi.fn(async () => 0n),
+          }),
+          hasTransaction: () => false,
+        },
+        keyring,
+        attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
+      },
+      rpc: {
+        registry: rpcRegistry,
+      },
+    } as never,
     platform,
+    uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
   });
+  const bridge = createUiBridge({ uiAccess });
 
   return {
     bridge,
@@ -669,6 +685,11 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     emitNetworkPreferencesChanged: () => {
       for (const handler of networkPreferencesListeners) {
         handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
+      }
+    },
+    emitAttentionStateChanged: () => {
+      for (const handler of attentionStateHandlers) {
+        handler();
       }
     },
   };
@@ -723,7 +744,6 @@ describe("uiBridge", () => {
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);
-    bridge.attachListeners();
     port.messages = []; // drop initial snapshot
   });
 
@@ -796,66 +816,77 @@ describe("uiBridge", () => {
     });
     const controllers = createControllers();
     const listeners = new Set<(payload: { next: { activeChainByNamespace: Record<string, string> } }) => void>();
+    const attentionStateHandlers = new Set<() => void>();
     let snapshotBroken = true;
 
-    const bridge = createUiBridge({
-      browser: browserApi as unknown as Parameters<typeof createUiBridge>[0]["browser"],
-      controllers,
-      chainActivation: { selectWalletChain: vi.fn(async () => {}) } as Parameters<
-        typeof createUiBridge
-      >[0]["chainActivation"],
-      chainViews: {
-        ...(controllers as unknown as { chainViews: Parameters<typeof createUiBridge>[0]["chainViews"] }).chainViews,
-        getSelectedChainView: () => {
-          if (snapshotBroken) {
-            throw new Error("selected chain temporarily unavailable");
-          }
-          return CHAIN;
+    const uiAccess = createUiRuntimeAccess({
+      runtime: {
+        bus: {
+          subscribe: (_topic: unknown, handler: () => void) => {
+            attentionStateHandlers.add(handler);
+            return () => attentionStateHandlers.delete(handler);
+          },
         },
-        buildWalletNetworksSnapshot: () => {
-          if (snapshotBroken) {
-            throw new Error("selected chain temporarily unavailable");
-          }
-          return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
+        controllers,
+        services: {
+          chainActivation: { selectWalletChain: vi.fn(async () => {}) },
+          chainViews: {
+            ...(controllers as unknown as { chainViews: Record<string, unknown> }).chainViews,
+            getSelectedChainView: () => {
+              if (snapshotBroken) {
+                throw new Error("selected chain temporarily unavailable");
+              }
+              return CHAIN;
+            },
+            buildWalletNetworksSnapshot: () => {
+              if (snapshotBroken) {
+                throw new Error("selected chain temporarily unavailable");
+              }
+              return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
+            },
+          },
+          permissionViews: (
+            controllers as unknown as {
+              permissionViews: unknown;
+            }
+          ).permissionViews,
+          networkPreferences: {
+            subscribeChanged: (
+              handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
+            ) => {
+              listeners.add(handler);
+              return () => listeners.delete(handler);
+            },
+          },
+          accountCodecs,
+          session: {
+            unlock: new FakeUnlock(true),
+            withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
+            persistVaultMeta: vi.fn(async () => {}),
+            vault: {
+              getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
+            },
+          },
+          namespaceBindings: {
+            getUi: () => ({
+              getNativeBalance: vi.fn(async () => 0n),
+            }),
+            hasTransaction: () => false,
+          },
+          keyring,
+          attention: { getSnapshot: () => ({ queue: [], count: 0 }) },
         },
-      },
-      permissionViews: (
-        controllers as unknown as {
-          permissionViews: Parameters<typeof createUiBridge>[0]["permissionViews"];
-        }
-      ).permissionViews,
-      networkPreferences: {
-        subscribeChanged: (
-          handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
-        ) => {
-          listeners.add(handler);
-          return () => listeners.delete(handler);
+        rpc: {
+          registry: rpcRegistry,
         },
-      } as unknown as Parameters<typeof createUiBridge>[0]["networkPreferences"],
-      accountCodecs: accountCodecs as Parameters<typeof createUiBridge>[0]["accountCodecs"],
-      session: {
-        unlock: new FakeUnlock(true),
-        withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
-        vault: {
-          getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
-        },
-      } as unknown as Parameters<typeof createUiBridge>[0]["session"],
-      namespaceBindings: {
-        getUi: () => ({
-          getNativeBalance: vi.fn(async () => 0n),
-        }),
-        hasTransaction: () => false,
-      } as Parameters<typeof createUiBridge>[0]["namespaceBindings"],
-      rpcRegistry,
-      persistVaultMeta: vi.fn(async () => {}),
-      keyring: keyring,
-      attention: { getSnapshot: () => ({ queue: [], count: 0 }) } as Parameters<typeof createUiBridge>[0]["attention"],
+      } as never,
       platform,
+      uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
     });
+    const bridge = createUiBridge({ uiAccess });
 
     const port = createPort();
     bridge.attachPort(port as unknown as UiPort);
-    bridge.attachListeners();
 
     expect(port.messages).toEqual([]);
 

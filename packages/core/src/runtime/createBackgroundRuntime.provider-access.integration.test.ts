@@ -167,12 +167,12 @@ const setupNamespaceAwareProviderRuntime = async () => {
   return runtime;
 };
 
-describe("createBackgroundRuntime provider surface", () => {
+describe("createBackgroundRuntime provider access", () => {
   it("builds namespace-scoped snapshots and hides permitted accounts while locked", async () => {
     const background = await setupBackground();
 
     try {
-      const snapshot = background.runtime.surfaces.provider.buildSnapshot("eip155");
+      const snapshot = background.runtime.providerAccess.buildSnapshot("eip155");
 
       expect(snapshot).toEqual({
         namespace: "eip155",
@@ -190,7 +190,7 @@ describe("createBackgroundRuntime provider surface", () => {
       });
 
       await expect(
-        background.runtime.surfaces.provider.listPermittedAccounts({
+        background.runtime.providerAccess.listPermittedAccounts({
           origin: ORIGIN,
           chainRef: snapshot.chain.chainRef,
         }),
@@ -204,7 +204,7 @@ describe("createBackgroundRuntime provider surface", () => {
     const background = await setupBackground();
 
     try {
-      const lockedState = await background.runtime.surfaces.provider.buildConnectionState({
+      const lockedState = await background.runtime.providerAccess.buildConnectionState({
         namespace: "eip155",
         origin: ORIGIN,
       });
@@ -245,7 +245,7 @@ describe("createBackgroundRuntime provider surface", () => {
         ],
       });
 
-      const unlockedState = await background.runtime.surfaces.provider.buildConnectionState({
+      const unlockedState = await background.runtime.providerAccess.buildConnectionState({
         namespace: chain.namespace,
         origin: ORIGIN,
       });
@@ -262,7 +262,7 @@ describe("createBackgroundRuntime provider surface", () => {
     try {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
-      const unlockedSnapshot = background.runtime.surfaces.provider.buildSnapshot(chain.namespace);
+      const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot(chain.namespace);
 
       await background.runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
         namespace: chain.namespace,
@@ -280,7 +280,7 @@ describe("createBackgroundRuntime provider surface", () => {
         ],
       });
 
-      const accounts = await background.runtime.surfaces.provider.listPermittedAccounts({
+      const accounts = await background.runtime.providerAccess.listPermittedAccounts({
         origin: ORIGIN,
         chainRef: chain.chainRef,
       });
@@ -289,7 +289,7 @@ describe("createBackgroundRuntime provider surface", () => {
       background.runtime.services.session.unlock.lock("manual");
 
       await expect(
-        background.runtime.surfaces.provider.listPermittedAccounts({
+        background.runtime.providerAccess.listPermittedAccounts({
           origin: ORIGIN,
           chainRef: unlockedSnapshot.chain.chainRef,
         }),
@@ -322,7 +322,7 @@ describe("createBackgroundRuntime provider surface", () => {
         ],
       });
 
-      const response = await background.runtime.surfaces.provider.executeRpcRequest({
+      const response = await background.runtime.providerAccess.executeRpcRequest({
         id: "rpc-1",
         jsonrpc: "2.0",
         method: "eth_accounts",
@@ -371,7 +371,7 @@ describe("createBackgroundRuntime provider surface", () => {
         approvalCreatedResolve?.();
       });
 
-      const pendingResponse = background.runtime.surfaces.provider.executeRpcRequest({
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
         id: "rpc-2",
         jsonrpc: "2.0",
         method: "eth_requestAccounts",
@@ -388,7 +388,7 @@ describe("createBackgroundRuntime provider surface", () => {
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(1);
 
       await expect(
-        background.runtime.surfaces.provider.cancelSessionApprovals({
+        background.runtime.providerAccess.cancelSessionApprovals({
           origin: ORIGIN,
           portId: "port-1",
           sessionId: "session-1",
@@ -415,7 +415,7 @@ describe("createBackgroundRuntime provider surface", () => {
 
     try {
       expect(
-        runtime.surfaces.provider.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
+        runtime.providerAccess.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
           origin: ORIGIN,
           method: "sol_getBalance",
           rpcContext: buildProviderContext({
@@ -438,7 +438,7 @@ describe("createBackgroundRuntime provider surface", () => {
 
     try {
       await expect(
-        runtime.surfaces.provider.executeRpcRequest({
+        runtime.providerAccess.executeRpcRequest({
           id: "rpc-sol-1",
           jsonrpc: "2.0",
           method: "sol_getBalance",

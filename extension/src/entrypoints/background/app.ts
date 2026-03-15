@@ -2,6 +2,7 @@ import { createLogger } from "@arx/core/logger";
 import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
+import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { ENTRYPOINTS } from "./constants";
 import { createApprovalUiListener } from "./listeners/approvalUiListener";
 import { createProviderEventsListener } from "./listeners/providerEventsListener";
@@ -14,7 +15,10 @@ import { createUiBridge } from "./uiBridge";
 export const createBackgroundApp = () => {
   const appLog = createLogger("bg:app");
   const extensionOrigin = getExtensionOrigin();
-  const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
+  const runtimeHost = createBackgroundRuntimeHost({
+    extensionOrigin,
+    runtimeNamespaces: INSTALLED_NAMESPACES.runtime,
+  });
   const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
 
   const portRouter = createPortRouter({

@@ -2,17 +2,34 @@ import { assertValidNamespaceManifest, eip155NamespaceManifest, type NamespaceMa
 import { createEip155Module } from "@arx/provider/namespaces";
 import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 
+export type InstalledNamespaceProviderExposure =
+  | Readonly<{
+      expose: false;
+    }>
+  | Readonly<{
+      expose: true;
+      module: ProviderModule;
+    }>;
+
 export type InstalledNamespaceSpec = Readonly<{
   namespace: string;
   manifest: NamespaceManifest;
-  providerModule: ProviderModule;
+  provider: InstalledNamespaceProviderExposure;
+}>;
+
+export type InstalledNamespacesRuntimeAssembly = Readonly<{
+  manifests: readonly NamespaceManifest[];
+}>;
+
+export type InstalledNamespacesProviderAssembly = Readonly<{
+  modules: readonly ProviderModule[];
+  createRegistry: () => ProviderRegistry;
 }>;
 
 export type InstalledNamespacesComposition = Readonly<{
   specs: readonly InstalledNamespaceSpec[];
-  manifests: readonly NamespaceManifest[];
-  providerModules: readonly ProviderModule[];
-  createProviderRegistry: () => ProviderRegistry;
+  runtime: InstalledNamespacesRuntimeAssembly;
+  provider: InstalledNamespacesProviderAssembly;
 }>;
 
 export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly InstalledNamespaceSpec[]>(
@@ -34,9 +51,9 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
       );
     }
 
-    if (spec.providerModule.namespace !== spec.namespace) {
+    if (spec.provider.expose && spec.provider.module.namespace !== spec.namespace) {
       throw new Error(
-        `Installed namespace "${spec.namespace}" must use a provider module with the same namespace; received "${spec.providerModule.namespace}"`,
+        `Installed namespace "${spec.namespace}" must use a provider module with the same namespace; received "${spec.provider.module.namespace}"`,
       );
     }
   }
@@ -49,13 +66,19 @@ export const createInstalledNamespacesComposition = (
 ): InstalledNamespacesComposition => {
   const validatedSpecs = defineInstalledNamespaceSpecs(specs);
   const manifests: readonly NamespaceManifest[] = validatedSpecs.map((spec) => spec.manifest);
-  const providerModules: readonly ProviderModule[] = validatedSpecs.map((spec) => spec.providerModule);
+  const providerModules: readonly ProviderModule[] = validatedSpecs.flatMap((spec) =>
+    spec.provider.expose ? [spec.provider.module] : [],
+  );
 
   return {
     specs: validatedSpecs,
-    manifests,
-    providerModules,
-    createProviderRegistry: () => createProviderRegistryFromModules(providerModules),
+    runtime: {
+      manifests,
+    },
+    provider: {
+      modules: providerModules,
+      createRegistry: () => createProviderRegistryFromModules(providerModules),
+    },
   };
 };
 
@@ -64,17 +87,10 @@ export const INSTALLED_NAMESPACES = createInstalledNamespacesComposition(
     {
       namespace: eip155NamespaceManifest.namespace,
       manifest: eip155NamespaceManifest,
-      providerModule: createEip155Module(),
+      provider: {
+        expose: true,
+        module: createEip155Module(),
+      },
     },
   ] as const),
 );
-
-export const INSTALLED_NAMESPACE_SPECS: readonly InstalledNamespaceSpec[] = INSTALLED_NAMESPACES.specs;
-
-export const INSTALLED_NAMESPACE_MANIFESTS: readonly NamespaceManifest[] = INSTALLED_NAMESPACES.manifests;
-
-export const INSTALLED_PROVIDER_MODULES: readonly ProviderModule[] = INSTALLED_NAMESPACES.providerModules;
-
-export const createInstalledProviderRegistry = (): ProviderRegistry => {
-  return INSTALLED_NAMESPACES.createProviderRegistry();
-};

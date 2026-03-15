@@ -1,14 +1,7 @@
 import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
 import type { ProviderModule } from "@arx/provider/registry";
 import { describe, expect, it } from "vitest";
-import {
-  createInstalledProviderRegistry,
-  defineInstalledNamespaceSpecs,
-  INSTALLED_NAMESPACE_MANIFESTS,
-  INSTALLED_NAMESPACE_SPECS,
-  INSTALLED_NAMESPACES,
-  INSTALLED_PROVIDER_MODULES,
-} from "./installed";
+import { createInstalledNamespacesComposition, defineInstalledNamespaceSpecs, INSTALLED_NAMESPACES } from "./installed";
 
 const createTestProviderModule = (namespace: string): ProviderModule => ({
   namespace,
@@ -18,29 +11,38 @@ const createTestProviderModule = (namespace: string): ProviderModule => ({
 });
 
 describe("installed namespaces composition root", () => {
-  it("keeps installed manifests and provider modules aligned by namespace", () => {
-    const installedNamespaces = INSTALLED_NAMESPACE_SPECS.map((spec) => spec.namespace);
+  it("keeps runtime manifests and exposed provider modules aligned by namespace", () => {
+    const installedNamespaces = INSTALLED_NAMESPACES.specs.map((spec) => spec.namespace);
 
-    expect(INSTALLED_NAMESPACES.specs).toBe(INSTALLED_NAMESPACE_SPECS);
-    expect(INSTALLED_NAMESPACES.manifests).toBe(INSTALLED_NAMESPACE_MANIFESTS);
-    expect(INSTALLED_NAMESPACES.providerModules).toBe(INSTALLED_PROVIDER_MODULES);
     expect(installedNamespaces).toEqual(["eip155"]);
-    expect(INSTALLED_NAMESPACE_MANIFESTS.map((manifest) => manifest.namespace)).toEqual(installedNamespaces);
-    expect(INSTALLED_PROVIDER_MODULES.map((module) => module.namespace)).toEqual(installedNamespaces);
+    expect(INSTALLED_NAMESPACES.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(installedNamespaces);
+    expect(INSTALLED_NAMESPACES.provider.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
   });
 
-  it("builds provider registries from the installed provider module list", () => {
-    const registry = createInstalledProviderRegistry();
-    const compositionRegistry = INSTALLED_NAMESPACES.createProviderRegistry();
+  it("builds provider registries from the provider stage output", () => {
+    const registry = INSTALLED_NAMESPACES.provider.createRegistry();
 
-    expect(registry.modules.map((module) => module.namespace)).toEqual(
-      INSTALLED_PROVIDER_MODULES.map((m) => m.namespace),
+    expect(registry.modules).toBe(INSTALLED_NAMESPACES.provider.modules);
+    expect(registry.modules.map((module) => module.namespace)).toEqual(["eip155"]);
+    expect([...registry.byNamespace.keys()]).toEqual(["eip155"]);
+  });
+
+  it("supports installed namespaces that are not exposed to dapps", () => {
+    const hiddenNamespace = createInstalledNamespacesComposition(
+      defineInstalledNamespaceSpecs([
+        {
+          namespace: "eip155",
+          manifest: eip155NamespaceManifest,
+          provider: {
+            expose: false,
+          },
+        },
+      ] as const),
     );
-    expect([...registry.byNamespace.keys()]).toEqual(INSTALLED_PROVIDER_MODULES.map((module) => module.namespace));
-    expect(compositionRegistry.modules).toBe(INSTALLED_PROVIDER_MODULES);
-    expect([...compositionRegistry.byNamespace.keys()]).toEqual(
-      INSTALLED_PROVIDER_MODULES.map((module) => module.namespace),
-    );
+
+    expect(hiddenNamespace.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
+    expect(hiddenNamespace.provider.modules).toEqual([]);
+    expect(hiddenNamespace.provider.createRegistry().modules).toEqual([]);
   });
 
   it("rejects invalid installed namespace specs", () => {
@@ -66,12 +68,18 @@ describe("installed namespaces composition root", () => {
         {
           namespace: "eip155",
           manifest: eip155NamespaceManifest,
-          providerModule: createTestProviderModule("eip155"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("eip155"),
+          },
         },
         {
           namespace: "eip155",
           manifest: eip155NamespaceManifest,
-          providerModule: createTestProviderModule("eip155"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("eip155"),
+          },
         },
       ] as const),
     ).toThrow(/Duplicate installed namespace "eip155"/);
@@ -81,7 +89,10 @@ describe("installed namespaces composition root", () => {
         {
           namespace: "conflux",
           manifest: eip155NamespaceManifest,
-          providerModule: createTestProviderModule("conflux"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("conflux"),
+          },
         },
       ] as const),
     ).toThrow(/must use a manifest with the same namespace/);
@@ -91,7 +102,10 @@ describe("installed namespaces composition root", () => {
         {
           namespace: "eip155",
           manifest: eip155NamespaceManifest,
-          providerModule: mismatchedProviderModule,
+          provider: {
+            expose: true,
+            module: mismatchedProviderModule,
+          },
         },
       ] as const),
     ).toThrow(/must use a provider module with the same namespace/);
@@ -101,7 +115,10 @@ describe("installed namespaces composition root", () => {
         {
           namespace: "eip155",
           manifest: invalidManifest,
-          providerModule: createTestProviderModule("eip155"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("eip155"),
+          },
         },
       ] as const),
     ).toThrow(/core\.rpc\.namespace/);

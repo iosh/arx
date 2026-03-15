@@ -19,10 +19,6 @@ vi.mock("@/platform/storage", () => ({
   getExtensionStorage: getExtensionStorageMock,
 }));
 
-vi.mock("@/platform/namespaces/installed", () => ({
-  INSTALLED_NAMESPACE_MANIFESTS: [],
-}));
-
 vi.mock("@arx/core/logger", () => ({
   createLogger: () => vi.fn(),
   extendLogger: () => vi.fn(),
@@ -177,6 +173,8 @@ const makeRuntime = () => {
 };
 
 describe("runtimeHost", () => {
+  const runtimeNamespaces = { manifests: [] };
+
   beforeEach(() => {
     vi.clearAllMocks();
     getExtensionStorageMock.mockReturnValue({
@@ -204,7 +202,10 @@ describe("runtimeHost", () => {
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
-    const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
+    const runtimeHost = createBackgroundRuntimeHost({
+      extensionOrigin: "chrome-extension://test",
+      runtimeNamespaces,
+    });
     const uiPlatform = {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
@@ -223,6 +224,11 @@ describe("runtimeHost", () => {
     const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
 
     expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
+    expect(createBackgroundRuntimeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespaces: runtimeNamespaces,
+      }),
+    );
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
@@ -247,7 +253,10 @@ describe("runtimeHost", () => {
     const runtimeHarness = makeRuntime();
     createBackgroundRuntimeMock.mockReturnValue(runtimeHarness.runtime);
 
-    const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
+    const runtimeHost = createBackgroundRuntimeHost({
+      extensionOrigin: "chrome-extension://test",
+      runtimeNamespaces,
+    });
 
     await runtimeHost.initializeRuntime();
     runtimeHost.destroy();
@@ -278,7 +287,10 @@ describe("runtimeHost", () => {
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
-    const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
+    const runtimeHost = createBackgroundRuntimeHost({
+      extensionOrigin: "chrome-extension://test",
+      runtimeNamespaces,
+    });
     const uiPlatform = {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),

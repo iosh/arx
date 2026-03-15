@@ -106,7 +106,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
     if (startTask) return;
 
     startTask = (async () => {
-      const { controllers, session, networkPreferences } = await runtimeHost.getOrInitContext();
+      const providerEventsAccess = await runtimeHost.getOrInitProviderEventsAccess();
       if (disposed) return;
 
       const publishAccountsState = () => {
@@ -114,14 +114,14 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       };
 
       subscriptions.push(
-        session.unlock.onUnlocked((payload) => {
+        providerEventsAccess.subscribeSessionUnlocked((payload) => {
           portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
           publishAccountsState();
         }),
       );
 
       subscriptions.push(
-        session.unlock.onLocked((payload) => {
+        providerEventsAccess.subscribeSessionLocked((payload) => {
           portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
           publishAccountsState();
           portRouter.broadcastDisconnect();
@@ -129,27 +129,27 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       );
 
       subscriptions.push(
-        controllers.network.onStateChanged(() => {
-          const namespaces = collectRelevantNamespaces(networkPreferences.getActiveChainByNamespace());
+        providerEventsAccess.subscribeNetworkStateChanged(() => {
+          const namespaces = collectRelevantNamespaces(providerEventsAccess.getActiveChainByNamespace());
           reconcileNamespaces(namespaces);
         }),
       );
 
       subscriptions.push(
-        networkPreferences.subscribeChanged(({ next }) => {
+        providerEventsAccess.subscribeNetworkPreferencesChanged(({ next }) => {
           const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
           reconcileNamespaces(namespaces);
         }),
       );
 
       subscriptions.push(
-        controllers.accounts.onStateChanged(() => {
+        providerEventsAccess.subscribeAccountsStateChanged(() => {
           publishAccountsState();
         }),
       );
 
       subscriptions.push(
-        controllers.permissions.onStateChanged(() => {
+        providerEventsAccess.subscribePermissionsStateChanged(() => {
           publishAccountsState();
         }),
       );

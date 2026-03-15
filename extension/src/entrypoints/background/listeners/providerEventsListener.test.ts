@@ -53,37 +53,34 @@ const buildHarness = () => {
   } as unknown as ReturnType<typeof createPortRouter>;
 
   const runtimeHost: BackgroundRuntimeHost = {
-    getOrInitContext: vi.fn(async () => ({
-      controllers: {
-        network: {
-          onStateChanged: (handler: () => void) => {
-            networkStateHandlers.add(handler);
-            return () => networkStateHandlers.delete(handler);
-          },
-        },
-        accounts: {
-          onStateChanged: () => () => {},
-        },
-        permissions: {
-          onStateChanged: () => () => {},
-        },
+    initializeRuntime: vi.fn(async () => {}),
+    getOrInitContext: vi.fn(async () => {
+      throw new Error("providerEventsListener should not request the full runtime context");
+    }) as unknown as BackgroundRuntimeHost["getOrInitContext"],
+    getOrInitProviderEventsAccess: vi.fn(async () => ({
+      getProviderSnapshot: (namespace: string) => {
+        const snapshot = snapshots[namespace];
+        if (!snapshot) {
+          throw new Error(`Missing snapshot for ${namespace}`);
+        }
+        return snapshot;
       },
-      session: {
-        unlock: {
-          onUnlocked: () => () => {},
-          onLocked: () => () => {},
-        },
+      getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
+      subscribeSessionUnlocked: () => () => {},
+      subscribeSessionLocked: () => () => {},
+      subscribeNetworkStateChanged: (handler: () => void) => {
+        networkStateHandlers.add(handler);
+        return () => networkStateHandlers.delete(handler);
       },
-      networkPreferences: {
-        getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
-        subscribeChanged: (
-          handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
-        ) => {
-          networkPreferenceHandlers.add(handler);
-          return () => networkPreferenceHandlers.delete(handler);
-        },
+      subscribeNetworkPreferencesChanged: (
+        handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
+      ) => {
+        networkPreferenceHandlers.add(handler);
+        return () => networkPreferenceHandlers.delete(handler);
       },
-    })) as unknown as BackgroundRuntimeHost["getOrInitContext"],
+      subscribeAccountsStateChanged: () => () => {},
+      subscribePermissionsStateChanged: () => () => {},
+    })) as unknown as BackgroundRuntimeHost["getOrInitProviderEventsAccess"],
     getProviderSnapshot: vi.fn((namespace: string) => {
       const snapshot = snapshots[namespace];
       if (!snapshot) {
@@ -92,12 +89,19 @@ const buildHarness = () => {
       return snapshot;
     }),
     persistVaultMeta: vi.fn(),
+    getOrInitUiBridgeAccess: vi.fn(async () => {
+      throw new Error("UI bridge contract should not be requested in providerEventsListener tests");
+    }),
+    getOrInitApprovalUiAccess: vi.fn(async () => {
+      throw new Error("Approval UI contract should not be requested in providerEventsListener tests");
+    }),
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),
   };
 
   return {
     listener: createProviderEventsListener({ runtimeHost, portRouter }),
+    runtimeHost,
     mocks: {
       listConnectedNamespaces,
       broadcastMetaChangedForNamespaces,
@@ -130,6 +134,8 @@ describe("providerEventsListener", () => {
 
     harness.listener.start();
     await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
+    expect(harness.runtimeHost.getOrInitProviderEventsAccess).toHaveBeenCalledTimes(1);
+    expect(harness.runtimeHost.getOrInitContext).not.toHaveBeenCalled();
 
     harness.emitNetworkStateChanged();
 

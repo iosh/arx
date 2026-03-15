@@ -169,15 +169,30 @@ const buildHarness = (windowIds: number[]) => {
   };
 
   const runtimeHost: BackgroundRuntimeHost = {
-    getOrInitContext: vi.fn(async () => ({
-      runtime: { bus },
-      controllers: { approvals },
-      session: {
-        vault: { getStatus: () => ({ hasEnvelope: true }) },
-        unlock,
-      },
-    })) as unknown as BackgroundRuntimeHost["getOrInitContext"],
+    initializeRuntime: vi.fn(async () => {}),
+    getOrInitContext: vi.fn(async () => {
+      throw new Error("approvalUiListener should not request the full runtime context");
+    }) as unknown as BackgroundRuntimeHost["getOrInitContext"],
     getProviderSnapshot: vi.fn() as unknown as BackgroundRuntimeHost["getProviderSnapshot"],
+    getOrInitUiBridgeAccess: vi.fn(async () => {
+      throw new Error("UI bridge contract should not be requested in approvalUiListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitUiBridgeAccess"],
+    getOrInitProviderEventsAccess: vi.fn(async () => {
+      throw new Error("Provider events contract should not be requested in approvalUiListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitProviderEventsAccess"],
+    getOrInitApprovalUiAccess: vi.fn(async () => ({
+      subscribeAttentionRequested: (handler: (payload: unknown) => void) => bus.subscribe(ATTENTION_REQUESTED, handler),
+      subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
+        approvals.onCreated(handler),
+      subscribeApprovalFinished: (handler: (event: { id: string }) => void) => approvals.onFinished(handler),
+      subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
+      subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
+      subscribeSessionStateChanged: (handler: () => void) => unlock.onStateChanged(handler),
+      cancelApproval: approvals.cancel,
+      listPendingApprovalIds: () => approvals.getState().pending.map((item) => item.id),
+      hasInitializedVault: () => true,
+      isUnlocked: () => unlock.isUnlocked(),
+    })) as unknown as BackgroundRuntimeHost["getOrInitApprovalUiAccess"],
     persistVaultMeta: vi.fn() as unknown as BackgroundRuntimeHost["persistVaultMeta"],
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),
@@ -205,7 +220,8 @@ describe("approvalUiListener", () => {
     const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
     listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitContext).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
+    expect(harness.runtimeHost.getOrInitContext).not.toHaveBeenCalled();
 
     harness.approvals.add(createRecord({ id: "approval-1" }));
     harness.approvals.add(
@@ -240,7 +256,7 @@ describe("approvalUiListener", () => {
     const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
     listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitContext).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
 
     harness.approvals.add(createRecord({ id: "provider-approval" }));
     harness.approvals.add(
@@ -274,7 +290,7 @@ describe("approvalUiListener", () => {
     const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
     listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitContext).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
 
     harness.approvals.add(createRecord({ id: "provider-approval" }));
     harness.approvals.add(
@@ -311,7 +327,7 @@ describe("approvalUiListener", () => {
     const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
     listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitContext).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
 
     harness.bus.emit(ATTENTION_REQUESTED, {
       reason: "unlock_required",

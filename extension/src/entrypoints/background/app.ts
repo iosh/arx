@@ -1,4 +1,3 @@
-import { ATTENTION_STATE_CHANGED } from "@arx/core/services";
 import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
@@ -37,23 +36,12 @@ export const createBackgroundApp = () => {
     if (uiBridgePromise) return await uiBridgePromise;
 
     uiBridgePromise = (async () => {
-      const ctx = await runtimeHost.getOrInitContext();
+      const uiBridgeAccess = await runtimeHost.getOrInitUiBridgeAccess();
       if (stopped) throw new Error("Background app is stopped");
       const bridge = createUiBridge({
         browser,
-        controllers: ctx.controllers,
-        chainActivation: ctx.runtime.services.chainActivation,
-        chainViews: ctx.chainViews,
-        permissionViews: ctx.permissionViews,
-        networkPreferences: ctx.networkPreferences,
-        accountCodecs: ctx.runtime.services.accountCodecs,
-        session: ctx.session,
-        namespaceBindings: ctx.runtime.services.namespaceBindings,
-        rpcRegistry: ctx.runtime.rpc.registry,
-        persistVaultMeta: () => runtimeHost.persistVaultMeta(),
-        keyring: ctx.keyring,
-        attention: ctx.attention,
         platform: uiPlatform,
+        ...uiBridgeAccess.uiBridgeRuntimeInputs,
       });
 
       uiBridge = bridge;
@@ -62,7 +50,7 @@ export const createBackgroundApp = () => {
         bridge.attachListeners();
       }
 
-      unsubscribeAttentionStateChanged ??= ctx.runtime.bus.subscribe(ATTENTION_STATE_CHANGED, () => {
+      unsubscribeAttentionStateChanged ??= uiBridgeAccess.subscribeAttentionStateChanged(() => {
         uiBridge?.broadcast();
       });
 
@@ -102,7 +90,7 @@ export const createBackgroundApp = () => {
   const start = () => {
     stopped = false;
     runtimeHost.applyDebugNamespacesFromEnv();
-    void runtimeHost.getOrInitContext();
+    void runtimeHost.initializeRuntime();
     providerEvents.start();
     approvalUi.start();
 

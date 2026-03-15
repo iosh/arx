@@ -1,21 +1,12 @@
 import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/controllers/approval";
 import { createLogger, extendLogger } from "@arx/core/logger";
-import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { UiPlatform } from "../platform/uiPlatform";
-import type { BackgroundRuntimeHost } from "../runtimeHost";
+import type { BackgroundAttentionRequestedPayload, BackgroundRuntimeHost } from "../runtimeHost";
 
 type ApprovalUiOrchestratorDeps = {
   runtimeHost: BackgroundRuntimeHost;
   platform: UiPlatform;
-};
-
-type AttentionRequestedPayload = {
-  reason: string;
-  origin?: string;
-  method?: string;
-  chainRef?: string | null;
-  namespace?: string | null;
 };
 
 export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOrchestratorDeps) => {
@@ -42,14 +33,14 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
     if (startTask) return;
 
     startTask = (async () => {
-      const { runtime, controllers, session } = await runtimeHost.getOrInitContext();
+      const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
       if (disposed) return;
 
       const cancelApprovalIds = async (approvalIds: string[], reason: ApprovalTerminalReason) => {
         await Promise.all(
           approvalIds.map(async (approvalId) => {
             try {
-              await controllers.approvals.cancel({ id: approvalId, reason });
+              await approvalUiAccess.cancelApproval({ id: approvalId, reason });
             } catch (error) {
               popupLog("failed to cancel approval", { approvalId, reason, error });
             }
@@ -58,7 +49,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       };
 
       const cancelPendingApprovals = async (reason: ApprovalTerminalReason) => {
-        const approvalIds = controllers.approvals.getState().pending.map((item) => item.id);
+        const approvalIds = approvalUiAccess.listPendingApprovalIds();
         await cancelApprovalIds(approvalIds, reason);
       };
 
@@ -76,7 +67,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       };
 
       subscriptions.push(
-        runtime.bus.subscribe(ATTENTION_REQUESTED, (request: AttentionRequestedPayload) => {
+        approvalUiAccess.subscribeAttentionRequested((request: BackgroundAttentionRequestedPayload) => {
           popupLog("event:attention:requested", {
             reason: request.reason,
             origin: request.origin,
@@ -89,7 +80,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
             return;
           }
 
-          const vaultInitialized = session.vault.getStatus().hasEnvelope;
+          const vaultInitialized = approvalUiAccess.hasInitializedVault();
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
               reason: request.reason,
@@ -128,13 +119,13 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       );
 
       subscriptions.push(
-        controllers.approvals.onCreated(({ record }) => {
+        approvalUiAccess.subscribeApprovalCreated(({ record }) => {
           if (record.requester.transport !== "provider") {
             return;
           }
 
           const method = getApprovalType(record.kind);
-          const vaultInitialized = session.vault.getStatus().hasEnvelope;
+          const vaultInitialized = approvalUiAccess.hasInitializedVault();
           if (!vaultInitialized) {
             popupLog("skip notification window (vault uninitialized)", {
               reason: "approval_required",
@@ -175,20 +166,20 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       );
 
       subscriptions.push(
-        controllers.approvals.onFinished(({ id }) => {
+        approvalUiAccess.subscribeApprovalFinished(({ id }) => {
           approvalWindowTracker.deleteApproval(id);
         }),
       );
 
       subscriptions.push(
-        session.unlock.onLocked(() => {
+        approvalUiAccess.subscribeSessionLocked(() => {
           void cancelPendingApprovals("locked");
         }),
       );
 
       subscriptions.push(
-        controllers.approvals.onStateChanged(() => {
-          const pending = controllers.approvals.getState().pending;
+        approvalUiAccess.subscribeApprovalStateChanged(() => {
+          const pending = approvalUiAccess.listPendingApprovalIds();
           if (pending.length === 0) {
             clearWindowTracking();
           }
@@ -196,8 +187,8 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
       );
 
       subscriptions.push(
-        session.unlock.onStateChanged(() => {
-          if (session.unlock.isUnlocked()) return;
+        approvalUiAccess.subscribeSessionStateChanged(() => {
+          if (approvalUiAccess.isUnlocked()) return;
           clearWindowTracking();
         }),
       );

@@ -1,3 +1,4 @@
+import { createLogger, extendLogger } from "@arx/core/logger";
 import { PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { createPortRouter } from "../portRouter";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
@@ -27,6 +28,8 @@ const areMetasEqual = (left: ProviderBridgeSnapshot["meta"], right: ProviderBrid
 };
 
 export const createProviderEventsListener = ({ runtimeHost, portRouter }: ProviderEventsOrchestratorDeps) => {
+  const log = createLogger("bg:listener");
+  const listenerLog = extendLogger(log, "providerEvents");
   const subscriptions: Array<() => void> = [];
   let started = false;
   let disposed = false;
@@ -91,68 +94,91 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
     }
   };
 
+  const clearSubscriptions = () => {
+    const activeSubscriptions = [...subscriptions];
+    subscriptions.length = 0;
+
+    for (const unsubscribe of activeSubscriptions) {
+      try {
+        unsubscribe();
+      } catch {
+        // best-effort
+      }
+    }
+  };
+
+  const resetDerivedState = () => {
+    readProviderSnapshot = () => null;
+    snapshotCache.clear();
+  };
+
   const start = () => {
-    if (started) return;
-    started = true;
+    if (started || startTask) return;
     disposed = false;
 
-    if (startTask) return;
-
     startTask = (async () => {
-      const providerAccess = await runtimeHost.getOrInitProviderAccess();
-      if (disposed) return;
-      readProviderSnapshot = (namespace: string) => {
-        try {
-          return providerAccess.buildSnapshot(namespace);
-        } catch {
-          return null;
-        }
-      };
+      try {
+        const providerAccess = await runtimeHost.getOrInitProviderAccess();
+        if (disposed) return;
+        readProviderSnapshot = (namespace: string) => {
+          try {
+            return providerAccess.buildSnapshot(namespace);
+          } catch {
+            return null;
+          }
+        };
 
-      const publishAccountsState = () => {
-        portRouter.broadcastAccountsChanged();
-      };
+        const publishAccountsState = () => {
+          portRouter.broadcastAccountsChanged();
+        };
 
-      subscriptions.push(
-        providerAccess.subscribeSessionUnlocked((payload) => {
-          portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
-          publishAccountsState();
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribeSessionUnlocked((payload) => {
+            portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
+            publishAccountsState();
+          }),
+        );
 
-      subscriptions.push(
-        providerAccess.subscribeSessionLocked((payload) => {
-          portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
-          publishAccountsState();
-          portRouter.broadcastDisconnect();
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribeSessionLocked((payload) => {
+            portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
+            publishAccountsState();
+            portRouter.broadcastDisconnect();
+          }),
+        );
 
-      subscriptions.push(
-        providerAccess.subscribeNetworkStateChanged(() => {
-          const namespaces = collectRelevantNamespaces(providerAccess.getActiveChainByNamespace());
-          reconcileNamespaces(namespaces);
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribeNetworkStateChanged(() => {
+            const namespaces = collectRelevantNamespaces(providerAccess.getActiveChainByNamespace());
+            reconcileNamespaces(namespaces);
+          }),
+        );
 
-      subscriptions.push(
-        providerAccess.subscribeNetworkPreferencesChanged(({ next }) => {
-          const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
-          reconcileNamespaces(namespaces);
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribeNetworkPreferencesChanged(({ next }) => {
+            const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
+            reconcileNamespaces(namespaces);
+          }),
+        );
 
-      subscriptions.push(
-        providerAccess.subscribeAccountsStateChanged(() => {
-          publishAccountsState();
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribeAccountsStateChanged(() => {
+            publishAccountsState();
+          }),
+        );
 
-      subscriptions.push(
-        providerAccess.subscribePermissionsStateChanged(() => {
-          publishAccountsState();
-        }),
-      );
+        subscriptions.push(
+          providerAccess.subscribePermissionsStateChanged(() => {
+            publishAccountsState();
+          }),
+        );
+
+        started = true;
+      } catch (error) {
+        clearSubscriptions();
+        resetDerivedState();
+        listenerLog("failed to start provider events listener", error);
+      }
     })().finally(() => {
       startTask = null;
     });
@@ -161,15 +187,8 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
   const destroy = () => {
     started = false;
     disposed = true;
-    readProviderSnapshot = () => null;
-    snapshotCache.clear();
-    subscriptions.splice(0).forEach((unsubscribe) => {
-      try {
-        unsubscribe();
-      } catch {
-        // best-effort
-      }
-    });
+    resetDerivedState();
+    clearSubscriptions();
   };
 
   return { start, destroy };

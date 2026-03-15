@@ -12,12 +12,13 @@ import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
   const {
-    controllers,
-    chainActivation,
-    chainViews,
+    accounts,
+    approvals,
+    transactions,
+    chains,
     accountCodecs,
     session,
-    keyring,
+    keyrings,
     namespaceBindings,
     platform,
     uiOrigin,
@@ -25,18 +26,18 @@ export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
     uiSessionId,
   } = deps;
 
-  const toChainSnapshot = () => chainViews.getSelectedChainView();
+  const toChainSnapshot = () => chains.getSelectedChainView();
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
     ...createAttentionHandlers({ platform }),
-    ...createBalancesHandlers({ chainViews, session, namespaceBindings }),
-    ...createSessionHandlers({ session, keyring }),
-    ...createOnboardingHandlers({ controllers, chainViews, accountCodecs, session, keyring, platform }),
-    ...createAccountsHandlers({ controllers }),
-    ...createNetworksHandlers({ chainActivation }, toChainSnapshot),
-    ...createApprovalsHandlers({ controllers }),
-    ...createKeyringsHandlers({ controllers, chainViews, accountCodecs, session, keyring }),
-    ...createTransactionsHandlers({ controllers, chainViews, session, namespaceBindings, uiOrigin }, uiSessionId),
+    ...createBalancesHandlers({ chains, session, namespaceBindings }),
+    ...createSessionHandlers({ session, keyrings }),
+    ...createOnboardingHandlers({ accounts, chains, accountCodecs, session, keyrings, platform }),
+    ...createAccountsHandlers({ accounts }),
+    ...createNetworksHandlers({ chains }, toChainSnapshot),
+    ...createApprovalsHandlers({ approvals }),
+    ...createKeyringsHandlers({ accounts, chains, accountCodecs, session, keyrings }),
+    ...createTransactionsHandlers({ transactions, chains, session, namespaceBindings, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;
 };

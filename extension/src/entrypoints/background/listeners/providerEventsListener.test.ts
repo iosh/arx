@@ -25,7 +25,7 @@ const toNamespaceList = (value: Iterable<string>) => {
   return [...value].sort();
 };
 
-const buildHarness = () => {
+const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
   const networkStateHandlers = new Set<() => void>();
   const networkPreferenceHandlers = new Set<
     (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
@@ -33,6 +33,7 @@ const buildHarness = () => {
   const snapshots: Record<string, ProviderBridgeSnapshot> = {
     conflux: makeSnapshot("conflux"),
   };
+  let shouldFailFirstProviderAccess = options?.failFirstProviderAccess ?? false;
 
   const listConnectedNamespaces = vi.fn(() => ["conflux"]);
   const broadcastMetaChangedForNamespaces = vi.fn();
@@ -52,43 +53,52 @@ const buildHarness = () => {
     broadcastDisconnect,
   } as unknown as ReturnType<typeof createPortRouter>;
 
+  const createProviderAccess = () => ({
+    buildSnapshot: (namespace: string) => {
+      const snapshot = snapshots[namespace];
+      if (!snapshot) {
+        throw new Error(`Missing snapshot for ${namespace}`);
+      }
+      return snapshot;
+    },
+    buildConnectionState: async ({ namespace }: { namespace: string }) => {
+      const snapshot = snapshots[namespace];
+      if (!snapshot) {
+        throw new Error(`Missing snapshot for ${namespace}`);
+      }
+      return { snapshot, accounts: [] };
+    },
+    getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
+    subscribeSessionUnlocked: () => () => {},
+    subscribeSessionLocked: () => () => {},
+    subscribeNetworkStateChanged: (handler: () => void) => {
+      networkStateHandlers.add(handler);
+      return () => networkStateHandlers.delete(handler);
+    },
+    subscribeNetworkPreferencesChanged: (
+      handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
+    ) => {
+      networkPreferenceHandlers.add(handler);
+      return () => networkPreferenceHandlers.delete(handler);
+    },
+    subscribeAccountsStateChanged: () => () => {},
+    subscribePermissionsStateChanged: () => () => {},
+    executeRpcRequest: vi.fn(),
+    encodeRpcError: vi.fn(),
+    listPermittedAccounts: vi.fn(),
+    cancelSessionApprovals: vi.fn(),
+  });
+
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitProviderAccess: vi.fn(async () => ({
-      buildSnapshot: (namespace: string) => {
-        const snapshot = snapshots[namespace];
-        if (!snapshot) {
-          throw new Error(`Missing snapshot for ${namespace}`);
-        }
-        return snapshot;
-      },
-      buildConnectionState: async ({ namespace }: { namespace: string }) => {
-        const snapshot = snapshots[namespace];
-        if (!snapshot) {
-          throw new Error(`Missing snapshot for ${namespace}`);
-        }
-        return { snapshot, accounts: [] };
-      },
-      getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
-      subscribeSessionUnlocked: () => () => {},
-      subscribeSessionLocked: () => () => {},
-      subscribeNetworkStateChanged: (handler: () => void) => {
-        networkStateHandlers.add(handler);
-        return () => networkStateHandlers.delete(handler);
-      },
-      subscribeNetworkPreferencesChanged: (
-        handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
-      ) => {
-        networkPreferenceHandlers.add(handler);
-        return () => networkPreferenceHandlers.delete(handler);
-      },
-      subscribeAccountsStateChanged: () => () => {},
-      subscribePermissionsStateChanged: () => () => {},
-      executeRpcRequest: vi.fn(),
-      encodeRpcError: vi.fn(),
-      listPermittedAccounts: vi.fn(),
-      cancelSessionApprovals: vi.fn(),
-    })) as unknown as BackgroundRuntimeHost["getOrInitProviderAccess"],
+    getOrInitProviderAccess: vi.fn(async () => {
+      if (shouldFailFirstProviderAccess) {
+        shouldFailFirstProviderAccess = false;
+        throw new Error("provider access bootstrap failed");
+      }
+
+      return createProviderAccess();
+    }) as unknown as BackgroundRuntimeHost["getOrInitProviderAccess"],
     getOrInitUiAccess: vi.fn(async () => {
       throw new Error("UI bridge access should not be requested in providerEventsListener tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
@@ -149,5 +159,19 @@ describe("providerEventsListener", () => {
     harness.emitNetworkPreferencesChanged({ eip155: "eip155:1" });
 
     await vi.waitFor(() => expect(harness.mocks.listConnectedNamespaces).toHaveBeenCalledTimes(2));
+  });
+
+  it("retries initialization after the first provider access bootstrap failure", async () => {
+    const harness = buildHarness({ failFirstProviderAccess: true });
+
+    harness.listener.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitProviderAccess).toHaveBeenCalledTimes(1));
+    expect(harness.getNetworkStateSubscriptionCount()).toBe(0);
+
+    await vi.waitFor(() => {
+      harness.listener.start();
+      expect(harness.runtimeHost.getOrInitProviderAccess).toHaveBeenCalledTimes(2);
+    });
+    await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
   });
 });

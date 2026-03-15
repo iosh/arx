@@ -5,15 +5,15 @@ import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createTransactionsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "session" | "namespaceBindings" | "uiOrigin">,
+  deps: Pick<UiRuntimeDeps, "transactions" | "chains" | "session" | "namespaceBindings" | "uiOrigin">,
   uiSessionId: string,
 ): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
   return {
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
 
-      const resolvedChainRef = chainRef ?? deps.chainViews.getSelectedChainView().chainRef;
-      const chain = deps.chainViews.requireAvailableChainMetadata(resolvedChainRef);
+      const resolvedChainRef = chainRef ?? deps.chains.getSelectedChainView().chainRef;
+      const chain = deps.chains.requireAvailableChainMetadata(resolvedChainRef);
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
       const sendSupported =
         Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);
@@ -52,12 +52,9 @@ export const createTransactionsHandlers = (
         valueWei: wei,
       });
 
-      const created = await deps.controllers.transactions.createTransactionApproval(
-        deps.uiOrigin,
-        request,
-        requestContext,
-        { id: approvalId },
-      );
+      const created = await deps.transactions.createTransactionApproval(deps.uiOrigin, request, requestContext, {
+        id: approvalId,
+      });
 
       return { approvalId: created.id };
     },

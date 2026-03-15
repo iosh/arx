@@ -5,6 +5,7 @@ import type { NamespaceManifest, NamespaceRuntimeBindingsRegistry } from "../nam
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
+import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import type { createChainViewsService } from "../services/runtime/chainViews/index.js";
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
@@ -16,6 +17,9 @@ import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
+import type { UiError } from "../ui/protocol/envelopes.js";
+import { createUiRuntimeAccess } from "../ui/server/access.js";
+import type { UiPlatformAdapter, UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
 import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
@@ -31,7 +35,13 @@ import type { KeyringService } from "./keyring/KeyringService.js";
 import { createProviderRuntimeAccess } from "./provider/index.js";
 import type { ProviderRuntimeAccess } from "./provider/types.js";
 
+export type { UiPlatformAdapter, UiRuntimeAccess } from "../ui/server/types.js";
 export type { BackgroundSessionServices } from "./background/session.js";
+
+export type BackgroundRuntimeUiAccessOptions = {
+  platform: UiPlatformAdapter;
+  uiOrigin: string;
+};
 
 export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainDefinitions"> & {
   messenger?: {
@@ -97,7 +107,57 @@ export type BackgroundRuntime = {
     getIsInitialized: () => boolean;
   };
   providerAccess: ProviderRuntimeAccess;
+  createUiAccess: (options: BackgroundRuntimeUiAccessOptions) => UiRuntimeAccess;
 };
+
+const createBackgroundRuntimeUiDeps = (
+  runtime: BackgroundRuntime,
+  { platform, uiOrigin }: BackgroundRuntimeUiAccessOptions,
+): UiRuntimeDeps => ({
+  accounts: runtime.controllers.accounts,
+  approvals: runtime.controllers.approvals,
+  permissions: {
+    buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
+    onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
+  },
+  transactions: runtime.controllers.transactions,
+  chains: {
+    buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
+    findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
+    getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
+    getPreferredChainViewForNamespace: (namespace) =>
+      runtime.services.chainViews.getPreferredChainViewForNamespace(namespace),
+    getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
+    requireAvailableChainMetadata: (chainRef) => runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
+    selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
+    onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
+    onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
+  },
+  accountCodecs: runtime.services.accountCodecs,
+  session: {
+    unlock: runtime.services.session.unlock,
+    vault: runtime.services.session.vault,
+    withVaultMetaPersistHold: runtime.services.session.withVaultMetaPersistHold,
+    persistVaultMeta: runtime.services.session.persistVaultMeta,
+  },
+  keyrings: runtime.services.keyring,
+  attention: {
+    getSnapshot: () => runtime.services.attention.getSnapshot(),
+    onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
+  },
+  namespaceBindings: runtime.services.namespaceBindings,
+  errorEncoder: {
+    encodeError: (error, context) =>
+      runtime.rpc.registry.encodeErrorWithAdapters(error, {
+        surface: "ui",
+        namespace: context.namespace,
+        chainRef: context.chainRef,
+        method: context.method,
+      }) as UiError,
+  },
+  platform,
+  uiOrigin,
+});
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const rpcRegistry = createRpcRegistry();
@@ -232,6 +292,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   } as BackgroundRuntime;
 
   runtime.providerAccess = createProviderRuntimeAccess(runtime);
+  runtime.createUiAccess = (options) => createUiRuntimeAccess(createBackgroundRuntimeUiDeps(runtime, options));
 
   if (rpcEngineOptions.assemble !== false) {
     createRpcEngineForBackground(runtime, rpcEngineOptions.env);

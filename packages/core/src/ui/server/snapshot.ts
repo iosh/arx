@@ -1,68 +1,75 @@
 import type { ApprovalFlowRegistry } from "../../approvals/types.js";
-import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
-import type { HandlerControllers } from "../../rpc/handlers/types.js";
-import type { BackgroundSessionServices } from "../../runtime/background/session.js";
-import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
-import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
-import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import { type UiSnapshot, UiSnapshotSchema } from "../protocol/schemas.js";
+import type {
+  UiAccountsAccess,
+  UiApprovalsAccess,
+  UiAttentionAccess,
+  UiChainsAccess,
+  UiKeyringsAccess,
+  UiNamespaceBindingsAccess,
+  UiPermissionsAccess,
+  UiSessionAccess,
+  UiTransactionsAccess,
+} from "./types.js";
 
 export const buildUiSnapshot = (deps: {
-  controllers: HandlerControllers;
-  chainViews: Pick<
-    ChainViewsService,
+  accounts: UiAccountsAccess;
+  approvals: UiApprovalsAccess;
+  chains: Pick<
+    UiChainsAccess,
     "buildWalletNetworksSnapshot" | "findAvailableChainView" | "getApprovalReviewChainView" | "getSelectedChainView"
   >;
-  permissionViews: Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
-  session: BackgroundSessionServices;
-  keyring: KeyringService;
-  attention: { getSnapshot: () => UiSnapshot["attention"] };
-  namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
+  permissions: Pick<UiPermissionsAccess, "buildUiPermissionsSnapshot">;
+  session: UiSessionAccess;
+  keyrings: Pick<UiKeyringsAccess, "getKeyrings">;
+  attention: Pick<UiAttentionAccess, "getSnapshot">;
+  namespaceBindings: UiNamespaceBindingsAccess;
+  transactions: Pick<UiTransactionsAccess, "getMeta">;
   approvalFlowRegistry: Pick<ApprovalFlowRegistry, "present">;
 }): UiSnapshot => {
   const {
-    controllers,
-    chainViews,
-    permissionViews,
+    accounts,
+    approvals,
+    chains,
+    permissions,
     session,
-    keyring,
+    keyrings,
     attention,
     namespaceBindings,
+    transactions,
     approvalFlowRegistry,
   } = deps;
 
-  const chain = chainViews.getSelectedChainView();
-  const networks = chainViews.buildWalletNetworksSnapshot();
+  const chain = chains.getSelectedChainView();
+  const networks = chains.buildWalletNetworksSnapshot();
   const resolvedChain = chain.chainRef;
   const uiBindings = namespaceBindings.getUi(chain.namespace);
 
   const accountList = session.unlock.isUnlocked()
-    ? controllers.accounts
-        .listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
-        .map((account) => ({
-          accountId: account.accountId,
-          canonicalAddress: account.canonicalAddress,
-          displayAddress: account.displayAddress,
-        }))
+    ? accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
+        accountId: account.accountId,
+        canonicalAddress: account.canonicalAddress,
+        displayAddress: account.displayAddress,
+      }))
     : [];
   const activeAccount = session.unlock.isUnlocked()
-    ? controllers.accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
+    ? accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
     : null;
 
-  const accountsState = controllers.accounts.getState();
+  const accountsState = accounts.getState();
   const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountIds.length, 0);
 
-  const approvalState = controllers.approvals.getState();
+  const approvalState = approvals.getState();
   const approvalSummaries = approvalState.pending
     .map((item) => {
-      const record = controllers.approvals.get(item.id);
+      const record = approvals.get(item.id);
       if (!record) return null;
 
       try {
         return approvalFlowRegistry.present(record, {
-          accounts: controllers.accounts,
-          chainViews,
-          transactions: controllers.transactions,
+          accounts,
+          chainViews: chains,
+          transactions,
         });
       } catch {
         return null;
@@ -70,7 +77,7 @@ export const buildUiSnapshot = (deps: {
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
-  const keyringWarnings = keyring
+  const keyringWarnings = keyrings
     .getKeyrings()
     .filter((meta) => meta.type === "hd" && meta.needsBackup === true)
     .map((meta) => ({
@@ -118,7 +125,7 @@ export const buildUiSnapshot = (deps: {
     },
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
-    permissions: permissionViews.buildUiPermissionsSnapshot(),
+    permissions: permissions.buildUiPermissionsSnapshot(),
     vault: {
       initialized: session.vault.getStatus().hasEnvelope,
     },

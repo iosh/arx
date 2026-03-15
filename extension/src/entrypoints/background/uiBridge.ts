@@ -1,5 +1,5 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
-import type { UiRuntimeAccess } from "@arx/core/ui/server";
+import type { UiRuntimeAccess } from "@arx/core/runtime";
 import { createUiPortHub } from "./ui/portHub";
 import { createUiSnapshotBroadcaster } from "./ui/snapshotBroadcaster";
 

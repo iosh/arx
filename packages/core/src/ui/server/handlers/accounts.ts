@@ -13,12 +13,12 @@ const toUiOwnedAccountSummary = (account: {
 });
 
 export const createAccountsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers">,
+  deps: Pick<UiRuntimeDeps, "accounts">,
 ): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
     "ui.accounts.switchActive": async ({ chainRef, accountId }) => {
       const { namespace } = parseChainRef(chainRef);
-      const active = await deps.controllers.accounts.setActiveAccount({
+      const active = await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
         accountId: accountId ?? null,

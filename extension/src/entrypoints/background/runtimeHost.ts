@@ -1,8 +1,12 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import { createBackgroundRuntime, type ProviderRuntimeAccess } from "@arx/core/runtime";
+import {
+  createBackgroundRuntime,
+  type ProviderRuntimeAccess,
+  type UiPlatformAdapter,
+  type UiRuntimeAccess,
+} from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
-import { createUiRuntimeAccess, type UiPlatformAdapter, type UiRuntimeAccess } from "@arx/core/ui/server";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACE_MANIFESTS } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
@@ -153,11 +157,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
     uiAccessPromise = (async () => {
       const active = await getOrInitRuntimeCache();
-      const access = createUiRuntimeAccess({
-        runtime: active.runtime,
-        platform,
-        uiOrigin,
-      });
+      const access = active.runtime.createUiAccess({ platform, uiOrigin });
 
       if (destroyed) {
         throw new Error("Background runtime host is destroyed");

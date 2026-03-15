@@ -10,7 +10,7 @@ import {
 } from "./lib.js";
 
 export const createOnboardingHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "accountCodecs" | "session" | "keyring" | "platform">,
+  deps: Pick<UiRuntimeDeps, "accounts" | "chains" | "accountCodecs" | "session" | "keyrings" | "platform">,
 ): Pick<
   UiHandlers,
   | "ui.onboarding.openTab"
@@ -25,7 +25,7 @@ export const createOnboardingHandlers = (
     },
 
     "ui.onboarding.generateMnemonic": async (payload) => {
-      const mnemonic = deps.keyring.generateMnemonic(payload?.wordCount ?? 12);
+      const mnemonic = deps.keyrings.generateMnemonic(payload?.wordCount ?? 12);
       return { words: mnemonic.split(" ") };
     },
 
@@ -40,7 +40,7 @@ export const createOnboardingHandlers = (
 
       return await deps.session.withVaultMetaPersistHold(async () => {
         const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
@@ -53,12 +53,12 @@ export const createOnboardingHandlers = (
           await deps.session.unlock.unlock({ password });
         }
 
-        await deps.keyring.waitForReady();
+        await deps.keyrings.waitForReady();
 
-        const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
+        const { keyringId, address } = await deps.keyrings.importMnemonic(mnemonic, opts);
+        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.setActiveAccount({
+        await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
           accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
@@ -77,7 +77,7 @@ export const createOnboardingHandlers = (
 
       return await deps.session.withVaultMetaPersistHold(async () => {
         const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
@@ -90,12 +90,12 @@ export const createOnboardingHandlers = (
           await deps.session.unlock.unlock({ password });
         }
 
-        await deps.keyring.waitForReady();
+        await deps.keyrings.waitForReady();
 
-        const { keyringId, address } = await deps.keyring.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
+        const { keyringId, address } = await deps.keyrings.importMnemonic(mnemonic, opts);
+        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.setActiveAccount({
+        await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
           accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
@@ -113,7 +113,7 @@ export const createOnboardingHandlers = (
 
       return await deps.session.withVaultMetaPersistHold(async () => {
         const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.controllers)) {
+        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
           throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
         }
 
@@ -126,12 +126,12 @@ export const createOnboardingHandlers = (
           await deps.session.unlock.unlock({ password });
         }
 
-        await deps.keyring.waitForReady();
+        await deps.keyrings.waitForReady();
 
-        const { keyringId, account } = await deps.keyring.importPrivateKey(privateKey, opts);
-        const namespace = opts.namespace ?? deps.chainViews.getSelectedChainView().namespace;
+        const { keyringId, account } = await deps.keyrings.importPrivateKey(privateKey, opts);
+        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
         const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.controllers.accounts.setActiveAccount({
+        await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
           accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address: account.address }),

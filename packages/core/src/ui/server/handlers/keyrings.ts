@@ -9,7 +9,7 @@ import {
 } from "./lib.js";
 
 export const createKeyringsHandlers = (
-  deps: Pick<UiRuntimeDeps, "controllers" | "chainViews" | "accountCodecs" | "session" | "keyring">,
+  deps: Pick<UiRuntimeDeps, "accounts" | "chains" | "accountCodecs" | "session" | "keyrings">,
 ): Pick<
   UiHandlers,
   | "ui.keyrings.confirmNewMnemonic"
@@ -28,9 +28,9 @@ export const createKeyringsHandlers = (
   | "ui.keyrings.exportPrivateKey"
 > => {
   const selectAccount = async (params: { namespace?: string; accountId: string }) => {
-    const namespace = params.namespace ?? deps.chainViews.getSelectedChainView().namespace;
+    const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
     const chainRef = resolveChainRefForNamespace(deps, namespace);
-    await deps.controllers.accounts.setActiveAccount({ namespace, chainRef, accountId: params.accountId });
+    await deps.accounts.setActiveAccount({ namespace, chainRef, accountId: params.accountId });
   };
 
   return {
@@ -40,13 +40,10 @@ export const createKeyringsHandlers = (
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyring.confirmNewMnemonic(params.words.join(" "), opts);
+      const result = await deps.keyrings.confirmNewMnemonic(params.words.join(" "), opts);
       await selectAccount({
         accountId: deps.accountCodecs.toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(
-            deps,
-            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
-          ),
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
@@ -59,13 +56,10 @@ export const createKeyringsHandlers = (
       const opts: { alias?: string; namespace?: string } = {};
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyring.importMnemonic(params.words.join(" "), opts);
+      const result = await deps.keyrings.importMnemonic(params.words.join(" "), opts);
       await selectAccount({
         accountId: deps.accountCodecs.toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(
-            deps,
-            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
-          ),
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
@@ -78,13 +72,10 @@ export const createKeyringsHandlers = (
       const opts: { alias?: string; namespace?: string } = {};
       if (params.alias !== undefined) opts.alias = params.alias;
       if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyring.importPrivateKey(params.privateKey, opts);
+      const result = await deps.keyrings.importPrivateKey(params.privateKey, opts);
       await selectAccount({
         accountId: deps.accountCodecs.toAccountIdFromAddress({
-          chainRef: resolveChainRefForNamespace(
-            deps,
-            opts.namespace ?? deps.chainViews.getSelectedChainView().namespace,
-          ),
+          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.account.address,
         }),
         ...(opts.namespace ? { namespace: opts.namespace } : {}),
@@ -94,65 +85,65 @@ export const createKeyringsHandlers = (
 
     "ui.keyrings.deriveAccount": async (params) => {
       assertUnlocked(deps.session);
-      return await deps.keyring.deriveAccount(params.keyringId);
+      return await deps.keyrings.deriveAccount(params.keyringId);
     },
 
     "ui.keyrings.list": async () => {
       assertUnlocked(deps.session);
-      const metas = deps.keyring.getKeyrings();
+      const metas = deps.keyrings.getKeyrings();
       return metas.map(toUiKeyringMeta);
     },
 
     "ui.keyrings.getAccountsByKeyring": async (params) => {
       assertUnlocked(deps.session);
-      const records = deps.keyring.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
+      const records = deps.keyrings.getAccountsByKeyring(params.keyringId, params.includeHidden ?? false);
       return records.map((record) => toUiAccountMeta(deps, record));
     },
 
     "ui.keyrings.renameKeyring": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.renameKeyring(params.keyringId, params.alias);
+      await deps.keyrings.renameKeyring(params.keyringId, params.alias);
       return null;
     },
 
     "ui.keyrings.renameAccount": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.renameAccount(params.accountId, params.alias);
+      await deps.keyrings.renameAccount(params.accountId, params.alias);
       return null;
     },
 
     "ui.keyrings.markBackedUp": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.markBackedUp(params.keyringId);
+      await deps.keyrings.markBackedUp(params.keyringId);
       return null;
     },
 
     "ui.keyrings.hideHdAccount": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.hideHdAccount(params.accountId);
+      await deps.keyrings.hideHdAccount(params.accountId);
       return null;
     },
 
     "ui.keyrings.unhideHdAccount": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.unhideHdAccount(params.accountId);
+      await deps.keyrings.unhideHdAccount(params.accountId);
       return null;
     },
 
     "ui.keyrings.removePrivateKeyKeyring": async (params) => {
       assertUnlocked(deps.session);
-      await deps.keyring.removePrivateKeyKeyring(params.keyringId);
+      await deps.keyrings.removePrivateKeyKeyring(params.keyringId);
       return null;
     },
 
     "ui.keyrings.exportMnemonic": async (params) => {
       assertUnlocked(deps.session);
-      return { words: (await deps.keyring.exportMnemonic(params.keyringId, params.password)).split(" ") };
+      return { words: (await deps.keyrings.exportMnemonic(params.keyringId, params.password)).split(" ") };
     },
 
     "ui.keyrings.exportPrivateKey": async (params) => {
       assertUnlocked(deps.session);
-      const secret = await deps.keyring.exportPrivateKeyByAccountId(params.accountId, params.password);
+      const secret = await deps.keyrings.exportPrivateKeyByAccountId(params.accountId, params.password);
       const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
       return { privateKey };
     },

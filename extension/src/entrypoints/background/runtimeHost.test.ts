@@ -3,26 +3,16 @@ import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
-const {
-  createBackgroundRuntimeMock,
-  createUiRuntimeAccessMock,
-  getExtensionStorageMock,
-  disableDebugNamespacesMock,
-  enableDebugNamespacesMock,
-} = vi.hoisted(() => ({
-  createBackgroundRuntimeMock: vi.fn(),
-  createUiRuntimeAccessMock: vi.fn(),
-  getExtensionStorageMock: vi.fn(),
-  disableDebugNamespacesMock: vi.fn(),
-  enableDebugNamespacesMock: vi.fn(),
-}));
+const { createBackgroundRuntimeMock, getExtensionStorageMock, disableDebugNamespacesMock, enableDebugNamespacesMock } =
+  vi.hoisted(() => ({
+    createBackgroundRuntimeMock: vi.fn(),
+    getExtensionStorageMock: vi.fn(),
+    disableDebugNamespacesMock: vi.fn(),
+    enableDebugNamespacesMock: vi.fn(),
+  }));
 
 vi.mock("@arx/core/runtime", () => ({
   createBackgroundRuntime: createBackgroundRuntimeMock,
-}));
-
-vi.mock("@arx/core/ui/server", () => ({
-  createUiRuntimeAccess: createUiRuntimeAccessMock,
 }));
 
 vi.mock("@/platform/storage", () => ({
@@ -92,6 +82,7 @@ const makeRuntime = () => {
     listPermittedAccounts: vi.fn(),
     cancelSessionApprovals: vi.fn(async () => 0),
   };
+  const createUiAccess = vi.fn();
 
   const runtime = {
     bus: { subscribe },
@@ -159,11 +150,13 @@ const makeRuntime = () => {
       getIsInitialized: vi.fn(),
     },
     providerAccess,
+    createUiAccess,
   } as unknown as BackgroundRuntime;
 
   return {
     runtime,
     providerAccess,
+    createUiAccess,
     providerSnapshot,
     initialize,
     start,
@@ -209,7 +202,7 @@ describe("runtimeHost", () => {
       shouldHoldBroadcast: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
     };
-    createUiRuntimeAccessMock.mockReturnValue(uiAccess);
+    runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
     const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
     const uiPlatform = {
@@ -230,9 +223,8 @@ describe("runtimeHost", () => {
     const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
 
     expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
-    expect(createUiRuntimeAccessMock).toHaveBeenCalledTimes(1);
-    expect(createUiRuntimeAccessMock).toHaveBeenCalledWith({
-      runtime: runtimeHarness.runtime,
+    expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
     });
@@ -284,7 +276,7 @@ describe("runtimeHost", () => {
       shouldHoldBroadcast: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
     };
-    createUiRuntimeAccessMock.mockReturnValue(uiAccess);
+    runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
     const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
     const uiPlatform = {
@@ -314,6 +306,6 @@ describe("runtimeHost", () => {
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
 
-    expect(createUiRuntimeAccessMock).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
   });
 });

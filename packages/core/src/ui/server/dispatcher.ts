@@ -8,10 +8,10 @@ export type UiDispatchOutput = {
   reply: UiPortEnvelope;
   effects: UiDispatchEffects;
 };
-type UiDispatcherDeps = Pick<UiRuntimeDeps, "rpcRegistry"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
+type UiDispatcherDeps = Pick<UiRuntimeDeps, "errorEncoder"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
 
 export const createUiDispatcher = (deps: UiDispatcherDeps) => {
-  const { handlers, getUiContext, rpcRegistry } = deps;
+  const { handlers, getUiContext, errorEncoder } = deps;
 
   const dispatch = async (raw: unknown): Promise<UiDispatchOutput | null> => {
     const requestMeta = parseUiRequestMetadata(raw);
@@ -21,9 +21,9 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
     const { request, method, effects } = requestMeta;
 
     if (!method) {
-      const encoded = rpcRegistry.encodeErrorWithAdapters(
+      const encoded = errorEncoder.encodeError(
         arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Unknown UI method: ${request.method}` }),
-        { surface: "ui", namespace: ctx.namespace, chainRef: ctx.chainRef, method: request.method },
+        { namespace: ctx.namespace, chainRef: ctx.chainRef, method: request.method },
       );
       return {
         reply: { type: "ui:error", id: request.id, error: encoded as unknown as UiError, context: ctx },
@@ -41,12 +41,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
         effects,
       };
     } catch (error) {
-      const encoded = rpcRegistry.encodeErrorWithAdapters(error, {
-        surface: "ui",
-        namespace: ctx.namespace,
-        chainRef: ctx.chainRef,
-        method,
-      });
+      const encoded = errorEncoder.encodeError(error, { namespace: ctx.namespace, chainRef: ctx.chainRef, method });
       return {
         reply: { type: "ui:error", id: request.id, error: encoded as unknown as UiError, context: ctx },
         effects: EMPTY_UI_DISPATCH_EFFECTS,

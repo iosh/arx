@@ -64,16 +64,56 @@ const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgr
 
 const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   return createUiServerRuntime({
-    controllers: runtime.controllers,
-    chainActivation: runtime.services.chainActivation,
-    chainViews: runtime.services.chainViews,
-    permissionViews: runtime.services.permissionViews,
+    accounts: runtime.controllers.accounts,
+    approvals: runtime.controllers.approvals,
+    permissions: {
+      buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
+        runtime.services.permissionViews,
+      ),
+      onStateChanged: runtime.controllers.permissions.onStateChanged.bind(runtime.controllers.permissions),
+    },
+    transactions: runtime.controllers.transactions,
+    chains: {
+      buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
+        runtime.services.chainViews,
+      ),
+      findAvailableChainView: runtime.services.chainViews.findAvailableChainView.bind(runtime.services.chainViews),
+      getApprovalReviewChainView: runtime.services.chainViews.getApprovalReviewChainView.bind(
+        runtime.services.chainViews,
+      ),
+      getPreferredChainViewForNamespace: runtime.services.chainViews.getPreferredChainViewForNamespace.bind(
+        runtime.services.chainViews,
+      ),
+      getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
+      requireAvailableChainMetadata: runtime.services.chainViews.requireAvailableChainMetadata.bind(
+        runtime.services.chainViews,
+      ),
+      selectWalletChain: runtime.services.chainActivation.selectWalletChain.bind(runtime.services.chainActivation),
+      onStateChanged: runtime.controllers.network.onStateChanged.bind(runtime.controllers.network),
+      onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
+    },
     accountCodecs: runtime.services.accountCodecs,
-    session: runtime.services.session,
-    keyring: runtime.services.keyring,
-    attention: runtime.services.attention,
+    session: {
+      unlock: runtime.services.session.unlock,
+      vault: runtime.services.session.vault,
+      withVaultMetaPersistHold: runtime.services.session.withVaultMetaPersistHold,
+      persistVaultMeta: runtime.services.session.persistVaultMeta,
+    },
+    keyrings: runtime.services.keyring,
+    attention: {
+      getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),
+      onStateChanged: () => () => {},
+    },
     namespaceBindings: runtime.services.namespaceBindings,
-    rpcRegistry: runtime.rpc.registry,
+    errorEncoder: {
+      encodeError: (error, context) =>
+        runtime.rpc.registry.encodeErrorWithAdapters(error, {
+          surface: "ui",
+          namespace: context.namespace,
+          chainRef: context.chainRef,
+          method: context.method,
+        }) as never,
+    },
     uiOrigin: "chrome-extension://arx",
     platform: {
       openOnboardingTab: async () => ({ activationPath: "create" }),

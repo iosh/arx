@@ -3,12 +3,12 @@ import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
 export const createBalancesHandlers = (
-  deps: Pick<UiRuntimeDeps, "chainViews" | "session" | "namespaceBindings">,
+  deps: Pick<UiRuntimeDeps, "chains" | "session" | "namespaceBindings">,
 ): Pick<UiHandlers, "ui.balances.getNative"> => {
   return {
     "ui.balances.getNative": async ({ chainRef, address }) => {
       assertUnlocked(deps.session);
-      const chain = deps.chainViews.requireAvailableChainMetadata(chainRef);
+      const chain = deps.chains.requireAvailableChainMetadata(chainRef);
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
       if (!uiBindings?.getNativeBalance) {
         throw arxError({

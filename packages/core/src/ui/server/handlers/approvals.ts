@@ -1,5 +1,4 @@
-import type { ApprovalResolveInput } from "../../../controllers/approval/types.js";
-import type { HandlerControllers } from "../../../rpc/handlers/types.js";
+import type { ApprovalController, ApprovalResolveInput } from "../../../controllers/approval/types.js";
 import type { UiMethodResult } from "../../protocol/index.js";
 import type { UiHandlers } from "../types.js";
 
@@ -7,12 +6,12 @@ type UiResolveApprovalResult = UiMethodResult<"ui.approvals.resolve">;
 type UiResolvedApproved = Extract<UiResolveApprovalResult, { status: "approved" }>;
 
 export const createApprovalsHandlers = ({
-  controllers,
+  approvals,
 }: {
-  controllers: Pick<HandlerControllers, "approvals">;
+  approvals: Pick<ApprovalController, "resolve">;
 }): Pick<UiHandlers, "ui.approvals.resolve"> => ({
   "ui.approvals.resolve": async (input) => {
-    const resolved = await controllers.approvals.resolve(input as ApprovalResolveInput);
+    const resolved = await approvals.resolve(input as ApprovalResolveInput);
 
     if (resolved.status === "approved") {
       return {

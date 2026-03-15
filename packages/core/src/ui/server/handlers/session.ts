@@ -1,7 +1,7 @@
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 
 export const createSessionHandlers = (
-  deps: Pick<UiRuntimeDeps, "session" | "keyring">,
+  deps: Pick<UiRuntimeDeps, "session" | "keyrings">,
 ): Pick<
   UiHandlers,
   "ui.session.unlock" | "ui.session.lock" | "ui.session.resetAutoLockTimer" | "ui.session.setAutoLockDuration"
@@ -9,7 +9,7 @@ export const createSessionHandlers = (
   return {
     "ui.session.unlock": async ({ password }) => {
       await deps.session.unlock.unlock({ password });
-      await deps.keyring.waitForReady();
+      await deps.keyrings.waitForReady();
       return deps.session.unlock.getState();
     },
 

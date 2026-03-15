@@ -3,12 +3,11 @@ import { validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 import * as Hex from "ox/Hex";
 import { keyringErrors } from "../../../keyring/errors.js";
-import type { BackgroundSessionServices } from "../../../runtime/background/session.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../../storage/records.js";
 import { zeroize } from "../../../utils/bytes.js";
 import type { UiRuntimeDeps } from "../types.js";
 
-export const assertUnlocked = (session: BackgroundSessionServices) => {
+export const assertUnlocked = (session: UiRuntimeDeps["session"]) => {
   if (!session.unlock.isUnlocked()) {
     throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
   }
@@ -60,13 +59,13 @@ export const parsePrivateKeyHex = (value: string): string => {
   return normalized;
 };
 
-export const hasAnyAccounts = (controllers: UiRuntimeDeps["controllers"]): boolean => {
-  const accountsState = controllers.accounts.getState();
+export const hasAnyAccounts = (accounts: UiRuntimeDeps["accounts"]): boolean => {
+  const accountsState = accounts.getState();
   return Object.values(accountsState.namespaces).some((ns) => ns.accountIds.length > 0);
 };
 
-export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chainViews">, namespace: string): string => {
-  return deps.chainViews.getPreferredChainViewForNamespace(namespace).chainRef;
+export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chains">, namespace: string): string => {
+  return deps.chains.getPreferredChainViewForNamespace(namespace).chainRef;
 };
 
 export const toUiAccountMeta = (deps: Pick<UiRuntimeDeps, "accountCodecs">, record: AccountRecord) => {

@@ -25,173 +25,191 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
     platform.clearWindowCloseTracks();
   };
 
+  const clearSubscriptions = () => {
+    const activeSubscriptions = [...subscriptions];
+    subscriptions.length = 0;
+
+    for (const unsubscribe of activeSubscriptions) {
+      try {
+        unsubscribe();
+      } catch {
+        // best-effort
+      }
+    }
+  };
+
   const start = () => {
-    if (started) return;
-    started = true;
+    if (started || startTask) return;
     disposed = false;
 
-    if (startTask) return;
-
     startTask = (async () => {
-      const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
-      if (disposed) return;
+      try {
+        const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
+        if (disposed) return;
 
-      const cancelApprovalIds = async (approvalIds: string[], reason: ApprovalTerminalReason) => {
-        await Promise.all(
-          approvalIds.map(async (approvalId) => {
-            try {
-              await approvalUiAccess.cancelApproval({ id: approvalId, reason });
-            } catch (error) {
-              popupLog("failed to cancel approval", { approvalId, reason, error });
-            }
-          }),
-        );
-      };
+        const cancelApprovalIds = async (approvalIds: string[], reason: ApprovalTerminalReason) => {
+          await Promise.all(
+            approvalIds.map(async (approvalId) => {
+              try {
+                await approvalUiAccess.cancelApproval({ id: approvalId, reason });
+              } catch (error) {
+                popupLog("failed to cancel approval", { approvalId, reason, error });
+              }
+            }),
+          );
+        };
 
-      const cancelPendingApprovals = async (reason: ApprovalTerminalReason) => {
-        const approvalIds = approvalUiAccess.listPendingApprovalIds();
-        await cancelApprovalIds(approvalIds, reason);
-      };
+        const cancelPendingApprovals = async (reason: ApprovalTerminalReason) => {
+          const approvalIds = approvalUiAccess.listPendingApprovalIds();
+          await cancelApprovalIds(approvalIds, reason);
+        };
 
-      const ensureWindowTracked = (windowId: number) => {
-        if (trackedWindowIds.has(windowId)) {
-          return;
-        }
-
-        trackedWindowIds.add(windowId);
-        platform.trackWindowClose(windowId, () => {
-          trackedWindowIds.delete(windowId);
-          const approvalIds = approvalWindowTracker.takeWindowApprovalIds(windowId);
-          void cancelApprovalIds(approvalIds, "window_closed");
-        });
-      };
-
-      subscriptions.push(
-        approvalUiAccess.subscribeAttentionRequested((request: BackgroundAttentionRequestedPayload) => {
-          popupLog("event:attention:requested", {
-            reason: request.reason,
-            origin: request.origin,
-            method: request.method,
-            chainRef: request.chainRef,
-            namespace: request.namespace,
-          });
-
-          if (request.reason !== "unlock_required") {
+        const ensureWindowTracked = (windowId: number) => {
+          if (trackedWindowIds.has(windowId)) {
             return;
           }
 
-          const vaultInitialized = approvalUiAccess.hasInitializedVault();
-          if (!vaultInitialized) {
-            popupLog("skip notification window (vault uninitialized)", {
+          trackedWindowIds.add(windowId);
+          platform.trackWindowClose(windowId, () => {
+            trackedWindowIds.delete(windowId);
+            const approvalIds = approvalWindowTracker.takeWindowApprovalIds(windowId);
+            void cancelApprovalIds(approvalIds, "window_closed");
+          });
+        };
+
+        subscriptions.push(
+          approvalUiAccess.subscribeAttentionRequested((request: BackgroundAttentionRequestedPayload) => {
+            popupLog("event:attention:requested", {
               reason: request.reason,
               origin: request.origin,
               method: request.method,
               chainRef: request.chainRef,
               namespace: request.namespace,
             });
-            return;
-          }
 
-          void platform
-            .openNotificationPopup({
-              reason: request.reason,
-              origin: request.origin,
-              method: request.method,
-              chainRef: request.chainRef,
-              namespace: request.namespace,
-            })
-            .then((result) => {
-              if (disposed) return;
-              if (!result.windowId) return;
-              ensureWindowTracked(result.windowId);
-            })
-            .catch((error) => {
-              popupLog("failed to open notification window", {
-                error,
+            if (request.reason !== "unlock_required") {
+              return;
+            }
+
+            const vaultInitialized = approvalUiAccess.hasInitializedVault();
+            if (!vaultInitialized) {
+              popupLog("skip notification window (vault uninitialized)", {
                 reason: request.reason,
                 origin: request.origin,
                 method: request.method,
                 chainRef: request.chainRef,
                 namespace: request.namespace,
               });
-            });
-        }),
-      );
+              return;
+            }
 
-      subscriptions.push(
-        approvalUiAccess.subscribeApprovalCreated(({ record }) => {
-          if (record.requester.transport !== "provider") {
-            return;
-          }
+            void platform
+              .openNotificationPopup({
+                reason: request.reason,
+                origin: request.origin,
+                method: request.method,
+                chainRef: request.chainRef,
+                namespace: request.namespace,
+              })
+              .then((result) => {
+                if (disposed) return;
+                if (!result.windowId) return;
+                ensureWindowTracked(result.windowId);
+              })
+              .catch((error) => {
+                popupLog("failed to open notification window", {
+                  error,
+                  reason: request.reason,
+                  origin: request.origin,
+                  method: request.method,
+                  chainRef: request.chainRef,
+                  namespace: request.namespace,
+                });
+              });
+          }),
+        );
 
-          const method = getApprovalType(record.kind);
-          const vaultInitialized = approvalUiAccess.hasInitializedVault();
-          if (!vaultInitialized) {
-            popupLog("skip notification window (vault uninitialized)", {
-              reason: "approval_required",
-              origin: record.origin,
-              method,
-              chainRef: record.chainRef,
-              namespace: record.namespace,
-            });
-            return;
-          }
+        subscriptions.push(
+          approvalUiAccess.subscribeApprovalCreated(({ record }) => {
+            if (record.requester.transport !== "provider") {
+              return;
+            }
 
-          void platform
-            .openNotificationPopup({
-              reason: "approval_required",
-              origin: record.origin,
-              method,
-              chainRef: record.chainRef,
-              namespace: record.namespace,
-              urlSearchParams: { approvalId: record.id },
-            })
-            .then((result) => {
-              if (disposed) return;
-              if (!result.windowId) return;
-              ensureWindowTracked(result.windowId);
-              approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.id });
-            })
-            .catch((error) => {
-              popupLog("failed to open notification window", {
-                error,
+            const method = getApprovalType(record.kind);
+            const vaultInitialized = approvalUiAccess.hasInitializedVault();
+            if (!vaultInitialized) {
+              popupLog("skip notification window (vault uninitialized)", {
                 reason: "approval_required",
                 origin: record.origin,
                 method,
                 chainRef: record.chainRef,
                 namespace: record.namespace,
               });
-            });
-        }),
-      );
+              return;
+            }
 
-      subscriptions.push(
-        approvalUiAccess.subscribeApprovalFinished(({ id }) => {
-          approvalWindowTracker.deleteApproval(id);
-        }),
-      );
+            void platform
+              .openNotificationPopup({
+                reason: "approval_required",
+                origin: record.origin,
+                method,
+                chainRef: record.chainRef,
+                namespace: record.namespace,
+                urlSearchParams: { approvalId: record.id },
+              })
+              .then((result) => {
+                if (disposed) return;
+                if (!result.windowId) return;
+                ensureWindowTracked(result.windowId);
+                approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.id });
+              })
+              .catch((error) => {
+                popupLog("failed to open notification window", {
+                  error,
+                  reason: "approval_required",
+                  origin: record.origin,
+                  method,
+                  chainRef: record.chainRef,
+                  namespace: record.namespace,
+                });
+              });
+          }),
+        );
 
-      subscriptions.push(
-        approvalUiAccess.subscribeSessionLocked(() => {
-          void cancelPendingApprovals("locked");
-        }),
-      );
+        subscriptions.push(
+          approvalUiAccess.subscribeApprovalFinished(({ id }) => {
+            approvalWindowTracker.deleteApproval(id);
+          }),
+        );
 
-      subscriptions.push(
-        approvalUiAccess.subscribeApprovalStateChanged(() => {
-          const pending = approvalUiAccess.listPendingApprovalIds();
-          if (pending.length === 0) {
+        subscriptions.push(
+          approvalUiAccess.subscribeSessionLocked(() => {
+            void cancelPendingApprovals("locked");
+          }),
+        );
+
+        subscriptions.push(
+          approvalUiAccess.subscribeApprovalStateChanged(() => {
+            const pending = approvalUiAccess.listPendingApprovalIds();
+            if (pending.length === 0) {
+              clearWindowTracking();
+            }
+          }),
+        );
+
+        subscriptions.push(
+          approvalUiAccess.subscribeSessionStateChanged(() => {
+            if (approvalUiAccess.isUnlocked()) return;
             clearWindowTracking();
-          }
-        }),
-      );
+          }),
+        );
 
-      subscriptions.push(
-        approvalUiAccess.subscribeSessionStateChanged(() => {
-          if (approvalUiAccess.isUnlocked()) return;
-          clearWindowTracking();
-        }),
-      );
+        started = true;
+      } catch (error) {
+        clearSubscriptions();
+        clearWindowTracking();
+        popupLog("failed to start approval ui listener", error);
+      }
     })().finally(() => {
       startTask = null;
     });
@@ -200,13 +218,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
   const destroy = () => {
     started = false;
     disposed = true;
-    subscriptions.splice(0).forEach((unsubscribe) => {
-      try {
-        unsubscribe();
-      } catch {
-        // best-effort
-      }
-    });
+    clearSubscriptions();
     clearWindowTracking();
   };
 

@@ -146,12 +146,18 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
   },
 });
 
-const buildHarness = (windowIds: number[]) => {
+const buildHarness = (
+  windowIds: number[],
+  options?: {
+    failFirstApprovalUiAccess?: boolean;
+  },
+) => {
   const bus = new FakeBus();
   const approvals = new FakeApprovalsController();
   const unlock = new FakeUnlock();
   const trackedWindowClosers = new Map<number, () => void>();
   let openCallIndex = 0;
+  let shouldFailFirstApprovalUiAccess = options?.failFirstApprovalUiAccess ?? false;
 
   const platform: UiPlatform = {
     openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
@@ -176,19 +182,27 @@ const buildHarness = (windowIds: number[]) => {
     getOrInitUiAccess: vi.fn(async () => {
       throw new Error("UI bridge access should not be requested in approvalUiListener tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
-    getOrInitApprovalUiAccess: vi.fn(async () => ({
-      subscribeAttentionRequested: (handler: (payload: unknown) => void) => bus.subscribe(ATTENTION_REQUESTED, handler),
-      subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
-        approvals.onCreated(handler),
-      subscribeApprovalFinished: (handler: (event: { id: string }) => void) => approvals.onFinished(handler),
-      subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
-      subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
-      subscribeSessionStateChanged: (handler: () => void) => unlock.onStateChanged(handler),
-      cancelApproval: approvals.cancel,
-      listPendingApprovalIds: () => approvals.getState().pending.map((item) => item.id),
-      hasInitializedVault: () => true,
-      isUnlocked: () => unlock.isUnlocked(),
-    })) as unknown as BackgroundRuntimeHost["getOrInitApprovalUiAccess"],
+    getOrInitApprovalUiAccess: vi.fn(async () => {
+      if (shouldFailFirstApprovalUiAccess) {
+        shouldFailFirstApprovalUiAccess = false;
+        throw new Error("approval ui access bootstrap failed");
+      }
+
+      return {
+        subscribeAttentionRequested: (handler: (payload: unknown) => void) =>
+          bus.subscribe(ATTENTION_REQUESTED, handler),
+        subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
+          approvals.onCreated(handler),
+        subscribeApprovalFinished: (handler: (event: { id: string }) => void) => approvals.onFinished(handler),
+        subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
+        subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
+        subscribeSessionStateChanged: (handler: () => void) => unlock.onStateChanged(handler),
+        cancelApproval: approvals.cancel,
+        listPendingApprovalIds: () => approvals.getState().pending.map((item) => item.id),
+        hasInitializedVault: () => true,
+        isUnlocked: () => unlock.isUnlocked(),
+      };
+    }) as unknown as BackgroundRuntimeHost["getOrInitApprovalUiAccess"],
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),
   };
@@ -336,6 +350,32 @@ describe("approvalUiListener", () => {
     harness.closeWindow(51);
 
     expect(harness.approvals.cancel).not.toHaveBeenCalled();
+
+    listener.destroy();
+  });
+
+  it("retries initialization after the first approval UI access bootstrap failure", async () => {
+    const harness = buildHarness([61], { failFirstApprovalUiAccess: true });
+    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+
+    listener.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
+    expect(harness.platform.openNotificationPopup).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      listener.start();
+      expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(2);
+    });
+
+    harness.bus.emit(ATTENTION_REQUESTED, {
+      reason: "unlock_required",
+      origin: "https://dapp.example",
+      method: "eth_requestAccounts",
+      chainRef: "eip155:1",
+      namespace: "eip155",
+    });
+
+    await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 
     listener.destroy();
   });

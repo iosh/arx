@@ -1,3 +1,4 @@
+import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import {
   type NetworkPreferencesRecord,
@@ -137,10 +138,7 @@ export const createNetworkPreferencesService = ({
   };
 
   const setActiveChainRef = async (chainRef: ChainRef) => {
-    const [namespace] = chainRef.split(":");
-    if (!namespace) {
-      throw new Error(`Invalid chainRef: ${chainRef}`);
-    }
+    const namespace = getChainRefNamespace(chainRef);
     return update({ activeChainByNamespacePatch: { [namespace]: chainRef } });
   };
 

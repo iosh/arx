@@ -10,7 +10,7 @@ import type { SettingsPort } from "../../services/store/settings/port.js";
 import { createSettingsService } from "../../services/store/settings/SettingsService.js";
 import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import { createTransactionsService } from "../../services/store/transactions/TransactionsService.js";
-import { DEFAULT_CHAIN } from "./constants.js";
+import type { RuntimeNetworkPreferencesDefaults } from "./networkDefaults.js";
 
 export type RuntimeStorePorts = {
   transactions: TransactionsPort;
@@ -32,21 +32,20 @@ export const initRuntimeStoreServices = ({
   settingsPort,
   networkPreferencesPort,
   ports,
+  networkDefaults,
   now,
 }: {
   settingsPort: SettingsPort;
   networkPreferencesPort: NetworkPreferencesPort;
   ports: RuntimeStorePorts;
+  networkDefaults: RuntimeNetworkPreferencesDefaults;
   now: () => number;
 }): RuntimeStoreServices => {
   const settingsService = createSettingsService({ port: settingsPort, now });
 
   const networkPreferences = createNetworkPreferencesService({
     port: networkPreferencesPort,
-    defaults: {
-      selectedChainRef: DEFAULT_CHAIN.chainRef,
-      activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef },
-    },
+    defaults: networkDefaults,
     now,
   });
 

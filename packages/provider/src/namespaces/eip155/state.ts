@@ -1,3 +1,4 @@
+import { parseChainRef } from "@arx/core";
 import type { TransportMeta } from "../../types/transport.js";
 import { cloneTransportMeta } from "../../utils/transportMeta.js";
 import { DEFAULT_NAMESPACE } from "./constants.js";
@@ -154,8 +155,11 @@ export class Eip155ProviderState {
 
     if (typeof chainRef === "string" && chainRef.length > 0) {
       this.#chainRef = chainRef;
-      const [namespace] = chainRef.split(":");
-      this.#namespace = namespace ?? DEFAULT_NAMESPACE;
+      try {
+        this.#namespace = parseChainRef(chainRef as never).namespace;
+      } catch {
+        this.#namespace = DEFAULT_NAMESPACE;
+      }
       return;
     }
 
@@ -177,7 +181,12 @@ export class Eip155ProviderState {
 
   #parseNumericReference(candidate: string | null | undefined) {
     if (typeof candidate !== "string" || candidate.length === 0) return null;
-    const [, reference = candidate] = candidate.split(":");
+    let reference = candidate;
+    try {
+      reference = parseChainRef(candidate as never).reference;
+    } catch {
+      // Fall back to legacy plain numeric strings.
+    }
     return /^\d+$/.test(reference) ? reference : null;
   }
 

@@ -9,7 +9,7 @@ import {
   isArxError,
 } from "@arx/errors";
 import { ZodError } from "zod";
-import { normalizeChainRef, parseChainRef } from "../chains/caip.js";
+import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { PermissionCapability, PermissionCapabilityResolver } from "../controllers/index.js";
 import { createLogger, extendLogger } from "../utils/logger.js";
@@ -503,8 +503,8 @@ export class RpcRegistry {
       });
     }
 
-    const [chainNamespace] = chainRef.split(":");
-    if (chainNamespace && chainNamespace !== namespace) {
+    const chainNamespace = getChainRefNamespace(chainRef);
+    if (chainNamespace !== namespace) {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `Namespace mismatch for "${method}"`,

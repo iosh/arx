@@ -1,4 +1,4 @@
-import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
+import { assertValidNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
 import { createEip155Module } from "@arx/provider/namespaces";
 import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 
@@ -21,6 +21,8 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
   const seen = new Set<string>();
 
   for (const spec of specs) {
+    assertValidNamespaceManifest(spec.manifest);
+
     if (seen.has(spec.namespace)) {
       throw new Error(`Duplicate installed namespace "${spec.namespace}"`);
     }
@@ -45,11 +47,12 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
 export const createInstalledNamespacesComposition = (
   specs: readonly InstalledNamespaceSpec[],
 ): InstalledNamespacesComposition => {
-  const manifests: readonly NamespaceManifest[] = specs.map((spec) => spec.manifest);
-  const providerModules: readonly ProviderModule[] = specs.map((spec) => spec.providerModule);
+  const validatedSpecs = defineInstalledNamespaceSpecs(specs);
+  const manifests: readonly NamespaceManifest[] = validatedSpecs.map((spec) => spec.manifest);
+  const providerModules: readonly ProviderModule[] = validatedSpecs.map((spec) => spec.providerModule);
 
   return {
-    specs,
+    specs: validatedSpecs,
     manifests,
     providerModules,
     createProviderRegistry: () => createProviderRegistryFromModules(providerModules),

@@ -14,10 +14,12 @@ import type {
   NamespaceSignerRegistry,
   NamespaceUiBindings,
 } from "./types.js";
+import { assertValidNamespaceManifest } from "./validation.js";
 
-const assertUniqueNamespaces = (manifests: readonly NamespaceManifest[]): void => {
+const assertValidUniqueNamespaceManifests = (manifests: readonly NamespaceManifest[]): void => {
   const seen = new Set<string>();
   for (const manifest of manifests) {
+    assertValidNamespaceManifest(manifest);
     if (seen.has(manifest.namespace)) {
       throw new Error(`Duplicate namespace manifest "${manifest.namespace}"`);
     }
@@ -40,25 +42,26 @@ const createNamespaceRuntimeBindingsRegistry = (params: {
 };
 
 export const collectChainSeedsFromManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
+  assertValidUniqueNamespaceManifests(manifests);
   return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map((chain) => ({ ...chain })) ?? []);
 };
 
 export const createChainAddressCodecRegistryFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): ChainAddressCodecRegistry => {
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
   return new ChainAddressCodecRegistry(manifests.map((manifest) => manifest.core.chainAddressCodec));
 };
 
 export const createAccountCodecRegistryFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): AccountCodecRegistry => {
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
   return createAccountCodecRegistry(manifests.map((manifest) => manifest.core.accountCodec));
 };
 
 export const createKeyringNamespacesFromManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
   return manifests.map((manifest) => ({
     ...manifest.core.keyring,
     factories: { ...manifest.core.keyring.factories },
@@ -69,7 +72,7 @@ export const registerRpcModulesFromManifests = (
   registry: RpcRegistry,
   manifests: readonly NamespaceManifest[],
 ): void => {
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
 
   const registered = new Set(registry.getRegisteredNamespaceAdapters().map((entry) => entry.namespace));
   for (const manifest of manifests) {
@@ -86,7 +89,7 @@ export const registerRpcClientFactoriesFromManifests = (
   registry: Pick<RpcClientRegistry, "registerFactory">,
   manifests: readonly NamespaceManifest[],
 ): void => {
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
 
   for (const manifest of manifests) {
     const factory = manifest.runtime?.clientFactory;
@@ -118,7 +121,7 @@ export const assembleRuntimeNamespaces = (params: {
   keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
 }): { signers: HandlerControllers["signers"]; bindings: NamespaceRuntimeBindingsRegistry } => {
   const { manifests, transactionRegistry, rpcClients, chains, keyring } = params;
-  assertUniqueNamespaces(manifests);
+  assertValidUniqueNamespaceManifests(manifests);
 
   const signerByNamespace = new Map<string, unknown>();
   const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();

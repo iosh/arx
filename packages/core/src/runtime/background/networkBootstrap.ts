@@ -1,15 +1,18 @@
+import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../controllers/network/config.js";
 import type { NetworkChainConfig, NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
-import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
+import { buildDefaultRoutingState } from "./constants.js";
+import type { RuntimeNetworkPreferencesDefaults } from "./networkDefaults.js";
 
 export type CreateNetworkBootstrapOptions = {
   network: NetworkController;
   chainDefinitions: ChainDefinitionsController;
   preferences: NetworkPreferencesService;
+  preferencesDefaults: RuntimeNetworkPreferencesDefaults;
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
@@ -25,8 +28,16 @@ export type NetworkBootstrap = {
 };
 
 export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
-  const { network, chainDefinitions, preferences, hydrationEnabled, logger, getIsHydrating, getRegisteredNamespaces } =
-    opts;
+  const {
+    network,
+    chainDefinitions,
+    preferences,
+    preferencesDefaults,
+    hydrationEnabled,
+    logger,
+    getIsHydrating,
+    getRegisteredNamespaces,
+  } = opts;
 
   let cachedPreferences: NetworkPreferencesRecord | null = null;
   let preferencesLoaded = !hydrationEnabled;
@@ -72,11 +83,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return { rpc, corrections };
   };
 
-  const getNamespace = (chainRef: ChainRef): string => {
-    const [namespace] = chainRef.split(":");
-    return namespace ?? DEFAULT_CHAIN.namespace;
-  };
-
   const resolveActiveChainByNamespace = (
     registryChains: NetworkChainConfig[],
     selectedChainRefHint: ChainRef,
@@ -84,7 +90,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     const availableByNamespace = new Map<string, ChainRef[]>();
 
     for (const chain of registryChains) {
-      const namespace = getNamespace(chain.chainRef);
+      const namespace = getChainRefNamespace(chain.chainRef);
       const chainRefs = availableByNamespace.get(namespace);
       if (chainRefs) {
         chainRefs.push(chain.chainRef);
@@ -94,7 +100,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const next: Record<string, ChainRef> = {};
-    const selectedNamespace = getNamespace(selectedChainRefHint);
+    const selectedNamespace = getChainRefNamespace(selectedChainRefHint);
 
     for (const [namespace, chainRefs] of availableByNamespace) {
       const preferred = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
@@ -108,8 +114,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
         continue;
       }
 
-      if (namespace === DEFAULT_CHAIN.namespace && chainRefs.includes(DEFAULT_CHAIN.chainRef)) {
-        next[namespace] = DEFAULT_CHAIN.chainRef;
+      const fallbackChainRef = preferencesDefaults.activeChainByNamespace[namespace] ?? null;
+      if (fallbackChainRef && chainRefs.includes(fallbackChainRef)) {
+        next[namespace] = fallbackChainRef;
         continue;
       }
 
@@ -127,7 +134,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     activeChainByNamespace: Record<string, ChainRef>,
   ): ChainRef => {
     if (registryChains.length === 0) {
-      return cachedPreferences?.selectedChainRef ?? DEFAULT_CHAIN.chainRef;
+      return cachedPreferences?.selectedChainRef ?? preferencesDefaults.selectedChainRef;
     }
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
@@ -136,7 +143,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       return preferredSelectedChainRef;
     }
 
-    const preferredSelectedNamespace = preferredSelectedChainRef ? getNamespace(preferredSelectedChainRef) : null;
+    const preferredSelectedNamespace = preferredSelectedChainRef
+      ? getChainRefNamespace(preferredSelectedChainRef)
+      : null;
     const preferredSelectedNamespaceActive = preferredSelectedNamespace
       ? (activeChainByNamespace[preferredSelectedNamespace] ?? null)
       : null;
@@ -144,13 +153,14 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       return preferredSelectedNamespaceActive;
     }
 
-    const defaultNamespaceActive = activeChainByNamespace[DEFAULT_CHAIN.namespace] ?? null;
-    if (defaultNamespaceActive && available.has(defaultNamespaceActive)) {
-      return defaultNamespaceActive;
+    const fallbackNamespace = getChainRefNamespace(preferencesDefaults.selectedChainRef);
+    const fallbackNamespaceActive = activeChainByNamespace[fallbackNamespace] ?? null;
+    if (fallbackNamespaceActive && available.has(fallbackNamespaceActive)) {
+      return fallbackNamespaceActive;
     }
 
-    if (available.has(DEFAULT_CHAIN.chainRef)) {
-      return DEFAULT_CHAIN.chainRef;
+    if (available.has(preferencesDefaults.selectedChainRef)) {
+      return preferencesDefaults.selectedChainRef;
     }
 
     const first = registryChains[0];
@@ -201,7 +211,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const current = network.getState();
-    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? DEFAULT_CHAIN.chainRef;
+    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? preferencesDefaults.selectedChainRef;
     const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains, selectedChainRefHint);
     const nextSelectedChainRef = selectSelectedChainRef(registryChains, nextActiveChainByNamespace);
 

@@ -1,6 +1,5 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
-import { DEFAULT_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
@@ -32,8 +31,6 @@ import { StoreTransactionController } from "../../controllers/transaction/StoreT
 import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
-import type { Namespace } from "../../rpc/handlers/types.js";
-import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
@@ -41,9 +38,8 @@ import type { PermissionsService } from "../../services/store/permissions/types.
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import { buildDefaultRoutingState, DEFAULT_CHAIN, DEFAULT_NETWORK_STATE_INPUT, DEFAULT_STRATEGY } from "./constants.js";
-
-type NamespaceResolver = (method: string, context?: RpcInvocationContext) => Namespace | null;
+import { DEFAULT_STRATEGY } from "./constants.js";
+import type { RuntimeNetworkPlan } from "./networkDefaults.js";
 
 export type ControllerLayerOptions = {
   network?: {
@@ -98,25 +94,24 @@ export type ControllersInitResult = {
 
 export const initControllers = ({
   bus,
-  rpcRegistry,
   accountCodecs,
   accountsService,
   settingsService,
   permissionsService,
   transactionsService,
   networkPreferences,
+  networkPlan,
   options,
   createApprovalExecutor,
 }: {
   bus: Messenger;
-  namespaceResolver: NamespaceResolver;
-  rpcRegistry: RpcRegistry;
   accountCodecs: AccountCodecRegistry;
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsService: PermissionsService;
   transactionsService: TransactionsService;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
+  networkPlan: RuntimeNetworkPlan;
   options: ControllerLayerOptions;
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
 }): ControllersInitResult => {
@@ -131,44 +126,11 @@ export const initControllers = ({
     throw new Error("createBackgroundRuntime requires chainDefinitions.port");
   }
 
-  const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
-  const seedSource = chainDefinitionsOptions.seed ?? DEFAULT_CHAIN_METADATA;
-  const registrySeed: ChainMetadata[] = seedSource.map((entry) => ({ ...entry }));
-  const admittedRegistrySeed = registrySeed.filter((entry) => registeredNamespaces.has(entry.namespace));
-  const requestedNetworkInitialState = networkOptions?.initialState ?? DEFAULT_NETWORK_STATE_INPUT;
-  const bootstrapChains =
-    admittedRegistrySeed.length > 0
-      ? admittedRegistrySeed
-      : registeredNamespaces.has(DEFAULT_CHAIN.namespace)
-        ? [DEFAULT_CHAIN]
-        : [];
-  const bootstrapChainRefs = new Set(bootstrapChains.map((chain) => chain.chainRef));
-  const canResolveRequestedInitialState = requestedNetworkInitialState.availableChainRefs.every((chainRef) =>
-    bootstrapChainRefs.has(chainRef),
-  );
-  const bootstrapInitialChain =
-    bootstrapChains.find((chain) => requestedNetworkInitialState.availableChainRefs.includes(chain.chainRef)) ??
-    bootstrapChains[0];
-
-  if (!bootstrapInitialChain) {
-    throw new Error("createBackgroundRuntime requires at least one admitted bootstrap chain definition");
-  }
-
-  const bootstrapInitialState: NetworkStateInput = canResolveRequestedInitialState
-    ? requestedNetworkInitialState
-    : {
-        availableChainRefs: [bootstrapInitialChain.chainRef],
-        rpc: {
-          [bootstrapInitialChain.chainRef]:
-            requestedNetworkInitialState.rpc[bootstrapInitialChain.chainRef] ??
-            buildDefaultRoutingState(bootstrapInitialChain, networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY),
-        },
-      };
-  const deferredNetworkInitialState = canResolveRequestedInitialState ? null : requestedNetworkInitialState;
+  const registrySeed: ChainMetadata[] = (chainDefinitionsOptions.seed ?? []).map((entry) => ({ ...entry }));
 
   const networkController = new InMemoryNetworkController({
     messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
-    initialRuntime: buildNetworkRuntimeInput(bootstrapInitialState, bootstrapChains),
+    initialRuntime: buildNetworkRuntimeInput(networkPlan.bootstrapState, networkPlan.admittedChains),
     defaultStrategy: networkOptions?.defaultStrategy ?? DEFAULT_STRATEGY,
     ...(networkOptions?.defaultCooldownMs !== undefined ? { defaultCooldownMs: networkOptions.defaultCooldownMs } : {}),
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
@@ -248,6 +210,6 @@ export const initControllers = ({
     networkController,
     chainDefinitionsController,
     permissionController,
-    deferredNetworkInitialState,
+    deferredNetworkInitialState: networkPlan.deferredState,
   };
 };

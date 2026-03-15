@@ -37,6 +37,15 @@ const ALT_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.alt", type: "public" }],
 };
 
+const BASE_CHAIN: ChainMetadata = {
+  chainRef: "eip155:8453",
+  namespace: "eip155",
+  chainId: "0x2105",
+  displayName: "Base",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcEndpoints: [{ url: "https://rpc.base", type: "public" }],
+};
+
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
 
 const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinitionEntity => ({
@@ -74,6 +83,45 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
 };
 
 describe("createBackgroundRuntime (no snapshots)", () => {
+  it("derives network preference defaults from the admitted chain seed before hydration", async () => {
+    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort([
+      toRegistryEntity(BASE_CHAIN, 0),
+    ]);
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: chainDefinitionsPort, seed: [BASE_CHAIN] },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(BASE_CHAIN.chainRef);
+    expect(runtime.services.networkPreferences.getActiveChainByNamespace()).toEqual({
+      [BASE_CHAIN.namespace]: BASE_CHAIN.chainRef,
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(BASE_CHAIN.chainRef);
+
+    runtime.lifecycle.destroy();
+  });
+
   it("hydrates network preferences from NetworkPreferencesPort", async () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];

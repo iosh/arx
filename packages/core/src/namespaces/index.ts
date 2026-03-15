@@ -18,3 +18,4 @@ export type {
   NamespaceSignerRegistry,
   NamespaceUiBindings,
 } from "./types.js";
+export { assertValidNamespaceManifest, defineNamespaceManifest } from "./validation.js";

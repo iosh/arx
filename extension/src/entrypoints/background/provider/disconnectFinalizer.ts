@@ -4,22 +4,20 @@ import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol"
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
 import { buildRpcContext, deriveRpcContextNamespace } from "../rpc";
-import type { BackgroundContext } from "../runtimeHost";
 import type { PortContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
-  getContext: () => Promise<BackgroundContext>;
   getRpcRegistry: () => RpcRegistry | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
-  getPortId: (port: Runtime.Port) => string | null;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;
   detachPortListeners: (port: Runtime.Port) => void;
   postEnvelope: (port: Runtime.Port, envelope: Envelope) => boolean;
   removePortState: (port: Runtime.Port) => void;
+  cancelApprovalsForSession: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
   portLog: (message: string, details?: Record<string, unknown>) => void;
 };
 
@@ -32,39 +30,17 @@ const toErrorDetails = (error: unknown): Record<string, string> => {
 export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinalizerDeps) => {
   const {
     extensionOrigin,
-    getContext,
     getRpcRegistry,
     getSessionIdForPort,
-    getPortId,
     getPortContext,
     getPendingRequestMap,
     clearPendingForPort,
     detachPortListeners,
     postEnvelope,
     removePortState,
+    cancelApprovalsForSession,
     portLog,
   } = deps;
-
-  const cancelProviderScopedApprovals = async (port: Runtime.Port, sessionId: string, reason: string) => {
-    const portId = getPortId(port);
-    if (!portId) return;
-
-    try {
-      const { controllers } = await getContext();
-      await controllers.approvals.cancelByScope({
-        scope: {
-          transport: "provider",
-          origin: getPortOrigin(port, extensionOrigin),
-          portId,
-          sessionId,
-        },
-        reason: "session_lost",
-      });
-    } catch (error) {
-      const origin = getPortOrigin(port, extensionOrigin);
-      portLog(reason, { origin, ...toErrorDetails(error) });
-    }
-  };
 
   const encodeDisconnectError = (port: Runtime.Port, overrideError?: JsonRpcError): JsonRpcError => {
     if (overrideError) {
@@ -119,7 +95,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
     const sessionId = getSessionIdForPort(port);
     if (sessionId) {
-      void cancelProviderScopedApprovals(port, sessionId, "failed to expire approvals on stale port");
+      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on stale port");
     }
 
     cleanupPortState(port);
@@ -137,7 +113,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const finalizePortDisconnect = (port: Runtime.Port) => {
     const sessionId = getSessionIdForPort(port);
     if (sessionId) {
-      void cancelProviderScopedApprovals(port, sessionId, "failed to expire approvals on disconnect");
+      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on disconnect");
     }
 
     try {

@@ -3,13 +3,14 @@ import { eip155Codec } from "../../accounts/addressing/codec.js";
 import { EIP155_CHAIN_METADATA } from "../../chains/chains.seed.js";
 import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
-import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/utils.js";
+import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
 import type { Eip155RpcCapabilities, Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
 import { eip155Module } from "../../rpc/namespaces/eip155/module.js";
 import { createEip155TransactionAdapter } from "../../transactions/adapters/eip155/adapter.js";
 import { createEip155Broadcaster } from "../../transactions/adapters/eip155/broadcaster.js";
 import { createEip155Signer, type Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
 import type { NamespaceManifest } from "../types.js";
+import { defineNamespaceManifest } from "../validation.js";
 
 const DEFAULT_EIP155_CHAIN_REF = EIP155_CHAIN_METADATA[0]?.chainRef;
 const EIP155_CLIENT_FACTORY = eip155Module.clientFactory;
@@ -27,7 +28,7 @@ const toEip155AccountId = (params: { chainRef: string; address: string }) => {
   return eip155Codec.toAccountId(canonical);
 };
 
-export const eip155NamespaceManifest: NamespaceManifest = {
+export const eip155NamespaceManifest = defineNamespaceManifest({
   namespace: EIP155_NAMESPACE,
   core: {
     namespace: EIP155_NAMESPACE,
@@ -93,4 +94,4 @@ export const eip155NamespaceManifest: NamespaceManifest = {
       });
     },
   },
-};
+} satisfies NamespaceManifest);

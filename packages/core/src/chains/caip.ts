@@ -33,8 +33,12 @@ export const parseChainRef = (value: ChainRef): ParsedChainRef => {
   return { namespace, reference };
 };
 
+export const getChainRefNamespace = (chainRef: ChainRef): string => {
+  return parseChainRef(chainRef).namespace;
+};
+
 export const assertNamespace = (chainRef: ChainRef, expected: string): void => {
-  const { namespace } = parseChainRef(chainRef);
+  const namespace = getChainRefNamespace(chainRef);
   if (namespace !== expected) {
     throw chainErrors.namespaceMismatch({ chainRef, expected, actual: namespace });
   }

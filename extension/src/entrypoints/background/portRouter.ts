@@ -1,12 +1,15 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { RpcRegistry } from "@arx/core/rpc";
-import { CHANNEL, type Envelope, PROTOCOL_VERSION } from "@arx/provider/protocol";
+import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
+import { createProviderApprovalScopeCanceller } from "./provider/approvalScope";
 import { createProviderDisconnectFinalizer } from "./provider/disconnectFinalizer";
 import { createProviderEventBroadcaster } from "./provider/eventBroadcaster";
+import { createProviderHandshakeCoordinator } from "./provider/handshakeCoordinator";
+import { createProviderPermittedAccountsResolver } from "./provider/permittedAccounts";
 import { createProviderRequestExecutor } from "./provider/requestExecutor";
 import { createProviderSessionRegistry } from "./provider/sessionRegistry";
 import type { BackgroundContext } from "./runtimeHost";
@@ -16,11 +19,6 @@ type PortRouterDeps = {
   extensionOrigin: string;
   getOrInitContext: () => Promise<BackgroundContext>;
   getProviderSnapshot: (namespace: string) => ProviderBridgeSnapshot;
-};
-
-const parseHandshakeNamespace = (envelope: Extract<Envelope, { type: "handshake" }>) => {
-  const namespace = envelope.payload.namespace.trim();
-  return namespace.length > 0 ? namespace : null;
 };
 
 const toErrorDetails = (error: unknown): Record<string, string> => {
@@ -121,37 +119,30 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     syncAllPortContexts(ports, findPortSnapshot, portContextStore, extensionOrigin);
   };
 
-  const getPermittedAccountsForPort = async (
-    port: Runtime.Port,
-    snapshot: ProviderBridgeSnapshot,
-  ): Promise<string[]> => {
-    if (!snapshot.isUnlocked) return [];
+  const approvalScopeCanceller = createProviderApprovalScopeCanceller({
+    extensionOrigin,
+    getContext,
+    getPortId: (port) => sessionRegistry.readPortId(port),
+    portLog,
+  });
 
-    const origin = getPortOrigin(port, extensionOrigin);
-    if (origin === "unknown://") return [];
-
-    const { controllers, permissionViews } = await getContext();
-    const portContext = sessionRegistry.readPortContext(port);
-    const chainRef = portContext?.chainRef ?? snapshot.chain.chainRef;
-    return permissionViews
-      .listPermittedAccounts(origin, { chainRef })
-      .map((account) =>
-        controllers.chainAddressCodecs.formatAddress({ chainRef, canonical: account.canonicalAddress }),
-      );
-  };
+  const permittedAccountsResolver = createProviderPermittedAccountsResolver({
+    extensionOrigin,
+    getContext,
+    getPortChainRef: (port) => sessionRegistry.readPortContext(port)?.chainRef ?? null,
+  });
 
   const disconnectFinalizer = createProviderDisconnectFinalizer({
     extensionOrigin,
-    getContext,
     getRpcRegistry,
     getSessionIdForPort,
-    getPortId: (port) => sessionRegistry.readPortId(port),
     getPortContext: (port) => sessionRegistry.readPortContext(port),
     getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
     clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
     detachPortListeners,
     postEnvelope,
     removePortState: (port) => sessionRegistry.removePortState(port),
+    cancelApprovalsForSession: approvalScopeCanceller.cancelByPortSession,
     portLog,
   });
 
@@ -171,7 +162,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     syncPortContextsForPorts,
     postEnvelope,
     dropStalePort: disconnectFinalizer.dropStalePort,
-    getPermittedAccountsForPort,
+    getPermittedAccountsForPort: permittedAccountsResolver.listPermittedAccountsForPort,
   });
 
   const getOrCreatePortId = (port: Runtime.Port) => {
@@ -206,35 +197,18 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     sendReply,
   });
 
-  const sendHandshakeAck = async (
-    port: Runtime.Port,
-    envelope: Extract<Envelope, { type: "handshake" }>,
-    snapshot: ProviderBridgeSnapshot,
-  ) => {
-    syncPortContext(port, snapshot, portContextStore, extensionOrigin);
-    sessionRegistry.writeSessionId(port, envelope.sessionId);
-
-    const accounts = await getPermittedAccountsForPort(port, snapshot);
-
-    postEnvelopeOrDrop(
-      port,
-      {
-        channel: CHANNEL,
-        sessionId: envelope.sessionId,
-        type: "handshake_ack",
-        payload: {
-          protocolVersion: PROTOCOL_VERSION,
-          handshakeId: envelope.payload.handshakeId,
-          chainId: snapshot.chain.chainId,
-          chainRef: snapshot.chain.chainRef,
-          accounts,
-          isUnlocked: snapshot.isUnlocked,
-          meta: snapshot.meta,
-        },
-      },
-      "send_handshake_failed",
-    );
-  };
+  const handshakeCoordinator = createProviderHandshakeCoordinator({
+    getContext,
+    getExpectedSessionId: getSessionIdForPort,
+    writeSessionId: (port, sessionId) => sessionRegistry.writeSessionId(port, sessionId),
+    getProviderSnapshot: findProviderSnapshot,
+    syncPortContext: (port, snapshot) => syncPortContext(port, snapshot, portContextStore, extensionOrigin),
+    listPermittedAccountsForPort: permittedAccountsResolver.listPermittedAccountsForPort,
+    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
+    cancelApprovalsForSession: approvalScopeCanceller.cancelByPortSession,
+    postEnvelopeOrDrop,
+    dropStalePort: disconnectFinalizer.dropStalePort,
+  });
 
   const handleConnect = (port: Runtime.Port) => {
     if (port.name !== CHANNEL) return;
@@ -255,48 +229,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
 
       switch (envelope.type) {
         case "handshake": {
-          void (async () => {
-            const namespace = parseHandshakeNamespace(envelope);
-            if (!namespace) {
-              disconnectFinalizer.dropStalePort(port, "handshake_missing_namespace");
-              return;
-            }
-
-            const expectedSessionId = getSessionIdForPort(port);
-            if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
-              sessionRegistry.dropPendingRequests(port);
-              const portId = sessionRegistry.readPortId(port);
-              if (portId) {
-                try {
-                  const { controllers } = await getContext();
-                  await controllers.approvals.cancelByScope({
-                    scope: {
-                      transport: "provider",
-                      origin: getPortOrigin(port, extensionOrigin),
-                      portId,
-                      sessionId: expectedSessionId,
-                    },
-                    reason: "session_lost",
-                  });
-                } catch (error) {
-                  const eventOrigin = getPortOrigin(port, extensionOrigin);
-                  portLog("failed to expire approvals on session rotation", {
-                    origin: eventOrigin,
-                    ...toErrorDetails(error),
-                  });
-                }
-              }
-            }
-
-            await getContext();
-            const snapshot = findProviderSnapshot(namespace);
-            if (!snapshot) {
-              disconnectFinalizer.dropStalePort(port, "handshake_snapshot_unavailable");
-              return;
-            }
-
-            await sendHandshakeAck(port, envelope, snapshot);
-          })();
+          void handshakeCoordinator.handleHandshake(port, envelope);
           break;
         }
 

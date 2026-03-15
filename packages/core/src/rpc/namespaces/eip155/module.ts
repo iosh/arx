@@ -1,7 +1,7 @@
 import { createEip155ProtocolAdapter } from "../../eip155ProtocolAdapter.js";
+import { EIP155_NAMESPACE } from "../../handlers/namespaces/eip155/constants.js";
 import { buildEip155Definitions } from "../../handlers/namespaces/eip155/definitions.js";
 import { PASSTHROUGH_CONFIG } from "../../handlers/namespaces/eip155/passthrough.js";
-import { EIP155_NAMESPACE } from "../../handlers/namespaces/utils.js";
 import { createEip155RpcClientFactory } from "../../namespaceClients/eip155.js";
 import type { RpcNamespaceModule } from "../types.js";
 

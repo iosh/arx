@@ -2,8 +2,9 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createApprovalId, deriveSigningInputs, isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
+import { parseEip155PersonalSignParams } from "./signingParams.js";
 
 type PersonalSignParams = { address: string; message: string };
 
@@ -21,7 +22,7 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       });
     }
 
-    const { address, message } = deriveSigningInputs(paramsArray);
+    const { address, message } = parseEip155PersonalSignParams(paramsArray);
 
     if (!address) {
       throw arxError({

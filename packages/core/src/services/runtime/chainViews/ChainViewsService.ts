@@ -4,6 +4,7 @@ import {
   type ApprovalChainContextRequest,
   deriveApprovalReviewContext,
 } from "../../../approvals/chainContext.js";
+import { getChainRefNamespace } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
@@ -216,10 +217,7 @@ class DefaultChainViewsService implements ChainViewsService {
     const grouped = new Map<string, ChainRef[]>();
 
     for (const chainRef of availableChainRefs) {
-      const [namespace] = chainRef.split(":");
-      if (!namespace) {
-        continue;
-      }
+      const namespace = getChainRefNamespace(chainRef);
       const current = grouped.get(namespace);
       if (current) {
         current.push(chainRef);
@@ -229,7 +227,7 @@ class DefaultChainViewsService implements ChainViewsService {
     }
 
     const selectedChainRef = this.#tryResolveSelectedChainRef(availableChainRefs);
-    const [selectedNamespace] = selectedChainRef?.split(":") ?? [];
+    const selectedNamespace = selectedChainRef ? getChainRefNamespace(selectedChainRef) : null;
 
     const next: Record<string, ChainRef> = {};
     for (const [namespace, chainRefs] of grouped) {

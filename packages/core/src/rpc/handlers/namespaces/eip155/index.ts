@@ -1,8 +1,9 @@
 import type { NamespaceAdapter } from "../adapter.js";
-import { EIP155_NAMESPACE } from "../utils.js";
+import { EIP155_NAMESPACE } from "./constants.js";
 import { buildEip155Definitions } from "./definitions.js";
 import { PASSTHROUGH_CONFIG } from "./passthrough.js";
 
+export { EIP155_NAMESPACE } from "./constants.js";
 export {
   EIP155_PASSTHROUGH_FILTER_METHODS,
   EIP155_PASSTHROUGH_READONLY_METHODS,

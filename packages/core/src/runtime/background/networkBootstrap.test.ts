@@ -9,8 +9,17 @@ import { createChainViewsService } from "../../services/runtime/chainViews/index
 import { createNetworkPreferencesService } from "../../services/store/networkPreferences/NetworkPreferencesService.js";
 import type { NetworkPreferencesRecord } from "../../storage/records.js";
 import { MemoryNetworkPreferencesPort, toRegistryEntity } from "../__fixtures__/backgroundTestSetup.js";
-import { buildDefaultRoutingState, DEFAULT_CHAIN } from "./constants.js";
+import { buildDefaultRoutingState } from "./constants.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
+
+const MAINNET_CHAIN: ChainMetadata = {
+  chainRef: "eip155:1",
+  namespace: "eip155",
+  chainId: "0x1",
+  displayName: "Ethereum Mainnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcEndpoints: [{ url: "https://rpc.mainnet.example", type: "public" }],
+};
 
 const ALT_CHAIN: ChainMetadata = {
   chainRef: "eip155:10",
@@ -64,7 +73,7 @@ const createChainDefinitionsStub = (chains: ChainDefinitionSeed[]): MutableChain
     reconcileBuiltinChains: async () => {},
     upsertCustomChain: async () => ({
       kind: "noop",
-      chain: toRegistryEntity(current[0]?.metadata ?? DEFAULT_CHAIN, 0),
+      chain: toRegistryEntity(current[0]?.metadata ?? MAINNET_CHAIN, 0),
     }),
     removeCustomChain: async () => ({ removed: false }),
     onStateChanged: (handler) => {
@@ -96,14 +105,18 @@ const createNetworkController = (chain: ChainMetadata) => {
   });
 };
 
-const createPreferencesService = (seed: NetworkPreferencesRecord | null, now = () => 1_000) => {
+const createPreferencesService = (
+  seed: NetworkPreferencesRecord | null,
+  defaults = {
+    selectedChainRef: MAINNET_CHAIN.chainRef,
+    activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+  },
+  now = () => 1_000,
+) => {
   const port = new MemoryNetworkPreferencesPort(seed);
   const service = createNetworkPreferencesService({
     port,
-    defaults: {
-      selectedChainRef: DEFAULT_CHAIN.chainRef,
-      activeChainByNamespace: { [DEFAULT_CHAIN.namespace]: DEFAULT_CHAIN.chainRef },
-    },
+    defaults,
     now,
   });
   return { port, service };
@@ -111,9 +124,9 @@ const createPreferencesService = (seed: NetworkPreferencesRecord | null, now = (
 
 describe("networkBootstrap", () => {
   it("mounts only admitted namespace chains and corrects stored preferences", async () => {
-    const network = createNetworkController(DEFAULT_CHAIN);
+    const network = createNetworkController(MAINNET_CHAIN);
     const chainDefinitions = createChainDefinitionsStub([
-      { metadata: DEFAULT_CHAIN },
+      { metadata: MAINNET_CHAIN },
       { metadata: ALT_CHAIN },
       { metadata: SOLANA_CHAIN },
     ]);
@@ -132,6 +145,10 @@ describe("networkBootstrap", () => {
       network,
       chainDefinitions,
       preferences: service,
+      preferencesDefaults: {
+        selectedChainRef: MAINNET_CHAIN.chainRef,
+        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+      },
       hydrationEnabled: true,
       logger: () => {},
       getIsHydrating: () => false,
@@ -143,7 +160,7 @@ describe("networkBootstrap", () => {
     await bootstrap.flushPendingSync();
 
     expect(network.getState()).toMatchObject({
-      availableChainRefs: [DEFAULT_CHAIN.chainRef, ALT_CHAIN.chainRef],
+      availableChainRefs: [MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef],
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
       },
@@ -158,12 +175,12 @@ describe("networkBootstrap", () => {
   });
 
   it("repairs selectedChainRef when registry removes the current chain", async () => {
-    const network = createNetworkController(DEFAULT_CHAIN);
-    const chainDefinitions = createChainDefinitionsStub([{ metadata: DEFAULT_CHAIN }, { metadata: ALT_CHAIN }]);
+    const network = createNetworkController(MAINNET_CHAIN);
+    const chainDefinitions = createChainDefinitionsStub([{ metadata: MAINNET_CHAIN }, { metadata: ALT_CHAIN }]);
     const { service } = createPreferencesService({
       id: "network-preferences",
-      selectedChainRef: DEFAULT_CHAIN.chainRef,
-      activeChainByNamespace: { eip155: DEFAULT_CHAIN.chainRef },
+      selectedChainRef: MAINNET_CHAIN.chainRef,
+      activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
     });
@@ -172,6 +189,10 @@ describe("networkBootstrap", () => {
       network,
       chainDefinitions,
       preferences: service,
+      preferencesDefaults: {
+        selectedChainRef: MAINNET_CHAIN.chainRef,
+        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+      },
       hydrationEnabled: true,
       logger: () => {},
       getIsHydrating: () => false,
@@ -195,11 +216,11 @@ describe("networkBootstrap", () => {
   });
 
   it("repairs unavailable selectedChainRef using the resolved provider chain for the same namespace", async () => {
-    const network = createNetworkController(DEFAULT_CHAIN);
+    const network = createNetworkController(MAINNET_CHAIN);
     const chainDefinitions = createChainDefinitionsStub([{ metadata: ALT_CHAIN }]);
     const { port, service } = createPreferencesService({
       id: "network-preferences",
-      selectedChainRef: DEFAULT_CHAIN.chainRef,
+      selectedChainRef: MAINNET_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
@@ -209,6 +230,10 @@ describe("networkBootstrap", () => {
       network,
       chainDefinitions,
       preferences: service,
+      preferencesDefaults: {
+        selectedChainRef: MAINNET_CHAIN.chainRef,
+        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+      },
       hydrationEnabled: true,
       logger: () => {},
       getIsHydrating: () => false,

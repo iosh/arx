@@ -352,4 +352,38 @@ describe("portRouter privacy and binding", () => {
       }),
     );
   });
+
+  it("cancels provider-scoped approvals when handshake rotates the session", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("22222222-2222-4222-8222-222222222222");
+
+    const { router, cancelByScope } = createRouterHarness();
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    handshake(port, "session-2", "eip155");
+
+    await vi.waitFor(() =>
+      expect(cancelByScope).toHaveBeenCalledWith({
+        scope: {
+          transport: "provider",
+          origin: "https://example.com",
+          portId: "22222222-2222-4222-8222-222222222222",
+          sessionId: "session-1",
+        },
+        reason: "session_lost",
+      }),
+    );
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
+    expect(port.postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        sessionId: "session-2",
+        type: "handshake_ack",
+      }),
+    );
+  });
 });

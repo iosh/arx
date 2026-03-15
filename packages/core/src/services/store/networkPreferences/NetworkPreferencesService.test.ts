@@ -93,4 +93,16 @@ describe("NetworkPreferencesService", () => {
     expect(next.selectedChainRef).toBe("eip155:10");
     expect(next.activeChainByNamespace).toEqual({ eip155: "eip155:1" });
   });
+
+  it("rejects invalid chainRef values when setting an active chain", async () => {
+    const { port } = createInMemoryPort();
+    const service = createNetworkPreferencesService({
+      port,
+      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+    });
+
+    await expect(service.setActiveChainRef("eip155" as never)).rejects.toMatchObject({
+      message: "Invalid CAIP-2 chainRef: eip155",
+    });
+  });
 });

@@ -41,4 +41,18 @@ describe("NetworkPreferencesRecordSchema", () => {
       }),
     ).toThrow();
   });
+
+  it("rejects activeChainByNamespace entries whose chainRef namespace drifts", () => {
+    expect(() =>
+      NetworkPreferencesRecordSchema.parse({
+        id: "network-preferences",
+        selectedChainRef: "solana:101",
+        activeChainByNamespace: {
+          solana: "eip155:1",
+        },
+        rpc: {},
+        updatedAt: 0,
+      }),
+    ).toThrow(/must point to the same namespace/);
+  });
 });

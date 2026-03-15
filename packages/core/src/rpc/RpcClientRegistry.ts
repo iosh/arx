@@ -1,5 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams } from "@metamask/utils";
+import { getChainRefNamespace, normalizeChainRef } from "../chains/caip.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { NetworkController, RpcEndpointInfo, RpcOutcomeReport } from "../controllers/network/types.js";
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
@@ -430,8 +432,9 @@ export class RpcClientRegistry {
     if (!namespace) throw new Error("RpcClientRegistry.getClient requires a namespace");
     if (!chainRef) throw new Error("RpcClientRegistry.getClient requires a chainRef");
 
-    const [chainNamespace] = chainRef.split(":");
-    if (chainNamespace && chainNamespace !== namespace) {
+    const normalizedChainRef = normalizeChainRef(chainRef as ChainRef);
+    const chainNamespace = getChainRefNamespace(normalizedChainRef);
+    if (chainNamespace !== namespace) {
       throw new Error(`Namespace mismatch: chainRef "${chainRef}" does not match namespace "${namespace}"`);
     }
     let perNamespace = this.#clients.get(namespace);
@@ -440,24 +443,24 @@ export class RpcClientRegistry {
       this.#clients.set(namespace, perNamespace);
     }
 
-    if (!perNamespace.has(chainRef)) {
+    if (!perNamespace.has(normalizedChainRef)) {
       const factory = this.#factories.get(namespace) as RpcClientFactory<TCapabilities> | undefined;
       if (!factory) {
         throw new Error(`No RPC client factory registered for namespace "${namespace}"`);
       }
-      const transport = createJsonRpcTransport(namespace, chainRef, this.#network, this.#config);
+      const transport = createJsonRpcTransport(namespace, normalizedChainRef, this.#network, this.#config);
       const client = factory({
         namespace,
-        chainRef,
+        chainRef: normalizedChainRef,
         network: this.#network,
         transport,
       }) as RpcClient<RpcClientCapabilities>;
-      perNamespace.set(chainRef, client);
+      perNamespace.set(normalizedChainRef, client);
     }
 
-    const cached = perNamespace.get(chainRef);
+    const cached = perNamespace.get(normalizedChainRef);
     if (!cached) {
-      throw new Error(`Failed to create RPC client for ${namespace} ${chainRef}`);
+      throw new Error(`Failed to create RPC client for ${namespace} ${normalizedChainRef}`);
     }
     return cached as RpcClient<TCapabilities>;
   }

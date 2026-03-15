@@ -1,4 +1,4 @@
-import { parseChainRef } from "../../../chains/caip.js";
+import { getChainRefNamespace, parseChainRef } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
@@ -25,10 +25,7 @@ export const createChainActivationService = ({
   };
 
   const persistWalletChainSelection = async (chainRef: ChainRef) => {
-    const [namespace] = chainRef.split(":");
-    if (!namespace) {
-      throw new Error(`Invalid chainRef: ${chainRef}`);
-    }
+    const namespace = getChainRefNamespace(chainRef);
 
     return await preferences.update({
       selectedChainRef: chainRef,
@@ -54,7 +51,7 @@ export const createChainActivationService = ({
       case ChainSelectionSyncPolicies.Never:
         return false;
       default:
-        return preferences.getSelectedChainRef().split(":")[0] === namespace;
+        return getChainRefNamespace(preferences.getSelectedChainRef()) === namespace;
     }
   };
 

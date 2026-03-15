@@ -1,5 +1,6 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
+import type { ChainMetadata } from "../../chains/metadata.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   assembleRuntimeNamespaces,
@@ -29,6 +30,7 @@ import type { KeyringService } from "../keyring/KeyringService.js";
 import { type ControllerLayerOptions, type ControllersBase, initControllers } from "./controllers.js";
 import { type EngineOptions, initEngine } from "./engine.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
+import { buildRuntimeNetworkPlan, type RuntimeNetworkPlan } from "./networkDefaults.js";
 import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
 import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 import { initRuntimeStoreServices } from "./runtimeStoreServices.js";
@@ -47,7 +49,6 @@ type MessengerOptions = {
 };
 
 type BackgroundNamespaceResolver = (context?: RpcInvocationContext) => Namespace | null;
-type BackgroundMethodNamespaceResolver = (method: string, context?: RpcInvocationContext) => Namespace | null;
 
 export type RuntimeBootstrapPhase = {
   bus: Messenger;
@@ -56,7 +57,8 @@ export type RuntimeBootstrapPhase = {
   registeredNamespaces: ReadonlySet<string>;
   accountCodecs: AccountCodecRegistry;
   chainAddressCodecs: ReturnType<typeof createChainAddressCodecRegistryFromManifests>;
-  methodNamespaceResolver: BackgroundMethodNamespaceResolver;
+  admittedChains: readonly ChainMetadata[];
+  networkPlan: RuntimeNetworkPlan;
   contextNamespaceResolver: BackgroundNamespaceResolver;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
@@ -126,6 +128,11 @@ export const initializeRuntimeBootstrapPhase = ({
   const chainAddressCodecs = createChainAddressCodecRegistryFromManifests(namespaceManifests);
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
   const chainDefinitionSeed = chainDefinitionsOptions.seed ?? collectChainSeedsFromManifests(namespaceManifests);
+  const networkPlan = buildRuntimeNetworkPlan({
+    admittedChains: chainDefinitionSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
+    ...(networkOptions?.initialState ? { requestedInitialState: networkOptions.initialState } : {}),
+    ...(networkOptions?.defaultStrategy ? { defaultStrategy: networkOptions.defaultStrategy } : {}),
+  });
   const resolvedSessionOptions = sessionOptions?.keyringNamespaces
     ? sessionOptions
     : {
@@ -133,7 +140,6 @@ export const initializeRuntimeBootstrapPhase = ({
         keyringNamespaces: createKeyringNamespacesFromManifests(namespaceManifests),
       };
 
-  const methodNamespaceResolver = rpcRegistry.createMethodNamespaceResolver();
   const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
@@ -156,7 +162,8 @@ export const initializeRuntimeBootstrapPhase = ({
     registeredNamespaces,
     accountCodecs,
     chainAddressCodecs,
-    methodNamespaceResolver,
+    admittedChains: networkPlan.admittedChains,
+    networkPlan,
     contextNamespaceResolver,
     storageLogger,
     storageNow,
@@ -193,19 +200,19 @@ export const initializeRuntimeSessionPhase = ({
       settingsPort,
       networkPreferencesPort,
       ports: storePorts,
+      networkDefaults: bootstrapPhase.networkPlan.preferencesDefaults,
       now: bootstrapPhase.storageNow,
     });
 
   const controllersInit = initControllers({
     bus: bootstrapPhase.bus,
-    namespaceResolver: bootstrapPhase.methodNamespaceResolver,
-    rpcRegistry: bootstrapPhase.rpcRegistry,
     accountCodecs: bootstrapPhase.accountCodecs,
     accountsService: accountsStore,
     settingsService,
     permissionsService,
     transactionsService,
     networkPreferences,
+    networkPlan: bootstrapPhase.networkPlan,
     options: bootstrapPhase.controllerOptions,
     ...(createApprovalExecutor ? { createApprovalExecutor } : {}),
   });
@@ -302,6 +309,7 @@ export const initializeRuntimeCapabilityPhase = ({
     network: sessionPhase.controllersBase.network,
     chainDefinitions: sessionPhase.controllersBase.chainDefinitions,
     preferences: sessionPhase.networkPreferences,
+    preferencesDefaults: bootstrapPhase.networkPlan.preferencesDefaults,
     hydrationEnabled: bootstrapPhase.hydrationEnabled,
     logger: bootstrapPhase.storageLogger,
     getIsHydrating: () => sessionPhase.runtimeLifecycle.getIsHydrating(),

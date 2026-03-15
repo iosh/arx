@@ -271,4 +271,17 @@ describe("RpcClientRegistry", () => {
     network.setEndpoint("eip155:1", "https://rpc.next");
     expect(network.outcomes).toHaveLength(0);
   });
+
+  it("rejects invalid chainRef identifiers before creating clients", () => {
+    const network = createNetworkStub();
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ result: null }), { status: 200 }));
+    const registry = new RpcClientRegistry({ network: network.stub, fetch });
+    const factory: RpcClientFactory = vi.fn(({ transport }) => ({
+      request: (payload) => transport(payload),
+    }));
+    registry.registerFactory("custom", factory);
+
+    expect(() => registry.getClient("custom", "custom")).toThrow(/Invalid CAIP-2 chainRef/);
+    expect(factory).not.toHaveBeenCalled();
+  });
 });

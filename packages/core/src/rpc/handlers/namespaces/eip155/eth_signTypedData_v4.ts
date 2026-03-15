@@ -2,8 +2,9 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
 import { lockedQueue } from "../../locked.js";
 import { type MethodDefinition, PermissionChecks } from "../../types.js";
-import { createApprovalId, isDomainError, isRpcError, parseTypedDataParams, toParamsArray } from "../utils.js";
+import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
+import { parseEip155TypedDataParams } from "./signingParams.js";
 
 type EthSignTypedDataV4Params = { address: string; typedData: string };
 
@@ -11,7 +12,7 @@ export const ethSignTypedDataV4Definition: MethodDefinition<EthSignTypedDataV4Pa
   capability: PermissionCapabilities.Sign,
   permissionCheck: PermissionChecks.Connected,
   locked: lockedQueue(),
-  parseParams: (params) => parseTypedDataParams(toParamsArray(params)),
+  parseParams: (params) => parseEip155TypedDataParams(toParamsArray(params)),
   handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const { address, typedData } = params;
     const chainRef = invocation.chainRef;

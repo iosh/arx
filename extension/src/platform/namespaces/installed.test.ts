@@ -1,4 +1,4 @@
-import { eip155NamespaceManifest } from "@arx/core/namespaces";
+import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
 import type { ProviderModule } from "@arx/provider/registry";
 import { describe, expect, it } from "vitest";
 import {
@@ -50,6 +50,16 @@ describe("installed namespaces composition root", () => {
         throw new Error("not used in test");
       },
     };
+    const invalidManifest: NamespaceManifest = {
+      ...eip155NamespaceManifest,
+      core: {
+        ...eip155NamespaceManifest.core,
+        rpc: {
+          ...eip155NamespaceManifest.core.rpc,
+          namespace: "conflux",
+        },
+      },
+    };
 
     expect(() =>
       defineInstalledNamespaceSpecs([
@@ -85,5 +95,15 @@ describe("installed namespaces composition root", () => {
         },
       ] as const),
     ).toThrow(/must use a provider module with the same namespace/);
+
+    expect(() =>
+      defineInstalledNamespaceSpecs([
+        {
+          namespace: "eip155",
+          manifest: invalidManifest,
+          providerModule: createTestProviderModule("eip155"),
+        },
+      ] as const),
+    ).toThrow(/core\.rpc\.namespace/);
   });
 });

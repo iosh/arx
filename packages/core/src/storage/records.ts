@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getChainRefNamespace } from "../chains/caip.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
@@ -47,7 +48,7 @@ export const NetworkPreferencesRecordSchema = z
   })
   .superRefine((value, ctx) => {
     for (const [namespace, chainRef] of Object.entries(value.activeChainByNamespace)) {
-      const [chainNamespace] = chainRef.split(":");
+      const chainNamespace = getChainRefNamespace(chainRef);
       if (chainNamespace !== namespace) {
         ctx.addIssue({
           code: "custom",
@@ -119,7 +120,7 @@ export const PermissionRecordSchema = z
     }
 
     for (const [index, chain] of value.chains.entries()) {
-      const [chainNamespace] = chain.chainRef.split(":");
+      const chainNamespace = getChainRefNamespace(chain.chainRef);
       if (chainNamespace !== value.namespace) {
         ctx.addIssue({
           code: "custom",

@@ -1,17 +1,16 @@
-import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, RpcInvocationContext, RpcRegistry } from "@arx/core/rpc";
+import type { JsonRpcParams, JsonRpcRequest, RpcInvocationContext } from "@arx/core/rpc";
+import type { ProviderRuntimeSurface } from "@arx/core/runtime";
 import type { Envelope } from "@arx/provider/protocol";
 import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
-import { buildRpcContext, deriveRpcContextNamespace } from "../rpc";
-import type { BackgroundContext } from "../runtimeHost";
+import { buildRpcContext } from "../rpc";
 import type { ArxRpcContext, PortContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
   extensionOrigin: string;
-  getContext: () => Promise<BackgroundContext>;
-  getRpcRegistry: () => RpcRegistry | null;
+  getProviderBridgeAccess: () => Promise<ProviderRuntimeSurface>;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
@@ -22,8 +21,7 @@ type ProviderRequestExecutorDeps = {
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
   const {
     extensionOrigin,
-    getContext,
-    getRpcRegistry,
+    getProviderBridgeAccess,
     getPortContext,
     getOrCreatePortId,
     getPendingRequestMap,
@@ -32,7 +30,6 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
   } = deps;
 
   const handleRpcRequest = async (port: Runtime.Port, envelope: Extract<Envelope, { type: "request" }>) => {
-    const { engine } = await getContext();
     const { id: rpcId, jsonrpc, method } = envelope.payload;
     const pendingRequestMap = getPendingRequestMap(port);
     pendingRequestMap.set(envelope.id, { rpcId, jsonrpc });
@@ -67,29 +64,26 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       }),
     };
 
-    try {
-      const response = await new Promise<TransportResponse>((resolve, reject) => {
-        engine.handle(request, (error, result) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve(result as TransportResponse);
-        });
-      });
+    let providerBridgeAccess: ProviderRuntimeSurface | null = null;
 
-      sendReply(port, envelope.id, response);
+    try {
+      providerBridgeAccess = await getProviderBridgeAccess();
+      const response = await providerBridgeAccess.executeRpcRequest(request);
+
+      sendReply(port, envelope.id, response as TransportResponse);
     } catch (error) {
+      const rpcError = providerBridgeAccess
+        ? providerBridgeAccess.encodeRpcError(error, {
+            origin,
+            method,
+            rpcContext: request.arx,
+          })
+        : ({ code: -32603, message: "Internal error" } as const);
+
       sendReply(port, envelope.id, {
         id: rpcId,
         jsonrpc,
-        error: (getRpcRegistry()?.encodeErrorWithAdapters(error, {
-          surface: "dapp",
-          namespace: deriveRpcContextNamespace(rpcContext),
-          chainRef: rpcContext?.chainRef ?? null,
-          origin,
-          method,
-        }) ?? ({ code: -32603, message: "Internal error" } as const)) as JsonRpcError,
+        error: rpcError,
       });
     } finally {
       pendingRequestMap.delete(envelope.id);

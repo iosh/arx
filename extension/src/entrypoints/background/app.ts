@@ -1,3 +1,4 @@
+import { createLogger } from "@arx/core/logger";
 import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
@@ -11,14 +12,14 @@ import { createBackgroundRuntimeHost } from "./runtimeHost";
 import { createUiBridge } from "./uiBridge";
 
 export const createBackgroundApp = () => {
+  const appLog = createLogger("bg:app");
   const extensionOrigin = getExtensionOrigin();
   const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
   const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
 
   const portRouter = createPortRouter({
     extensionOrigin,
-    getOrInitContext: runtimeHost.getOrInitContext,
-    getProviderSnapshot: runtimeHost.getProviderSnapshot,
+    getOrInitProviderBridgeAccess: runtimeHost.getOrInitProviderBridgeAccess,
   });
 
   const providerEvents = createProviderEventsListener({ runtimeHost, portRouter });
@@ -74,13 +75,13 @@ export const createBackgroundApp = () => {
   const handleOnInstalled = (details: Runtime.OnInstalledDetailsType) => {
     if (details.reason !== "install") return;
     void openOrFocusOnboardingTab().catch((error) => {
-      console.warn("[bg] failed to open onboarding tab on install", error);
+      appLog("failed to open onboarding tab on install", error);
     });
   };
   const handleConnect = (port: Runtime.Port) => {
     if (port.name === UI_CHANNEL) {
       void attachUiPort(port).catch((error) => {
-        console.warn("[bg] failed to attach UI port", error);
+        appLog("failed to attach UI port", error);
       });
       return;
     }

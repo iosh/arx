@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/core/errors";
-import type { JsonRpcError, RpcRegistry } from "@arx/core/rpc";
+import type { JsonRpcError } from "@arx/core/rpc";
+import type { ProviderRuntimeSurface } from "@arx/core/runtime";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
@@ -9,7 +10,7 @@ import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
-  getRpcRegistry: () => RpcRegistry | null;
+  getProviderBridgeAccess: () => ProviderRuntimeSurface | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
@@ -21,16 +22,10 @@ type ProviderDisconnectFinalizerDeps = {
   portLog: (message: string, details?: Record<string, unknown>) => void;
 };
 
-const toErrorDetails = (error: unknown): Record<string, string> => {
-  if (!error) return {};
-  if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
-  return { error: String(error) };
-};
-
 export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinalizerDeps) => {
   const {
     extensionOrigin,
-    getRpcRegistry,
+    getProviderBridgeAccess,
     getSessionIdForPort,
     getPortContext,
     getPendingRequestMap,
@@ -50,13 +45,18 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     const portContext = getPortContext(port);
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const namespace = deriveRpcContextNamespace(rpcContext);
-    const chainRef = rpcContext?.chainRef ?? null;
+    const providerBridgeAccess = getProviderBridgeAccess();
+    const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
 
-    return (getRpcRegistry()?.encodeErrorWithAdapters(
-      arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" }),
-      { surface: "dapp", namespace, chainRef, origin, method: PROVIDER_EVENTS.disconnect },
-    ) ?? ({ code: 4900, message: "Disconnected" } as const)) as JsonRpcError;
+    if (!providerBridgeAccess) {
+      return { code: 4900, message: "Disconnected" } as const;
+    }
+
+    return providerBridgeAccess.encodeRpcError(disconnectError, {
+      origin,
+      method: PROVIDER_EVENTS.disconnect,
+      rpcContext,
+    }) as JsonRpcError;
   };
 
   const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
@@ -107,7 +107,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     }
 
     const origin = getPortOrigin(port, extensionOrigin);
-    portLog("drop stale port", { origin, reason, ...toErrorDetails(error) });
+    portLog("drop stale port", { origin, reason, error });
   };
 
   const finalizePortDisconnect = (port: Runtime.Port) => {
@@ -120,7 +120,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       rejectPendingWithDisconnect(port);
     } catch (error) {
       const origin = getPortOrigin(port, extensionOrigin);
-      portLog("disconnect cleanup error", { origin, ...toErrorDetails(error) });
+      portLog("disconnect cleanup error", { origin, error });
     } finally {
       cleanupPortState(port);
     }

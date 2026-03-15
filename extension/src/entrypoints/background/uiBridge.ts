@@ -1,4 +1,5 @@
 import type { AccountCodecRegistry } from "@arx/core/accounts";
+import { createLogger, extendLogger } from "@arx/core/logger";
 import type { NamespaceRuntimeBindingsRegistry } from "@arx/core/namespaces";
 import type { HandlerControllers, RpcRegistry } from "@arx/core/rpc";
 import type { BackgroundSessionServices, KeyringService } from "@arx/core/runtime";
@@ -23,6 +24,9 @@ import { createUiPortHub } from "./ui/portHub";
 import { createUiSnapshotBroadcaster } from "./ui/snapshotBroadcaster";
 
 export { UI_CHANNEL } from "@arx/core/ui";
+
+const uiLog = createLogger("bg:ui");
+const bridgeLog = extendLogger(uiLog, "bridge");
 
 type BridgeDeps = {
   browser: typeof browserDefaultType;
@@ -103,7 +107,7 @@ export const createUiBridge = ({
         context: uiRuntime.getUiContext(),
       };
     } catch (error) {
-      console.warn("[uiBridge] failed to build snapshot", error);
+      bridgeLog("failed to build snapshot", error);
       return null;
     }
   };
@@ -129,7 +133,7 @@ export const createUiBridge = ({
       try {
         await persistVaultMeta();
       } catch (error) {
-        console.warn("[uiBridge] failed to persist vault meta", error);
+        bridgeLog("failed to persist vault meta", error);
       }
     }
 
@@ -169,7 +173,7 @@ export const createUiBridge = ({
       try {
         unsubscribe();
       } catch (error) {
-        console.warn("[uiBridge] failed to remove listener", error);
+        bridgeLog("failed to remove listener", error);
       }
     });
 

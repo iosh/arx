@@ -1,7 +1,11 @@
+import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiPortEnvelope } from "@arx/core/ui";
 import type browserDefaultType from "webextension-polyfill";
 
 export type UiPort = browserDefaultType.Runtime.Port;
+
+const uiLog = createLogger("bg:ui");
+const portLog = extendLogger(uiLog, "port");
 
 export const createUiPortHub = () => {
   const ports = new Set<UiPort>();
@@ -17,7 +21,7 @@ export const createUiPortHub = () => {
       port.postMessage(envelope);
       return true;
     } catch (error) {
-      console.warn("[uiBridge] drop stale UI port", error);
+      portLog("drop stale UI port", error);
       detach(port);
       return false;
     }
@@ -38,7 +42,7 @@ export const createUiPortHub = () => {
       return Promise.resolve()
         .then(() => onMessage(raw))
         .catch((error) => {
-          console.warn("[uiBridge] UI port message handler failed", error);
+          portLog("UI port message handler failed", error);
         });
     };
 

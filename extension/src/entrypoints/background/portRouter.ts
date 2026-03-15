@@ -1,47 +1,53 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
-import type { RpcRegistry } from "@arx/core/rpc";
+import type { ProviderRuntimeSurface } from "@arx/core/runtime";
 import { CHANNEL, type Envelope } from "@arx/provider/protocol";
 import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
-import { createProviderApprovalScopeCanceller } from "./provider/approvalScope";
 import { createProviderDisconnectFinalizer } from "./provider/disconnectFinalizer";
 import { createProviderEventBroadcaster } from "./provider/eventBroadcaster";
 import { createProviderHandshakeCoordinator } from "./provider/handshakeCoordinator";
-import { createProviderPermittedAccountsResolver } from "./provider/permittedAccounts";
 import { createProviderRequestExecutor } from "./provider/requestExecutor";
 import { createProviderSessionRegistry } from "./provider/sessionRegistry";
-import type { BackgroundContext } from "./runtimeHost";
 import type { PortContext, ProviderBridgeSnapshot } from "./types";
 
 type PortRouterDeps = {
   extensionOrigin: string;
-  getOrInitContext: () => Promise<BackgroundContext>;
-  getProviderSnapshot: (namespace: string) => ProviderBridgeSnapshot;
+  getOrInitProviderBridgeAccess: () => Promise<ProviderRuntimeSurface>;
 };
 
-const toErrorDetails = (error: unknown): Record<string, string> => {
-  if (!error) return {};
-  if (error instanceof Error) return { errorName: error.name, errorMessage: error.message };
-  return { error: String(error) };
-};
-
-export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProviderSnapshot }: PortRouterDeps) => {
+export const createPortRouter = ({ extensionOrigin, getOrInitProviderBridgeAccess }: PortRouterDeps) => {
   const messageHandlers = new Map<Runtime.Port, (message: unknown) => void>();
   const disconnectHandlers = new Map<Runtime.Port, () => void>();
 
   const runtimeLog = createLogger("bg:runtime");
   const portLog = extendLogger(runtimeLog, "port");
-  let rpcRegistry: RpcRegistry | null = null;
+  let providerBridgeAccess: ProviderRuntimeSurface | null = null;
+  let providerBridgeAccessPromise: Promise<ProviderRuntimeSurface> | null = null;
 
-  const getContext = async () => {
-    const ctx = await getOrInitContext();
-    rpcRegistry = ctx.runtime.rpc.registry;
-    return ctx;
+  const getCachedProviderBridgeAccess = () => providerBridgeAccess;
+
+  const loadProviderBridgeAccess = async () => {
+    if (providerBridgeAccess) {
+      return providerBridgeAccess;
+    }
+
+    if (providerBridgeAccessPromise) {
+      return await providerBridgeAccessPromise;
+    }
+
+    providerBridgeAccessPromise = getOrInitProviderBridgeAccess()
+      .then((access) => {
+        providerBridgeAccess = access;
+        return access;
+      })
+      .finally(() => {
+        providerBridgeAccessPromise = null;
+      });
+
+    return await providerBridgeAccessPromise;
   };
-
-  const getRpcRegistry = () => rpcRegistry;
 
   const createPortId = (): string => {
     return globalThis.crypto.randomUUID();
@@ -87,7 +93,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
       return true;
     } catch (error) {
       const origin = getPortOrigin(port, extensionOrigin);
-      portLog("postMessage failed", { origin, envelopeType: envelope.type, ...toErrorDetails(error) });
+      portLog("postMessage failed", { origin, envelopeType: envelope.type, error });
       return false;
     }
   };
@@ -96,11 +102,16 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     return sessionRegistry.listConnectedNamespaces();
   };
 
-  const findProviderSnapshot = (namespace: string): ProviderBridgeSnapshot | null => {
+  const readProviderSnapshot = (namespace: string): ProviderBridgeSnapshot | null => {
+    const access = getCachedProviderBridgeAccess();
+    if (!access) {
+      return null;
+    }
+
     try {
-      return getProviderSnapshot(namespace);
+      return access.buildSnapshot(namespace);
     } catch (error) {
-      portLog("failed to get provider snapshot", { namespace, ...toErrorDetails(error) });
+      portLog("failed to get provider snapshot", { namespace, error });
       return null;
     }
   };
@@ -108,7 +119,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   const findPortSnapshot = (port: Runtime.Port): ProviderBridgeSnapshot | null => {
     const namespace = sessionRegistry.readPortContext(port)?.providerNamespace;
     if (!namespace) return null;
-    return findProviderSnapshot(namespace);
+    return readProviderSnapshot(namespace);
   };
 
   const getPortsBoundToNamespaces = (namespaces: Iterable<string>) => {
@@ -119,22 +130,48 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     syncAllPortContexts(ports, findPortSnapshot, portContextStore, extensionOrigin);
   };
 
-  const approvalScopeCanceller = createProviderApprovalScopeCanceller({
-    extensionOrigin,
-    getContext,
-    getPortId: (port) => sessionRegistry.readPortId(port),
-    portLog,
-  });
+  const cancelApprovalsForSession = async (port: Runtime.Port, sessionId: string, logReason: string) => {
+    const portId = sessionRegistry.readPortId(port);
+    if (!portId) {
+      return;
+    }
 
-  const permittedAccountsResolver = createProviderPermittedAccountsResolver({
-    extensionOrigin,
-    getContext,
-    getPortChainRef: (port) => sessionRegistry.readPortContext(port)?.chainRef ?? null,
-  });
+    const origin = getPortOrigin(port, extensionOrigin);
+
+    try {
+      const access = await loadProviderBridgeAccess();
+      await access.cancelSessionApprovals({ origin, portId, sessionId });
+    } catch (error) {
+      portLog(logReason, { origin, error });
+    }
+  };
+
+  const listPermittedAccountsForPort = async (port: Runtime.Port, snapshot: ProviderBridgeSnapshot) => {
+    const origin = sessionRegistry.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
+    const chainRef = sessionRegistry.readPortContext(port)?.chainRef ?? snapshot.chain.chainRef;
+    const access = await loadProviderBridgeAccess();
+
+    return await access.listPermittedAccounts({
+      origin,
+      chainRef,
+    });
+  };
+
+  const buildConnectionStateForPort = async (port: Runtime.Port, namespace: string) => {
+    const origin = sessionRegistry.readPortContext(port)?.origin ?? getPortOrigin(port, extensionOrigin);
+
+    try {
+      const access = await loadProviderBridgeAccess();
+      return await access.buildConnectionState({ namespace, origin });
+    } catch (error) {
+      portLog("failed to build provider connection state", { namespace, origin, error });
+      return null;
+    }
+  };
 
   const disconnectFinalizer = createProviderDisconnectFinalizer({
     extensionOrigin,
-    getRpcRegistry,
+    getProviderBridgeAccess: getCachedProviderBridgeAccess,
     getSessionIdForPort,
     getPortContext: (port) => sessionRegistry.readPortContext(port),
     getPendingRequestMap: (port) => sessionRegistry.readPendingRequestMap(port),
@@ -142,7 +179,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     detachPortListeners,
     postEnvelope,
     removePortState: (port) => sessionRegistry.removePortState(port),
-    cancelApprovalsForSession: approvalScopeCanceller.cancelByPortSession,
+    cancelApprovalsForSession,
     portLog,
   });
 
@@ -162,7 +199,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     syncPortContextsForPorts,
     postEnvelope,
     dropStalePort: disconnectFinalizer.dropStalePort,
-    getPermittedAccountsForPort: permittedAccountsResolver.listPermittedAccountsForPort,
+    getPermittedAccountsForPort: listPermittedAccountsForPort,
   });
 
   const getOrCreatePortId = (port: Runtime.Port) => {
@@ -188,8 +225,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
 
   const requestExecutor = createProviderRequestExecutor({
     extensionOrigin,
-    getContext,
-    getRpcRegistry,
+    getProviderBridgeAccess: loadProviderBridgeAccess,
     getPortContext: (port) => sessionRegistry.readPortContext(port),
     getOrCreatePortId,
     getPendingRequestMap: (port) => sessionRegistry.openPendingRequestMap(port),
@@ -198,14 +234,12 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
   });
 
   const handshakeCoordinator = createProviderHandshakeCoordinator({
-    getContext,
     getExpectedSessionId: getSessionIdForPort,
     writeSessionId: (port, sessionId) => sessionRegistry.writeSessionId(port, sessionId),
-    getProviderSnapshot: findProviderSnapshot,
+    getProviderConnectionState: buildConnectionStateForPort,
     syncPortContext: (port, snapshot) => syncPortContext(port, snapshot, portContextStore, extensionOrigin),
-    listPermittedAccountsForPort: permittedAccountsResolver.listPermittedAccountsForPort,
     clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
-    cancelApprovalsForSession: approvalScopeCanceller.cancelByPortSession,
+    cancelApprovalsForSession,
     postEnvelopeOrDrop,
     dropStalePort: disconnectFinalizer.dropStalePort,
   });
@@ -276,6 +310,8 @@ export const createPortRouter = ({ extensionOrigin, getOrInitContext, getProvide
     sessionRegistry.clearAllState();
     messageHandlers.clear();
     disconnectHandlers.clear();
+    providerBridgeAccess = null;
+    providerBridgeAccessPromise = null;
   };
 
   return {

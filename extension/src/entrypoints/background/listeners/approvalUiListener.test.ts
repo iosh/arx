@@ -170,16 +170,12 @@ const buildHarness = (windowIds: number[]) => {
 
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitContext: vi.fn(async () => {
-      throw new Error("approvalUiListener should not request the full runtime context");
-    }) as unknown as BackgroundRuntimeHost["getOrInitContext"],
-    getProviderSnapshot: vi.fn() as unknown as BackgroundRuntimeHost["getProviderSnapshot"],
+    getOrInitProviderBridgeAccess: vi.fn(async () => {
+      throw new Error("Provider bridge contract should not be requested in approvalUiListener tests");
+    }) as unknown as BackgroundRuntimeHost["getOrInitProviderBridgeAccess"],
     getOrInitUiBridgeAccess: vi.fn(async () => {
       throw new Error("UI bridge contract should not be requested in approvalUiListener tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiBridgeAccess"],
-    getOrInitProviderEventsAccess: vi.fn(async () => {
-      throw new Error("Provider events contract should not be requested in approvalUiListener tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitProviderEventsAccess"],
     getOrInitApprovalUiAccess: vi.fn(async () => ({
       subscribeAttentionRequested: (handler: (payload: unknown) => void) => bus.subscribe(ATTENTION_REQUESTED, handler),
       subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
@@ -221,7 +217,6 @@ describe("approvalUiListener", () => {
 
     listener.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalUiAccess).toHaveBeenCalledTimes(1));
-    expect(harness.runtimeHost.getOrInitContext).not.toHaveBeenCalled();
 
     harness.approvals.add(createRecord({ id: "approval-1" }));
     harness.approvals.add(

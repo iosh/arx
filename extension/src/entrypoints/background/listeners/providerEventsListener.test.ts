@@ -54,16 +54,20 @@ const buildHarness = () => {
 
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitContext: vi.fn(async () => {
-      throw new Error("providerEventsListener should not request the full runtime context");
-    }) as unknown as BackgroundRuntimeHost["getOrInitContext"],
-    getOrInitProviderEventsAccess: vi.fn(async () => ({
-      getProviderSnapshot: (namespace: string) => {
+    getOrInitProviderBridgeAccess: vi.fn(async () => ({
+      buildSnapshot: (namespace: string) => {
         const snapshot = snapshots[namespace];
         if (!snapshot) {
           throw new Error(`Missing snapshot for ${namespace}`);
         }
         return snapshot;
+      },
+      buildConnectionState: async ({ namespace }: { namespace: string }) => {
+        const snapshot = snapshots[namespace];
+        if (!snapshot) {
+          throw new Error(`Missing snapshot for ${namespace}`);
+        }
+        return { snapshot, accounts: [] };
       },
       getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
       subscribeSessionUnlocked: () => () => {},
@@ -80,14 +84,11 @@ const buildHarness = () => {
       },
       subscribeAccountsStateChanged: () => () => {},
       subscribePermissionsStateChanged: () => () => {},
-    })) as unknown as BackgroundRuntimeHost["getOrInitProviderEventsAccess"],
-    getProviderSnapshot: vi.fn((namespace: string) => {
-      const snapshot = snapshots[namespace];
-      if (!snapshot) {
-        throw new Error(`Missing snapshot for ${namespace}`);
-      }
-      return snapshot;
-    }),
+      executeRpcRequest: vi.fn(),
+      encodeRpcError: vi.fn(),
+      listPermittedAccounts: vi.fn(),
+      cancelSessionApprovals: vi.fn(),
+    })) as unknown as BackgroundRuntimeHost["getOrInitProviderBridgeAccess"],
     persistVaultMeta: vi.fn(),
     getOrInitUiBridgeAccess: vi.fn(async () => {
       throw new Error("UI bridge contract should not be requested in providerEventsListener tests");
@@ -134,8 +135,7 @@ describe("providerEventsListener", () => {
 
     harness.listener.start();
     await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
-    expect(harness.runtimeHost.getOrInitProviderEventsAccess).toHaveBeenCalledTimes(1);
-    expect(harness.runtimeHost.getOrInitContext).not.toHaveBeenCalled();
+    expect(harness.runtimeHost.getOrInitProviderBridgeAccess).toHaveBeenCalledTimes(1);
 
     harness.emitNetworkStateChanged();
 

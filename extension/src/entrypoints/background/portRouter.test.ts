@@ -1,11 +1,10 @@
-import { ChainAddressCodecRegistry, eip155AddressCodec } from "@arx/core/chains";
-import type { RpcRegistry } from "@arx/core/rpc";
+import type { JsonRpcResponse } from "@arx/core/rpc";
+import type { ProviderRuntimeSurface } from "@arx/core/runtime";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { createPortRouter } from "./portRouter";
-import type { BackgroundContext } from "./runtimeHost";
 import type { ProviderBridgeSnapshot } from "./types";
 
 vi.mock("./origin", () => ({
@@ -62,46 +61,39 @@ const makeSnapshot = (
 });
 
 const createRouterHarness = (options?: {
-  listPermittedAccounts?: (
-    origin: string,
-    params: { chainRef: string },
-  ) => Array<{ accountId: string; canonicalAddress: string; displayAddress: string }>;
-  cancelByScope?: (params: unknown) => Promise<number>;
+  buildConnectionState?: ProviderRuntimeSurface["buildConnectionState"];
+  listPermittedAccounts?: ProviderRuntimeSurface["listPermittedAccounts"];
+  cancelSessionApprovals?: ProviderRuntimeSurface["cancelSessionApprovals"];
+  executeRpcRequest?: ProviderRuntimeSurface["executeRpcRequest"];
+  encodeRpcError?: ProviderRuntimeSurface["encodeRpcError"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
 }) => {
   const listPermittedAccounts = vi.fn(
     options?.listPermittedAccounts ??
-      ((_origin, params) =>
-        params.chainRef === "eip155:1"
-          ? [
-              {
-                accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              },
-            ]
-          : []),
+      (async ({ chainRef }) => (chainRef === "eip155:1" ? ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"] : [])),
   );
-  const cancelByScope = vi.fn(options?.cancelByScope ?? (async () => 1));
-  const engineHandle = vi.fn((request: unknown, callback: (error: unknown, response?: unknown) => void) => {
-    const payload = request as { id?: unknown; jsonrpc?: unknown };
-    callback(null, {
-      id: payload.id ?? "1",
-      jsonrpc: payload.jsonrpc ?? "2.0",
-      result: null,
-    });
-  });
-  const registry = { getRegisteredNamespaces: () => ["eip155", "conflux"] } as unknown as RpcRegistry;
-  const chainAddressCodecs = new ChainAddressCodecRegistry([eip155AddressCodec]);
-  const getOrInitContext = vi.fn(async () => ({
-    engine: { handle: engineHandle },
-    runtime: { rpc: { registry } },
-    controllers: {
-      approvals: { cancelByScope },
-      chainAddressCodecs,
-    },
-    permissionViews: { listPermittedAccounts },
-  }));
+  const cancelSessionApprovals = vi.fn(options?.cancelSessionApprovals ?? (async () => 1));
+  const executeRpcRequest = vi.fn(
+    options?.executeRpcRequest ??
+      (async (input) => {
+        const payload = input;
+        return {
+          id: payload.id,
+          jsonrpc: payload.jsonrpc,
+          result: null,
+        } satisfies JsonRpcResponse;
+      }),
+  );
+  const encodeRpcError = vi.fn(
+    options?.encodeRpcError ??
+      ((error: unknown) => {
+        const payload = error as { code?: number; message?: string } | undefined;
+        return {
+          code: payload?.code ?? 4900,
+          message: payload?.message ?? "Disconnected",
+        };
+      }),
+  );
   const snapshots = options?.snapshots ?? {
     eip155: makeSnapshot("eip155", true, {
       chain: { chainId: "0x1", chainRef: "eip155:1" },
@@ -111,20 +103,62 @@ const createRouterHarness = (options?: {
       },
     }),
   };
+  const buildConnectionState = vi.fn(
+    options?.buildConnectionState ??
+      (async ({ namespace, origin }) => {
+        const snapshot = snapshots[namespace];
+        if (!snapshot) {
+          throw new Error(`Missing snapshot for ${namespace}`);
+        }
 
-  const router = createPortRouter({
-    extensionOrigin: "ext://",
-    getOrInitContext: getOrInitContext as unknown as () => Promise<BackgroundContext>,
-    getProviderSnapshot: (namespace: string) => {
+        return {
+          snapshot,
+          accounts: snapshot.isUnlocked
+            ? await listPermittedAccounts({ origin, chainRef: snapshot.chain.chainRef })
+            : [],
+        };
+      }),
+  );
+
+  const providerBridgeAccess: ProviderRuntimeSurface = {
+    buildSnapshot: vi.fn((namespace: string) => {
       const snapshot = snapshots[namespace];
       if (!snapshot) {
         throw new Error(`Missing snapshot for ${namespace}`);
       }
       return snapshot;
-    },
+    }),
+    buildConnectionState,
+    getActiveChainByNamespace: vi.fn(() => ({ eip155: "eip155:1" })),
+    subscribeSessionUnlocked: vi.fn(() => () => {}),
+    subscribeSessionLocked: vi.fn(() => () => {}),
+    subscribeNetworkStateChanged: vi.fn(() => () => {}),
+    subscribeNetworkPreferencesChanged: vi.fn(() => () => {}),
+    subscribeAccountsStateChanged: vi.fn(() => () => {}),
+    subscribePermissionsStateChanged: vi.fn(() => () => {}),
+    executeRpcRequest,
+    encodeRpcError,
+    listPermittedAccounts,
+    cancelSessionApprovals,
+  };
+
+  const getOrInitProviderBridgeAccess = vi.fn(async () => providerBridgeAccess);
+  const router = createPortRouter({
+    extensionOrigin: "ext://",
+    getOrInitProviderBridgeAccess,
   });
 
-  return { router, getOrInitContext, listPermittedAccounts, cancelByScope, engineHandle, snapshots };
+  return {
+    router,
+    getOrInitProviderBridgeAccess,
+    providerBridgeAccess,
+    buildConnectionState,
+    listPermittedAccounts,
+    cancelSessionApprovals,
+    executeRpcRequest,
+    encodeRpcError,
+    snapshots,
+  };
 };
 
 const handshake = (port: FakePort, sessionId: string, namespace: string) => {
@@ -151,6 +185,7 @@ describe("portRouter privacy and binding", () => {
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
     const { router, listPermittedAccounts } = createRouterHarness({
+      listPermittedAccounts: async () => [],
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -182,6 +217,7 @@ describe("portRouter privacy and binding", () => {
       meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
     });
     const { router, listPermittedAccounts } = createRouterHarness({
+      listPermittedAccounts: async () => [],
       snapshots: { eip155: lockedSnapshot },
     });
 
@@ -200,18 +236,15 @@ describe("portRouter privacy and binding", () => {
         payload: { event: "accountsChanged", params: [[]] },
       }),
     );
-    expect(listPermittedAccounts).not.toHaveBeenCalled();
+    expect(listPermittedAccounts).toHaveBeenLastCalledWith({
+      origin: "https://example.com",
+      chainRef: "eip155:1",
+    });
   });
 
   it("sends handshake_ack with permitted accounts from the bound chain", async () => {
     const { router, listPermittedAccounts } = createRouterHarness({
-      listPermittedAccounts: () => [
-        {
-          accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          canonicalAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        },
-      ],
+      listPermittedAccounts: async () => ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
       snapshots: {
         eip155: makeSnapshot("eip155", true, {
           chain: { chainId: "0x1", chainRef: "eip155:1" },
@@ -232,7 +265,8 @@ describe("portRouter privacy and binding", () => {
     handshake(port, "s1", "eip155");
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
-    expect(listPermittedAccounts).toHaveBeenCalledWith("https://example.com", {
+    expect(listPermittedAccounts).toHaveBeenCalledWith({
+      origin: "https://example.com",
       chainRef: "eip155:1",
     });
     expect(port.postMessage).toHaveBeenCalledWith(
@@ -240,6 +274,46 @@ describe("portRouter privacy and binding", () => {
         type: "handshake_ack",
         payload: expect.objectContaining({
           accounts: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
+        }),
+      }),
+    );
+  });
+
+  it("uses runtime-provided connection state for handshake responses", async () => {
+    const unlockedSnapshot = makeSnapshot("eip155", true, {
+      chain: { chainId: "0x1", chainRef: "eip155:1" },
+      meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+    });
+    const lockedSnapshot = makeSnapshot("eip155", false, {
+      chain: { chainId: "0x1", chainRef: "eip155:1" },
+      meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+    });
+    const { router, buildConnectionState, listPermittedAccounts, providerBridgeAccess } = createRouterHarness({
+      snapshots: { eip155: unlockedSnapshot },
+      buildConnectionState: async () => ({
+        snapshot: lockedSnapshot,
+        accounts: [],
+      }),
+      listPermittedAccounts: async () => ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "s1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+    expect(buildConnectionState).toHaveBeenCalledWith({
+      namespace: "eip155",
+      origin: "https://example.com",
+    });
+    expect(listPermittedAccounts).not.toHaveBeenCalled();
+    expect(providerBridgeAccess.buildSnapshot).not.toHaveBeenCalled();
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "handshake_ack",
+        payload: expect.objectContaining({
+          accounts: [],
+          isUnlocked: false,
         }),
       }),
     );
@@ -295,7 +369,7 @@ describe("portRouter privacy and binding", () => {
   });
 
   it("forwards provider-bound requests with providerNamespace in rpc context", async () => {
-    const { router, engineHandle } = createRouterHarness();
+    const { router, executeRpcRequest } = createRouterHarness();
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
@@ -315,8 +389,8 @@ describe("portRouter privacy and binding", () => {
       },
     });
 
-    await vi.waitFor(() => expect(engineHandle).toHaveBeenCalledTimes(1));
-    const request = engineHandle.mock.calls[0]?.[0] as {
+    await vi.waitFor(() => expect(executeRpcRequest).toHaveBeenCalledTimes(1));
+    const request = executeRpcRequest.mock.calls[0]?.[0] as {
       arx?: { namespace?: string; providerNamespace?: string; chainRef?: string };
     };
 
@@ -330,7 +404,7 @@ describe("portRouter privacy and binding", () => {
   it("cancels provider-scoped approvals when the port disconnects", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("11111111-1111-4111-8111-111111111111");
 
-    const { router, cancelByScope } = createRouterHarness();
+    const { router, cancelSessionApprovals } = createRouterHarness();
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
@@ -341,14 +415,10 @@ describe("portRouter privacy and binding", () => {
     port.triggerDisconnect();
 
     await vi.waitFor(() =>
-      expect(cancelByScope).toHaveBeenCalledWith({
-        scope: {
-          transport: "provider",
-          origin: "https://example.com",
-          portId: "11111111-1111-4111-8111-111111111111",
-          sessionId: "session-1",
-        },
-        reason: "session_lost",
+      expect(cancelSessionApprovals).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        portId: "11111111-1111-4111-8111-111111111111",
+        sessionId: "session-1",
       }),
     );
   });
@@ -356,7 +426,7 @@ describe("portRouter privacy and binding", () => {
   it("cancels provider-scoped approvals when handshake rotates the session", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("22222222-2222-4222-8222-222222222222");
 
-    const { router, cancelByScope } = createRouterHarness();
+    const { router, cancelSessionApprovals } = createRouterHarness();
 
     const port = new FakePort();
     router.handleConnect(port as unknown as Runtime.Port);
@@ -367,14 +437,10 @@ describe("portRouter privacy and binding", () => {
     handshake(port, "session-2", "eip155");
 
     await vi.waitFor(() =>
-      expect(cancelByScope).toHaveBeenCalledWith({
-        scope: {
-          transport: "provider",
-          origin: "https://example.com",
-          portId: "22222222-2222-4222-8222-222222222222",
-          sessionId: "session-1",
-        },
-        reason: "session_lost",
+      expect(cancelSessionApprovals).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        portId: "22222222-2222-4222-8222-222222222222",
+        sessionId: "session-1",
       }),
     );
 
@@ -385,5 +451,65 @@ describe("portRouter privacy and binding", () => {
         type: "handshake_ack",
       }),
     );
+  });
+
+  it("rejects pending requests with a disconnect error when the port disconnects", async () => {
+    let resolveRequest: (value: JsonRpcResponse) => void = () => {
+      throw new Error("executeRpcRequest resolver not initialized");
+    };
+    const { router, executeRpcRequest, encodeRpcError } = createRouterHarness({
+      executeRpcRequest: (input) => {
+        const payload = input;
+        return new Promise<JsonRpcResponse>((resolve) => {
+          resolveRequest = resolve;
+          void payload;
+        });
+      },
+      encodeRpcError: () => ({ code: 4900, message: "Disconnected" }),
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "session-1",
+      type: "request",
+      id: "transport-1",
+      payload: {
+        id: "rpc-1",
+        jsonrpc: "2.0",
+        method: "eth_chainId",
+      },
+    });
+
+    await vi.waitFor(() => expect(executeRpcRequest).toHaveBeenCalledTimes(1));
+
+    port.triggerDisconnect();
+
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          type: "response",
+          payload: {
+            id: "rpc-1",
+            jsonrpc: "2.0",
+            error: { code: 4900, message: "Disconnected" },
+          },
+        }),
+      ),
+    );
+    expect(encodeRpcError).toHaveBeenCalled();
+
+    resolveRequest({
+      id: "rpc-1",
+      jsonrpc: "2.0",
+      result: "0x1",
+    });
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
   });
 });

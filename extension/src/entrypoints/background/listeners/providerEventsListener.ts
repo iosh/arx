@@ -31,16 +31,9 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
   let started = false;
   let disposed = false;
   let startTask: Promise<void> | null = null;
+  let readProviderSnapshot: (namespace: string) => ProviderBridgeSnapshot | null = () => null;
 
   const snapshotCache = new Map<string, ProviderBridgeSnapshot>();
-
-  const getSnapshot = (namespace: string) => {
-    try {
-      return runtimeHost.getProviderSnapshot(namespace);
-    } catch {
-      return null;
-    }
-  };
 
   const collectRelevantNamespaces = (activeChainByNamespace: Record<string, string>) => {
     return new Set([
@@ -59,7 +52,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       if (!namespace) continue;
 
       const previous = snapshotCache.get(namespace) ?? null;
-      const next = getSnapshot(namespace);
+      const next = readProviderSnapshot(namespace);
 
       if (!next) {
         if (previous) {
@@ -106,22 +99,29 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
     if (startTask) return;
 
     startTask = (async () => {
-      const providerEventsAccess = await runtimeHost.getOrInitProviderEventsAccess();
+      const providerAccess = await runtimeHost.getOrInitProviderBridgeAccess();
       if (disposed) return;
+      readProviderSnapshot = (namespace: string) => {
+        try {
+          return providerAccess.buildSnapshot(namespace);
+        } catch {
+          return null;
+        }
+      };
 
       const publishAccountsState = () => {
         portRouter.broadcastAccountsChanged();
       };
 
       subscriptions.push(
-        providerEventsAccess.subscribeSessionUnlocked((payload) => {
+        providerAccess.subscribeSessionUnlocked((payload) => {
           portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
           publishAccountsState();
         }),
       );
 
       subscriptions.push(
-        providerEventsAccess.subscribeSessionLocked((payload) => {
+        providerAccess.subscribeSessionLocked((payload) => {
           portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
           publishAccountsState();
           portRouter.broadcastDisconnect();
@@ -129,27 +129,27 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       );
 
       subscriptions.push(
-        providerEventsAccess.subscribeNetworkStateChanged(() => {
-          const namespaces = collectRelevantNamespaces(providerEventsAccess.getActiveChainByNamespace());
+        providerAccess.subscribeNetworkStateChanged(() => {
+          const namespaces = collectRelevantNamespaces(providerAccess.getActiveChainByNamespace());
           reconcileNamespaces(namespaces);
         }),
       );
 
       subscriptions.push(
-        providerEventsAccess.subscribeNetworkPreferencesChanged(({ next }) => {
+        providerAccess.subscribeNetworkPreferencesChanged(({ next }) => {
           const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
           reconcileNamespaces(namespaces);
         }),
       );
 
       subscriptions.push(
-        providerEventsAccess.subscribeAccountsStateChanged(() => {
+        providerAccess.subscribeAccountsStateChanged(() => {
           publishAccountsState();
         }),
       );
 
       subscriptions.push(
-        providerEventsAccess.subscribePermissionsStateChanged(() => {
+        providerAccess.subscribePermissionsStateChanged(() => {
           publishAccountsState();
         }),
       );
@@ -161,6 +161,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
   const destroy = () => {
     started = false;
     disposed = true;
+    readProviderSnapshot = () => null;
     snapshotCache.clear();
     subscriptions.splice(0).forEach((unsubscribe) => {
       try {

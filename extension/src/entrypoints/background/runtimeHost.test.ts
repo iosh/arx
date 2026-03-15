@@ -56,6 +56,33 @@ const makeRuntime = () => {
   const onUnlockStateChanged = vi.fn(() => vi.fn());
   const subscribeNetworkPreferencesChanged = vi.fn(() => vi.fn());
   const subscribe = vi.fn(() => unsubscribeAttentionStateChanged);
+  const providerSnapshot = {
+    namespace: "eip155",
+    chain: { chainId: "0x1", chainRef: "eip155:1" },
+    isUnlocked: true,
+    meta: {
+      activeChainByNamespace: { eip155: "eip155:1" },
+      supportedChains: ["eip155:1"],
+    },
+  };
+  const providerSurface = {
+    buildSnapshot: vi.fn(() => providerSnapshot),
+    buildConnectionState: vi.fn(async () => ({
+      snapshot: providerSnapshot,
+      accounts: [],
+    })),
+    getActiveChainByNamespace: vi.fn(() => ({ eip155: "eip155:1" })),
+    subscribeSessionUnlocked: onUnlocked,
+    subscribeSessionLocked: onLocked,
+    subscribeNetworkStateChanged: onNetworkStateChanged,
+    subscribeNetworkPreferencesChanged: subscribeNetworkPreferencesChanged,
+    subscribeAccountsStateChanged: onAccountsStateChanged,
+    subscribePermissionsStateChanged: onPermissionsStateChanged,
+    executeRpcRequest: vi.fn(),
+    encodeRpcError: vi.fn(),
+    listPermittedAccounts: vi.fn(),
+    cancelSessionApprovals: vi.fn(async () => 0),
+  };
 
   const runtime = {
     bus: { subscribe },
@@ -123,10 +150,15 @@ const makeRuntime = () => {
       destroy,
       getIsInitialized: vi.fn(),
     },
+    surfaces: {
+      provider: providerSurface,
+    },
   } as unknown as BackgroundRuntime;
 
   return {
     runtime,
+    providerSurface,
+    providerSnapshot,
     initialize,
     start,
     destroy,
@@ -171,17 +203,20 @@ describe("runtimeHost", () => {
     const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin: "chrome-extension://test" });
 
     await runtimeHost.initializeRuntime();
+    const providerBridgeAccess = await runtimeHost.getOrInitProviderBridgeAccess();
     const firstUiBridgeAccess = await runtimeHost.getOrInitUiBridgeAccess();
     const secondUiBridgeAccess = await runtimeHost.getOrInitUiBridgeAccess();
-    const providerEventsAccess = await runtimeHost.getOrInitProviderEventsAccess();
     const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
 
     expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.initialize).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.start).toHaveBeenCalledTimes(1);
+    expect(providerBridgeAccess).toBe(runtimeHarness.providerSurface);
     expect(firstUiBridgeAccess.uiBridgeRuntimeInputs.controllers).toBe(runtimeHarness.runtime.controllers);
     expect(secondUiBridgeAccess.uiBridgeRuntimeInputs.rpcRegistry).toBe(runtimeHarness.runtime.rpc.registry);
-    expect(providerEventsAccess.getActiveChainByNamespace()).toEqual({ eip155: "eip155:1" });
+    expect(providerBridgeAccess.getActiveChainByNamespace()).toEqual({ eip155: "eip155:1" });
+    expect(providerBridgeAccess.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
+    expect(runtimeHarness.providerSurface.buildSnapshot).toHaveBeenCalledWith("eip155");
     expect(approvalUiAccess.hasInitializedVault()).toBe(true);
 
     await firstUiBridgeAccess.uiBridgeRuntimeInputs.persistVaultMeta();
@@ -208,8 +243,8 @@ describe("runtimeHost", () => {
 
     expect(runtimeHarness.destroy).toHaveBeenCalledTimes(1);
     await expect(runtimeHost.initializeRuntime()).rejects.toThrow("Background runtime host is destroyed");
+    await expect(runtimeHost.getOrInitProviderBridgeAccess()).rejects.toThrow("Background runtime host is destroyed");
     await expect(runtimeHost.getOrInitUiBridgeAccess()).rejects.toThrow("Background runtime host is destroyed");
-    await expect(runtimeHost.getOrInitProviderEventsAccess()).rejects.toThrow("Background runtime host is destroyed");
     await expect(runtimeHost.getOrInitApprovalUiAccess()).rejects.toThrow("Background runtime host is destroyed");
   });
 });

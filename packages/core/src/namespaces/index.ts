@@ -1,10 +1,17 @@
+export type {
+  RuntimeBootstrapNamespaceAssembly,
+  RuntimeNamespaceStageAssembly,
+  RuntimeSessionNamespaceAssembly,
+} from "./assembly.js";
 export {
+  assembleRuntimeNamespaceStages,
   assembleRuntimeNamespaces,
   collectChainSeedsFromManifests,
   createAccountCodecRegistryFromManifests,
   createChainAddressCodecRegistryFromManifests,
   createKeyringNamespacesFromManifests,
   registerRpcClientFactoriesFromManifests,
+  registerRpcModules,
   registerRpcModulesFromManifests,
 } from "./assembly.js";
 export { BUILTIN_NAMESPACE_MANIFESTS, createBuiltinKeyringNamespaces } from "./builtin.js";

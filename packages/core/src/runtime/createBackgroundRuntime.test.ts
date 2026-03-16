@@ -221,6 +221,45 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.destroy();
   });
 
+  it("prefers explicit session keyring namespaces over the default session stage output", () => {
+    const overriddenKeyringNamespaces = [
+      {
+        ...eip155NamespaceManifest.core.keyring,
+        defaultChainRef: ALT_CHAIN.chainRef,
+        factories: { ...eip155NamespaceManifest.core.keyring.factories },
+      },
+    ];
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: { port: new MemoryChainDefinitionsPort([toRegistryEntity(ALT_CHAIN, 0)]), seed: [ALT_CHAIN] },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      session: {
+        keyringNamespaces: overriddenKeyringNamespaces,
+      },
+    });
+
+    expect(runtime.services.keyring.getNamespaces()[0]?.defaultChainRef).toBe(ALT_CHAIN.chainRef);
+    expect(runtime.services.keyring.getNamespaces()[0]).not.toBe(overriddenKeyringNamespaces[0]);
+
+    runtime.lifecycle.destroy();
+  });
+
   it("persists selectedChainRef when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];

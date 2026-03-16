@@ -3,7 +3,6 @@ import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/to
 import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";
 import { InMemoryUnlockController } from "../../controllers/unlock/UnlockController.js";
 import type { Messenger } from "../../messenger/Messenger.js";
-import { createBuiltinKeyringNamespaces } from "../../namespaces/builtin.js";
 import type { AccountsService, KeyringMetasService } from "../../services/index.js";
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
@@ -30,6 +29,8 @@ export type SessionOptions = {
   keyringNamespaces?: NamespaceConfig[];
 };
 
+export type SessionLayerOptions = Omit<SessionOptions, "keyringNamespaces">;
+
 export type BackgroundSessionServices = {
   vault: VaultService;
   unlock: UnlockController;
@@ -45,10 +46,11 @@ type SessionLayerParams = {
   vaultMetaPort?: VaultMetaPort;
   accountsStore: AccountsService;
   keyringMetas: KeyringMetasService;
+  keyringNamespaces: readonly NamespaceConfig[];
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
   hydrationEnabled: boolean;
-  sessionOptions?: SessionOptions;
+  sessionOptions?: SessionLayerOptions;
   getIsHydrating(): boolean;
   getIsDestroyed(): boolean;
 };
@@ -71,6 +73,7 @@ export const initSessionLayer = ({
   vaultMetaPort,
   accountsStore,
   keyringMetas,
+  keyringNamespaces,
   storageLogger,
   storageNow,
   hydrationEnabled,
@@ -269,8 +272,6 @@ export const initSessionLayer = ({
 
   const unlock = unlockFactory(unlockOptions);
 
-  const defaultKeyringNamespaces: NamespaceConfig[] = createBuiltinKeyringNamespaces();
-
   const keyringService = new KeyringService({
     now: storageNow,
     uuid: sessionOptions?.uuid ?? (() => crypto.randomUUID()),
@@ -278,7 +279,10 @@ export const initSessionLayer = ({
     unlock,
     accountsStore,
     keyringMetas,
-    namespaces: sessionOptions?.keyringNamespaces ?? defaultKeyringNamespaces,
+    namespaces: keyringNamespaces.map((namespace) => ({
+      ...namespace,
+      factories: { ...namespace.factories },
+    })),
     logger: storageLogger,
   });
 

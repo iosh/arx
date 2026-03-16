@@ -2,6 +2,7 @@ import { type AccountCodecRegistry, createAccountCodecRegistry } from "../accoun
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { HandlerControllers } from "../rpc/handlers/types.js";
+import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
 import type { KeyringService } from "../runtime/keyring/KeyringService.js";
@@ -16,6 +17,22 @@ import type {
 } from "./types.js";
 import { assertValidNamespaceManifest } from "./validation.js";
 
+export type RuntimeBootstrapNamespaceAssembly = Readonly<{
+  rpcModules: readonly RpcNamespaceModule[];
+  accountCodecs: AccountCodecRegistry;
+  chainAddressCodecs: ChainAddressCodecRegistry;
+  chainSeeds: readonly ChainMetadata[];
+}>;
+
+export type RuntimeSessionNamespaceAssembly = Readonly<{
+  keyringNamespaces: readonly NamespaceConfig[];
+}>;
+
+export type RuntimeNamespaceStageAssembly = Readonly<{
+  bootstrap: RuntimeBootstrapNamespaceAssembly;
+  session: RuntimeSessionNamespaceAssembly;
+}>;
+
 const assertValidUniqueNamespaceManifests = (manifests: readonly NamespaceManifest[]): void => {
   const seen = new Set<string>();
   for (const manifest of manifests) {
@@ -25,6 +42,42 @@ const assertValidUniqueNamespaceManifests = (manifests: readonly NamespaceManife
     }
     seen.add(manifest.namespace);
   }
+};
+
+const getValidatedUniqueNamespaceManifests = (
+  manifests: readonly NamespaceManifest[],
+): readonly NamespaceManifest[] => {
+  assertValidUniqueNamespaceManifests(manifests);
+  return manifests;
+};
+
+const collectRpcModulesFromValidatedManifests = (
+  manifests: readonly NamespaceManifest[],
+): readonly RpcNamespaceModule[] => {
+  return manifests.map((manifest) => manifest.core.rpc);
+};
+
+const collectChainSeedsFromValidatedManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
+  return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map((chain) => ({ ...chain })) ?? []);
+};
+
+const createChainAddressCodecRegistryFromValidatedManifests = (
+  manifests: readonly NamespaceManifest[],
+): ChainAddressCodecRegistry => {
+  return new ChainAddressCodecRegistry(manifests.map((manifest) => manifest.core.chainAddressCodec));
+};
+
+const createAccountCodecRegistryFromValidatedManifests = (
+  manifests: readonly NamespaceManifest[],
+): AccountCodecRegistry => {
+  return createAccountCodecRegistry(manifests.map((manifest) => manifest.core.accountCodec));
+};
+
+const createKeyringNamespacesFromValidatedManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
+  return manifests.map((manifest) => ({
+    ...manifest.core.keyring,
+    factories: { ...manifest.core.keyring.factories },
+  }));
 };
 
 const createNamespaceRuntimeBindingsRegistry = (params: {
@@ -41,48 +94,71 @@ const createNamespaceRuntimeBindingsRegistry = (params: {
   };
 };
 
+export const assembleRuntimeNamespaceStages = (
+  manifests: readonly NamespaceManifest[],
+): RuntimeNamespaceStageAssembly => {
+  const validatedManifests = getValidatedUniqueNamespaceManifests(manifests);
+
+  return {
+    bootstrap: {
+      rpcModules: collectRpcModulesFromValidatedManifests(validatedManifests),
+      accountCodecs: createAccountCodecRegistryFromValidatedManifests(validatedManifests),
+      chainAddressCodecs: createChainAddressCodecRegistryFromValidatedManifests(validatedManifests),
+      chainSeeds: collectChainSeedsFromValidatedManifests(validatedManifests),
+    },
+    session: {
+      keyringNamespaces: createKeyringNamespacesFromValidatedManifests(validatedManifests),
+    },
+  };
+};
+
 export const collectChainSeedsFromManifests = (manifests: readonly NamespaceManifest[]): ChainMetadata[] => {
-  assertValidUniqueNamespaceManifests(manifests);
-  return manifests.flatMap((manifest) => manifest.core.chainSeeds?.map((chain) => ({ ...chain })) ?? []);
+  return collectChainSeedsFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
 };
 
 export const createChainAddressCodecRegistryFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): ChainAddressCodecRegistry => {
-  assertValidUniqueNamespaceManifests(manifests);
-  return new ChainAddressCodecRegistry(manifests.map((manifest) => manifest.core.chainAddressCodec));
+  return createChainAddressCodecRegistryFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
 };
 
 export const createAccountCodecRegistryFromManifests = (
   manifests: readonly NamespaceManifest[],
 ): AccountCodecRegistry => {
-  assertValidUniqueNamespaceManifests(manifests);
-  return createAccountCodecRegistry(manifests.map((manifest) => manifest.core.accountCodec));
+  return createAccountCodecRegistryFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
 };
 
 export const createKeyringNamespacesFromManifests = (manifests: readonly NamespaceManifest[]): NamespaceConfig[] => {
-  assertValidUniqueNamespaceManifests(manifests);
-  return manifests.map((manifest) => ({
-    ...manifest.core.keyring,
-    factories: { ...manifest.core.keyring.factories },
-  }));
+  return createKeyringNamespacesFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests));
 };
 
-export const registerRpcModulesFromManifests = (
-  registry: RpcRegistry,
-  manifests: readonly NamespaceManifest[],
-): void => {
-  assertValidUniqueNamespaceManifests(manifests);
+export const registerRpcModules = (registry: RpcRegistry, modules: readonly RpcNamespaceModule[]): void => {
+  const seen = new Set<string>();
+  for (const module of modules) {
+    if (seen.has(module.namespace)) {
+      throw new Error(`Duplicate RPC namespace module "${module.namespace}"`);
+    }
+    seen.add(module.namespace);
+  }
 
   const registered = new Set(registry.getRegisteredNamespaceAdapters().map((entry) => entry.namespace));
-  for (const manifest of manifests) {
-    const module = manifest.core.rpc;
+  for (const module of modules) {
     if (!registered.has(module.namespace)) {
       registry.registerNamespaceAdapter(module.adapter);
       registered.add(module.namespace);
     }
     registry.registerNamespaceProtocolAdapter(module.namespace, module.protocolAdapter);
   }
+};
+
+export const registerRpcModulesFromManifests = (
+  registry: RpcRegistry,
+  manifests: readonly NamespaceManifest[],
+): void => {
+  registerRpcModules(
+    registry,
+    collectRpcModulesFromValidatedManifests(getValidatedUniqueNamespaceManifests(manifests)),
+  );
 };
 
 export const registerRpcClientFactoriesFromManifests = (

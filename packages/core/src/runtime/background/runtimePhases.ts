@@ -1,16 +1,13 @@
-import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   assembleRuntimeNamespaces,
-  collectChainSeedsFromManifests,
-  createAccountCodecRegistryFromManifests,
-  createChainAddressCodecRegistryFromManifests,
-  createKeyringNamespacesFromManifests,
   type NamespaceManifest,
   type NamespaceRuntimeBindingsRegistry,
-  registerRpcModulesFromManifests,
+  type RuntimeBootstrapNamespaceAssembly,
+  type RuntimeSessionNamespaceAssembly,
+  registerRpcModules,
 } from "../../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../../rpc/handlers/types.js";
 import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
@@ -34,7 +31,7 @@ import { buildRuntimeNetworkPlan, type RuntimeNetworkPlan } from "./networkDefau
 import { initRpcLayer, type RpcLayerOptions } from "./rpcLayer.js";
 import { createRuntimeLifecycle } from "./runtimeLifecycle.js";
 import { initRuntimeStoreServices } from "./runtimeStoreServices.js";
-import { initSessionLayer, type SessionLayerResult, type SessionOptions } from "./session.js";
+import { initSessionLayer, type SessionLayerOptions, type SessionLayerResult, type SessionOptions } from "./session.js";
 import { createTransactionsLifecycle } from "./transactionsLifecycle.js";
 
 type StorageOptions = {
@@ -53,10 +50,8 @@ type BackgroundNamespaceResolver = (context?: RpcInvocationContext) => Namespace
 export type RuntimeBootstrapPhase = {
   bus: Messenger;
   rpcRegistry: RpcRegistry;
-  namespaceManifests: readonly NamespaceManifest[];
+  namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   registeredNamespaces: ReadonlySet<string>;
-  accountCodecs: AccountCodecRegistry;
-  chainAddressCodecs: ReturnType<typeof createChainAddressCodecRegistryFromManifests>;
   admittedChains: readonly ChainMetadata[];
   networkPlan: RuntimeNetworkPlan;
   contextNamespaceResolver: BackgroundNamespaceResolver;
@@ -64,10 +59,10 @@ export type RuntimeBootstrapPhase = {
   storageNow: () => number;
   hydrationEnabled: boolean;
   controllerOptions: ControllerLayerOptions;
-  resolvedSessionOptions?: SessionOptions;
 };
 
 export type RuntimeSessionPhase = {
+  namespaceSession: RuntimeSessionNamespaceAssembly;
   controllersBase: ControllersBase;
   deferredNetworkInitialState: ReturnType<typeof initControllers>["deferredNetworkInitialState"];
   transactionRegistry: ReturnType<typeof initControllers>["transactionRegistry"];
@@ -91,9 +86,18 @@ export type RuntimeCapabilityPhase = {
   networkBootstrap: ReturnType<typeof createNetworkBootstrap>;
 };
 
+const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLayerOptions | undefined => {
+  if (!sessionOptions) {
+    return undefined;
+  }
+
+  const { keyringNamespaces: _keyringNamespaces, ...resolvedSessionOptions } = sessionOptions;
+  return Object.keys(resolvedSessionOptions).length > 0 ? resolvedSessionOptions : undefined;
+};
+
 export const initializeRuntimeBootstrapPhase = ({
   rpcRegistry,
-  namespaceManifests,
+  namespaceBootstrap,
   messengerOptions,
   storageOptions,
   networkOptions,
@@ -102,10 +106,9 @@ export const initializeRuntimeBootstrapPhase = ({
   permissionOptions,
   transactionOptions,
   chainDefinitionsOptions,
-  sessionOptions,
 }: {
   rpcRegistry: RpcRegistry;
-  namespaceManifests: readonly NamespaceManifest[];
+  namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
   messengerOptions?: MessengerOptions;
   storageOptions?: StorageOptions;
   networkOptions?: ControllerLayerOptions["network"];
@@ -114,9 +117,8 @@ export const initializeRuntimeBootstrapPhase = ({
   permissionOptions?: ControllerLayerOptions["permissions"];
   transactionOptions?: ControllerLayerOptions["transactions"];
   chainDefinitionsOptions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
-  sessionOptions?: SessionOptions;
 }): RuntimeBootstrapPhase => {
-  registerRpcModulesFromManifests(rpcRegistry, namespaceManifests);
+  registerRpcModules(rpcRegistry, namespaceBootstrap.rpcModules);
 
   const storageLogger = storageOptions?.logger ?? (() => {});
   const bus = new Messenger({
@@ -124,21 +126,13 @@ export const initializeRuntimeBootstrapPhase = ({
     onListenerError: ({ topic, error }) => storageLogger(`messenger: listener error in "${topic}"`, error),
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
-  const accountCodecs = createAccountCodecRegistryFromManifests(namespaceManifests);
-  const chainAddressCodecs = createChainAddressCodecRegistryFromManifests(namespaceManifests);
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
-  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? collectChainSeedsFromManifests(namespaceManifests);
+  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const networkPlan = buildRuntimeNetworkPlan({
     admittedChains: chainDefinitionSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
     ...(networkOptions?.initialState ? { requestedInitialState: networkOptions.initialState } : {}),
     ...(networkOptions?.defaultStrategy ? { defaultStrategy: networkOptions.defaultStrategy } : {}),
   });
-  const resolvedSessionOptions = sessionOptions?.keyringNamespaces
-    ? sessionOptions
-    : {
-        ...sessionOptions,
-        keyringNamespaces: createKeyringNamespacesFromManifests(namespaceManifests),
-      };
 
   const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
   const storageNow = storageOptions?.now ?? Date.now;
@@ -149,19 +143,17 @@ export const initializeRuntimeBootstrapPhase = ({
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(permissionOptions
-      ? { permissions: { ...permissionOptions, chains: chainAddressCodecs } }
-      : { permissions: { chains: chainAddressCodecs } }),
+      ? { permissions: { ...permissionOptions, chains: namespaceBootstrap.chainAddressCodecs } }
+      : { permissions: { chains: namespaceBootstrap.chainAddressCodecs } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    chainDefinitions: { ...chainDefinitionsOptions, seed: chainDefinitionSeed },
+    chainDefinitions: { ...chainDefinitionsOptions, seed: [...chainDefinitionSeed] },
   };
 
   return {
     bus,
     rpcRegistry,
-    namespaceManifests,
+    namespaceBootstrap,
     registeredNamespaces,
-    accountCodecs,
-    chainAddressCodecs,
     admittedChains: networkPlan.admittedChains,
     networkPlan,
     contextNamespaceResolver,
@@ -169,20 +161,22 @@ export const initializeRuntimeBootstrapPhase = ({
     storageNow,
     hydrationEnabled,
     controllerOptions,
-    ...(resolvedSessionOptions ? { resolvedSessionOptions } : {}),
   };
 };
 
 export const initializeRuntimeSessionPhase = ({
   bootstrapPhase,
+  namespaceSession,
   settingsPort,
   networkPreferencesPort,
   storePorts,
   engineOptions,
   vaultMetaPort,
   createApprovalExecutor,
+  sessionOptions,
 }: {
   bootstrapPhase: RuntimeBootstrapPhase;
+  namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
   networkPreferencesPort: NetworkPreferencesPort;
   storePorts: {
@@ -194,6 +188,7 @@ export const initializeRuntimeSessionPhase = ({
   engineOptions?: EngineOptions;
   vaultMetaPort?: VaultMetaPort;
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
+  sessionOptions?: SessionOptions;
 }): RuntimeSessionPhase => {
   const { settingsService, networkPreferences, transactionsService, permissionsService, accountsStore, keyringMetas } =
     initRuntimeStoreServices({
@@ -206,7 +201,7 @@ export const initializeRuntimeSessionPhase = ({
 
   const controllersInit = initControllers({
     bus: bootstrapPhase.bus,
-    accountCodecs: bootstrapPhase.accountCodecs,
+    accountCodecs: bootstrapPhase.namespaceBootstrap.accountCodecs,
     accountsService: accountsStore,
     settingsService,
     permissionsService,
@@ -238,23 +233,27 @@ export const initializeRuntimeSessionPhase = ({
   });
 
   const runtimeLifecycle = createRuntimeLifecycle("createBackgroundRuntime");
+  const resolvedKeyringNamespaces = sessionOptions?.keyringNamespaces ?? namespaceSession.keyringNamespaces;
+  const resolvedSessionOptions = extractSessionLayerOptions(sessionOptions);
   const sessionLayer = initSessionLayer({
     bus: bootstrapPhase.bus,
     controllers: controllersBase,
     accountsStore,
     keyringMetas,
+    keyringNamespaces: resolvedKeyringNamespaces,
     storageLogger: bootstrapPhase.storageLogger,
     storageNow: bootstrapPhase.storageNow,
     hydrationEnabled: bootstrapPhase.hydrationEnabled,
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
     getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
-    ...(bootstrapPhase.resolvedSessionOptions ? { sessionOptions: bootstrapPhase.resolvedSessionOptions } : {}),
+    ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
   });
 
   const engine = initEngine(engineOptions);
 
   return {
+    namespaceSession,
     controllersBase,
     deferredNetworkInitialState,
     transactionRegistry: controllersInit.transactionRegistry,
@@ -273,23 +272,25 @@ export const initializeRuntimeSessionPhase = ({
 export const initializeRuntimeCapabilityPhase = ({
   bootstrapPhase,
   sessionPhase,
+  namespaceManifests,
   rpcClientOptions,
 }: {
   bootstrapPhase: RuntimeBootstrapPhase;
   sessionPhase: RuntimeSessionPhase;
+  namespaceManifests: readonly NamespaceManifest[];
   rpcClientOptions?: RpcLayerOptions;
 }): RuntimeCapabilityPhase => {
   const rpcClientRegistry = initRpcLayer({
     controllers: sessionPhase.controllersBase,
-    namespaceManifests: bootstrapPhase.namespaceManifests,
+    namespaceManifests,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
   const assembledRuntimeNamespaces = assembleRuntimeNamespaces({
-    manifests: bootstrapPhase.namespaceManifests,
+    manifests: namespaceManifests,
     transactionRegistry: sessionPhase.transactionRegistry,
     rpcClients: rpcClientRegistry,
-    chains: bootstrapPhase.chainAddressCodecs,
+    chains: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
     keyring: sessionPhase.keyringService,
   });
 

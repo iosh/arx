@@ -1,7 +1,11 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
-import type { NamespaceManifest, NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
+import {
+  assembleRuntimeNamespaceStages,
+  type NamespaceManifest,
+  type NamespaceRuntimeBindingsRegistry,
+} from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
@@ -182,9 +186,10 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   } = options;
 
   const namespaceManifests = namespacesOptions.manifests;
+  const namespaceStages = assembleRuntimeNamespaceStages(namespaceManifests);
   const bootstrapPhase = initializeRuntimeBootstrapPhase({
     rpcRegistry,
-    namespaceManifests,
+    namespaceBootstrap: namespaceStages.bootstrap,
     ...(messengerOptions ? { messengerOptions } : {}),
     ...(storageOptions ? { storageOptions } : {}),
     ...(networkOptions ? { networkOptions } : {}),
@@ -193,7 +198,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     ...(permissionOptions ? { permissionOptions } : {}),
     ...(transactionOptions ? { transactionOptions } : {}),
     chainDefinitionsOptions,
-    ...(sessionOptions ? { sessionOptions } : {}),
   });
   const approvalFlowRegistry = createApprovalFlowRegistry();
   let sessionPhase: ReturnType<typeof initializeRuntimeSessionPhase> | null = null;
@@ -215,11 +219,13 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   sessionPhase = initializeRuntimeSessionPhase({
     bootstrapPhase,
+    namespaceSession: namespaceStages.session,
     settingsPort: settingsOptions.port,
     networkPreferencesPort: networkPreferencesOptions.port,
     storePorts: storeOptions.ports,
     ...(engineOptions ? { engineOptions } : {}),
     ...(storageOptions?.vaultMetaPort ? { vaultMetaPort: storageOptions.vaultMetaPort } : {}),
+    ...(sessionOptions ? { sessionOptions } : {}),
     createApprovalExecutor: (controllersBase) =>
       createApprovalExecutor({
         registry: approvalFlowRegistry,
@@ -242,13 +248,14 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   capabilityPhase = initializeRuntimeCapabilityPhase({
     bootstrapPhase,
     sessionPhase,
+    namespaceManifests,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
   const controllers: HandlerControllers = {
     ...sessionPhase.controllersBase,
     networkPreferences: sessionPhase.networkPreferences,
-    chainAddressCodecs: bootstrapPhase.chainAddressCodecs,
+    chainAddressCodecs: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
     clock: {
       now: bootstrapPhase.storageNow,
     },
@@ -276,7 +283,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       chainActivation: sessionPhase.chainActivation,
       chainViews: sessionPhase.chainViews,
       permissionViews: capabilityPhase.permissionViews,
-      accountCodecs: bootstrapPhase.accountCodecs,
+      accountCodecs: bootstrapPhase.namespaceBootstrap.accountCodecs,
       networkPreferences: sessionPhase.networkPreferences,
       namespaceBindings: capabilityPhase.namespaceBindings,
       session: sessionPhase.sessionLayer.session,

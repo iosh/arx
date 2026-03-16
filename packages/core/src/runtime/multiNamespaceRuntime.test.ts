@@ -132,6 +132,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       eip155: MAINNET_CHAIN.chainRef,
       solana: SOLANA_CHAIN.chainRef,
     });
+    expect(runtime.services.keyring.getNamespaces().map((entry) => entry.namespace)).toEqual(["eip155", "solana"]);
     expect(runtime.rpc.registry.resolveInvocation(runtime.controllers, "sol_getBalance", undefined)).toEqual({
       namespace: "solana",
       chainRef: SOLANA_CHAIN.chainRef,

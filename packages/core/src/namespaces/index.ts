@@ -1,16 +1,16 @@
 export type {
   RuntimeBootstrapNamespaceAssembly,
+  RuntimeNamespaceRuntimeSupportAssembly,
   RuntimeNamespaceStageAssembly,
   RuntimeSessionNamespaceAssembly,
 } from "./assembly.js";
 export {
   assembleRuntimeNamespaceStages,
-  assembleRuntimeNamespaces,
   collectChainSeedsFromManifests,
   createAccountCodecRegistryFromManifests,
   createChainAddressCodecRegistryFromManifests,
   createKeyringNamespacesFromManifests,
-  registerRpcClientFactoriesFromManifests,
+  materializeNamespaceRuntimeSupport,
   registerRpcModules,
   registerRpcModulesFromManifests,
 } from "./assembly.js";
@@ -22,6 +22,9 @@ export type {
   NamespaceManifest,
   NamespaceRuntimeBindingsRegistry,
   NamespaceRuntimeManifest,
+  NamespaceRuntimeSupport,
+  NamespaceRuntimeSupportIndex,
+  NamespaceRuntimeSupportSpec,
   NamespaceSignerRegistry,
   NamespaceUiBindings,
 } from "./types.js";

@@ -503,6 +503,15 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
+    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      namespace: "eip155",
+      hasRpcClient: true,
+      hasSigner: true,
+      hasApprovalBindings: true,
+      hasUiBindings: true,
+      hasTransaction: true,
+    });
+
     const handlers = createHandlersForRuntime(runtime);
 
     await expect(
@@ -518,6 +527,133 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(getBalance).toHaveBeenCalledWith("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", {
       blockTag: "latest",
       timeoutMs: 15_000,
+    });
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("fails closed when sign approvals are unsupported for the namespace", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createApprovalBindings: undefined,
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const approvalPromise = runtime.controllers.approvals.create(
+      {
+        id: "sign-message-approval",
+        kind: ApprovalKinds.SignMessage,
+        origin: "https://dapp.example",
+        namespace: "eip155",
+        chainRef: MAINNET_CHAIN.chainRef,
+        createdAt: 1,
+        request: {
+          chainRef: MAINNET_CHAIN.chainRef,
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          message: "0x68656c6c6f",
+        },
+      },
+      {
+        transport: "provider",
+        portId: "port-1",
+        sessionId: "session-1",
+        requestId: "request-1",
+        origin: "https://dapp.example",
+      },
+    ).settled;
+
+    await expect(
+      runtime.controllers.approvals.resolve({ id: "sign-message-approval", action: "approve" }),
+    ).rejects.toMatchObject({
+      reason: "ChainNotCompatible",
+    });
+    await expect(approvalPromise).rejects.toMatchObject({
+      reason: "ChainNotCompatible",
+    });
+    expect(runtime.controllers.approvals.getState().pending).toEqual([]);
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("tracks rpc client support separately from other runtime support", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              clientFactory: undefined,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      namespace: "eip155",
+      hasRpcClient: false,
+      hasSigner: true,
+      hasApprovalBindings: true,
+      hasUiBindings: true,
+      hasTransaction: true,
     });
 
     runtime.lifecycle.destroy();

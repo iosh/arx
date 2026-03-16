@@ -35,6 +35,21 @@ export type NamespaceRuntimeBindingsRegistry = {
   hasTransaction(namespace: string): boolean;
 };
 
+export type NamespaceRuntimeSupport = Readonly<{
+  namespace: string;
+  hasRpcClient: boolean;
+  hasSigner: boolean;
+  hasApprovalBindings: boolean;
+  hasUiBindings: boolean;
+  hasTransaction: boolean;
+}>;
+
+export type NamespaceRuntimeSupportIndex = {
+  get(namespace: string): NamespaceRuntimeSupport | undefined;
+  require(namespace: string): NamespaceRuntimeSupport;
+  list(): NamespaceRuntimeSupport[];
+};
+
 export type NamespaceSignerRegistry = {
   get<TSigner = unknown>(namespace: string): TSigner | undefined;
   require<TSigner = unknown>(namespace: string): TSigner;
@@ -57,6 +72,12 @@ export type NamespaceRuntimeManifest = {
     signer: unknown;
   }) => TransactionAdapter;
 };
+
+export type NamespaceRuntimeSupportSpec = Readonly<
+  {
+    namespace: string;
+  } & NamespaceRuntimeManifest
+>;
 
 export type NamespaceManifest = {
   namespace: string;

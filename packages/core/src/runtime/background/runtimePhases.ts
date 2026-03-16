@@ -2,10 +2,11 @@ import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
-  assembleRuntimeNamespaces,
-  type NamespaceManifest,
+  materializeNamespaceRuntimeSupport,
   type NamespaceRuntimeBindingsRegistry,
+  type NamespaceRuntimeSupportIndex,
   type RuntimeBootstrapNamespaceAssembly,
+  type RuntimeNamespaceRuntimeSupportAssembly,
   type RuntimeSessionNamespaceAssembly,
   registerRpcModules,
 } from "../../namespaces/index.js";
@@ -77,10 +78,11 @@ export type RuntimeSessionPhase = {
   transactionsService: ReturnType<typeof initRuntimeStoreServices>["transactionsService"];
 };
 
-export type RuntimeCapabilityPhase = {
+export type RuntimeSupportPhase = {
   rpcClientRegistry: ReturnType<typeof initRpcLayer>;
   signers: HandlerControllers["signers"];
   namespaceBindings: NamespaceRuntimeBindingsRegistry;
+  namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
   permissionViews: ReturnType<typeof createPermissionViewsService>;
   transactionsLifecycle: ReturnType<typeof createTransactionsLifecycle>;
   networkBootstrap: ReturnType<typeof createNetworkBootstrap>;
@@ -269,29 +271,37 @@ export const initializeRuntimeSessionPhase = ({
   };
 };
 
-export const initializeRuntimeCapabilityPhase = ({
+export const initializeRuntimeSupportPhase = ({
   bootstrapPhase,
   sessionPhase,
-  namespaceManifests,
+  namespaceRuntimeSupport,
   rpcClientOptions,
 }: {
   bootstrapPhase: RuntimeBootstrapPhase;
   sessionPhase: RuntimeSessionPhase;
-  namespaceManifests: readonly NamespaceManifest[];
+  namespaceRuntimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
   rpcClientOptions?: RpcLayerOptions;
-}): RuntimeCapabilityPhase => {
+}): RuntimeSupportPhase => {
+  const manifestRpcClientFactories = namespaceRuntimeSupport.namespaces.flatMap((spec) =>
+    spec.clientFactory ? [{ namespace: spec.namespace, factory: spec.clientFactory }] : [],
+  );
+  const overrideRpcClientFactories = rpcClientOptions?.factories ?? [];
+  const rpcClientFactoryNamespaces = new Set(
+    [...manifestRpcClientFactories, ...overrideRpcClientFactories].map((entry) => entry.namespace),
+  );
   const rpcClientRegistry = initRpcLayer({
     controllers: sessionPhase.controllersBase,
-    namespaceManifests,
-    ...(rpcClientOptions ? { rpcClientOptions } : {}),
+    ...(rpcClientOptions?.options ? { rpcClientOptions: { options: rpcClientOptions.options } } : {}),
+    factories: [...manifestRpcClientFactories, ...overrideRpcClientFactories],
   });
 
-  const assembledRuntimeNamespaces = assembleRuntimeNamespaces({
-    manifests: namespaceManifests,
+  const materializedRuntimeSupport = materializeNamespaceRuntimeSupport({
+    runtimeSupport: namespaceRuntimeSupport,
     transactionRegistry: sessionPhase.transactionRegistry,
     rpcClients: rpcClientRegistry,
     chains: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
     keyring: sessionPhase.keyringService,
+    rpcClientNamespaces: rpcClientFactoryNamespaces,
   });
 
   const permissionViews = createPermissionViewsService({
@@ -319,8 +329,9 @@ export const initializeRuntimeCapabilityPhase = ({
 
   return {
     rpcClientRegistry,
-    signers: assembledRuntimeNamespaces.signers,
-    namespaceBindings: assembledRuntimeNamespaces.bindings,
+    signers: materializedRuntimeSupport.signers,
+    namespaceBindings: materializedRuntimeSupport.bindings,
+    namespaceRuntimeSupport: materializedRuntimeSupport.runtimeSupport,
     permissionViews,
     transactionsLifecycle,
     networkBootstrap,

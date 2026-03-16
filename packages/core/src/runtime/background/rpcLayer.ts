@@ -1,4 +1,3 @@
-import { type NamespaceManifest, registerRpcClientFactoriesFromManifests } from "../../namespaces/index.js";
 import {
   type RpcClientFactory,
   RpcClientRegistry,
@@ -14,11 +13,11 @@ export type RpcLayerOptions = {
 export const initRpcLayer = ({
   controllers,
   rpcClientOptions,
-  namespaceManifests,
+  factories,
 }: {
   controllers: ControllersBase;
-  rpcClientOptions?: RpcLayerOptions;
-  namespaceManifests: readonly NamespaceManifest[];
+  rpcClientOptions?: Pick<RpcLayerOptions, "options">;
+  factories?: ReadonlyArray<{ namespace: string; factory: RpcClientFactory }>;
 }) => {
   const rpcClientRegistry = new RpcClientRegistry({
     ...(rpcClientOptions?.options ?? {}),
@@ -30,9 +29,7 @@ export const initRpcLayer = ({
     },
   });
 
-  registerRpcClientFactoriesFromManifests(rpcClientRegistry, namespaceManifests);
-
-  for (const entry of rpcClientOptions?.factories ?? []) {
+  for (const entry of factories ?? []) {
     rpcClientRegistry.registerFactory(entry.namespace, entry.factory);
   }
 

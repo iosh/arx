@@ -5,6 +5,7 @@ import {
   assembleRuntimeNamespaceStages,
   type NamespaceManifest,
   type NamespaceRuntimeBindingsRegistry,
+  type NamespaceRuntimeSupportIndex,
 } from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
@@ -31,8 +32,8 @@ import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "./background/runtimeLifecyclePlan.js";
 import {
   initializeRuntimeBootstrapPhase,
-  initializeRuntimeCapabilityPhase,
   initializeRuntimeSessionPhase,
+  initializeRuntimeSupportPhase,
 } from "./background/runtimePhases.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
@@ -95,6 +96,7 @@ export type BackgroundRuntime = {
     accountCodecs: AccountCodecRegistry;
     networkPreferences: NetworkPreferencesService;
     namespaceBindings: NamespaceRuntimeBindingsRegistry;
+    namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
     session: BackgroundSessionServices;
     keyring: KeyringService;
   };
@@ -201,7 +203,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   });
   const approvalFlowRegistry = createApprovalFlowRegistry();
   let sessionPhase: ReturnType<typeof initializeRuntimeSessionPhase> | null = null;
-  let capabilityPhase: ReturnType<typeof initializeRuntimeCapabilityPhase> | null = null;
+  let runtimeSupportPhase: ReturnType<typeof initializeRuntimeSupportPhase> | null = null;
 
   const requireSessionPhase = () => {
     if (!sessionPhase) {
@@ -210,11 +212,11 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     return sessionPhase;
   };
 
-  const requireCapabilityPhase = () => {
-    if (!capabilityPhase) {
-      throw new Error("Runtime capability phase is not initialized");
+  const requireRuntimeSupportPhase = () => {
+    if (!runtimeSupportPhase) {
+      throw new Error("Runtime support phase is not initialized");
     }
-    return capabilityPhase;
+    return runtimeSupportPhase;
   };
 
   sessionPhase = initializeRuntimeSessionPhase({
@@ -231,7 +233,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         registry: approvalFlowRegistry,
         getDeps: () => {
           const activeSessionPhase = requireSessionPhase();
-          const activeCapabilityPhase = requireCapabilityPhase();
+          const activeRuntimeSupportPhase = requireRuntimeSupportPhase();
 
           return {
             accounts: controllersBase.accounts,
@@ -239,16 +241,16 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
             transactions: controllersBase.transactions,
             chainActivation: activeSessionPhase.chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
-            namespaceBindings: activeCapabilityPhase.namespaceBindings,
+            namespaceBindings: activeRuntimeSupportPhase.namespaceBindings,
           };
         },
       }),
   });
 
-  capabilityPhase = initializeRuntimeCapabilityPhase({
+  runtimeSupportPhase = initializeRuntimeSupportPhase({
     bootstrapPhase,
     sessionPhase,
-    namespaceManifests,
+    namespaceRuntimeSupport: namespaceStages.runtimeSupport,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
@@ -259,17 +261,17 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     clock: {
       now: bootstrapPhase.storageNow,
     },
-    signers: capabilityPhase.signers,
+    signers: runtimeSupportPhase.signers,
   };
   const lifecycle = createBackgroundRuntimeLifecycle({
     runtimeLifecycle: sessionPhase.runtimeLifecycle,
     controllersBase: sessionPhase.controllersBase,
     deferredNetworkInitialState: sessionPhase.deferredNetworkInitialState,
     registeredNamespaces: bootstrapPhase.registeredNamespaces,
-    transactionsLifecycle: capabilityPhase.transactionsLifecycle,
-    networkBootstrap: capabilityPhase.networkBootstrap,
+    transactionsLifecycle: runtimeSupportPhase.transactionsLifecycle,
+    networkBootstrap: runtimeSupportPhase.networkBootstrap,
     sessionLayer: sessionPhase.sessionLayer,
-    rpcClientRegistry: capabilityPhase.rpcClientRegistry,
+    rpcClientRegistry: runtimeSupportPhase.rpcClientRegistry,
     engine: sessionPhase.engine,
     bus: bootstrapPhase.bus,
     logger: bootstrapPhase.storageLogger,
@@ -282,17 +284,18 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       attention: sessionPhase.attention,
       chainActivation: sessionPhase.chainActivation,
       chainViews: sessionPhase.chainViews,
-      permissionViews: capabilityPhase.permissionViews,
+      permissionViews: runtimeSupportPhase.permissionViews,
       accountCodecs: bootstrapPhase.namespaceBootstrap.accountCodecs,
       networkPreferences: sessionPhase.networkPreferences,
-      namespaceBindings: capabilityPhase.namespaceBindings,
+      namespaceBindings: runtimeSupportPhase.namespaceBindings,
+      namespaceRuntimeSupport: runtimeSupportPhase.namespaceRuntimeSupport,
       session: sessionPhase.sessionLayer.session,
       keyring: sessionPhase.keyringService,
     },
     rpc: {
       engine: sessionPhase.engine,
       registry: rpcRegistry,
-      clients: capabilityPhase.rpcClientRegistry,
+      clients: runtimeSupportPhase.rpcClientRegistry,
       getActiveNamespace: bootstrapPhase.contextNamespaceResolver,
     },
     lifecycle,

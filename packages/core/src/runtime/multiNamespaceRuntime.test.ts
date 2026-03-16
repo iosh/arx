@@ -142,6 +142,22 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     runtime.lifecycle.start();
 
     expect(runtime.services.chainViews.getProviderChainView("solana").chainRef).toBe(SOLANA_CHAIN.chainRef);
+    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      namespace: "eip155",
+      hasRpcClient: true,
+      hasSigner: true,
+      hasApprovalBindings: true,
+      hasUiBindings: true,
+      hasTransaction: true,
+    });
+    expect(runtime.services.namespaceRuntimeSupport.get("solana")).toMatchObject({
+      namespace: "solana",
+      hasRpcClient: false,
+      hasSigner: false,
+      hasApprovalBindings: false,
+      hasUiBindings: false,
+      hasTransaction: false,
+    });
     expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
     expect(runtime.services.namespaceBindings.hasTransaction("solana")).toBe(false);
     expect(runtime.controllers.signers.listNamespaces()).toEqual(["eip155"]);

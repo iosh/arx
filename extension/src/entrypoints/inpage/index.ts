@@ -4,6 +4,6 @@ import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 
 export default defineUnlistedScript(() => {
   bootstrapInpageProvider({
-    registry: INSTALLED_NAMESPACES.provider.createRegistry(),
+    registry: INSTALLED_NAMESPACES.provider.registry,
   });
 });

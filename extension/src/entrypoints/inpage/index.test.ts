@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { bootstrapInpageProviderMock, createRegistryMock } = vi.hoisted(() => ({
+const { bootstrapInpageProviderMock } = vi.hoisted(() => ({
   bootstrapInpageProviderMock: vi.fn(),
-  createRegistryMock: vi.fn(),
 }));
 
 const registry = {
@@ -17,7 +16,7 @@ vi.mock("@arx/provider/inpage", () => ({
 vi.mock("@/platform/namespaces/installed", () => ({
   INSTALLED_NAMESPACES: {
     provider: {
-      createRegistry: createRegistryMock,
+      registry,
     },
   },
 }));
@@ -28,13 +27,10 @@ vi.mock("wxt/utils/define-unlisted-script", () => ({
 
 describe("inpage entrypoint", () => {
   it("boots provider host from the installed namespace provider assembly", async () => {
-    createRegistryMock.mockReturnValue(registry);
-
     const entrypoint = await import("./index");
     const runEntrypoint = entrypoint.default as unknown as () => void;
     runEntrypoint();
 
-    expect(createRegistryMock).toHaveBeenCalledTimes(1);
     expect(bootstrapInpageProviderMock).toHaveBeenCalledWith({
       registry,
     });

@@ -23,7 +23,7 @@ export type InstalledNamespacesRuntimeAssembly = Readonly<{
 
 export type InstalledNamespacesProviderAssembly = Readonly<{
   modules: readonly ProviderModule[];
-  createRegistry: () => ProviderRegistry;
+  registry: ProviderRegistry;
 }>;
 
 export type InstalledNamespacesComposition = Readonly<{
@@ -69,6 +69,7 @@ export const createInstalledNamespacesComposition = (
   const providerModules: readonly ProviderModule[] = validatedSpecs.flatMap((spec) =>
     spec.provider.expose ? [spec.provider.module] : [],
   );
+  const providerRegistry = createProviderRegistryFromModules(providerModules);
 
   return {
     specs: validatedSpecs,
@@ -77,7 +78,7 @@ export const createInstalledNamespacesComposition = (
     },
     provider: {
       modules: providerModules,
-      createRegistry: () => createProviderRegistryFromModules(providerModules),
+      registry: providerRegistry,
     },
   };
 };

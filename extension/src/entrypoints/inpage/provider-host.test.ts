@@ -1,9 +1,11 @@
 import type { ProviderHostWindow } from "@arx/provider/host";
 import { createProviderHost } from "@arx/provider/host";
-import { createProviderRegistry, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
+import { createEip155Module } from "@arx/provider/namespaces";
+import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 import { WindowPostMessageTransport } from "@arx/provider/transport";
 import type { EIP1193Provider, Transport } from "@arx/provider/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { createTestDom, MockContentBridge, type TestDomContext } from "./provider-host.test.helpers.js";
 
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -106,6 +108,11 @@ const createInjectedMultiNamespaceRegistry = (): ProviderRegistry => {
   };
 };
 
+const createEmptyRegistry = (): ProviderRegistry => ({
+  modules: [],
+  byNamespace: new Map(),
+});
+
 describe("ProviderHost (inpage injection + EIP-6963)", () => {
   let ctx: TestDomContext;
   let cleanups: Array<() => void>;
@@ -127,13 +134,13 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     return listener;
   };
 
-  const createHarness = (options?: { registry?: ReturnType<typeof createProviderRegistry> }) => {
+  const createHarness = (options?: { registry?: ProviderRegistry }) => {
     const transport = new WindowPostMessageTransport({ namespace: "eip155" });
     cleanups.push(() => transport.destroy());
 
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
-      registry: options?.registry ?? createProviderRegistry(),
+      registry: options?.registry ?? INSTALLED_NAMESPACES.provider.registry,
       createTransportForNamespace: () => transport,
     });
 
@@ -252,6 +259,25 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     await waitForTransportConnect(transport);
   });
 
+  it("fails closed when the provider registry exposes no provider modules", () => {
+    const host = createProviderHost({
+      targetWindow: window as unknown as ProviderHostWindow,
+      registry: createEmptyRegistry(),
+      createTransportForNamespace: () => createStubTransport(),
+    });
+    cleanups.push(() => host.destroy());
+
+    const initialized = onWindowEvent("ethereum#initialized");
+    const announced = onWindowEvent("eip6963:announceProvider");
+
+    host.initialize();
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+    expect((window as WindowWithBuiltinProviders).ethereum).toBeUndefined();
+    expect(initialized).toHaveBeenCalledTimes(0);
+    expect(announced).toHaveBeenCalledTimes(0);
+  });
+
   it("injects multiple provider window keys when the registry includes another namespace", () => {
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
@@ -287,9 +313,11 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
   });
 
   it("does not throw for eth_accounts before ready, then returns accounts after handshake", async () => {
-    const registry = createProviderRegistry({
-      eip155: { timeouts: { ethAccountsWaitMs: 0, readyTimeoutMs: 2000 } },
-    });
+    const registry = createProviderRegistryFromModules([
+      createEip155Module({
+        timeouts: { ethAccountsWaitMs: 0, readyTimeoutMs: 2000 },
+      }),
+    ]);
 
     const bridge = new MockContentBridge(ctx.dom, { autoHandshake: false });
     bridge.setAccounts(["0xabc"]);

@@ -20,7 +20,7 @@ describe("installed namespaces composition root", () => {
   });
 
   it("builds provider registries from the provider stage output", () => {
-    const registry = INSTALLED_NAMESPACES.provider.createRegistry();
+    const registry = INSTALLED_NAMESPACES.provider.registry;
 
     expect(registry.modules).toBe(INSTALLED_NAMESPACES.provider.modules);
     expect(registry.modules.map((module) => module.namespace)).toEqual(["eip155"]);
@@ -42,7 +42,8 @@ describe("installed namespaces composition root", () => {
 
     expect(hiddenNamespace.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
     expect(hiddenNamespace.provider.modules).toEqual([]);
-    expect(hiddenNamespace.provider.createRegistry().modules).toEqual([]);
+    expect(hiddenNamespace.provider.registry.modules).toEqual([]);
+    expect([...hiddenNamespace.provider.registry.byNamespace.keys()]).toEqual([]);
   });
 
   it("rejects invalid installed namespace specs", () => {

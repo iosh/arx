@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  installedNamespaces,
   createApprovalUiListenerMock,
   createBackgroundRuntimeHostMock,
   createPortRouterMock,
@@ -9,21 +8,12 @@ const {
   createUiPlatformMock,
   getExtensionOriginMock,
 } = vi.hoisted(() => ({
-  installedNamespaces: {
-    runtime: {
-      manifests: [],
-    },
-  } as const,
   createApprovalUiListenerMock: vi.fn(),
   createBackgroundRuntimeHostMock: vi.fn(),
   createPortRouterMock: vi.fn(),
   createProviderEventsListenerMock: vi.fn(),
   createUiPlatformMock: vi.fn(),
   getExtensionOriginMock: vi.fn(),
-}));
-
-vi.mock("@/platform/namespaces/installed", () => ({
-  INSTALLED_NAMESPACES: installedNamespaces,
 }));
 
 vi.mock("./runtimeHost", () => ({
@@ -106,14 +96,13 @@ describe("background app", () => {
     });
   });
 
-  it("passes installed runtime namespaces into the background runtime host", async () => {
+  it("creates the background runtime host with the extension origin", async () => {
     const { createBackgroundApp } = await import("./app");
 
     createBackgroundApp();
 
     expect(createBackgroundRuntimeHostMock).toHaveBeenCalledWith({
       extensionOrigin: "chrome-extension://test",
-      runtimeNamespaces: installedNamespaces.runtime,
     });
   });
 });

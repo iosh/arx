@@ -1,6 +1,5 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import type { NamespaceManifest } from "@arx/core/namespaces";
 import {
   createBackgroundRuntime,
   type ProviderRuntimeAccess,
@@ -9,6 +8,7 @@ import {
 } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
 import browser from "webextension-polyfill";
+import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
 
@@ -29,10 +29,6 @@ export type BackgroundUiAccessParams = {
   platform: UiPlatformAdapter;
   uiOrigin: string;
 };
-
-export type BackgroundRuntimeNamespaces = Readonly<{
-  manifests: readonly NamespaceManifest[];
-}>;
 
 type BackgroundRuntimeApprovals = ReturnType<typeof createBackgroundRuntime>["controllers"]["approvals"];
 type BackgroundRuntimeUnlock = ReturnType<typeof createBackgroundRuntime>["services"]["session"]["unlock"];
@@ -61,10 +57,7 @@ export type BackgroundApprovalUiAccess = {
   isUnlocked: () => boolean;
 };
 
-export const createBackgroundRuntimeHost = (deps: {
-  extensionOrigin: string;
-  runtimeNamespaces: BackgroundRuntimeNamespaces;
-}): BackgroundRuntimeHost => {
+export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
   let uiAccess: UiRuntimeAccess | null = null;
@@ -119,7 +112,7 @@ export const createBackgroundRuntimeHost = (deps: {
             shouldRequestUnlockAttention: () => true,
           },
         },
-        namespaces: deps.runtimeNamespaces,
+        namespaces: INSTALLED_NAMESPACES.runtime,
       });
 
       await runtime.lifecycle.initialize();

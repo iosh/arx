@@ -11,8 +11,20 @@ const { createBackgroundRuntimeMock, getExtensionStorageMock, disableDebugNamesp
     enableDebugNamespacesMock: vi.fn(),
   }));
 
+const { installedNamespaces } = vi.hoisted(() => ({
+  installedNamespaces: {
+    runtime: {
+      manifests: [],
+    },
+  } as const,
+}));
+
 vi.mock("@arx/core/runtime", () => ({
   createBackgroundRuntime: createBackgroundRuntimeMock,
+}));
+
+vi.mock("@/platform/namespaces/installed", () => ({
+  INSTALLED_NAMESPACES: installedNamespaces,
 }));
 
 vi.mock("@/platform/storage", () => ({
@@ -173,8 +185,6 @@ const makeRuntime = () => {
 };
 
 describe("runtimeHost", () => {
-  const runtimeNamespaces = { manifests: [] };
-
   beforeEach(() => {
     vi.clearAllMocks();
     getExtensionStorageMock.mockReturnValue({
@@ -204,7 +214,6 @@ describe("runtimeHost", () => {
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
-      runtimeNamespaces,
     });
     const uiPlatform = {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
@@ -226,7 +235,7 @@ describe("runtimeHost", () => {
     expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
     expect(createBackgroundRuntimeMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        namespaces: runtimeNamespaces,
+        namespaces: installedNamespaces.runtime,
       }),
     );
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
@@ -255,7 +264,6 @@ describe("runtimeHost", () => {
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
-      runtimeNamespaces,
     });
 
     await runtimeHost.initializeRuntime();
@@ -289,7 +297,6 @@ describe("runtimeHost", () => {
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
-      runtimeNamespaces,
     });
     const uiPlatform = {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),

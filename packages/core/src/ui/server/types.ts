@@ -77,7 +77,7 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
     onPreferencesChanged: (listener: () => void) => () => void;
   };
 
-export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountIdFromAddress">;
+export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountKeyFromAddress">;
 
 export type UiSessionAccess = {
   unlock: Pick<

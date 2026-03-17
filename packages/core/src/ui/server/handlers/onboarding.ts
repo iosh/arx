@@ -61,7 +61,7 @@ export const createOnboardingHandlers = (
         await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
+          accountId: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
         });
         return { keyringId, address };
       });
@@ -98,7 +98,7 @@ export const createOnboardingHandlers = (
         await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address }),
+          accountId: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
         });
         return { keyringId, address };
       });
@@ -134,7 +134,7 @@ export const createOnboardingHandlers = (
         await deps.accounts.setActiveAccount({
           namespace,
           chainRef,
-          accountId: deps.accountCodecs.toAccountIdFromAddress({ chainRef, address: account.address }),
+          accountId: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address: account.address }),
         });
         return { keyringId, account };
       });

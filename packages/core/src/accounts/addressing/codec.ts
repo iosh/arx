@@ -3,6 +3,7 @@ import { parseChainRef } from "../../chains/caip.js";
 import { createEip155AddressModule } from "../../chains/eip155/address.js";
 import type { ChainRef } from "../../chains/ids.js";
 import { type AccountId, AccountIdSchema } from "../../storage/records.js";
+import type { AccountKey } from "./accountKey.js";
 
 export type CanonicalAddress = {
   namespace: string;
@@ -53,25 +54,37 @@ export class AccountCodecRegistry {
     throw new Error(`No account codec registered for namespace "${namespace}"`);
   }
 
-  toAccountIdFromAddress(params: { chainRef: ChainRef; address: string }): AccountId {
+  toAccountKeyFromAddress(params: { chainRef: ChainRef; address: string }): AccountKey {
     const { namespace } = parseChainRef(params.chainRef);
     const codec = this.require(namespace);
     const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
     return codec.toAccountId(canonical);
   }
 
-  toCanonicalAddressFromAccountId(params: { accountId: AccountId }): string {
-    const namespace = parseAccountIdParts(params.accountId).namespace;
+  toCanonicalAddressFromAccountKey(params: { accountKey: AccountKey }): string {
+    const namespace = parseAccountIdParts(params.accountKey).namespace;
     const codec = this.require(namespace);
-    const canonical = codec.fromAccountId(params.accountId);
+    const canonical = codec.fromAccountId(params.accountKey);
     return codec.toCanonicalString({ canonical });
   }
 
-  toDisplayAddressFromAccountId(params: { chainRef: ChainRef; accountId: AccountId }): string {
+  toDisplayAddressFromAccountKey(params: { chainRef: ChainRef; accountKey: AccountKey }): string {
     const { namespace } = parseChainRef(params.chainRef);
     const codec = this.require(namespace);
-    const canonical = codec.fromAccountId(params.accountId);
+    const canonical = codec.fromAccountId(params.accountKey);
     return codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
+  }
+
+  toAccountIdFromAddress(params: { chainRef: ChainRef; address: string }): AccountId {
+    return this.toAccountKeyFromAddress(params);
+  }
+
+  toCanonicalAddressFromAccountId(params: { accountId: AccountId }): string {
+    return this.toCanonicalAddressFromAccountKey({ accountKey: params.accountId });
+  }
+
+  toDisplayAddressFromAccountId(params: { chainRef: ChainRef; accountId: AccountId }): string {
+    return this.toDisplayAddressFromAccountKey({ chainRef: params.chainRef, accountKey: params.accountId });
   }
 
   list(): AccountCodec[] {

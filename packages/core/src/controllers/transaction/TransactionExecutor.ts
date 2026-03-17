@@ -42,7 +42,7 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 type Deps = {
   view: StoreTransactionView;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress">;
+  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -71,7 +71,7 @@ export class TransactionExecutor
     >
 {
   #view: StoreTransactionView;
-  #accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress">;
+  #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -151,7 +151,7 @@ export class TransactionExecutor
       throw new Error("Transaction from address is required");
     }
 
-    const fromAccountId = this.#accountCodecs.toAccountIdFromAddress({ chainRef, address: fromAddress });
+    const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
     // Avoid RPC/slow work before the approval is enqueued.
     const adapter = this.#registry.get(derived.namespace);
     const normalizedCandidate = adapter?.normalizeRequest?.(request, chainRef) ?? {
@@ -187,7 +187,7 @@ export class TransactionExecutor
       });
     } else {
       const ownedIds = new Set(ownedAccounts.map((account) => account.accountId));
-      if (!ownedIds.has(fromAccountId)) {
+      if (!ownedIds.has(fromAccountKey)) {
         collectedIssues.push({
           kind: "issue",
           code: "transaction.request.from_not_owned",
@@ -204,7 +204,7 @@ export class TransactionExecutor
       namespace: derived.namespace,
       chainRef,
       origin,
-      fromAccountId,
+      fromAccountId: fromAccountKey,
       request: cloneRequest(normalizedRequest),
       warnings: cloneWarnings(collectedWarnings),
       issues: cloneIssues(collectedIssues),

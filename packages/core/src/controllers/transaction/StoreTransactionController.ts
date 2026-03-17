@@ -23,7 +23,7 @@ import type {
 
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
-  accountCodecs: Pick<AccountCodecRegistry, "toAccountIdFromAddress" | "toCanonicalAddressFromAccountId">;
+  accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;

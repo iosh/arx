@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { getAccountIdNamespace } from "../../accounts/addressing/accountId.js";
+import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js";
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
@@ -176,7 +176,7 @@ const normalizeAccountIds = (namespace: string, accountIds: readonly AccountId[]
   return uniqSorted(
     accountIds.map((value) => {
       const accountId = String(value) as AccountId;
-      if (getAccountIdNamespace(accountId) !== namespace) {
+      if (getAccountKeyNamespace(accountId) !== namespace) {
         throw arxError({
           reason: ArxReasons.RpcInvalidRequest,
           message: `Permission accountId "${accountId}" does not belong to namespace "${namespace}"`,

@@ -13,4 +13,20 @@ describe("accounts/addressing codec registry", () => {
     const registry = createAccountCodecRegistry();
     expect(() => registry.require("solana")).toThrow(/No account codec registered/);
   });
+
+  it("projects accountKey-oriented helpers through the registry", () => {
+    const registry = createAccountCodecRegistry([eip155Codec]);
+    const accountKey = registry.toAccountKeyFromAddress({
+      chainRef: "eip155:1",
+      address: "0x52908400098527886E0F7030069857D2E4169EE7",
+    });
+
+    expect(accountKey).toBe("eip155:52908400098527886e0f7030069857d2e4169ee7");
+    expect(registry.toCanonicalAddressFromAccountKey({ accountKey })).toBe(
+      "0x52908400098527886e0f7030069857d2e4169ee7",
+    );
+    expect(registry.toDisplayAddressFromAccountKey({ chainRef: "eip155:1", accountKey })).toBe(
+      "0x52908400098527886E0F7030069857D2E4169EE7",
+    );
+  });
 });

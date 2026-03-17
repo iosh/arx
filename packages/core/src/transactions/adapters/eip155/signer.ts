@@ -148,7 +148,7 @@ const composeSignatureHex = ({ bytes, yParity }: ParsedSignature): HexType => {
   return Hex.from(output);
 };
 
-const toEip155AccountId = (params: { chainRef: string; address: string }) => {
+const toEip155AccountKey = (params: { chainRef: string; address: string }) => {
   const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
   return eip155Codec.toAccountId(canonical);
 };
@@ -235,8 +235,8 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
       });
     }
 
-    const fromAccountId = toEip155AccountId({ chainRef: context.chainRef, address: context.from });
-    await assertUnlockedAccount(deps.keyring, fromAccountId);
+    const fromAccountKey = toEip155AccountKey({ chainRef: context.chainRef, address: context.from });
+    await assertUnlockedAccount(deps.keyring, fromAccountKey);
     const prepared = preparedInput as Eip155PreparedTransaction;
     const chainId = deriveChainId(context, preparedInput);
     const envelope = buildEnvelope(prepared, chainId);
@@ -244,7 +244,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
     if (envelope.type === "eip1559") {
       const txSignPayload = TransactionEnvelopeEip1559.getSignPayload(envelope.value);
       const signature = await deps.keyring.signDigestByAccountId({
-        accountId: fromAccountId,
+        accountId: fromAccountKey,
         digest: Hex.toBytes(txSignPayload),
       });
       const signed = TransactionEnvelopeEip1559.from(envelope.value, {
@@ -257,7 +257,7 @@ export const createEip155Signer = (deps: SignerDeps): Eip155Signer => {
 
     const txSignPayload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
     const signature = await deps.keyring.signDigestByAccountId({
-      accountId: fromAccountId,
+      accountId: fromAccountKey,
       digest: Hex.toBytes(txSignPayload),
     });
     const signed = TransactionEnvelopeLegacy.from(envelope.value, {

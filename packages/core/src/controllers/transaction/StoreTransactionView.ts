@@ -16,7 +16,7 @@ import { cloneMeta, cloneRequest } from "./utils.js";
 type Options = {
   messenger: TransactionMessenger;
   service: TransactionsService;
-  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId">;
+  accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   stateLimit: number;
   logger?: (message: string, data?: unknown) => void;
 };
@@ -30,7 +30,7 @@ type Options = {
 export class StoreTransactionView {
   #messenger: TransactionMessenger;
   #service: TransactionsService;
-  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountId">;
+  #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #stateLimit: number;
   #logger: (message: string, data?: unknown) => void;
   #unsubscribeStore: (() => void) | null = null;
@@ -195,9 +195,9 @@ export class StoreTransactionView {
     });
   }
 
-  #safeFromAccountIdToAddress(record: TransactionRecord): string | null {
+  #safeFromAccountKeyToAddress(record: TransactionRecord): string | null {
     try {
-      return this.#accountCodecs.toCanonicalAddressFromAccountId({ accountId: record.fromAccountId });
+      return this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: record.fromAccountId });
     } catch (error) {
       if (!this.#fromDecodeLogged.has(record.id)) {
         this.#fromDecodeLogged.add(record.id);
@@ -238,7 +238,7 @@ export class StoreTransactionView {
       namespace: record.namespace,
       chainRef: record.chainRef,
       origin: record.origin,
-      from: this.#safeFromAccountIdToAddress(record),
+      from: this.#safeFromAccountKeyToAddress(record),
       request: cloneRequest(record.request),
       prepared: (record.prepared ?? null) as TransactionPrepared | null,
       status: record.status,

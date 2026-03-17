@@ -1,22 +1,18 @@
-import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type AccountId, AccountIdSchema } from "../../storage/records.js";
+import type { AccountId } from "../../storage/records.js";
+import {
+  getAccountKeyNamespace,
+  parseAccountKey,
+  toAccountKeyFromAddress,
+  toCanonicalAddressFromAccountKey,
+  toDisplayAddressFromAccountKey,
+} from "./accountKey.js";
 import type { AccountCodecRegistry } from "./codec.js";
 
-export const parseAccountId = (accountId: AccountId): { namespace: string; payloadHex: string } => {
-  const parsed = AccountIdSchema.parse(accountId);
-  const separatorIndex = parsed.indexOf(":");
-  if (separatorIndex < 0) {
-    throw new Error(`Invalid accountId format: ${parsed}`);
-  }
+export const parseAccountId = (accountId: AccountId): { namespace: string; payloadHex: string } =>
+  parseAccountKey(accountId);
 
-  return {
-    namespace: parsed.slice(0, separatorIndex),
-    payloadHex: parsed.slice(separatorIndex + 1),
-  };
-};
-
-export const getAccountIdNamespace = (accountId: AccountId): string => parseAccountId(accountId).namespace;
+export const getAccountIdNamespace = (accountId: AccountId): string => getAccountKeyNamespace(accountId);
 
 type AccountCodecLookup = Pick<AccountCodecRegistry, "require">;
 
@@ -24,30 +20,24 @@ export const toAccountIdFromAddress = (params: {
   chainRef: ChainRef;
   address: string;
   accountCodecs: AccountCodecLookup;
-}): AccountId => {
-  const { namespace } = parseChainRef(params.chainRef);
-  const codec = params.accountCodecs.require(namespace);
-  const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-  return codec.toAccountId(canonical);
-};
+}): AccountId => toAccountKeyFromAddress(params);
 
 export const toCanonicalAddressFromAccountId = (params: {
   accountId: AccountId;
   accountCodecs: AccountCodecLookup;
-}): string => {
-  const { namespace } = parseAccountId(params.accountId);
-  const codec = params.accountCodecs.require(namespace);
-  const canonical = codec.fromAccountId(params.accountId);
-  return codec.toCanonicalString({ canonical });
-};
+}): string =>
+  toCanonicalAddressFromAccountKey({
+    accountKey: params.accountId,
+    accountCodecs: params.accountCodecs,
+  });
 
 export const toDisplayAddressFromAccountId = (params: {
   chainRef: ChainRef;
   accountId: AccountId;
   accountCodecs: AccountCodecLookup;
-}): string => {
-  const { namespace } = parseChainRef(params.chainRef);
-  const codec = params.accountCodecs.require(namespace);
-  const canonical = codec.fromAccountId(params.accountId);
-  return codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
-};
+}): string =>
+  toDisplayAddressFromAccountKey({
+    chainRef: params.chainRef,
+    accountKey: params.accountId,
+    accountCodecs: params.accountCodecs,
+  });

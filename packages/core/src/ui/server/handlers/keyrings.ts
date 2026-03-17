@@ -42,7 +42,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyrings.confirmNewMnemonic(params.words.join(" "), opts);
       await selectAccount({
-        accountId: deps.accountCodecs.toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.address,
         }),
@@ -58,7 +58,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyrings.importMnemonic(params.words.join(" "), opts);
       await selectAccount({
-        accountId: deps.accountCodecs.toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.address,
         }),
@@ -74,7 +74,7 @@ export const createKeyringsHandlers = (
       if (params.namespace !== undefined) opts.namespace = params.namespace;
       const result = await deps.keyrings.importPrivateKey(params.privateKey, opts);
       await selectAccount({
-        accountId: deps.accountCodecs.toAccountIdFromAddress({
+        accountId: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
           address: result.account.address,
         }),

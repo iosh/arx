@@ -1,8 +1,16 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../../../chains/caip.js";
-import { defineNoParamsMethod } from "../../types.js";
+import {
+  ApprovalRequirements,
+  AuthorizedScopeChecks,
+  ConnectionRequirements,
+  defineNoParamsMethod,
+} from "../../types.js";
 
 export const ethChainIdDefinition = defineNoParamsMethod({
+  connectionRequirement: ConnectionRequirements.None,
+  approvalRequirement: ApprovalRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   handler: ({ invocation }) => {
     const { reference } = parseChainRef(invocation.chainRef);
     if (!/^\d+$/.test(reference)) {

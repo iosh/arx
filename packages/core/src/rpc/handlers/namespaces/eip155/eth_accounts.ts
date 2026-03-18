@@ -1,10 +1,17 @@
-import { PermissionCapabilities } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedResponse } from "../../locked.js";
-import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
+import {
+  ApprovalRequirements,
+  AuthorizedScopeChecks,
+  ConnectionRequirements,
+  defineNoParamsMethod,
+} from "../../types.js";
 
 export const ethAccountsDefinition = defineNoParamsMethod({
-  capability: PermissionCapabilities.Accounts,
-  permissionCheck: PermissionChecks.None,
+  requestClassification: RpcRequestClassifications.AccountsAccess,
+  connectionRequirement: ConnectionRequirements.None,
+  approvalRequirement: ApprovalRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedResponse([]),
   handler: ({ origin, controllers, services, invocation }) => {
     const chainRef = invocation.chainRef;

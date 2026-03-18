@@ -1,10 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { PermissionCapabilities } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
-  assertPermittedEip155Account,
+  defineEip155AuthorizedAccountApprovalMethod,
   isTransactionResolutionError,
   requireRequestContext,
   TransactionResolutionError,
@@ -16,9 +15,8 @@ type RpcLikeError = Error & { code: number; data?: unknown };
 
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
-export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionParams> = {
-  capability: PermissionCapabilities.SendTransaction,
-  permissionCheck: PermissionChecks.Connected,
+export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
+  requestClassification: RpcRequestClassifications.TransactionSubmission,
   locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);
@@ -33,26 +31,19 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
 
     return paramsArray as unknown as EthSendTransactionParams;
   },
-  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
-    const chainRef = invocation.chainRef;
-
-    const txRequest = buildEip155TransactionRequest(params, chainRef);
-    const from = assertPermittedEip155Account({
-      origin,
-      method: "eth_sendTransaction",
-      chainRef,
+  buildAuthorizedExecution: ({ params, invocation }) => {
+    const txRequest = buildEip155TransactionRequest(params, invocation.chainRef);
+    return {
       address: txRequest.payload.from,
-      controllers: {
-        permissionViews: services.permissionViews,
-        chainAddressCodecs: controllers.chainAddressCodecs,
-      },
-    });
-    txRequest.payload.from = from;
-
+      prepared: txRequest,
+    };
+  },
+  executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext }) => {
+    prepared.payload.from = from;
     try {
       const meta = await controllers.transactions.requestTransactionApproval(
         origin,
-        txRequest,
+        prepared,
         requireRequestContext(rpcContext, "eth_sendTransaction"),
       );
       const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
@@ -103,4 +94,4 @@ export const ethSendTransactionDefinition: MethodDefinition<EthSendTransactionPa
       });
     }
   },
-};
+});

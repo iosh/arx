@@ -153,7 +153,6 @@ const makeRuntime = () => {
       resolveMethodNamespace: vi.fn(),
       resolveInvocation: vi.fn(),
       resolveInvocationDetails: vi.fn(),
-      resolvePermissionCapability: vi.fn(),
       executeRequest: vi.fn(),
       errorEncoder: {
         encodeUi: vi.fn(),

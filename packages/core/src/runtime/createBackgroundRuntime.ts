@@ -13,7 +13,6 @@ import {
   createRpcErrorEncoder,
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
-  createRpcPermissionCapabilityResolver,
   createRpcRegistry,
   type RpcErrorEncoder,
   type RpcInvocationContext,
@@ -122,7 +121,6 @@ export type BackgroundRuntime = {
       method: string,
       context?: RpcInvocationContext,
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
-    resolvePermissionCapability: ReturnType<typeof createRpcPermissionCapabilityResolver>;
     executeRequest: ReturnType<typeof createRpcMethodExecutor>;
     errorEncoder: RpcErrorEncoder;
   };
@@ -302,7 +300,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     resolveRpcInvocation(rpcRegistry, controllers, method, context);
   const resolveInvocationDetails = (method: string, context?: RpcInvocationContext) =>
     resolveRpcInvocationDetails(rpcRegistry, controllers, method, context);
-  const resolvePermissionCapability = createRpcPermissionCapabilityResolver(rpcRegistry, resolveMethodNamespace);
   const executeRequest = createRpcMethodExecutor({
     registry: rpcRegistry,
     controllers,
@@ -337,7 +334,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       resolveMethodNamespace,
       resolveInvocation,
       resolveInvocationDetails,
-      resolvePermissionCapability,
       executeRequest,
       errorEncoder,
     },

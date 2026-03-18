@@ -1,10 +1,9 @@
-import { ArxReasons, arxError, isArxError } from "@arx/errors";
+import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainNamespace } from "../../../controllers/index.js";
-import { derivePermissionCheck, type PermissionCheck, PermissionChecks } from "../../../rpc/handlers/types.js";
-import type { RpcInvocationContext } from "../../../rpc/index.js";
+import { type ConnectionRequirement, ConnectionRequirements } from "../../../rpc/handlers/types.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
@@ -25,13 +24,11 @@ type AccessPolicyGuardDeps = {
     chainRef: string | null;
     namespace: string | null;
   }): void;
-
-  assertPermission(origin: string, method: string, context?: RpcInvocationContext): Promise<void>;
   isConnected(origin: string, options: { namespace: ChainNamespace; chainRef: ChainRef }): boolean;
 };
 
 const assertNever = (value: never): never => {
-  throw new Error(`Unexpected permissionCheck: ${String(value)}`);
+  throw new Error(`Unexpected connectionRequirement: ${String(value)}`);
 };
 
 export const createAccessPolicyGuardMiddleware = ({
@@ -39,7 +36,6 @@ export const createAccessPolicyGuardMiddleware = ({
   isInternalOrigin,
   requestAttention,
   shouldRequestUnlockAttention,
-  assertPermission,
   isConnected,
 }: AccessPolicyGuardDeps): JsonRpcMiddleware<JsonRpcParams, Json> => {
   const shouldRequestUnlock = shouldRequestUnlockAttention ?? (() => true);
@@ -116,10 +112,10 @@ export const createAccessPolicyGuardMiddleware = ({
             res.result = locked.response;
             return;
           case "allow":
-            break; // continue to permissions
+            break; // continue to connection/execution
           case "queue":
             requestUnlockAttention();
-            break; // continue to permissions/execution (queues approval flow)
+            break; // continue to connection/execution after unlock attention
           case "deny":
             requestUnlockAttention();
             throw arxError({
@@ -129,36 +125,16 @@ export const createAccessPolicyGuardMiddleware = ({
             });
         }
       }
-
-      // Default: methods with capability require unlock unless explicitly allowed above.
-      if (definition.capability && locked?.type !== "allow" && locked?.type !== "queue") {
-        requestUnlockAttention();
-        throw arxError({
-          reason: ArxReasons.SessionLocked,
-          message: `Request ${req.method} requires an unlocked session`,
-          data: { origin, method: req.method },
-        });
-      }
     }
 
-    // Permission policy.
-    const mode: PermissionCheck = derivePermissionCheck(definition);
+    const connectionRequirement: ConnectionRequirement = definition.connectionRequirement;
 
-    // Prevent misconfigured method definitions from silently allowing calls.
-    if (mode === PermissionChecks.Capability && !definition.capability) {
-      throw arxError({
-        reason: ArxReasons.RpcInternal,
-        message: `Method "${req.method}" is misconfigured: permissionCheck="capability" requires capability`,
-        data: { origin, method: req.method },
-      });
-    }
-
-    switch (mode) {
-      case PermissionChecks.None: {
+    switch (connectionRequirement) {
+      case ConnectionRequirements.None: {
         await next();
         return;
       }
-      case PermissionChecks.Connected: {
+      case ConnectionRequirements.Required: {
         const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? null;
         const namespace = invocation?.namespace ?? rpcContext?.namespace ?? null;
 
@@ -188,24 +164,8 @@ export const createAccessPolicyGuardMiddleware = ({
         await next();
         return;
       }
-      case PermissionChecks.Capability: {
-        try {
-          await assertPermission(origin, req.method, rpcContext);
-        } catch (error) {
-          if (isArxError(error)) throw error;
-          throw arxError({
-            reason: ArxReasons.PermissionDenied,
-            message: (error as Error)?.message ?? `Origin lacks permission for ${req.method}`,
-            data: { origin, method: req.method },
-            cause: error,
-          });
-        }
-
-        await next();
-        return;
-      }
     }
 
-    return assertNever(mode);
+    return assertNever(connectionRequirement);
   });
 };

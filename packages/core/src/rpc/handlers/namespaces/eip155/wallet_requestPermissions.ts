@@ -9,10 +9,11 @@ import {
   type PermissionRequestDescriptor,
 } from "../../../../controllers/index.js";
 import { isPermissionCapability } from "../../../../permissions/capabilities.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
+import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { requireApprovalRequester } from "./shared.js";
+import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
 
 const toRequestDescriptors = (
   capabilities: readonly PermissionCapability[],
@@ -72,9 +73,10 @@ const WalletRequestPermissionsParamsSchema = z
     return out;
   });
 
-export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestPermissionsParams> = {
-  capability: PermissionCapabilities.Accounts,
-  permissionCheck: PermissionChecks.None,
+export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
+  requestClassification: RpcRequestClassifications.AccountsAccess,
+  connectionRequirement: ConnectionRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params, _rpcContext) => {
     try {
@@ -121,4 +123,4 @@ export const walletRequestPermissionsDefinition: MethodDefinition<WalletRequestP
 
     return services.permissionViews.buildWalletPermissions(origin, { namespace, chainRef });
   },
-};
+});

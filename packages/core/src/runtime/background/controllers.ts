@@ -22,11 +22,7 @@ import type {
 } from "../../controllers/network/types.js";
 import { StorePermissionController } from "../../controllers/permission/StorePermissionController.js";
 import { PERMISSION_TOPICS } from "../../controllers/permission/topics.js";
-import type {
-  PermissionCapabilityResolver,
-  PermissionController,
-  PermissionsState,
-} from "../../controllers/permission/types.js";
+import type { PermissionController, PermissionsState } from "../../controllers/permission/types.js";
 import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
 import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
@@ -59,7 +55,6 @@ export type ControllerLayerOptions = {
   };
   permissions?: {
     initialState?: PermissionsState;
-    capabilityResolver?: PermissionCapabilityResolver;
     chains?: ChainAddressCodecRegistry;
   };
   transactions?: {

@@ -2,10 +2,11 @@ import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import type { MethodDefinition } from "../../types.js";
+import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { requireApprovalRequester } from "./shared.js";
+import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
   chainId?: string;
@@ -75,7 +76,10 @@ const WalletSwitchEthereumChainParamsSchema = z
   )
   .transform(normalizeWalletSwitchEthereumChainParams);
 
-export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchEthereumChainParams> = {
+export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<WalletSwitchEthereumChainParams>({
+  requestClassification: RpcRequestClassifications.ChainManagement,
+  connectionRequirement: ConnectionRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params) => {
     try {
@@ -157,4 +161,4 @@ export const walletSwitchEthereumChainDefinition: MethodDefinition<WalletSwitchE
       requireApprovalRequester(rpcContext, "wallet_switchEthereumChain"),
     ).settled;
   },
-};
+});

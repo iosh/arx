@@ -4,7 +4,16 @@ import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import { toApprovalRequester } from "../../../../controllers/approval/utils.js";
 import type { ApprovalRequester, TransactionController, TransactionMeta } from "../../../../controllers/index.js";
 import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
-import type { RpcInvocationContext } from "../../types.js";
+import {
+  ApprovalRequirements,
+  AuthorizedScopeChecks,
+  ConnectionRequirements,
+  defineMethod,
+  defineNoParamsMethod,
+  type MethodDefinition,
+  type MethodHandler,
+  type RpcInvocationContext,
+} from "../../types.js";
 
 export const requireRequestContext = (rpcContext: RpcInvocationContext | undefined, method: string) => {
   const requestContext = rpcContext?.requestContext;
@@ -61,6 +70,92 @@ export const assertPermittedEip155Account = (args: {
   }
 
   return canonical;
+};
+
+type MethodExecutionContext<P> = Parameters<MethodHandler<P>>[0];
+
+type Eip155ApprovalMethodDefinition<P> = Omit<MethodDefinition<P>, "approvalRequirement"> & {
+  approvalRequirement?: never;
+};
+
+export const defineEip155ApprovalMethod = <P>(definition: Eip155ApprovalMethodDefinition<P>): MethodDefinition<P> => {
+  return defineMethod({
+    ...definition,
+    approvalRequirement: ApprovalRequirements.Required,
+  });
+};
+
+type Eip155NoParamsApprovalMethodDefinition = Omit<
+  MethodDefinition<undefined>,
+  "approvalRequirement" | "paramsSchema" | "parseParams"
+> & {
+  approvalRequirement?: never;
+  paramsSchema?: never;
+  parseParams?: never;
+};
+
+export const defineEip155NoParamsApprovalMethod = (
+  definition: Eip155NoParamsApprovalMethodDefinition,
+): MethodDefinition<undefined> => {
+  return defineNoParamsMethod({
+    ...definition,
+    approvalRequirement: ApprovalRequirements.Required,
+  });
+};
+
+type AuthorizedEip155ExecutionPlan<Prepared> = {
+  address: string;
+  prepared: Prepared;
+};
+
+type Eip155AuthorizedAccountApprovalMethodDefinition<P, Prepared> = Omit<
+  MethodDefinition<P>,
+  "connectionRequirement" | "approvalRequirement" | "authorizedScopeCheck" | "handler"
+> & {
+  connectionRequirement?: never;
+  approvalRequirement?: never;
+  authorizedScopeCheck?: never;
+  buildAuthorizedExecution: (
+    context: MethodExecutionContext<P>,
+  ) => AuthorizedEip155ExecutionPlan<Prepared> | Promise<AuthorizedEip155ExecutionPlan<Prepared>>;
+  executeAuthorizedRequest: (
+    context: MethodExecutionContext<P> & { from: string; prepared: Prepared },
+  ) => ReturnType<MethodHandler<P>>;
+};
+
+export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
+  definition: Eip155AuthorizedAccountApprovalMethodDefinition<P, Prepared>,
+): MethodDefinition<P> => {
+  const { buildAuthorizedExecution, executeAuthorizedRequest, ...methodDefinition } = definition;
+
+  return defineMethod({
+    ...methodDefinition,
+    connectionRequirement: ConnectionRequirements.Required,
+    approvalRequirement: ApprovalRequirements.Required,
+    authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
+    handler: async (context) => {
+      const executionPlan = await buildAuthorizedExecution(context);
+      const { address, prepared } = executionPlan;
+      const chainRef = context.invocation.chainRef;
+
+      const from = assertPermittedEip155Account({
+        origin: context.origin,
+        method: context.request.method,
+        chainRef,
+        address,
+        controllers: {
+          permissionViews: context.services.permissionViews,
+          chainAddressCodecs: context.controllers.chainAddressCodecs,
+        },
+      });
+
+      return executeAuthorizedRequest({
+        ...context,
+        from,
+        prepared,
+      });
+    },
+  });
 };
 
 export class TransactionResolutionError extends Error {

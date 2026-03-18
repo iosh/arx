@@ -6,16 +6,13 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
-import type {
-  PermissionCapability,
-  PermissionCapabilityResolver,
-  PermissionController,
-} from "../../controllers/permission/types.js";
+import type { PermissionController } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { RpcRequestClassification } from "../requestClassification.js";
 import type { RequestContext } from "../requestContext.js";
 import { NoParamsSchema } from "./params.js";
 
@@ -75,18 +72,16 @@ export type MethodHandler<P = unknown> = BivariantCallback<
   Promise<unknown> | unknown
 >;
 
-export const PermissionChecks = {
+export const ConnectionRequirements = {
   None: "none",
-  Connected: "connected",
-  Capability: "capability",
+  Required: "required",
 } as const;
-export type PermissionCheck = (typeof PermissionChecks)[keyof typeof PermissionChecks];
+export type ConnectionRequirement = (typeof ConnectionRequirements)[keyof typeof ConnectionRequirements];
 
-export const derivePermissionCheck = (definition: {
-  permissionCheck?: PermissionCheck;
-  capability?: PermissionCapability;
-}): PermissionCheck => {
-  return definition.permissionCheck ?? (definition.capability ? PermissionChecks.Capability : PermissionChecks.None);
+export const deriveConnectionRequirement = (definition: {
+  connectionRequirement: ConnectionRequirement;
+}): ConnectionRequirement => {
+  return definition.connectionRequirement;
 };
 
 export type LockedPolicy =
@@ -95,20 +90,64 @@ export type LockedPolicy =
   | { type: "response"; response: Json }
   | { type: "queue" };
 
+export const ApprovalRequirements = {
+  None: "none",
+  Required: "required",
+} as const;
+export type ApprovalRequirement = (typeof ApprovalRequirements)[keyof typeof ApprovalRequirements];
+
+export const deriveApprovalRequirement = (definition: {
+  approvalRequirement: ApprovalRequirement;
+}): ApprovalRequirement => {
+  return definition.approvalRequirement;
+};
+
+export const AuthorizedScopeChecks = {
+  None: "none",
+  NamespaceSpecific: "namespace_specific",
+} as const;
+export type AuthorizedScopeCheck = (typeof AuthorizedScopeChecks)[keyof typeof AuthorizedScopeChecks];
+
+export const deriveAuthorizedScopeCheck = (definition: {
+  authorizedScopeCheck: AuthorizedScopeCheck;
+}): AuthorizedScopeCheck => {
+  return definition.authorizedScopeCheck;
+};
+
 export type MethodDefinition<P = unknown> = {
-  capability?: PermissionCapability;
   /**
-   * Permission guard mode.
-   *
-   * - "none": no permission check; the method must self-filter (e.g. return []).
-   * - "connected": require Accounts connection for namespace+chainRef.
-   * - "capability": require the method's capability via permissions.assertPermission.
-   *
-   * Default:
-   * - if `capability` is present => "capability"
-   * - otherwise => "none"
+   * Request classification label used by RPC and approval presentation surfaces.
    */
-  permissionCheck?: PermissionCheck;
+  requestClassification?: RpcRequestClassification;
+  /**
+   * Connection precondition enforced by the generic access-policy middleware.
+   *
+   * - "none": the request does not require prior connection authorization.
+   * - "required": the request requires origin+namespace+chainRef to be connected.
+   */
+  connectionRequirement: ConnectionRequirement;
+  /**
+   * Request-level approval fact declared by the method definition.
+   *
+   * Middleware does not execute this requirement. Namespace handlers and the
+   * transactions pipeline still own approval creation and execution.
+   *
+   * - "none": the request may execute without creating an approval.
+   * - "required": the request must route through an approval or confirmation flow.
+   */
+  approvalRequirement: ApprovalRequirement;
+  /**
+   * Namespace-specific authorization-scope validation required before the
+   * sensitive action executes.
+   *
+   * Generic middleware does not perform this check. Namespace handlers or
+   * namespace helpers must validate account, chain, and request scope.
+   *
+   * - "none": no extra namespace-specific scope validation is required.
+   * - "namespace_specific": handler must validate request scope against the
+   *   authorized connection scope.
+   */
+  authorizedScopeCheck: AuthorizedScopeCheck;
   locked?: LockedPolicy;
   /**
    * Optional zod schema for JSON-RPC params.
@@ -126,8 +165,6 @@ export type MethodDefinition<P = unknown> = {
 };
 
 export type Namespace = string;
-
-export type { PermissionCapabilityResolver };
 
 export const defineMethod = <P>(definition: MethodDefinition<P>): MethodDefinition<P> => definition;
 

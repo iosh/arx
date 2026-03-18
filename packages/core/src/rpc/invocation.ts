@@ -1,7 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { PermissionCapability, PermissionCapabilityResolver } from "../controllers/permission/types.js";
 import type { HandlerControllers, MethodDefinition, Namespace, RpcInvocationContext } from "./handlers/types.js";
 import type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 
@@ -280,25 +279,5 @@ export const createRpcMethodNamespaceResolver = (catalog: RpcInvocationCatalog) 
 export const createRpcContextNamespaceResolver = (catalog: RpcInvocationCatalog) => {
   return (context?: RpcInvocationContext): Namespace | null => {
     return deriveInvocationNamespace(catalog, "", context);
-  };
-};
-
-export const createRpcPermissionCapabilityResolver = (
-  catalog: RpcInvocationCatalog,
-  namespaceResolver: (method: string, context?: RpcInvocationContext) => Namespace | null,
-  overrides?: Partial<Record<string, PermissionCapability | null>>,
-): PermissionCapabilityResolver => {
-  return (method, context) => {
-    if (overrides && Object.hasOwn(overrides, method)) {
-      const value = overrides[method];
-      return value === null ? undefined : value;
-    }
-
-    const namespace = namespaceResolver(method, context);
-    if (!namespace) {
-      return undefined;
-    }
-
-    return catalog.getMethodDefinition(namespace, method)?.capability;
   };
 };

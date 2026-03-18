@@ -2,8 +2,8 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { PermissionCapabilities } from "../../controllers/permission/types.js";
 import { eip155NamespaceManifest } from "../../namespaces/index.js";
+import { ApprovalRequirements, AuthorizedScopeChecks, ConnectionRequirements } from "../../rpc/handlers/types.js";
 import {
   MemoryAccountsPort,
   MemoryChainDefinitionsPort,
@@ -286,7 +286,7 @@ describe("background rpc engine assembly", () => {
     expect(attentionSpy).not.toHaveBeenCalled();
   });
 
-  it("preserves PermissionDenied semantics for capability-guarded methods", async () => {
+  it("preserves PermissionNotConnected semantics for connection-required methods", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: { port: new MemoryChainDefinitionsPort() },
       namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
@@ -307,7 +307,9 @@ describe("background rpc engine assembly", () => {
       "eip155",
       {
         arx_secureTest: {
-          capability: PermissionCapabilities.Sign,
+          connectionRequirement: ConnectionRequirements.Required,
+          approvalRequirement: ApprovalRequirements.None,
+          authorizedScopeCheck: AuthorizedScopeChecks.None,
           locked: { type: "allow" },
           handler: vi.fn(),
         },
@@ -349,9 +351,8 @@ describe("background rpc engine assembly", () => {
         );
       }),
     ).rejects.toMatchObject({
-      reason: ArxReasons.PermissionDenied,
+      reason: ArxReasons.PermissionNotConnected,
       data: expect.objectContaining({
-        capability: PermissionCapabilities.Sign,
         method: "arx_secureTest",
         namespace: "eip155",
         chainRef: "eip155:1",

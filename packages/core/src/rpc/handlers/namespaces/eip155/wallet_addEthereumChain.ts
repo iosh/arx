@@ -6,12 +6,16 @@ import {
   isSameAddChainComparableMetadata,
 } from "../../../../chains/index.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import type { MethodDefinition } from "../../types.js";
+import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, toParamsArray } from "../utils.js";
-import { requireApprovalRequester } from "./shared.js";
+import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
 
-export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> = {
+export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<ChainMetadata>({
+  requestClassification: RpcRequestClassifications.ChainManagement,
+  connectionRequirement: ConnectionRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params) => {
     const [raw] = toParamsArray(params);
@@ -93,4 +97,4 @@ export const walletAddEthereumChainDefinition: MethodDefinition<ChainMetadata> =
 
     return null;
   },
-};
+});

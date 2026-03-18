@@ -1,16 +1,18 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import { type MethodDefinition, PermissionChecks } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { assertPermittedEip155Account, requireApprovalRequester } from "./shared.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requireApprovalRequester } from "./shared.js";
 import { parseEip155PersonalSignParams } from "./signingParams.js";
 
 type PersonalSignParams = { address: string; message: string };
 
-export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
-  capability: PermissionCapabilities.Sign,
-  permissionCheck: PermissionChecks.Connected,
+export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMethod<
+  PersonalSignParams,
+  { message: string }
+>({
+  requestClassification: RpcRequestClassifications.MessageSigning,
   locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);
@@ -42,20 +44,17 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
 
     return { address, message };
   },
-  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
-    const { address, message } = params;
-    const chainRef = invocation.chainRef;
-    const from = assertPermittedEip155Account({
-      origin,
-      method: "personal_sign",
-      chainRef,
-      address,
-      controllers: {
-        permissionViews: services.permissionViews,
-        chainAddressCodecs: controllers.chainAddressCodecs,
+  buildAuthorizedExecution: ({ params }) => {
+    return {
+      address: params.address,
+      prepared: {
+        message: params.message,
       },
-    });
-
+    };
+  },
+  executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext, invocation }) => {
+    const { message } = prepared;
+    const chainRef = invocation.chainRef;
     const request = {
       id: createApprovalId("personal_sign"),
       kind: ApprovalKinds.SignMessage,
@@ -82,4 +81,4 @@ export const personalSignDefinition: MethodDefinition<PersonalSignParams> = {
       });
     }
   },
-};
+});

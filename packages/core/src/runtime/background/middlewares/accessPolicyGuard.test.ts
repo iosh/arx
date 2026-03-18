@@ -1,9 +1,14 @@
-import { ArxReasons, arxError } from "@arx/errors";
+import { ArxReasons } from "@arx/errors";
 import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import { describe, expect, it, vi } from "vitest";
-import { PermissionCapabilities } from "../../../controllers/permission/types.js";
-import { type MethodDefinition, PermissionChecks } from "../../../rpc/handlers/types.js";
+import {
+  ApprovalRequirements,
+  AuthorizedScopeChecks,
+  ConnectionRequirements,
+  type MethodDefinition,
+} from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
+import { RpcRequestClassifications } from "../../../rpc/requestClassification.js";
 import { createAccessPolicyGuardMiddleware } from "./accessPolicyGuard.js";
 import { createInvocationContextMiddleware } from "./invocationContext.js";
 
@@ -11,6 +16,14 @@ const ORIGINS = {
   internal: "chrome-extension://arx",
   external: "https://dapp.example",
 };
+
+const buildMethodDefinition = (overrides: Partial<MethodDefinition> = {}): MethodDefinition => ({
+  connectionRequirement: ConnectionRequirements.None,
+  approvalRequirement: ApprovalRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
+  handler: vi.fn(),
+  ...overrides,
+});
 
 const run = async (args: {
   origin: string;
@@ -73,16 +86,13 @@ describe("createAccessPolicyGuardMiddleware", () => {
         resolve: () => ({
           namespace: "eip155",
           chainRef: "eip155:1",
-          definition: { handler: vi.fn() },
+          definition: buildMethodDefinition(),
           passthrough: { isPassthrough: false, allowWhenLocked: false },
         }),
         guard: {
           isUnlocked: () => false,
           isInternalOrigin: (origin) => origin === ORIGINS.internal,
           requestAttention: attention,
-          assertPermission: vi.fn(async () => {
-            throw new Error("should not run");
-          }),
           isConnected: vi.fn(() => false),
         },
       }),
@@ -106,7 +116,6 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isUnlocked: () => true,
           isInternalOrigin: () => false,
           requestAttention: attention,
-          assertPermission: vi.fn(async () => {}),
           isConnected: vi.fn(() => false),
         },
       }),
@@ -131,7 +140,6 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isInternalOrigin: () => false,
           requestAttention: attention,
           shouldRequestUnlockAttention: () => true,
-          assertPermission: vi.fn(async () => {}),
           isConnected: vi.fn(() => false),
         },
       }),
@@ -153,18 +161,15 @@ describe("createAccessPolicyGuardMiddleware", () => {
       resolve: () => ({
         namespace: "eip155",
         chainRef: "eip155:1",
-        definition: {
-          capability: PermissionCapabilities.Accounts,
+        definition: buildMethodDefinition({
           locked: { type: "response", response: [] },
-          handler: vi.fn(),
-        },
+        }),
         passthrough: { isPassthrough: false, allowWhenLocked: false },
       }),
       guard: {
         isUnlocked: () => false,
         isInternalOrigin: () => false,
         requestAttention: attention,
-        assertPermission: vi.fn(async () => {}),
         isConnected: vi.fn(() => false),
       },
     });
@@ -172,32 +177,32 @@ describe("createAccessPolicyGuardMiddleware", () => {
     expect(attention).not.toHaveBeenCalled();
   });
 
-  it("denies capability-protected methods by default when locked", async () => {
+  it("does not infer locked denial from request classification", async () => {
     const attention = vi.fn();
-    await expect(
-      run({
-        origin: ORIGINS.external,
-        method: "eth_requestAccounts",
-        resolve: () => ({
-          namespace: "eip155",
-          chainRef: "eip155:1",
-          definition: { capability: PermissionCapabilities.Accounts, handler: vi.fn() },
-          passthrough: { isPassthrough: false, allowWhenLocked: false },
+    const result = await run({
+      origin: ORIGINS.external,
+      method: "eth_requestAccounts",
+      resolve: () => ({
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        definition: buildMethodDefinition({
+          requestClassification: RpcRequestClassifications.AccountsAccess,
         }),
-        guard: {
-          isUnlocked: () => false,
-          isInternalOrigin: () => false,
-          requestAttention: attention,
-          shouldRequestUnlockAttention: () => true,
-          assertPermission: vi.fn(async () => {}),
-          isConnected: vi.fn(() => false),
-        },
+        passthrough: { isPassthrough: false, allowWhenLocked: false },
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.SessionLocked });
-    expect(attention).toHaveBeenCalled();
+      guard: {
+        isUnlocked: () => false,
+        isInternalOrigin: () => false,
+        requestAttention: attention,
+        shouldRequestUnlockAttention: () => true,
+        isConnected: vi.fn(() => false),
+      },
+    });
+    expect(result.handler).toHaveBeenCalledTimes(1);
+    expect(attention).not.toHaveBeenCalled();
   });
 
-  it("enforces connected check when permissionCheck is connected", async () => {
+  it("enforces connected check when connectionRequirement is required", async () => {
     const attention = vi.fn();
     await expect(
       run({
@@ -207,51 +212,43 @@ describe("createAccessPolicyGuardMiddleware", () => {
         resolve: () => ({
           namespace: "eip155",
           chainRef: "eip155:1",
-          definition: {
-            capability: PermissionCapabilities.Sign,
-            permissionCheck: PermissionChecks.Connected,
+          definition: buildMethodDefinition({
+            connectionRequirement: ConnectionRequirements.Required,
             locked: { type: "allow" },
-            handler: vi.fn(),
-          },
+          }),
           passthrough: { isPassthrough: false, allowWhenLocked: false },
         }),
         guard: {
           isUnlocked: () => true,
           isInternalOrigin: () => false,
           requestAttention: attention,
-          assertPermission: vi.fn(async () => {}),
           isConnected: vi.fn(() => false),
         },
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.PermissionNotConnected });
   });
 
-  it("enforces capability permission checks", async () => {
+  it("does not execute approval facts in middleware", async () => {
     const attention = vi.fn();
-    await expect(
-      run({
-        origin: ORIGINS.external,
-        method: "eth_accounts",
-        resolve: () => ({
-          namespace: "eip155",
-          chainRef: "eip155:1",
-          definition: {
-            capability: PermissionCapabilities.Accounts,
-            locked: { type: "allow" },
-            handler: vi.fn(),
-          },
-          passthrough: { isPassthrough: false, allowWhenLocked: false },
+    const result = await run({
+      origin: ORIGINS.external,
+      method: "wallet_requestPermissions",
+      resolve: () => ({
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        definition: buildMethodDefinition({
+          approvalRequirement: ApprovalRequirements.Required,
         }),
-        guard: {
-          isUnlocked: () => true,
-          isInternalOrigin: () => false,
-          requestAttention: attention,
-          assertPermission: vi.fn(async () => {
-            throw arxError({ reason: ArxReasons.PermissionDenied, message: "nope" });
-          }),
-          isConnected: vi.fn(() => true),
-        },
+        passthrough: { isPassthrough: false, allowWhenLocked: false },
       }),
-    ).rejects.toMatchObject({ reason: ArxReasons.PermissionDenied });
+      guard: {
+        isUnlocked: () => true,
+        isInternalOrigin: () => false,
+        requestAttention: attention,
+        isConnected: vi.fn(() => true),
+      },
+    });
+    expect(result.handler).toHaveBeenCalledTimes(1);
+    expect(attention).not.toHaveBeenCalled();
   });
 });

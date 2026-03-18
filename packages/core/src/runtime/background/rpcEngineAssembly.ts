@@ -1,4 +1,3 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
 import type { AttentionService, RequestAttentionParams } from "../../services/runtime/attention/index.js";
@@ -50,7 +49,6 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
 export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = runtime.controllers;
   const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
-  const resolvePermissionCapability = runtime.rpc.resolvePermissionCapability;
   const executeRequest = runtime.rpc.executeRequest;
 
   const invocationContext: Middleware = createInvocationContextMiddleware({
@@ -105,20 +103,6 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
         chainRef: args.chainRef,
         namespace: args.namespace,
       });
-    },
-    assertPermission: async (origin, method, context) => {
-      const capability = resolvePermissionCapability(method, context);
-      if (!capability) return;
-
-      const { namespace, chainRef } = runtime.rpc.resolveInvocation(method, context);
-
-      if (!runtime.services.permissionViews.getConnectionSnapshot(origin, { chainRef }).isConnected) {
-        throw arxError({
-          reason: ArxReasons.PermissionDenied,
-          message: `Origin "${origin}" lacks permission for ${method}`,
-          data: { origin, method, namespace, chainRef, capability },
-        });
-      }
     },
     isConnected: (origin, options) => {
       const { chainRef } = options;

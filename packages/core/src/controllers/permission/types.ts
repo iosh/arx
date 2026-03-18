@@ -1,16 +1,10 @@
 import type { ChainRef } from "../../chains/ids.js";
 import { PermissionCapabilities } from "../../permissions/capabilities.js";
-import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
 import type { AccountKey } from "../../storage/records.js";
 import type { ChainNamespace } from "../account/types.js";
 
 export { PermissionCapabilities };
 export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof PermissionCapabilities];
-
-export type PermissionCapabilityResolver = (
-  method: string,
-  context?: RpcInvocationContext,
-) => PermissionCapability | undefined;
 
 export type ChainPermissionState = {
   accountKeys: AccountKey[];

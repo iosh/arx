@@ -1,13 +1,15 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ApprovalKinds, PermissionCapabilities } from "../../../../controllers/index.js";
+import { ApprovalKinds } from "../../../../controllers/index.js";
+import { RpcRequestClassifications } from "../../../requestClassification.js";
 import { lockedQueue } from "../../locked.js";
-import { defineNoParamsMethod, PermissionChecks } from "../../types.js";
+import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError } from "../utils.js";
-import { requireApprovalRequester } from "./shared.js";
+import { defineEip155NoParamsApprovalMethod, requireApprovalRequester } from "./shared.js";
 
-export const ethRequestAccountsDefinition = defineNoParamsMethod({
-  capability: PermissionCapabilities.Accounts,
-  permissionCheck: PermissionChecks.None,
+export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
+  requestClassification: RpcRequestClassifications.AccountsAccess,
+  connectionRequirement: ConnectionRequirements.None,
+  authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   handler: async ({ origin, controllers, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;

@@ -1,7 +1,7 @@
 import type { UnlockController } from "../../controllers/unlock/types.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { VaultKeyringEntry } from "../../storage/keyringSchemas.js";
-import type { AccountId, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
+import type { AccountKey, AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import type { VaultService } from "../../vault/types.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
 
@@ -18,10 +18,10 @@ export type KeyringServiceOptions = {
     remove(id: KeyringMetaRecord["id"]): Promise<void>;
   };
   accountsStore: {
-    get(accountId: AccountId): Promise<AccountRecord | null>;
+    get(accountKey: AccountKey): Promise<AccountRecord | null>;
     list(params?: { includeHidden?: boolean }): Promise<AccountRecord[]>;
     upsert(record: AccountRecord): Promise<void>;
-    remove(accountId: AccountId): Promise<void>;
+    remove(accountKey: AccountKey): Promise<void>;
     removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
   };
   namespaces: NamespaceConfig[];
@@ -45,10 +45,10 @@ export type KeyringPayloadListener = (payload: Uint8Array | null) => void | Prom
 export type KeyringRuntimeState = {
   keyrings: Map<string, RuntimeKeyring>;
   keyringMetas: Map<string, KeyringMetaRecord>;
-  accounts: Map<AccountId, AccountRecord>;
+  accounts: Map<AccountKey, AccountRecord>;
   payload: Payload;
   addressIndex: Map<string, { namespace: string; keyringId: string }>;
   payloadListeners: Set<KeyringPayloadListener>;
 };
 
-export type { AccountId, AccountRecord, KeyringMetaRecord, VaultKeyringEntry };
+export type { AccountKey, AccountRecord, KeyringMetaRecord, VaultKeyringEntry };

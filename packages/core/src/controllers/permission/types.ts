@@ -1,7 +1,7 @@
 import type { ChainRef } from "../../chains/ids.js";
 import { PermissionCapabilities } from "../../permissions/capabilities.js";
 import type { RpcInvocationContext } from "../../rpc/handlers/types.js";
-import type { AccountId } from "../../storage/records.js";
+import type { AccountKey } from "../../storage/records.js";
 import type { ChainNamespace } from "../account/types.js";
 
 export { PermissionCapabilities };
@@ -13,7 +13,7 @@ export type PermissionCapabilityResolver = (
 ) => PermissionCapability | undefined;
 
 export type ChainPermissionState = {
-  accountIds: AccountId[];
+  accountKeys: AccountKey[];
 };
 
 export type NamespacePermissionState = {
@@ -41,12 +41,12 @@ export type ChainPermissionAuthorization = {
   origin: string;
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  accountIds: AccountId[];
+  accountKeys: AccountKey[];
 };
 
 export type AuthorizationChainInput = {
   chainRef: ChainRef;
-  accountIds: AccountId[];
+  accountKeys: AccountKey[];
 };
 
 export type UpsertAuthorizationOptions = {
@@ -54,10 +54,10 @@ export type UpsertAuthorizationOptions = {
   chains: [AuthorizationChainInput, ...AuthorizationChainInput[]];
 };
 
-export type SetChainAccountIdsOptions = {
+export type SetChainAccountKeysOptions = {
   namespace: ChainNamespace;
   chainRef: ChainRef;
-  accountIds: AccountId[];
+  accountKeys: AccountKey[];
 };
 
 export type MutatePermittedChainsOptions = {
@@ -93,7 +93,7 @@ export type PermissionController = {
   listAuthorizations(origin: string): PermissionAuthorization[];
 
   upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization>;
-  setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization>;
+  setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
   addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization>;
   revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void>;
   clearOrigin(origin: string): Promise<void>;

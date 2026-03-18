@@ -66,10 +66,10 @@ describe("ui actions", () => {
     void actions.onboarding.importWalletFromPrivateKey({ privateKey: "deadbeef" });
 
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
-    void actions.accounts.switchActive({ chainRef: "eip155:1", accountId: null });
+    void actions.accounts.switchActive({ chainRef: "eip155:1", accountKey: null });
     void actions.accounts.switchActive({
       chainRef: "eip155:1",
-      accountId: "eip155:0000000000000000000000000000000000000000",
+      accountKey: "eip155:0000000000000000000000000000000000000000",
     });
 
     void actions.networks.switchActive({ chainRef: "eip155:1" });
@@ -95,14 +95,14 @@ describe("ui actions", () => {
     void actions.keyrings.list();
     void actions.keyrings.getAccountsByKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.renameKeyring({ keyringId: "00000000-0000-0000-0000-000000000000", alias: "a" });
-    void actions.keyrings.renameAccount({ accountId: "eip155:0000000000000000000000000000000000000000", alias: "a" });
+    void actions.keyrings.renameAccount({ accountKey: "eip155:0000000000000000000000000000000000000000", alias: "a" });
     void actions.keyrings.markBackedUp({ keyringId: "00000000-0000-0000-0000-000000000000" });
-    void actions.keyrings.hideHdAccount({ accountId: "eip155:0000000000000000000000000000000000000000" });
-    void actions.keyrings.unhideHdAccount({ accountId: "eip155:0000000000000000000000000000000000000000" });
+    void actions.keyrings.hideHdAccount({ accountKey: "eip155:0000000000000000000000000000000000000000" });
+    void actions.keyrings.unhideHdAccount({ accountKey: "eip155:0000000000000000000000000000000000000000" });
     void actions.keyrings.removePrivateKeyKeyring({ keyringId: "00000000-0000-0000-0000-000000000000" });
     void actions.keyrings.exportMnemonic({ keyringId: "00000000-0000-0000-0000-000000000000", password: "pw" });
     void actions.keyrings.exportPrivateKey({
-      accountId: "eip155:0000000000000000000000000000000000000000",
+      accountKey: "eip155:0000000000000000000000000000000000000000",
       password: "pw",
     });
 
@@ -142,10 +142,10 @@ describe("ui actions", () => {
     await actions.session.unlock({ password: "test123" });
     expect(capturedParams[capturedParams.length - 1]).toEqual({ password: "test123" });
 
-    await actions.accounts.switchActive({ chainRef: "eip155:1", accountId: null });
+    await actions.accounts.switchActive({ chainRef: "eip155:1", accountKey: null });
     expect(capturedParams[capturedParams.length - 1]).toEqual({
       chainRef: "eip155:1",
-      accountId: null,
+      accountKey: null,
     });
   });
 

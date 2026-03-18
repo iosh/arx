@@ -13,7 +13,7 @@ const POLYGON = "eip155:137";
 const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_ACCOUNT_ID = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-const createRecord = (chains: Array<{ chainRef: string; accountIds: string[] }>, updatedAt: number) =>
+const createRecord = (chains: Array<{ chainRef: string; accountKeys: string[] }>, updatedAt: number) =>
   PermissionRecordSchema.parse({
     origin: ORIGIN,
     namespace: NAMESPACE,
@@ -73,7 +73,7 @@ describe("StorePermissionController", () => {
     await controller.whenReady();
     await controller.upsertAuthorization(ORIGIN, {
       namespace: NAMESPACE,
-      chains: [{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }],
+      chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
     });
 
     expect(store.size).toBe(1);
@@ -82,15 +82,15 @@ describe("StorePermissionController", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountIds: [ACCOUNT_ID],
+          accountKeys: [ACCOUNT_ID],
         },
       },
     });
     expect(originEvents.length).toBeGreaterThan(0);
   });
 
-  it("setChainAccountIds() updates only the targeted chain authorization", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
+  it("setChainAccountKeys() updates only the targeted chain authorization", async () => {
+    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
 
     const { port } = createInMemoryPort(seed);
     const service = createPermissionsService({ port, now: () => 2000 });
@@ -98,10 +98,10 @@ describe("StorePermissionController", () => {
     const controller = new StorePermissionController({ messenger, service });
 
     await controller.whenReady();
-    await controller.setChainAccountIds(ORIGIN, {
+    await controller.setChainAccountKeys(ORIGIN, {
       namespace: NAMESPACE,
       chainRef: MAINNET,
-      accountIds: [OTHER_ACCOUNT_ID],
+      accountKeys: [OTHER_ACCOUNT_ID],
     });
 
     expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
@@ -109,14 +109,14 @@ describe("StorePermissionController", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountIds: [OTHER_ACCOUNT_ID],
+          accountKeys: [OTHER_ACCOUNT_ID],
         },
       },
     });
   });
 
   it("addPermittedChains() merges chains into the existing authorization", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
+    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
 
     const { port } = createInMemoryPort(seed);
     const service = createPermissionsService({ port, now: () => 2000 });
@@ -134,17 +134,17 @@ describe("StorePermissionController", () => {
       namespace: NAMESPACE,
       chains: {
         [MAINNET]: {
-          accountIds: [ACCOUNT_ID],
+          accountKeys: [ACCOUNT_ID],
         },
         [POLYGON]: {
-          accountIds: [],
+          accountKeys: [],
         },
       },
     });
   });
 
   it("revokePermittedChains() deletes the authorization when the last chain is removed", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountIds: [ACCOUNT_ID] }], 1000)];
+    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
 
     const { port, store } = createInMemoryPort(seed);
     const service = createPermissionsService({ port, now: () => 2000 });

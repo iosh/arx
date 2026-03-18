@@ -3,7 +3,7 @@ import { getAccountKeyNamespace } from "../../accounts/addressing/accountKey.js"
 import { parseChainRef as parseCaipChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { PermissionsService } from "../../services/store/permissions/types.js";
-import type { AccountId, PermissionRecord } from "../../storage/records.js";
+import type { AccountKey, PermissionRecord } from "../../storage/records.js";
 import { PERMISSION_ORIGIN_CHANGED, PERMISSION_STATE_CHANGED, type PermissionMessenger } from "./topics.js";
 import type {
   AuthorizationChainInput,
@@ -15,7 +15,7 @@ import type {
   PermissionAuthorization,
   PermissionController,
   PermissionsState,
-  SetChainAccountIdsOptions,
+  SetChainAccountKeysOptions,
   UpsertAuthorizationOptions,
 } from "./types.js";
 
@@ -32,7 +32,7 @@ const cloneChainStates = (chains: Record<ChainRef, ChainPermissionState>): Recor
     Object.entries(chains).map(([chainRef, chainState]) => [
       chainRef,
       {
-        accountIds: [...chainState.accountIds],
+        accountKeys: [...chainState.accountKeys],
       },
     ]),
   ) as Record<ChainRef, ChainPermissionState>;
@@ -66,7 +66,7 @@ const stablePermissionRecordSnapshot = (record: PermissionRecord): StablePermiss
   chains: [...record.chains]
     .map((chain) => ({
       chainRef: String(chain.chainRef) as ChainRef,
-      accountIds: uniqSorted((chain.accountIds as AccountId[]).map((value) => String(value) as AccountId)),
+      accountKeys: uniqSorted((chain.accountKeys as AccountKey[]).map((value) => String(value) as AccountKey)),
     }))
     .sort((left, right) => left.chainRef.localeCompare(right.chainRef)),
 });
@@ -121,7 +121,7 @@ const buildOriginStateFromRecords = (records: PermissionRecord[]): OriginPermiss
         stablePermissionRecordSnapshot(record).chains.map((chain) => [
           chain.chainRef,
           {
-            accountIds: [...chain.accountIds],
+            accountKeys: [...chain.accountKeys],
           },
         ]),
       ) as Record<ChainRef, ChainPermissionState>,
@@ -172,18 +172,18 @@ const normalizeChainRef = (namespace: string, chainRef: ChainRef): ChainRef => {
   return `${parsed.namespace}:${parsed.reference}` as ChainRef;
 };
 
-const normalizeAccountIds = (namespace: string, accountIds: readonly AccountId[]): AccountId[] => {
+const normalizeAccountKeys = (namespace: string, accountKeys: readonly AccountKey[]): AccountKey[] => {
   return uniqSorted(
-    accountIds.map((value) => {
-      const accountId = String(value) as AccountId;
-      if (getAccountKeyNamespace(accountId) !== namespace) {
+    accountKeys.map((value) => {
+      const accountKey = String(value) as AccountKey;
+      if (getAccountKeyNamespace(accountKey) !== namespace) {
         throw arxError({
           reason: ArxReasons.RpcInvalidRequest,
-          message: `Permission accountId "${accountId}" does not belong to namespace "${namespace}"`,
-          data: { namespace, accountId },
+          message: `Permission accountKey "${accountKey}" does not belong to namespace "${namespace}"`,
+          data: { namespace, accountKey },
         });
       }
-      return accountId;
+      return accountKey;
     }),
   );
 };
@@ -214,7 +214,7 @@ const normalizeChains = (
 
     return {
       chainRef: normalizedChainRef,
-      accountIds: normalizeAccountIds(namespace, chain.accountIds),
+      accountKeys: normalizeAccountKeys(namespace, chain.accountKeys),
     };
   });
 
@@ -229,7 +229,7 @@ const toChainMap = (chains: readonly AuthorizationChainInput[]): Record<ChainRef
     chains.map((chain) => [
       chain.chainRef,
       {
-        accountIds: [...chain.accountIds],
+        accountKeys: [...chain.accountKeys],
       },
     ]),
   ) as Record<ChainRef, ChainPermissionState>;
@@ -328,7 +328,7 @@ export class StorePermissionController implements PermissionController {
       origin,
       namespace,
       chainRef,
-      accountIds: [...chain.accountIds],
+      accountKeys: [...chain.accountKeys],
     };
   }
 
@@ -361,7 +361,7 @@ export class StorePermissionController implements PermissionController {
     return toAuthorization(origin, namespace, toChainMap(chains));
   }
 
-  async setChainAccountIds(origin: string, options: SetChainAccountIdsOptions): Promise<PermissionAuthorization> {
+  async setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization> {
     const namespace = assertNamespace(options.namespace);
     const existing = await this.#service.get({ origin, namespace });
     if (!existing) {
@@ -373,7 +373,7 @@ export class StorePermissionController implements PermissionController {
     }
 
     const chainRef = normalizeChainRef(namespace, options.chainRef);
-    const accountIds = normalizeAccountIds(namespace, options.accountIds);
+    const accountKeys = normalizeAccountKeys(namespace, options.accountKeys);
     const nextChains = [...stablePermissionRecordSnapshot(existing).chains];
     const targetIndex = nextChains.findIndex((chain) => chain.chainRef === chainRef);
 
@@ -385,7 +385,7 @@ export class StorePermissionController implements PermissionController {
       });
     }
 
-    nextChains[targetIndex] = { chainRef, accountIds };
+    nextChains[targetIndex] = { chainRef, accountKeys };
 
     if (!sameAuthorizationRecord(existing, nextChains)) {
       await this.#service.upsert({
@@ -418,7 +418,7 @@ export class StorePermissionController implements PermissionController {
       existingChainRefs.add(normalizedChainRef);
       nextChains.push({
         chainRef: normalizedChainRef,
-        accountIds: [],
+        accountKeys: [],
       });
     }
 

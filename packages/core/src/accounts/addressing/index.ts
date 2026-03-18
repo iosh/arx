@@ -1,10 +1,3 @@
-export {
-  getAccountIdNamespace,
-  parseAccountId,
-  toAccountIdFromAddress,
-  toCanonicalAddressFromAccountId,
-  toDisplayAddressFromAccountId,
-} from "./accountId.js";
 export type { AccountKey } from "./accountKey.js";
 export {
   getAccountKeyNamespace,

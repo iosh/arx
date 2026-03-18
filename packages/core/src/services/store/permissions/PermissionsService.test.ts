@@ -8,7 +8,7 @@ const NAMESPACE = "eip155";
 
 const createRecord = (args: {
   origin?: string;
-  chains: Array<{ chainRef: string; accountIds: string[] }>;
+  chains: Array<{ chainRef: string; accountKeys: string[] }>;
   updatedAt: number;
 }) =>
   PermissionRecordSchema.parse({
@@ -73,7 +73,7 @@ describe("PermissionsService", () => {
     await service.upsert({
       origin: ORIGIN,
       namespace: NAMESPACE,
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     t = 2000;
@@ -81,8 +81,8 @@ describe("PermissionsService", () => {
       origin: ORIGIN,
       namespace: NAMESPACE,
       chains: [
-        { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        { chainRef: "eip155:137", accountIds: [] },
+        { chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { chainRef: "eip155:137", accountKeys: [] },
       ],
     });
 
@@ -93,8 +93,8 @@ describe("PermissionsService", () => {
     expect(current).not.toBeNull();
     if (!current) throw new Error("Expected permission record to exist");
     expect(current.chains).toEqual([
-      { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-      { chainRef: "eip155:137", accountIds: [] },
+      { chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+      { chainRef: "eip155:137", accountKeys: [] },
     ]);
     expect(current.updatedAt).toBe(2000);
   });
@@ -110,12 +110,12 @@ describe("PermissionsService", () => {
   it("clearOrigin() removes all records for the origin and emits changed", async () => {
     const seed = [
       createRecord({
-        chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+        chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
         updatedAt: 1,
       }),
       createRecord({
         origin: "https://other.example",
-        chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
+        chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
         updatedAt: 1,
       }),
     ];

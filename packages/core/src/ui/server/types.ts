@@ -94,7 +94,7 @@ export type UiKeyringsAccess = Pick<
   | "confirmNewMnemonic"
   | "deriveAccount"
   | "exportMnemonic"
-  | "exportPrivateKeyByAccountId"
+  | "exportPrivateKeyByAccountKey"
   | "generateMnemonic"
   | "getAccountsByKeyring"
   | "getKeyrings"

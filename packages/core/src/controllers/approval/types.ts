@@ -2,7 +2,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import type { ChainNamespace } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { AccountId } from "../../storage/records.js";
+import type { AccountKey } from "../../storage/records.js";
 import type { PermissionApprovalResult, RequestPermissionsApprovalPayload } from "../permission/types.js";
 import type { TransactionApprovalRequestPayload, TransactionMeta } from "../transaction/types.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
@@ -58,7 +58,7 @@ export type ApprovalRequestByKind = {
 };
 
 export type ApprovalAccountSelectionDecision = {
-  accountIds: [AccountId, ...AccountId[]];
+  accountKeys: [AccountKey, ...AccountKey[]];
 };
 
 export type ApprovalDecisionByKind = {

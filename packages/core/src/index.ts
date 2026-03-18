@@ -22,6 +22,47 @@ export * from "./services/runtime/attention/index.js";
 export * from "./services/runtime/chainActivation/index.js";
 export * from "./services/runtime/chainViews/index.js";
 export * from "./services/runtime/permissionViews/index.js";
-export * from "./storage/index.js";
+export type {
+  AccountNamespace,
+  AccountRecord,
+  KeyringMetaRecord,
+  NetworkPreferencesRecord,
+  NetworkRpcPreference,
+  PermissionRecord,
+  SettingsRecord,
+  TransactionRecord,
+  StorageTransactionStatus,
+} from "./storage/index.js";
+export {
+  AccountNamespaceSchema,
+  AccountRecordSchema,
+  KeyringMetaRecordSchema,
+  NetworkPreferencesRecordSchema,
+  NetworkRpcPreferenceSchema,
+  PermissionRecordSchema,
+  SettingsRecordSchema,
+  TransactionRecordSchema,
+  TransactionStatusSchema,
+  KEYRING_TYPES,
+  KEYRING_VAULT_ENTRY_VERSION,
+  KeyringTypeSchema,
+  VaultKeyringEntrySchema,
+  VaultKeyringPayloadSchema,
+  CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
+  ChainDefinitionEntitySchema,
+  ChainDefinitionSourceSchema,
+  DOMAIN_SCHEMA_VERSION,
+  VAULT_META_SNAPSHOT_VERSION,
+  VaultMetaSnapshotSchema,
+} from "./storage/index.js";
+export type {
+  KeyringType,
+  VaultKeyringEntry,
+  VaultKeyringPayload,
+  ChainDefinitionEntity,
+  ChainDefinitionSource,
+  VaultMetaSnapshot,
+  VaultMetaPort,
+} from "./storage/index.js";
 export * from "./utils/logger.js";
 export * from "./vault/index.js";

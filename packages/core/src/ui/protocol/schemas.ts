@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../chains/ids.js";
 import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../../chains/url.js";
-import { AccountIdSchema } from "../../storage/records.js";
+import { AccountKeySchema } from "../../storage/records.js";
 
 const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
   message: "Expected a 0x-prefixed hexadecimal string",
@@ -30,7 +30,7 @@ export const ChainSnapshotSchema = z.object({
 });
 
 export const UiOwnedAccountSummarySchema = z.object({
-  accountId: AccountIdSchema,
+  accountKey: AccountKeySchema,
   canonicalAddress: z.string().min(1),
   displayAddress: z.string().min(1),
 });
@@ -58,7 +58,7 @@ export const VaultSnapshotSchema = z.object({
 });
 
 const ChainPermissionStateSchema = z.object({
-  accountIds: z.array(AccountIdSchema),
+  accountKeys: z.array(AccountKeySchema),
 });
 
 const NamespacePermissionStateSchema = z.object({
@@ -83,7 +83,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
     type: z.literal("requestAccounts"),
     payload: z.object({
       selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-      recommendedAccountId: AccountIdSchema.nullable(),
+      recommendedAccountKey: AccountKeySchema.nullable(),
     }),
   }),
   approvalPayloadBase.extend({
@@ -136,7 +136,7 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
     type: z.literal("requestPermissions"),
     payload: z.object({
       selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-      recommendedAccountId: AccountIdSchema.nullable(),
+      recommendedAccountKey: AccountKeySchema.nullable(),
       requestedAccesses: z
         .array(
           z.object({
@@ -192,7 +192,7 @@ export const UiKeyringMetaSchema = z.object({
 });
 
 export const UiAccountMetaSchema = z.object({
-  accountId: AccountIdSchema,
+  accountKey: AccountKeySchema,
   canonicalAddress: z.string(),
   keyringId: z.uuid(),
   derivationIndex: z.number().int().nonnegative().optional(),

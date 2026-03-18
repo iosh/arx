@@ -61,7 +61,7 @@ export const parsePrivateKeyHex = (value: string): string => {
 
 export const hasAnyAccounts = (accounts: UiRuntimeDeps["accounts"]): boolean => {
   const accountsState = accounts.getState();
-  return Object.values(accountsState.namespaces).some((ns) => ns.accountIds.length > 0);
+  return Object.values(accountsState.namespaces).some((ns) => ns.accountKeys.length > 0);
 };
 
 export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chains">, namespace: string): string => {
@@ -73,11 +73,11 @@ export const toUiAccountMeta = (deps: Pick<UiRuntimeDeps, "accountCodecs">, reco
   if (!codec) {
     throw new Error(`No account codec registered for namespace "${record.namespace}"`);
   }
-  const canonical = codec.fromAccountId(record.accountId);
+  const canonical = codec.fromAccountKey(record.accountKey);
   const canonicalAddress = codec.toCanonicalString({ canonical });
 
   return {
-    accountId: record.accountId,
+    accountKey: record.accountKey,
     canonicalAddress,
     keyringId: record.keyringId,
     derivationIndex: record.derivationIndex,

@@ -31,7 +31,7 @@ describe("DexieAccountsPort", () => {
     const port = storage.ports.accounts;
 
     const record = AccountRecordSchema.parse({
-      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
@@ -39,7 +39,7 @@ describe("DexieAccountsPort", () => {
     });
 
     await port.upsert(record);
-    const loaded = await port.get(record.accountId);
+    const loaded = await port.get(record.accountKey);
     expect(loaded).toEqual(record);
   });
 
@@ -48,14 +48,14 @@ describe("DexieAccountsPort", () => {
     const port = storage.ports.accounts;
 
     const a = AccountRecordSchema.parse({
-      accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 1000,
     });
 
     const b = AccountRecordSchema.parse({
-      accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+      accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: "11111111-1111-4111-8111-111111111111",
       createdAt: 2000,
@@ -66,7 +66,7 @@ describe("DexieAccountsPort", () => {
     await port.upsert(b);
 
     const list = await port.list();
-    expect(list.map((r) => r.accountId).sort()).toEqual([a.accountId, b.accountId].sort());
+    expect(list.map((r) => r.accountKey).sort()).toEqual([a.accountKey, b.accountKey].sort());
   });
 
   it("drops invalid rows on read (warn + delete)", async () => {
@@ -75,7 +75,7 @@ describe("DexieAccountsPort", () => {
 
     await storage.__debug.db
       .table("accounts")
-      .put({ accountId: "eip155:dddddddddddddddddddddddddddddddddddddddd" } as unknown as Record<string, unknown>);
+      .put({ accountKey: "eip155:dddddddddddddddddddddddddddddddddddddddd" } as unknown as Record<string, unknown>);
 
     const loaded = await storage.ports.accounts.get("eip155:dddddddddddddddddddddddddddddddddddddddd");
     expect(loaded).toBeNull();
@@ -89,7 +89,7 @@ describe("DexieAccountsPort", () => {
     expect(after).toBeUndefined();
   });
 
-  it("remove() deletes by accountId; removeByKeyringId() deletes all accounts for a keyring", async () => {
+  it("remove() deletes by accountKey; removeByKeyringId() deletes all accounts for a keyring", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.accounts;
 
@@ -97,19 +97,19 @@ describe("DexieAccountsPort", () => {
     const keyringB = "22222222-2222-4222-8222-222222222222";
 
     const a1 = AccountRecordSchema.parse({
-      accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 1000,
     });
     const a2 = AccountRecordSchema.parse({
-      accountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      accountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       namespace: "eip155",
       keyringId: keyringA,
       createdAt: 2000,
     });
     const b1 = AccountRecordSchema.parse({
-      accountId: "eip155:cccccccccccccccccccccccccccccccccccccccc",
+      accountKey: "eip155:cccccccccccccccccccccccccccccccccccccccc",
       namespace: "eip155",
       keyringId: keyringB,
       createdAt: 3000,
@@ -119,11 +119,11 @@ describe("DexieAccountsPort", () => {
     await port.upsert(a2);
     await port.upsert(b1);
 
-    await port.remove(a1.accountId);
-    expect(await port.get(a1.accountId)).toBeNull();
+    await port.remove(a1.accountKey);
+    expect(await port.get(a1.accountKey)).toBeNull();
 
     await port.removeByKeyringId(keyringA);
-    expect(await port.get(a2.accountId)).toBeNull();
-    expect(await port.get(b1.accountId)).toEqual(b1);
+    expect(await port.get(a2.accountKey)).toBeNull();
+    expect(await port.get(b1.accountKey)).toEqual(b1);
   });
 });

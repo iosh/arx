@@ -1,4 +1,4 @@
-import { type AccountId, type AccountRecord, AccountRecordSchema } from "../../../storage/records.js";
+import { type AccountKey, type AccountRecord, AccountRecordSchema } from "../../../storage/records.js";
 import { createSignal } from "../_shared/signal.js";
 import type { AccountsPort } from "./port.js";
 import type { AccountsChangedPayload, AccountsService, ListAccountsParams } from "./types.js";
@@ -10,8 +10,8 @@ export type CreateAccountsServiceOptions = {
 export const createAccountsService = ({ port }: CreateAccountsServiceOptions): AccountsService => {
   const changed = createSignal<AccountsChangedPayload>();
 
-  const get = async (accountId: AccountId) => {
-    const record = await port.get(accountId);
+  const get = async (accountKey: AccountKey) => {
+    const record = await port.get(accountKey);
     if (!record) return null;
     const parsed = AccountRecordSchema.safeParse(record);
     return parsed.success ? parsed.data : null;
@@ -27,19 +27,19 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     });
 
     const filtered = includeHidden ? parsed : parsed.filter((r) => !r.hidden);
-    filtered.sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
+    filtered.sort((a, b) => a.createdAt - b.createdAt || a.accountKey.localeCompare(b.accountKey));
 
     return filtered;
   };
   const upsert = async (record: AccountRecord) => {
     const checked = AccountRecordSchema.parse(record);
     await port.upsert(checked);
-    changed.emit({ kind: "upsert", accountId: checked.accountId });
+    changed.emit({ kind: "upsert", accountKey: checked.accountKey });
   };
 
-  const remove = async (accountId: AccountId) => {
-    await port.remove(accountId);
-    changed.emit({ kind: "remove", accountId });
+  const remove = async (accountKey: AccountKey) => {
+    await port.remove(accountKey);
+    changed.emit({ kind: "remove", accountKey });
   };
 
   const removeByKeyringId = async (keyringId: AccountRecord["keyringId"]) => {
@@ -47,8 +47,8 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     changed.emit({ kind: "removeByKeyringId", keyringId });
   };
 
-  const setHidden = async (params: { accountId: AccountId; hidden: boolean }) => {
-    const existing = await port.get(params.accountId);
+  const setHidden = async (params: { accountKey: AccountKey; hidden: boolean }) => {
+    const existing = await port.get(params.accountKey);
     if (!existing) return;
 
     const currentParsed = AccountRecordSchema.safeParse(existing);
@@ -61,7 +61,7 @@ export const createAccountsService = ({ port }: CreateAccountsServiceOptions): A
     });
 
     await port.upsert(next);
-    changed.emit({ kind: "setHidden", accountId: next.accountId });
+    changed.emit({ kind: "setHidden", accountKey: next.accountKey });
   };
   return {
     subscribeChanged: changed.subscribe,

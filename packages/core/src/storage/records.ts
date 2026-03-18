@@ -16,15 +16,15 @@ export const AccountNamespaceSchema = z.string().min(1);
 export type AccountNamespace = z.infer<typeof AccountNamespaceSchema>;
 
 // Deterministic account key: <namespace>:<hex bytes>. Used for dedupe and references.
-export const AccountIdSchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
-  error: "accountId must be <namespace>:<even-length lowercase hex bytes>",
+export const AccountKeySchema = z.string().regex(/^[a-z0-9]+:(?:[0-9a-f]{2})+$/, {
+  error: "accountKey must be <namespace>:<even-length lowercase hex bytes>",
 });
-export type AccountId = z.infer<typeof AccountIdSchema>;
+export type AccountKey = z.infer<typeof AccountKeySchema>;
 
 export const SettingsRecordSchema = z.strictObject({
   id: z.literal("settings"),
   // Per-namespace selection: only store present selections (absence => null).
-  selectedAccountIdsByNamespace: z.record(z.string().min(1), AccountIdSchema).optional(),
+  selectedAccountKeysByNamespace: z.record(z.string().min(1), AccountKeySchema).optional(),
   updatedAt: epochMillisecondsSchema,
 });
 export type SettingsRecord = z.infer<typeof SettingsRecordSchema>;
@@ -73,7 +73,7 @@ export type KeyringMetaRecord = z.infer<typeof KeyringMetaRecordSchema>;
 
 export const AccountRecordSchema = z
   .strictObject({
-    accountId: AccountIdSchema,
+    accountKey: AccountKeySchema,
     namespace: AccountNamespaceSchema,
     keyringId: z.string().uuid(),
     derivationIndex: z.number().int().min(0).optional(),
@@ -82,13 +82,13 @@ export const AccountRecordSchema = z
     createdAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    const separatorIndex = value.accountId.indexOf(":");
-    const accountNamespace = separatorIndex >= 0 ? value.accountId.slice(0, separatorIndex) : null;
+    const separatorIndex = value.accountKey.indexOf(":");
+    const accountNamespace = separatorIndex >= 0 ? value.accountKey.slice(0, separatorIndex) : null;
     if (accountNamespace !== value.namespace) {
       ctx.addIssue({
         code: "custom",
-        message: `accountId namespace must equal "${value.namespace}"`,
-        path: ["accountId"],
+        message: `accountKey namespace must equal "${value.namespace}"`,
+        path: ["accountKey"],
       });
     }
   });
@@ -97,7 +97,7 @@ export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 export const PermissionChainScopeSchema = z.strictObject({
   chainRef: chainRefSchema,
   // Empty means the origin is connected to the chain but has no account access on it.
-  accountIds: z.array(AccountIdSchema),
+  accountKeys: z.array(AccountKeySchema),
 });
 export type PermissionChainScope = z.infer<typeof PermissionChainScopeSchema>;
 
@@ -129,23 +129,23 @@ export const PermissionRecordSchema = z
         });
       }
 
-      const uniqueAccounts = new Set(chain.accountIds);
-      if (uniqueAccounts.size !== chain.accountIds.length) {
+      const uniqueAccounts = new Set(chain.accountKeys);
+      if (uniqueAccounts.size !== chain.accountKeys.length) {
         ctx.addIssue({
           code: "custom",
-          message: `chains[${index}].accountIds must not contain duplicates`,
-          path: ["chains", index, "accountIds"],
+          message: `chains[${index}].accountKeys must not contain duplicates`,
+          path: ["chains", index, "accountKeys"],
         });
       }
 
-      for (const [accountIndex, accountId] of chain.accountIds.entries()) {
-        const separatorIndex = accountId.indexOf(":");
-        const accountNamespace = separatorIndex >= 0 ? accountId.slice(0, separatorIndex) : null;
+      for (const [accountIndex, accountKey] of chain.accountKeys.entries()) {
+        const separatorIndex = accountKey.indexOf(":");
+        const accountNamespace = separatorIndex >= 0 ? accountKey.slice(0, separatorIndex) : null;
         if (accountNamespace !== value.namespace) {
           ctx.addIssue({
             code: "custom",
-            message: `chains[${index}].accountIds[${accountIndex}] must belong to namespace "${value.namespace}"`,
-            path: ["chains", index, "accountIds", accountIndex],
+            message: `chains[${index}].accountKeys[${accountIndex}] must belong to namespace "${value.namespace}"`,
+            path: ["chains", index, "accountKeys", accountIndex],
           });
         }
       }
@@ -170,7 +170,7 @@ export const TransactionRecordSchema = z
     namespace: z.string().min(1),
     chainRef: chainRefSchema,
     origin: originStringSchema,
-    fromAccountId: AccountIdSchema,
+    fromAccountKey: AccountKeySchema,
     status: TransactionStatusSchema,
     request: TransactionRequestSchema,
     prepared: z.unknown().nullable().optional(),

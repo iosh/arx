@@ -1,5 +1,5 @@
 import type { AccountsPort } from "@arx/core/services";
-import { type AccountId, type AccountRecord, AccountRecordSchema } from "@arx/core/storage";
+import { type AccountKey, type AccountRecord, AccountRecordSchema } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
 import { parseOrDrop } from "../internal/parseOrDrop.js";
 
@@ -10,10 +10,10 @@ export class DexieAccountsPort implements AccountsPort {
     return this.ctx.db.accounts;
   }
 
-  async get(accountId: AccountId): Promise<AccountRecord | null> {
+  async get(accountKey: AccountKey): Promise<AccountRecord | null> {
     await this.ctx.ready;
-    const row = await this.table.get(accountId);
-    return await this.parseRow(row, accountId);
+    const row = await this.table.get(accountKey);
+    return await this.parseRow(row, accountKey);
   }
 
   async list(): Promise<AccountRecord[]> {
@@ -21,7 +21,7 @@ export class DexieAccountsPort implements AccountsPort {
     const rows = await this.table.toArray();
     const out: AccountRecord[] = [];
     for (const row of rows) {
-      const deleteKey = typeof (row as { accountId?: unknown }).accountId === "string" ? row.accountId : undefined;
+      const deleteKey = typeof (row as { accountKey?: unknown }).accountKey === "string" ? row.accountKey : undefined;
       const parsed = await this.parseRow(row, deleteKey);
       if (parsed) out.push(parsed);
     }
@@ -34,9 +34,9 @@ export class DexieAccountsPort implements AccountsPort {
     await this.table.put(checked);
   }
 
-  async remove(accountId: AccountId): Promise<void> {
+  async remove(accountKey: AccountKey): Promise<void> {
     await this.ctx.ready;
-    await this.table.delete(accountId);
+    await this.table.delete(accountKey);
   }
 
   async removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void> {
@@ -44,7 +44,7 @@ export class DexieAccountsPort implements AccountsPort {
     await this.table.where("keyringId").equals(keyringId).delete();
   }
 
-  private async parseRow(row: unknown, deleteKey?: AccountId): Promise<AccountRecord | null> {
+  private async parseRow(row: unknown, deleteKey?: AccountKey): Promise<AccountRecord | null> {
     if (!row) return null;
 
     if (!deleteKey) {

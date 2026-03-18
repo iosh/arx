@@ -14,7 +14,7 @@ describe("buildWalletPermissions", () => {
       origin: ORIGIN,
       namespace: "eip155",
       chainRef: "eip155:1",
-      accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     };
 
     const getAccounts = vi.fn((chainRef: string) => (chainRef === "eip155:1" ? ["0xabc", "0xabc", "0xdef"] : []));
@@ -33,7 +33,7 @@ describe("buildWalletPermissions", () => {
       origin: ORIGIN,
       namespace: "eip155",
       chainRef: "eip155:137",
-      accountIds: [],
+      accountKeys: [],
     };
 
     expect(buildWalletPermissions({ origin: ORIGIN, authorization })).toEqual([]);

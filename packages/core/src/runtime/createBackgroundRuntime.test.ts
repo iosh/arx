@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
@@ -357,8 +357,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
-          accountIds: [
-            toAccountIdFromAddress({
+          accountKeys: [
+            toAccountKeyFromAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               accountCodecs: runtime.services.accountCodecs,
@@ -413,8 +413,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       chains: [
         {
           chainRef: MAINNET_CHAIN.chainRef,
-          accountIds: [
-            toAccountIdFromAddress({
+          accountKeys: [
+            toAccountKeyFromAddress({
               chainRef: MAINNET_CHAIN.chainRef,
               address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               accountCodecs: runtime.services.accountCodecs,

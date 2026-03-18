@@ -25,7 +25,7 @@ if (!EIP155_CLIENT_FACTORY) {
 
 const toEip155AccountKey = (params: { chainRef: string; address: string }) => {
   const canonical = eip155Codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-  return eip155Codec.toAccountId(canonical);
+  return eip155Codec.toAccountKey(canonical);
 };
 
 export const eip155NamespaceManifest = defineNamespaceManifest({
@@ -54,12 +54,12 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
       return {
         signMessage: async ({ chainRef, address, message }) =>
           await typedSigner.signPersonalMessage({
-            accountId: toEip155AccountKey({ chainRef, address }),
+            accountKey: toEip155AccountKey({ chainRef, address }),
             message,
           }),
         signTypedData: async ({ chainRef, address, typedData }) =>
           await typedSigner.signTypedData({
-            accountId: toEip155AccountKey({ chainRef, address }),
+            accountKey: toEip155AccountKey({ chainRef, address }),
             typedData,
           }),
       };

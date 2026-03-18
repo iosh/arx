@@ -6,15 +6,15 @@ type AccountSelectionApproval = Extract<ApprovalSummary, { type: "requestAccount
 
 export function ApprovalAccountSelector({
   approval,
-  selectedAccountId,
+  selectedAccountKey,
   onSelect,
 }: {
   approval: AccountSelectionApproval;
-  selectedAccountId: string | null;
-  onSelect: (accountId: string) => void;
+  selectedAccountKey: string | null;
+  onSelect: (accountKey: string) => void;
 }) {
   const selectableAccounts = approval.payload.selectableAccounts;
-  const recommendedAccountId = approval.payload.recommendedAccountId;
+  const recommendedAccountKey = approval.payload.recommendedAccountKey;
 
   return (
     <Card padded bordered gap="$2">
@@ -30,11 +30,11 @@ export function ApprovalAccountSelector({
       ) : (
         <YStack gap="$2" marginTop="$1">
           {selectableAccounts.map((account) => {
-            const isSelected = account.accountId === selectedAccountId;
-            const isRecommended = account.accountId === recommendedAccountId;
+            const isSelected = account.accountKey === selectedAccountKey;
+            const isRecommended = account.accountKey === recommendedAccountKey;
 
             return (
-              <Card key={account.accountId} padded bordered borderColor={isSelected ? "$accent" : "$border"} gap="$2">
+              <Card key={account.accountKey} padded bordered borderColor={isSelected ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay
                   address={account.canonicalAddress}
                   displayAddress={account.displayAddress}
@@ -48,7 +48,7 @@ export function ApprovalAccountSelector({
                     size="$3"
                     variant={isSelected ? "primary" : "secondary"}
                     disabled={isSelected}
-                    onPress={() => onSelect(account.accountId)}
+                    onPress={() => onSelect(account.accountKey)}
                   >
                     {isSelected ? "Current" : "Use"}
                   </Button>

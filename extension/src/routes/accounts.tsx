@@ -109,13 +109,13 @@ function AccountSwitchPage() {
     return <LoadingScreen />;
   }
 
-  const handleAccountSwitch = async (accountId: string | null) => {
+  const handleAccountSwitch = async (accountKey: string | null) => {
     if (pendingAccountId) return;
 
     setErrorMessage(null);
-    setPendingAccountId(accountId);
+    setPendingAccountId(accountKey);
     try {
-      await switchAccount({ chainRef: snapshot.chain.chainRef, accountId });
+      await switchAccount({ chainRef: snapshot.chain.chainRef, accountKey });
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -239,10 +239,10 @@ function AccountSwitchPage() {
           <Paragraph color="$color10">No accounts available yet.</Paragraph>
         ) : (
           snapshot.accounts.list.map((account) => {
-            const isActive = snapshot.accounts.active?.accountId === account.accountId;
-            const loading = pendingAccountId === account.accountId;
+            const isActive = snapshot.accounts.active?.accountKey === account.accountKey;
+            const loading = pendingAccountId === account.accountKey;
             return (
-              <Card key={account.accountId} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
+              <Card key={account.accountKey} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay address={account.canonicalAddress} displayAddress={account.displayAddress} />
                 <XStack alignItems="center" justifyContent="space-between">
                   <Paragraph color={isActive ? "$accent" : "$mutedText"} fontSize="$2">
@@ -251,7 +251,7 @@ function AccountSwitchPage() {
                   <Button
                     size="$3"
                     disabled={isActive || loading}
-                    onPress={() => void handleAccountSwitch(account.accountId)}
+                    onPress={() => void handleAccountSwitch(account.accountKey)}
                   >
                     {loading ? "Switching..." : isActive ? "Current" : "Switch"}
                   </Button>

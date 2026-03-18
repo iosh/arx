@@ -1,8 +1,8 @@
 import {
   createAccountCodecRegistry,
   eip155Codec,
-  toAccountIdFromAddress,
-  toCanonicalAddressFromAccountId,
+  toAccountKeyFromAddress,
+  toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
@@ -13,7 +13,7 @@ import type { HandlerControllers } from "@arx/core/rpc";
 import { createRpcRegistry } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
-import type { AccountId, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
+import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
   UI_EVENT_SNAPSHOT_CHANGED,
@@ -45,7 +45,7 @@ const CHAIN = {
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 };
 
-type ChainRef = Parameters<typeof toAccountIdFromAddress>[0]["chainRef"];
+type ChainRef = Parameters<typeof toAccountKeyFromAddress>[0]["chainRef"];
 
 type Listener = (msg: unknown) => void;
 
@@ -211,8 +211,8 @@ const createMemoryKeyringMetasStore = () => {
 const createMemoryAccountsStore = () => {
   let records: AccountRecord[] = [];
   return {
-    async get(accountId: AccountId) {
-      return records.find((r) => r.accountId === accountId) ?? null;
+    async get(accountKey: AccountKey) {
+      return records.find((r) => r.accountKey === accountKey) ?? null;
     },
     async list(_params?: { includeHidden?: boolean }) {
       void _params;
@@ -220,10 +220,10 @@ const createMemoryAccountsStore = () => {
     },
     async upsert(record: AccountRecord) {
       const next = { ...record };
-      records = [...records.filter((r) => r.accountId !== next.accountId), next];
+      records = [...records.filter((r) => r.accountKey !== next.accountKey), next];
     },
-    async remove(accountId: AccountId) {
-      records = records.filter((r) => r.accountId !== accountId);
+    async remove(accountKey: AccountKey) {
+      records = records.filter((r) => r.accountKey !== accountKey);
     },
     async removeByKeyringId(keyringId: string) {
       records = records.filter((r) => r.keyringId !== keyringId);
@@ -232,13 +232,15 @@ const createMemoryAccountsStore = () => {
 };
 
 const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<typeof createMemoryAccountsStore> }) => {
-  const toAccountId = (chainRef: ChainRef, address: string) =>
-    toAccountIdFromAddress({ chainRef, address, accountCodecs });
-  const toAddress = (_chainRef: ChainRef, accountId: AccountId) =>
-    toCanonicalAddressFromAccountId({ accountId, accountCodecs });
+  const toAccountKey = (chainRef: ChainRef, address: string) =>
+    toAccountKeyFromAddress({ chainRef, address, accountCodecs });
+  const toAddress = (_chainRef: ChainRef, accountKey: AccountKey) =>
+    toCanonicalAddressFromAccountKey({ accountKey, accountCodecs });
 
   let state = {
-    namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
+    namespaces: {
+      [CHAIN.namespace]: { accountKeys: [] as AccountKey[], selectedAccountKey: null as AccountKey | null },
+    },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -250,15 +252,15 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     const rows = await deps.accountsStore.list({ includeHidden: true });
     const all = rows
       .filter((r) => r.namespace === CHAIN.namespace)
-      .map((r) => toCanonicalAddressFromAccountId({ accountId: r.accountId, accountCodecs }))
+      .map((r) => toCanonicalAddressFromAccountKey({ accountKey: r.accountKey, accountCodecs }))
       .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a));
 
     const uniq = Array.from(new Set(all));
-    const accountIds = uniq.map((addr) => toAccountId(CHAIN.chainRef, addr));
-    const currentSelected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
-    const selectedAccountId =
-      currentSelected && accountIds.includes(currentSelected) ? currentSelected : (accountIds[0] ?? null);
-    state = { namespaces: { [CHAIN.namespace]: { accountIds, selectedAccountId } } };
+    const accountKeys = uniq.map((addr) => toAccountKey(CHAIN.chainRef, addr));
+    const currentSelected = state.namespaces[CHAIN.namespace]?.selectedAccountKey ?? null;
+    const selectedAccountKey =
+      currentSelected && accountKeys.includes(currentSelected) ? currentSelected : (accountKeys[0] ?? null);
+    state = { namespaces: { [CHAIN.namespace]: { accountKeys, selectedAccountKey } } };
 
     emit();
   };
@@ -282,32 +284,32 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
     }),
     listOwnedForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      return (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((accountId) => ({
-        accountId,
+      return (state.namespaces[CHAIN.namespace]?.accountKeys ?? []).map((accountKey) => ({
+        accountKey,
         namespace: CHAIN.namespace,
-        canonicalAddress: toAddress(params.chainRef, accountId),
-        displayAddress: toAddress(params.chainRef, accountId),
+        canonicalAddress: toAddress(params.chainRef, accountKey),
+        displayAddress: toAddress(params.chainRef, accountKey),
       }));
     },
-    getOwnedAccount: (params: { namespace: string; chainRef: string; accountId: AccountId }) => {
+    getOwnedAccount: (params: { namespace: string; chainRef: string; accountKey: AccountKey }) => {
       void params.namespace;
-      return state.namespaces[CHAIN.namespace]?.accountIds.includes(params.accountId)
+      return state.namespaces[CHAIN.namespace]?.accountKeys.includes(params.accountKey)
         ? {
-            accountId: params.accountId,
+            accountKey: params.accountKey,
             namespace: CHAIN.namespace,
-            canonicalAddress: toAddress(params.chainRef, params.accountId),
-            displayAddress: toAddress(params.chainRef, params.accountId),
+            canonicalAddress: toAddress(params.chainRef, params.accountKey),
+            displayAddress: toAddress(params.chainRef, params.accountKey),
           }
         : null;
     },
-    getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
-    getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
+    getAccountKeysForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountKeys ?? [],
+    getSelectedAccountKey: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountKey ?? null,
     getActiveAccountForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountKey ?? null;
       return selected
         ? {
-            accountId: selected,
+            accountKey: selected,
             namespace: CHAIN.namespace,
             chainRef: params.chainRef,
             canonicalAddress: toAddress(params.chainRef, selected),
@@ -315,20 +317,20 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
           }
         : null;
     },
-    setActiveAccount: async (params: { namespace: string; chainRef: string; accountId?: AccountId | null }) => {
+    setActiveAccount: async (params: { namespace: string; chainRef: string; accountKey?: AccountKey | null }) => {
       void params.namespace;
-      const desired = params.accountId ?? null;
-      const current = state.namespaces[CHAIN.namespace]?.accountIds ?? [];
-      const selectedAccountId = desired && current.includes(desired) ? desired : (current[0] ?? null);
-      state = { namespaces: { [CHAIN.namespace]: { accountIds: [...current], selectedAccountId } } };
+      const desired = params.accountKey ?? null;
+      const current = state.namespaces[CHAIN.namespace]?.accountKeys ?? [];
+      const selectedAccountKey = desired && current.includes(desired) ? desired : (current[0] ?? null);
+      state = { namespaces: { [CHAIN.namespace]: { accountKeys: [...current], selectedAccountKey } } };
       emit();
-      return selectedAccountId
+      return selectedAccountKey
         ? {
-            accountId: selectedAccountId,
+            accountKey: selectedAccountKey,
             namespace: CHAIN.namespace,
             chainRef: params.chainRef,
-            canonicalAddress: toAddress(params.chainRef, selectedAccountId),
-            displayAddress: toAddress(params.chainRef, selectedAccountId),
+            canonicalAddress: toAddress(params.chainRef, selectedAccountKey),
+            displayAddress: toAddress(params.chainRef, selectedAccountKey),
           }
         : null;
     },
@@ -340,11 +342,13 @@ const createStoreBackedAccountsController = (deps: { accountsStore: ReturnType<t
 };
 
 const createAccountsController = () => {
-  const toAddress = (_chainRef: ChainRef, accountId: AccountId) =>
-    toCanonicalAddressFromAccountId({ accountId, accountCodecs });
+  const toAddress = (_chainRef: ChainRef, accountKey: AccountKey) =>
+    toCanonicalAddressFromAccountKey({ accountKey, accountCodecs });
 
   let state = {
-    namespaces: { [CHAIN.namespace]: { accountIds: [] as AccountId[], selectedAccountId: null as AccountId | null } },
+    namespaces: {
+      [CHAIN.namespace]: { accountKeys: [] as AccountKey[], selectedAccountKey: null as AccountKey | null },
+    },
   };
   const listeners = new Set<(s: typeof state) => void>();
 
@@ -358,32 +362,32 @@ const createAccountsController = () => {
     }),
     listOwnedForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      return (state.namespaces[CHAIN.namespace]?.accountIds ?? []).map((accountId) => ({
-        accountId,
+      return (state.namespaces[CHAIN.namespace]?.accountKeys ?? []).map((accountKey) => ({
+        accountKey,
         namespace: CHAIN.namespace,
-        canonicalAddress: toAddress(params.chainRef, accountId),
-        displayAddress: toAddress(params.chainRef, accountId),
+        canonicalAddress: toAddress(params.chainRef, accountKey),
+        displayAddress: toAddress(params.chainRef, accountKey),
       }));
     },
-    getOwnedAccount: (params: { namespace: string; chainRef: string; accountId: AccountId }) => {
+    getOwnedAccount: (params: { namespace: string; chainRef: string; accountKey: AccountKey }) => {
       void params.namespace;
-      return state.namespaces[CHAIN.namespace]?.accountIds.includes(params.accountId)
+      return state.namespaces[CHAIN.namespace]?.accountKeys.includes(params.accountKey)
         ? {
-            accountId: params.accountId,
+            accountKey: params.accountKey,
             namespace: CHAIN.namespace,
-            canonicalAddress: toAddress(params.chainRef, params.accountId),
-            displayAddress: toAddress(params.chainRef, params.accountId),
+            canonicalAddress: toAddress(params.chainRef, params.accountKey),
+            displayAddress: toAddress(params.chainRef, params.accountKey),
           }
         : null;
     },
-    getAccountIdsForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountIds ?? [],
-    getSelectedAccountId: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null,
+    getAccountKeysForNamespace: (_namespace: string) => state.namespaces[CHAIN.namespace]?.accountKeys ?? [],
+    getSelectedAccountKey: (_namespace: string) => state.namespaces[CHAIN.namespace]?.selectedAccountKey ?? null,
     getActiveAccountForNamespace: (params: { namespace: string; chainRef: string }) => {
       void params.namespace;
-      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountId ?? null;
+      const selected = state.namespaces[CHAIN.namespace]?.selectedAccountKey ?? null;
       return selected
         ? {
-            accountId: selected,
+            accountKey: selected,
             namespace: CHAIN.namespace,
             chainRef: params.chainRef,
             canonicalAddress: toAddress(params.chainRef, selected),
@@ -391,21 +395,21 @@ const createAccountsController = () => {
           }
         : null;
     },
-    setActiveAccount: async (params: { namespace: string; chainRef: string; accountId?: AccountId | null }) => {
+    setActiveAccount: async (params: { namespace: string; chainRef: string; accountKey?: AccountKey | null }) => {
       const ns = CHAIN.namespace;
       void params.namespace;
-      const prev = state.namespaces[ns] ?? { accountIds: [], selectedAccountId: null };
-      const desired = params.accountId ?? null;
-      const selectedAccountId = desired && prev.accountIds.includes(desired) ? desired : (prev.accountIds[0] ?? null);
-      state = { namespaces: { ...state.namespaces, [ns]: { ...prev, selectedAccountId } } };
+      const prev = state.namespaces[ns] ?? { accountKeys: [], selectedAccountKey: null };
+      const desired = params.accountKey ?? null;
+      const selectedAccountKey = desired && prev.accountKeys.includes(desired) ? desired : (prev.accountKeys[0] ?? null);
+      state = { namespaces: { ...state.namespaces, [ns]: { ...prev, selectedAccountKey } } };
       emit();
-      return selectedAccountId
+      return selectedAccountKey
         ? {
-            accountId: selectedAccountId,
+            accountKey: selectedAccountKey,
             namespace: ns,
             chainRef: params.chainRef,
-            canonicalAddress: toAddress(params.chainRef, selectedAccountId),
-            displayAddress: toAddress(params.chainRef, selectedAccountId),
+            canonicalAddress: toAddress(params.chainRef, selectedAccountKey),
+            displayAddress: toAddress(params.chainRef, selectedAccountKey),
           }
         : null;
     },
@@ -981,16 +985,16 @@ describe("uiBridge", () => {
     expect(derived.address).toMatch(/^0x/);
     expect(derived.derivationIndex).toBe(1);
 
-    const derivedAccountId = toAccountIdFromAddress({
+    const derivedAccountKey = toAccountKeyFromAddress({
       chainRef: CHAIN.chainRef,
       address: derived.address,
       accountCodecs,
     });
 
-    const hideRes = await send("ui.keyrings.hideHdAccount", { accountId: derivedAccountId });
+    const hideRes = await send("ui.keyrings.hideHdAccount", { accountKey: derivedAccountKey });
     expectResponse(hideRes.envelope, hideRes.id);
 
-    const unhideRes = await send("ui.keyrings.unhideHdAccount", { accountId: derivedAccountId });
+    const unhideRes = await send("ui.keyrings.unhideHdAccount", { accountKey: derivedAccountKey });
     expectResponse(unhideRes.envelope, unhideRes.id);
 
     const exportMnemonic = await send("ui.keyrings.exportMnemonic", { keyringId, password: PASSWORD });
@@ -998,7 +1002,7 @@ describe("uiBridge", () => {
     expect(exported.words.join(" ")).toBe(TEST_MNEMONIC);
 
     const exportPk = await send("ui.keyrings.exportPrivateKey", {
-      accountId: toAccountIdFromAddress({ chainRef: CHAIN.chainRef, address, accountCodecs }),
+      accountKey: toAccountKeyFromAddress({ chainRef: CHAIN.chainRef, address, accountCodecs }),
       password: PASSWORD,
     });
     const pkResult = expectResponse(exportPk.envelope, exportPk.id) as { privateKey: string };
@@ -1023,10 +1027,10 @@ describe("uiBridge", () => {
     const createResult = expectResponse(createRes.envelope, createRes.id) as { keyringId: string; address: string };
 
     const secret = new Uint8Array([0xde, 0xad, 0xbe, 0xef, ...new Uint8Array(28)]);
-    const spy = vi.spyOn(keyring, "exportPrivateKeyByAccountId").mockResolvedValue(secret);
+    const spy = vi.spyOn(keyring, "exportPrivateKeyByAccountKey").mockResolvedValue(secret);
 
     const exportPk = await send("ui.keyrings.exportPrivateKey", {
-      accountId: toAccountIdFromAddress({
+      accountKey: toAccountKeyFromAddress({
         chainRef: CHAIN.chainRef,
         address: createResult.address,
         accountCodecs,

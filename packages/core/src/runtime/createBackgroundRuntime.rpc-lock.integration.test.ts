@@ -1,6 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import { createRpcHarness, flushAsync, TEST_MNEMONIC } from "./__fixtures__/backgroundTestSetup.js";
 
 const PASSWORD = "secret-pass";
@@ -20,7 +20,7 @@ const deriveAccount = async (runtime: RpcHarnessInstance["runtime"]) => {
   await runtime.controllers.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
-    accountId: toAccountIdFromAddress({
+    accountKey: toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: account.address,
       accountCodecs: runtime.services.accountCodecs,
@@ -112,8 +112,8 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [
-              toAccountIdFromAddress({
+            accountKeys: [
+              toAccountKeyFromAddress({
                 chainRef: chain.chainRef,
                 address,
                 accountCodecs: runtime.services.accountCodecs,
@@ -177,8 +177,8 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [
-              toAccountIdFromAddress({
+            accountKeys: [
+              toAccountKeyFromAddress({
                 chainRef: chain.chainRef,
                 address,
                 accountCodecs: runtime.services.accountCodecs,

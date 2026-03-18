@@ -19,7 +19,7 @@ function ApproveRequestPermissionsByIdPage() {
   const { snapshot, isLoading, resolveApproval } = useUiSnapshot();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
 
   const approval = snapshot?.approvals.find((a) => a.id === id);
   const isMatching = approval?.type === "requestPermissions";
@@ -34,19 +34,19 @@ function ApproveRequestPermissionsByIdPage() {
   useEffect(() => {
     if (!approval || !isMatching) return;
 
-    const selectableIds = new Set(approval.payload.selectableAccounts.map((account) => account.accountId));
-    setSelectedAccountId((current) => {
+    const selectableIds = new Set(approval.payload.selectableAccounts.map((account) => account.accountKey));
+    setSelectedAccountKey((current) => {
       if (current && selectableIds.has(current)) {
         return current;
       }
 
-      return approval.payload.recommendedAccountId ?? approval.payload.selectableAccounts[0]?.accountId ?? null;
+      return approval.payload.recommendedAccountKey ?? approval.payload.selectableAccounts[0]?.accountKey ?? null;
     });
   }, [approval, isMatching]);
 
   const handleApprove = async () => {
     if (!approval || !isMatching) return;
-    if (!selectedAccountId) {
+    if (!selectedAccountKey) {
       setErrorMessage("Choose an account to continue.");
       return;
     }
@@ -57,7 +57,7 @@ function ApproveRequestPermissionsByIdPage() {
       await resolveApproval({
         id: approval.id,
         action: "approve",
-        decision: { accountIds: [selectedAccountId] },
+        decision: { accountKeys: [selectedAccountKey] },
       });
       router.navigate({ to: ROUTES.APPROVALS, replace: true });
     } catch (error) {
@@ -100,12 +100,12 @@ function ApproveRequestPermissionsByIdPage() {
       }}
       pending={pending}
       errorMessage={errorMessage}
-      approveDisabled={!selectedAccountId}
+      approveDisabled={!selectedAccountKey}
     >
       <ApprovalAccountSelector
         approval={approval}
-        selectedAccountId={selectedAccountId}
-        onSelect={setSelectedAccountId}
+        selectedAccountKey={selectedAccountKey}
+        onSelect={setSelectedAccountKey}
       />
     </ApprovalDetailScreen>
   );

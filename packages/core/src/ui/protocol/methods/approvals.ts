@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
-import { AccountIdSchema } from "../../../storage/records.js";
+import { AccountKeySchema } from "../../../storage/records.js";
 import { defineMethod } from "./types.js";
 
 const PermissionRequestDescriptorSchema = z.strictObject({
@@ -14,14 +14,14 @@ const PermissionApprovalResultSchema = z.strictObject({
 
 const ApprovalAccountSelectionDecisionSchema = z
   .strictObject({
-    accountIds: z.array(AccountIdSchema).min(1),
+    accountKeys: z.array(AccountKeySchema).min(1),
   })
   .superRefine((value, ctx) => {
-    if (new Set(value.accountIds).size !== value.accountIds.length) {
+    if (new Set(value.accountKeys).size !== value.accountKeys.length) {
       ctx.addIssue({
         code: "custom",
-        message: "decision.accountIds must not contain duplicates",
-        path: ["accountIds"],
+        message: "decision.accountKeys must not contain duplicates",
+        path: ["accountKeys"],
       });
     }
   });

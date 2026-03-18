@@ -7,7 +7,7 @@ export {
   VaultKeyringPayloadSchema,
 } from "./keyringSchemas.js";
 export type {
-  AccountId,
+  AccountKey,
   AccountNamespace,
   AccountRecord,
   KeyringMetaRecord,
@@ -19,7 +19,7 @@ export type {
   TransactionStatus as StorageTransactionStatus,
 } from "./records.js";
 export {
-  AccountIdSchema,
+  AccountKeySchema,
   AccountNamespaceSchema,
   AccountRecordSchema,
   KeyringMetaRecordSchema,

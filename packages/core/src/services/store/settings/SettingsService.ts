@@ -27,25 +27,25 @@ export const createSettingsService = ({ port, now }: CreateSettingsServiceOption
       const baseParsed = current ? SettingsRecordSchema.safeParse(current) : null;
       const base = baseParsed?.success ? baseParsed.data : null;
 
-      const selectedAccountIdsByNamespace: Record<string, string> = {
-        ...(base?.selectedAccountIdsByNamespace ?? {}),
+      const selectedAccountKeysByNamespace: Record<string, string> = {
+        ...(base?.selectedAccountKeysByNamespace ?? {}),
       };
 
-      if (params.selectedAccountIdsByNamespace) {
-        for (const [namespace, accountId] of Object.entries(params.selectedAccountIdsByNamespace)) {
+      if (params.selectedAccountKeysByNamespace) {
+        for (const [namespace, accountKey] of Object.entries(params.selectedAccountKeysByNamespace)) {
           const ns = namespace.trim();
           if (!ns) continue;
-          if (!accountId) {
-            delete selectedAccountIdsByNamespace[ns];
+          if (!accountKey) {
+            delete selectedAccountKeysByNamespace[ns];
             continue;
           }
-          selectedAccountIdsByNamespace[ns] = accountId;
+          selectedAccountKeysByNamespace[ns] = accountKey;
         }
       }
 
       const next: SettingsRecord = SettingsRecordSchema.parse({
         id: "settings",
-        ...(Object.keys(selectedAccountIdsByNamespace).length > 0 ? { selectedAccountIdsByNamespace } : {}),
+        ...(Object.keys(selectedAccountKeysByNamespace).length > 0 ? { selectedAccountKeysByNamespace } : {}),
         updatedAt: clock(),
       });
 

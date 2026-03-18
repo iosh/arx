@@ -193,34 +193,34 @@ export class MemoryAccountsPort implements AccountsPort {
   constructor(seed: AccountRecord[] = []) {
     for (const record of seed) {
       const checked = AccountRecordSchema.parse(record);
-      this.#records.set(checked.accountId, clone(checked));
+      this.#records.set(checked.accountKey, clone(checked));
     }
   }
 
-  async get(accountId: string): Promise<AccountRecord | null> {
-    const found = this.#records.get(accountId);
+  async get(accountKey: string): Promise<AccountRecord | null> {
+    const found = this.#records.get(accountKey);
     return found ? clone(found) : null;
   }
 
   async list(): Promise<AccountRecord[]> {
     return Array.from(this.#records.values())
       .map((record) => clone(record))
-      .sort((a, b) => a.createdAt - b.createdAt || a.accountId.localeCompare(b.accountId));
+      .sort((a, b) => a.createdAt - b.createdAt || a.accountKey.localeCompare(b.accountKey));
   }
 
   async upsert(record: AccountRecord): Promise<void> {
     const checked = AccountRecordSchema.parse(record);
-    this.#records.set(checked.accountId, clone(checked));
+    this.#records.set(checked.accountKey, clone(checked));
   }
 
-  async remove(accountId: string): Promise<void> {
-    this.#records.delete(accountId);
+  async remove(accountKey: string): Promise<void> {
+    this.#records.delete(accountKey);
   }
 
   async removeByKeyringId(keyringId: string): Promise<void> {
-    for (const [accountId, record] of Array.from(this.#records.entries())) {
+    for (const [accountKey, record] of Array.from(this.#records.entries())) {
       if (record.keyringId === keyringId) {
-        this.#records.delete(accountId);
+        this.#records.delete(accountKey);
       }
     }
   }

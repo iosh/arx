@@ -59,7 +59,7 @@ export type NamespaceSignerRegistry = {
 export type NamespaceRuntimeManifest = {
   clientFactory?: RpcClientFactory;
   createSigner?: (params: {
-    keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
+    keyring: Pick<KeyringService, "waitForReady" | "hasAccountKey" | "signDigestByAccountKey">;
   }) => unknown;
   createApprovalBindings?: (params: { signer: unknown }) => NamespaceApprovalBindings;
   createUiBindings?: (params: {

@@ -186,8 +186,8 @@ export class TransactionExecutor
         data: { chainRef },
       });
     } else {
-      const ownedIds = new Set(ownedAccounts.map((account) => account.accountId));
-      if (!ownedIds.has(fromAccountKey)) {
+      const ownedKeys = new Set(ownedAccounts.map((account) => account.accountKey));
+      if (!ownedKeys.has(fromAccountKey)) {
         collectedIssues.push({
           kind: "issue",
           code: "transaction.request.from_not_owned",
@@ -204,7 +204,7 @@ export class TransactionExecutor
       namespace: derived.namespace,
       chainRef,
       origin,
-      fromAccountId: fromAccountKey,
+      fromAccountKey: fromAccountKey,
       request: cloneRequest(normalizedRequest),
       warnings: cloneWarnings(collectedWarnings),
       issues: cloneIssues(collectedIssues),

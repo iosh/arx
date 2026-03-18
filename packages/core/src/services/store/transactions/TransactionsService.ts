@@ -58,7 +58,7 @@ export const createTransactionsService = ({
       namespace: params.namespace,
       chainRef: params.chainRef,
       origin: params.origin,
-      fromAccountId: params.fromAccountId,
+      fromAccountKey: params.fromAccountKey,
       status: "pending",
       request: params.request,
       prepared: null,

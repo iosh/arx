@@ -14,7 +14,7 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
   kind: ApprovalKinds.RequestPermissions,
   parseDecision: (input) => parseAccountSelectionDecision(ApprovalKinds.RequestPermissions, input),
   present(record, deps) {
-    const { selectableAccounts, recommendedAccountId } = getApprovalSelectableAccounts(record, deps, {
+    const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
       request: record.request,
     });
 
@@ -23,11 +23,11 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       type: "requestPermissions",
       payload: {
         selectableAccounts: selectableAccounts.map((account) => ({
-          accountId: account.accountId,
+          accountKey: account.accountKey,
           canonicalAddress: account.canonicalAddress,
           displayAddress: account.displayAddress,
         })),
-        recommendedAccountId,
+        recommendedAccountKey,
         requestedAccesses: record.request.requested.flatMap((item) =>
           item.chainRefs.map((chainRef) => ({
             capability: item.capability,
@@ -98,12 +98,12 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     });
 
     const nextChains = new Map<string, string[]>(
-      Object.entries(existing?.chains ?? {}).map(([chainRef, chainState]) => [chainRef, [...chainState.accountIds]]),
+      Object.entries(existing?.chains ?? {}).map(([chainRef, chainState]) => [chainRef, [...chainState.accountKeys]]),
     );
     for (const chainRef of requestedChainRefs) {
       nextChains.set(
         chainRef,
-        selectedAccounts.map((account) => account.accountId),
+        selectedAccounts.map((account) => account.accountKey),
       );
     }
 
@@ -111,12 +111,12 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       namespace,
       chains: [...nextChains.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
-        .map(([chainRef, accountIds]) => ({
+        .map(([chainRef, accountKeys]) => ({
           chainRef: chainRef as typeof primaryChainRef,
-          accountIds,
+          accountKeys,
         })) as [
-        { chainRef: typeof primaryChainRef; accountIds: string[] },
-        ...Array<{ chainRef: typeof primaryChainRef; accountIds: string[] }>,
+        { chainRef: typeof primaryChainRef; accountKeys: string[] },
+        ...Array<{ chainRef: typeof primaryChainRef; accountKeys: string[] }>,
       ],
     });
 

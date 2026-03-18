@@ -54,8 +54,8 @@ export const useUiSnapshot = () => {
   });
 
   const switchAccountMutation = useMutation({
-    mutationFn: ({ chainRef, accountId }: { chainRef: string; accountId?: string | null }) =>
-      uiClient.accounts.switchActive({ chainRef, accountId }),
+    mutationFn: ({ chainRef, accountKey }: { chainRef: string; accountKey?: string | null }) =>
+      uiClient.accounts.switchActive({ chainRef, accountKey }),
   });
 
   const switchChainMutation = useMutation({
@@ -95,7 +95,7 @@ export const useUiSnapshot = () => {
   });
 
   const renameAccountMutation = useMutation({
-    mutationFn: (params: { accountId: string; alias: string }) => uiClient.keyrings.renameAccount(params),
+    mutationFn: (params: { accountKey: string; alias: string }) => uiClient.keyrings.renameAccount(params),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
     },
@@ -110,14 +110,14 @@ export const useUiSnapshot = () => {
   });
 
   const hideHdAccountMutation = useMutation({
-    mutationFn: (accountId: string) => uiClient.keyrings.hideHdAccount({ accountId }),
+    mutationFn: (accountKey: string) => uiClient.keyrings.hideHdAccount({ accountKey }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
     },
   });
 
   const unhideHdAccountMutation = useMutation({
-    mutationFn: (accountId: string) => uiClient.keyrings.unhideHdAccount({ accountId }),
+    mutationFn: (accountKey: string) => uiClient.keyrings.unhideHdAccount({ accountKey }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
     },
@@ -136,7 +136,7 @@ export const useUiSnapshot = () => {
   });
 
   const exportPrivateKeyMutation = useMutation({
-    mutationFn: (params: { accountId: string; password: string }) => uiClient.keyrings.exportPrivateKey(params),
+    mutationFn: (params: { accountKey: string; password: string }) => uiClient.keyrings.exportPrivateKey(params),
   });
 
   const fetchKeyrings = useCallback(

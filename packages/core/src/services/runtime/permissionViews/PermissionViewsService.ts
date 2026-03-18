@@ -4,7 +4,7 @@ import type { ChainRef } from "../../../chains/ids.js";
 import type { AccountController } from "../../../controllers/account/types.js";
 import type { PermissionController } from "../../../controllers/permission/types.js";
 import { buildWalletPermissions as buildEip2255WalletPermissions } from "../../../permissions/eip2255.js";
-import type { AccountId } from "../../../storage/records.js";
+import type { AccountKey } from "../../../storage/records.js";
 import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
 import type {
   BuildWalletPermissionViewsOptions,
@@ -22,9 +22,9 @@ const sortChainRefs = (values: readonly ChainRef[]): ChainRef[] => {
   return [...values].sort((left, right) => left.localeCompare(right));
 };
 
-const uniqAccountIds = (values: readonly AccountId[]): AccountId[] => {
-  const seen = new Set<AccountId>();
-  const next: AccountId[] = [];
+const uniqAccountKeys = (values: readonly AccountKey[]): AccountKey[] => {
+  const seen = new Set<AccountKey>();
+  const next: AccountKey[] = [];
 
   for (const value of values) {
     if (seen.has(value)) {
@@ -51,9 +51,9 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     const { namespace } = parseChainRef(chainRef);
     const authorization = this.#permissions.getAuthorization(origin, { namespace });
     const permittedChainRefs = sortChainRefs(Object.keys(authorization?.chains ?? {}) as ChainRef[]);
-    const rawAccountIds = authorization?.chains[chainRef]?.accountIds ?? [];
-    const accounts = this.#resolveAccounts(namespace, chainRef, rawAccountIds);
-    const permittedAccountIds = accounts.map((account) => account.accountId);
+    const rawAccountKeys = authorization?.chains[chainRef]?.accountKeys ?? [];
+    const accounts = this.#resolveAccounts(namespace, chainRef, rawAccountKeys);
+    const permittedAccountKeys = accounts.map((account) => account.accountKey);
     const isPermittedChain = permittedChainRefs.includes(chainRef);
 
     return {
@@ -61,7 +61,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
       chainRef,
       isPermittedChain,
       permittedChainRefs,
-      permittedAccountIds,
+      permittedAccountKeys,
       accounts,
       isConnected: isPermittedChain && accounts.length > 0,
     };
@@ -105,7 +105,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
         origin,
         namespace: snapshot.namespace,
         chainRef: snapshot.chainRef,
-        accountIds: snapshot.permittedAccountIds,
+        accountKeys: snapshot.permittedAccountKeys,
       },
       getAccounts: (chainRef) =>
         chainRef === snapshot.chainRef ? snapshot.accounts.map((account) => account.canonicalAddress) : [],
@@ -134,11 +134,11 @@ class DefaultPermissionViewsService implements PermissionViewsService {
             sortChainRefs(Object.keys(namespaceState.chains) as ChainRef[]).map((chainRef) => [
               chainRef,
               {
-                accountIds: this.#resolveAccounts(
+                accountKeys: this.#resolveAccounts(
                   namespace,
                   chainRef,
-                  namespaceState.chains[chainRef]?.accountIds ?? [],
-                ).map((account) => account.accountId),
+                  namespaceState.chains[chainRef]?.accountKeys ?? [],
+                ).map((account) => account.accountKey),
               },
             ]),
           ),
@@ -151,17 +151,17 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     return UiPermissionsSnapshotSchema.parse({ origins });
   }
 
-  #resolveAccounts(namespace: string, chainRef: ChainRef, accountIds: readonly AccountId[]): PermittedAccountView[] {
+  #resolveAccounts(namespace: string, chainRef: ChainRef, accountKeys: readonly AccountKey[]): PermittedAccountView[] {
     const accounts: PermittedAccountView[] = [];
 
-    for (const accountId of uniqAccountIds(accountIds)) {
+    for (const accountKey of uniqAccountKeys(accountKeys)) {
       try {
-        const account = this.#accounts.getOwnedAccount({ namespace, chainRef, accountId });
+        const account = this.#accounts.getOwnedAccount({ namespace, chainRef, accountKey });
         if (!account) {
           continue;
         }
         accounts.push({
-          accountId: account.accountId,
+          accountKey: account.accountKey,
           canonicalAddress: account.canonicalAddress,
           displayAddress: account.displayAddress,
         });

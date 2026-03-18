@@ -29,12 +29,12 @@ describe("SettingsService", () => {
     const service = createSettingsService({ port, now: () => 123 });
 
     const next = await service.update({
-      selectedAccountIdsByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      selectedAccountKeysByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     });
 
     expect(next).toEqual({
       id: "settings",
-      selectedAccountIdsByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      selectedAccountKeysByNamespace: { eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
       updatedAt: 123,
     });
   });
@@ -44,10 +44,10 @@ describe("SettingsService", () => {
     const service = createSettingsService({ port, now: () => 500 });
 
     const after = await service.update({
-      selectedAccountIdsByNamespace: { eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      selectedAccountKeysByNamespace: { eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
     });
 
-    expect(after.selectedAccountIdsByNamespace).toEqual({
+    expect(after.selectedAccountKeysByNamespace).toEqual({
       eip155: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     });
     expect(after.updatedAt).toBe(500);
@@ -58,22 +58,22 @@ describe("SettingsService", () => {
     const service = createSettingsService({ port, now: () => 1 });
 
     const first = await service.update({
-      selectedAccountIdsByNamespace: {
+      selectedAccountKeysByNamespace: {
         eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       },
     });
 
-    expect(first.selectedAccountIdsByNamespace).toEqual({
+    expect(first.selectedAccountKeysByNamespace).toEqual({
       eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     });
 
     const second = await service.update({
-      selectedAccountIdsByNamespace: {
+      selectedAccountKeysByNamespace: {
         eip155: null,
       },
     });
 
-    expect(second.selectedAccountIdsByNamespace).toBeUndefined();
+    expect(second.selectedAccountKeysByNamespace).toBeUndefined();
   });
 
   it("trims namespace keys on write", async () => {
@@ -81,17 +81,17 @@ describe("SettingsService", () => {
     const service = createSettingsService({ port, now: () => 10 });
 
     const first = await service.update({
-      selectedAccountIdsByNamespace: { " eip155 ": "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      selectedAccountKeysByNamespace: { " eip155 ": "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
     });
 
-    expect(first.selectedAccountIdsByNamespace).toEqual({
+    expect(first.selectedAccountKeysByNamespace).toEqual({
       eip155: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     });
 
     const second = await service.update({
-      selectedAccountIdsByNamespace: { " eip155 ": null },
+      selectedAccountKeysByNamespace: { " eip155 ": null },
     });
 
-    expect(second.selectedAccountIdsByNamespace).toBeUndefined();
+    expect(second.selectedAccountKeysByNamespace).toBeUndefined();
   });
 });

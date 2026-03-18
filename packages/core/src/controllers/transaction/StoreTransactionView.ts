@@ -197,14 +197,14 @@ export class StoreTransactionView {
 
   #safeFromAccountKeyToAddress(record: TransactionRecord): string | null {
     try {
-      return this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: record.fromAccountId });
+      return this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: record.fromAccountKey });
     } catch (error) {
       if (!this.#fromDecodeLogged.has(record.id)) {
         this.#fromDecodeLogged.add(record.id);
         this.#logger("transactions:view failed to derive from address", {
           id: record.id,
           chainRef: record.chainRef,
-          fromAccountId: record.fromAccountId,
+          fromAccountKey: record.fromAccountKey,
           error: error instanceof Error ? error.message : String(error),
         });
       }

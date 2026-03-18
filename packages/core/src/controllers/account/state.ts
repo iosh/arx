@@ -1,8 +1,8 @@
 import type { ChainNamespace, MultiNamespaceAccountsState, NamespaceAccountsState } from "./types.js";
 
 export const cloneNamespaceAccountsState = (state: NamespaceAccountsState): NamespaceAccountsState => ({
-  accountIds: [...state.accountIds],
-  selectedAccountId: state.selectedAccountId ?? null,
+  accountKeys: [...state.accountKeys],
+  selectedAccountKey: state.selectedAccountKey ?? null,
 });
 
 export const cloneMultiNamespaceAccountsState = (state: MultiNamespaceAccountsState): MultiNamespaceAccountsState => {
@@ -17,9 +17,9 @@ export const cloneMultiNamespaceAccountsState = (state: MultiNamespaceAccountsSt
 
 const isSameNamespaceAccountsState = (prev?: NamespaceAccountsState, next?: NamespaceAccountsState) => {
   if (!prev || !next) return false;
-  if ((prev.selectedAccountId ?? null) !== (next.selectedAccountId ?? null)) return false;
-  if (prev.accountIds.length !== next.accountIds.length) return false;
-  return prev.accountIds.every((value, index) => value === next.accountIds[index]);
+  if ((prev.selectedAccountKey ?? null) !== (next.selectedAccountKey ?? null)) return false;
+  if (prev.accountKeys.length !== next.accountKeys.length) return false;
+  return prev.accountKeys.every((value, index) => value === next.accountKeys[index]);
 };
 
 export const isSameMultiNamespaceAccountsState = (

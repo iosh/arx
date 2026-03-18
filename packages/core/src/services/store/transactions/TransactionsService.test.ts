@@ -66,7 +66,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -87,7 +87,7 @@ describe("TransactionsService", () => {
       namespace: "cosmos",
       chainRef: "cosmos:cosmoshub-4",
       origin: "https://dapp.example",
-      fromAccountId: "cosmos:aa",
+      fromAccountKey: "cosmos:aa",
       request: {
         namespace: "cosmos",
         chainRef: "cosmos:cosmoshub-4",
@@ -116,7 +116,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -137,7 +137,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -164,7 +164,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -184,7 +184,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -201,7 +201,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      fromAccountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 
@@ -247,7 +247,7 @@ describe("TransactionsService", () => {
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
     });
 

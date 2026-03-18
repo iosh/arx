@@ -34,8 +34,8 @@ describe("accounts/addressing accountRef helpers", () => {
               toCanonicalAddress: () => ({ namespace: "conflux", bytes: Uint8Array.from([]) }),
               toCanonicalString: () => "cfx:aarc9abycue0hhzgyrr53m6cxedgccrmmyybjgh4xg",
               toDisplayAddress: () => "cfx:aarc9abycue0hhzgyrr53m6cxedgccrmmyybjgh4xg",
-              toAccountId: () => "conflux:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              fromAccountId: () => ({ namespace: "conflux", bytes: Uint8Array.from([]) }),
+              toAccountKey: () => "conflux:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              fromAccountKey: () => ({ namespace: "conflux", bytes: Uint8Array.from([]) }),
             };
           },
         },

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../../accounts/addressing/accountKey.js";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
@@ -38,14 +38,14 @@ describe("TransactionExecutor", () => {
   it("can create a transaction approval without waiting for settlement", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,
       namespace: "eip155",
       chainRef,
       origin: "https://dapp.example",
-      fromAccountId: accountId,
+      fromAccountKey: accountKey,
       status: "pending",
       request: {
         namespace: "eip155",
@@ -85,7 +85,7 @@ describe("TransactionExecutor", () => {
         getActiveAccountForNamespace: () => null,
         listOwnedForNamespace: () => [
           {
-            accountId,
+            accountKey,
             namespace: "eip155",
             canonicalAddress: from,
             displayAddress: from,
@@ -136,14 +136,14 @@ describe("TransactionExecutor", () => {
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,
       namespace: "eip155",
       chainRef,
       origin: "https://dapp.example",
-      fromAccountId: accountId,
+      fromAccountKey: accountKey,
       status: "pending",
       request: {
         namespace: "eip155",
@@ -183,7 +183,7 @@ describe("TransactionExecutor", () => {
         getActiveAccountForNamespace: () => null,
         listOwnedForNamespace: () => [
           {
-            accountId,
+            accountKey,
             namespace: "eip155",
             canonicalAddress: from,
             displayAddress: from,
@@ -234,14 +234,14 @@ describe("TransactionExecutor", () => {
   it("delegates request normalization to the namespace adapter before persistence", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const accountId = toAccountIdFromAddress({ chainRef, address: from, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
 
     const createdRecord: TransactionRecord = {
       id: REQUEST_ID,
       namespace: "eip155",
       chainRef,
       origin: "https://dapp.example",
-      fromAccountId: accountId,
+      fromAccountKey: accountKey,
       status: "pending",
       request: {
         namespace: "eip155",
@@ -289,7 +289,7 @@ describe("TransactionExecutor", () => {
         getActiveAccountForNamespace: () => null,
         listOwnedForNamespace: () => [
           {
-            accountId,
+            accountKey,
             namespace: "eip155",
             canonicalAddress: from,
             displayAddress: from,

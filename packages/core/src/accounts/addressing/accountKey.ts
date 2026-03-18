@@ -1,9 +1,9 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type AccountId, AccountIdSchema } from "../../storage/records.js";
+import { type AccountKey as StorageAccountKey, AccountKeySchema } from "../../storage/records.js";
 import type { AccountCodecRegistry } from "./codec.js";
 
-export type AccountKey = AccountId;
+export type AccountKey = StorageAccountKey;
 
 type AccountCodecLookup = Pick<AccountCodecRegistry, "require">;
 
@@ -18,7 +18,7 @@ export const assertAccountKeyMatchesChainRef = (params: { chainRef: ChainRef; ac
 };
 
 export const parseAccountKey = (accountKey: AccountKey): { namespace: string; payloadHex: string } => {
-  const parsed = AccountIdSchema.parse(accountKey);
+  const parsed = AccountKeySchema.parse(accountKey);
   const separatorIndex = parsed.indexOf(":");
   if (separatorIndex < 0) {
     throw new Error(`Invalid accountKey format: ${parsed}`);
@@ -40,7 +40,7 @@ export const toAccountKeyFromAddress = (params: {
   const { namespace } = parseChainRef(params.chainRef);
   const codec = params.accountCodecs.require(namespace);
   const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-  return codec.toAccountId(canonical);
+  return codec.toAccountKey(canonical);
 };
 
 export const toCanonicalAddressFromAccountKey = (params: {
@@ -49,7 +49,7 @@ export const toCanonicalAddressFromAccountKey = (params: {
 }): string => {
   const { namespace } = parseAccountKey(params.accountKey);
   const codec = params.accountCodecs.require(namespace);
-  const canonical = codec.fromAccountId(params.accountKey);
+  const canonical = codec.fromAccountKey(params.accountKey);
   return codec.toCanonicalString({ canonical });
 };
 
@@ -60,6 +60,6 @@ export const toDisplayAddressFromAccountKey = (params: {
 }): string => {
   assertAccountKeyMatchesChainRef(params);
   const codec = params.accountCodecs.require(getAccountKeyNamespace(params.accountKey));
-  const canonical = codec.fromAccountId(params.accountKey);
+  const canonical = codec.fromAccountKey(params.accountKey);
   return codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
 };

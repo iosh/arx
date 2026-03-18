@@ -15,7 +15,7 @@ const keyringId = "11111111-1111-4111-8111-111111111111";
 
 const makeAccount = (payloadHex: string, createdAt: number, extra?: Partial<AccountRecord>): AccountRecord =>
   AccountRecordSchema.parse({
-    accountId: `eip155:${payloadHex}`,
+    accountKey: `eip155:${payloadHex}`,
     namespace,
     keyringId,
     createdAt,
@@ -60,7 +60,7 @@ describe("StoreAccountsController", () => {
       accounts: [first, second, hidden],
       settings: {
         id: "settings",
-        selectedAccountIdsByNamespace: {
+        selectedAccountKeysByNamespace: {
           eip155: "eip155:ffffffffffffffffffffffffffffffffffffffff",
         },
         updatedAt: 1,
@@ -68,21 +68,21 @@ describe("StoreAccountsController", () => {
     });
     createdControllers.push(controller);
 
-    expect(controller.getAccountIdsForNamespace(namespace)).toEqual([second.accountId, first.accountId]);
+    expect(controller.getAccountKeysForNamespace(namespace)).toEqual([second.accountKey, first.accountKey]);
     expect(controller.listOwnedForNamespace({ namespace, chainRef })).toMatchObject([
       {
-        accountId: second.accountId,
+        accountKey: second.accountKey,
         canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
       },
       {
-        accountId: first.accountId,
+        accountKey: first.accountKey,
         canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
       },
     ]);
     expect(controller.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
       namespace,
       chainRef,
-      accountId: second.accountId,
+      accountKey: second.accountKey,
       canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
   });
@@ -95,7 +95,7 @@ describe("StoreAccountsController", () => {
       accounts: [first, second],
       settings: {
         id: "settings",
-        selectedAccountIdsByNamespace: {
+        selectedAccountKeysByNamespace: {
           other: "other:aa",
         },
         updatedAt: 1,
@@ -107,31 +107,31 @@ describe("StoreAccountsController", () => {
       controller.setActiveAccount({
         namespace,
         chainRef,
-        accountId: second.accountId,
+        accountKey: second.accountKey,
       }),
     ).resolves.toMatchObject({
       namespace,
       chainRef,
-      accountId: second.accountId,
+      accountKey: second.accountKey,
       canonicalAddress: addressOf("2222222222222222222222222222222222222222"),
     });
 
     expect(settingsPort.saved.at(-1)).toMatchObject({
-      selectedAccountIdsByNamespace: {
+      selectedAccountKeysByNamespace: {
         other: "other:aa",
-        eip155: second.accountId,
+        eip155: second.accountKey,
       },
     });
-    expect(controller.getSelectedAccountId(namespace)).toBe(second.accountId);
+    expect(controller.getSelectedAccountKey(namespace)).toBe(second.accountKey);
 
-    await expect(controller.setActiveAccount({ namespace, chainRef, accountId: null })).resolves.toMatchObject({
+    await expect(controller.setActiveAccount({ namespace, chainRef, accountKey: null })).resolves.toMatchObject({
       namespace,
       chainRef,
-      accountId: first.accountId,
+      accountKey: first.accountKey,
       canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
     });
     expect(controller.getActiveAccountForNamespace({ namespace, chainRef })).toMatchObject({
-      accountId: first.accountId,
+      accountKey: first.accountKey,
       canonicalAddress: addressOf("1111111111111111111111111111111111111111"),
     });
   });
@@ -147,7 +147,7 @@ describe("StoreAccountsController", () => {
       controller.setActiveAccount({
         namespace,
         chainRef,
-        accountId: hidden.accountId,
+        accountKey: hidden.accountKey,
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.PermissionDenied });
 
@@ -155,7 +155,7 @@ describe("StoreAccountsController", () => {
       controller.setActiveAccount({
         namespace,
         chainRef,
-        accountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.KeyringAccountNotFound });
   });
@@ -170,7 +170,7 @@ describe("StoreAccountsController", () => {
       controller.setActiveAccount({
         namespace: "solana",
         chainRef,
-        accountId: "solana:1111111111111111111111111111111111111111",
+        accountKey: "solana:1111111111111111111111111111111111111111",
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.RpcInvalidRequest });
   });

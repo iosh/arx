@@ -1,11 +1,11 @@
-import type { AccountId, AccountRecord } from "../../../storage/records.js";
+import type { AccountKey, AccountRecord } from "../../../storage/records.js";
 import type { Unsubscribe } from "../_shared/signal.js";
 
 export type AccountsChangedPayload =
-  | { kind: "upsert"; accountId: AccountId }
-  | { kind: "remove"; accountId: AccountId }
+  | { kind: "upsert"; accountKey: AccountKey }
+  | { kind: "remove"; accountKey: AccountKey }
   | { kind: "removeByKeyringId"; keyringId: AccountRecord["keyringId"] }
-  | { kind: "setHidden"; accountId: AccountId };
+  | { kind: "setHidden"; accountKey: AccountKey };
 
 export type ListAccountsParams = {
   includeHidden?: boolean;
@@ -14,10 +14,10 @@ export type ListAccountsParams = {
 export type AccountsService = {
   subscribeChanged(handler: (payload: AccountsChangedPayload) => void): Unsubscribe;
 
-  get(accountId: AccountId): Promise<AccountRecord | null>;
+  get(accountKey: AccountKey): Promise<AccountRecord | null>;
   list(params?: ListAccountsParams): Promise<AccountRecord[]>;
   upsert(record: AccountRecord): Promise<void>;
-  remove(accountId: AccountId): Promise<void>;
+  remove(accountKey: AccountKey): Promise<void>;
   removeByKeyringId(keyringId: AccountRecord["keyringId"]): Promise<void>;
-  setHidden(params: { accountId: AccountId; hidden: boolean }): Promise<void>;
+  setHidden(params: { accountKey: AccountKey; hidden: boolean }): Promise<void>;
 };

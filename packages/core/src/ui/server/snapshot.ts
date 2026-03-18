@@ -47,7 +47,7 @@ export const buildUiSnapshot = (deps: {
 
   const accountList = session.unlock.isUnlocked()
     ? accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
-        accountId: account.accountId,
+        accountKey: account.accountKey,
         canonicalAddress: account.canonicalAddress,
         displayAddress: account.displayAddress,
       }))
@@ -57,7 +57,7 @@ export const buildUiSnapshot = (deps: {
     : null;
 
   const accountsState = accounts.getState();
-  const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountIds.length, 0);
+  const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountKeys.length, 0);
 
   const approvalState = approvals.getState();
   const approvalSummaries = approvalState.pending
@@ -112,7 +112,7 @@ export const buildUiSnapshot = (deps: {
       list: accountList,
       active: activeAccount
         ? {
-            accountId: activeAccount.accountId,
+            accountKey: activeAccount.accountKey,
             canonicalAddress: activeAccount.canonicalAddress,
             displayAddress: activeAccount.displayAddress,
           }

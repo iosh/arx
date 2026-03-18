@@ -29,7 +29,7 @@ afterEach(async () => {
 describe("DexiePermissionsPort", () => {
   const createRecord = (args: {
     origin?: string;
-    chains: Array<{ chainRef: string; accountIds: string[] }>;
+    chains: Array<{ chainRef: string; accountKeys: string[] }>;
     updatedAt?: number;
   }) =>
     PermissionRecordSchema.parse({
@@ -44,7 +44,7 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const record = createRecord({
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     await port.upsert(record);
@@ -57,8 +57,8 @@ describe("DexiePermissionsPort", () => {
 
     const record = createRecord({
       chains: [
-        { chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
-        { chainRef: "eip155:137", accountIds: [] },
+        { chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] },
+        { chainRef: "eip155:137", accountKeys: [] },
       ],
     });
 
@@ -84,12 +84,12 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     const b1 = createRecord({
       origin: "https://other.example",
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);
@@ -104,12 +104,12 @@ describe("DexiePermissionsPort", () => {
     const port = storage.ports.permissions;
 
     const a1 = createRecord({
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] }],
     });
 
     const b1 = createRecord({
       origin: "https://other.example",
-      chains: [{ chainRef: "eip155:1", accountIds: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
+      chains: [{ chainRef: "eip155:1", accountKeys: ["eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] }],
     });
 
     await port.upsert(a1);

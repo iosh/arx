@@ -3,7 +3,7 @@ import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import { decodePayloadAndZeroize } from "./keyring-utils.js";
 import type {
-  AccountId,
+  AccountKey,
   AccountRecord,
   KeyringMetaRecord,
   KeyringServiceOptions,
@@ -15,7 +15,7 @@ import type {
 type KeyringState = {
   keyrings: Map<string, RuntimeKeyring>;
   keyringMetas: Map<string, KeyringMetaRecord>;
-  accounts: Map<AccountId, AccountRecord>;
+  accounts: Map<AccountKey, AccountRecord>;
 };
 
 // Manages keyring lifecycle: hydration on unlock, cleanup on lock
@@ -132,7 +132,7 @@ export class KeyringHydration {
 
         this.#state.accounts.clear();
         for (const a of accounts) {
-          this.#state.accounts.set(a.accountId, a);
+          this.#state.accounts.set(a.accountKey, a);
         }
 
         // Decode payload from vault
@@ -176,9 +176,9 @@ export class KeyringHydration {
               this.#options.logger?.(`keyring: failed to remove orphaned store entries for ${meta.id}`, error);
             } finally {
               this.#state.keyringMetas.delete(meta.id);
-              for (const [accountId, record] of Array.from(this.#state.accounts.entries())) {
+              for (const [accountKey, record] of Array.from(this.#state.accounts.entries())) {
                 if (record.keyringId === meta.id) {
-                  this.#state.accounts.delete(accountId);
+                  this.#state.accounts.delete(accountKey);
                 }
               }
             }
@@ -248,8 +248,8 @@ export class KeyringHydration {
                   chainRef: config.defaultChainRef,
                   value: derivedAccount.address,
                 });
-                const expectedAccountId = config.codec.toAccountId(canonical);
-                if (expectedAccountId !== meta.accountId) {
+                const expectedAccountKey = config.codec.toAccountKey(canonical);
+                if (expectedAccountKey !== meta.accountKey) {
                   throw keyringErrors.secretUnavailable();
                 }
               }

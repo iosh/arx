@@ -1,8 +1,8 @@
 import {
-  toAccountIdFromAddress,
-  toCanonicalAddressFromAccountId,
-  toDisplayAddressFromAccountId,
-} from "../../../../../accounts/addressing/accountId.js";
+  toAccountKeyFromAddress,
+  toCanonicalAddressFromAccountKey,
+  toDisplayAddressFromAccountKey,
+} from "../../../../../accounts/addressing/accountKey.js";
 import type { ChainRef } from "../../../../../chains/ids.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/index.js";
@@ -129,10 +129,10 @@ export const connectOrigin = async (args: {
     namespace,
     chains: chainRefs.map((chainRef, index) => ({
       chainRef,
-      accountIds:
+      accountKeys:
         index === 0
           ? (addresses.map((address) =>
-              toAccountIdFromAddress({
+              toAccountKeyFromAddress({
                 chainRef,
                 address,
                 accountCodecs: runtime.services.accountCodecs,
@@ -140,8 +140,8 @@ export const connectOrigin = async (args: {
             ) as [string, ...string[]])
           : [],
     })) as [
-      { chainRef: ChainRef; accountIds: [string, ...string[]] },
-      ...Array<{ chainRef: ChainRef; accountIds: string[] }>,
+      { chainRef: ChainRef; accountKeys: [string, ...string[]] },
+      ...Array<{ chainRef: ChainRef; accountKeys: string[] }>,
     ],
   });
 
@@ -155,28 +155,28 @@ export const connectOrigin = async (args: {
     const original = accountsController.getOwnedAccount.bind(accountsController);
     accountsController.__originalGetOwnedAccount = original;
     accountsController.getOwnedAccount = (params) => {
-      const key = `${params.chainRef}:${params.accountId}`;
+      const key = `${params.chainRef}:${params.accountKey}`;
       return accountsController.__testOwnedAccounts?.get(key) ?? original(params);
     };
   }
 
   for (const chainRef of chainRefs) {
     for (const address of addresses) {
-      const accountId = toAccountIdFromAddress({
+      const accountKey = toAccountKeyFromAddress({
         chainRef,
         address,
         accountCodecs: runtime.services.accountCodecs,
       });
-      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountId}`, {
-        accountId,
+      accountsController.__testOwnedAccounts.set(`${chainRef}:${accountKey}`, {
+        accountKey,
         namespace,
-        canonicalAddress: toCanonicalAddressFromAccountId({
-          accountId,
+        canonicalAddress: toCanonicalAddressFromAccountKey({
+          accountKey,
           accountCodecs: runtime.services.accountCodecs,
         }),
-        displayAddress: toDisplayAddressFromAccountId({
+        displayAddress: toDisplayAddressFromAccountKey({
           chainRef,
-          accountId,
+          accountKey,
           accountCodecs: runtime.services.accountCodecs,
         }),
       });

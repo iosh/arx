@@ -3,11 +3,11 @@ import type { UiOwnedAccountSummary } from "../../protocol/schemas.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 
 const toUiOwnedAccountSummary = (account: {
-  accountId: string;
+  accountKey: string;
   canonicalAddress: string;
   displayAddress: string;
 }): UiOwnedAccountSummary => ({
-  accountId: account.accountId,
+  accountKey: account.accountKey,
   canonicalAddress: account.canonicalAddress,
   displayAddress: account.displayAddress,
 });
@@ -16,12 +16,12 @@ export const createAccountsHandlers = (
   deps: Pick<UiRuntimeDeps, "accounts">,
 ): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
-    "ui.accounts.switchActive": async ({ chainRef, accountId }) => {
+    "ui.accounts.switchActive": async ({ chainRef, accountKey }) => {
       const { namespace } = parseChainRef(chainRef);
       const active = await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
-        accountId: accountId ?? null,
+        accountKey: accountKey ?? null,
       });
       return active ? toUiOwnedAccountSummary(active) : null;
     },

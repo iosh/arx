@@ -1,10 +1,10 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { WalletPermissionDescriptor } from "../../../permissions/eip2255.js";
-import type { AccountId } from "../../../storage/records.js";
+import type { AccountKey } from "../../../storage/records.js";
 import type { UiPermissionsSnapshot } from "../../../ui/protocol/schemas.js";
 
 export type PermittedAccountView = {
-  accountId: AccountId;
+  accountKey: AccountKey;
   canonicalAddress: string;
   displayAddress: string;
 };
@@ -14,7 +14,7 @@ export type ConnectionSnapshot = {
   chainRef: ChainRef;
   isPermittedChain: boolean;
   permittedChainRefs: ChainRef[];
-  permittedAccountIds: AccountId[];
+  permittedAccountKeys: AccountKey[];
   accounts: PermittedAccountView[];
   isConnected: boolean;
 };

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AccountIdSchema } from "../../../storage/records.js";
+import { AccountKeySchema } from "../../../storage/records.js";
 import { UiAccountMetaSchema, UiKeyringMetaSchema } from "../schemas.js";
 import { defineMethod } from "./types.js";
 
@@ -84,7 +84,7 @@ export const keyringsMethods = {
   ),
 
   "ui.keyrings.renameAccount": defineMethod(
-    z.strictObject({ accountId: AccountIdSchema, alias: z.string().min(1) }),
+    z.strictObject({ accountKey: AccountKeySchema, alias: z.string().min(1) }),
     z.null(),
     { broadcastSnapshot: true },
   ),
@@ -93,11 +93,11 @@ export const keyringsMethods = {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ accountId: AccountIdSchema }), z.null(), {
+  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ accountId: AccountIdSchema }), z.null(), {
+  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 
@@ -111,7 +111,7 @@ export const keyringsMethods = {
   ),
 
   "ui.keyrings.exportPrivateKey": defineMethod(
-    z.strictObject({ accountId: AccountIdSchema, password: passwordSchema }),
+    z.strictObject({ accountKey: AccountKeySchema, password: passwordSchema }),
     ExportPrivateKeyResultSchema,
   ),
 } as const;

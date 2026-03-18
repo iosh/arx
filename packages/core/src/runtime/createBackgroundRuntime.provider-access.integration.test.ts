@@ -1,6 +1,6 @@
 import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import { toAccountIdFromAddress } from "../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
@@ -48,7 +48,7 @@ const deriveActiveAccount = async (runtime: CreateBackgroundRuntimeResult) => {
   await runtime.controllers.accounts.setActiveAccount({
     namespace: chain.namespace,
     chainRef: chain.chainRef,
-    accountId: toAccountIdFromAddress({
+    accountKey: toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: account.address,
       accountCodecs: runtime.services.accountCodecs,
@@ -89,8 +89,8 @@ const createTestAccountCodec = (namespace: string): AccountCodec => ({
   toCanonicalAddress: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
   toCanonicalString: () => `${namespace}:canonical`,
   toDisplayAddress: () => `${namespace}:display`,
-  toAccountId: () => `${namespace}:010203`,
-  fromAccountId: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
+  toAccountKey: () => `${namespace}:010203`,
+  fromAccountKey: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
 });
 
 const createTestChainAddressCodec = (namespace: string): ChainAddressCodec => ({
@@ -234,8 +234,8 @@ describe("createBackgroundRuntime provider access", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [
-              toAccountIdFromAddress({
+            accountKeys: [
+              toAccountKeyFromAddress({
                 chainRef: chain.chainRef,
                 address,
                 accountCodecs: background.runtime.services.accountCodecs,
@@ -269,8 +269,8 @@ describe("createBackgroundRuntime provider access", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [
-              toAccountIdFromAddress({
+            accountKeys: [
+              toAccountKeyFromAddress({
                 chainRef: chain.chainRef,
                 address,
                 accountCodecs: background.runtime.services.accountCodecs,
@@ -311,8 +311,8 @@ describe("createBackgroundRuntime provider access", () => {
         chains: [
           {
             chainRef: chain.chainRef,
-            accountIds: [
-              toAccountIdFromAddress({
+            accountKeys: [
+              toAccountKeyFromAddress({
                 chainRef: chain.chainRef,
                 address,
                 accountCodecs: background.runtime.services.accountCodecs,

@@ -244,7 +244,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
   transactionRegistry: TransactionAdapterRegistry;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   chains: ChainAddressCodecRegistry;
-  keyring: Pick<KeyringService, "waitForReady" | "hasAccountId" | "signDigestByAccountId">;
+  keyring: Pick<KeyringService, "waitForReady" | "hasAccountKey" | "signDigestByAccountKey">;
   rpcClientNamespaces: ReadonlySet<string>;
 }): {
   signers: HandlerControllers["signers"];

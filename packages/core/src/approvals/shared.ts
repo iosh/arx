@@ -6,7 +6,7 @@ import type {
   ApprovalKind,
   ApprovalRecord,
 } from "../controllers/approval/types.js";
-import { AccountIdSchema } from "../storage/records.js";
+import { AccountKeySchema } from "../storage/records.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
 import type { ApprovalFlowPresenterDeps } from "./types.js";
 
@@ -16,14 +16,14 @@ type DeriveApprovalReviewContextOptions = {
 
 const ApprovalAccountSelectionDecisionSchema = z
   .strictObject({
-    accountIds: z.array(AccountIdSchema).min(1),
+    accountKeys: z.array(AccountKeySchema).min(1),
   })
   .superRefine((value, ctx) => {
-    if (new Set(value.accountIds).size !== value.accountIds.length) {
+    if (new Set(value.accountKeys).size !== value.accountKeys.length) {
       ctx.addIssue({
         code: "custom",
-        message: "decision.accountIds must not contain duplicates",
-        path: ["accountIds"],
+        message: "decision.accountKeys must not contain duplicates",
+        path: ["accountKeys"],
       });
     }
   });
@@ -46,7 +46,7 @@ export const parseAccountSelectionDecision = <K extends ApprovalKind>(kind: K, i
   } catch (error) {
     throw arxError({
       reason: ArxReasons.RpcInvalidParams,
-      message: `Approval kind "${kind}" requires a non-empty accountIds decision.`,
+      message: `Approval kind "${kind}" requires a non-empty accountKeys decision.`,
       data: { kind, decision: input },
       ...(error instanceof ZodError ? { cause: error } : {}),
     });
@@ -74,16 +74,16 @@ export const getApprovalSelectableAccounts = (
     namespace,
     chainRef: reviewChainRef,
   });
-  const recommendedAccountId =
-    activeAccount && selectableAccounts.some((account) => account.accountId === activeAccount.accountId)
-      ? activeAccount.accountId
-      : (selectableAccounts[0]?.accountId ?? null);
+  const recommendedAccountKey =
+    activeAccount && selectableAccounts.some((account) => account.accountKey === activeAccount.accountKey)
+      ? activeAccount.accountKey
+      : (selectableAccounts[0]?.accountKey ?? null);
 
   return {
     namespace,
     chainRef: reviewChainRef,
     selectableAccounts,
-    recommendedAccountId,
+    recommendedAccountKey,
   };
 };
 
@@ -94,19 +94,19 @@ export const resolveApprovalSelectedAccounts = (args: {
   decision: ApprovalAccountSelectionDecision;
   selectableAccounts: ReturnType<typeof getApprovalSelectableAccounts>["selectableAccounts"];
 }) => {
-  const byId = new Map(args.selectableAccounts.map((account) => [account.accountId, account] as const));
-  const selected = args.decision.accountIds.map((accountId) => {
-    const account = byId.get(accountId);
+  const byKey = new Map(args.selectableAccounts.map((account) => [account.accountKey, account] as const));
+  const selected = args.decision.accountKeys.map((accountKey) => {
+    const account = byKey.get(accountKey);
     if (!account) {
       throw arxError({
         reason: ArxReasons.PermissionDenied,
-        message: `Approval decision contains an unselectable account "${accountId}"`,
+        message: `Approval decision contains an unselectable account "${accountKey}"`,
         data: {
           origin: args.record.origin,
           kind: args.record.kind,
           namespace: args.namespace,
           chainRef: args.chainRef,
-          accountId,
+          accountKey,
         },
       });
     }

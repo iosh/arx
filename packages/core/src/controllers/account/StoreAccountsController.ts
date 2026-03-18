@@ -4,7 +4,7 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
-import type { AccountId } from "../../storage/records.js";
+import type { AccountKey } from "../../storage/records.js";
 import { cloneMultiNamespaceAccountsState, isSameMultiNamespaceAccountsState } from "./state.js";
 import { ACCOUNTS_STATE_CHANGED, type AccountMessenger } from "./topics.js";
 import type {
@@ -88,33 +88,33 @@ export class StoreAccountsController implements AccountController {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
     const record = this.#state.namespaces[namespace];
     if (!record) return [];
-    return record.accountIds.map((accountId) => this.#toOwnedAccountView({ namespace, chainRef, accountId }));
+    return record.accountKeys.map((accountKey) => this.#toOwnedAccountView({ namespace, chainRef, accountKey }));
   }
 
-  getOwnedAccount(params: NamespaceChainContext & { accountId: AccountId }): OwnedAccountView | null {
+  getOwnedAccount(params: NamespaceChainContext & { accountKey: AccountKey }): OwnedAccountView | null {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const { accountId } = params;
+    const { accountKey } = params;
     const record = this.#state.namespaces[namespace];
-    if (!record?.accountIds.includes(accountId)) return null;
-    return this.#toOwnedAccountView({ namespace, chainRef, accountId });
+    if (!record?.accountKeys.includes(accountKey)) return null;
+    return this.#toOwnedAccountView({ namespace, chainRef, accountKey });
   }
 
-  getAccountIdsForNamespace(namespace: ChainNamespace): AccountId[] {
+  getAccountKeysForNamespace(namespace: ChainNamespace): AccountKey[] {
     const record = this.#state.namespaces[namespace];
-    return record ? [...record.accountIds] : [];
+    return record ? [...record.accountKeys] : [];
   }
 
-  getSelectedAccountId(namespace: ChainNamespace): AccountId | null {
+  getSelectedAccountKey(namespace: ChainNamespace): AccountKey | null {
     const record = this.#state.namespaces[namespace];
-    return record?.selectedAccountId ?? null;
+    return record?.selectedAccountKey ?? null;
   }
 
   getActiveAccountForNamespace(params: NamespaceChainContext): ActiveAccountView | null {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const accountId = this.getSelectedAccountId(namespace);
-    if (!accountId) return null;
+    const accountKey = this.getSelectedAccountKey(namespace);
+    if (!accountKey) return null;
 
-    const owned = this.getOwnedAccount({ namespace, chainRef, accountId });
+    const owned = this.getOwnedAccount({ namespace, chainRef, accountKey });
     if (!owned) return null;
 
     return {
@@ -124,34 +124,34 @@ export class StoreAccountsController implements AccountController {
   }
 
   async setActiveAccount(
-    params: NamespaceChainContext & { accountId?: AccountId | null },
+    params: NamespaceChainContext & { accountKey?: AccountKey | null },
   ): Promise<ActiveAccountView | null> {
     const { namespace, chainRef } = this.#assertNamespaceChainContext(params);
-    const accountId = params.accountId ?? null;
+    const accountKey = params.accountKey ?? null;
 
-    if (accountId !== null) {
-      this.#assertAccountIdNamespace(accountId, namespace);
+    if (accountKey !== null) {
+      this.#assertAccountKeyNamespace(accountKey, namespace);
 
-      const record = await this.#accounts.get(accountId);
+      const record = await this.#accounts.get(accountKey);
       if (!record) {
         throw arxError({
           reason: ArxReasons.KeyringAccountNotFound,
-          message: `Unknown account "${accountId}" for namespace "${namespace}"`,
-          data: { chainRef, namespace, accountId },
+          message: `Unknown account "${accountKey}" for namespace "${namespace}"`,
+          data: { chainRef, namespace, accountKey },
         });
       }
       if (record.hidden) {
         throw arxError({
           reason: ArxReasons.PermissionDenied,
-          message: `Account "${accountId}" is hidden for namespace "${namespace}"`,
-          data: { chainRef, namespace, accountId },
+          message: `Account "${accountKey}" is hidden for namespace "${namespace}"`,
+          data: { chainRef, namespace, accountKey },
         });
       }
     }
 
     await this.#settings.update({
-      selectedAccountIdsByNamespace: {
-        [namespace]: accountId,
+      selectedAccountKeysByNamespace: {
+        [namespace]: accountKey,
       },
     });
 
@@ -176,13 +176,13 @@ export class StoreAccountsController implements AccountController {
     return params;
   }
 
-  #assertAccountIdNamespace(accountId: AccountId, namespace: ChainNamespace): void {
-    const accountNamespace = getAccountKeyNamespace(accountId);
+  #assertAccountKeyNamespace(accountKey: AccountKey, namespace: ChainNamespace): void {
+    const accountNamespace = getAccountKeyNamespace(accountKey);
     if (accountNamespace !== namespace) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
-        message: `Account "${accountId}" does not belong to namespace "${namespace}"`,
-        data: { accountId, namespace, accountNamespace },
+        message: `Account "${accountKey}" does not belong to namespace "${namespace}"`,
+        data: { accountKey, namespace, accountNamespace },
       });
     }
   }
@@ -190,15 +190,15 @@ export class StoreAccountsController implements AccountController {
   #toOwnedAccountView(params: {
     namespace: ChainNamespace;
     chainRef: NamespaceChainContext["chainRef"];
-    accountId: AccountId;
+    accountKey: AccountKey;
   }): OwnedAccountView {
     return {
-      accountId: params.accountId,
+      accountKey: params.accountKey,
       namespace: params.namespace,
-      canonicalAddress: this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: params.accountId }),
+      canonicalAddress: this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: params.accountKey }),
       displayAddress: this.#accountCodecs.toDisplayAddressFromAccountKey({
         chainRef: params.chainRef,
-        accountKey: params.accountId,
+        accountKey: params.accountKey,
       }),
     };
   }
@@ -208,17 +208,17 @@ export class StoreAccountsController implements AccountController {
 
     this.#refreshPromise = (async () => {
       const records = await this.#accounts.list({ includeHidden: false });
-      const byNamespace = new Map<string, AccountId[]>();
+      const byNamespace = new Map<string, AccountKey[]>();
       for (const record of records) {
         const list = byNamespace.get(record.namespace) ?? [];
-        list.push(record.accountId);
+        list.push(record.accountKey);
         byNamespace.set(record.namespace, list);
       }
 
-      let selectedByNamespace: Record<string, AccountId> = {};
+      let selectedByNamespace: Record<string, AccountKey> = {};
       try {
         const settings = await this.#settings.get();
-        selectedByNamespace = { ...(settings?.selectedAccountIdsByNamespace ?? {}) };
+        selectedByNamespace = { ...(settings?.selectedAccountKeysByNamespace ?? {}) };
       } catch (error) {
         this.#logger?.("accounts: failed to load settings", error);
         selectedByNamespace = {};
@@ -226,11 +226,11 @@ export class StoreAccountsController implements AccountController {
 
       const nextNamespaces: Record<ChainNamespace, NamespaceAccountsState> = {};
       const namespaces = [...byNamespace.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-      for (const [ns, accountIds] of namespaces) {
+      for (const [ns, accountKeys] of namespaces) {
         const desired = selectedByNamespace[ns] ?? null;
         nextNamespaces[ns] = {
-          accountIds: [...accountIds],
-          selectedAccountId: desired && accountIds.includes(desired) ? desired : (accountIds[0] ?? null),
+          accountKeys: [...accountKeys],
+          selectedAccountKey: desired && accountKeys.includes(desired) ? desired : (accountKeys[0] ?? null),
         };
       }
 

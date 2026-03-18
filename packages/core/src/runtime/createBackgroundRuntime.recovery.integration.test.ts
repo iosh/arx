@@ -48,7 +48,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       namespace: "eip155",
       chainRef: chain.chainRef,
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       status: "broadcast",
       request: {
         namespace: "eip155",
@@ -126,7 +126,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       namespace: "eip155",
       chainRef: chain.chainRef,
       origin: "https://dapp.example",
-      fromAccountId: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       status: "approved",
       request: {
         namespace: "eip155",

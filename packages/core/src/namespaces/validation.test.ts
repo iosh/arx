@@ -18,8 +18,8 @@ const createTestAccountCodec = (namespace: string): AccountCodec => ({
   toCanonicalAddress: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
   toCanonicalString: () => `${namespace}:canonical`,
   toDisplayAddress: () => `${namespace}:display`,
-  toAccountId: () => `${namespace}:010203`,
-  fromAccountId: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
+  toAccountKey: () => `${namespace}:010203`,
+  fromAccountKey: () => ({ namespace, bytes: Uint8Array.from([1, 2, 3]) }),
 });
 
 const createTestChainAddressCodec = (namespace: string): ChainAddressCodec => ({

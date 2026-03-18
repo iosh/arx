@@ -1,6 +1,6 @@
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainPermissionAuthorization } from "../controllers/permission/types.js";
-import type { AccountId } from "../storage/records.js";
+import type { AccountKey } from "../storage/records.js";
 import { PermissionCapabilities, type PermissionCapability } from "./capabilities.js";
 
 export type WalletPermissionCaveat = {
@@ -17,7 +17,7 @@ export type WalletPermissionDescriptor = {
 export type BuildWalletPermissionsOptions = {
   origin: string;
   authorization?: ChainPermissionAuthorization | null;
-  getAccounts?: (chainRef: ChainRef, accountIds: readonly AccountId[]) => readonly string[] | undefined;
+  getAccounts?: (chainRef: ChainRef, accountKeys: readonly AccountKey[]) => readonly string[] | undefined;
 };
 
 const unique = <T>(values: readonly T[]): T[] => {
@@ -34,11 +34,11 @@ export const buildWalletPermissions = ({
   getAccounts,
 }: BuildWalletPermissionsOptions): WalletPermissionDescriptor[] => {
   if (!authorization) return [];
-  if (authorization.accountIds.length === 0) {
+  if (authorization.accountKeys.length === 0) {
     return [];
   }
 
-  const addresses = sanitizeAccounts(getAccounts?.(authorization.chainRef, authorization.accountIds) ?? []);
+  const addresses = sanitizeAccounts(getAccounts?.(authorization.chainRef, authorization.accountKeys) ?? []);
   const uniqueAddresses = unique(addresses);
   if (uniqueAddresses.length === 0) {
     return [];

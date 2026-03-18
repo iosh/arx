@@ -1,6 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
 import type { ChainMetadata } from "../../../../../chains/metadata.js";
 import { ApprovalKinds, type RequestPermissionsApprovalPayload } from "../../../../../controllers/index.js";
 import {
@@ -64,7 +64,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: mainnet.namespace,
       chainRef: mainnet.chainRef,
-      accountId: toAccountIdFromAddress({
+      accountKey: toAccountKeyFromAddress({
         chainRef: mainnet.chainRef,
         address: derived.address,
         accountCodecs: runtime.services.accountCodecs,
@@ -762,7 +762,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
-    const accountId = toAccountIdFromAddress({
+    const accountKey = toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: account.address,
       accountCodecs: runtime.services.accountCodecs,
@@ -770,7 +770,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: chain.namespace,
       chainRef: chain.chainRef,
-      accountId,
+      accountKey,
     });
 
     const teardown = setupApprovalResponder(runtime, async (task) => {
@@ -781,7 +781,7 @@ describe("eip155 handlers - core error paths", () => {
       await runtime.controllers.approvals.resolve({
         id: task.id,
         action: "approve",
-        decision: { accountIds: [accountId] },
+        decision: { accountKeys: [accountKey] },
       });
       return true;
     });
@@ -801,7 +801,7 @@ describe("eip155 handlers - core error paths", () => {
 
       const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
       expect(Object.keys(authorization?.chains ?? {})).toEqual([chain.chainRef]);
-      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual([accountId]);
+      expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([accountKey]);
     } finally {
       teardown();
       runtime.lifecycle.destroy();
@@ -846,7 +846,7 @@ describe("eip155 handlers - core error paths", () => {
         .resolve({
           id: task.id,
           action: "approve",
-          decision: { accountIds: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
+          decision: { accountKeys: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
         })
         .catch(() => {});
       return true;
@@ -884,12 +884,12 @@ describe("eip155 handlers - core error paths", () => {
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
 
-    const firstAccountId = toAccountIdFromAddress({
+    const firstAccountId = toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: first.address,
       accountCodecs: runtime.services.accountCodecs,
     });
-    const secondAccountId = toAccountIdFromAddress({
+    const secondAccountId = toAccountKeyFromAddress({
       chainRef: chain.chainRef,
       address: second.address,
       accountCodecs: runtime.services.accountCodecs,
@@ -898,7 +898,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: chain.namespace,
       chainRef: chain.chainRef,
-      accountId: firstAccountId,
+      accountKey: firstAccountId,
     });
     await connectOrigin({
       runtime,
@@ -911,7 +911,7 @@ describe("eip155 handlers - core error paths", () => {
       await runtime.controllers.approvals.resolve({
         id: task.id,
         action: "approve",
-        decision: { accountIds: [secondAccountId] },
+        decision: { accountKeys: [secondAccountId] },
       });
       return true;
     });
@@ -924,7 +924,7 @@ describe("eip155 handlers - core error paths", () => {
       });
 
       const authorization = runtime.controllers.permissions.getAuthorization(ORIGIN, { namespace: "eip155" });
-      expect(authorization?.chains[chain.chainRef]?.accountIds).toEqual([secondAccountId]);
+      expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([secondAccountId]);
     } finally {
       teardown();
       runtime.lifecycle.destroy();
@@ -951,7 +951,7 @@ describe("eip155 handlers - core error paths", () => {
         .resolve({
           id: task.id,
           action: "approve",
-          decision: { accountIds: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
+          decision: { accountKeys: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
         })
         .catch(() => {});
       return true;

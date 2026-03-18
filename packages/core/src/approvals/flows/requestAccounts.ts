@@ -12,7 +12,7 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
   kind: ApprovalKinds.RequestAccounts,
   parseDecision: (input) => parseAccountSelectionDecision(ApprovalKinds.RequestAccounts, input),
   present(record, deps) {
-    const { selectableAccounts, recommendedAccountId } = getApprovalSelectableAccounts(record, deps, {
+    const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
       request: record.request,
     });
 
@@ -21,11 +21,11 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
       type: "requestAccounts",
       payload: {
         selectableAccounts: selectableAccounts.map((account) => ({
-          accountId: account.accountId,
+          accountKey: account.accountKey,
           canonicalAddress: account.canonicalAddress,
           displayAddress: account.displayAddress,
         })),
-        recommendedAccountId,
+        recommendedAccountKey,
       },
     };
   },
@@ -54,24 +54,24 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
     const nextChains = new Map<string, string[]>(
       Object.entries(existing?.chains ?? {}).map(([existingChainRef, chainState]) => [
         existingChainRef,
-        [...chainState.accountIds],
+        [...chainState.accountKeys],
       ]),
     );
     nextChains.set(
       chainRef,
-      selectedAccounts.map((account) => account.accountId),
+      selectedAccounts.map((account) => account.accountKey),
     );
 
     await deps.permissions.upsertAuthorization(record.origin, {
       namespace,
       chains: [...nextChains.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
-        .map(([entryChainRef, accountIds]) => ({
+        .map(([entryChainRef, accountKeys]) => ({
           chainRef: entryChainRef as typeof chainRef,
-          accountIds,
+          accountKeys,
         })) as [
-        { chainRef: typeof chainRef; accountIds: string[] },
-        ...Array<{ chainRef: typeof chainRef; accountIds: string[] }>,
+        { chainRef: typeof chainRef; accountKeys: string[] },
+        ...Array<{ chainRef: typeof chainRef; accountKeys: string[] }>,
       ],
     });
 

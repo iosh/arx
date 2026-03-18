@@ -17,7 +17,7 @@ export type CreatePendingTransactionParams = {
   namespace: TransactionRecord["namespace"];
   chainRef: ChainRef;
   origin: TransactionRecord["origin"];
-  fromAccountId: TransactionRecord["fromAccountId"];
+  fromAccountKey: TransactionRecord["fromAccountKey"];
   request: TransactionRecord["request"];
   warnings?: TransactionRecord["warnings"];
   issues?: TransactionRecord["issues"];

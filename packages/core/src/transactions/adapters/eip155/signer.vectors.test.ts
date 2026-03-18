@@ -2,7 +2,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import * as Hash from "ox/Hash";
 import * as Hex from "ox/Hex";
 import { describe, expect, it } from "vitest";
-import { toAccountIdFromAddress } from "../../../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../../../accounts/addressing/accountKey.js";
 import { createAccountCodecRegistry, eip155Codec } from "../../../accounts/addressing/codec.js";
 import type { TransactionSignContext } from "../types.js";
 import { createEip155Signer } from "./signer.js";
@@ -15,14 +15,14 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" as const;
     const address = "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
       waitForReady: async () => {},
-      hasAccountId: (id: string) => id === accountId,
-      signDigestByAccountId: async ({ accountId: id, digest }: { accountId: string; digest: Uint8Array }) => {
-        expect(id).toBe(accountId);
+      hasAccountKey: (key: string) => key === accountKey,
+      signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
+        expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
       },
@@ -31,7 +31,7 @@ describe("eip155 signer (vectors)", () => {
     const signer = createEip155Signer({ keyring });
 
     const message = "0x68656c6c6f20776f726c64" as const; // "hello world"
-    const signature = await signer.signPersonalMessage({ accountId, message });
+    const signature = await signer.signPersonalMessage({ accountKey, message });
 
     // Precomputed with viem@2.39.0 (privateKeyToAccount(privateKey).signMessage({ message: { raw: message } }))
     expect(signature.toLowerCase()).toBe(
@@ -43,14 +43,14 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0x1111111111111111111111111111111111111111111111111111111111111111" as const;
     const address = "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
       waitForReady: async () => {},
-      hasAccountId: (id: string) => id === accountId,
-      signDigestByAccountId: async ({ accountId: id, digest }: { accountId: string; digest: Uint8Array }) => {
-        expect(id).toBe(accountId);
+      hasAccountKey: (key: string) => key === accountKey,
+      signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
+        expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
       },
@@ -84,7 +84,7 @@ describe("eip155 signer (vectors)", () => {
       },
     } as const;
 
-    const signature = await signer.signTypedData({ accountId, typedData: JSON.stringify(typedData) });
+    const signature = await signer.signTypedData({ accountKey, typedData: JSON.stringify(typedData) });
 
     // Precomputed with viem@2.39.0 (privateKeyToAccount(privateKey).signTypedData(typedData))
     expect(signature.toLowerCase()).toBe(
@@ -96,14 +96,14 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
     const address = "0x8fd379246834eac74B8419FfdA202CF8051F7A03" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
       waitForReady: async () => {},
-      hasAccountId: (id: string) => id === accountId,
-      signDigestByAccountId: async ({ accountId: id, digest }: { accountId: string; digest: Uint8Array }) => {
-        expect(id).toBe(accountId);
+      hasAccountKey: (key: string) => key === accountKey,
+      signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
+        expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
       },
@@ -145,14 +145,14 @@ describe("eip155 signer (vectors)", () => {
     const privateKey = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
     const address = "0x88f9B82462f6C4bf4a0Fb15e5c3971559a316e7f" as const;
     const chainRef = "eip155:1" as const;
-    const accountId = toAccountIdFromAddress({ chainRef, address, accountCodecs });
+    const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
     const keyring = {
       waitForReady: async () => {},
-      hasAccountId: (id: string) => id === accountId,
-      signDigestByAccountId: async ({ accountId: id, digest }: { accountId: string; digest: Uint8Array }) => {
-        expect(id).toBe(accountId);
+      hasAccountKey: (key: string) => key === accountKey,
+      signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
+        expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
         return { r: sig.r, s: sig.s, yParity: sig.recovery, bytes: sig.toCompactRawBytes() };
       },

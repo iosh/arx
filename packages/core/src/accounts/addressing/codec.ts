@@ -2,8 +2,8 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { parseChainRef } from "../../chains/caip.js";
 import { createEip155AddressModule } from "../../chains/eip155/address.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type AccountId, AccountIdSchema } from "../../storage/records.js";
 import type { AccountKey } from "./accountKey.js";
+import { AccountKeySchema } from "../../storage/records.js";
 
 export type CanonicalAddress = {
   namespace: string;
@@ -17,8 +17,8 @@ export type AccountCodec = {
   toCanonicalString(params: { canonical: CanonicalAddress }): string;
   toDisplayAddress(params: { chainRef: ChainRef; canonical: CanonicalAddress }): string;
 
-  toAccountId(canonical: CanonicalAddress): AccountId;
-  fromAccountId(accountId: AccountId): CanonicalAddress;
+  toAccountKey(canonical: CanonicalAddress): AccountKey;
+  fromAccountKey(accountKey: AccountKey): CanonicalAddress;
 };
 
 export class AccountCodecRegistry {
@@ -58,33 +58,21 @@ export class AccountCodecRegistry {
     const { namespace } = parseChainRef(params.chainRef);
     const codec = this.require(namespace);
     const canonical = codec.toCanonicalAddress({ chainRef: params.chainRef, value: params.address });
-    return codec.toAccountId(canonical);
+    return codec.toAccountKey(canonical);
   }
 
   toCanonicalAddressFromAccountKey(params: { accountKey: AccountKey }): string {
-    const namespace = parseAccountIdParts(params.accountKey).namespace;
+    const namespace = parseAccountKeyParts(params.accountKey).namespace;
     const codec = this.require(namespace);
-    const canonical = codec.fromAccountId(params.accountKey);
+    const canonical = codec.fromAccountKey(params.accountKey);
     return codec.toCanonicalString({ canonical });
   }
 
   toDisplayAddressFromAccountKey(params: { chainRef: ChainRef; accountKey: AccountKey }): string {
     const { namespace } = parseChainRef(params.chainRef);
     const codec = this.require(namespace);
-    const canonical = codec.fromAccountId(params.accountKey);
+    const canonical = codec.fromAccountKey(params.accountKey);
     return codec.toDisplayAddress({ chainRef: params.chainRef, canonical });
-  }
-
-  toAccountIdFromAddress(params: { chainRef: ChainRef; address: string }): AccountId {
-    return this.toAccountKeyFromAddress(params);
-  }
-
-  toCanonicalAddressFromAccountId(params: { accountId: AccountId }): string {
-    return this.toCanonicalAddressFromAccountKey({ accountKey: params.accountId });
-  }
-
-  toDisplayAddressFromAccountId(params: { chainRef: ChainRef; accountId: AccountId }): string {
-    return this.toDisplayAddressFromAccountKey({ chainRef: params.chainRef, accountKey: params.accountId });
   }
 
   list(): AccountCodec[] {
@@ -92,11 +80,11 @@ export class AccountCodecRegistry {
   }
 }
 
-const parseAccountIdParts = (accountId: AccountId): { namespace: string; payloadHex: string } => {
-  const parsed = AccountIdSchema.parse(accountId);
+const parseAccountKeyParts = (accountKey: AccountKey): { namespace: string; payloadHex: string } => {
+  const parsed = AccountKeySchema.parse(accountKey);
   const separatorIndex = parsed.indexOf(":");
   if (separatorIndex < 0) {
-    throw new Error(`Invalid accountId format: ${parsed}`);
+    throw new Error(`Invalid accountKey format: ${parsed}`);
   }
 
   return {
@@ -105,10 +93,10 @@ const parseAccountIdParts = (accountId: AccountId): { namespace: string; payload
   };
 };
 
-const requireAccountIdNamespace = (accountId: AccountId, namespace: string): string => {
-  const parsed = parseAccountIdParts(accountId);
+const requireAccountKeyNamespace = (accountKey: AccountKey, namespace: string): string => {
+  const parsed = parseAccountKeyParts(accountKey);
   if (parsed.namespace !== namespace) {
-    throw new Error(`AccountId namespace mismatch: expected "${namespace}", got "${parsed.namespace}"`);
+    throw new Error(`AccountKey namespace mismatch: expected "${namespace}", got "${parsed.namespace}"`);
   }
   return parsed.payloadHex;
 };
@@ -138,15 +126,15 @@ export const eip155Codec: AccountCodec = {
     return eip155Module.format({ chainRef, canonical: hex });
   },
 
-  toAccountId(canonical) {
+  toAccountKey(canonical) {
     if (canonical.namespace !== "eip155") {
       throw new Error(`Unsupported namespace for eip155Codec: ${canonical.namespace}`);
     }
-    return AccountIdSchema.parse(`eip155:${bytesToHex(canonical.bytes)}`);
+    return AccountKeySchema.parse(`eip155:${bytesToHex(canonical.bytes)}`);
   },
 
-  fromAccountId(accountId) {
-    const payloadHex = requireAccountIdNamespace(accountId, "eip155");
+  fromAccountKey(accountKey) {
+    const payloadHex = requireAccountKeyNamespace(accountKey, "eip155");
     return { namespace: "eip155", bytes: hexToBytes(payloadHex) };
   },
 };

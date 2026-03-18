@@ -1,6 +1,6 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
-import { toAccountIdFromAddress } from "../../../../../accounts/addressing/accountId.js";
+import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
 import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
 import { ApprovalKinds, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
@@ -52,7 +52,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: activeChain.namespace,
       chainRef: activeChain.chainRef,
-      accountId: selectableAccount.accountId,
+      accountKey: selectableAccount.accountKey,
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -81,11 +81,11 @@ describe("eip155 handlers - approval metadata", () => {
         createdAt: task.createdAt,
         payload: {
           selectableAccounts: selectableAccounts.map((account) => ({
-            accountId: account.accountId,
+            accountKey: account.accountKey,
             canonicalAddress: account.canonicalAddress,
             displayAddress: account.displayAddress,
           })),
-          recommendedAccountId: selectableAccount.accountId,
+          recommendedAccountKey: selectableAccount.accountKey,
           requestedAccesses: [{ capability: "eth_accounts", chainRef: activeChain.chainRef }],
         },
       });
@@ -122,7 +122,7 @@ describe("eip155 handlers - approval metadata", () => {
     const activeChain = getActiveChainMetadata(runtime);
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
     const account = await runtime.services.keyring.deriveAccount(keyringId);
-    const accountId = toAccountIdFromAddress({
+    const accountKey = toAccountKeyFromAddress({
       chainRef: activeChain.chainRef,
       address: account.address,
       accountCodecs: runtime.services.accountCodecs,
@@ -130,7 +130,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.controllers.accounts.setActiveAccount({
       namespace: activeChain.namespace,
       chainRef: activeChain.chainRef,
-      accountId,
+      accountKey,
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -139,7 +139,7 @@ describe("eip155 handlers - approval metadata", () => {
       void runtime.controllers.approvals.resolve({
         id: record.id,
         action: "approve",
-        decision: { accountIds: [accountId] },
+        decision: { accountKeys: [accountKey] },
       });
     });
 
@@ -499,7 +499,7 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({
+        accountKey: toAccountKeyFromAddress({
           chainRef: mainnet.chainRef,
           address: account.address,
           accountCodecs: runtime.services.accountCodecs,
@@ -580,7 +580,7 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({
+        accountKey: toAccountKeyFromAddress({
           chainRef: mainnet.chainRef,
           address: account.address,
           accountCodecs: runtime.services.accountCodecs,
@@ -606,11 +606,11 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       const signer = runtime.controllers.signers.require<{
-        signPersonalMessage: (params: { accountId: string; message: string }) => Promise<string>;
+        signPersonalMessage: (params: { accountKey: string; message: string }) => Promise<string>;
       }>("eip155");
       await expect(
         signer.signPersonalMessage({
-          accountId: toAccountIdFromAddress({
+          accountKey: toAccountKeyFromAddress({
             chainRef: mainnet.chainRef,
             address: account.address,
             accountCodecs: runtime.services.accountCodecs,
@@ -647,7 +647,7 @@ describe("eip155 handlers - approval metadata", () => {
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
         chainRef: mainnet.chainRef,
-        accountId: toAccountIdFromAddress({
+        accountKey: toAccountKeyFromAddress({
           chainRef: mainnet.chainRef,
           address: account.address,
           accountCodecs: runtime.services.accountCodecs,
@@ -686,11 +686,11 @@ describe("eip155 handlers - approval metadata", () => {
       expect(signature).toMatch(/^0x[0-9a-f]+$/i);
       expect(signature.length).toBe(132);
       const signer = runtime.controllers.signers.require<{
-        signTypedData: (params: { accountId: string; typedData: string }) => Promise<string>;
+        signTypedData: (params: { accountKey: string; typedData: string }) => Promise<string>;
       }>("eip155");
       await expect(
         signer.signTypedData({
-          accountId: toAccountIdFromAddress({
+          accountKey: toAccountKeyFromAddress({
             chainRef: mainnet.chainRef,
             address: account.address,
             accountCodecs: runtime.services.accountCodecs,

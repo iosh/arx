@@ -149,7 +149,18 @@ const makeRuntime = () => {
     rpc: {
       engine: {},
       registry: {},
-      getActiveNamespace: vi.fn(),
+      resolveContextNamespace: vi.fn(),
+      resolveMethodNamespace: vi.fn(),
+      resolveInvocation: vi.fn(),
+      resolveInvocationDetails: vi.fn(),
+      resolvePermissionCapability: vi.fn(),
+      executeRequest: vi.fn(),
+      errorEncoder: {
+        encodeUi: vi.fn(),
+        encodeDapp: vi.fn(),
+        encodeSurfaceError: vi.fn(),
+        executeWithEncoding: vi.fn(),
+      },
     },
     lifecycle: {
       initialize,

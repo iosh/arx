@@ -51,7 +51,9 @@ export type AccountController = {
    * Selects the active account for a namespace.
    * - accountKey omitted/null => reset selection to the namespace default (first account)
    */
-  setActiveAccount(params: NamespaceChainContext & { accountKey?: AccountKey | null }): Promise<ActiveAccountView | null>;
+  setActiveAccount(
+    params: NamespaceChainContext & { accountKey?: AccountKey | null },
+  ): Promise<ActiveAccountView | null>;
 
   onStateChanged(handler: (state: MultiNamespaceAccountsState) => void): () => void;
 

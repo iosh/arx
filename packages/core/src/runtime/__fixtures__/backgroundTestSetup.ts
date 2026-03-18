@@ -733,7 +733,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
   });
   const { runtime } = background;
 
-  const deriveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver();
+  const deriveMethodNamespace = runtime.rpc.resolveMethodNamespace;
   const engine = runtime.rpc.engine;
 
   const buildRpcContext = (overrides?: Partial<RpcInvocationContext>): RpcInvocationContext => {
@@ -782,8 +782,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         (error, response) => {
           if (error) {
             reject(
-              runtime.rpc.registry.encodeErrorWithAdapters(error, {
-                surface: "dapp",
+              runtime.rpc.errorEncoder.encodeDapp(error, {
                 namespace,
                 chainRef: resolvedChainRef,
                 origin,

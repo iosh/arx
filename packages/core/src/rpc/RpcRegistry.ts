@@ -1,90 +1,20 @@
-import type { ErrorEncodeContext, ErrorSurface, NamespaceProtocolAdapter } from "@arx/errors";
-import {
-  type ArxError,
-  ArxReasons,
-  arxError,
-  coerceArxError,
-  encodeDappError as encodeGenericDappError,
-  encodeUiError as encodeGenericUiError,
-  isArxError,
-} from "@arx/errors";
-import { ZodError } from "zod";
-import { getChainRefNamespace, normalizeChainRef, parseChainRef } from "../chains/caip.js";
-import type { ChainRef } from "../chains/ids.js";
-import type { PermissionCapability, PermissionCapabilityResolver } from "../controllers/index.js";
-import { createLogger, extendLogger } from "../utils/logger.js";
+import type { NamespaceProtocolAdapter } from "@arx/errors";
+import { ArxReasons, arxError } from "@arx/errors";
 import type { NamespaceAdapter } from "./handlers/namespaces/index.js";
-import type {
-  HandlerControllers,
-  HandlerRuntimeServices,
-  MethodDefinition,
-  Namespace,
-  RpcInvocationContext,
-  RpcRequest,
-} from "./handlers/types.js";
-import type { RpcClientRegistry, RpcTransportRequest } from "./RpcClientRegistry.js";
+import type { MethodDefinition, Namespace } from "./handlers/types.js";
 
 type NamespaceDefinitions = Record<string, MethodDefinition>;
 
-export type ExecuteWithAdaptersContext = Omit<ErrorEncodeContext, "surface" | "namespace"> & {
-  surface: ErrorSurface;
-  namespace?: string | null;
-};
-
-export type ExecuteWithAdaptersResult<T> = { ok: true; result: T } | { ok: false; error: unknown };
-
-type MethodExecutorDependencies = {
-  rpcClientRegistry: RpcClientRegistry;
-  services: HandlerRuntimeServices;
-};
-
-type PassthroughPolicy = {
+export type RpcPassthroughPolicy = {
   allowedMethods: ReadonlySet<string>;
   allowWhenLocked: ReadonlySet<string>;
-};
-
-const rpcLogger = createLogger("core:rpc");
-const passthroughLogger = extendLogger(rpcLogger, "passthrough");
-
-const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: unknown; data?: unknown } => {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.code === "number";
-};
-
-const toInternalArxError = (error: unknown, ctx: ExecuteWithAdaptersContext): ArxError => {
-  const message =
-    error instanceof Error && typeof error.message === "string" && error.message.length > 0
-      ? error.message
-      : "Internal error";
-
-  return arxError({
-    reason: ArxReasons.RpcInternal,
-    message,
-    data: {
-      namespace: ctx.namespace,
-      ...(ctx.chainRef ? { chainRef: ctx.chainRef } : {}),
-      ...(ctx.method ? { method: ctx.method } : {}),
-    },
-    cause: error,
-  });
-};
-
-const toGenericEncodeContext = (ctx: ExecuteWithAdaptersContext): ErrorEncodeContext => {
-  return {
-    surface: ctx.surface,
-    namespace: typeof ctx.namespace === "string" && ctx.namespace.length > 0 ? ctx.namespace : "unknown",
-    ...(ctx.chainRef ? { chainRef: ctx.chainRef } : {}),
-    ...(ctx.origin ? { origin: ctx.origin } : {}),
-    ...(ctx.method ? { method: ctx.method } : {}),
-  };
 };
 
 export class RpcRegistry {
   private readonly namespaceDefinitions = new Map<Namespace, NamespaceDefinitions>();
   private readonly namespacePrefixes = new Map<string, Namespace>();
   private readonly namespaceAdapters = new Map<Namespace, NamespaceAdapter>();
-  private readonly passthroughByNamespace = new Map<Namespace, PassthroughPolicy>();
+  private readonly passthroughByNamespace = new Map<Namespace, RpcPassthroughPolicy>();
   private readonly protocolAdapters = new Map<string, NamespaceProtocolAdapter>();
 
   getRegisteredNamespaceAdapters(): NamespaceAdapter[] {
@@ -159,58 +89,57 @@ export class RpcRegistry {
     });
   }
 
-  encodeErrorWithAdapters(error: unknown, ctx: ExecuteWithAdaptersContext): unknown {
-    if (ctx.surface === "dapp") {
-      if (isJsonRpcErrorLike(error)) {
-        const message = typeof error.message === "string" && error.message.length > 0 ? error.message : "Unknown error";
-        return {
-          code: error.code,
-          message,
-          ...(error.data !== undefined ? { data: error.data } : {}),
-        };
-      }
-    }
-
-    const domain = coerceArxError(error) ?? toInternalArxError(error, ctx);
-    const genericContext = toGenericEncodeContext(ctx);
-
-    if (!ctx.namespace) {
-      return ctx.surface === "ui"
-        ? encodeGenericUiError(domain, genericContext)
-        : encodeGenericDappError(domain, genericContext);
-    }
-
-    try {
-      const adapterContext: ErrorEncodeContext = { ...genericContext, namespace: ctx.namespace };
-      const adapter = this.getNamespaceProtocolAdapter(ctx.namespace);
-      if (ctx.surface === "ui") {
-        return adapter.encodeUiError(domain, adapterContext);
-      }
-      return adapter.encodeDappError(domain, adapterContext);
-    } catch {
-      return ctx.surface === "ui"
-        ? encodeGenericUiError(domain, genericContext)
-        : encodeGenericDappError(domain, genericContext);
-    }
-  }
-
-  async executeWithAdapters<T>(
-    ctx: ExecuteWithAdaptersContext,
-    handler: () => Promise<T>,
-  ): Promise<ExecuteWithAdaptersResult<T>> {
-    try {
-      return { ok: true, result: await handler() };
-    } catch (error) {
-      return { ok: false, error: this.encodeErrorWithAdapters(error, ctx) };
-    }
-  }
-
   private cloneDefinitions(definitions: NamespaceDefinitions): NamespaceDefinitions {
     return { ...definitions };
   }
 
-  private getDefinitionsForNamespace(namespace: Namespace): NamespaceDefinitions | undefined {
-    return this.namespaceDefinitions.get(namespace);
+  registerNamespaceDefinitions(
+    namespace: Namespace,
+    definitions: NamespaceDefinitions,
+    options?: { replace?: boolean; methodPrefixes?: string[] },
+  ): void {
+    const existing = this.namespaceDefinitions.get(namespace);
+    const shouldReplace = options?.replace ?? true;
+    const next = shouldReplace || !existing ? this.cloneDefinitions(definitions) : { ...existing, ...definitions };
+
+    this.namespaceDefinitions.set(namespace, next);
+    this.recordPrefixesForNamespace(namespace, options?.methodPrefixes);
+  }
+
+  unregisterNamespaceDefinitions(namespace: Namespace): void {
+    this.namespaceDefinitions.delete(namespace);
+
+    for (const [prefix, currentNamespace] of this.namespacePrefixes) {
+      if (currentNamespace === namespace) {
+        this.namespacePrefixes.delete(prefix);
+      }
+    }
+  }
+
+  getRegisteredNamespaces(): Namespace[] {
+    return [...this.namespaceDefinitions.keys()];
+  }
+
+  hasNamespace(namespace: Namespace): boolean {
+    return this.namespaceDefinitions.has(namespace);
+  }
+
+  getMethodDefinition(namespace: Namespace, method: string): MethodDefinition | undefined {
+    return this.namespaceDefinitions.get(namespace)?.[method];
+  }
+
+  resolveNamespaceFromMethodPrefix(method: string): Namespace | null {
+    for (const [prefix, namespace] of this.namespacePrefixes) {
+      if (method.startsWith(prefix)) {
+        return namespace;
+      }
+    }
+
+    return null;
+  }
+
+  getPassthroughPolicy(namespace: Namespace): RpcPassthroughPolicy | null {
+    return this.passthroughByNamespace.get(namespace) ?? null;
   }
 
   private recordPrefixesForNamespace(namespace: Namespace, prefixes?: string[] | undefined) {
@@ -218,7 +147,6 @@ export class RpcRegistry {
       return;
     }
 
-    // Remove existing prefixes pointing to this namespace to avoid stale entries.
     for (const [prefix, currentNamespace] of this.namespacePrefixes) {
       if (currentNamespace === namespace) {
         this.namespacePrefixes.delete(prefix);
@@ -239,524 +167,5 @@ export class RpcRegistry {
 
       this.namespacePrefixes.set(prefix, namespace);
     }
-  }
-
-  /**
-   * Registers method definitions for a namespace and (optionally) associates method
-   * prefixes for fast namespace inference.
-   *
-   * - When `replace` is true (default) the namespace definitions are replaced.
-   * - When `replace` is false the provided definitions are merged with existing ones.
-   * - Method prefixes are matched in declaration order; the first match wins.
-   *   Prefixes should therefore be unique to avoid ambiguity.
-   */
-  registerNamespaceDefinitions(
-    namespace: Namespace,
-    definitions: NamespaceDefinitions,
-    options?: { replace?: boolean; methodPrefixes?: string[] },
-  ): void {
-    const existing = this.namespaceDefinitions.get(namespace);
-    const shouldReplace = options?.replace ?? true;
-    const next = shouldReplace || !existing ? this.cloneDefinitions(definitions) : { ...existing, ...definitions };
-    this.namespaceDefinitions.set(namespace, next);
-    this.recordPrefixesForNamespace(namespace, options?.methodPrefixes);
-  }
-
-  unregisterNamespaceDefinitions(namespace: Namespace): void {
-    this.namespaceDefinitions.delete(namespace);
-
-    for (const [prefix, currentNamespace] of this.namespacePrefixes) {
-      if (currentNamespace === namespace) {
-        this.namespacePrefixes.delete(prefix);
-      }
-    }
-  }
-
-  getRegisteredNamespaces(): Namespace[] {
-    return [...this.namespaceDefinitions.keys()];
-  }
-
-  getPassthroughAllowance(
-    controllers: HandlerControllers,
-    method: string,
-    context?: RpcInvocationContext,
-  ): { isPassthrough: boolean; allowWhenLocked: boolean } {
-    const { namespace } = this.resolveInvocation(controllers, method, context);
-    const passthrough = this.passthroughByNamespace.get(namespace);
-    if (!passthrough) {
-      return { isPassthrough: false, allowWhenLocked: false };
-    }
-    const isPassthrough = passthrough.allowedMethods.has(method);
-    return {
-      isPassthrough,
-      allowWhenLocked: isPassthrough && passthrough.allowWhenLocked.has(method),
-    };
-  }
-
-  resolveInvocationDetails(
-    controllers: HandlerControllers,
-    method: string,
-    context?: RpcInvocationContext,
-  ): {
-    namespace: Namespace;
-    chainRef: ChainRef;
-    definition: MethodDefinition | undefined;
-    passthrough: { isPassthrough: boolean; allowWhenLocked: boolean };
-  } {
-    const { namespace, chainRef } = this.resolveInvocation(controllers, method, context);
-    const definition = this.getDefinitionsForNamespace(namespace)?.[method];
-    const passthrough = this.passthroughByNamespace.get(namespace);
-    if (!passthrough) {
-      return { namespace, chainRef, definition, passthrough: { isPassthrough: false, allowWhenLocked: false } };
-    }
-    const isPassthrough = passthrough.allowedMethods.has(method);
-    return {
-      namespace,
-      chainRef,
-      definition,
-      passthrough: {
-        isPassthrough,
-        allowWhenLocked: isPassthrough && passthrough.allowWhenLocked.has(method),
-      },
-    };
-  }
-
-  private namespaceFromChainRef(chainRef: string | null | undefined): Namespace | null {
-    if (!chainRef) {
-      return null;
-    }
-    const [namespace] = chainRef.split(":");
-    return namespace ? (namespace as Namespace) : null;
-  }
-
-  private deriveNamespaceFromMethod(method: string): Namespace | null {
-    for (const [prefix, namespace] of this.namespacePrefixes) {
-      if (method.startsWith(prefix)) {
-        return namespace;
-      }
-    }
-    return null;
-  }
-
-  private normalizeNamespaceCandidate(candidate: string | null | undefined): Namespace | null {
-    if (typeof candidate !== "string") {
-      return null;
-    }
-
-    const trimmed = candidate.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-
-    const [prefix] = trimmed.split(":");
-    const normalized = (prefix || trimmed) as Namespace;
-    return this.namespaceDefinitions.has(normalized) ? normalized : null;
-  }
-
-  private normalizeLooseNamespaceCandidate(candidate: string | null | undefined): string | null {
-    if (typeof candidate !== "string") {
-      return null;
-    }
-
-    const trimmed = candidate.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-
-    const [prefix] = trimmed.split(":");
-    return prefix || trimmed;
-  }
-
-  private selectNamespace(method: string, context?: RpcInvocationContext): Namespace | null {
-    if (context?.namespace) {
-      const normalized = this.normalizeNamespaceCandidate(context.namespace);
-      if (normalized) return normalized;
-    }
-
-    const fromChain = this.namespaceFromChainRef(context?.chainRef ?? null);
-    if (fromChain && this.namespaceDefinitions.has(fromChain)) {
-      return fromChain;
-    }
-
-    const fromMethod = this.deriveNamespaceFromMethod(method);
-    if (fromMethod && this.namespaceDefinitions.has(fromMethod)) {
-      return fromMethod;
-    }
-
-    if (context?.providerNamespace) {
-      const normalized = this.normalizeNamespaceCandidate(context.providerNamespace);
-      if (normalized) return normalized;
-    }
-
-    return null;
-  }
-
-  private resolveNamespace(method: string, context?: RpcInvocationContext): Namespace {
-    const namespace = this.selectNamespace(method, context);
-    if (namespace) {
-      return namespace;
-    }
-
-    throw arxError({
-      reason: ArxReasons.RpcInvalidRequest,
-      message: method ? `Missing namespace context for "${method}"` : "Missing namespace context",
-      data: {
-        ...(method ? { method } : {}),
-        ...(context?.namespace ? { contextNamespace: context.namespace } : {}),
-        ...(context?.chainRef ? { chainRef: context.chainRef } : {}),
-        ...(context?.providerNamespace ? { providerNamespace: context.providerNamespace } : {}),
-      },
-    });
-  }
-
-  private normalizeOptionalChainRef(
-    method: string,
-    namespace: Namespace,
-    raw: unknown,
-  ): { kind: "present"; value: ChainRef } | { kind: "absent" } {
-    if (raw === undefined || raw === null) {
-      return { kind: "absent" };
-    }
-
-    if (typeof raw !== "string") {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "Invalid chainRef identifier",
-        data: { method, namespace, chainRef: raw },
-      });
-    }
-
-    const trimmed = raw.trim();
-    try {
-      return { kind: "present", value: normalizeChainRef(trimmed as ChainRef) };
-    } catch (error) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "Invalid chainRef identifier",
-        data: { method, namespace, chainRef: raw },
-        cause: error,
-      });
-    }
-  }
-
-  private assertContextNamespaceConsistency(method: string, context?: RpcInvocationContext) {
-    const ctxNamespace = this.normalizeLooseNamespaceCandidate(context?.namespace);
-    const ctxChainNamespace = typeof context?.chainRef === "string" ? context.chainRef.split(":")[0] : null;
-    const providerNamespace = this.normalizeLooseNamespaceCandidate(context?.providerNamespace);
-
-    if (ctxNamespace && ctxChainNamespace && ctxNamespace !== ctxChainNamespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Namespace mismatch: namespace="${ctxNamespace}" chainRef="${context?.chainRef}"`,
-        data: { method, namespace: ctxNamespace, chainRef: context?.chainRef ?? null },
-      });
-    }
-
-    if (providerNamespace && ctxNamespace && providerNamespace !== ctxNamespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Namespace mismatch: providerNamespace="${providerNamespace}" namespace="${ctxNamespace}"`,
-        data: { method, providerNamespace, namespace: ctxNamespace },
-      });
-    }
-
-    if (providerNamespace && ctxChainNamespace && providerNamespace !== ctxChainNamespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Namespace mismatch: providerNamespace="${providerNamespace}" chainRef="${context?.chainRef}"`,
-        data: { method, providerNamespace, chainRef: context?.chainRef ?? null },
-      });
-    }
-  }
-
-  private resolveChainRefForInvocation(args: {
-    method: string;
-    namespace: Namespace;
-    contextChainRef: unknown;
-    namespaceActiveChainRef: ChainRef | null;
-  }): ChainRef {
-    const parsed = this.normalizeOptionalChainRef(args.method, args.namespace, args.contextChainRef);
-    if (parsed.kind === "present") {
-      return parsed.value;
-    }
-
-    if (!args.namespaceActiveChainRef) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Missing chainRef for namespace "${args.namespace}"`,
-        data: { method: args.method, namespace: args.namespace, namespaceActiveChainRef: null },
-      });
-    }
-
-    return args.namespaceActiveChainRef;
-  }
-
-  private assertInvocationChainRef(method: string, namespace: Namespace, chainRef: ChainRef) {
-    try {
-      parseChainRef(chainRef);
-    } catch (error) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: "Invalid chainRef identifier",
-        data: { method, namespace, chainRef },
-        cause: error,
-      });
-    }
-
-    const chainNamespace = getChainRefNamespace(chainRef);
-    if (chainNamespace !== namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Namespace mismatch for "${method}"`,
-        data: { method, namespace, chainRef },
-      });
-    }
-  }
-
-  resolveInvocation(
-    controllers: HandlerControllers,
-    method: string,
-    context?: RpcInvocationContext,
-  ): { namespace: Namespace; chainRef: ChainRef } {
-    this.assertContextNamespaceConsistency(method, context);
-    const namespace = this.resolveNamespace(method, context);
-    const namespaceActiveChainRef = controllers.networkPreferences.getActiveChainRef(namespace);
-    const chainRef = this.resolveChainRefForInvocation({
-      method,
-      namespace,
-      contextChainRef: context?.chainRef,
-      namespaceActiveChainRef,
-    });
-    this.assertInvocationChainRef(method, namespace, chainRef);
-
-    return { namespace, chainRef };
-  }
-
-  createMethodDefinitionResolver(controllers: HandlerControllers) {
-    return (method: string, context?: RpcInvocationContext) => {
-      const { namespace } = this.resolveInvocation(controllers, method, context);
-      return this.getDefinitionsForNamespace(namespace)?.[method];
-    };
-  }
-
-  createMethodNamespaceResolver() {
-    return (method: string, context?: RpcInvocationContext): Namespace | null => {
-      return this.selectNamespace(method, context);
-    };
-  }
-
-  createStrictMethodNamespaceResolver(controllers: HandlerControllers) {
-    return (method: string, context?: RpcInvocationContext): Namespace => {
-      return this.resolveInvocation(controllers, method, context).namespace;
-    };
-  }
-
-  createNamespaceResolver() {
-    return (context?: RpcInvocationContext): Namespace | null => {
-      return this.selectNamespace("", context);
-    };
-  }
-
-  createPermissionCapabilityResolver(
-    namespaceResolver: (method: string, context?: RpcInvocationContext) => Namespace | null,
-    overrides?: Partial<Record<string, PermissionCapability | null>>,
-  ): PermissionCapabilityResolver {
-    return (method, context) => {
-      if (overrides && Object.hasOwn(overrides, method)) {
-        const value = overrides[method];
-        return value === null ? undefined : value;
-      }
-      const namespace = namespaceResolver(method, context);
-      if (!namespace) {
-        return undefined;
-      }
-      return this.getDefinitionsForNamespace(namespace)?.[method]?.capability;
-    };
-  }
-
-  createMethodExecutor(controllers: HandlerControllers, deps: MethodExecutorDependencies) {
-    const resolveInvocation = (method: string, context?: RpcInvocationContext) =>
-      this.resolveInvocation(controllers, method, context);
-
-    const resolveDefinition = (namespace: Namespace, method: string): MethodDefinition | undefined =>
-      this.getDefinitionsForNamespace(namespace)?.[method];
-
-    const parseDefinitionParams = (
-      definition: MethodDefinition,
-      args: { namespace: Namespace; method: string; params: RpcRequest["params"]; context?: RpcInvocationContext },
-    ): unknown => {
-      if (!definition.parseParams && !definition.paramsSchema) return args.params;
-
-      try {
-        if (definition.parseParams) {
-          return definition.parseParams(args.params, args.context);
-        }
-        if (!definition.paramsSchema) {
-          return args.params;
-        }
-        return definition.paramsSchema.parse(args.params);
-      } catch (error) {
-        if (isArxError(error)) throw error;
-
-        // Only treat known validation failures as "invalid params".
-        // Unknown exceptions likely indicate a bug and should surface as internal errors.
-        if (error instanceof ZodError) {
-          throw arxError({
-            reason: ArxReasons.RpcInvalidParams,
-            message: "Invalid params",
-            data: { namespace: args.namespace, method: args.method },
-            cause: error,
-          });
-        }
-
-        throw arxError({
-          reason: ArxReasons.RpcInternal,
-          message: `Failed to parse params for "${args.method}"`,
-          data: {
-            namespace: args.namespace,
-            method: args.method,
-            errorName: error instanceof Error ? error.name : typeof error,
-          },
-          cause: error,
-        });
-      }
-    };
-
-    const executeLocal = async (args: {
-      origin: string;
-      request: RpcRequest;
-      namespace: Namespace;
-      chainRef: ChainRef;
-      definition: MethodDefinition;
-      context?: RpcInvocationContext;
-    }) => {
-      const params = parseDefinitionParams(args.definition, {
-        namespace: args.namespace,
-        method: args.request.method,
-        params: args.request.params,
-        ...(args.context !== undefined ? { context: args.context } : {}),
-      });
-
-      const handlerArgs =
-        args.context === undefined
-          ? {
-              origin: args.origin,
-              request: args.request,
-              params,
-              controllers,
-              services: deps.services,
-              invocation: { namespace: args.namespace, chainRef: args.chainRef },
-            }
-          : {
-              origin: args.origin,
-              request: args.request,
-              params,
-              controllers,
-              services: deps.services,
-              invocation: { namespace: args.namespace, chainRef: args.chainRef },
-              rpcContext: args.context,
-            };
-      return args.definition.handler(handlerArgs);
-    };
-
-    const assertPassthroughAllowed = (namespace: Namespace, method: string): void => {
-      const passthrough = this.passthroughByNamespace.get(namespace);
-      if (!passthrough || !passthrough.allowedMethods.has(method)) {
-        throw arxError({
-          reason: ArxReasons.RpcUnsupportedMethod,
-          message: `Method "${method}" is not supported`,
-          data: { namespace, method },
-        });
-      }
-    };
-
-    const sanitizeNodeRpcError = (error: unknown) => {
-      if (!isJsonRpcErrorLike(error)) return null;
-      const rpcError = error as { code: number; message?: unknown; data?: unknown };
-
-      const message =
-        typeof rpcError.message === "string" && rpcError.message.length > 0 ? rpcError.message : "Unknown error";
-
-      if (!rpcError.data || typeof rpcError.data !== "object") {
-        return {
-          code: rpcError.code,
-          message,
-          ...(rpcError.data !== undefined ? { data: rpcError.data } : {}),
-        };
-      }
-
-      // Sanitize error.data to remove internal fields like stack, path.
-      const sanitized = { ...(rpcError.data as Record<string, unknown>) };
-      delete sanitized.stack;
-      delete sanitized.path;
-      return { code: rpcError.code, message, data: sanitized };
-    };
-
-    const executePassthrough = async (args: {
-      origin: string;
-      request: RpcRequest;
-      namespace: Namespace;
-      chainRef: ChainRef;
-    }) => {
-      const logMeta = {
-        namespace: args.namespace,
-        chainRef: args.chainRef,
-        method: args.request.method,
-        origin: args.origin ?? "unknown://",
-      };
-
-      try {
-        const client = deps.rpcClientRegistry.getClient(args.namespace, args.chainRef);
-        const rpcPayload: RpcTransportRequest = { method: args.request.method };
-        if (args.request.params !== undefined) {
-          rpcPayload.params = args.request.params;
-        }
-        passthroughLogger("request", { ...logMeta, params: args.request.params ?? [] });
-        const result = await client.request(rpcPayload);
-        passthroughLogger("response", { ...logMeta });
-        return result;
-      } catch (error) {
-        const errorSummary = isJsonRpcErrorLike(error)
-          ? {
-              code: (error as { code?: number | string }).code,
-              message: (error as { message?: string }).message ?? "RPC error",
-            }
-          : { message: (error as Error)?.message ?? String(error) };
-        passthroughLogger("error", { ...logMeta, error: errorSummary });
-
-        const sanitized = sanitizeNodeRpcError(error);
-        if (sanitized) throw sanitized;
-        if (isArxError(error)) throw error;
-
-        throw arxError({
-          reason: ArxReasons.RpcInternal,
-          message: `Failed to execute "${args.request.method}"`,
-          data: { namespace: args.namespace, chainRef: args.chainRef },
-          cause: error,
-        });
-      }
-    };
-
-    return async (args: { origin: string; request: RpcRequest; context?: RpcInvocationContext }) => {
-      const { namespace, chainRef } = resolveInvocation(args.request.method, args.context);
-
-      const definition = resolveDefinition(namespace, args.request.method);
-      if (definition) {
-        return executeLocal(
-          args.context === undefined
-            ? { origin: args.origin, request: args.request, namespace, chainRef, definition }
-            : { origin: args.origin, request: args.request, namespace, chainRef, definition, context: args.context },
-        );
-      }
-
-      assertPassthroughAllowed(namespace, args.request.method);
-
-      return executePassthrough({
-        origin: args.origin,
-        request: args.request,
-        namespace,
-        chainRef,
-      });
-    };
   }
 }

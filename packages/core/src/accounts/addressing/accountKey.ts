@@ -1,6 +1,6 @@
 import { parseChainRef } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import { type AccountKey as StorageAccountKey, AccountKeySchema } from "../../storage/records.js";
+import { AccountKeySchema, type AccountKey as StorageAccountKey } from "../../storage/records.js";
 import type { AccountCodecRegistry } from "./codec.js";
 
 export type AccountKey = StorageAccountKey;

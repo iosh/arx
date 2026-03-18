@@ -9,7 +9,9 @@ export type {
   JsonRpcSuccess,
   JsonRpcVersion2,
 } from "@metamask/utils";
-
+export type { RpcEncodedExecutionResult, RpcErrorEncoder, RpcSurfaceErrorContext } from "./errorEncoder.js";
+export { createRpcErrorEncoder } from "./errorEncoder.js";
+export { createRpcMethodExecutor } from "./executor.js";
 export type { NamespaceAdapter } from "./handlers/namespaces/index.js";
 export {
   createEip155Adapter,
@@ -27,6 +29,14 @@ export type {
   RpcInvocationContext,
   RpcRequest,
 } from "./handlers/types.js";
+export type { ResolvedRpcInvocation, ResolvedRpcInvocationDetails, RpcPassthroughAllowance } from "./invocation.js";
+export {
+  createRpcContextNamespaceResolver,
+  createRpcMethodNamespaceResolver,
+  createRpcPermissionCapabilityResolver,
+  resolveRpcInvocation,
+  resolveRpcInvocationDetails,
+} from "./invocation.js";
 export type { Eip155RpcCapabilities, Eip155RpcClient } from "./namespaceClients/eip155.js";
 export { createEip155RpcClientFactory } from "./namespaceClients/eip155.js";
 export { BUILTIN_RPC_NAMESPACE_MODULES } from "./namespaces/builtin.js";
@@ -40,7 +50,7 @@ export {
   type RpcTransport,
   type RpcTransportRequest,
 } from "./RpcClientRegistry.js";
-export type { ExecuteWithAdaptersContext, ExecuteWithAdaptersResult } from "./RpcRegistry.js";
+export type { RpcPassthroughPolicy } from "./RpcRegistry.js";
 export { RpcRegistry } from "./RpcRegistry.js";
 export { type RequestContext, RequestContextSchema } from "./requestContext.js";
 

@@ -10,8 +10,8 @@ import {
   type RuntimeSessionNamespaceAssembly,
   registerRpcModules,
 } from "../../namespaces/index.js";
-import type { HandlerControllers, Namespace } from "../../rpc/handlers/types.js";
-import type { RpcInvocationContext, RpcRegistry } from "../../rpc/index.js";
+import type { HandlerControllers } from "../../rpc/handlers/types.js";
+import type { RpcRegistry } from "../../rpc/index.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../../services/runtime/attention/index.js";
 import { createChainActivationService } from "../../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
@@ -46,8 +46,6 @@ type MessengerOptions = {
   violationMode?: ViolationMode;
 };
 
-type BackgroundNamespaceResolver = (context?: RpcInvocationContext) => Namespace | null;
-
 export type RuntimeBootstrapPhase = {
   bus: Messenger;
   rpcRegistry: RpcRegistry;
@@ -55,7 +53,6 @@ export type RuntimeBootstrapPhase = {
   registeredNamespaces: ReadonlySet<string>;
   admittedChains: readonly ChainMetadata[];
   networkPlan: RuntimeNetworkPlan;
-  contextNamespaceResolver: BackgroundNamespaceResolver;
   storageLogger: (message: string, error?: unknown) => void;
   storageNow: () => number;
   hydrationEnabled: boolean;
@@ -136,7 +133,6 @@ export const initializeRuntimeBootstrapPhase = ({
     ...(networkOptions?.defaultStrategy ? { defaultStrategy: networkOptions.defaultStrategy } : {}),
   });
 
-  const contextNamespaceResolver = rpcRegistry.createNamespaceResolver();
   const storageNow = storageOptions?.now ?? Date.now;
   const hydrationEnabled = storageOptions?.hydrate ?? true;
 
@@ -158,7 +154,6 @@ export const initializeRuntimeBootstrapPhase = ({
     registeredNamespaces,
     admittedChains: networkPlan.admittedChains,
     networkPlan,
-    contextNamespaceResolver,
     storageLogger,
     storageNow,
     hydrationEnabled,

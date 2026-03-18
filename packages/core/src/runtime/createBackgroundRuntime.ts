@@ -8,7 +8,18 @@ import {
   type NamespaceRuntimeSupportIndex,
 } from "../namespaces/index.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import { createRpcRegistry, type RpcInvocationContext } from "../rpc/index.js";
+import {
+  createRpcContextNamespaceResolver,
+  createRpcErrorEncoder,
+  createRpcMethodExecutor,
+  createRpcMethodNamespaceResolver,
+  createRpcPermissionCapabilityResolver,
+  createRpcRegistry,
+  type RpcErrorEncoder,
+  type RpcInvocationContext,
+  resolveRpcInvocation,
+  resolveRpcInvocationDetails,
+} from "../rpc/index.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
@@ -104,7 +115,16 @@ export type BackgroundRuntime = {
     engine: ReturnType<typeof initEngine>;
     registry: ReturnType<typeof createRpcRegistry>;
     clients: ReturnType<typeof initRpcLayer>;
-    getActiveNamespace: (context?: RpcInvocationContext) => Namespace | null;
+    resolveContextNamespace: (context?: RpcInvocationContext) => Namespace | null;
+    resolveMethodNamespace: (method: string, context?: RpcInvocationContext) => Namespace | null;
+    resolveInvocation: (method: string, context?: RpcInvocationContext) => ReturnType<typeof resolveRpcInvocation>;
+    resolveInvocationDetails: (
+      method: string,
+      context?: RpcInvocationContext,
+    ) => ReturnType<typeof resolveRpcInvocationDetails>;
+    resolvePermissionCapability: ReturnType<typeof createRpcPermissionCapabilityResolver>;
+    executeRequest: ReturnType<typeof createRpcMethodExecutor>;
+    errorEncoder: RpcErrorEncoder;
   };
   lifecycle: {
     initialize: () => Promise<void>;
@@ -154,8 +174,7 @@ const createBackgroundRuntimeUiDeps = (
   namespaceBindings: runtime.services.namespaceBindings,
   errorEncoder: {
     encodeError: (error, context) =>
-      runtime.rpc.registry.encodeErrorWithAdapters(error, {
-        surface: "ui",
+      runtime.rpc.errorEncoder.encodeUi(error, {
         namespace: context.namespace,
         chainRef: context.chainRef,
         method: context.method,
@@ -277,6 +296,24 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     logger: bootstrapPhase.storageLogger,
   });
 
+  const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
+  const resolveContextNamespace = createRpcContextNamespaceResolver(rpcRegistry);
+  const resolveInvocation = (method: string, context?: RpcInvocationContext) =>
+    resolveRpcInvocation(rpcRegistry, controllers, method, context);
+  const resolveInvocationDetails = (method: string, context?: RpcInvocationContext) =>
+    resolveRpcInvocationDetails(rpcRegistry, controllers, method, context);
+  const resolvePermissionCapability = createRpcPermissionCapabilityResolver(rpcRegistry, resolveMethodNamespace);
+  const executeRequest = createRpcMethodExecutor({
+    registry: rpcRegistry,
+    controllers,
+    rpcClientRegistry: runtimeSupportPhase.rpcClientRegistry,
+    services: {
+      chainViews: sessionPhase.chainViews,
+      permissionViews: runtimeSupportPhase.permissionViews,
+    },
+  });
+  const errorEncoder = createRpcErrorEncoder(rpcRegistry);
+
   const runtime = {
     bus: bootstrapPhase.bus,
     controllers,
@@ -296,7 +333,13 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       engine: sessionPhase.engine,
       registry: rpcRegistry,
       clients: runtimeSupportPhase.rpcClientRegistry,
-      getActiveNamespace: bootstrapPhase.contextNamespaceResolver,
+      resolveContextNamespace,
+      resolveMethodNamespace,
+      resolveInvocation,
+      resolveInvocationDetails,
+      resolvePermissionCapability,
+      executeRequest,
+      errorEncoder,
     },
     lifecycle,
   } as BackgroundRuntime;

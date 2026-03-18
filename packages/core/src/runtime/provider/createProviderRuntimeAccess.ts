@@ -17,7 +17,7 @@ type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
 const UNKNOWN_ORIGIN = "unknown://";
 
 export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): ProviderRuntimeAccess => {
-  const resolveMethodNamespace = runtime.rpc.registry.createMethodNamespaceResolver();
+  const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
 
   const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {
     const providerMeta = runtime.services.chainViews.buildProviderMeta(namespace);
@@ -71,8 +71,7 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     error: unknown,
     { origin, method, rpcContext }: ProviderRuntimeErrorContext,
   ): JsonRpcError => {
-    return runtime.rpc.registry.encodeErrorWithAdapters(error, {
-      surface: "dapp",
+    return runtime.rpc.errorEncoder.encodeDapp(error, {
       namespace: resolveMethodNamespace(method, rpcContext) ?? null,
       chainRef: rpcContext?.chainRef ?? null,
       origin,

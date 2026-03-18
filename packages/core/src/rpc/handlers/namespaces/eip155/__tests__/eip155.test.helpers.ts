@@ -185,14 +185,8 @@ export const connectOrigin = async (args: {
 };
 
 export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
-  const execute = runtime.rpc.registry.createMethodExecutor(runtime.controllers, {
-    rpcClientRegistry: runtime.rpc.clients,
-    services: {
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-    },
-  });
-  return async (args: Parameters<typeof execute>[0]) => {
+  const executeRequest = runtime.rpc.executeRequest;
+  return async (args: Parameters<typeof executeRequest>[0]) => {
     const chainRef =
       args.context?.chainRef ??
       runtime.services.networkPreferences.getActiveChainRef("eip155") ??
@@ -210,7 +204,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           origin: args.origin,
         } as const),
     };
-    const result = await runtime.rpc.registry.executeWithAdapters(
+    const result = await runtime.rpc.errorEncoder.executeWithEncoding(
       {
         surface: "dapp",
         namespace: "eip155",
@@ -218,7 +212,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
         origin: args.origin,
         method: args.request.method,
       },
-      () => execute({ ...args, context }),
+      () => executeRequest({ ...args, context }),
     );
     if (result.ok) return result.result;
     throw result.error;

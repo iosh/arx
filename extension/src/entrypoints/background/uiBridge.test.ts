@@ -10,7 +10,7 @@ import { ArxReasons, arxError } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
 import type { HandlerControllers } from "@arx/core/rpc";
-import { createRpcRegistry } from "@arx/core/rpc";
+import { createRpcErrorEncoder, createRpcRegistry } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
@@ -31,6 +31,7 @@ import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
 registerRpcModulesFromManifests(rpcRegistry, [eip155NamespaceManifest]);
+const rpcErrorEncoder = createRpcErrorEncoder(rpcRegistry);
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -400,7 +401,8 @@ const createAccountsController = () => {
       void params.namespace;
       const prev = state.namespaces[ns] ?? { accountKeys: [], selectedAccountKey: null };
       const desired = params.accountKey ?? null;
-      const selectedAccountKey = desired && prev.accountKeys.includes(desired) ? desired : (prev.accountKeys[0] ?? null);
+      const selectedAccountKey =
+        desired && prev.accountKeys.includes(desired) ? desired : (prev.accountKeys[0] ?? null);
       state = { namespaces: { ...state.namespaces, [ns]: { ...prev, selectedAccountKey } } };
       emit();
       return selectedAccountKey
@@ -620,8 +622,7 @@ const createUiAccessForTest = (input: {
     }) as never,
     errorEncoder: {
       encodeError: (error, context) =>
-        rpcRegistry.encodeErrorWithAdapters(error, {
-          surface: "ui",
+        rpcErrorEncoder.encodeUi(error, {
           namespace: context.namespace,
           chainRef: context.chainRef,
           method: context.method,

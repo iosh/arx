@@ -2,8 +2,8 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { parseChainRef } from "../../chains/caip.js";
 import { createEip155AddressModule } from "../../chains/eip155/address.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { AccountKey } from "./accountKey.js";
 import { AccountKeySchema } from "../../storage/records.js";
+import type { AccountKey } from "./accountKey.js";
 
 export type CanonicalAddress = {
   namespace: string;

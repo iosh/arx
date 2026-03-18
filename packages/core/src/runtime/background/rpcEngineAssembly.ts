@@ -49,22 +49,12 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
 
 export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = runtime.controllers;
-  const rpcRegistry = runtime.rpc.registry;
-  const resolveMethodNamespace = rpcRegistry.createMethodNamespaceResolver();
-  const resolvePermissionCapability = rpcRegistry.createPermissionCapabilityResolver((method, ctx) =>
-    resolveMethodNamespace(method, ctx),
-  );
-
-  const executeMethod = rpcRegistry.createMethodExecutor(controllers, {
-    rpcClientRegistry: runtime.rpc.clients,
-    services: {
-      chainViews: runtime.services.chainViews,
-      permissionViews: runtime.services.permissionViews,
-    },
-  });
+  const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
+  const resolvePermissionCapability = runtime.rpc.resolvePermissionCapability;
+  const executeRequest = runtime.rpc.executeRequest;
 
   const invocationContext: Middleware = createInvocationContextMiddleware({
-    resolve: (method, ctx) => rpcRegistry.resolveInvocationDetails(controllers, method, ctx),
+    resolve: (method, ctx) => runtime.rpc.resolveInvocationDetails(method, ctx),
   }) as unknown as Middleware;
 
   const errorBoundary: Middleware = createAsyncMiddleware(async (req, res, next) => {
@@ -80,8 +70,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
         (namespace ? controllers.networkPreferences.getActiveChainRef(namespace) : null) ??
         null;
 
-      return rpcRegistry.encodeErrorWithAdapters(error, {
-        surface: "dapp",
+      return runtime.rpc.errorEncoder.encodeDapp(error, {
         namespace,
         chainRef,
         origin,
@@ -121,7 +110,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       const capability = resolvePermissionCapability(method, context);
       if (!capability) return;
 
-      const { namespace, chainRef } = rpcRegistry.resolveInvocation(controllers, method, context);
+      const { namespace, chainRef } = runtime.rpc.resolveInvocation(method, context);
 
       if (!runtime.services.permissionViews.getConnectionSnapshot(origin, { chainRef }).isConnected) {
         throw arxError({
@@ -159,7 +148,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
       ...(rpcContext ? { context: rpcContext } : {}),
     };
 
-    const result = await executeMethod(rpcInvocation);
+    const result = await executeRequest(rpcInvocation);
     res.result = result as Json;
   });
 

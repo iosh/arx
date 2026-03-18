@@ -107,8 +107,7 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
     namespaceBindings: runtime.services.namespaceBindings,
     errorEncoder: {
       encodeError: (error, context) =>
-        runtime.rpc.registry.encodeErrorWithAdapters(error, {
-          surface: "ui",
+        runtime.rpc.errorEncoder.encodeUi(error, {
           namespace: context.namespace,
           chainRef: context.chainRef,
           method: context.method,

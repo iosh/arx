@@ -9,7 +9,7 @@ import {
   type PermissionRequestDescriptor,
 } from "../../../../controllers/index.js";
 import { isPermissionCapability } from "../../../../permissions/capabilities.js";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -74,7 +74,7 @@ const WalletRequestPermissionsParamsSchema = z
   });
 
 export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
-  requestClassification: RpcRequestClassifications.AccountsAccess,
+  requestKind: RpcRequestKinds.AccountAccess,
   connectionRequirement: ConnectionRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),

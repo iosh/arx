@@ -8,7 +8,7 @@ import {
   type MethodDefinition,
 } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
-import { RpcRequestClassifications } from "../../../rpc/requestClassification.js";
+import { RpcRequestKinds } from "../../../rpc/requestKind.js";
 import { createAccessPolicyGuardMiddleware } from "./accessPolicyGuard.js";
 import { createInvocationContextMiddleware } from "./invocationContext.js";
 
@@ -177,7 +177,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
     expect(attention).not.toHaveBeenCalled();
   });
 
-  it("does not infer locked denial from request classification", async () => {
+  it("does not infer locked denial from request kind", async () => {
     const attention = vi.fn();
     const result = await run({
       origin: ORIGINS.external,
@@ -186,7 +186,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
         namespace: "eip155",
         chainRef: "eip155:1",
         definition: buildMethodDefinition({
-          requestClassification: RpcRequestClassifications.AccountsAccess,
+          requestKind: RpcRequestKinds.AccountAccess,
         }),
         passthrough: { isPassthrough: false, allowWhenLocked: false },
       }),

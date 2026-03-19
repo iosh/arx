@@ -1,4 +1,4 @@
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedAllow } from "../../locked.js";
 import {
   ApprovalRequirements,
@@ -8,7 +8,7 @@ import {
 } from "../../types.js";
 
 export const walletGetPermissionsDefinition = defineNoParamsMethod({
-  requestClassification: RpcRequestClassifications.AccountsAccess,
+  requestKind: RpcRequestKinds.AccountAccess,
   connectionRequirement: ConnectionRequirements.None,
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,

@@ -2,7 +2,7 @@ import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
 import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
@@ -77,7 +77,7 @@ const WalletSwitchEthereumChainParamsSchema = z
   .transform(normalizeWalletSwitchEthereumChainParams);
 
 export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<WalletSwitchEthereumChainParams>({
-  requestClassification: RpcRequestClassifications.ChainManagement,
+  requestKind: RpcRequestKinds.ChainManagement,
   connectionRequirement: ConnectionRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),

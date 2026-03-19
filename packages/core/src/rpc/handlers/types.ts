@@ -12,7 +12,7 @@ import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { RpcRequestClassification } from "../requestClassification.js";
+import type { RpcRequestKind } from "../requestKind.js";
 import type { RequestContext } from "../requestContext.js";
 import { NoParamsSchema } from "./params.js";
 
@@ -116,9 +116,9 @@ export const deriveAuthorizedScopeCheck = (definition: {
 
 export type MethodDefinition<P = unknown> = {
   /**
-   * Request classification label used by RPC and approval presentation surfaces.
+   * Request kind label used by RPC and approval presentation surfaces.
    */
-  requestClassification?: RpcRequestClassification;
+  requestKind?: RpcRequestKind;
   /**
    * Connection precondition enforced by the generic access-policy middleware.
    *

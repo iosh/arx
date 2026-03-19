@@ -1,13 +1,13 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../../../controllers/index.js";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError } from "../utils.js";
 import { defineEip155NoParamsApprovalMethod, requireApprovalRequester } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
-  requestClassification: RpcRequestClassifications.AccountsAccess,
+  requestKind: RpcRequestKinds.AccountAccess,
   connectionRequirement: ConnectionRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),

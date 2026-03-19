@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../../../controllers/index.js";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { defineEip155AuthorizedAccountApprovalMethod, requireApprovalRequester } from "./shared.js";
@@ -12,7 +12,7 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
   PersonalSignParams,
   { message: string }
 >({
-  requestClassification: RpcRequestClassifications.MessageSigning,
+  requestKind: RpcRequestKinds.MessageSigning,
   locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);

@@ -6,14 +6,14 @@ import {
   isSameAddChainComparableMetadata,
 } from "../../../../chains/index.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
 
 export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<ChainMetadata>({
-  requestClassification: RpcRequestClassifications.ChainManagement,
+  requestKind: RpcRequestKinds.ChainManagement,
   connectionRequirement: ConnectionRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),

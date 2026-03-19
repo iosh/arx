@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { RpcRequestClassifications } from "../../../requestClassification.js";
+import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
@@ -16,7 +16,7 @@ type RpcLikeError = Error & { code: number; data?: unknown };
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
 
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
-  requestClassification: RpcRequestClassifications.TransactionSubmission,
+  requestKind: RpcRequestKinds.TransactionSubmission,
   locked: lockedQueue(),
   parseParams: (params) => {
     const paramsArray = toParamsArray(params);

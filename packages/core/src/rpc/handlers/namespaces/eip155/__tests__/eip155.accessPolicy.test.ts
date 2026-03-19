@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type RpcRequestClassification, RpcRequestClassifications } from "../../../../requestClassification.js";
+import { type RpcRequestKind, RpcRequestKinds } from "../../../../requestKind.js";
 import {
   type ApprovalRequirement,
   ApprovalRequirements,
@@ -11,7 +11,7 @@ import {
 import { EIP155_DEFINITIONS, type Eip155Method } from "../definitions.js";
 
 type MethodAccessPolicySnapshot = {
-  requestClassification: RpcRequestClassification | null;
+  requestKind: RpcRequestKind | null;
   connectionRequirement: ConnectionRequirement;
   approvalRequirement: ApprovalRequirement;
   authorizedScopeCheck: AuthorizedScopeCheck;
@@ -20,70 +20,70 @@ type MethodAccessPolicySnapshot = {
 
 const EXPECTED_METHOD_ACCESS_POLICY: Record<Eip155Method, MethodAccessPolicySnapshot> = {
   eth_accounts: {
-    requestClassification: RpcRequestClassifications.AccountsAccess,
+    requestKind: RpcRequestKinds.AccountAccess,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.None,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "response",
   },
   eth_chainId: {
-    requestClassification: null,
+    requestKind: null,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.None,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: null,
   },
   eth_requestAccounts: {
-    requestClassification: RpcRequestClassifications.AccountsAccess,
+    requestKind: RpcRequestKinds.AccountAccess,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "queue",
   },
   eth_sendTransaction: {
-    requestClassification: RpcRequestClassifications.TransactionSubmission,
+    requestKind: RpcRequestKinds.TransactionSubmission,
     connectionRequirement: ConnectionRequirements.Required,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
     lockedType: "queue",
   },
   eth_signTypedData_v4: {
-    requestClassification: RpcRequestClassifications.MessageSigning,
+    requestKind: RpcRequestKinds.MessageSigning,
     connectionRequirement: ConnectionRequirements.Required,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
     lockedType: "queue",
   },
   personal_sign: {
-    requestClassification: RpcRequestClassifications.MessageSigning,
+    requestKind: RpcRequestKinds.MessageSigning,
     connectionRequirement: ConnectionRequirements.Required,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
     lockedType: "queue",
   },
   wallet_addEthereumChain: {
-    requestClassification: RpcRequestClassifications.ChainManagement,
+    requestKind: RpcRequestKinds.ChainManagement,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "queue",
   },
   wallet_getPermissions: {
-    requestClassification: RpcRequestClassifications.AccountsAccess,
+    requestKind: RpcRequestKinds.AccountAccess,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.None,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "allow",
   },
   wallet_requestPermissions: {
-    requestClassification: RpcRequestClassifications.AccountsAccess,
+    requestKind: RpcRequestKinds.AccountAccess,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
     lockedType: "queue",
   },
   wallet_switchEthereumChain: {
-    requestClassification: RpcRequestClassifications.ChainManagement,
+    requestKind: RpcRequestKinds.ChainManagement,
     connectionRequirement: ConnectionRequirements.None,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.None,
@@ -98,7 +98,7 @@ describe("EIP155_DEFINITIONS access policy facts", () => {
     const definition = EIP155_DEFINITIONS[method];
 
     expect({
-      requestClassification: definition.requestClassification ?? null,
+        requestKind: definition.requestKind ?? null,
       connectionRequirement: definition.connectionRequirement,
       approvalRequirement: definition.approvalRequirement,
       authorizedScopeCheck: definition.authorizedScopeCheck,

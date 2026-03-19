@@ -98,7 +98,7 @@ describe("EIP155_DEFINITIONS access policy facts", () => {
     const definition = EIP155_DEFINITIONS[method];
 
     expect({
-        requestKind: definition.requestKind ?? null,
+      requestKind: definition.requestKind ?? null,
       connectionRequirement: definition.connectionRequirement,
       approvalRequirement: definition.approvalRequirement,
       authorizedScopeCheck: definition.authorizedScopeCheck,

@@ -3,13 +3,13 @@ import { ChainRefSchema } from "../../../chains/ids.js";
 import { AccountKeySchema } from "../../../storage/records.js";
 import { defineMethod } from "./types.js";
 
-const PermissionRequestDescriptorSchema = z.strictObject({
-  capability: z.string().min(1),
+const ConnectionGrantRequestSchema = z.strictObject({
+  grantKind: z.string().min(1),
   chainRefs: z.array(ChainRefSchema).min(1),
 });
 
-const PermissionApprovalResultSchema = z.strictObject({
-  granted: z.array(PermissionRequestDescriptorSchema),
+const RequestPermissionsApprovalResultSchema = z.strictObject({
+  grantedGrants: z.array(ConnectionGrantRequestSchema),
 });
 
 const ApprovalAccountSelectionDecisionSchema = z
@@ -69,7 +69,7 @@ const ApprovalResultValueSchema = z.union([
   TransactionMetaSchema,
   z.array(z.string().min(1)),
   z.string().min(1),
-  PermissionApprovalResultSchema,
+  RequestPermissionsApprovalResultSchema,
   z.null(),
 ]);
 

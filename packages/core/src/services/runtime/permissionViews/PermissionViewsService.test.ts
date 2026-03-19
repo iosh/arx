@@ -7,7 +7,7 @@ const VALID_ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const STALE_ACCOUNT_ID = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 describe("createPermissionViewsService", () => {
-  it("filters stale accounts across connection, wallet permissions, and UI projections", async () => {
+  it("filters stale accounts across connection and UI projections", async () => {
     const service = createPermissionViewsService({
       permissions: {
         getAuthorization: (origin, options) => {
@@ -90,20 +90,6 @@ describe("createPermissionViewsService", () => {
     await expect(service.assertConnected(ORIGIN, { chainRef: "eip155:10" })).rejects.toMatchObject({
       reason: ArxReasons.PermissionNotConnected,
     });
-
-    expect(service.buildWalletPermissions(ORIGIN, { chainRef: "eip155:1" })).toEqual([
-      {
-        invoker: ORIGIN,
-        parentCapability: "eth_accounts",
-        caveats: [
-          {
-            type: "restrictReturnedAccounts",
-            value: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-          },
-        ],
-      },
-    ]);
-    expect(service.buildWalletPermissions(ORIGIN, { chainRef: "eip155:10" })).toEqual([]);
 
     expect(service.buildUiPermissionsSnapshot()).toEqual({
       origins: {

@@ -77,9 +77,9 @@ describe("InMemoryApprovalController", () => {
       createdAt: 1000,
       request: {
         chainRef: "eip155:1",
-        requested: [
+        requestedGrants: [
           {
-            capability: "eth_accounts",
+            grantKind: "eth_accounts",
             chainRefs: [],
           },
         ],

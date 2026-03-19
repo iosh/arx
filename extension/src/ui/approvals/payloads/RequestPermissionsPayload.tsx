@@ -3,11 +3,11 @@ import { Card, Paragraph, YStack } from "tamagui";
 
 type RequestPermissionsApproval = Extract<ApprovalSummary, { type: "requestPermissions" }>;
 
-const CAPABILITY_LABELS: Record<string, string> = {
+const GRANT_KIND_LABELS: Record<string, string> = {
   eth_accounts: "View accounts",
 };
 
-const getCapabilityLabel = (capability: string) => CAPABILITY_LABELS[capability] ?? capability;
+const getGrantKindLabel = (grantKind: string) => GRANT_KIND_LABELS[grantKind] ?? grantKind;
 
 export function RequestPermissionsPayload({ approval }: { approval: RequestPermissionsApproval }) {
   return (
@@ -17,9 +17,9 @@ export function RequestPermissionsPayload({ approval }: { approval: RequestPermi
         This site wants account access on the following chains. Choose the account to share for this request.
       </Paragraph>
       <YStack gap="$2" marginTop="$2">
-        {approval.payload.requestedAccesses.map((request, index) => (
-          <Card key={`${request.capability}-${request.chainRef}-${index}`} padded bordered>
-            <Paragraph fontWeight="600">{getCapabilityLabel(request.capability)}</Paragraph>
+        {approval.payload.requestedGrants.map((request, index) => (
+          <Card key={`${request.grantKind}-${request.chainRef}-${index}`} padded bordered>
+            <Paragraph fontWeight="600">{getGrantKindLabel(request.grantKind)}</Paragraph>
             <Paragraph color="$color10" fontSize="$2">
               Chain: {request.chainRef}
             </Paragraph>

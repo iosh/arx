@@ -1,25 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ChainPermissionAuthorization } from "../controllers/permission/types.js";
-import { buildWalletPermissions } from "./permissions.js";
+import { buildEip2255Permissions, buildEip2255PermissionsFromConnectionSnapshot } from "./permissions.js";
 
 const ORIGIN = "https://dapp.example";
 
-describe("buildWalletPermissions", () => {
-  it("returns empty list when origin lacks permissions", () => {
-    expect(buildWalletPermissions({ origin: ORIGIN })).toEqual([]);
+describe("buildEip2255Permissions", () => {
+  it("returns empty list when origin lacks connected account addresses", () => {
+    expect(buildEip2255Permissions({ origin: ORIGIN })).toEqual([]);
   });
 
-  it("returns only the eth_accounts descriptor for the current chain", () => {
-    const authorization: ChainPermissionAuthorization = {
-      origin: ORIGIN,
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      accountKeys: ["eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-    };
+  it("returns only the eth_accounts descriptor for the current connection scope", () => {
+    const accountAddresses = vi.fn(() => ["0xabc", "0xabc", "0xdef"])();
 
-    const getAccounts = vi.fn((chainRef: string) => (chainRef === "eip155:1" ? ["0xabc", "0xabc", "0xdef"] : []));
-
-    expect(buildWalletPermissions({ origin: ORIGIN, authorization, getAccounts })).toEqual([
+    expect(buildEip2255Permissions({ origin: ORIGIN, accountAddresses })).toEqual([
       {
         invoker: ORIGIN,
         parentCapability: "eth_accounts",
@@ -28,14 +20,24 @@ describe("buildWalletPermissions", () => {
     ]);
   });
 
-  it("returns empty list when the current chain has no account access", () => {
-    const authorization: ChainPermissionAuthorization = {
-      origin: ORIGIN,
-      namespace: "eip155",
-      chainRef: "eip155:137",
-      accountKeys: [],
-    };
+  it("adapts connection snapshots into EIP-2255 descriptors", () => {
+    expect(
+      buildEip2255PermissionsFromConnectionSnapshot({
+        origin: ORIGIN,
+        snapshot: {
+          accounts: [{ canonicalAddress: "0xabc" }, { canonicalAddress: "0xabc" }, { canonicalAddress: "0xdef" }],
+        },
+      }),
+    ).toEqual([
+      {
+        invoker: ORIGIN,
+        parentCapability: "eth_accounts",
+        caveats: [{ type: "restrictReturnedAccounts", value: ["0xabc", "0xdef"] }],
+      },
+    ]);
+  });
 
-    expect(buildWalletPermissions({ origin: ORIGIN, authorization })).toEqual([]);
+  it("returns empty list when the current connection scope has no permitted accounts", () => {
+    expect(buildEip2255Permissions({ origin: ORIGIN, accountAddresses: [] })).toEqual([]);
   });
 });

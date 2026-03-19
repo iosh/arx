@@ -1,10 +1,10 @@
 import type { ChainRef } from "../../chains/ids.js";
-import { PermissionCapabilities } from "../../permissions/capabilities.js";
+import { ConnectionGrantKinds } from "../../permissions/connectionGrantKinds.js";
 import type { AccountKey } from "../../storage/records.js";
 import type { ChainNamespace } from "../account/types.js";
 
-export { PermissionCapabilities };
-export type PermissionCapability = (typeof PermissionCapabilities)[keyof typeof PermissionCapabilities];
+export { ConnectionGrantKinds };
+export type ConnectionGrantKind = (typeof ConnectionGrantKinds)[keyof typeof ConnectionGrantKinds];
 
 export type ChainPermissionState = {
   accountKeys: AccountKey[];
@@ -59,20 +59,20 @@ export type MutatePermittedChainsOptions = {
   chainRefs: [ChainRef, ...ChainRef[]];
 };
 
-export type PermissionRequestChainRefs = [ChainRef, ...ChainRef[]];
+export type ConnectionGrantChainRefs = [ChainRef, ...ChainRef[]];
 
-export type PermissionRequestDescriptor = {
-  capability: PermissionCapability;
-  chainRefs: PermissionRequestChainRefs;
+export type ConnectionGrantRequest = {
+  grantKind: ConnectionGrantKind;
+  chainRefs: ConnectionGrantChainRefs;
 };
 
 export type RequestPermissionsApprovalPayload = {
   chainRef: ChainRef;
-  requested: PermissionRequestDescriptor[];
+  requestedGrants: ConnectionGrantRequest[];
 };
 
-export type PermissionApprovalResult = {
-  granted: PermissionRequestDescriptor[];
+export type RequestPermissionsApprovalResult = {
+  grantedGrants: ConnectionGrantRequest[];
 };
 
 export type PermissionController = {

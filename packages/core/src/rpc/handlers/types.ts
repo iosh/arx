@@ -12,8 +12,8 @@ import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { RpcRequestKind } from "../requestKind.js";
 import type { RequestContext } from "../requestContext.js";
+import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
 
 export type HandlerControllers = {
@@ -33,10 +33,7 @@ export type HandlerControllers = {
 
 export type HandlerRuntimeServices = {
   chainViews: Pick<ChainViewsService, "resolveEip155SwitchChain">;
-  permissionViews: Pick<
-    PermissionViewsService,
-    "buildWalletPermissions" | "getConnectionSnapshot" | "listPermittedAccounts"
-  >;
+  permissionViews: Pick<PermissionViewsService, "getConnectionSnapshot" | "listPermittedAccounts">;
 };
 
 export type RpcRequest = {

@@ -4,39 +4,40 @@ import type { ChainRef } from "../../../../chains/ids.js";
 import {
   type ApprovalCreateParams,
   ApprovalKinds,
-  PermissionCapabilities,
-  type PermissionCapability,
-  type PermissionRequestDescriptor,
+  type ConnectionGrantKind,
+  ConnectionGrantKinds,
+  type ConnectionGrantRequest,
 } from "../../../../controllers/index.js";
-import { isPermissionCapability } from "../../../../permissions/capabilities.js";
+import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
+import { buildEip2255PermissionsFromConnectionSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
 
-const toRequestDescriptors = (
-  capabilities: readonly PermissionCapability[],
+const toConnectionGrantRequests = (
+  grantKinds: readonly ConnectionGrantKind[],
   defaultChain: ChainRef,
-): PermissionRequestDescriptor[] => {
-  const requests = new Map<string, PermissionRequestDescriptor>();
+): ConnectionGrantRequest[] => {
+  const requests = new Map<string, ConnectionGrantRequest>();
 
-  const addCapability = (capability: string) => {
-    if (!isPermissionCapability(capability)) return;
-    const existing = requests.get(capability);
+  const addGrantKind = (grantKind: string) => {
+    if (!isConnectionGrantKind(grantKind)) return;
+    const existing = requests.get(grantKind);
     if (existing) return;
 
-    requests.set(capability, { capability, chainRefs: [defaultChain] });
+    requests.set(grantKind, { grantKind, chainRefs: [defaultChain] });
   };
 
-  for (const capability of capabilities) {
-    addCapability(capability);
+  for (const grantKind of grantKinds) {
+    addGrantKind(grantKind);
   }
 
   return [...requests.values()];
 };
 
-type WalletRequestPermissionsParams = readonly PermissionCapability[];
+type WalletRequestPermissionsParams = readonly ConnectionGrantKind[];
 
 const WalletRequestPermissionsParamsSchema = z
   .any()
@@ -51,19 +52,19 @@ const WalletRequestPermissionsParamsSchema = z
       });
     }
 
-    const out: PermissionCapability[] = [];
+    const out: ConnectionGrantKind[] = [];
     for (const capability of new Set<string>(entries)) {
-      if (!isPermissionCapability(capability)) {
+      if (!isConnectionGrantKind(capability)) {
         throw arxError({
           reason: ArxReasons.RpcInvalidParams,
           message: `wallet_requestPermissions does not support capability "${capability}"`,
           data: { capability },
         });
       }
-      if (capability !== PermissionCapabilities.Accounts) {
+      if (capability !== ConnectionGrantKinds.Accounts) {
         throw arxError({
           reason: ArxReasons.RpcInvalidParams,
-          message: `wallet_requestPermissions only supports "${PermissionCapabilities.Accounts}"`,
+          message: `wallet_requestPermissions only supports "${ConnectionGrantKinds.Accounts}"`,
           data: { capability },
         });
       }
@@ -95,17 +96,16 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
   },
   handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
     const chainRef = invocation.chainRef;
-    const namespace = invocation.namespace;
 
-    const requested = toRequestDescriptors(params, chainRef);
+    const requestedGrants = toConnectionGrantRequests(params, chainRef);
     const request = {
       id: createApprovalId("wallet_requestPermissions"),
       kind: ApprovalKinds.RequestPermissions,
       origin,
-      namespace,
+      namespace: invocation.namespace,
       chainRef,
       createdAt: controllers.clock.now(),
-      request: { chainRef, requested },
+      request: { chainRef, requestedGrants },
     } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
 
     try {
@@ -121,6 +121,9 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       });
     }
 
-    return services.permissionViews.buildWalletPermissions(origin, { namespace, chainRef });
+    return buildEip2255PermissionsFromConnectionSnapshot({
+      origin,
+      snapshot: services.permissionViews.getConnectionSnapshot(origin, { chainRef }),
+    });
   },
 });

@@ -777,7 +777,7 @@ describe("eip155 handlers - core error paths", () => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
       const payload = task.request as RequestPermissionsApprovalPayload;
       expect(payload.chainRef).toBe(chain.chainRef);
-      expect(payload.requested).toEqual([{ capability: "eth_accounts", chainRefs: [chain.chainRef] }]);
+      expect(payload.requestedGrants).toEqual([{ grantKind: "eth_accounts", chainRefs: [chain.chainRef] }]);
       await runtime.controllers.approvals.resolve({
         id: task.id,
         action: "approve",

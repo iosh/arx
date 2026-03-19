@@ -1,2 +1,2 @@
-export * from "./capabilities.js";
+export * from "./connectionGrantKinds.js";
 export * from "./eip2255.js";

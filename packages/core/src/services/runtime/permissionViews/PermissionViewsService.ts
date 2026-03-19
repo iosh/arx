@@ -3,15 +3,9 @@ import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { AccountController } from "../../../controllers/account/types.js";
 import type { PermissionController } from "../../../controllers/permission/types.js";
-import { buildWalletPermissions as buildEip2255WalletPermissions } from "../../../permissions/eip2255.js";
 import type { AccountKey } from "../../../storage/records.js";
 import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
-import type {
-  BuildWalletPermissionViewsOptions,
-  ConnectionSnapshot,
-  PermissionViewsService,
-  PermittedAccountView,
-} from "./types.js";
+import type { ConnectionSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
   accounts: Pick<AccountController, "getOwnedAccount">;
@@ -86,30 +80,6 @@ class DefaultPermissionViewsService implements PermissionViewsService {
 
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[] {
     return this.getConnectionSnapshot(origin, options).accounts;
-  }
-
-  buildWalletPermissions(origin: string, options: BuildWalletPermissionViewsOptions) {
-    const snapshot = this.getConnectionSnapshot(origin, { chainRef: options.chainRef });
-
-    if (options.namespace && options.namespace !== snapshot.namespace) {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Permission namespace mismatch for "${options.chainRef}"`,
-        data: { chainRef: options.chainRef, namespace: options.namespace, expectedNamespace: snapshot.namespace },
-      });
-    }
-
-    return buildEip2255WalletPermissions({
-      origin,
-      authorization: {
-        origin,
-        namespace: snapshot.namespace,
-        chainRef: snapshot.chainRef,
-        accountKeys: snapshot.permittedAccountKeys,
-      },
-      getAccounts: (chainRef) =>
-        chainRef === snapshot.chainRef ? snapshot.accounts.map((account) => account.canonicalAddress) : [],
-    });
   }
 
   buildUiPermissionsSnapshot(): UiPermissionsSnapshot {

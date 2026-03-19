@@ -86,7 +86,7 @@ describe("eip155 handlers - approval metadata", () => {
             displayAddress: account.displayAddress,
           })),
           recommendedAccountKey: selectableAccount.accountKey,
-          requestedAccesses: [{ capability: "eth_accounts", chainRef: activeChain.chainRef }],
+          requestedGrants: [{ grantKind: "eth_accounts", chainRef: activeChain.chainRef }],
         },
       });
 

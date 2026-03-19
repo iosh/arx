@@ -137,10 +137,10 @@ export const ApprovalSummarySchema = z.discriminatedUnion("type", [
     payload: z.object({
       selectableAccounts: z.array(ApprovalSelectableAccountSchema),
       recommendedAccountKey: AccountKeySchema.nullable(),
-      requestedAccesses: z
+      requestedGrants: z
         .array(
           z.object({
-            capability: z.string(),
+            grantKind: z.string(),
             chainRef: ChainRefSchema,
           }),
         )

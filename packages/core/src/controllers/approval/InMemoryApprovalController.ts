@@ -73,16 +73,16 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
     });
   }
 
-  if ("requested" in request.request) {
-    if (request.request.requested.length === 0) {
+  if ("requestedGrants" in request.request) {
+    if (request.request.requestedGrants.length === 0) {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
-        message: "Request-permissions approval must include at least one requested capability.",
+        message: "Request-permissions approval must include at least one requested grant.",
         data: { id: request.id, kind: request.kind, chainRef: request.chainRef, namespace: request.namespace },
       });
     }
 
-    for (const descriptor of request.request.requested) {
+    for (const descriptor of request.request.requestedGrants) {
       if (descriptor.chainRefs.length === 0) {
         throw arxError({
           reason: ArxReasons.RpcInvalidParams,
@@ -92,7 +92,7 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
             kind: request.kind,
             chainRef: request.chainRef,
             namespace: request.namespace,
-            capability: descriptor.capability,
+            grantKind: descriptor.grantKind,
           },
         });
       }
@@ -108,7 +108,7 @@ const assertApprovalContext = (request: ApprovalCreateParams) => {
               kind: request.kind,
               namespace: request.namespace,
               chainRef: targetChainRef,
-              capability: descriptor.capability,
+              grantKind: descriptor.grantKind,
             },
           });
         }

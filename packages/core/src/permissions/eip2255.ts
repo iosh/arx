@@ -1,44 +1,34 @@
-import type { ChainRef } from "../chains/ids.js";
-import type { ChainPermissionAuthorization } from "../controllers/permission/types.js";
-import type { AccountKey } from "../storage/records.js";
-import { PermissionCapabilities, type PermissionCapability } from "./capabilities.js";
+import { type ConnectionGrantKind, ConnectionGrantKinds } from "./connectionGrantKinds.js";
 
-export type WalletPermissionCaveat = {
+export type Eip2255PermissionCaveat = {
   type: string;
   value: unknown;
 };
 
-export type WalletPermissionDescriptor = {
+export type Eip2255PermissionDescriptor = {
   invoker: string;
-  parentCapability: PermissionCapability;
-  caveats?: WalletPermissionCaveat[];
+  parentCapability: ConnectionGrantKind;
+  caveats?: Eip2255PermissionCaveat[];
 };
 
-export type BuildWalletPermissionsOptions = {
+export type BuildEip2255PermissionsOptions = {
   origin: string;
-  authorization?: ChainPermissionAuthorization | null;
-  getAccounts?: (chainRef: ChainRef, accountKeys: readonly AccountKey[]) => readonly string[] | undefined;
+  accountAddresses?: readonly string[];
 };
 
 const unique = <T>(values: readonly T[]): T[] => {
   return [...new Set(values)];
 };
 
-const sanitizeAccounts = (values: readonly unknown[]): string[] => {
+const sanitizeAccountAddresses = (values: readonly unknown[]): string[] => {
   return values.filter((value): value is string => typeof value === "string" && value.length > 0).map((value) => value);
 };
 
-export const buildWalletPermissions = ({
+export const buildEip2255Permissions = ({
   origin,
-  authorization,
-  getAccounts,
-}: BuildWalletPermissionsOptions): WalletPermissionDescriptor[] => {
-  if (!authorization) return [];
-  if (authorization.accountKeys.length === 0) {
-    return [];
-  }
-
-  const addresses = sanitizeAccounts(getAccounts?.(authorization.chainRef, authorization.accountKeys) ?? []);
+  accountAddresses,
+}: BuildEip2255PermissionsOptions): Eip2255PermissionDescriptor[] => {
+  const addresses = sanitizeAccountAddresses(accountAddresses ?? []);
   const uniqueAddresses = unique(addresses);
   if (uniqueAddresses.length === 0) {
     return [];
@@ -47,7 +37,7 @@ export const buildWalletPermissions = ({
   return [
     {
       invoker: origin,
-      parentCapability: PermissionCapabilities.Accounts,
+      parentCapability: ConnectionGrantKinds.Accounts,
       caveats: [
         {
           type: "restrictReturnedAccounts",

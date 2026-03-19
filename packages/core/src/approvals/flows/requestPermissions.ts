@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { PermissionCapabilities, type PermissionRequestDescriptor } from "../../controllers/permission/types.js";
+import { ConnectionGrantKinds, type ConnectionGrantRequest } from "../../controllers/permission/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import {
   deriveApprovalReviewContext,
@@ -28,9 +28,9 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
           displayAddress: account.displayAddress,
         })),
         recommendedAccountKey,
-        requestedAccesses: record.request.requested.flatMap((item) =>
+        requestedGrants: record.request.requestedGrants.flatMap((item) =>
           item.chainRefs.map((chainRef) => ({
-            capability: item.capability,
+            grantKind: item.grantKind,
             chainRef,
           })),
         ),
@@ -38,20 +38,20 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     };
   },
   async approve(record, decision, deps) {
-    const granted = record.request.requested.map((descriptor) => ({
-      capability: descriptor.capability,
-      chainRefs: [...descriptor.chainRefs] as PermissionRequestDescriptor["chainRefs"],
+    const grantedGrants = record.request.requestedGrants.map((descriptor) => ({
+      grantKind: descriptor.grantKind,
+      chainRefs: [...descriptor.chainRefs] as ConnectionGrantRequest["chainRefs"],
     }));
 
     const requestedChainRefs = new Set<string>();
     let namespace: string | null = null;
 
-    for (const descriptor of granted) {
-      if (descriptor.capability !== PermissionCapabilities.Accounts) {
+    for (const descriptor of grantedGrants) {
+      if (descriptor.grantKind !== ConnectionGrantKinds.Accounts) {
         throw arxError({
           reason: ArxReasons.RpcInvalidParams,
-          message: `Unsupported permission capability "${descriptor.capability}"`,
-          data: { origin: record.origin, capability: descriptor.capability },
+          message: `Unsupported connection grant kind "${descriptor.grantKind}"`,
+          data: { origin: record.origin, grantKind: descriptor.grantKind },
         });
       }
 
@@ -73,7 +73,7 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
     }
 
     const existing = deps.permissions.getAuthorization(record.origin, { namespace });
-    const primaryChainRef = granted[0]?.chainRefs[0] ?? record.request.chainRef;
+    const primaryChainRef = grantedGrants[0]?.chainRefs[0] ?? record.request.chainRef;
     const { reviewChainRef } = deriveApprovalReviewContext(record, {
       request: { chainRef: primaryChainRef },
     });
@@ -120,6 +120,6 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       ],
     });
 
-    return { granted };
+    return { grantedGrants };
   },
 };

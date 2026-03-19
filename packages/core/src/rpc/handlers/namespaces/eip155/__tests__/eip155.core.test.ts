@@ -749,7 +749,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("grants permissions after wallet_requestPermissions approval", async () => {
+  it("persists connection authorization after wallet_requestPermissions approval", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();

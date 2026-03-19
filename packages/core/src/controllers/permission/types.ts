@@ -25,6 +25,12 @@ export type PermissionsState = {
   origins: Record<string, OriginPermissionState>;
 };
 
+/**
+ * Persistent connection authorization for one origin and namespace.
+ *
+ * The record defines the permitted chain and account scope only. Request-level
+ * signing and transaction approvals are not represented here.
+ */
 export type PermissionAuthorization = {
   origin: string;
   namespace: ChainNamespace;
@@ -61,6 +67,12 @@ export type MutatePermittedChainsOptions = {
 
 export type ConnectionGrantChainRefs = [ChainRef, ...ChainRef[]];
 
+/**
+ * Persistent connection grant requested through `wallet_requestPermissions`.
+ *
+ * The protocol surface may expose the grant as an EIP-2255 capability, but its
+ * stored meaning remains connection scope rather than signing or transaction authorization.
+ */
 export type ConnectionGrantRequest = {
   grantKind: ConnectionGrantKind;
   chainRefs: ConnectionGrantChainRefs;

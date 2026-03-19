@@ -7,6 +7,7 @@ export type Eip2255PermissionCaveat = {
 
 export type Eip2255PermissionDescriptor = {
   invoker: string;
+  // EIP-2255 represents the serialized connection grant kind in `parentCapability`.
   parentCapability: ConnectionGrantKind;
   caveats?: Eip2255PermissionCaveat[];
 };

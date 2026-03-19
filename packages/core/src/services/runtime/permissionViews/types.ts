@@ -19,9 +19,10 @@ export type ConnectionSnapshot = {
 };
 
 export type PermissionViewsService = {
+  // Generic connection projection consumed by RPC, provider, and UI surfaces.
   getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot;
   assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void>;
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];
-  // Protocol-specific permission surfaces should adapt from these generic projections.
+  // Protocol-specific permission surfaces adapt from the generic connection projection.
   buildUiPermissionsSnapshot(): UiPermissionsSnapshot;
 };

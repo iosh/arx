@@ -105,7 +105,8 @@ export const PermissionRecordSchema = z
   .strictObject({
     origin: originStringSchema,
     namespace: z.string().min(1),
-    // One durable authorization entity per (origin, namespace).
+    // One persistent connection-authorization record per (origin, namespace).
+    // Request-level signing and transaction approvals remain runtime state.
     chains: z.array(PermissionChainScopeSchema).min(1),
     updatedAt: epochMillisecondsSchema,
   })

@@ -443,7 +443,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("returns a submission summary when eth_sendTransaction auto-approves", async () => {
+  it("returns a submission summary for eth_sendTransaction without mutating durable connection authorization", async () => {
     const rpcMocks = {
       estimateGas: vi.fn(async () => "0x5208"),
       getBalance: vi.fn(async () => "0xffffffffffffffff"),
@@ -557,7 +557,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("signs personal_sign requests when the account is unlocked", async () => {
+  it("signs personal_sign requests without mutating durable connection authorization", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -591,6 +591,7 @@ describe("eip155 handlers - approval metadata", () => {
         chainRefs: [mainnet.chainRef],
         addresses: [account.address],
       });
+      const beforePermissions = runtime.controllers.permissions.getState();
 
       const execute = createExecutor(runtime);
       const message = "0xdeadbeef";
@@ -618,13 +619,14 @@ describe("eip155 handlers - approval metadata", () => {
           message,
         }),
       ).resolves.toBe(signature);
+      expect(runtime.controllers.permissions.getState()).toEqual(beforePermissions);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.destroy();
     }
   });
 
-  it("signs eth_signTypedData_v4 requests with the eip155 signer", async () => {
+  it("signs eth_signTypedData_v4 requests without mutating durable connection authorization", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();

@@ -1,3 +1,9 @@
+/**
+ * Grant kinds persisted by the permission domain.
+ *
+ * These values describe connection scope only. Request-level signing and
+ * transaction approvals remain runtime state.
+ */
 export const ConnectionGrantKinds = {
   Accounts: "eth_accounts",
 } as const;

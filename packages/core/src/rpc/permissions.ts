@@ -17,6 +17,7 @@ export const buildEip2255PermissionsFromConnectionSnapshot = (args: {
 }): Eip2255PermissionDescriptor[] => {
   const { origin, snapshot } = args;
 
+  // Adapt the generic connection projection into the EIP-2255 permission surface.
   return buildEip2255Permissions({
     origin,
     accountAddresses: snapshot.accounts.map((account) => account.canonicalAddress),

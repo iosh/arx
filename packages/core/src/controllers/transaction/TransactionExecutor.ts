@@ -1,5 +1,6 @@
 import { ArxReasons, isArxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { requestApproval } from "../../approvals/creation.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
@@ -10,14 +11,12 @@ import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ApprovalController } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
-import { toApprovalRequester } from "../approval/utils.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
   TransactionApprovalChainMetadata,
-  TransactionApprovalRequest,
   TransactionApprovalRequestPayload,
   TransactionController,
   TransactionError,
@@ -212,8 +211,20 @@ export class TransactionExecutor
 
     const storedMeta = this.#view.commitRecord(created).next;
 
-    const approvalRequest = this.#createApprovalRequest(storedMeta);
-    const approvalPromise = this.#approvals.create(approvalRequest, toApprovalRequester(requestContext)).settled;
+    const approvalPromise = requestApproval(
+      {
+        approvals: this.#approvals,
+        now: this.#now,
+      },
+      {
+        kind: ApprovalKinds.SendTransaction,
+        requestContext,
+        // Transaction-backed approvals keep a stable 1:1 link with the transaction record.
+        approvalId: storedMeta.id,
+        createdAt: storedMeta.createdAt,
+        request: this.#createApprovalRequest(storedMeta),
+      },
+    ).settled;
 
     // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#prepare.queuePrepare(id);
@@ -488,23 +499,15 @@ export class TransactionExecutor
     return null;
   }
 
-  #createApprovalRequest(meta: TransactionMeta): TransactionApprovalRequest {
+  #createApprovalRequest(meta: TransactionMeta): TransactionApprovalRequestPayload {
     return {
-      id: meta.id,
-      kind: ApprovalKinds.SendTransaction,
-      origin: meta.origin,
-      namespace: meta.request.namespace,
       chainRef: meta.chainRef,
-      createdAt: meta.createdAt,
-      request: {
-        chainRef: meta.chainRef,
-        origin: meta.origin,
-        chain: this.#buildChainMetadata(meta),
-        from: meta.from,
-        request: cloneRequest(meta.request),
-        warnings: cloneWarnings(meta.warnings),
-        issues: cloneIssues(meta.issues),
-      } satisfies TransactionApprovalRequestPayload,
+      origin: meta.origin,
+      chain: this.#buildChainMetadata(meta),
+      from: meta.from,
+      request: cloneRequest(meta.request),
+      warnings: cloneWarnings(meta.warnings),
+      issues: cloneIssues(meta.issues),
     };
   }
 

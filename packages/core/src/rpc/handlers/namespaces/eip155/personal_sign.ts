@@ -1,9 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155AuthorizedAccountApprovalMethod, requireApprovalRequester } from "./shared.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
 import { parseEip155PersonalSignParams } from "./signingParams.js";
 
 type PersonalSignParams = { address: string; message: string };
@@ -55,22 +56,22 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
   executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext, invocation }) => {
     const { message } = prepared;
     const chainRef = invocation.chainRef;
-    const request = {
-      id: createApprovalId("personal_sign"),
-      kind: ApprovalKinds.SignMessage,
-      origin,
-      namespace: invocation.namespace,
-      chainRef,
-      createdAt: controllers.clock.now(),
-      request: {
-        chainRef,
-        from,
-        message,
-      },
-    };
-
     try {
-      return await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "personal_sign")).settled;
+      return await requestApproval(
+        {
+          approvals: controllers.approvals,
+          now: controllers.clock.now,
+        },
+        {
+          kind: ApprovalKinds.SignMessage,
+          requestContext: requireRequestContext(rpcContext, "personal_sign"),
+          request: {
+            chainRef,
+            from,
+            message,
+          },
+        },
+      ).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

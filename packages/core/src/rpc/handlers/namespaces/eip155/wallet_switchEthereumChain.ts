@@ -1,12 +1,13 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
+import { requestApproval } from "../../../../approvals/creation.js";
 import { parseChainRef } from "../../../../chains/caip.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
-import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
   chainId?: string;
@@ -144,21 +145,18 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       return null;
     }
 
-    const request = {
-      id: createApprovalId("wallet_switchEthereumChain"),
-      kind: ApprovalKinds.SwitchChain,
-      origin,
-      namespace: invocation.namespace,
-      chainRef: target.chainRef,
-      createdAt: controllers.clock.now(),
-      request: {
-        chainRef: target.chainRef,
+    return await requestApproval(
+      {
+        approvals: controllers.approvals,
+        now: controllers.clock.now,
       },
-    };
-
-    return await controllers.approvals.create(
-      request,
-      requireApprovalRequester(rpcContext, "wallet_switchEthereumChain"),
+      {
+        kind: ApprovalKinds.SwitchChain,
+        requestContext: requireRequestContext(rpcContext, "wallet_switchEthereumChain"),
+        request: {
+          chainRef: target.chainRef,
+        },
+      },
     ).settled;
   },
 });

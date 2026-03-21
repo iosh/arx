@@ -1,8 +1,8 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
+import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
-  type ApprovalCreateParams,
   ApprovalKinds,
   type ConnectionGrantKind,
   ConnectionGrantKinds,
@@ -13,8 +13,8 @@ import { buildEip2255PermissionsFromConnectionSnapshot } from "../../../permissi
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
-import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155ApprovalMethod, requireApprovalRequester } from "./shared.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
 
 const toConnectionGrantRequests = (
   grantKinds: readonly ConnectionGrantKind[],
@@ -98,19 +98,18 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
     const chainRef = invocation.chainRef;
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
-    const request = {
-      id: createApprovalId("wallet_requestPermissions"),
-      kind: ApprovalKinds.RequestPermissions,
-      origin,
-      namespace: invocation.namespace,
-      chainRef,
-      createdAt: controllers.clock.now(),
-      request: { chainRef, requestedGrants },
-    } satisfies ApprovalCreateParams<typeof ApprovalKinds.RequestPermissions>;
-
     try {
-      await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "wallet_requestPermissions"))
-        .settled;
+      await requestApproval(
+        {
+          approvals: controllers.approvals,
+          now: controllers.clock.now,
+        },
+        {
+          kind: ApprovalKinds.RequestPermissions,
+          requestContext: requireRequestContext(rpcContext, "wallet_requestPermissions"),
+          request: { chainRef, requestedGrants },
+        },
+      ).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
       throw arxError({

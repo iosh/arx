@@ -2,10 +2,6 @@ import { isArxError } from "@arx/errors";
 import { getChainRefNamespace } from "../../../chains/caip.js";
 import type { Namespace, RpcInvocationContext } from "../types.js";
 
-export const createApprovalId = (_prefix: string) => {
-  return globalThis.crypto.randomUUID();
-};
-
 export const isRpcError = (value: unknown): value is { code: number } =>
   Boolean(value && typeof value === "object" && "code" in (value as Record<string, unknown>));
 

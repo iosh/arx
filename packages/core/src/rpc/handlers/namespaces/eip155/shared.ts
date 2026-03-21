@@ -1,8 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
-import { toApprovalRequester } from "../../../../controllers/approval/utils.js";
-import type { ApprovalRequester, TransactionController, TransactionMeta } from "../../../../controllers/index.js";
+import type { TransactionController, TransactionMeta } from "../../../../controllers/index.js";
 import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
 import {
   ApprovalRequirements,
@@ -25,13 +24,6 @@ export const requireRequestContext = (rpcContext: RpcInvocationContext | undefin
     });
   }
   return requestContext;
-};
-
-export const requireApprovalRequester = (
-  rpcContext: RpcInvocationContext | undefined,
-  method: string,
-): ApprovalRequester => {
-  return toApprovalRequester(requireRequestContext(rpcContext, method));
 };
 
 type PermittedAccountDeps = {

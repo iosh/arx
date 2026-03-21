@@ -1,9 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { createApprovalId, isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155AuthorizedAccountApprovalMethod, requireApprovalRequester } from "./shared.js";
+import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
 import { parseEip155TypedDataParams } from "./signingParams.js";
 
 type EthSignTypedDataV4Params = { address: string; typedData: string };
@@ -26,23 +27,22 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
   executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext, invocation }) => {
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
-    const request = {
-      id: createApprovalId("eth_signTypedData_v4"),
-      kind: ApprovalKinds.SignTypedData,
-      origin,
-      namespace: invocation.namespace,
-      chainRef,
-      createdAt: controllers.clock.now(),
-      request: {
-        chainRef,
-        from,
-        typedData,
-      },
-    };
-
     try {
-      return await controllers.approvals.create(request, requireApprovalRequester(rpcContext, "eth_signTypedData_v4"))
-        .settled;
+      return await requestApproval(
+        {
+          approvals: controllers.approvals,
+          now: controllers.clock.now,
+        },
+        {
+          kind: ApprovalKinds.SignTypedData,
+          requestContext: requireRequestContext(rpcContext, "eth_signTypedData_v4"),
+          request: {
+            chainRef,
+            from,
+            typedData,
+          },
+        },
+      ).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

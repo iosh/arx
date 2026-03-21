@@ -240,7 +240,7 @@ describe("runtimeHost", () => {
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
     });
-    const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
+    const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
 
     expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
     expect(createBackgroundRuntimeMock).toHaveBeenCalledWith(
@@ -261,11 +261,46 @@ describe("runtimeHost", () => {
     expect(providerAccess.getActiveChainByNamespace()).toEqual({ eip155: "eip155:1" });
     expect(providerAccess.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
     expect(runtimeHarness.providerAccess.buildSnapshot).toHaveBeenCalledWith("eip155");
-    expect(approvalUiAccess.hasInitializedVault()).toBe(true);
+    expect(approvalPopupAccess.hasInitializedVault()).toBe(true);
 
-    const approvalListener = vi.fn();
-    approvalUiAccess.subscribeAttentionRequested(approvalListener);
-    expect(runtimeHarness.subscribe).toHaveBeenCalledWith(ATTENTION_REQUESTED, approvalListener);
+    const unlockListener = vi.fn();
+    approvalPopupAccess.subscribeUnlockAttentionRequested(unlockListener);
+    expect(runtimeHarness.subscribe).toHaveBeenCalledWith(ATTENTION_REQUESTED, expect.any(Function));
+
+    const attentionSubscription = runtimeHarness.subscribe.mock.calls.find((call) => call[0] === ATTENTION_REQUESTED);
+    const attentionHandler = attentionSubscription?.[1];
+
+    expect(attentionHandler).toBeTypeOf("function");
+
+    attentionHandler?.({
+      reason: "unlock_required",
+      origin: "https://dapp.example",
+      method: "eth_requestAccounts",
+      chainRef: "eip155:1",
+      namespace: "eip155",
+      requestedAt: 1_000,
+      expiresAt: 2_000,
+    });
+    attentionHandler?.({
+      reason: "approval_required",
+      origin: "https://dapp.example",
+      method: "personal_sign",
+      chainRef: "eip155:1",
+      namespace: "eip155",
+      requestedAt: 1_000,
+      expiresAt: 2_000,
+    });
+
+    expect(unlockListener).toHaveBeenCalledTimes(1);
+    expect(unlockListener).toHaveBeenCalledWith({
+      reason: "unlock_required",
+      origin: "https://dapp.example",
+      method: "eth_requestAccounts",
+      chainRef: "eip155:1",
+      namespace: "eip155",
+      requestedAt: 1_000,
+      expiresAt: 2_000,
+    });
   });
 
   it("destroys runtime and rejects new access after destroy", async () => {
@@ -291,7 +326,7 @@ describe("runtimeHost", () => {
         uiOrigin: "chrome-extension://test",
       }),
     ).rejects.toThrow("Background runtime host is destroyed");
-    await expect(runtimeHost.getOrInitApprovalUiAccess()).rejects.toThrow("Background runtime host is destroyed");
+    await expect(runtimeHost.getOrInitApprovalPopupAccess()).rejects.toThrow("Background runtime host is destroyed");
   });
 
   it("rejects repeated UI access requests with different parameters", async () => {

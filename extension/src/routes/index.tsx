@@ -63,8 +63,8 @@ function HomePage() {
       onExportMnemonic={handleExportMnemonic}
       markingKeyringId={markingId}
       onOpenApprovals={() => {
-        void uiClient.attention
-          .openNotification()
+        void uiClient.approvals
+          .openPopup()
           .then(() => window.close())
           .catch((error) => {
             pushToast({ kind: "error", message: getErrorMessage(error), dedupeKey: "open-approvals" });

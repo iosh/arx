@@ -102,8 +102,8 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     getOrInitUiAccess: vi.fn(async () => {
       throw new Error("UI bridge access should not be requested in providerEventsListener tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
-    getOrInitApprovalUiAccess: vi.fn(async () => {
-      throw new Error("Approval UI access should not be requested in providerEventsListener tests");
+    getOrInitApprovalPopupAccess: vi.fn(async () => {
+      throw new Error("Approval popup access should not be requested in providerEventsListener tests");
     }),
     destroy: vi.fn(),
     applyDebugNamespacesFromEnv: vi.fn(),

@@ -47,8 +47,6 @@ describe("ui actions", () => {
 
     void actions.balances.getNative({ chainRef: "eip155:1", address: "0x0" });
 
-    void actions.attention.openNotification();
-
     void actions.session.unlock({ password: "pw" });
     void actions.session.lock();
     void actions.session.lock({ reason: "manual" });
@@ -80,6 +78,7 @@ describe("ui actions", () => {
       chainRef: "eip155:1",
     });
 
+    void actions.approvals.openPopup();
     void actions.approvals.resolve({ id: "id", action: "approve" });
     void actions.approvals.resolve({ id: "id", action: "reject" });
     void actions.approvals.resolve({ id: "id", action: "reject", reason: "reason" });

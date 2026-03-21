@@ -1,6 +1,5 @@
 import { accountsMethods } from "./methods/accounts.js";
 import { approvalsMethods } from "./methods/approvals.js";
-import { attentionMethods } from "./methods/attention.js";
 import { balancesMethods } from "./methods/balances.js";
 import { keyringsMethods } from "./methods/keyrings.js";
 import { networksMethods } from "./methods/networks.js";
@@ -13,9 +12,6 @@ import type { UiMethodDefinition } from "./methods/types.js";
 export const uiMethods = {
   // --- snapshot ---
   ...snapshotMethods,
-
-  // --- attention ---
-  ...attentionMethods,
 
   // --- balances ---
   ...balancesMethods,

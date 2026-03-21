@@ -72,7 +72,7 @@ describe("background app", () => {
     createBackgroundRuntimeHostMock.mockReturnValue({
       applyDebugNamespacesFromEnv: vi.fn(),
       destroy: vi.fn(),
-      getOrInitApprovalUiAccess: vi.fn(),
+      getOrInitApprovalPopupAccess: vi.fn(),
       getOrInitProviderAccess: vi.fn(),
       getOrInitUiAccess: vi.fn(),
       initializeRuntime: vi.fn(async () => {}),

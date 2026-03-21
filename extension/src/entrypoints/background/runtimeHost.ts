@@ -20,7 +20,7 @@ export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
   getOrInitProviderAccess: () => Promise<ProviderRuntimeAccess>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
-  getOrInitApprovalUiAccess: () => Promise<BackgroundApprovalUiAccess>;
+  getOrInitApprovalPopupAccess: () => Promise<BackgroundApprovalPopupAccess>;
   destroy: () => void;
   applyDebugNamespacesFromEnv: () => void;
 };
@@ -37,24 +37,25 @@ type ApprovalCreatedListener = Parameters<BackgroundRuntimeApprovals["onCreated"
 type ApprovalFinishedListener = Parameters<BackgroundRuntimeApprovals["onFinished"]>[0];
 type ApprovalStateChangedListener = Parameters<BackgroundRuntimeApprovals["onStateChanged"]>[0];
 type ApprovalSessionLockedListener = Parameters<BackgroundRuntimeUnlock["onLocked"]>[0];
-type ApprovalSessionStateChangedListener = Parameters<BackgroundRuntimeUnlock["onStateChanged"]>[0];
 
-export type BackgroundAttentionRequestedPayload = Pick<
-  AttentionRequest,
-  "reason" | "origin" | "method" | "chainRef" | "namespace"
->;
+export type BackgroundUnlockAttentionRequestedPayload = AttentionRequest & { reason: "unlock_required" };
 
-export type BackgroundApprovalUiAccess = {
-  subscribeAttentionRequested: (listener: (payload: BackgroundAttentionRequestedPayload) => void) => () => void;
+export type BackgroundApprovalPopupAccess = {
+  subscribeUnlockAttentionRequested: (
+    listener: (payload: BackgroundUnlockAttentionRequestedPayload) => void,
+  ) => () => void;
   subscribeApprovalCreated: (listener: ApprovalCreatedListener) => () => void;
   subscribeApprovalFinished: (listener: ApprovalFinishedListener) => () => void;
   subscribeApprovalStateChanged: (listener: ApprovalStateChangedListener) => () => void;
   subscribeSessionLocked: (listener: ApprovalSessionLockedListener) => () => void;
-  subscribeSessionStateChanged: (listener: ApprovalSessionStateChangedListener) => () => void;
   cancelApproval: (params: { id: string; reason: ApprovalTerminalReason }) => Promise<void>;
-  listPendingApprovalIds: () => string[];
+  cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
+  getPendingApprovalCount: () => number;
   hasInitializedVault: () => boolean;
-  isUnlocked: () => boolean;
+};
+
+const isUnlockAttentionRequest = (payload: AttentionRequest): payload is BackgroundUnlockAttentionRequestedPayload => {
+  return payload.reason === "unlock_required";
 };
 
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
@@ -180,20 +181,29 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     return active.runtime.providerAccess;
   };
 
-  const getOrInitApprovalUiAccess = async (): Promise<BackgroundApprovalUiAccess> => {
+  const getOrInitApprovalPopupAccess = async (): Promise<BackgroundApprovalPopupAccess> => {
     const active = await getOrInitRuntimeCache();
 
     return {
-      subscribeAttentionRequested: (listener) => active.runtime.bus.subscribe(ATTENTION_REQUESTED, listener),
+      subscribeUnlockAttentionRequested: (listener) =>
+        active.runtime.bus.subscribe(ATTENTION_REQUESTED, (payload) => {
+          if (!isUnlockAttentionRequest(payload)) {
+            return;
+          }
+
+          listener(payload);
+        }),
       subscribeApprovalCreated: (listener) => active.runtime.controllers.approvals.onCreated(listener),
       subscribeApprovalFinished: (listener) => active.runtime.controllers.approvals.onFinished(listener),
       subscribeApprovalStateChanged: (listener) => active.runtime.controllers.approvals.onStateChanged(listener),
       subscribeSessionLocked: (listener) => active.runtime.services.session.unlock.onLocked(listener),
-      subscribeSessionStateChanged: (listener) => active.runtime.services.session.unlock.onStateChanged(listener),
       cancelApproval: (params) => active.runtime.controllers.approvals.cancel(params),
-      listPendingApprovalIds: () => active.runtime.controllers.approvals.getState().pending.map((item) => item.id),
+      cancelPendingApprovals: async (reason) => {
+        const pending = active.runtime.controllers.approvals.getState().pending;
+        await Promise.all(pending.map((item) => active.runtime.controllers.approvals.cancel({ id: item.id, reason })));
+      },
+      getPendingApprovalCount: () => active.runtime.controllers.approvals.getState().pending.length,
       hasInitializedVault: () => active.runtime.services.session.vault.getStatus().hasEnvelope,
-      isUnlocked: () => active.runtime.services.session.unlock.isUnlocked(),
     };
   };
 
@@ -209,7 +219,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     initializeRuntime,
     getOrInitProviderAccess,
     getOrInitUiAccess,
-    getOrInitApprovalUiAccess,
+    getOrInitApprovalPopupAccess,
     destroy,
     applyDebugNamespacesFromEnv,
   };

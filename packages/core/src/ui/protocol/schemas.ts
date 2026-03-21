@@ -93,7 +93,7 @@ const HdBackupWarningSchema = z.object({
 });
 
 export const AttentionRequestSchema = z.object({
-  reason: z.enum(["unlock_required", "approval_required"]),
+  reason: z.enum(["unlock_required"]),
   origin: z.string().min(1),
   method: z.string().min(1),
   chainRef: ChainRefSchema.nullable(),

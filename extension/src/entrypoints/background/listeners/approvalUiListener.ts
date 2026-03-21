@@ -2,7 +2,7 @@ import { type ApprovalTerminalReason, getApprovalType } from "@arx/core/controll
 import { createLogger, extendLogger } from "@arx/core/logger";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { UiPlatform } from "../platform/uiPlatform";
-import type { BackgroundAttentionRequestedPayload, BackgroundRuntimeHost } from "../runtimeHost";
+import type { BackgroundRuntimeHost, BackgroundUnlockAttentionRequestedPayload } from "../runtimeHost";
 
 type ApprovalUiOrchestratorDeps = {
   runtimeHost: BackgroundRuntimeHost;
@@ -44,24 +44,19 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
 
     startTask = (async () => {
       try {
-        const approvalUiAccess = await runtimeHost.getOrInitApprovalUiAccess();
+        const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
         if (disposed) return;
 
         const cancelApprovalIds = async (approvalIds: string[], reason: ApprovalTerminalReason) => {
           await Promise.all(
             approvalIds.map(async (approvalId) => {
               try {
-                await approvalUiAccess.cancelApproval({ id: approvalId, reason });
+                await approvalPopupAccess.cancelApproval({ id: approvalId, reason });
               } catch (error) {
                 popupLog("failed to cancel approval", { approvalId, reason, error });
               }
             }),
           );
-        };
-
-        const cancelPendingApprovals = async (reason: ApprovalTerminalReason) => {
-          const approvalIds = approvalUiAccess.listPendingApprovalIds();
-          await cancelApprovalIds(approvalIds, reason);
         };
 
         const ensureWindowTracked = (windowId: number) => {
@@ -78,68 +73,66 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
         };
 
         subscriptions.push(
-          approvalUiAccess.subscribeAttentionRequested((request: BackgroundAttentionRequestedPayload) => {
-            popupLog("event:attention:requested", {
-              reason: request.reason,
-              origin: request.origin,
-              method: request.method,
-              chainRef: request.chainRef,
-              namespace: request.namespace,
-            });
-
-            if (request.reason !== "unlock_required") {
-              return;
-            }
-
-            const vaultInitialized = approvalUiAccess.hasInitializedVault();
-            if (!vaultInitialized) {
-              popupLog("skip notification window (vault uninitialized)", {
+          approvalPopupAccess.subscribeUnlockAttentionRequested(
+            (request: BackgroundUnlockAttentionRequestedPayload) => {
+              popupLog("event:attention:requested", {
                 reason: request.reason,
                 origin: request.origin,
                 method: request.method,
                 chainRef: request.chainRef,
                 namespace: request.namespace,
               });
-              return;
-            }
 
-            void platform
-              .openNotificationPopup({
-                reason: request.reason,
-                origin: request.origin,
-                method: request.method,
-                chainRef: request.chainRef,
-                namespace: request.namespace,
-              })
-              .then((result) => {
-                if (disposed) return;
-                if (!result.windowId) return;
-                ensureWindowTracked(result.windowId);
-              })
-              .catch((error) => {
-                popupLog("failed to open notification window", {
-                  error,
+              const vaultInitialized = approvalPopupAccess.hasInitializedVault();
+              if (!vaultInitialized) {
+                popupLog("skip notification window (vault uninitialized)", {
                   reason: request.reason,
                   origin: request.origin,
                   method: request.method,
                   chainRef: request.chainRef,
                   namespace: request.namespace,
                 });
-              });
-          }),
+                return;
+              }
+
+              void platform
+                .openNotificationPopup({
+                  reason: request.reason,
+                  origin: request.origin,
+                  method: request.method,
+                  chainRef: request.chainRef,
+                  namespace: request.namespace,
+                })
+                .then((result) => {
+                  if (disposed) return;
+                  if (!result.windowId) return;
+                  ensureWindowTracked(result.windowId);
+                })
+                .catch((error) => {
+                  popupLog("failed to open notification window", {
+                    error,
+                    reason: request.reason,
+                    origin: request.origin,
+                    method: request.method,
+                    chainRef: request.chainRef,
+                    namespace: request.namespace,
+                  });
+                });
+            },
+          ),
         );
 
         subscriptions.push(
-          approvalUiAccess.subscribeApprovalCreated(({ record }) => {
+          approvalPopupAccess.subscribeApprovalCreated(({ record }) => {
             if (record.requester.transport !== "provider") {
               return;
             }
 
             const method = getApprovalType(record.kind);
-            const vaultInitialized = approvalUiAccess.hasInitializedVault();
+            const vaultInitialized = approvalPopupAccess.hasInitializedVault();
             if (!vaultInitialized) {
               popupLog("skip notification window (vault uninitialized)", {
-                reason: "approval_required",
+                reason: "approval_created",
                 origin: record.origin,
                 method,
                 chainRef: record.chainRef,
@@ -150,7 +143,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
 
             void platform
               .openNotificationPopup({
-                reason: "approval_required",
+                reason: "approval_created",
                 origin: record.origin,
                 method,
                 chainRef: record.chainRef,
@@ -166,7 +159,7 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
               .catch((error) => {
                 popupLog("failed to open notification window", {
                   error,
-                  reason: "approval_required",
+                  reason: "approval_created",
                   origin: record.origin,
                   method,
                   chainRef: record.chainRef,
@@ -177,30 +170,23 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
         );
 
         subscriptions.push(
-          approvalUiAccess.subscribeApprovalFinished(({ id }) => {
+          approvalPopupAccess.subscribeApprovalFinished(({ id }) => {
             approvalWindowTracker.deleteApproval(id);
           }),
         );
 
         subscriptions.push(
-          approvalUiAccess.subscribeSessionLocked(() => {
-            void cancelPendingApprovals("locked");
+          approvalPopupAccess.subscribeSessionLocked(() => {
+            clearWindowTracking();
+            void approvalPopupAccess.cancelPendingApprovals("locked");
           }),
         );
 
         subscriptions.push(
-          approvalUiAccess.subscribeApprovalStateChanged(() => {
-            const pending = approvalUiAccess.listPendingApprovalIds();
-            if (pending.length === 0) {
+          approvalPopupAccess.subscribeApprovalStateChanged(() => {
+            if (approvalPopupAccess.getPendingApprovalCount() === 0) {
               clearWindowTracking();
             }
-          }),
-        );
-
-        subscriptions.push(
-          approvalUiAccess.subscribeSessionStateChanged(() => {
-            if (approvalUiAccess.isUnlocked()) return;
-            clearWindowTracking();
           }),
         );
 

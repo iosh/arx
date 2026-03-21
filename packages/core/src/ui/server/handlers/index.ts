@@ -1,7 +1,6 @@
 import type { UiHandlerDeps, UiHandlers } from "../types.js";
 import { createAccountsHandlers } from "./accounts.js";
 import { createApprovalsHandlers } from "./approvals.js";
-import { createAttentionHandlers } from "./attention.js";
 import { createBalancesHandlers } from "./balances.js";
 import { createKeyringsHandlers } from "./keyrings.js";
 import { createNetworksHandlers } from "./networks.js";
@@ -30,13 +29,12 @@ export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
-    ...createAttentionHandlers({ platform }),
     ...createBalancesHandlers({ chains, session, namespaceBindings }),
     ...createSessionHandlers({ session, keyrings }),
     ...createOnboardingHandlers({ accounts, chains, accountCodecs, session, keyrings, platform }),
     ...createAccountsHandlers({ accounts }),
     ...createNetworksHandlers({ chains }, toChainSnapshot),
-    ...createApprovalsHandlers({ approvals }),
+    ...createApprovalsHandlers({ approvals, platform }),
     ...createKeyringsHandlers({ accounts, chains, accountCodecs, session, keyrings }),
     ...createTransactionsHandlers({ transactions, chains, session, namespaceBindings, uiOrigin }, uiSessionId),
   } as const satisfies UiHandlers;

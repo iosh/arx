@@ -21,10 +21,6 @@ export const uiActions = (client: UiClient) => {
       getNative: call("ui.balances.getNative"),
     },
 
-    attention: {
-      openNotification: call("ui.attention.openNotification"),
-    },
-
     session: {
       unlock: call("ui.session.unlock"),
       lock: call("ui.session.lock"),
@@ -49,6 +45,7 @@ export const uiActions = (client: UiClient) => {
     },
 
     approvals: {
+      openPopup: call("ui.approvals.openPopup"),
       resolve: call("ui.approvals.resolve"),
     },
 

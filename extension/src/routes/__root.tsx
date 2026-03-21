@@ -2,7 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
 import { YStack } from "tamagui";
-import { ApprovalSnoozeProvider, ApprovalsOrchestrator } from "@/ui/approvals";
+import { ApprovalsOrchestrator } from "@/ui/approvals";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
@@ -87,12 +87,10 @@ function RootInner() {
 
   return (
     <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>
-      <ApprovalSnoozeProvider>
-        <ApprovalsOrchestrator snapshot={snapshot} isLoading={isLoading} />
-        <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
-          <Outlet />
-        </SessionGate>
-      </ApprovalSnoozeProvider>
+      <ApprovalsOrchestrator snapshot={snapshot} isLoading={isLoading} />
+      <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
+        <Outlet />
+      </SessionGate>
     </YStack>
   );
 }

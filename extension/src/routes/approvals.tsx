@@ -1,7 +1,7 @@
 import type { ApprovalSummary } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Card, Paragraph, YStack } from "tamagui";
-import { getApprovalRoutePath, getApprovalTypeLabel, useApprovalSnooze } from "@/ui/approvals";
+import { getApprovalRoutePath, getApprovalTypeLabel } from "@/ui/approvals";
 import { Button, ListItem, LoadingScreen, Screen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
@@ -14,7 +14,6 @@ export const Route = createFileRoute("/approvals")({
 
 function ApprovalsPage() {
   const router = useRouter();
-  const { snoozeHeadId } = useApprovalSnooze();
   const { snapshot, isLoading } = useUiSnapshot();
 
   if (isLoading || !snapshot) {
@@ -25,7 +24,6 @@ function ApprovalsPage() {
     <Screen>
       <Button
         onPress={() => {
-          snoozeHeadId(snapshot.approvals[0]?.id ?? null);
           router.navigate({ to: ROUTES.HOME });
         }}
       >

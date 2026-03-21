@@ -1,4 +1,4 @@
-import type { UiMethodParams, UiSnapshot } from "@arx/core/ui";
+import type { UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { uiClient } from "../lib/uiBridgeClient";
@@ -60,10 +60,6 @@ export const useUiSnapshot = () => {
 
   const switchChainMutation = useMutation({
     mutationFn: (chainRef: string) => uiClient.networks.switchActive({ chainRef }),
-  });
-
-  const resolveApprovalMutation = useMutation({
-    mutationFn: (params: UiMethodParams<"ui.approvals.resolve">) => uiClient.approvals.resolve(params),
   });
 
   const setAutoLockDurationMutation = useMutation({
@@ -168,7 +164,6 @@ export const useUiSnapshot = () => {
     resetAutoLockTimer: resetAutoLockMutation.mutate,
     switchAccount: switchAccountMutation.mutateAsync,
     switchChain: switchChainMutation.mutateAsync,
-    resolveApproval: resolveApprovalMutation.mutateAsync,
     setAutoLockDuration: setAutoLockDurationMutation.mutateAsync,
     deriveAccount: deriveAccountMutation.mutateAsync,
     importPrivateKey: importPrivateKeyMutation.mutateAsync,

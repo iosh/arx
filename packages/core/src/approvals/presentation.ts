@@ -1,6 +1,6 @@
 import type { ChainRef } from "../chains/ids.js";
-import type { ApprovalRecord } from "../controllers/approval/types.js";
-import type { ApprovalSummary } from "../ui/protocol/schemas.js";
+import type { ApprovalQueueItem, ApprovalRecord } from "../controllers/approval/types.js";
+import type { ApprovalSummary } from "./summary.js";
 import type { ApprovalFlowPresenterDeps, ApprovalSummaryBaseOptions } from "./types.js";
 
 type UiWarning = {
@@ -43,10 +43,18 @@ export const createApprovalSummaryBase = (
 };
 
 export const toUnsupportedApprovalSummary = (
-  record: ApprovalRecord,
-  deps: ApprovalFlowPresenterDeps,
+  record: Pick<
+    ApprovalRecord | ApprovalQueueItem,
+    "id" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt"
+  > & {
+    request?: unknown;
+  },
 ): ApprovalSummary => ({
-  ...createApprovalSummaryBase(record, deps),
+  id: record.id,
+  origin: record.origin,
+  namespace: record.namespace,
+  chainRef: record.chainRef,
+  createdAt: record.createdAt,
   type: "unsupported",
   payload: {
     rawType: record.kind,

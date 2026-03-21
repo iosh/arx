@@ -452,7 +452,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     ).resolves.toMatchObject({
       id: "switch-chain-approval",
       status: "approved",
-      result: null,
+      terminalReason: "user_approve",
+      value: null,
     });
     await expect(approvalPromise).resolves.toBeNull();
     expect(runtime.controllers.permissions.getState()).toEqual(before);

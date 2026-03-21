@@ -580,7 +580,11 @@ const createUiAccessForTest = (input: {
     accounts: input.controllers.accounts,
     approvals: {
       ...input.controllers.approvals,
-      resolve: vi.fn(async () => ({ id: "approval-id", status: "rejected" as const })),
+      resolve: vi.fn(async () => ({
+        id: "approval-id",
+        status: "rejected" as const,
+        terminalReason: "user_reject" as const,
+      })),
     },
     permissions: {
       buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)

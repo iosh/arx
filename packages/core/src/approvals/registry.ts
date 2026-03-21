@@ -8,6 +8,7 @@ import { signMessageApprovalFlow } from "./flows/signMessage.js";
 import { signTypedDataApprovalFlow } from "./flows/signTypedData.js";
 import { switchChainApprovalFlow } from "./flows/switchChain.js";
 import { toUnsupportedApprovalSummary } from "./presentation.js";
+import { ApprovalSummarySchema } from "./summary.js";
 import type {
   ApprovalExecutor,
   ApprovalFlow,
@@ -42,14 +43,23 @@ const getRequiredFlow = <K extends ApprovalKind>(
   return flow;
 };
 
-export const createApprovalFlowRegistry = (): ApprovalFlowRegistry => {
-  const byKind = new Map<ApprovalKind, ApprovalFlow>(APPROVAL_FLOWS.map((flow) => [flow.kind, flow]));
+export const createApprovalFlowRegistry = (options?: { flows?: readonly ApprovalFlow[] }): ApprovalFlowRegistry => {
+  const flows = options?.flows ?? APPROVAL_FLOWS;
+  const byKind = new Map<ApprovalKind, ApprovalFlow>(flows.map((flow) => [flow.kind, flow]));
 
   return {
     get: (kind) => byKind.get(kind) as ApprovalFlow<typeof kind> | undefined,
     present: (record: ApprovalRecord, deps: ApprovalFlowPresenterDeps) => {
       const flow = byKind.get(record.kind);
-      return flow ? flow.present(record as never, deps) : toUnsupportedApprovalSummary(record, deps);
+      if (!flow) {
+        return toUnsupportedApprovalSummary(record);
+      }
+
+      try {
+        return ApprovalSummarySchema.parse(flow.present(record as never, deps));
+      } catch {
+        return toUnsupportedApprovalSummary(record);
+      }
     },
   };
 };

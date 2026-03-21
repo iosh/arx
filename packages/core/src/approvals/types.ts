@@ -12,7 +12,7 @@ import type { TransactionController } from "../controllers/transaction/types.js"
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../services/runtime/chainViews/types.js";
-import type { ApprovalSummary } from "../ui/protocol/schemas.js";
+import type { ApprovalSummary } from "./summary.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;

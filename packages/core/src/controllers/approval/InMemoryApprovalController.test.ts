@@ -103,11 +103,17 @@ describe("InMemoryApprovalController", () => {
 
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(true);
 
-    await controller.resolve({ id: request.id, action: "approve" });
+    const resolved = await controller.resolve({ id: request.id, action: "approve" });
 
     await expect(handle.settled).resolves.toEqual(value);
     expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
     expect(executor.approve).toHaveBeenCalledTimes(1);
+    expect(resolved).toEqual({
+      id: request.id,
+      status: "approved",
+      terminalReason: "user_approve",
+      value,
+    });
   });
 
   it("allows synchronous onCreated handlers to resolve without races", async () => {
@@ -166,8 +172,23 @@ describe("InMemoryApprovalController", () => {
     const custom = new Error("custom rejection");
     (custom as Error & { code?: number }).code = 4001;
 
-    await controller.resolve({ id: request.id, action: "reject", error: custom });
+    await expect(controller.resolve({ id: request.id, action: "reject", error: custom })).resolves.toEqual({
+      id: request.id,
+      status: "rejected",
+      terminalReason: "user_reject",
+    });
     await expect(handle.settled).rejects.toBe(custom);
+  });
+
+  it("sorts pending approvals by createdAt and id", () => {
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+
+    controller.create(createRequest({ id: "approval-b", createdAt: 2_000 }), requester);
+    controller.create(createRequest({ id: "approval-a", createdAt: 2_000 }), requester);
+    controller.create(createRequest({ id: "approval-c", createdAt: 1_000 }), requester);
+
+    expect(controller.getState().pending.map((item) => item.id)).toEqual(["approval-c", "approval-a", "approval-b"]);
   });
 
   it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {

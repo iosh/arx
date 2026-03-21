@@ -1,32 +1,18 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { ZodError, z } from "zod";
+import { ZodError } from "zod";
 import type {
   ApprovalAccountSelectionDecision,
   ApprovalDecision,
   ApprovalKind,
   ApprovalRecord,
 } from "../controllers/approval/types.js";
-import { AccountKeySchema } from "../storage/records.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
+import { ApprovalAccountSelectionDecisionSchema } from "./resolve.js";
 import type { ApprovalFlowPresenterDeps } from "./types.js";
 
 type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
 };
-
-const ApprovalAccountSelectionDecisionSchema = z
-  .strictObject({
-    accountKeys: z.array(AccountKeySchema).min(1),
-  })
-  .superRefine((value, ctx) => {
-    if (new Set(value.accountKeys).size !== value.accountKeys.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: "decision.accountKeys must not contain duplicates",
-        path: ["accountKeys"],
-      });
-    }
-  });
 
 export const parseNoDecision = <K extends ApprovalKind>(kind: K, input: unknown): ApprovalDecision<K> => {
   if (input !== undefined) {

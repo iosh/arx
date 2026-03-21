@@ -139,8 +139,12 @@ describe("ui client runtime", () => {
         params: { id: "a", action: "reject" },
       });
 
-      transport.emit({ type: "ui:response", id: "id1", result: { id: "a", status: "rejected" } });
-      await expect(p).resolves.toEqual({ id: "a", status: "rejected" });
+      transport.emit({
+        type: "ui:response",
+        id: "id1",
+        result: { id: "a", status: "rejected", terminalReason: "user_reject" },
+      });
+      await expect(p).resolves.toEqual({ id: "a", status: "rejected", terminalReason: "user_reject" });
     } finally {
       client.destroy();
     }

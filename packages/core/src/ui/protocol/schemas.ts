@@ -1,19 +1,12 @@
 import { z } from "zod";
+import {
+  type ApprovalSelectableAccount,
+  ApprovalSelectableAccountSchema,
+  type ApprovalSummary,
+  ApprovalSummarySchema,
+} from "../../approvals/summary.js";
 import { ChainRefSchema } from "../../chains/ids.js";
-import { HTTP_PROTOCOLS, isUrlWithProtocols, RPC_PROTOCOLS } from "../../chains/url.js";
 import { AccountKeySchema } from "../../storage/records.js";
-
-const hexChainIdSchema = z.string().regex(/^0x[a-fA-F0-9]+$/, {
-  message: "Expected a 0x-prefixed hexadecimal string",
-});
-
-const httpUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, HTTP_PROTOCOLS), {
-  message: "URL must use the http or https protocol",
-});
-
-const rpcUrlSchema = z.url().refine((value) => isUrlWithProtocols(value, RPC_PROTOCOLS), {
-  message: "URL must use http, https, ws, or wss protocol",
-});
 
 export const ChainSnapshotSchema = z.object({
   chainRef: ChainRefSchema,
@@ -34,7 +27,6 @@ export const UiOwnedAccountSummarySchema = z.object({
   canonicalAddress: z.string().min(1),
   displayAddress: z.string().min(1),
 });
-export const ApprovalSelectableAccountSchema = UiOwnedAccountSummarySchema;
 
 export const AccountsSnapshotSchema = z.object({
   totalCount: z.number().int().nonnegative(),
@@ -70,117 +62,6 @@ const OriginPermissionStateSchema = z.record(z.string().min(1), NamespacePermiss
 export const UiPermissionsSnapshotSchema = z.object({
   origins: z.record(z.string().min(1), OriginPermissionStateSchema),
 });
-
-const approvalPayloadBase = z.object({
-  id: z.string(),
-  origin: z.string(),
-  namespace: z.string(),
-  chainRef: ChainRefSchema,
-  createdAt: z.number().int(),
-});
-export const ApprovalSummarySchema = z.discriminatedUnion("type", [
-  approvalPayloadBase.extend({
-    type: z.literal("requestAccounts"),
-    payload: z.object({
-      selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-      recommendedAccountKey: AccountKeySchema.nullable(),
-    }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("signMessage"),
-    payload: z.object({ from: z.string(), message: z.string() }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("signTypedData"),
-    payload: z.object({ from: z.string(), typedData: z.string() }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("sendTransaction"),
-    payload: z.object({
-      from: z.string(),
-      to: z.string().nullable(),
-      value: z.string().optional(),
-      data: z.string().optional(),
-      gas: z.string().optional(),
-      fee: z
-        .object({
-          gasPrice: z.string().optional(),
-          maxFeePerGas: z.string().optional(),
-          maxPriorityFeePerGas: z.string().optional(),
-        })
-        .optional(),
-      summary: z.record(z.string(), z.unknown()).optional(),
-      warnings: z
-        .array(
-          z.object({
-            code: z.string(),
-            message: z.string(),
-            level: z.enum(["info", "warning", "error"]).optional(),
-            details: z.record(z.string(), z.unknown()).optional(),
-          }),
-        )
-        .optional(),
-      issues: z
-        .array(
-          z.object({
-            code: z.string(),
-            message: z.string(),
-            severity: z.enum(["low", "medium", "high"]).optional(),
-            details: z.record(z.string(), z.unknown()).optional(),
-          }),
-        )
-        .optional(),
-    }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("requestPermissions"),
-    payload: z.object({
-      selectableAccounts: z.array(ApprovalSelectableAccountSchema),
-      recommendedAccountKey: AccountKeySchema.nullable(),
-      requestedGrants: z
-        .array(
-          z.object({
-            grantKind: z.string(),
-            chainRef: ChainRefSchema,
-          }),
-        )
-        .min(1),
-    }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("switchChain"),
-    payload: z.object({
-      chainRef: ChainRefSchema,
-      chainId: hexChainIdSchema.optional(),
-      displayName: z.string().min(1).optional(),
-    }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("addChain"),
-    payload: z.object({
-      chainRef: ChainRefSchema,
-      chainId: hexChainIdSchema,
-      displayName: z.string().min(1),
-      rpcUrls: z.array(rpcUrlSchema).min(1),
-      nativeCurrency: z
-        .object({
-          name: z.string().min(1),
-          symbol: z.string().min(1),
-          decimals: z.number().int().nonnegative(),
-        })
-        .optional(),
-      blockExplorerUrl: httpUrlSchema.optional(),
-      isUpdate: z.boolean(),
-    }),
-  }),
-  approvalPayloadBase.extend({
-    type: z.literal("unsupported"),
-    payload: z.object({
-      rawType: z.string().min(1),
-      rawPayload: z.unknown().optional(),
-    }),
-  }),
-]);
 
 export const UiKeyringMetaSchema = z.object({
   id: z.uuid(),
@@ -241,15 +122,15 @@ export const UiSnapshotSchema = z.object({
 
 export type ChainSnapshot = z.infer<typeof ChainSnapshotSchema>;
 export type UiOwnedAccountSummary = z.infer<typeof UiOwnedAccountSummarySchema>;
-export type ApprovalSelectableAccount = z.infer<typeof ApprovalSelectableAccountSchema>;
 export type AccountsSnapshot = z.infer<typeof AccountsSnapshotSchema>;
 export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type UiChainCapabilities = z.infer<typeof UiChainCapabilitiesSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
-export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;
 export type HdBackupWarning = z.infer<typeof HdBackupWarningSchema>;
 export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;
 export type UiPermissionsSnapshot = z.infer<typeof UiPermissionsSnapshotSchema>;
+export { ApprovalSelectableAccountSchema, ApprovalSummarySchema };
+export type { ApprovalSelectableAccount, ApprovalSummary };

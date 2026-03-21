@@ -248,7 +248,7 @@ export class InMemoryApprovalController implements ApprovalController {
         error: toSimpleError(error),
       });
 
-      return { id: input.id, status: "rejected" };
+      return { id: input.id, status: "rejected", terminalReason: "user_reject" };
     }
 
     try {
@@ -272,7 +272,7 @@ export class InMemoryApprovalController implements ApprovalController {
       });
 
       entry.resolve(value);
-      return { id: input.id, status: "approved", value };
+      return { id: input.id, status: "approved", terminalReason: "user_approve", value };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 

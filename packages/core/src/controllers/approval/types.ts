@@ -141,11 +141,18 @@ export type ApprovalResolveInput =
       error?: Error;
     };
 
-export type ApprovalResolveResult<T = unknown> = {
-  id: string;
-  status: ApprovalFinalStatus;
-  value?: T | undefined;
-};
+export type ApprovalResolveResult<T = unknown> =
+  | {
+      id: string;
+      status: "approved";
+      terminalReason: "user_approve";
+      value: T;
+    }
+  | {
+      id: string;
+      status: "rejected";
+      terminalReason: "user_reject";
+    };
 
 export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
   record: ApprovalRecord<K>;

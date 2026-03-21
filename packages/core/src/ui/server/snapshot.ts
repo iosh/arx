@@ -1,3 +1,4 @@
+import { toUnsupportedApprovalSummary } from "../../approvals/presentation.js";
 import type { ApprovalFlowRegistry } from "../../approvals/types.js";
 import { type UiSnapshot, UiSnapshotSchema } from "../protocol/schemas.js";
 import type {
@@ -60,22 +61,18 @@ export const buildUiSnapshot = (deps: {
   const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountKeys.length, 0);
 
   const approvalState = approvals.getState();
-  const approvalSummaries = approvalState.pending
-    .map((item) => {
-      const record = approvals.get(item.id);
-      if (!record) return null;
+  const approvalSummaries = approvalState.pending.map((item) => {
+    const record = approvals.get(item.id);
+    if (!record) {
+      return toUnsupportedApprovalSummary(item);
+    }
 
-      try {
-        return approvalFlowRegistry.present(record, {
-          accounts,
-          chainViews: chains,
-          transactions,
-        });
-      } catch {
-        return null;
-      }
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+    return approvalFlowRegistry.present(record, {
+      accounts,
+      chainViews: chains,
+      transactions,
+    });
+  });
 
   const keyringWarnings = keyrings
     .getKeyrings()

@@ -98,7 +98,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       throw error;
     }
   },
-  handler: async ({ origin, params, controllers, services, rpcContext, invocation }) => {
+  handler: async ({ origin: _origin, params, controllers, services, rpcContext, invocation }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;

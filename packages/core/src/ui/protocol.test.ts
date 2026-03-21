@@ -94,6 +94,31 @@ describe("ui protocol registry", () => {
     expect(parseUiMethodParams("ui.session.lock", undefined)).toBeUndefined();
     expect(parseUiMethodParams("ui.session.lock", {})).toEqual({});
     expect(() => parseUiMethodParams("ui.session.lock", { reason: "__bad__" })).toThrow();
+
+    expect(
+      parseUiMethodParams("ui.approvals.resolve", {
+        id: "approval-1",
+        action: "approve",
+        decision: {
+          accountKeys: ["eip155:0000000000000000000000000000000000000000"],
+        },
+      }),
+    ).toMatchObject({
+      id: "approval-1",
+      action: "approve",
+    });
+    expect(() =>
+      parseUiMethodParams("ui.approvals.resolve", {
+        id: "approval-1",
+        action: "approve",
+        decision: {
+          accountKeys: [
+            "eip155:0000000000000000000000000000000000000000",
+            "eip155:0000000000000000000000000000000000000000",
+          ],
+        },
+      }),
+    ).toThrow();
   });
 
   it("validates method results (strict)", () => {
@@ -105,6 +130,19 @@ describe("ui protocol registry", () => {
       words: Array.from<string>({ length: 12 }).fill("word"),
     });
     expect(okOnboardingMnemonic.words).toHaveLength(12);
+
+    const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", {
+      id: "approval-1",
+      status: "approved",
+      terminalReason: "user_approve",
+      value: null,
+    });
+    expect(okApprovalResolve).toEqual({
+      id: "approval-1",
+      status: "approved",
+      terminalReason: "user_approve",
+      value: null,
+    });
   });
 
   it("validates event payloads (strict)", () => {

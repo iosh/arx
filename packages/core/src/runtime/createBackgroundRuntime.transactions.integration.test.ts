@@ -327,12 +327,162 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const replacedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(replacedMeta?.status).toBe("replaced");
-      expect(replacedMeta?.hash).toBe(replacementHash);
+      // Best practice: keep the original broadcast hash as the transaction identity.
+      expect(replacedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
       expect(replacedMeta?.error?.name).toBe("TransactionReplacedError");
+      expect(replacedMeta?.error?.data).toMatchObject({ replacementHash });
 
       const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("replaced");
-      expect(stored?.hash).toBe(replacementHash);
+      expect(stored?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+    } finally {
+      unsubscribeAutoApproval();
+      context.destroy();
+    }
+  });
+
+  it("does not misclassify transient receipt polling errors as terminal failure", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
+
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+      raw: "0x1111",
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const fetchReceipt = vi
+      .fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>()
+      .mockRejectedValueOnce(new Error("RPC temporary failure"))
+      .mockResolvedValueOnce({ status: "success", receipt: confirmedReceipt });
+
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
+    const registry = new TransactionAdapterRegistry();
+    registry.register(chain.namespace, adapter);
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      transactions: { registry },
+      persistDebounceMs: 0,
+    });
+    const unsubscribeAutoApproval = context.enableAutoApproval();
+
+    try {
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        makeRequestContext("https://dapp.example"),
+      );
+      await handoff.waitForApprovalDecision();
+
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
+      await flushAsync();
+
+      expect(fetchReceipt).toHaveBeenCalledTimes(1);
+      const afterError = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
+      expect(afterError?.status).toBe("broadcast");
+
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL * 2);
+      await flushAsync();
+
+      expect(fetchReceipt).toHaveBeenCalledTimes(2);
+
+      await vi.waitFor(() => {
+        const confirmed = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
+        expect(confirmed?.status).toBe("confirmed");
+      });
+    } finally {
+      unsubscribeAutoApproval();
+      context.destroy();
+    }
+  });
+
+  it("fails closed when receipt tracking is unsupported by the adapter", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {},
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+      raw: "0x1111",
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+
+    // No `receiptTracking` capability.
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+    };
+    const registry = new TransactionAdapterRegistry();
+    registry.register(chain.namespace, adapter);
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      transactions: { registry },
+      persistDebounceMs: 0,
+    });
+    const unsubscribeAutoApproval = context.enableAutoApproval();
+
+    try {
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        makeRequestContext("https://dapp.example"),
+      );
+      await handoff.waitForApprovalDecision();
+
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+      await vi.waitFor(async () => {
+        const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
+        const stored = await context.transactionsPort.get(handoff.transactionId);
+        expect(failedMeta?.status).toBe("failed");
+        expect(failedMeta?.error?.name).toBe("ReceiptTrackingUnsupportedError");
+        expect(stored?.status).toBe("failed");
+        expect(stored?.error?.name).toBe("ReceiptTrackingUnsupportedError");
+      });
     } finally {
       unsubscribeAutoApproval();
       context.destroy();

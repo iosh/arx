@@ -1,7 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { ReceiptResolution, ReplacementResolution, TransactionPrepareContext } from "../types.js";
+import type { Eip155TransactionPayload } from "../../types.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../types.js";
+import type { Eip155PreparedTransaction } from "./types.js";
 
 type ReceiptDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
@@ -62,16 +64,14 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   return "failed";
 };
 
-const extractNonce = (context: TransactionPrepareContext): string | null => {
-  const payload = context.request.payload;
-  if (!payload || typeof payload !== "object") {
-    return null;
+const readTrackingNonce = (context: TransactionTrackingContext): string | null => {
+  const payload = context.request.payload as Eip155TransactionPayload;
+  if (typeof payload.nonce === "string") {
+    return payload.nonce;
   }
-  const nonce = (payload as { nonce?: unknown }).nonce;
-  if (typeof nonce !== "string" || !HEX_PATTERN.test(nonce)) {
-    return null;
-  }
-  return nonce;
+
+  const prepared = context.prepared as Partial<Eip155PreparedTransaction> | null;
+  return typeof prepared?.nonce === "string" ? prepared.nonce : null;
 };
 
 const toBigInt = (value: string): bigint | null => {
@@ -86,8 +86,8 @@ const toBigInt = (value: string): bigint | null => {
 };
 
 export type Eip155ReceiptService = {
-  fetchReceipt(context: TransactionPrepareContext, hash: string): Promise<ReceiptResolution | null>;
-  detectReplacement(context: TransactionPrepareContext): Promise<ReplacementResolution | null>;
+  fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
+  detectReplacement(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {
@@ -129,7 +129,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       const from = context.from;
       if (!from) return null;
 
-      const originalNonceHex = extractNonce(context);
+      const originalNonceHex = readTrackingNonce(context);
       if (!originalNonceHex) return null;
 
       const client = getClient(context.chainRef);

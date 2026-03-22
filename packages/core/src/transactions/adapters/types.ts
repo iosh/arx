@@ -1,6 +1,12 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { TransactionIssue, TransactionReceipt, TransactionRequest, TransactionWarning } from "../types.js";
+import type {
+  TransactionIssue,
+  TransactionPrepared,
+  TransactionReceipt,
+  TransactionRequest,
+  TransactionWarning,
+} from "../types.js";
 
 export type PreparedTransactionResult<TPrepared = Record<string, unknown>> = {
   prepared: TPrepared;
@@ -23,6 +29,10 @@ export type TransactionPrepareContext = {
 
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
+export type TransactionTrackingContext = TransactionPrepareContext & {
+  prepared: TransactionPrepared | null;
+};
+
 export type ReceiptResolution =
   | { status: "success"; receipt: TransactionReceipt }
   | { status: "failed"; receipt: TransactionReceipt };
@@ -35,8 +45,8 @@ export type ReplacementResolution = {
 export type TransactionRequestDeriver = (request: TransactionRequest, chainRef: ChainRef) => TransactionRequest;
 
 export type TransactionReceiptTrackingAdapter = {
-  fetchReceipt(context: TransactionPrepareContext, hash: string): Promise<ReceiptResolution | null>;
-  detectReplacement?(context: TransactionPrepareContext): Promise<ReplacementResolution | null>;
+  fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
+  detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
 export type TransactionSubmissionAdapter = {

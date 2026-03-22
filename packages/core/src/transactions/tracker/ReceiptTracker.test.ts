@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReceiptResolution, ReplacementResolution, TransactionPrepareContext } from "../adapters/types.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../adapters/types.js";
 import { createReceiptTracker } from "./ReceiptTracker.js";
 
-const BASE_CONTEXT: TransactionPrepareContext = {
+const BASE_CONTEXT: TransactionTrackingContext = {
   namespace: "eip155",
   chainRef: "eip155:1",
   origin: "https://dapp.example",
@@ -18,6 +18,7 @@ const BASE_CONTEXT: TransactionPrepareContext = {
       data: "0x",
     },
   },
+  prepared: null,
 };
 
 const HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -52,7 +53,7 @@ describe("ReceiptTracker", () => {
         onReceipt,
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
@@ -84,7 +85,7 @@ describe("ReceiptTracker", () => {
         onReceipt: vi.fn(),
         onReplacement,
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
@@ -112,7 +113,7 @@ describe("ReceiptTracker", () => {
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout,
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 2 },
     );
@@ -150,7 +151,7 @@ describe("ReceiptTracker", () => {
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 100, maxDelayMs: 500, maxAttempts: 4 },
     );
@@ -181,7 +182,7 @@ describe("ReceiptTracker", () => {
         onReceipt,
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 100, maxDelayMs: 1000, maxAttempts: 5 },
     );
@@ -224,7 +225,7 @@ describe("ReceiptTracker", () => {
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 100, maxDelayMs: 500, maxAttempts: 5 },
     );
@@ -241,15 +242,15 @@ describe("ReceiptTracker", () => {
     setTimeoutSpy.mockRestore();
   });
 
-  it("calls onError when adapter is missing", async () => {
-    const onError = vi.fn();
+  it("calls onUnsupported when adapter is missing", async () => {
+    const onUnsupported = vi.fn();
     const tracker = createReceiptTracker(
       {
         getAdapter: () => undefined,
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError,
+        onUnsupported,
       },
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
@@ -257,7 +258,50 @@ describe("ReceiptTracker", () => {
     tracker.start("tx-1", BASE_CONTEXT, HASH);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(onError).toHaveBeenCalledWith("tx-1", expect.any(Error));
+    expect(onUnsupported).toHaveBeenCalledWith("tx-1", expect.any(Error));
+    expect(tracker.pending()).toBe(0);
+  });
+
+  it("continues tracking after transient errors and eventually resolves", async () => {
+    const receiptResolution: ReceiptResolution = {
+      status: "success",
+      receipt: { status: "0x1" },
+    };
+
+    const adapter = {
+      receiptTracking: {
+        fetchReceipt: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("RPC temporarily unavailable"))
+          .mockResolvedValueOnce(receiptResolution),
+        detectReplacement: vi.fn(),
+      },
+    };
+
+    const onReceipt = vi.fn();
+    const onTimeout = vi.fn();
+    const onTransientError = vi.fn();
+
+    const tracker = createReceiptTracker(
+      {
+        getAdapter: () => adapter,
+        onReceipt,
+        onReplacement: vi.fn(),
+        onTimeout,
+        onUnsupported: vi.fn(),
+        onTransientError,
+      },
+      { initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 3 },
+    );
+
+    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    await vi.runOnlyPendingTimersAsync();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(2);
+    expect(onTransientError).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(onReceipt).toHaveBeenCalledWith("tx-1", receiptResolution);
     expect(tracker.pending()).toBe(0);
   });
 
@@ -273,7 +317,7 @@ describe("ReceiptTracker", () => {
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
-        onError: vi.fn(),
+        onUnsupported: vi.fn(),
       },
       { initialDelayMs: 1, maxDelayMs: 1 },
     );

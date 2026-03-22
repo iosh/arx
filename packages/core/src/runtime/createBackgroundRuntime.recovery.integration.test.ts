@@ -115,8 +115,14 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
 
-    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction };
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 

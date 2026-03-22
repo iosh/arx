@@ -1,13 +1,16 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { TransactionPrepareContext } from "../types.js";
+import type { TransactionTrackingContext } from "../types.js";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
 import { createReceiptContext } from "./__fixtures__/contexts.js";
 import { createEip155RpcClient } from "./__mocks__/rpc.js";
 import { createEip155ReceiptService } from "./receipt.js";
 
-const BASE_CONTEXT = createReceiptContext();
+const BASE_CONTEXT: TransactionTrackingContext = {
+  ...createReceiptContext(),
+  prepared: null,
+};
 
 describe("createEip155ReceiptService", () => {
   it("throws when receipt hash mismatches", async () => {
@@ -53,15 +56,39 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const context: TransactionPrepareContext = {
+    const context: TransactionTrackingContext = {
       ...BASE_CONTEXT,
       request: {
         ...BASE_CONTEXT.request,
-        payload: {
-          ...(BASE_CONTEXT.request.payload as Record<string, unknown>),
-          nonce: "0x3",
-        },
+        payload: BASE_CONTEXT.request.payload,
       },
+      prepared: null,
+    };
+
+    const result = await service.detectReplacement(context);
+    expect(result).toEqual({ status: "replaced", hash: null });
+  });
+
+  it("detects replacement when nonce is only available in prepared params", async () => {
+    const client = createEip155RpcClient({
+      getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
+    });
+
+    const service = createEip155ReceiptService({
+      rpcClientFactory: () => client,
+    });
+
+    const { nonce: _nonce, ...payloadWithoutNonce } = BASE_CONTEXT.request.payload as {
+      nonce?: `0x${string}`;
+    } & Record<string, unknown>;
+
+    const context: TransactionTrackingContext = {
+      ...BASE_CONTEXT,
+      request: {
+        ...BASE_CONTEXT.request,
+        payload: payloadWithoutNonce,
+      },
+      prepared: { nonce: "0x3" },
     };
 
     const result = await service.detectReplacement(context);

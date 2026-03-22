@@ -5,7 +5,7 @@ import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tr
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
 import type { TransactionMeta } from "./types.js";
-import { buildPrepareContext } from "./utils.js";
+import { buildTrackingContext } from "./utils.js";
 
 type Options = {
   view: StoreTransactionView;
@@ -36,8 +36,8 @@ export class TransactionReceiptTracking {
       onTimeout: async (id: string) => {
         await this.#handleTrackerTimeout(id);
       },
-      onError: async (id: string, error: unknown) => {
-        await this.#handleTrackerError(id, error);
+      onUnsupported: async (id: string, error: unknown) => {
+        await this.#handleTrackingUnsupported(id, error);
       },
     };
 
@@ -57,7 +57,16 @@ export class TransactionReceiptTracking {
    */
   handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
     if (next.status === "broadcast" && typeof next.hash === "string") {
-      const context = buildPrepareContext(next);
+      const adapter = this.#registry.get(next.namespace);
+      if (!adapter?.receiptTracking) {
+        void this.#handleTrackingUnsupported(
+          next.id,
+          new Error(`Adapter ${next.namespace} cannot fetch receipts.`),
+        ).catch(() => {});
+        return;
+      }
+
+      const context = buildTrackingContext(next);
       if (this.#tracker.isTracking(next.id)) {
         this.#tracker.resume(next.id, context, next.hash);
       } else {
@@ -81,7 +90,15 @@ export class TransactionReceiptTracking {
    */
   resumeBroadcast(meta: TransactionMeta) {
     if (meta.status !== "broadcast" || typeof meta.hash !== "string") return;
-    this.#tracker.resume(meta.id, buildPrepareContext(meta), meta.hash);
+    const adapter = this.#registry.get(meta.namespace);
+    if (!adapter?.receiptTracking) {
+      void this.#handleTrackingUnsupported(
+        meta.id,
+        new Error(`Adapter ${meta.namespace} cannot fetch receipts.`),
+      ).catch(() => {});
+      return;
+    }
+    this.#tracker.resume(meta.id, buildTrackingContext(meta), meta.hash);
   }
 
   async #applyReceiptResolution(id: string, resolution: ReceiptResolution): Promise<void> {
@@ -123,7 +140,6 @@ export class TransactionReceiptTracking {
       fromStatus: "broadcast",
       toStatus: "replaced",
       patch: {
-        hash: resolution.hash ?? meta.hash,
         error: {
           name: "TransactionReplacedError",
           message: "Transaction was replaced by another transaction with the same nonce.",
@@ -152,20 +168,23 @@ export class TransactionReceiptTracking {
     });
   }
 
-  async #handleTrackerError(id: string, error: unknown): Promise<void> {
+  async #handleTrackingUnsupported(id: string, error: unknown): Promise<void> {
     const meta = await this.#loadBroadcastMeta(id);
     if (!meta) return;
 
-    const message = error instanceof Error ? error.message : String(error);
     await this.#transitionAndCommit({
       id,
       fromStatus: "broadcast",
       toStatus: "failed",
       patch: {
         error: {
-          name: "ReceiptTrackingError",
-          message,
-          data: error instanceof Error ? { name: error.name } : undefined,
+          name: "ReceiptTrackingUnsupportedError",
+          message: "Receipt tracking is not supported for this transaction.",
+          data: {
+            namespace: meta.namespace,
+            chainRef: meta.chainRef,
+            cause: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+          },
         },
         userRejected: false,
       },

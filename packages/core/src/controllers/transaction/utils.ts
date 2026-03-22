@@ -1,5 +1,9 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
-import type { TransactionPrepareContext, TransactionSignContext } from "../../transactions/adapters/types.js";
+import type {
+  TransactionPrepareContext,
+  TransactionSignContext,
+  TransactionTrackingContext,
+} from "../../transactions/adapters/types.js";
 import type {
   TransactionError,
   TransactionIssue,
@@ -147,6 +151,11 @@ export const buildPrepareContext = (meta: TransactionMeta): TransactionPrepareCo
   origin: meta.origin,
   from: meta.from,
   request: cloneRequest(meta.request),
+});
+
+export const buildTrackingContext = (meta: TransactionMeta): TransactionTrackingContext => ({
+  ...buildPrepareContext(meta),
+  prepared: meta.prepared ? deepClone(meta.prepared) : null,
 });
 
 export const buildSignContext = (meta: TransactionMeta): TransactionSignContext => {

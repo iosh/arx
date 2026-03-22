@@ -2,7 +2,7 @@ import type {
   ReceiptResolution,
   ReplacementResolution,
   TransactionAdapter,
-  TransactionPrepareContext,
+  TransactionTrackingContext,
 } from "../adapters/types.js";
 
 type TrackerAdapter = Pick<TransactionAdapter, "receiptTracking">;
@@ -12,7 +12,16 @@ type TrackerDeps = {
   onReceipt(id: string, resolution: ReceiptResolution): void | Promise<void>;
   onReplacement(id: string, resolution: ReplacementResolution): void | Promise<void>;
   onTimeout(id: string): void | Promise<void>;
-  onError?(id: string, error: unknown): void | Promise<void>;
+  /**
+   * Receipt tracking is unsupported (adapter missing or does not implement receipt tracking).
+   * This is treated as a terminal outcome for the tracking task.
+   */
+  onUnsupported(id: string, error: unknown): void | Promise<void>;
+  /**
+   * Non-fatal errors while polling receipts/replacements. Tracking continues with backoff.
+   * Useful for logging/diagnostics.
+   */
+  onTransientError?(id: string, error: unknown): void | Promise<void>;
 };
 type TrackerOptions = {
   initialDelayMs?: number;
@@ -22,7 +31,7 @@ type TrackerOptions = {
 
 type TaskState = {
   id: string;
-  context: TransactionPrepareContext;
+  context: TransactionTrackingContext;
   hash: string;
   attempts: number;
   delay: number;
@@ -35,8 +44,8 @@ const DEFAULT_MAX_DELAY_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 20;
 
 export type ReceiptTracker = {
-  start(id: string, context: TransactionPrepareContext, hash: string): void;
-  resume(id: string, context: TransactionPrepareContext, hash: string): void;
+  start(id: string, context: TransactionTrackingContext, hash: string): void;
+  resume(id: string, context: TransactionTrackingContext, hash: string): void;
   stop(id: string): void;
   isTracking(id: string): boolean;
   pending(): number;
@@ -68,16 +77,30 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
   };
 
   const tick = async (state: TaskState) => {
+    const handleTransientError = async (error: unknown) => {
+      try {
+        await deps.onTransientError?.(state.id, error);
+      } catch {
+        // Swallow observer errors; tracking should continue.
+      }
+    };
+
     try {
       const adapter = deps.getAdapter(state.context.namespace);
       const receiptTracking = adapter?.receiptTracking;
       if (!receiptTracking) {
         stop(state.id);
-        await deps.onError?.(state.id, new Error(`Adapter ${state.context.namespace} cannot fetch receipts.`));
+        await deps.onUnsupported(state.id, new Error(`Adapter ${state.context.namespace} cannot fetch receipts.`));
         return;
       }
 
-      const receiptResult = await receiptTracking.fetchReceipt(state.context, state.hash);
+      let receiptResult: ReceiptResolution | null = null;
+      try {
+        receiptResult = await receiptTracking.fetchReceipt(state.context, state.hash);
+      } catch (error) {
+        await handleTransientError(error);
+      }
+
       if (receiptResult) {
         stop(state.id);
         await deps.onReceipt(state.id, receiptResult);
@@ -85,7 +108,13 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
       }
 
       if (receiptTracking.detectReplacement) {
-        const replacement = await receiptTracking.detectReplacement(state.context);
+        let replacement: ReplacementResolution | null = null;
+        try {
+          replacement = await receiptTracking.detectReplacement(state.context);
+        } catch (error) {
+          await handleTransientError(error);
+        }
+
         if (replacement) {
           stop(state.id);
           await deps.onReplacement(state.id, replacement);
@@ -103,12 +132,25 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
       state.delay = Math.min(state.delay * 2, maxDelay);
       schedule(state);
     } catch (error) {
-      stop(state.id);
-      await deps.onError?.(state.id, error);
+      // Defensive: unexpected errors should not permanently hang a broadcast tx in `broadcast`.
+      // Treat as transient and continue retrying until timeout.
+      await handleTransientError(error);
+
+      if (!state.active) return;
+
+      state.attempts += 1;
+      if (state.attempts >= maxAttempts) {
+        stop(state.id);
+        await deps.onTimeout(state.id);
+        return;
+      }
+
+      state.delay = Math.min(state.delay * 2, maxDelay);
+      schedule(state);
     }
   };
 
-  const start = (id: string, context: TransactionPrepareContext, hash: string) => {
+  const start = (id: string, context: TransactionTrackingContext, hash: string) => {
     if (tasks.has(id)) return;
     const state: TaskState = {
       id,
@@ -127,7 +169,7 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
    * Restarts tracking from the initial delay (used after cold starts).
    * Attempts and backoff delay are reset, so the polling loop begins anew.
    */
-  const resume = (id: string, context: TransactionPrepareContext, hash: string) => {
+  const resume = (id: string, context: TransactionTrackingContext, hash: string) => {
     stop(id);
     start(id, context, hash);
   };

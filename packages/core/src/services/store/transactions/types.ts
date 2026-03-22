@@ -43,11 +43,16 @@ export type PatchTransactionParams = {
   patch: Partial<Pick<TransactionRecord, "prepared" | "warnings" | "issues" | "error">>;
 };
 
+export type ListTransactionsCursor = {
+  createdAt: number;
+  id: TransactionRecord["id"];
+};
+
 export type ListTransactionsParams = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
   limit?: number;
-  beforeCreatedAt?: number;
+  before?: ListTransactionsCursor;
 };
 
 export type TransactionsService = {

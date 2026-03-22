@@ -33,6 +33,7 @@ export type NamespaceRuntimeBindingsRegistry = {
   getApproval(namespace: string): NamespaceApprovalBindings | undefined;
   getUi(namespace: string): NamespaceUiBindings | undefined;
   hasTransaction(namespace: string): boolean;
+  hasTransactionReceiptTracking(namespace: string): boolean;
 };
 
 export type NamespaceRuntimeSupport = Readonly<{

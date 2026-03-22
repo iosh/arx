@@ -129,13 +129,15 @@ const createNamespaceRuntimeBindingsRegistry = (params: {
   approvalByNamespace: ReadonlyMap<string, NamespaceApprovalBindings>;
   uiByNamespace: ReadonlyMap<string, NamespaceUiBindings>;
   transactionNamespaces: ReadonlySet<string>;
+  receiptTrackingNamespaces: ReadonlySet<string>;
 }): NamespaceRuntimeBindingsRegistry => {
-  const { approvalByNamespace, uiByNamespace, transactionNamespaces } = params;
+  const { approvalByNamespace, uiByNamespace, transactionNamespaces, receiptTrackingNamespaces } = params;
 
   return {
     getApproval: (namespace) => approvalByNamespace.get(namespace),
     getUi: (namespace) => uiByNamespace.get(namespace),
     hasTransaction: (namespace) => transactionNamespaces.has(namespace),
+    hasTransactionReceiptTracking: (namespace) => receiptTrackingNamespaces.has(namespace),
   };
 };
 
@@ -306,11 +308,15 @@ export const materializeNamespaceRuntimeSupport = (params: {
   }
 
   const transactionNamespaces = new Set(transactionRegistry.listNamespaces());
+  const receiptTrackingNamespaces = new Set<string>();
   for (const spec of runtimeSupport.namespaces) {
     const approvalBindings = approvalByNamespace.get(spec.namespace);
     const uiBindings = uiByNamespace.get(spec.namespace);
     const transactionAdapter = transactionRegistry.get(spec.namespace);
     const receiptTracking = transactionAdapter?.receiptTracking;
+    if (receiptTracking) {
+      receiptTrackingNamespaces.add(spec.namespace);
+    }
 
     supportByNamespace.set(spec.namespace, {
       namespace: spec.namespace,
@@ -330,6 +336,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
       approvalByNamespace,
       uiByNamespace,
       transactionNamespaces,
+      receiptTrackingNamespaces,
     }),
     runtimeSupport: createNamespaceRuntimeSupportIndex(supportByNamespace),
   };

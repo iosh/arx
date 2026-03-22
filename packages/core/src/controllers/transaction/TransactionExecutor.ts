@@ -6,7 +6,7 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { TransactionsService } from "../../services/store/transactions/types.js";
+import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ApprovalController } from "../approval/types.js";
@@ -35,6 +35,8 @@ import {
   cloneWarnings,
   coerceTransactionError,
   createMissingAdapterError,
+  createReceiptTrackingUnsupportedError,
+  createTransactionSubmissionUnavailableError,
   isUserRejectedError,
   missingAdapterIssue,
 } from "./utils.js";
@@ -128,6 +130,9 @@ export class TransactionExecutor
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
     // Avoid RPC/slow work before the approval is enqueued.
     const adapter = this.#registry.get(derived.namespace);
+    if (adapter && !adapter.receiptTracking) {
+      throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef });
+    }
     const derivedRequestCandidate = adapter?.deriveRequestForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
@@ -297,6 +302,10 @@ export class TransactionExecutor
       await this.rejectTransaction(id, createMissingAdapterError(meta.namespace));
       return;
     }
+    if (!adapter.receiptTracking) {
+      await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
+      return;
+    }
 
     try {
       let prepared = meta.prepared;
@@ -448,17 +457,18 @@ export class TransactionExecutor
 
   async #listAllByStatus(status: TransactionStatus) {
     const out: TransactionRecord[] = [];
-    let cursor: number | undefined;
+    let cursor: ListTransactionsCursor | undefined;
 
     while (true) {
       const page = await this.#service.list({
         status,
         limit: 200,
-        ...(cursor !== undefined ? { beforeCreatedAt: cursor } : {}),
+        ...(cursor !== undefined ? { before: cursor } : {}),
       });
       if (page.length === 0) break;
       out.push(...page);
-      cursor = page.at(-1)?.createdAt;
+      const tail = page.at(-1);
+      cursor = tail ? { createdAt: tail.createdAt, id: tail.id } : undefined;
       if (cursor === undefined) break;
     }
 

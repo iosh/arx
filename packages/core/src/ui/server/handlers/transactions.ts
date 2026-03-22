@@ -16,7 +16,9 @@ export const createTransactionsHandlers = (
       const chain = deps.chains.requireAvailableChainMetadata(resolvedChainRef);
       const uiBindings = deps.namespaceBindings.getUi(chain.namespace);
       const sendSupported =
-        Boolean(uiBindings?.createSendTransactionRequest) && deps.namespaceBindings.hasTransaction(chain.namespace);
+        Boolean(uiBindings?.createSendTransactionRequest) &&
+        deps.namespaceBindings.hasTransaction(chain.namespace) &&
+        deps.namespaceBindings.hasTransactionReceiptTracking(chain.namespace);
       if (!sendSupported || !uiBindings?.createSendTransactionRequest) {
         throw arxError({
           reason: ArxReasons.ChainNotSupported,

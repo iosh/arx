@@ -52,7 +52,7 @@ describe("DexieTransactionsPort", () => {
     expect(loaded).toEqual(record);
   });
 
-  it("list() returns newest-first and respects filters + beforeCreatedAt", async () => {
+  it("list() returns newest-first and respects filters + before cursor", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
@@ -114,8 +114,56 @@ describe("DexieTransactionsPort", () => {
     const byStatus = await port.list({ status: "approved" });
     expect(byStatus.map((r) => r.id)).toEqual([r3.id, r2.id]);
 
-    const before = await port.list({ chainRef: "eip155:1", beforeCreatedAt: 2000 });
+    const before = await port.list({
+      chainRef: "eip155:1",
+      before: { createdAt: 2000, id: r2.id },
+    });
     expect(before.map((r) => r.id)).toEqual([r1.id]);
+  });
+
+  it("list() paginates stably across rows that share createdAt", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
+
+    const r1 = TransactionRecordSchema.parse({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      status: "pending",
+      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    });
+    const r2 = TransactionRecordSchema.parse({
+      ...r1,
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    });
+    const r3 = TransactionRecordSchema.parse({
+      ...r1,
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    });
+
+    await port.create(r1);
+    await port.create(r2);
+    await port.create(r3);
+
+    const firstPage = await port.list({ status: "pending", limit: 2 });
+    expect(firstPage.map((record) => record.id)).toEqual([r3.id, r2.id]);
+    const cursor = firstPage[1];
+    expect(cursor).toBeDefined();
+
+    const secondPage = await port.list({
+      status: "pending",
+      limit: 2,
+      before: { createdAt: cursor.createdAt, id: cursor.id },
+    });
+    expect(secondPage.map((record) => record.id)).toEqual([r1.id]);
   });
 
   it("findByChainRefAndHash() finds the record by (chainRef, hash)", async () => {

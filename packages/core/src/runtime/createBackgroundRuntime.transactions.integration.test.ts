@@ -422,7 +422,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }
   });
 
-  it("fails closed when receipt tracking is unsupported by the adapter", async () => {
+  it("rejects new transaction approvals before broadcast when receipt tracking is unsupported by the adapter", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -456,35 +456,31 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
-    const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
-          chainRef: chain.chainRef,
-          payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
+      await expect(
+        context.runtime.controllers.transactions.beginTransactionApproval(
+          {
+            namespace: chain.namespace,
+            chainRef: chain.chainRef,
+            payload: {
+              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              value: "0x0",
+              data: "0x",
+            },
           },
-        },
-        makeRequestContext("https://dapp.example"),
-      );
-      await handoff.waitForApprovalDecision();
-
-      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
-      await vi.waitFor(async () => {
-        const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
-        const stored = await context.transactionsPort.get(handoff.transactionId);
-        expect(failedMeta?.status).toBe("failed");
-        expect(failedMeta?.error?.name).toBe("ReceiptTrackingUnsupportedError");
-        expect(stored?.status).toBe("failed");
-        expect(stored?.error?.name).toBe("ReceiptTrackingUnsupportedError");
+          makeRequestContext("https://dapp.example"),
+        ),
+      ).rejects.toMatchObject({
+        reason: "ChainNotSupported",
       });
+
+      expect(prepareTransaction).toHaveBeenCalledTimes(0);
+      expect(signTransaction).toHaveBeenCalledTimes(0);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+      await expect(context.transactionsPort.list()).resolves.toEqual([]);
     } finally {
-      unsubscribeAutoApproval();
       context.destroy();
     }
   });

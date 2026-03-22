@@ -138,19 +138,27 @@ export class MemoryTransactionsPort implements TransactionsPort {
     chainRef?: string;
     status?: TransactionRecord["status"];
     limit?: number;
-    beforeCreatedAt?: number;
+    before?: {
+      createdAt: number;
+      id: TransactionRecord["id"];
+    };
   }): Promise<TransactionRecord[]> {
     const chainRef = query?.chainRef;
     const status = query?.status;
     const limit = query?.limit ?? 100;
-    const beforeCreatedAt = query?.beforeCreatedAt;
+    const before = query?.before;
 
     let all = Array.from(this.#records.values());
     if (chainRef !== undefined) all = all.filter((r) => r.chainRef === chainRef);
     if (status !== undefined) all = all.filter((r) => r.status === status);
-    if (beforeCreatedAt !== undefined) all = all.filter((r) => r.createdAt < beforeCreatedAt);
+    all.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
+    if (before !== undefined) {
+      all = all.filter(
+        (r) =>
+          r.createdAt < before.createdAt || (r.createdAt === before.createdAt && r.id.localeCompare(before.id) < 0),
+      );
+    }
 
-    all.sort((a, b) => b.createdAt - a.createdAt);
     return all.slice(0, limit).map((r) => clone(r));
   }
 

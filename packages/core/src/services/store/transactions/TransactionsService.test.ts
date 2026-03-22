@@ -14,14 +14,19 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
       const chainRef = query?.chainRef;
       const status = query?.status;
       const limit = query?.limit ?? 100;
-      const beforeCreatedAt = query?.beforeCreatedAt;
+      const before = query?.before;
 
       let all = [...store.values()];
       if (chainRef) all = all.filter((r) => r.chainRef === chainRef);
       if (status) all = all.filter((r) => r.status === status);
-      if (beforeCreatedAt !== undefined) all = all.filter((r) => r.createdAt < beforeCreatedAt);
+      all.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
+      if (before !== undefined) {
+        all = all.filter(
+          (r) =>
+            r.createdAt < before.createdAt || (r.createdAt === before.createdAt && r.id.localeCompare(before.id) < 0),
+        );
+      }
 
-      all.sort((a, b) => b.createdAt - a.createdAt);
       return all.slice(0, limit);
     },
     async findByChainRefAndHash(params) {
@@ -329,5 +334,43 @@ describe("TransactionsService", () => {
 
     expect(out).toBeNull();
     expect(changed).toBe(0);
+  });
+
+  it("failAllPending() does not skip equal createdAt rows and preserves the reason-specific message", async () => {
+    const createdAt = 1_000;
+    const makeId = (index: number) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+    const seed = Array.from({ length: 201 }, (_, index) =>
+      TransactionRecordSchema.parse({
+        id: makeId(index),
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        status: "pending",
+        request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
+        prepared: null,
+        hash: null,
+        userRejected: false,
+        warnings: [],
+        issues: [],
+        createdAt,
+        updatedAt: createdAt,
+      }),
+    );
+    const { port, store } = createInMemoryPort(seed);
+    const service = createTransactionsService({ port, now: () => 2_000 });
+
+    const transitioned = await service.failAllPending({ reason: "session_lost" });
+
+    expect(transitioned).toBe(201);
+    expect(Array.from(store.values()).every((record) => record.status === "failed")).toBe(true);
+    expect(
+      Array.from(store.values()).every(
+        (record) =>
+          record.error?.name === "TransactionAbandonedError" &&
+          record.error?.message === "Transaction was abandoned due to session loss." &&
+          (record.error?.data as { reason?: string } | undefined)?.reason === "session_lost",
+      ),
+    ).toBe(true);
   });
 });

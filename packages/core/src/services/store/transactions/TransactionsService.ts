@@ -5,6 +5,7 @@ import type { TransactionsPort } from "./port.js";
 import { assertTransactionStatusTransition } from "./stateMachine.js";
 import type {
   CreatePendingTransactionParams,
+  ListTransactionsCursor,
   ListTransactionsParams,
   PatchTransactionParams,
   TransactionsChangedPayload,
@@ -25,6 +26,21 @@ const createDuplicateTransactionIdError = (id: TransactionRecord["id"]) => {
   return new Error(`Duplicate transaction id "${id}"`);
 };
 
+const compareTransactionsNewestFirst = (left: TransactionRecord, right: TransactionRecord) => {
+  return right.createdAt - left.createdAt || right.id.localeCompare(left.id);
+};
+
+const describeAbandonedTransaction = (reason: string) => {
+  switch (reason) {
+    case "session_lost":
+      return "Transaction was abandoned due to session loss.";
+    case "session_restart":
+      return "Transaction was abandoned due to session restart.";
+    default:
+      return "Transaction was abandoned.";
+  }
+};
+
 export const createTransactionsService = ({
   port,
   now = Date.now,
@@ -43,14 +59,14 @@ export const createTransactionsService = ({
       ...(params?.chainRef !== undefined ? { chainRef: params.chainRef } : {}),
       ...(params?.status !== undefined ? { status: params.status } : {}),
       ...(params?.limit !== undefined ? { limit: params.limit } : {}),
-      ...(params?.beforeCreatedAt !== undefined ? { beforeCreatedAt: params.beforeCreatedAt } : {}),
+      ...(params?.before !== undefined ? { before: params.before } : {}),
     });
 
     const parsed = records.flatMap((r) => {
       const out = TransactionRecordSchema.safeParse(r);
       return out.success ? [out.data] : [];
     });
-    parsed.sort((a, b) => b.createdAt - a.createdAt);
+    parsed.sort(compareTransactionsNewestFirst);
     return parsed;
   };
 
@@ -183,14 +199,15 @@ export const createTransactionsService = ({
 
   const failAllPending = async (params?: { reason?: string }) => {
     const reason = params?.reason ?? "session_restart";
-    let cursor: number | undefined;
+    const message = describeAbandonedTransaction(reason);
+    let cursor: ListTransactionsCursor | undefined;
     let transitioned = 0;
 
     while (true) {
       const page = await list({
         status: "pending",
         limit: 200,
-        ...(cursor !== undefined ? { beforeCreatedAt: cursor } : {}),
+        ...(cursor !== undefined ? { before: cursor } : {}),
       });
 
       if (page.length === 0) break;
@@ -204,7 +221,7 @@ export const createTransactionsService = ({
             userRejected: false,
             error: {
               name: "TransactionAbandonedError",
-              message: "Transaction was abandoned due to session restart.",
+              message,
               data: { reason },
             },
           },
@@ -212,7 +229,8 @@ export const createTransactionsService = ({
         if (next) transitioned += 1;
       }
 
-      cursor = page.at(-1)?.createdAt;
+      const tail = page.at(-1);
+      cursor = tail ? { createdAt: tail.createdAt, id: tail.id } : undefined;
       if (cursor === undefined) break;
     }
 

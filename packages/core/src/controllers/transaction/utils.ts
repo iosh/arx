@@ -100,6 +100,26 @@ export const createMissingAdapterError = (namespace: string): Error => {
   return error;
 };
 
+export const createReceiptTrackingUnsupportedError = (namespace: string): Error => {
+  const error = new Error(`Receipt tracking is not supported for namespace "${namespace}".`);
+  error.name = "ReceiptTrackingUnsupportedError";
+  return error;
+};
+
+export const createTransactionSubmissionUnavailableError = (params: { namespace: string; chainRef: string }) => {
+  const cause = createReceiptTrackingUnsupportedError(params.namespace);
+  return arxError({
+    reason: ArxReasons.ChainNotSupported,
+    message: `Send transaction is not supported for namespace "${params.namespace}" because receipt tracking is unavailable.`,
+    data: {
+      namespace: params.namespace,
+      chainRef: params.chainRef,
+      missingCapability: "receiptTracking",
+    },
+    cause,
+  });
+};
+
 export const issueFromPrepareError = (error: unknown): TransactionIssue => {
   if (error instanceof Error) {
     return {

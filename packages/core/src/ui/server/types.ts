@@ -113,7 +113,10 @@ export type UiAttentionAccess = Pick<AttentionService, "getSnapshot"> & {
   onStateChanged: (listener: () => void) => () => void;
 };
 
-export type UiNamespaceBindingsAccess = Pick<NamespaceRuntimeBindingsRegistry, "getUi" | "hasTransaction">;
+export type UiNamespaceBindingsAccess = Pick<
+  NamespaceRuntimeBindingsRegistry,
+  "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
+>;
 
 export type UiErrorEncoder = {
   encodeError: (error: unknown, context: { namespace: string; chainRef: string; method: string }) => UiError;

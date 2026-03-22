@@ -663,7 +663,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.destroy();
   });
 
-  it("derives selected-chain UI capabilities from namespace runtime bindings", async () => {
+  it("derives selected-chain UI capabilities from receipt-tracked transaction support", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: {
         port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
@@ -691,7 +691,13 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             ...eip155NamespaceManifest,
             runtime: {
               ...eip155NamespaceManifest.runtime,
-              createTransactionAdapter: undefined,
+              createTransactionAdapter: () => ({
+                prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
+                signTransaction: async () => ({ raw: "0x1111", hash: null }),
+                broadcastTransaction: async () => ({
+                  hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+                }),
+              }),
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
                 createSendTransactionRequest: () => ({
@@ -725,7 +731,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.destroy();
   });
 
-  it("fails closed when ui.transactions.requestSendTransactionApproval is unsupported for the selected namespace", async () => {
+  it("fails closed when ui.transactions.requestSendTransactionApproval lacks receipt-tracked transaction support", async () => {
     const runtime = createBackgroundRuntime({
       chainDefinitions: {
         port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
@@ -755,6 +761,21 @@ describe("createBackgroundRuntime (no snapshots)", () => {
               ...eip155NamespaceManifest.runtime,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
+                createSendTransactionRequest: () => ({
+                  namespace: "eip155",
+                  chainRef: MAINNET_CHAIN.chainRef,
+                  payload: {
+                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    value: "0x0",
+                  },
+                }),
+              }),
+              createTransactionAdapter: () => ({
+                prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
+                signTransaction: async () => ({ raw: "0x1111", hash: null }),
+                broadcastTransaction: async () => ({
+                  hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+                }),
               }),
             },
           },

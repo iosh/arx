@@ -1,7 +1,6 @@
 import type { ChainRef } from "@arx/core/chains";
 import type { TransactionsPort } from "@arx/core/services";
 import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/storage";
-import { Dexie } from "dexie";
 import type { DexieCtx } from "../internal/ctx.js";
 import { parseOrDrop } from "../internal/parseOrDrop.js";
 
@@ -22,7 +21,10 @@ export class DexieTransactionsPort implements TransactionsPort {
     chainRef?: ChainRef;
     status?: TransactionRecord["status"];
     limit?: number;
-    beforeCreatedAt?: number;
+    before?: {
+      createdAt: number;
+      id: TransactionRecord["id"];
+    };
   }): Promise<TransactionRecord[]> {
     await this.ctx.ready;
 
@@ -31,32 +33,36 @@ export class DexieTransactionsPort implements TransactionsPort {
 
     const chainRef = query?.chainRef;
     const status = query?.status;
-    const beforeCreatedAt = query?.beforeCreatedAt;
+    const before = query?.before;
+    const minCreatedAt = Number.MIN_SAFE_INTEGER;
+    const maxCreatedAt = Number.MAX_SAFE_INTEGER;
+    const minId = "";
+    const maxId = "\uffff";
 
     const base = (() => {
       if (chainRef !== undefined) {
-        const upper = beforeCreatedAt !== undefined ? [chainRef, beforeCreatedAt] : [chainRef, Dexie.maxKey];
-        const includeUpper = beforeCreatedAt === undefined;
+        const upper = before !== undefined ? [chainRef, before.createdAt, before.id] : [chainRef, maxCreatedAt, maxId];
+        const includeUpper = before === undefined;
         return this.table
-          .where("[chainRef+createdAt]")
-          .between([chainRef, Dexie.minKey], upper, true, includeUpper)
+          .where("[chainRef+createdAt+id]")
+          .between([chainRef, minCreatedAt, minId], upper, true, includeUpper)
           .reverse();
       }
 
       if (status !== undefined) {
-        const upper = beforeCreatedAt !== undefined ? [status, beforeCreatedAt] : [status, Dexie.maxKey];
-        const includeUpper = beforeCreatedAt === undefined;
+        const upper = before !== undefined ? [status, before.createdAt, before.id] : [status, maxCreatedAt, maxId];
+        const includeUpper = before === undefined;
         return this.table
-          .where("[status+createdAt]")
-          .between([status, Dexie.minKey], upper, true, includeUpper)
+          .where("[status+createdAt+id]")
+          .between([status, minCreatedAt, minId], upper, true, includeUpper)
           .reverse();
       }
 
-      if (beforeCreatedAt !== undefined) {
-        return this.table.where("createdAt").below(beforeCreatedAt).reverse();
+      if (before !== undefined) {
+        return this.table.where("[createdAt+id]").below([before.createdAt, before.id]).reverse();
       }
 
-      return this.table.orderBy("createdAt").reverse();
+      return this.table.orderBy("[createdAt+id]").reverse();
     })();
 
     const out: TransactionRecord[] = [];

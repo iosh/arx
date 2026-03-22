@@ -111,6 +111,7 @@ const createDeps = (options?: {
   namespaceBindings: {
     getUi: () => undefined,
     hasTransaction: () => false,
+    hasTransactionReceiptTracking: () => false,
   },
   transactions: {
     getMeta: () => undefined,

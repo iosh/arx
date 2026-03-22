@@ -1,11 +1,12 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { TransactionRecord, TransactionStatus } from "../../../storage/records.js";
+import type { ListTransactionsCursor } from "./types.js";
 
 export type ListTransactionsQuery = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
   limit?: number;
-  beforeCreatedAt?: number;
+  before?: ListTransactionsCursor;
 };
 export interface TransactionsPort {
   get(id: TransactionRecord["id"]): Promise<TransactionRecord | null>;

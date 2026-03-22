@@ -5,6 +5,8 @@ import {
   RpcStrategySchema,
   TransactionErrorSchema,
   TransactionIssueSchema,
+  TransactionPreparedSchema,
+  TransactionReceiptSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,
 } from "./schemas.js";
@@ -165,6 +167,10 @@ export const TransactionStatusSchema = z.enum([
 ]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
 
+const PersistedTransactionRequestSchema = TransactionRequestSchema.extend({
+  chainRef: chainRefSchema,
+});
+
 export const TransactionRecordSchema = z
   .strictObject({
     id: z.uuid(),
@@ -173,10 +179,10 @@ export const TransactionRecordSchema = z
     origin: originStringSchema,
     fromAccountKey: AccountKeySchema,
     status: TransactionStatusSchema,
-    request: TransactionRequestSchema,
-    prepared: z.unknown().nullable().optional(),
+    request: PersistedTransactionRequestSchema,
+    prepared: TransactionPreparedSchema.nullable().optional(),
     hash: z.string().nullable(),
-    receipt: z.unknown().optional(),
+    receipt: TransactionReceiptSchema.optional(),
     error: TransactionErrorSchema.optional(),
     userRejected: z.boolean(),
     warnings: z.array(TransactionWarningSchema),
@@ -185,6 +191,23 @@ export const TransactionRecordSchema = z
     updatedAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
+    if (getChainRefNamespace(value.chainRef) !== value.namespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: `chainRef must belong to namespace "${value.namespace}"`,
+        path: ["chainRef"],
+      });
+    }
+
+    const accountNamespace = value.fromAccountKey.split(":", 1)[0];
+    if (accountNamespace !== value.namespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: `fromAccountKey must belong to namespace "${value.namespace}"`,
+        path: ["fromAccountKey"],
+      });
+    }
+
     if (value.request.namespace !== value.namespace) {
       ctx.addIssue({
         code: "custom",
@@ -193,11 +216,30 @@ export const TransactionRecordSchema = z
       });
     }
 
-    if (value.request.chainRef && value.request.chainRef !== value.chainRef) {
+    if (value.request.chainRef !== value.chainRef) {
       ctx.addIssue({
         code: "custom",
-        message: `request.chainRef must equal record chainRef "${value.chainRef}" when provided`,
+        message: `request.chainRef must equal record chainRef "${value.chainRef}"`,
         path: ["request", "chainRef"],
+      });
+    }
+
+    if (
+      (value.status === "broadcast" || value.status === "confirmed" || value.status === "replaced") &&
+      value.hash === null
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: `hash is required when status is "${value.status}"`,
+        path: ["hash"],
+      });
+    }
+
+    if (value.userRejected && value.status !== "failed") {
+      ctx.addIssue({
+        code: "custom",
+        message: 'userRejected can only be true when status is "failed"',
+        path: ["userRejected"],
       });
     }
   });

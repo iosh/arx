@@ -163,8 +163,11 @@ export class MemoryTransactionsPort implements TransactionsPort {
     return null;
   }
 
-  async upsert(record: TransactionRecord): Promise<void> {
+  async create(record: TransactionRecord): Promise<void> {
     const checked = TransactionRecordSchema.parse(record);
+    if (this.#records.has(checked.id)) {
+      throw new Error(`Duplicate transaction id "${checked.id}"`);
+    }
     this.#records.set(checked.id, clone(checked));
   }
 

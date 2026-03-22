@@ -1,5 +1,6 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { TransactionRecord, TransactionStatus } from "../../../storage/records.js";
+import type { TransactionRequest } from "../../../transactions/types.js";
 import type { Unsubscribe } from "../_shared/signal.js";
 
 export type TransactionsChangedPayload =
@@ -18,7 +19,7 @@ export type CreatePendingTransactionParams = {
   chainRef: ChainRef;
   origin: TransactionRecord["origin"];
   fromAccountKey: TransactionRecord["fromAccountKey"];
-  request: TransactionRecord["request"];
+  request: TransactionRequest;
   warnings?: TransactionRecord["warnings"];
   issues?: TransactionRecord["issues"];
   /**

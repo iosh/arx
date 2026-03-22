@@ -34,6 +34,8 @@ export const Eip155TransactionRequestSchema = z.strictObject({
 });
 
 export const TransactionPayloadSchema = z.record(z.string(), z.unknown());
+export const TransactionPreparedSchema = z.record(z.string(), z.unknown());
+export const TransactionReceiptSchema = z.record(z.string(), z.unknown());
 
 // Persist only the shared transaction envelope here.
 // Namespace-specific payload validation belongs at RPC/UI/adapter boundaries.
@@ -66,5 +68,3 @@ export const TransactionErrorSchema = z.strictObject({
   code: z.number().int().optional(),
   data: z.unknown().optional(),
 });
-
-export const TransactionReceiptSchema = z.record(z.string(), z.unknown());

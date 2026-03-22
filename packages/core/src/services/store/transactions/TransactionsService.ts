@@ -21,6 +21,10 @@ const requiresHash = (status: TransactionRecord["status"]) => {
   return status === "broadcast" || status === "confirmed" || status === "replaced";
 };
 
+const createDuplicateTransactionIdError = (id: TransactionRecord["id"]) => {
+  return new Error(`Duplicate transaction id "${id}"`);
+};
+
 export const createTransactionsService = ({
   port,
   now = Date.now,
@@ -52,6 +56,10 @@ export const createTransactionsService = ({
 
   const createPending = async (params: CreatePendingTransactionParams) => {
     const ts = params.createdAt ?? now();
+    const request = {
+      ...params.request,
+      chainRef: params.chainRef,
+    };
 
     const record: TransactionRecord = TransactionRecordSchema.parse({
       id: params.id ?? crypto.randomUUID(),
@@ -60,7 +68,7 @@ export const createTransactionsService = ({
       origin: params.origin,
       fromAccountKey: params.fromAccountKey,
       status: "pending",
-      request: params.request,
+      request,
       prepared: null,
       hash: null,
       userRejected: false,
@@ -70,7 +78,12 @@ export const createTransactionsService = ({
       updatedAt: ts,
     });
 
-    await port.upsert(record);
+    const existing = await port.get(record.id);
+    if (existing) {
+      throw createDuplicateTransactionIdError(record.id);
+    }
+
+    await port.create(record);
     changed.emit({ kind: "createPending", id: record.id });
     return record;
   };

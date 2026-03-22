@@ -30,8 +30,11 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
       }
       return null;
     },
-    async upsert(record) {
+    async create(record) {
       const checked = TransactionRecordSchema.parse(record);
+      if (store.has(checked.id)) {
+        throw new Error(`Duplicate transaction id "${checked.id}"`);
+      }
       store.set(checked.id, checked);
     },
     async updateIfStatus(params) {
@@ -106,6 +109,65 @@ describe("TransactionsService", () => {
         fee: { amount: "2500", denom: "uatom" },
       },
     });
+  });
+
+  it("createPending() writes the resolved chainRef into the stored request", async () => {
+    const { port } = createInMemoryPort();
+    const service = createTransactionsService({ port, now: () => 1000 });
+
+    const created = await service.createPending({
+      id: "33333333-3333-4333-8333-333333333333",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      request: {
+        namespace: "eip155",
+        payload: { chainId: "0x1" },
+      },
+    });
+
+    expect(created.request.chainRef).toBe("eip155:1");
+  });
+
+  it("createPending() rejects duplicate ids instead of overwriting an existing record", async () => {
+    const { port } = createInMemoryPort([
+      TransactionRecordSchema.parse({
+        id: "44444444-4444-4444-8444-444444444444",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        status: "pending",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: { chainId: "0x1" },
+        },
+        prepared: null,
+        hash: null,
+        userRejected: false,
+        warnings: [],
+        issues: [],
+        createdAt: 1000,
+        updatedAt: 1000,
+      }),
+    ]);
+    const service = createTransactionsService({ port, now: () => 2000 });
+
+    await expect(
+      service.createPending({
+        id: "44444444-4444-4444-8444-444444444444",
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        request: {
+          namespace: "eip155",
+          payload: { chainId: "0x1" },
+        },
+      }),
+    ).rejects.toThrow(/duplicate transaction id/i);
   });
 
   it("transition() throws on invalid status transitions", async () => {
@@ -231,8 +293,11 @@ describe("TransactionsService", () => {
       async findByChainRefAndHash() {
         return null;
       },
-      async upsert(record) {
+      async create(record) {
         const checked = TransactionRecordSchema.parse(record);
+        if (store.has(checked.id)) {
+          throw new Error(`Duplicate transaction id "${checked.id}"`);
+        }
         store.set(checked.id, checked);
       },
       async updateIfStatus() {

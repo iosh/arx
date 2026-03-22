@@ -14,8 +14,10 @@ export interface TransactionsPort {
 
   findByChainRefAndHash(params: { chainRef: ChainRef; hash: string }): Promise<TransactionRecord | null>;
 
-  upsert(record: TransactionRecord): Promise<void>;
+  // Inserts a new transaction row. Duplicate ids must fail instead of overwriting.
+  create(record: TransactionRecord): Promise<void>;
 
+  // Compares the current persisted status before replacing the full row.
   updateIfStatus(params: {
     id: TransactionRecord["id"];
     expectedStatus: TransactionStatus;

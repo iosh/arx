@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 describe("DexieTransactionsPort", () => {
-  it("upsert() + get() roundtrip", async () => {
+  it("create() + get() roundtrip", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
@@ -46,7 +46,7 @@ describe("DexieTransactionsPort", () => {
       updatedAt: 1000,
     });
 
-    await port.upsert(record);
+    await port.create(record);
 
     const loaded = await port.get(record.id);
     expect(loaded).toEqual(record);
@@ -104,9 +104,9 @@ describe("DexieTransactionsPort", () => {
       updatedAt: 3000,
     });
 
-    await port.upsert(r1);
-    await port.upsert(r2);
-    await port.upsert(r3);
+    await port.create(r1);
+    await port.create(r2);
+    await port.create(r3);
 
     const byChain = await port.list({ chainRef: "eip155:1" });
     expect(byChain.map((r) => r.id)).toEqual([r2.id, r1.id]);
@@ -138,7 +138,7 @@ describe("DexieTransactionsPort", () => {
       updatedAt: 2000,
     });
 
-    await port.upsert(r);
+    await port.create(r);
 
     const found = await port.findByChainRefAndHash({ chainRef: "eip155:1", hash: "txid-1" });
     expect(found?.id).toBe(r.id);
@@ -167,7 +167,7 @@ describe("DexieTransactionsPort", () => {
       updatedAt: 1000,
     });
 
-    await port.upsert(r);
+    await port.create(r);
 
     const wrong = await port.updateIfStatus({
       id: r.id,

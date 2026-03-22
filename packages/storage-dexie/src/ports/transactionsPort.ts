@@ -96,9 +96,9 @@ export class DexieTransactionsPort implements TransactionsPort {
     return parsed;
   }
 
-  async upsert(record: TransactionRecord): Promise<void> {
+  async create(record: TransactionRecord): Promise<void> {
     await this.ctx.ready;
-    await this.table.put(TransactionRecordSchema.parse(record));
+    await this.table.add(TransactionRecordSchema.parse(record));
   }
 
   async updateIfStatus(params: {

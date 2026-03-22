@@ -20,6 +20,7 @@ export {
   TransactionErrorSchema,
   TransactionIssueSchema,
   TransactionPayloadSchema,
+  TransactionPreparedSchema,
   TransactionReceiptSchema,
   TransactionRequestSchema,
   TransactionWarningSchema,

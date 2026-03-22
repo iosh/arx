@@ -37,12 +37,11 @@ export const createTransactionsHandlers = (
         });
       }
 
-      const approvalId = crypto.randomUUID();
       const requestContext = {
         transport: "ui" as const,
         portId: "ui",
         sessionId: uiSessionId,
-        requestId: approvalId,
+        requestId: crypto.randomUUID(),
         origin: deps.uiOrigin,
       };
 
@@ -52,11 +51,9 @@ export const createTransactionsHandlers = (
         valueWei: wei,
       });
 
-      const created = await deps.transactions.createTransactionApproval(deps.uiOrigin, request, requestContext, {
-        id: approvalId,
-      });
+      const handoff = await deps.transactions.beginTransactionApproval(request, requestContext);
 
-      return { approvalId: created.id };
+      return { approvalId: handoff.approvalId };
     },
   };
 };

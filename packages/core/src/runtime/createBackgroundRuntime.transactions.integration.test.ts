@@ -79,8 +79,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       statusEvents.push(payload);
     });
     try {
-      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
-        "https://dapp.example",
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -93,21 +92,27 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         },
         makeRequestContext("https://dapp.example"),
       );
+      const approvedMeta = await handoff.waitForApprovalDecision();
+      expect(approvedMeta.status).toBe("approved");
+      const submission = await context.runtime.controllers.transactions.waitForTransactionSubmission(
+        handoff.transactionId,
+      );
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
       expect(fetchReceipt).toHaveBeenCalledTimes(0);
 
-      const broadcastMeta = context.runtime.controllers.transactions.getMeta(submission.id);
+      const broadcastMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(broadcastMeta?.status).toBe("broadcast");
+      expect(submission.hash).toBe(broadcastMeta?.hash);
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
 
       await vi.waitFor(() => expect(fetchReceipt).toHaveBeenCalledTimes(1));
 
       const timeline = statusEvents
-        .filter((event) => event.id === submission.id)
+        .filter((event) => event.id === handoff.transactionId)
         .map(({ previousStatus, nextStatus }) => [previousStatus, nextStatus]);
 
       expect(timeline).toEqual([
@@ -117,11 +122,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         ["broadcast", "confirmed"],
       ]);
 
-      const confirmedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
+      const confirmedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(confirmedMeta?.status).toBe("confirmed");
       expect(confirmedMeta?.receipt).toMatchObject(confirmedReceipt);
 
-      const stored = await context.transactionsPort.get(submission.id);
+      const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("confirmed");
     } finally {
       nowSpy.mockRestore();
@@ -191,10 +196,9 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         "0xffffffffffffffffffffffffffffffffffffffff",
       ];
 
-      const submissions = await Promise.all(
-        fromAddresses.map((from, index) =>
-          context.runtime.controllers.transactions.requestTransactionApproval(
-            "https://dapp.example",
+      const submissionIds = await Promise.all(
+        fromAddresses.map(async (from, index) => {
+          const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
             {
               namespace: chain.namespace,
               chainRef: chain.chainRef,
@@ -206,15 +210,16 @@ describe("createBackgroundRuntime (transactions integration)", () => {
               },
             },
             makeRequestContext("https://dapp.example"),
-          ),
-        ),
+          );
+          await handoff.waitForApprovalDecision();
+          return handoff.transactionId;
+        }),
       );
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(3));
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(3));
 
-      const submissionIds = submissions.map((submission) => submission.id);
       for (const id of submissionIds) {
         const meta = context.runtime.controllers.transactions.getMeta(id);
         expect(meta?.status).toBe("broadcast");
@@ -283,8 +288,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
-        "https://dapp.example",
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -297,6 +301,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         },
         makeRequestContext("https://dapp.example"),
       );
+      await handoff.waitForApprovalDecision();
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -308,12 +313,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
       expect(detectReplacement).toHaveBeenCalledTimes(1);
 
-      const replacedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
+      const replacedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(replacedMeta?.status).toBe("replaced");
       expect(replacedMeta?.hash).toBe(replacementHash);
       expect(replacedMeta?.error?.name).toBe("TransactionReplacedError");
 
-      const stored = await context.transactionsPort.get(submission.id);
+      const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("replaced");
       expect(stored?.hash).toBe(replacementHash);
     } finally {
@@ -355,8 +360,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
-        "https://dapp.example",
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -369,6 +373,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         },
         makeRequestContext("https://dapp.example"),
       );
+      await handoff.waitForApprovalDecision();
 
       await flushAsync();
 
@@ -380,11 +385,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(20);
 
-      const failedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
+      const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.error?.name).toBe("TransactionReceiptTimeoutError");
 
-      const stored = await context.transactionsPort.get(submission.id);
+      const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("failed");
       expect(stored?.error?.name).toBe("TransactionReceiptTimeoutError");
     } finally {
@@ -430,8 +435,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const submission = await context.runtime.controllers.transactions.requestTransactionApproval(
-        "https://dapp.example",
+      const handoff = await context.runtime.controllers.transactions.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -444,6 +448,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         },
         makeRequestContext("https://dapp.example"),
       );
+      await handoff.waitForApprovalDecision();
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -454,12 +459,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
-      const failedMeta = context.runtime.controllers.transactions.getMeta(submission.id);
+      const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.error?.name).toBe("TransactionExecutionFailed");
       expect(failedMeta?.receipt).toMatchObject(failedReceipt);
 
-      const stored = await context.transactionsPort.get(submission.id);
+      const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("failed");
       expect(stored?.error?.name).toBe("TransactionExecutionFailed");
     } finally {

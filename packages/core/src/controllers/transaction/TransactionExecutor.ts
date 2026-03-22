@@ -17,6 +17,7 @@ import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
   TransactionApprovalChainMetadata,
+  TransactionApprovalHandoff,
   TransactionApprovalRequestPayload,
   TransactionController,
   TransactionError,
@@ -61,12 +62,7 @@ export class TransactionExecutor
   implements
     Pick<
       TransactionController,
-      | "createTransactionApproval"
-      | "requestTransactionApproval"
-      | "approveTransaction"
-      | "rejectTransaction"
-      | "processTransaction"
-      | "resumePending"
+      "beginTransactionApproval" | "approveTransaction" | "rejectTransaction" | "processTransaction" | "resumePending"
     >
 {
   #view: StoreTransactionView;
@@ -102,32 +98,10 @@ export class TransactionExecutor
     this.#now = deps.now;
   }
 
-  async createTransactionApproval(
-    origin: string,
+  async beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta> {
-    const { createdMeta } = await this.#enqueueTransactionApproval(origin, request, requestContext, opts);
-    return createdMeta;
-  }
-
-  async requestTransactionApproval(
-    origin: string,
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta> {
-    const { settled } = await this.#enqueueTransactionApproval(origin, request, requestContext, opts);
-    return await settled;
-  }
-
-  async #enqueueTransactionApproval(
-    origin: string,
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<{ createdMeta: TransactionMeta; settled: Promise<TransactionMeta> }> {
+  ): Promise<TransactionApprovalHandoff> {
     const namespaceActiveChainRef = this.#networkPreferences.getActiveChainRef(request.namespace);
     const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
     if (!chainRef) {
@@ -139,7 +113,7 @@ export class TransactionExecutor
       throw new Error(`Transaction namespace mismatch: request=${request.namespace} chainRef=${chainRef}`);
     }
 
-    const id = opts?.id ?? crypto.randomUUID();
+    const id = crypto.randomUUID();
     const timestamp = this.#nextTimestamp();
 
     const fromAddress =
@@ -202,7 +176,7 @@ export class TransactionExecutor
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef,
-      origin,
+      origin: requestContext.origin,
       fromAccountKey: fromAccountKey,
       request: cloneRequest(normalizedRequest),
       warnings: cloneWarnings(collectedWarnings),
@@ -230,8 +204,10 @@ export class TransactionExecutor
     this.#prepare.queuePrepare(id);
 
     return {
-      createdMeta: storedMeta,
-      settled: approvalPromise,
+      transactionId: storedMeta.id,
+      approvalId: storedMeta.id,
+      pendingMeta: storedMeta,
+      waitForApprovalDecision: () => approvalPromise,
     };
   }
 
@@ -279,7 +255,7 @@ export class TransactionExecutor
         return;
       }
 
-      const userRejected = wantsUserRejected && latest.status === "pending";
+      const userRejected = wantsUserRejected && latest.status !== "broadcast";
 
       const updated = await this.#service.transition({
         id,

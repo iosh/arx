@@ -833,13 +833,19 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    const createTransactionApproval = vi
-      .spyOn(runtime.controllers.transactions, "createTransactionApproval")
-      .mockImplementation(async (_origin, request, _requestContext, opts) => ({ id: opts?.id, request }) as never);
+    const approvalId = "33333333-3333-4333-8333-333333333333";
+    const beginTransactionApproval = vi
+      .spyOn(runtime.controllers.transactions, "beginTransactionApproval")
+      .mockImplementation(async (request) => ({
+        transactionId: approvalId,
+        approvalId,
+        pendingMeta: { id: approvalId, request } as never,
+        waitForApprovalDecision: async () => ({ id: approvalId }) as never,
+      }));
 
     const handlers = createHandlersForRuntime(runtime);
 
-    const { approvalId } = await handlers["ui.transactions.requestSendTransactionApproval"]({
+    const result = await handlers["ui.transactions.requestSendTransactionApproval"]({
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       valueEther: "0.01",
       chainRef: MAINNET_CHAIN.chainRef,
@@ -851,8 +857,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       valueWei: 10_000_000_000_000_000n,
     });
-    expect(createTransactionApproval).toHaveBeenCalledWith(
-      "chrome-extension://arx",
+    expect(result).toEqual({ approvalId });
+    expect(beginTransactionApproval).toHaveBeenCalledWith(
       {
         namespace: "eip155",
         chainRef: MAINNET_CHAIN.chainRef,
@@ -864,10 +870,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       expect.objectContaining({
         transport: "ui",
         portId: "ui",
-        requestId: approvalId,
+        requestId: expect.any(String),
         origin: "chrome-extension://arx",
       }),
-      { id: approvalId },
     );
 
     runtime.lifecycle.destroy();
@@ -902,7 +907,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
 
-    vi.spyOn(runtime.controllers.transactions, "createTransactionApproval").mockRejectedValue(
+    vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval").mockRejectedValue(
       new Error("create approval failed"),
     );
 

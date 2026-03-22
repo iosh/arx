@@ -13,13 +13,27 @@ import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
+  TransactionApprovalHandoff,
   TransactionController,
   TransactionError,
   TransactionMeta,
   TransactionRequest,
   TransactionStateChange,
+  TransactionStatus,
   TransactionStatusChange,
+  TransactionSubmissionResolution,
 } from "./types.js";
+import { TransactionSubmissionError } from "./types.js";
+
+const SUBMITTED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["broadcast", "confirmed"]);
+const FAILED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["failed", "replaced"]);
+
+type SubmittedTransactionMeta = TransactionMeta & { hash: string };
+
+const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransactionMeta =>
+  SUBMITTED_TRANSACTION_STATUSES.has(meta.status) && typeof meta.hash === "string";
+
+const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUSES.has(meta.status);
 
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
@@ -99,22 +113,46 @@ export class StoreTransactionController implements TransactionController {
     return this.#view.getMeta(id);
   }
 
-  createTransactionApproval(
-    origin: string,
+  beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta> {
-    return this.#executor.createTransactionApproval(origin, request, requestContext, opts);
+  ): Promise<TransactionApprovalHandoff> {
+    return this.#executor.beginTransactionApproval(request, requestContext);
   }
 
-  requestTransactionApproval(
-    origin: string,
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta> {
-    return this.#executor.requestTransactionApproval(origin, request, requestContext, opts);
+  async waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
+    const initial = this.getMeta(id) ?? (await this.#view.getOrLoad(id));
+    if (!initial) {
+      throw new Error(`Transaction ${id} not found after approval`);
+    }
+
+    if (isSubmittedTransaction(initial)) {
+      const { hash } = initial;
+      return { hash, meta: initial };
+    }
+    if (isFailedTransaction(initial)) {
+      throw new TransactionSubmissionError(initial);
+    }
+
+    return await new Promise<TransactionSubmissionResolution>((resolve, reject) => {
+      const unsubscribe = this.onStatusChanged(({ id: changeId, meta }) => {
+        if (changeId !== id) {
+          return;
+        }
+
+        if (isSubmittedTransaction(meta)) {
+          unsubscribe();
+          const { hash } = meta;
+          resolve({ hash, meta });
+          return;
+        }
+
+        if (isFailedTransaction(meta)) {
+          unsubscribe();
+          reject(new TransactionSubmissionError(meta));
+        }
+      });
+    });
   }
 
   approveTransaction(id: string): Promise<TransactionMeta | null> {

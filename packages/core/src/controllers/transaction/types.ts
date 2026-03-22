@@ -68,20 +68,38 @@ export type TransactionApprovalRequestPayload = {
 
 export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKinds.SendTransaction>;
 
+export type TransactionApprovalHandoff = {
+  transactionId: string;
+  approvalId: string;
+  pendingMeta: TransactionMeta;
+  waitForApprovalDecision(): Promise<TransactionMeta>;
+};
+
+export type TransactionSubmissionResolution = {
+  hash: string;
+  meta: TransactionMeta;
+};
+
+export class TransactionSubmissionError extends Error {
+  readonly meta: TransactionMeta;
+
+  constructor(meta: TransactionMeta) {
+    super(meta.error?.message ?? "Transaction submission failed");
+    this.name = "TransactionSubmissionError";
+    this.meta = meta;
+  }
+}
+
+export const isTransactionSubmissionError = (error: unknown): error is TransactionSubmissionError =>
+  error instanceof TransactionSubmissionError;
+
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
-  createTransactionApproval(
-    origin: string,
+  beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta>;
-  requestTransactionApproval(
-    origin: string,
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    opts?: { id?: string },
-  ): Promise<TransactionMeta>;
+  ): Promise<TransactionApprovalHandoff>;
+  waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;

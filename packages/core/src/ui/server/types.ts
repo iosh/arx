@@ -60,7 +60,7 @@ export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissio
 
 export type UiTransactionsAccess = Pick<
   TransactionController,
-  "createTransactionApproval" | "getMeta" | "onStateChanged"
+  "beginTransactionApproval" | "getMeta" | "onStateChanged"
 >;
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &

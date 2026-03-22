@@ -592,10 +592,18 @@ const createUiAccessForTest = (input: {
       onStateChanged: input.controllers.permissions.onStateChanged,
     },
     transactions: {
-      createTransactionApproval:
-        "createTransactionApproval" in input.controllers.transactions
-          ? input.controllers.transactions.createTransactionApproval
-          : (vi.fn(async () => ({ id: "approval-id" }) as never) as never),
+      beginTransactionApproval:
+        "beginTransactionApproval" in input.controllers.transactions
+          ? input.controllers.transactions.beginTransactionApproval
+          : (vi.fn(
+              async () =>
+                ({
+                  transactionId: "approval-id",
+                  approvalId: "approval-id",
+                  pendingMeta: { id: "approval-id" },
+                  waitForApprovalDecision: async () => ({ id: "approval-id" }),
+                }) as never,
+            ) as never),
       getMeta:
         "getMeta" in input.controllers.transactions ? input.controllers.transactions.getMeta : vi.fn(() => undefined),
       onStateChanged: input.controllers.transactions.onStateChanged,

@@ -1,19 +1,19 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { isTransactionSubmissionError } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import {
-  defineEip155AuthorizedAccountApprovalMethod,
-  isTransactionResolutionError,
-  requireRequestContext,
-  TransactionResolutionError,
-  waitForTransactionBroadcast,
-} from "./shared.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
 import { buildEip155TransactionRequest } from "./transactionRequest.js";
 
 type RpcLikeError = Error & { code: number; data?: unknown };
 
 type EthSendTransactionParams = readonly [unknown, ...unknown[]];
+
+const isRejectedBeforeBroadcast = (params: {
+  userRejected: boolean;
+  error: { code?: number | undefined; name?: string | undefined } | null;
+}) => params.userRejected || params.error?.code === 4001 || params.error?.name === "TransactionRejectedError";
 
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
   requestKind: RpcRequestKinds.TransactionSubmission,
@@ -41,27 +41,22 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
   executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext }) => {
     prepared.payload.from = from;
     try {
-      const meta = await controllers.transactions.requestTransactionApproval(
-        origin,
+      const handoff = await controllers.transactions.beginTransactionApproval(
         prepared,
         requireRequestContext(rpcContext, "eth_sendTransaction"),
       );
-      const broadcastMeta = await waitForTransactionBroadcast(controllers.transactions, meta.id);
-
-      if (typeof broadcastMeta.hash !== "string") {
-        throw new TransactionResolutionError(broadcastMeta);
-      }
-
-      return broadcastMeta.hash;
+      await handoff.waitForApprovalDecision();
+      const submission = await controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
+      return submission.hash;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) {
         throw error;
       }
 
-      if (isTransactionResolutionError(error)) {
+      if (isTransactionSubmissionError(error)) {
         const failedMeta = error.meta;
 
-        if (failedMeta.userRejected) {
+        if (isRejectedBeforeBroadcast({ userRejected: failedMeta.userRejected, error: failedMeta.error })) {
           throw arxError({
             reason: ArxReasons.ApprovalRejected,
             message: "User rejected transaction",

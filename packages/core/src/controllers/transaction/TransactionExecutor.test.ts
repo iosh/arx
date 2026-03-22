@@ -35,7 +35,7 @@ const toMeta = (record: TransactionRecord, from: string): TransactionMeta => ({
 });
 
 describe("TransactionExecutor", () => {
-  it("can create a transaction approval without waiting for settlement", async () => {
+  it("begins a transaction approval with aligned transaction and approval ids", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
@@ -69,6 +69,11 @@ describe("TransactionExecutor", () => {
     const createPending = vi.fn(async () => createdRecord);
     const queuePrepare = vi.fn();
     let settleApproval: ((value: TransactionMeta) => void) | null = null;
+    const createApproval = vi.fn(() => ({
+      settled: new Promise<TransactionMeta>((resolve) => {
+        settleApproval = resolve;
+      }),
+    }));
 
     const executor = new TransactionExecutor({
       view: {
@@ -93,11 +98,7 @@ describe("TransactionExecutor", () => {
         ],
       } as never,
       approvals: {
-        create: () => ({
-          settled: new Promise<TransactionMeta>((resolve) => {
-            settleApproval = resolve;
-          }),
-        }),
+        create: createApproval,
       } as never,
       registry: {
         get: () => undefined,
@@ -112,8 +113,8 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const result = await executor.createTransactionApproval(
-      "https://dapp.example",
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
         payload: {
@@ -124,13 +125,28 @@ describe("TransactionExecutor", () => {
         },
       },
       REQUEST_CONTEXT,
-      { id: REQUEST_ID },
     );
+    randomUuidSpy.mockRestore();
 
-    expect(result).toMatchObject({ id: REQUEST_ID, status: "pending", chainRef, namespace: "eip155" });
+    expect(handoff).toMatchObject({
+      transactionId: REQUEST_ID,
+      approvalId: REQUEST_ID,
+      pendingMeta: { id: REQUEST_ID, status: "pending", chainRef, namespace: "eip155" },
+    });
     expect(createPending).toHaveBeenCalledTimes(1);
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(settleApproval).toBeTypeOf("function");
+    expect(createApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: REQUEST_ID,
+        createdAt: createdRecord.createdAt,
+        origin: REQUEST_CONTEXT.origin,
+      }),
+      expect.objectContaining({
+        origin: REQUEST_CONTEXT.origin,
+        requestId: REQUEST_CONTEXT.requestId,
+      }),
+    );
   });
 
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
@@ -206,8 +222,8 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const result = await executor.requestTransactionApproval(
-      "https://dapp.example",
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
         payload: {
@@ -218,8 +234,9 @@ describe("TransactionExecutor", () => {
         },
       },
       REQUEST_CONTEXT,
-      { id: REQUEST_ID },
     );
+    randomUuidSpy.mockRestore();
+    const result = await handoff.waitForApprovalDecision();
 
     expect(createPending).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -314,8 +331,8 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    await executor.requestTransactionApproval(
-      "https://dapp.example",
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
         payload: {
@@ -326,8 +343,9 @@ describe("TransactionExecutor", () => {
         },
       },
       REQUEST_CONTEXT,
-      { id: REQUEST_ID },
     );
+    randomUuidSpy.mockRestore();
+    await handoff.waitForApprovalDecision();
 
     expect(normalizeRequest).toHaveBeenCalledWith(
       {
@@ -353,5 +371,115 @@ describe("TransactionExecutor", () => {
         },
       }),
     );
+  });
+
+  it("marks signer-stage user rejection as userRejected before broadcast", async () => {
+    const id = "22222222-2222-4222-8222-222222222222";
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+    const signedRecord: TransactionRecord = {
+      id,
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      fromAccountKey: accountKey,
+      status: "signed",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      prepared: {},
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const failedRecord: TransactionRecord = {
+      ...signedRecord,
+      status: "failed",
+      userRejected: true,
+      updatedAt: 2,
+      error: {
+        name: "TransactionRejectedError",
+        message: "User rejected transaction",
+        code: 4001,
+      },
+    };
+
+    const transition = vi.fn(async () => failedRecord);
+    const commitRecord = vi.fn((record: TransactionRecord) => {
+      if (record.status === "failed") {
+        return {
+          previous: toMeta(signedRecord, from),
+          next: {
+            ...toMeta(failedRecord, from),
+            error: failedRecord.error ?? null,
+          },
+        };
+      }
+
+      return { next: toMeta(record, from) };
+    });
+
+    const executor = new TransactionExecutor({
+      view: {
+        peek: () => undefined,
+        getOrLoad: async () => null,
+        commitRecord,
+      } as never,
+      accountCodecs,
+      networkPreferences: {
+        getActiveChainRef: () => chainRef,
+      } as never,
+      chainDefinitions: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [],
+      } as never,
+      approvals: {
+        create: vi.fn(),
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        get: vi.fn(async () => signedRecord),
+        transition,
+      } as never,
+      prepare: {} as never,
+      tracking: {
+        stop: vi.fn(),
+        handleTransition: vi.fn(),
+      } as never,
+      now: () => 1,
+    });
+
+    const rejectionError = Object.assign(new Error("User rejected transaction"), { code: 4001 });
+    await executor.rejectTransaction(id, rejectionError);
+
+    expect(transition).toHaveBeenCalledWith({
+      id,
+      fromStatus: "signed",
+      toStatus: "failed",
+      patch: {
+        error: {
+          name: "Error",
+          message: "User rejected transaction",
+          code: 4001,
+        },
+        userRejected: true,
+      },
+    });
   });
 });

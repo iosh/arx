@@ -443,6 +443,92 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
+  it("maps signer-stage 4001 rejection to userRejected before broadcast for eth_sendTransaction", async () => {
+    const registry = new TransactionAdapterRegistry();
+    registry.register("eip155", {
+      prepareTransaction: vi.fn(async () => ({
+        prepared: {},
+        warnings: [],
+        issues: [],
+      })),
+      signTransaction: vi.fn(async () => {
+        throw Object.assign(new Error("User rejected transaction"), {
+          code: 4001,
+          name: "TransactionRejectedError",
+        });
+      }),
+      broadcastTransaction: vi.fn(async () => ({ hash: "0x1111" })),
+    });
+
+    const runtime = createRuntime({
+      transactions: { registry },
+    });
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+
+    const mainnet = getActiveChainMetadata(runtime);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const account = await runtime.services.keyring.deriveAccount(keyringId);
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: mainnet.namespace,
+      chainRef: mainnet.chainRef,
+      accountKey: toAccountKeyFromAddress({
+        chainRef: mainnet.chainRef,
+        address: account.address,
+        accountCodecs: runtime.services.accountCodecs,
+      }),
+    });
+    await connectOrigin({
+      runtime,
+      chainRefs: [mainnet.chainRef],
+      addresses: [account.address],
+    });
+
+    const execute = createExecutor(runtime);
+    let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
+    const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
+      if (task.kind !== ApprovalKinds.SendTransaction) {
+        return false;
+      }
+
+      capturedTask = task;
+      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      return true;
+    });
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: account.address,
+                to: account.address,
+                value: "0x0",
+                data: "0x",
+              },
+            ] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: 4001 });
+
+      expect(capturedTask?.id).toEqual(expect.any(String));
+      const failedMeta = runtime.controllers.transactions.getMeta(capturedTask?.id ?? "");
+      expect(failedMeta?.status).toBe("failed");
+      expect(failedMeta?.userRejected).toBe(true);
+      expect(failedMeta?.error?.code).toBe(4001);
+      expect(failedMeta?.error?.name).toBe("TransactionRejectedError");
+    } finally {
+      teardownApprovalResponder();
+      runtime.lifecycle.destroy();
+    }
+  });
+
   it("returns a submission summary for eth_sendTransaction without mutating durable connection authorization", async () => {
     const rpcMocks = {
       estimateGas: vi.fn(async () => "0x5208"),

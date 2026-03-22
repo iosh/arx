@@ -267,7 +267,9 @@ describe("runtimeHost", () => {
     approvalPopupAccess.subscribeUnlockAttentionRequested(unlockListener);
     expect(runtimeHarness.subscribe).toHaveBeenCalledWith(ATTENTION_REQUESTED, expect.any(Function));
 
-    const attentionSubscription = runtimeHarness.subscribe.mock.calls.find((call) => call[0] === ATTENTION_REQUESTED);
+    const attentionSubscription = (
+      runtimeHarness.subscribe.mock.calls as unknown as Array<[unknown, (payload: Record<string, unknown>) => void]>
+    ).find((call) => Object.is(call[0], ATTENTION_REQUESTED));
     const attentionHandler = attentionSubscription?.[1];
 
     expect(attentionHandler).toBeTypeOf("function");

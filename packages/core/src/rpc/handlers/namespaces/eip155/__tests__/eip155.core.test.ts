@@ -1116,7 +1116,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const txSpy = vi.spyOn(runtime.controllers.transactions, "requestTransactionApproval");
+    const txSpy = vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval");
     try {
       await expect(
         execute({

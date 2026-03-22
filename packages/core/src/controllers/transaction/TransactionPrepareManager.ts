@@ -128,7 +128,7 @@ export class TransactionPrepareManager {
         {
           prepared: null,
           warnings: cloneWarnings(meta.warnings),
-          issues: cloneIssues([...meta.issues, missingAdapterIssue(meta.namespace)]),
+          issues: cloneIssues(mergeIssues(meta.issues, [missingAdapterIssue(meta.namespace)])),
         },
         meta,
       );

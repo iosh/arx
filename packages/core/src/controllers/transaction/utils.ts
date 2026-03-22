@@ -90,6 +90,12 @@ export const missingAdapterIssue = (namespace: string): TransactionIssue => ({
   data: { namespace },
 });
 
+export const createMissingAdapterError = (namespace: string): Error => {
+  const error = new Error(`No transaction adapter registered for namespace ${namespace}`);
+  error.name = "TransactionAdapterMissingError";
+  return error;
+};
+
 export const issueFromPrepareError = (error: unknown): TransactionIssue => {
   if (error instanceof Error) {
     return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_VALUES } from "./__fixtures__/constants.js";
-import { deriveEip155HexChainIdFromChainRef, normalizeEip155TransactionRequest } from "./request.js";
+import { deriveEip155HexChainIdFromChainRef, deriveEip155TransactionRequestForChain } from "./request.js";
 
 describe("eip155 transaction request helpers", () => {
   it("derives a hex chainId from the chainRef reference", () => {
@@ -9,7 +9,7 @@ describe("eip155 transaction request helpers", () => {
 
   it("injects chainId when the request omits it", () => {
     expect(
-      normalizeEip155TransactionRequest(
+      deriveEip155TransactionRequestForChain(
         {
           namespace: "eip155",
           payload: {
@@ -36,7 +36,7 @@ describe("eip155 transaction request helpers", () => {
 
   it("preserves an explicit chainId", () => {
     expect(
-      normalizeEip155TransactionRequest(
+      deriveEip155TransactionRequestForChain(
         {
           namespace: "eip155",
           payload: {

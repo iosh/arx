@@ -39,8 +39,10 @@ describe("ReceiptTracker", () => {
     };
 
     const adapter = {
-      fetchReceipt: vi.fn(async () => receiptResolution),
-      detectReplacement: vi.fn(),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => receiptResolution),
+        detectReplacement: vi.fn(),
+      },
     };
 
     const onReceipt = vi.fn();
@@ -58,7 +60,7 @@ describe("ReceiptTracker", () => {
     tracker.start("tx-1", BASE_CONTEXT, HASH);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(adapter.fetchReceipt).toHaveBeenCalledTimes(1);
+    expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(1);
     expect(onReceipt).toHaveBeenCalledWith("tx-1", receiptResolution);
   });
 
@@ -69,8 +71,10 @@ describe("ReceiptTracker", () => {
     };
 
     const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => replacementResolution),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => null),
+        detectReplacement: vi.fn(async () => replacementResolution),
+      },
     };
 
     const onReplacement = vi.fn();
@@ -88,15 +92,17 @@ describe("ReceiptTracker", () => {
     tracker.start("tx-1", BASE_CONTEXT, HASH);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(adapter.fetchReceipt).toHaveBeenCalledTimes(1);
-    expect(adapter.detectReplacement).toHaveBeenCalledTimes(1);
+    expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(1);
+    expect(adapter.receiptTracking.detectReplacement).toHaveBeenCalledTimes(1);
     expect(onReplacement).toHaveBeenCalledWith("tx-1", replacementResolution);
   });
 
   it("invokes onTimeout after exceeding max attempts", async () => {
     const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => null),
+        detectReplacement: vi.fn(async () => null),
+      },
     };
 
     const onTimeout = vi.fn();
@@ -115,14 +121,16 @@ describe("ReceiptTracker", () => {
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(adapter.fetchReceipt).toHaveBeenCalledTimes(2);
+    expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(2);
     expect(onTimeout).toHaveBeenCalledWith("tx-1");
   });
 
   it("doubles delay on each attempt until it reaches maxDelay", async () => {
     const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => null),
+        detectReplacement: vi.fn(async () => null),
+      },
     };
 
     const delays: number[] = [];
@@ -160,8 +168,10 @@ describe("ReceiptTracker", () => {
 
   it("stops tracking and clears pending timers", async () => {
     const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => null),
+        detectReplacement: vi.fn(async () => null),
+      },
     };
 
     const onReceipt = vi.fn();
@@ -184,14 +194,16 @@ describe("ReceiptTracker", () => {
 
     await vi.runOnlyPendingTimersAsync();
     expect(onReceipt).not.toHaveBeenCalled();
-    expect(adapter.fetchReceipt).not.toHaveBeenCalled();
+    expect(adapter.receiptTracking.fetchReceipt).not.toHaveBeenCalled();
     expect(tracker.pending()).toBe(0);
   });
 
   it("restarts tracking from the initial delay when resumed", async () => {
     const adapter = {
-      fetchReceipt: vi.fn(async () => null),
-      detectReplacement: vi.fn(async () => null),
+      receiptTracking: {
+        fetchReceipt: vi.fn(async () => null),
+        detectReplacement: vi.fn(async () => null),
+      },
     };
 
     const delays: number[] = [];
@@ -253,8 +265,10 @@ describe("ReceiptTracker", () => {
     const tracker = createReceiptTracker(
       {
         getAdapter: () => ({
-          fetchReceipt: vi.fn(async () => null),
-          detectReplacement: vi.fn(async () => null),
+          receiptTracking: {
+            fetchReceipt: vi.fn(async () => null),
+            detectReplacement: vi.fn(async () => null),
+          },
         }),
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),

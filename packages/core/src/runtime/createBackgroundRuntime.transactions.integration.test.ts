@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransactionStatusChange } from "../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { TransactionAdapter } from "../transactions/adapters/types.js";
+import type { TransactionAdapter, TransactionReceiptTrackingAdapter } from "../transactions/adapters/types.js";
 import {
   createChainMetadata,
   flushAsync,
@@ -53,12 +53,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => ({
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
       status: "success",
       receipt: confirmedReceipt,
     }));
 
-    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -160,9 +165,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => null);
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
 
-    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -264,8 +274,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => null);
-    const detectReplacement = vi.fn<NonNullable<TransactionAdapter["detectReplacement"]>>(async () => ({
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
+    const detectReplacement = vi.fn<NonNullable<TransactionReceiptTrackingAdapter["detectReplacement"]>>(async () => ({
       status: "replaced",
       hash: replacementHash,
     }));
@@ -274,8 +284,10 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
-      fetchReceipt,
-      detectReplacement,
+      receiptTracking: {
+        fetchReceipt,
+        detectReplacement,
+      },
     };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
@@ -346,9 +358,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => null);
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
 
-    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 
@@ -418,12 +435,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => ({
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
       status: "failed",
       receipt: failedReceipt,
     }));
 
-    const adapter: TransactionAdapter = { prepareTransaction, signTransaction, broadcastTransaction, fetchReceipt };
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      receiptTracking: { fetchReceipt },
+    };
     const registry = new TransactionAdapterRegistry();
     registry.register(chain.namespace, adapter);
 

@@ -31,14 +31,24 @@ export type ReplacementResolution = {
   hash: string | null;
   status: "replaced";
 };
-export type TransactionAdapter = {
-  normalizeRequest?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
+
+export type TransactionRequestDeriver = (request: TransactionRequest, chainRef: ChainRef) => TransactionRequest;
+
+export type TransactionReceiptTrackingAdapter = {
+  fetchReceipt(context: TransactionPrepareContext, hash: string): Promise<ReceiptResolution | null>;
+  detectReplacement?(context: TransactionPrepareContext): Promise<ReplacementResolution | null>;
+};
+
+export type TransactionSubmissionAdapter = {
   prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
   signTransaction(
     context: TransactionSignContext,
     prepared: PreparedTransactionResult["prepared"],
   ): Promise<SignedTransactionPayload>;
   broadcastTransaction(context: TransactionPrepareContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
-  fetchReceipt?(context: TransactionPrepareContext, hash: string): Promise<ReceiptResolution | null>;
-  detectReplacement?(context: TransactionPrepareContext): Promise<ReplacementResolution | null>;
 };
+
+export type TransactionAdapter = {
+  deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
+  receiptTracking?: TransactionReceiptTrackingAdapter;
+} & TransactionSubmissionAdapter;

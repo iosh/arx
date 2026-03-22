@@ -42,6 +42,8 @@ export type NamespaceRuntimeSupport = Readonly<{
   hasApprovalBindings: boolean;
   hasUiBindings: boolean;
   hasTransaction: boolean;
+  hasTransactionReceiptTracking: boolean;
+  hasTransactionReplacementTracking: boolean;
 }>;
 
 export type NamespaceRuntimeSupportIndex = {

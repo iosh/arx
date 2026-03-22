@@ -11,7 +11,7 @@ export const deriveEip155HexChainIdFromChainRef = (chainRef: ChainRef): `0x${str
   return Hex.fromNumber(BigInt(parsed.reference)) as `0x${string}`;
 };
 
-export const normalizeEip155TransactionRequest = (
+export const deriveEip155TransactionRequestForChain = (
   request: Eip155TransactionRequest,
   chainRef: ChainRef,
 ): Eip155TransactionRequest => {

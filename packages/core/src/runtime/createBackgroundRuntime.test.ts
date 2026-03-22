@@ -510,6 +510,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasApprovalBindings: true,
       hasUiBindings: true,
       hasTransaction: true,
+      hasTransactionReceiptTracking: true,
+      hasTransactionReplacementTracking: true,
     });
 
     const handlers = createHandlersForRuntime(runtime);
@@ -654,6 +656,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasApprovalBindings: true,
       hasUiBindings: true,
       hasTransaction: true,
+      hasTransactionReceiptTracking: true,
+      hasTransactionReplacementTracking: true,
     });
 
     runtime.lifecycle.destroy();

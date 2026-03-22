@@ -34,6 +34,7 @@ import {
   cloneRequest,
   cloneWarnings,
   coerceTransactionError,
+  createMissingAdapterError,
   isUserRejectedError,
   missingAdapterIssue,
 } from "./utils.js";
@@ -127,23 +128,23 @@ export class TransactionExecutor
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
     // Avoid RPC/slow work before the approval is enqueued.
     const adapter = this.#registry.get(derived.namespace);
-    const normalizedCandidate = adapter?.normalizeRequest?.(request, chainRef) ?? {
+    const derivedRequestCandidate = adapter?.deriveRequestForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
     };
-    if (normalizedCandidate.namespace !== derived.namespace) {
+    if (derivedRequestCandidate.namespace !== derived.namespace) {
       throw new Error(
-        `Transaction adapter normalized request namespace mismatch: expected=${derived.namespace} actual=${normalizedCandidate.namespace}`,
+        `Transaction adapter derived request namespace mismatch: expected=${derived.namespace} actual=${derivedRequestCandidate.namespace}`,
       );
     }
-    if (normalizedCandidate.chainRef !== undefined && normalizedCandidate.chainRef !== chainRef) {
+    if (derivedRequestCandidate.chainRef !== undefined && derivedRequestCandidate.chainRef !== chainRef) {
       throw new Error(
-        `Transaction adapter normalized request chainRef mismatch: expected=${chainRef} actual=${normalizedCandidate.chainRef}`,
+        `Transaction adapter derived request chainRef mismatch: expected=${chainRef} actual=${derivedRequestCandidate.chainRef}`,
       );
     }
 
-    const normalizedRequest: TransactionRequest = {
-      ...normalizedCandidate,
+    const derivedRequest: TransactionRequest = {
+      ...derivedRequestCandidate,
       chainRef,
     };
     const collectedWarnings: TransactionWarning[] = [];
@@ -178,7 +179,7 @@ export class TransactionExecutor
       chainRef,
       origin: requestContext.origin,
       fromAccountKey: fromAccountKey,
-      request: cloneRequest(normalizedRequest),
+      request: cloneRequest(derivedRequest),
       warnings: cloneWarnings(collectedWarnings),
       issues: cloneIssues(collectedIssues),
     });
@@ -293,7 +294,7 @@ export class TransactionExecutor
 
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter) {
-      await this.rejectTransaction(id, new Error(`No transaction adapter registered for namespace ${meta.namespace}`));
+      await this.rejectTransaction(id, createMissingAdapterError(meta.namespace));
       return;
     }
 

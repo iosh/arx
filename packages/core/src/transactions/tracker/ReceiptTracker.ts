@@ -5,7 +5,7 @@ import type {
   TransactionPrepareContext,
 } from "../adapters/types.js";
 
-type TrackerAdapter = Pick<TransactionAdapter, "fetchReceipt" | "detectReplacement">;
+type TrackerAdapter = Pick<TransactionAdapter, "receiptTracking">;
 
 type TrackerDeps = {
   getAdapter(namespace: string): TrackerAdapter | undefined;
@@ -70,21 +70,22 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
   const tick = async (state: TaskState) => {
     try {
       const adapter = deps.getAdapter(state.context.namespace);
-      if (!adapter || !adapter.fetchReceipt) {
+      const receiptTracking = adapter?.receiptTracking;
+      if (!receiptTracking) {
         stop(state.id);
         await deps.onError?.(state.id, new Error(`Adapter ${state.context.namespace} cannot fetch receipts.`));
         return;
       }
 
-      const receiptResult = await adapter.fetchReceipt(state.context, state.hash);
+      const receiptResult = await receiptTracking.fetchReceipt(state.context, state.hash);
       if (receiptResult) {
         stop(state.id);
         await deps.onReceipt(state.id, receiptResult);
         return;
       }
 
-      if (adapter.detectReplacement) {
-        const replacement = await adapter.detectReplacement(state.context);
+      if (receiptTracking.detectReplacement) {
+        const replacement = await receiptTracking.detectReplacement(state.context);
         if (replacement) {
           stop(state.id);
           await deps.onReplacement(state.id, replacement);

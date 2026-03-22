@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../storage/records.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { TransactionAdapter } from "../transactions/adapters/types.js";
+import type { TransactionAdapter, TransactionReceiptTrackingAdapter } from "../transactions/adapters/types.js";
 import {
   createChainMetadata,
   flushAsync,
@@ -25,7 +25,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const fetchReceipt = vi.fn<NonNullable<TransactionAdapter["fetchReceipt"]>>(async () => ({
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
       status: "success",
       receipt: { status: "0x1", blockNumber: "0x10" },
     }));
@@ -36,7 +36,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       broadcastTransaction: vi.fn(async () => ({
         hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       })),
-      fetchReceipt,
+      receiptTracking: { fetchReceipt },
     };
 
     const registry = new TransactionAdapterRegistry();

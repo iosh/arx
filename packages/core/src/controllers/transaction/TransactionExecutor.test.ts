@@ -134,6 +134,15 @@ describe("TransactionExecutor", () => {
       pendingMeta: { id: REQUEST_ID, status: "pending", chainRef, namespace: "eip155" },
     });
     expect(createPending).toHaveBeenCalledTimes(1);
+    expect(createPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issues: [
+          expect.objectContaining({
+            code: "transaction.adapter_missing",
+          }),
+        ],
+      }),
+    );
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(settleApproval).toBeTypeOf("function");
     expect(createApproval).toHaveBeenCalledWith(
@@ -248,7 +257,7 @@ describe("TransactionExecutor", () => {
     expect(result).toMatchObject({ chainRef, namespace: "eip155" });
   });
 
-  it("delegates request normalization to the namespace adapter before persistence", async () => {
+  it("delegates chain-specific request derivation to the namespace adapter before persistence", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
@@ -279,7 +288,7 @@ describe("TransactionExecutor", () => {
       updatedAt: 1,
     };
 
-    const normalizeRequest = vi.fn((request, resolvedChainRef) => ({
+    const deriveRequestForChain = vi.fn((request, resolvedChainRef) => ({
       ...request,
       chainRef: resolvedChainRef,
       payload: {
@@ -318,7 +327,7 @@ describe("TransactionExecutor", () => {
       } as never,
       registry: {
         get: () => ({
-          normalizeRequest,
+          deriveRequestForChain,
         }),
       } as never,
       service: {
@@ -347,7 +356,7 @@ describe("TransactionExecutor", () => {
     randomUuidSpy.mockRestore();
     await handoff.waitForApprovalDecision();
 
-    expect(normalizeRequest).toHaveBeenCalledWith(
+    expect(deriveRequestForChain).toHaveBeenCalledWith(
       {
         namespace: "eip155",
         payload: {
@@ -371,6 +380,111 @@ describe("TransactionExecutor", () => {
         },
       }),
     );
+  });
+
+  it("fails with a stable adapter-missing error when execution reaches a namespace without a transaction adapter", async () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+    const approvedRecord: TransactionRecord = {
+      id,
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      fromAccountKey: accountKey,
+      status: "approved",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      prepared: null,
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const failedRecord: TransactionRecord = {
+      ...approvedRecord,
+      status: "failed",
+      updatedAt: 2,
+      error: {
+        name: "TransactionAdapterMissingError",
+        message: "No transaction adapter registered for namespace eip155",
+      },
+    };
+
+    const transition = vi.fn(async () => failedRecord);
+    const commitRecord = vi.fn((record: TransactionRecord) => {
+      if (record.status === "failed") {
+        return {
+          previous: toMeta(approvedRecord, from),
+          next: {
+            ...toMeta(failedRecord, from),
+            error: failedRecord.error ?? null,
+          },
+        };
+      }
+
+      return { next: toMeta(record, from) };
+    });
+
+    const executor = new TransactionExecutor({
+      view: {
+        getOrLoad: async () => toMeta(approvedRecord, from),
+        commitRecord,
+      } as never,
+      accountCodecs,
+      networkPreferences: {
+        getActiveChainRef: () => chainRef,
+      } as never,
+      chainDefinitions: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [],
+      } as never,
+      approvals: {
+        create: vi.fn(),
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        get: vi.fn(async () => approvedRecord),
+        transition,
+      } as never,
+      prepare: {} as never,
+      tracking: {
+        stop: vi.fn(),
+        handleTransition: vi.fn(),
+      } as never,
+      now: () => 1,
+    });
+
+    await executor.processTransaction(id);
+
+    expect(transition).toHaveBeenCalledWith({
+      id,
+      fromStatus: "approved",
+      toStatus: "failed",
+      patch: {
+        error: {
+          name: "TransactionAdapterMissingError",
+          message: "No transaction adapter registered for namespace eip155",
+        },
+        userRejected: false,
+      },
+    });
   });
 
   it("marks signer-stage user rejection as userRejected before broadcast", async () => {

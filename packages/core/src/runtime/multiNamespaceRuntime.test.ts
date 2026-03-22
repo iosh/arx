@@ -149,6 +149,8 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       hasApprovalBindings: true,
       hasUiBindings: true,
       hasTransaction: true,
+      hasTransactionReceiptTracking: true,
+      hasTransactionReplacementTracking: true,
     });
     expect(runtime.services.namespaceRuntimeSupport.get("solana")).toMatchObject({
       namespace: "solana",
@@ -157,6 +159,8 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
       hasApprovalBindings: false,
       hasUiBindings: false,
       hasTransaction: false,
+      hasTransactionReceiptTracking: false,
+      hasTransactionReplacementTracking: false,
     });
     expect(runtime.services.namespaceBindings.getUi("solana")).toBeUndefined();
     expect(runtime.services.namespaceBindings.hasTransaction("solana")).toBe(false);

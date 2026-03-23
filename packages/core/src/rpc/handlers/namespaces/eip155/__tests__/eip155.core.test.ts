@@ -58,7 +58,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
 
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
     const derived = await runtime.services.keyring.deriveAccount(keyringId);
     await runtime.controllers.accounts.setActiveAccount({
@@ -757,7 +757,7 @@ describe("eip155 handlers - core error paths", () => {
     const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const account = await runtime.services.keyring.deriveAccount(keyringId);
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
@@ -834,7 +834,7 @@ describe("eip155 handlers - core error paths", () => {
     const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
@@ -877,7 +877,7 @@ describe("eip155 handlers - core error paths", () => {
     const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const first = await runtime.services.keyring.deriveAccount(keyringId);
     const second = await runtime.services.keyring.deriveAccount(keyringId);
 
@@ -939,7 +939,7 @@ describe("eip155 handlers - core error paths", () => {
     const chain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };

@@ -1,9 +1,13 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import type {
+  UiCreateWalletFromMnemonicParams,
+  UiImportWalletFromMnemonicParams,
+  UiImportWalletFromPrivateKeyParams,
+} from "../sessionAccess.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   hasAnyAccounts,
   parsePrivateKeyHex,
-  requireOnboardingPassword,
   resolveChainRefForNamespace,
   sanitizeMnemonicPhraseFromWords,
   validateBip39Mnemonic,
@@ -30,114 +34,74 @@ export const createOnboardingHandlers = (
     },
 
     "ui.onboarding.createWalletFromMnemonic": async (params) => {
-      const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+      const { password, words, ...keyringParams } = params;
+      const mnemonic = sanitizeMnemonicPhraseFromWords(words);
       validateBip39Mnemonic(mnemonic);
 
-      const opts: { alias?: string; skipBackup?: boolean; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
+        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+      }
 
-      return await deps.session.withVaultMetaPersistHold(async () => {
-        const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
-          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-        }
-
-        if (!status.hasEnvelope) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.vault.initialize({ password });
-          await deps.session.unlock.unlock({ password });
-        } else if (!deps.session.unlock.isUnlocked()) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.unlock.unlock({ password });
-        }
-
-        await deps.keyrings.waitForReady();
-
-        const { keyringId, address } = await deps.keyrings.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
-        const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.accounts.setActiveAccount({
-          namespace,
-          chainRef,
-          accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
-        });
-        return { keyringId, address };
+      const { keyringId, address } = await deps.session.createWalletFromMnemonic({
+        password,
+        mnemonic,
+        ...keyringParams,
+      } as UiCreateWalletFromMnemonicParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      await deps.accounts.setActiveAccount({
+        namespace,
+        chainRef,
+        accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
       });
+      return { keyringId, address };
     },
 
     "ui.onboarding.importWalletFromMnemonic": async (params) => {
-      const mnemonic = sanitizeMnemonicPhraseFromWords(params.words);
+      const { password, words, ...keyringParams } = params;
+      const mnemonic = sanitizeMnemonicPhraseFromWords(words);
       validateBip39Mnemonic(mnemonic);
 
-      const opts: { alias?: string; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
+        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+      }
 
-      return await deps.session.withVaultMetaPersistHold(async () => {
-        const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
-          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-        }
-
-        if (!status.hasEnvelope) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.vault.initialize({ password });
-          await deps.session.unlock.unlock({ password });
-        } else if (!deps.session.unlock.isUnlocked()) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.unlock.unlock({ password });
-        }
-
-        await deps.keyrings.waitForReady();
-
-        const { keyringId, address } = await deps.keyrings.importMnemonic(mnemonic, opts);
-        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
-        const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.accounts.setActiveAccount({
-          namespace,
-          chainRef,
-          accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
-        });
-        return { keyringId, address };
+      const { keyringId, address } = await deps.session.importWalletFromMnemonic({
+        password,
+        mnemonic,
+        ...keyringParams,
+      } as UiImportWalletFromMnemonicParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      await deps.accounts.setActiveAccount({
+        namespace,
+        chainRef,
+        accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address }),
       });
+      return { keyringId, address };
     },
 
     "ui.onboarding.importWalletFromPrivateKey": async (params) => {
-      const privateKey = parsePrivateKeyHex(params.privateKey);
+      const { password, privateKey: privateKeyHex, ...keyringParams } = params;
+      const privateKey = parsePrivateKeyHex(privateKeyHex);
 
-      const opts: { alias?: string; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
+      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
+        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
+      }
 
-      return await deps.session.withVaultMetaPersistHold(async () => {
-        const status = deps.session.vault.getStatus();
-        if (status.hasEnvelope && hasAnyAccounts(deps.accounts)) {
-          throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-        }
-
-        if (!status.hasEnvelope) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.vault.initialize({ password });
-          await deps.session.unlock.unlock({ password });
-        } else if (!deps.session.unlock.isUnlocked()) {
-          const password = requireOnboardingPassword(params.password);
-          await deps.session.unlock.unlock({ password });
-        }
-
-        await deps.keyrings.waitForReady();
-
-        const { keyringId, account } = await deps.keyrings.importPrivateKey(privateKey, opts);
-        const namespace = opts.namespace ?? deps.chains.getSelectedChainView().namespace;
-        const chainRef = resolveChainRefForNamespace(deps, namespace);
-        await deps.accounts.setActiveAccount({
-          namespace,
-          chainRef,
-          accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address: account.address }),
-        });
-        return { keyringId, account };
+      const { keyringId, account } = await deps.session.importWalletFromPrivateKey({
+        password,
+        privateKey,
+        ...keyringParams,
+      } as UiImportWalletFromPrivateKeyParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      await deps.accounts.setActiveAccount({
+        namespace,
+        chainRef,
+        accountKey: deps.accountCodecs.toAccountKeyFromAddress({ chainRef, address: account.address }),
       });
+      return { keyringId, account };
     },
   };
 };

@@ -79,27 +79,43 @@ const createDeps = (options?: {
     buildUiPermissionsSnapshot: () => ({ origins: {} }),
   },
   session: {
-    unlock: {
-      isUnlocked: () => false,
-      getState: () => ({
-        isUnlocked: false,
-        lastUnlockedAt: null,
-        timeoutMs: 900_000,
-        nextAutoLockAt: null,
-      }),
-      lock: () => {},
-      onStateChanged: () => () => {},
-      scheduleAutoLock: () => null,
-      setAutoLockDuration: () => {},
-      unlock: async () => {},
+    getState: () => ({
+      isUnlocked: false,
+      lastUnlockedAt: null,
+      timeoutMs: 900_000,
+      nextAutoLockAt: null,
+    }),
+    isUnlocked: () => false,
+    hasInitializedVault: () => false,
+    unlock: async () => ({
+      isUnlocked: true,
+      lastUnlockedAt: 0,
+      timeoutMs: 900_000,
+      nextAutoLockAt: null,
+    }),
+    lock: () => ({
+      isUnlocked: false,
+      lastUnlockedAt: null,
+      timeoutMs: 900_000,
+      nextAutoLockAt: null,
+    }),
+    resetAutoLockTimer: () => ({
+      isUnlocked: false,
+      lastUnlockedAt: null,
+      timeoutMs: 900_000,
+      nextAutoLockAt: null,
+    }),
+    setAutoLockDuration: () => ({ autoLockDurationMs: 900_000, nextAutoLockAt: null }),
+    onStateChanged: () => () => {},
+    createWalletFromMnemonic: async () => {
+      throw new Error("not needed in snapshot test");
     },
-    vault: {
-      getStatus: () => ({ isUnlocked: false, hasEnvelope: false }),
-      initialize: async () => {
-        throw new Error("not needed in snapshot test");
-      },
+    importWalletFromMnemonic: async () => {
+      throw new Error("not needed in snapshot test");
     },
-    withVaultMetaPersistHold: async (fn) => await fn(),
+    importWalletFromPrivateKey: async () => {
+      throw new Error("not needed in snapshot test");
+    },
     persistVaultMeta: async () => {},
   } satisfies UiSessionAccess,
   keyrings: {

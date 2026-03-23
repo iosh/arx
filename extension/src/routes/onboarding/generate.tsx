@@ -13,6 +13,13 @@ export const Route = createFileRoute("/onboarding/generate")({
   component: GenerateMnemonicRoute,
 });
 
+const requireOnboardingPassword = (password: string | null): string => {
+  if (!password) {
+    throw new Error("Onboarding password is required");
+  }
+  return password;
+};
+
 function GenerateMnemonicRoute() {
   const router = useRouter();
   const { snapshot } = useUiSnapshot();
@@ -79,11 +86,16 @@ function GenerateMnemonicRoute() {
     setPending(true);
     setError(null);
     try {
-      const res = await uiClient.onboarding.createWalletFromMnemonic({
-        password: password ?? undefined,
-        words,
-        skipBackup: true,
-      });
+      const res = vaultInitialized
+        ? await uiClient.keyrings.confirmNewMnemonic({
+            words,
+            skipBackup: true,
+          })
+        : await uiClient.onboarding.createWalletFromMnemonic({
+            password: requireOnboardingPassword(password),
+            words,
+            skipBackup: true,
+          });
 
       // Keep words for Verify; clear password as soon as we no longer need it.
       clearPassword();
@@ -112,11 +124,18 @@ function GenerateMnemonicRoute() {
     setPending(true);
     setError(null);
     try {
-      await uiClient.onboarding.createWalletFromMnemonic({
-        password: password ?? undefined,
-        words,
-        skipBackup: true,
-      });
+      if (vaultInitialized) {
+        await uiClient.keyrings.confirmNewMnemonic({
+          words,
+          skipBackup: true,
+        });
+      } else {
+        await uiClient.onboarding.createWalletFromMnemonic({
+          password: requireOnboardingPassword(password),
+          words,
+          skipBackup: true,
+        });
+      }
 
       clearPassword();
       clearMnemonicWords();

@@ -48,7 +48,7 @@ export const createUiRuntimeAccess = ({ ...deps }: CreateUiRuntimeAccessOptions)
       deps.permissions.onStateChanged(notify),
       deps.transactions.onStateChanged(notify),
       deps.chains.onPreferencesChanged(notify),
-      deps.session.unlock.onStateChanged(notify),
+      deps.session.onStateChanged(notify),
       deps.attention.onStateChanged(notify),
     ];
 

@@ -33,7 +33,7 @@ describe("DexieKeyringMetasPort", () => {
     const record = KeyringMetaRecordSchema.parse({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       type: "hd",
-      name: "Main",
+      alias: "Main",
       needsBackup: true,
       nextDerivationIndex: 3,
       createdAt: 1000,

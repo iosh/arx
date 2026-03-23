@@ -65,7 +65,7 @@ export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSc
 export const KeyringMetaRecordSchema = z.strictObject({
   id: z.string().uuid(),
   type: KeyringTypeSchema,
-  name: nonEmptyStringSchema.optional(),
+  alias: nonEmptyStringSchema.optional(),
   needsBackup: z.boolean().optional(),
   // HD only: the next derivation index to use (monotonic, even if accounts are removed/hidden).
   nextDerivationIndex: z.number().int().min(0).optional(),

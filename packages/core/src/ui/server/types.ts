@@ -4,8 +4,6 @@ import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { PermissionController } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
-import type { BackgroundSessionServices } from "../../runtime/background/session.js";
-import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
@@ -13,6 +11,11 @@ import type { PermissionViewsService } from "../../services/runtime/permissionVi
 import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
+import type { UiKeyringsAccess } from "./keyringsAccess.js";
+import type { UiSessionAccess } from "./sessionAccess.js";
+
+export type { UiKeyringsAccess } from "./keyringsAccess.js";
+export type { UiSessionAccess } from "./sessionAccess.js";
 
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
@@ -78,36 +81,6 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   };
 
 export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountKeyFromAddress">;
-
-export type UiSessionAccess = {
-  unlock: Pick<
-    BackgroundSessionServices["unlock"],
-    "getState" | "isUnlocked" | "lock" | "onStateChanged" | "scheduleAutoLock" | "setAutoLockDuration" | "unlock"
-  >;
-  vault: Pick<BackgroundSessionServices["vault"], "getStatus" | "initialize">;
-  withVaultMetaPersistHold: BackgroundSessionServices["withVaultMetaPersistHold"];
-  persistVaultMeta: BackgroundSessionServices["persistVaultMeta"];
-};
-
-export type UiKeyringsAccess = Pick<
-  KeyringService,
-  | "confirmNewMnemonic"
-  | "deriveAccount"
-  | "exportMnemonic"
-  | "exportPrivateKeyByAccountKey"
-  | "generateMnemonic"
-  | "getAccountsByKeyring"
-  | "getKeyrings"
-  | "hideHdAccount"
-  | "importMnemonic"
-  | "importPrivateKey"
-  | "markBackedUp"
-  | "removePrivateKeyKeyring"
-  | "renameAccount"
-  | "renameKeyring"
-  | "unhideHdAccount"
-  | "waitForReady"
->;
 
 export type UiAttentionAccess = Pick<AttentionService, "getSnapshot"> & {
   onStateChanged: (listener: () => void) => () => void;

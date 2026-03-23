@@ -1,3 +1,8 @@
+import type {
+  UiConfirmNewMnemonicParams,
+  UiImportMnemonicParams,
+  UiImportPrivateKeyParams,
+} from "../keyringsAccess.js";
 import type { UiHandlers, UiRuntimeDeps } from "../types.js";
 import {
   assertUnlocked,
@@ -27,7 +32,7 @@ export const createKeyringsHandlers = (
   | "ui.keyrings.exportMnemonic"
   | "ui.keyrings.exportPrivateKey"
 > => {
-  const selectAccount = async (params: { namespace?: string; accountKey: string }) => {
+  const selectAccount = async (params: { namespace: string | undefined; accountKey: string }) => {
     const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
     const chainRef = resolveChainRefForNamespace(deps, namespace);
     await deps.accounts.setActiveAccount({ namespace, chainRef, accountKey: params.accountKey });
@@ -36,49 +41,50 @@ export const createKeyringsHandlers = (
   return {
     "ui.keyrings.confirmNewMnemonic": async (params) => {
       assertUnlocked(deps.session);
-      const opts: { alias?: string; skipBackup?: boolean; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.skipBackup !== undefined) opts.skipBackup = params.skipBackup;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyrings.confirmNewMnemonic(params.words.join(" "), opts);
+      const { words, ...keyringParams } = params;
+      const result = await deps.keyrings.confirmNewMnemonic({
+        mnemonic: words.join(" "),
+        ...keyringParams,
+      } as UiConfirmNewMnemonicParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
+          chainRef: resolveChainRefForNamespace(deps, namespace),
           address: result.address,
         }),
-        ...(opts.namespace ? { namespace: opts.namespace } : {}),
+        namespace: params.namespace,
       });
       return result;
     },
 
     "ui.keyrings.importMnemonic": async (params) => {
       assertUnlocked(deps.session);
-      const opts: { alias?: string; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyrings.importMnemonic(params.words.join(" "), opts);
+      const { words, ...keyringParams } = params;
+      const result = await deps.keyrings.importMnemonic({
+        mnemonic: words.join(" "),
+        ...keyringParams,
+      } as UiImportMnemonicParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
+          chainRef: resolveChainRefForNamespace(deps, namespace),
           address: result.address,
         }),
-        ...(opts.namespace ? { namespace: opts.namespace } : {}),
+        namespace: params.namespace,
       });
       return result;
     },
 
     "ui.keyrings.importPrivateKey": async (params) => {
       assertUnlocked(deps.session);
-      const opts: { alias?: string; namespace?: string } = {};
-      if (params.alias !== undefined) opts.alias = params.alias;
-      if (params.namespace !== undefined) opts.namespace = params.namespace;
-      const result = await deps.keyrings.importPrivateKey(params.privateKey, opts);
+      const result = await deps.keyrings.importPrivateKey(params as UiImportPrivateKeyParams);
+      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps, opts.namespace ?? deps.chains.getSelectedChainView().namespace),
+          chainRef: resolveChainRefForNamespace(deps, namespace),
           address: result.account.address,
         }),
-        ...(opts.namespace ? { namespace: opts.namespace } : {}),
+        namespace: params.namespace,
       });
       return result;
     },

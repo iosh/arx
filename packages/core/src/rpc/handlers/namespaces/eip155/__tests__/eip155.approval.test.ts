@@ -28,6 +28,10 @@ const createCrossChainPreferencesPort = () =>
     updatedAt: 0,
   });
 
+const createReceiptTrackingStub = () => ({
+  fetchReceipt: vi.fn(async () => null),
+});
+
 describe("eip155 handlers - approval metadata", () => {
   it("presents requestPermissions approvals as chain-scoped access requests", async () => {
     const runtime = createRuntime();
@@ -39,7 +43,7 @@ describe("eip155 handlers - approval metadata", () => {
     const activeChain = getActiveChainMetadata(runtime);
     await runtime.services.session.vault.initialize({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
-    await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
     const accountsController = runtime.controllers.accounts as unknown as { refresh?: () => Promise<void> };
     await accountsController.refresh?.();
@@ -120,7 +124,7 @@ describe("eip155 handlers - approval metadata", () => {
 
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const account = await runtime.services.keyring.deriveAccount(keyringId);
     const accountKey = toAccountKeyFromAddress({
       chainRef: activeChain.chainRef,
@@ -376,6 +380,7 @@ describe("eip155 handlers - approval metadata", () => {
       })),
       signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x", hash: null })),
       broadcastTransaction: vi.fn(async (_ctx, _signed) => ({ hash: "0x1111" })),
+      receiptTracking: createReceiptTrackingStub(),
     });
     const runtime = createRuntime({
       networkPreferences: { port: createCrossChainPreferencesPort() },
@@ -458,6 +463,7 @@ describe("eip155 handlers - approval metadata", () => {
         });
       }),
       broadcastTransaction: vi.fn(async () => ({ hash: "0x1111" })),
+      receiptTracking: createReceiptTrackingStub(),
     });
 
     const runtime = createRuntime({
@@ -470,7 +476,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const mainnet = getActiveChainMetadata(runtime);
-    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const account = await runtime.services.keyring.deriveAccount(keyringId);
     await runtime.controllers.accounts.setActiveAccount({
       namespace: mainnet.namespace,
@@ -580,7 +586,7 @@ describe("eip155 handlers - approval metadata", () => {
       const execute = createExecutor(runtime);
       const mainnet = getActiveChainMetadata(runtime);
 
-      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
       const account = await runtime.services.keyring.deriveAccount(keyringId);
       await runtime.controllers.accounts.setActiveAccount({
         namespace: mainnet.namespace,
@@ -660,7 +666,7 @@ describe("eip155 handlers - approval metadata", () => {
     });
     try {
       const mainnet = getActiveChainMetadata(runtime);
-      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
       await runtime.controllers.accounts.setActiveAccount({
@@ -729,7 +735,7 @@ describe("eip155 handlers - approval metadata", () => {
     });
     try {
       const mainnet = getActiveChainMetadata(runtime);
-      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic(TEST_MNEMONIC);
+      const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
       const account = await runtime.services.keyring.deriveAccount(keyringId);
       await runtime.controllers.accounts.setActiveAccount({

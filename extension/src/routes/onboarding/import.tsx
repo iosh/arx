@@ -27,6 +27,13 @@ export const Route = createFileRoute("/onboarding/import")({
   },
 });
 
+const requireOnboardingPassword = (password: string | null): string => {
+  if (!password) {
+    throw new Error("Onboarding password is required");
+  }
+  return password;
+};
+
 function ImportSetupRoute() {
   const router = useRouter();
   const search = Route.useSearch();
@@ -49,7 +56,6 @@ function ImportSetupRoute() {
   const handleImport = async (value: string, alias?: string) => {
     const vaultInitialized = snapshot?.vault.initialized ?? false;
     if (!vaultInitialized && !password) return;
-    const passwordParam = password ?? undefined;
 
     if (!value.trim()) {
       setError("Enter a recovery phrase or private key");
@@ -60,27 +66,42 @@ function ImportSetupRoute() {
     setError(null);
 
     try {
-      if (forcedMode === "mnemonic") {
-        const words = splitMnemonicWords(value);
-        await uiClient.onboarding.importWalletFromMnemonic({ password: passwordParam, words, alias });
-      } else if (forcedMode === "privateKey") {
-        await uiClient.onboarding.importWalletFromPrivateKey({
-          password: passwordParam,
-          privateKey: sanitizePrivateKeyInput(value),
+      const getOnboardingPassword = () => requireOnboardingPassword(password);
+
+      const importMnemonic = async (words: string[]) => {
+        if (vaultInitialized) {
+          return await uiClient.keyrings.importMnemonic({ words, alias });
+        }
+        return await uiClient.onboarding.importWalletFromMnemonic({
+          password: getOnboardingPassword(),
+          words,
           alias,
         });
+      };
+
+      const importPrivateKey = async (privateKey: string) => {
+        if (vaultInitialized) {
+          return await uiClient.keyrings.importPrivateKey({ privateKey, alias });
+        }
+        return await uiClient.onboarding.importWalletFromPrivateKey({
+          password: getOnboardingPassword(),
+          privateKey,
+          alias,
+        });
+      };
+
+      if (forcedMode === "mnemonic") {
+        const words = splitMnemonicWords(value);
+        await importMnemonic(words);
+      } else if (forcedMode === "privateKey") {
+        await importPrivateKey(sanitizePrivateKeyInput(value));
       } else {
         const words = splitMnemonicWords(value);
         const looksLikeMnemonic = words.length >= 11;
 
-        const importAsMnemonic = async () =>
-          uiClient.onboarding.importWalletFromMnemonic({ password: passwordParam, words, alias });
-        const importAsPrivateKey = async () =>
-          uiClient.onboarding.importWalletFromPrivateKey({
-            password: passwordParam,
-            privateKey: sanitizePrivateKeyInput(value),
-            alias,
-          });
+        const normalizedPrivateKey = sanitizePrivateKeyInput(value);
+        const importAsMnemonic = async () => await importMnemonic(words);
+        const importAsPrivateKey = async () => await importPrivateKey(normalizedPrivateKey);
 
         const primary = looksLikeMnemonic ? importAsMnemonic : importAsPrivateKey;
         const secondary = looksLikeMnemonic ? importAsPrivateKey : importAsMnemonic;

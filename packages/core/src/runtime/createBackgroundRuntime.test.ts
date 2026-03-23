@@ -6,7 +6,9 @@ import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { ChainDefinitionEntity } from "../storage/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
+import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
+import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -93,13 +95,14 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
       onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
     },
     accountCodecs: runtime.services.accountCodecs,
-    session: {
-      unlock: runtime.services.session.unlock,
-      vault: runtime.services.session.vault,
-      withVaultMetaPersistHold: runtime.services.session.withVaultMetaPersistHold,
-      persistVaultMeta: runtime.services.session.persistVaultMeta,
-    },
-    keyrings: runtime.services.keyring,
+    session: createUiSessionAccess({
+      accounts: runtime.controllers.accounts,
+      session: runtime.services.session,
+      keyring: runtime.services.keyring,
+    }),
+    keyrings: createUiKeyringsAccess({
+      keyring: runtime.services.keyring,
+    }),
     attention: {
       getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),
       onStateChanged: () => () => {},
@@ -256,6 +259,44 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(runtime.services.keyring.getNamespaces()[0]?.defaultChainRef).toBe(ALT_CHAIN.chainRef);
     expect(runtime.services.keyring.getNamespaces()[0]).not.toBe(overriddenKeyringNamespaces[0]);
 
+    runtime.lifecycle.destroy();
+  });
+
+  it("resolves unlocked session state through ui.session.unlock", async () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await runtime.services.session.vault.initialize({ password: "test" });
+
+    const handlers = createHandlersForRuntime(runtime);
+    const result = await handlers["ui.session.unlock"]({ password: "test" });
+
+    expect(result).toMatchObject({
+      isUnlocked: true,
+    });
     runtime.lifecycle.destroy();
   });
 

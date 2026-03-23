@@ -56,12 +56,14 @@ describe("ui actions", () => {
     void actions.onboarding.openTab({ reason: "reason" });
     void actions.onboarding.generateMnemonic();
     void actions.onboarding.createWalletFromMnemonic({
+      password: "pw",
       words: Array.from<string>({ length: 12 }).fill("word"),
     });
     void actions.onboarding.importWalletFromMnemonic({
+      password: "pw",
       words: Array.from<string>({ length: 12 }).fill("word"),
     });
-    void actions.onboarding.importWalletFromPrivateKey({ privateKey: "deadbeef" });
+    void actions.onboarding.importWalletFromPrivateKey({ password: "pw", privateKey: "deadbeef" });
 
     void actions.accounts.switchActive({ chainRef: "eip155:1" });
     void actions.accounts.switchActive({ chainRef: "eip155:1", accountKey: null });

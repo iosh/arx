@@ -45,15 +45,17 @@ export const buildUiSnapshot = (deps: {
   const networks = chains.buildWalletNetworksSnapshot();
   const resolvedChain = chain.chainRef;
   const uiBindings = namespaceBindings.getUi(chain.namespace);
+  const sessionState = session.getState();
+  const unlocked = sessionState.isUnlocked;
 
-  const accountList = session.unlock.isUnlocked()
+  const accountList = unlocked
     ? accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
         accountKey: account.accountKey,
         canonicalAddress: account.canonicalAddress,
         displayAddress: account.displayAddress,
       }))
     : [];
-  const activeAccount = session.unlock.isUnlocked()
+  const activeAccount = unlocked
     ? accounts.getActiveAccountForNamespace({ namespace: chain.namespace, chainRef: resolvedChain })
     : null;
 
@@ -79,7 +81,7 @@ export const buildUiSnapshot = (deps: {
     .filter((meta) => meta.type === "hd" && meta.needsBackup === true)
     .map((meta) => ({
       keyringId: meta.id,
-      alias: meta.name ?? null,
+      alias: meta.alias ?? null,
     }));
 
   const snapshot: UiSnapshot = {
@@ -118,15 +120,15 @@ export const buildUiSnapshot = (deps: {
         : null,
     },
     session: {
-      isUnlocked: session.unlock.isUnlocked(),
-      autoLockDurationMs: session.unlock.getState().timeoutMs,
-      nextAutoLockAt: session.unlock.getState().nextAutoLockAt,
+      isUnlocked: unlocked,
+      autoLockDurationMs: sessionState.timeoutMs,
+      nextAutoLockAt: sessionState.nextAutoLockAt,
     },
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
     permissions: permissions.buildUiPermissionsSnapshot(),
     vault: {
-      initialized: session.vault.getStatus().hasEnvelope,
+      initialized: session.hasInitializedVault(),
     },
     warnings: {
       hdKeyringsNeedingBackup: keyringWarnings,

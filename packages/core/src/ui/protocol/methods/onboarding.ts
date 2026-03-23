@@ -19,8 +19,13 @@ const GenerateMnemonicResultSchema = z.strictObject({
   words: MnemonicWordsSchema,
 });
 
+const PasswordSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, { message: "Password cannot be empty." });
+
 const CreateWalletFromMnemonicParamsSchema = z.strictObject({
-  password: z.string().min(1).optional(),
+  password: PasswordSchema,
   words: MnemonicWordsSchema,
   alias: z.string().min(1).optional(),
   skipBackup: z.boolean().optional(),
@@ -33,7 +38,7 @@ const CreateWalletFromMnemonicResultSchema = z.strictObject({
 });
 
 const ImportWalletFromMnemonicParamsSchema = z.strictObject({
-  password: z.string().min(1).optional(),
+  password: PasswordSchema,
   words: MnemonicWordsSchema,
   alias: z.string().min(1).optional(),
   namespace: z.string().min(1).optional(),
@@ -47,7 +52,7 @@ const KeyringAccountSchema = z.strictObject({
 });
 
 const ImportWalletFromPrivateKeyParamsSchema = z.strictObject({
-  password: z.string().min(1).optional(),
+  password: PasswordSchema,
   privateKey: z.string().min(1),
   alias: z.string().min(1).optional(),
   namespace: z.string().min(1).optional(),

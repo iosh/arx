@@ -27,6 +27,25 @@ import type {
   VaultKeyringEntry,
 } from "./types.js";
 
+export type ConfirmNewMnemonicParams = {
+  mnemonic: string;
+  alias?: string;
+  skipBackup?: boolean;
+  namespace?: string;
+};
+
+export type ImportMnemonicParams = {
+  mnemonic: string;
+  alias?: string;
+  namespace?: string;
+};
+
+export type ImportPrivateKeyParams = {
+  privateKey: string | Uint8Array;
+  alias?: string;
+  namespace?: string;
+};
+
 export class KeyringService {
   #options: KeyringServiceOptions;
   #namespacesConfig: Map<string, NamespaceConfig>;
@@ -98,27 +117,27 @@ export class KeyringService {
     return BIP39Generate(wordlist, strength);
   }
 
-  async confirmNewMnemonic(mnemonic: string, opts?: { name?: string; skipBackup?: boolean; namespace?: string }) {
+  async confirmNewMnemonic(params: ConfirmNewMnemonicParams) {
     await this.#waitForHydration();
-    return this.#importMnemonic(mnemonic, { ...opts, fresh: true });
+    return this.#createHdKeyringFromMnemonic(params);
   }
 
-  async importMnemonic(mnemonic: string, opts?: { name?: string; namespace?: string }) {
+  async importMnemonic(params: ImportMnemonicParams) {
     await this.#waitForHydration();
-    return this.#importMnemonic(mnemonic, { ...opts, fresh: false });
+    return this.#createHdKeyringFromMnemonic(params);
   }
 
-  async importPrivateKey(privateKey: string | Uint8Array, opts?: { name?: string; namespace?: string }) {
+  async importPrivateKey(params: ImportPrivateKeyParams) {
     await this.#waitForHydration();
     this.#assertUnlocked();
 
-    const namespace = opts?.namespace ?? this.#defaultNamespace();
+    const namespace = params.namespace ?? this.#defaultNamespace();
     const config = this.#getConfig(namespace);
     const factory = config.factories["private-key"];
     if (!factory) throw new Error(`Namespace "${namespace}" does not support private-key keyring`);
 
     const instance = factory();
-    instance.loadFromPrivateKey(privateKey);
+    instance.loadFromPrivateKey(params.privateKey);
     const [account] = instance.getAccounts();
     if (!account) throw keyringErrors.secretUnavailable();
 
@@ -146,7 +165,7 @@ export class KeyringService {
     const meta: KeyringMetaRecord = KeyringMetaRecordSchema.parse({
       id: keyringId,
       type: "private-key",
-      name: opts?.name,
+      alias: params.alias,
       createdAt: now,
     });
 
@@ -155,7 +174,7 @@ export class KeyringService {
       address: canonical,
       keyringId,
       createdAt: now,
-      ...(opts?.name !== undefined ? { alias: opts.name } : {}),
+      alias: params.alias,
     });
 
     await this.#persistNewKeyring({
@@ -224,11 +243,11 @@ export class KeyringService {
     await this.#setAccountHidden(accountKey, false);
   }
 
-  async renameKeyring(keyringId: string, name: string): Promise<void> {
+  async renameKeyring(keyringId: string, alias: string): Promise<void> {
     const meta = this.#keyringMetas.get(keyringId);
     if (!meta) return;
 
-    const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, name });
+    const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, alias });
     await this.#options.keyringMetas.upsert(next);
     this.#keyringMetas.set(keyringId, next);
   }
@@ -391,18 +410,15 @@ export class KeyringService {
     }
   }
 
-  async #importMnemonic(
-    mnemonic: string,
-    opts: { name?: string; skipBackup?: boolean; namespace?: string; fresh: boolean },
-  ) {
+  async #createHdKeyringFromMnemonic(params: ConfirmNewMnemonicParams) {
     this.#assertUnlocked();
 
-    const normalized = mnemonic.trim().replace(/\s+/g, " ");
+    const normalized = params.mnemonic.trim().replace(/\s+/g, " ");
     if (!validateMnemonic(normalized, wordlist)) {
       throw keyringErrors.invalidMnemonic();
     }
 
-    const namespace = opts.namespace ?? this.#defaultNamespace();
+    const namespace = params.namespace ?? this.#defaultNamespace();
 
     const existingHd = this.#payload.keyrings.find(
       (entry) =>
@@ -444,8 +460,8 @@ export class KeyringService {
     const meta: KeyringMetaRecord = KeyringMetaRecordSchema.parse({
       id: keyringId,
       type: "hd",
-      name: opts.name,
-      needsBackup: !opts.skipBackup,
+      alias: params.alias,
+      needsBackup: !params.skipBackup,
       nextDerivationIndex: 1,
       createdAt: now,
     });
@@ -456,7 +472,7 @@ export class KeyringService {
       keyringId,
       createdAt: now,
       derivationIndex: 0,
-      ...(opts?.name !== undefined ? { alias: opts.name } : {}),
+      alias: params.alias,
     });
 
     await this.#persistNewKeyring({
@@ -630,7 +646,7 @@ export class KeyringService {
     address: string;
     keyringId: string;
     createdAt: number;
-    alias?: string;
+    alias?: string | undefined;
     derivationIndex?: number;
   }): AccountRecord {
     const config = this.#getConfig(params.namespace);

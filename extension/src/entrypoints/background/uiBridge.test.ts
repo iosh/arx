@@ -22,7 +22,7 @@ import {
   type UiPortEnvelope,
   type UiSnapshot,
 } from "@arx/core/ui";
-import { createUiRuntimeAccess } from "@arx/core/ui/server";
+import { createUiKeyringsAccess, createUiRuntimeAccess, createUiSessionAccess } from "@arx/core/ui/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
@@ -164,6 +164,11 @@ class FakeUnlock {
 
   scheduleAutoLock(_ms?: number) {
     // no-op for tests
+  }
+
+  setAutoLockDuration(durationMs: number) {
+    this.#state = { ...this.#state, timeoutMs: durationMs };
+    for (const fn of this.#stateHandlers) fn(this.getState());
   }
 
   onUnlocked(fn: (payload: UnlockUnlockedPayload) => void) {
@@ -575,6 +580,17 @@ const createUiAccessForTest = (input: {
     chainViews: Record<string, unknown>;
     permissionViews: { buildUiPermissionsSnapshot: () => unknown };
   };
+  const sessionAccess = {
+    ...createUiSessionAccess({
+      accounts: input.controllers.accounts,
+      session: input.session as BackgroundSessionServices,
+      keyring: input.keyring,
+    }),
+    persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
+  };
+  const keyringsAccess = createUiKeyringsAccess({
+    keyring: input.keyring,
+  });
 
   return createUiRuntimeAccess({
     accounts: input.controllers.accounts,
@@ -615,13 +631,8 @@ const createUiAccessForTest = (input: {
       onPreferencesChanged: (listener: () => void) => input.networkPreferences.subscribeChanged(() => listener()),
     } as never,
     accountCodecs,
-    session: {
-      unlock: input.session.unlock,
-      vault: input.session.vault,
-      withVaultMetaPersistHold: input.session.withVaultMetaPersistHold,
-      persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
-    },
-    keyrings: input.keyring,
+    session: sessionAccess,
+    keyrings: keyringsAccess,
     attention: {
       getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
       onStateChanged: input.subscribeAttentionStateChanged,
@@ -871,7 +882,7 @@ describe("uiBridge", () => {
     expect(res.words).toHaveLength(12);
   });
 
-  it("onboarding.createWalletFromMnemonic supports setupIncomplete and holds snapshot broadcast", async () => {
+  it("onboarding.createWalletFromMnemonic initializes onboarding wallet state and holds snapshot broadcast", async () => {
     // Default test setup starts with a vault that has ciphertext but no accounts.
     const id = crypto.randomUUID();
     const words = TEST_MNEMONIC.split(" ");
@@ -880,7 +891,7 @@ describe("uiBridge", () => {
       type: "ui:request",
       id,
       method: "ui.onboarding.createWalletFromMnemonic",
-      params: { words, skipBackup: true },
+      params: { password: PASSWORD, words, skipBackup: true },
     } satisfies UiPortEnvelope);
 
     const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);

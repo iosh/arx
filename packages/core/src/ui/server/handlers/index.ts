@@ -30,7 +30,7 @@ export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
   return {
     ...createSnapshotHandlers(buildSnapshot),
     ...createBalancesHandlers({ chains, session, namespaceBindings }),
-    ...createSessionHandlers({ session, keyrings }),
+    ...createSessionHandlers({ session }),
     ...createOnboardingHandlers({ accounts, chains, accountCodecs, session, keyrings, platform }),
     ...createAccountsHandlers({ accounts }),
     ...createNetworksHandlers({ chains }, toChainSnapshot),

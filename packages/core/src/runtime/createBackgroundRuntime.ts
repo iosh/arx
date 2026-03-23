@@ -34,6 +34,8 @@ import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
 import type { UiError } from "../ui/protocol/envelopes.js";
 import { createUiRuntimeAccess } from "../ui/server/access.js";
+import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
+import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import type { UiPlatformAdapter, UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
@@ -158,13 +160,14 @@ const createBackgroundRuntimeUiDeps = (
     onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
   },
   accountCodecs: runtime.services.accountCodecs,
-  session: {
-    unlock: runtime.services.session.unlock,
-    vault: runtime.services.session.vault,
-    withVaultMetaPersistHold: runtime.services.session.withVaultMetaPersistHold,
-    persistVaultMeta: runtime.services.session.persistVaultMeta,
-  },
-  keyrings: runtime.services.keyring,
+  session: createUiSessionAccess({
+    accounts: runtime.controllers.accounts,
+    session: runtime.services.session,
+    keyring: runtime.services.keyring,
+  }),
+  keyrings: createUiKeyringsAccess({
+    keyring: runtime.services.keyring,
+  }),
   attention: {
     getSnapshot: () => runtime.services.attention.getSnapshot(),
     onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),

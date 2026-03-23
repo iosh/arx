@@ -41,7 +41,7 @@ describe("KeyringMetasService", () => {
     const record = KeyringMetaRecordSchema.parse({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       type: "hd",
-      name: "Main",
+      alias: "Main",
       needsBackup: true,
       createdAt: 1000,
     });

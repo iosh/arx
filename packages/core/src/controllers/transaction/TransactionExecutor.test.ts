@@ -14,6 +14,9 @@ const REQUEST_CONTEXT = {
   requestId: "request-1",
 };
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
+const createReceiptTrackingStub = () => ({
+  fetchReceipt: vi.fn(async () => null),
+});
 
 const toMeta = (record: TransactionRecord, from: string): TransactionMeta => ({
   id: record.id,
@@ -328,6 +331,7 @@ describe("TransactionExecutor", () => {
       registry: {
         get: () => ({
           deriveRequestForChain,
+          receiptTracking: createReceiptTrackingStub(),
         }),
       } as never,
       service: {

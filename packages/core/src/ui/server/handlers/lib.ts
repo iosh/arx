@@ -8,7 +8,7 @@ import { zeroize } from "../../../utils/bytes.js";
 import type { UiRuntimeDeps } from "../types.js";
 
 export const assertUnlocked = (session: UiRuntimeDeps["session"]) => {
-  if (!session.unlock.isUnlocked()) {
+  if (!session.isUnlocked()) {
     throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
   }
 };
@@ -38,16 +38,6 @@ export const validateBip39Mnemonic = (mnemonic: string): void => {
   if (!validateMnemonic(mnemonic, wordlist)) {
     throw keyringErrors.invalidMnemonic();
   }
-};
-
-export const requireOnboardingPassword = (password: string | undefined): string => {
-  if (!password || password.trim().length === 0) {
-    throw arxError({
-      reason: ArxReasons.RpcInvalidParams,
-      message: "Password cannot be empty",
-    });
-  }
-  return password;
 };
 
 export const parsePrivateKeyHex = (value: string): string => {
@@ -91,6 +81,6 @@ export const toUiKeyringMeta = (meta: KeyringMetaRecord) => ({
   id: meta.id,
   type: meta.type,
   createdAt: meta.createdAt,
-  alias: meta.name,
+  alias: meta.alias,
   ...(meta.type === "hd" ? { backedUp: meta.needsBackup !== true, derivedCount: meta.nextDerivationIndex ?? 0 } : {}),
 });

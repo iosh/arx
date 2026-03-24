@@ -203,7 +203,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         await Promise.all(pending.map((item) => active.runtime.controllers.approvals.cancel({ id: item.id, reason })));
       },
       getPendingApprovalCount: () => active.runtime.controllers.approvals.getState().pending.length,
-      hasInitializedVault: () => active.runtime.services.session.vault.getStatus().hasEnvelope,
+      hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),
     };
   };
 

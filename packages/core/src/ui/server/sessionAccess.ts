@@ -3,6 +3,7 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { UnlockReason, UnlockState } from "../../controllers/unlock/types.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
+import type { SessionStatus, SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { UiConfirmNewMnemonicParams, UiImportMnemonicParams, UiImportPrivateKeyParams } from "./keyringsAccess.js";
 
 export type UiCreateWalletFromMnemonicParams = UiConfirmNewMnemonicParams & {
@@ -18,7 +19,8 @@ export type UiImportWalletFromPrivateKeyParams = UiImportPrivateKeyParams & {
 };
 
 export type UiSessionAccess = {
-  getState: () => UnlockState;
+  getStatus: () => SessionStatus;
+  getUnlockState: () => UnlockState;
   isUnlocked: () => boolean;
   hasInitializedVault: () => boolean;
   unlock: (params: { password: string }) => Promise<UnlockState>;
@@ -39,6 +41,7 @@ export type UiSessionAccess = {
 export type CreateUiSessionAccessDeps = {
   accounts: Pick<AccountController, "getState">;
   session: BackgroundSessionServices;
+  sessionStatus: SessionStatusService;
   keyring: KeyringService;
 };
 
@@ -47,8 +50,14 @@ const hasAnyOwnedAccounts = (accounts: CreateUiSessionAccessDeps["accounts"]): b
   return Object.values(state.namespaces).some((namespace) => namespace.accountKeys.length > 0);
 };
 
-export const createUiSessionAccess = ({ accounts, session, keyring }: CreateUiSessionAccessDeps): UiSessionAccess => {
-  const getState: UiSessionAccess["getState"] = () => session.unlock.getState();
+export const createUiSessionAccess = ({
+  accounts,
+  session,
+  sessionStatus,
+  keyring,
+}: CreateUiSessionAccessDeps): UiSessionAccess => {
+  const getStatus: UiSessionAccess["getStatus"] = () => sessionStatus.getStatus();
+  const getUnlockState: UiSessionAccess["getUnlockState"] = () => session.unlock.getState();
 
   const waitForReady = async () => {
     await keyring.waitForReady();
@@ -57,7 +66,7 @@ export const createUiSessionAccess = ({ accounts, session, keyring }: CreateUiSe
   const unlock: UiSessionAccess["unlock"] = async ({ password }) => {
     await session.unlock.unlock({ password });
     await waitForReady();
-    return getState();
+    return getUnlockState();
   };
 
   const runOnboardingWalletFlow = async <T>(password: string, run: () => Promise<T>): Promise<T> => {
@@ -81,24 +90,25 @@ export const createUiSessionAccess = ({ accounts, session, keyring }: CreateUiSe
   };
 
   return {
-    getState,
-    isUnlocked: () => session.unlock.isUnlocked(),
-    hasInitializedVault: () => session.vault.getStatus().hasEnvelope,
+    getStatus,
+    getUnlockState,
+    isUnlocked: () => sessionStatus.isUnlocked(),
+    hasInitializedVault: () => sessionStatus.hasInitializedVault(),
     unlock,
     lock: (reason) => {
       session.unlock.lock(reason);
-      return getState();
+      return getUnlockState();
     },
     resetAutoLockTimer: () => {
       session.unlock.scheduleAutoLock();
-      return getState();
+      return getUnlockState();
     },
     setAutoLockDuration: (durationMs) => {
       session.unlock.setAutoLockDuration(durationMs);
-      const state = getState();
+      const state = getUnlockState();
       return { autoLockDurationMs: state.timeoutMs, nextAutoLockAt: state.nextAutoLockAt };
     },
-    onStateChanged: (listener) => session.unlock.onStateChanged(() => listener()),
+    onStateChanged: (listener) => session.onStateChanged(listener),
     createWalletFromMnemonic: async ({ password, ...keyringParams }) =>
       await runOnboardingWalletFlow(password, async () => await keyring.confirmNewMnemonic(keyringParams)),
     importWalletFromMnemonic: async ({ password, ...keyringParams }) =>

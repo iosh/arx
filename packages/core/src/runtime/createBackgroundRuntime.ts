@@ -19,11 +19,14 @@ import {
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
 } from "../rpc/index.js";
+import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import type { createChainViewsService } from "../services/runtime/chainViews/index.js";
+import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
+import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
@@ -110,6 +113,9 @@ export type BackgroundRuntime = {
     namespaceBindings: NamespaceRuntimeBindingsRegistry;
     namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
     session: BackgroundSessionServices;
+    sessionStatus: SessionStatusService;
+    accountSigning: AccountSigningService;
+    keyringExport: KeyringExportService;
     keyring: KeyringService;
   };
   rpc: {
@@ -163,10 +169,12 @@ const createBackgroundRuntimeUiDeps = (
   session: createUiSessionAccess({
     accounts: runtime.controllers.accounts,
     session: runtime.services.session,
+    sessionStatus: runtime.services.sessionStatus,
     keyring: runtime.services.keyring,
   }),
   keyrings: createUiKeyringsAccess({
     keyring: runtime.services.keyring,
+    keyringExport: runtime.services.keyringExport,
   }),
   attention: {
     getSnapshot: () => runtime.services.attention.getSnapshot(),
@@ -327,6 +335,9 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       namespaceBindings: runtimeSupportPhase.namespaceBindings,
       namespaceRuntimeSupport: runtimeSupportPhase.namespaceRuntimeSupport,
       session: sessionPhase.sessionLayer.session,
+      sessionStatus: sessionPhase.sessionStatus,
+      accountSigning: sessionPhase.accountSigning,
+      keyringExport: sessionPhase.keyringExport,
       keyring: sessionPhase.keyringService,
     },
     rpc: {

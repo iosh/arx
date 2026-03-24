@@ -48,7 +48,7 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
   },
   runtime: {
     clientFactory: EIP155_CLIENT_FACTORY,
-    createSigner: ({ keyring }) => createEip155Signer({ keyring }),
+    createSigner: ({ accountSigning }) => createEip155Signer({ accountSigning }),
     createApprovalBindings: ({ signer }) => {
       const typedSigner = signer as Pick<Eip155Signer, "signPersonalMessage" | "signTypedData">;
       return {

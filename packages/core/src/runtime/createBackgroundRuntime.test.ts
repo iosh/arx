@@ -98,10 +98,12 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
     session: createUiSessionAccess({
       accounts: runtime.controllers.accounts,
       session: runtime.services.session,
+      sessionStatus: runtime.services.sessionStatus,
       keyring: runtime.services.keyring,
     }),
     keyrings: createUiKeyringsAccess({
       keyring: runtime.services.keyring,
+      keyringExport: runtime.services.keyringExport,
     }),
     attention: {
       getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),

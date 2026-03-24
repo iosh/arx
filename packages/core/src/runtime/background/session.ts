@@ -38,6 +38,7 @@ export type BackgroundSessionServices = {
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
   persistVaultMeta(): Promise<void>;
   withVaultMetaPersistHold<T>(fn: () => Promise<T>): Promise<T>;
+  onStateChanged(listener: () => void): () => void;
 };
 
 type SessionLayerParams = {
@@ -106,6 +107,17 @@ export const initSessionLayer = ({
 
   let vaultMetaPersistHold = 0;
   let vaultMetaPersistPending = false;
+  const stateChangedListeners = new Set<() => void>();
+
+  const notifySessionStateChanged = () => {
+    for (const listener of stateChangedListeners) {
+      try {
+        listener();
+      } catch (error) {
+        storageLogger("session: failed to notify state listener", error);
+      }
+    }
+  };
 
   const getOrInitVaultInitializedAt = () => {
     if (vaultInitializedAt === null) {
@@ -213,6 +225,7 @@ export const initSessionLayer = ({
       if (!getIsHydrating()) {
         await persistVaultMetaImmediate();
       }
+      notifySessionStateChanged();
       return envelope;
     },
     async unlock(params) {
@@ -241,6 +254,7 @@ export const initSessionLayer = ({
     importEnvelope(value) {
       baseVault.importEnvelope(value);
       scheduleVaultMetaPersist();
+      notifySessionStateChanged();
     },
     getEnvelope() {
       return baseVault.getEnvelope();
@@ -323,6 +337,7 @@ export const initSessionLayer = ({
         }
         lastUnlockState = next;
         scheduleVaultMetaPersist();
+        notifySessionStateChanged();
       }),
     );
   };
@@ -403,6 +418,12 @@ export const initSessionLayer = ({
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
     persistVaultMeta: () => persistVaultMetaImmediate(),
     withVaultMetaPersistHold,
+    onStateChanged: (listener) => {
+      stateChangedListeners.add(listener);
+      return () => {
+        stateChangedListeners.delete(listener);
+      };
+    },
   };
 
   return {

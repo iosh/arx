@@ -79,7 +79,14 @@ const createDeps = (options?: {
     buildUiPermissionsSnapshot: () => ({ origins: {} }),
   },
   session: {
-    getState: () => ({
+    getStatus: () => ({
+      phase: "uninitialized" as const,
+      vaultInitialized: false,
+      isUnlocked: false,
+      autoLockDurationMs: 900_000,
+      nextAutoLockAt: null,
+    }),
+    getUnlockState: () => ({
       isUnlocked: false,
       lastUnlockedAt: null,
       timeoutMs: 900_000,
@@ -151,6 +158,37 @@ const createDeps = (options?: {
 });
 
 describe("buildUiSnapshot approvals fallback", () => {
+  it("derives session and vault facts from the session status", () => {
+    const deps = createDeps();
+    deps.session.getStatus = () => ({
+      phase: "locked",
+      vaultInitialized: true,
+      isUnlocked: false,
+      autoLockDurationMs: 123_000,
+      nextAutoLockAt: 456_000,
+    });
+    deps.session.getUnlockState = () => ({
+      isUnlocked: true,
+      lastUnlockedAt: 999,
+      timeoutMs: 900_000,
+      nextAutoLockAt: 999_999,
+    });
+    deps.session.hasInitializedVault = () => false;
+
+    const snapshot = buildUiSnapshot(deps);
+
+    expect(snapshot.session).toEqual({
+      isUnlocked: false,
+      autoLockDurationMs: 123_000,
+      nextAutoLockAt: 456_000,
+    });
+    expect(snapshot.vault).toEqual({
+      initialized: true,
+    });
+    expect(snapshot.accounts.list).toEqual([]);
+    expect(snapshot.accounts.active).toBeNull();
+  });
+
   it("keeps pending approvals visible when a record is missing or a fallback summary is returned", () => {
     const firstRecord = createApprovalRecord();
     const approvalState: ApprovalState = {

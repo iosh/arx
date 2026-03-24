@@ -3,8 +3,8 @@ import { keyringErrors } from "../../keyring/errors.js";
 import type { HierarchicalDeterministicKeyring, SimpleKeyring } from "../../keyring/types.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
-import type { NamespaceConfig } from "./namespaces.js";
 import { decodePayloadAndZeroize, encodePayload } from "./keyring-utils.js";
+import type { NamespaceConfig } from "./namespaces.js";
 import {
   type RuntimeKeyringReconciliationResult,
   reconcileRuntimeKeyringState,
@@ -377,11 +377,7 @@ export class RuntimeKeyringState {
     }
   }
 
-  #buildRuntimeKeyring(
-    entry: VaultKeyringEntry,
-    defaultNamespace: string,
-    accounts: AccountRecord[],
-  ): RuntimeKeyring {
+  #buildRuntimeKeyring(entry: VaultKeyringEntry, defaultNamespace: string, accounts: AccountRecord[]): RuntimeKeyring {
     try {
       this.#assertHydrationMetadata(entry);
 
@@ -425,10 +421,7 @@ export class RuntimeKeyringState {
     }
   }
 
-  #getRuntimeKeyringFactory(
-    entry: VaultKeyringEntry,
-    config: NamespaceConfig,
-  ): RuntimeKeyringFactory {
+  #getRuntimeKeyringFactory(entry: VaultKeyringEntry, config: NamespaceConfig): RuntimeKeyringFactory {
     const factory =
       entry.type === "hd"
         ? config.factories.hd

@@ -18,6 +18,7 @@ const UNKNOWN_ORIGIN = "unknown://";
 
 export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): ProviderRuntimeAccess => {
   const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
+  const getSessionStatus = () => runtime.services.sessionStatus.getStatus();
 
   const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {
     const providerMeta = runtime.services.chainViews.buildProviderMeta(namespace);
@@ -41,7 +42,7 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
   };
 
   const buildSnapshot = (namespace: string): ProviderRuntimeSnapshot => {
-    return buildSnapshotFromState(namespace, runtime.services.session.unlock.isUnlocked());
+    return buildSnapshotFromState(namespace, getSessionStatus().isUnlocked);
   };
 
   const getActiveChainByNamespace = () => runtime.services.networkPreferences.getActiveChainByNamespace();
@@ -128,7 +129,7 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     return listPermittedAccountsForState({
       origin,
       chainRef,
-      isUnlocked: runtime.services.session.unlock.isUnlocked(),
+      isUnlocked: getSessionStatus().isUnlocked,
     });
   };
 
@@ -136,7 +137,7 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     namespace,
     origin,
   }: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState> => {
-    const isUnlocked = runtime.services.session.unlock.isUnlocked();
+    const isUnlocked = getSessionStatus().isUnlocked;
     const snapshot = buildSnapshotFromState(namespace, isUnlocked);
 
     return {

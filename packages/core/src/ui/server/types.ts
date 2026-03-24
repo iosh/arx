@@ -14,6 +14,7 @@ import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiKeyringsAccess } from "./keyringsAccess.js";
 import type { UiSessionAccess } from "./sessionAccess.js";
 
+export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
 export type { UiSessionAccess } from "./sessionAccess.js";
 

@@ -143,6 +143,9 @@ const makeRuntime = () => {
           onStateChanged: onUnlockStateChanged,
         },
       },
+      sessionStatus: {
+        hasInitializedVault: () => true,
+      },
       namespaceBindings: {},
       keyring: {},
     },

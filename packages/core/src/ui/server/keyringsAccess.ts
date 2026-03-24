@@ -4,6 +4,7 @@ import type {
   ImportPrivateKeyParams,
   KeyringService,
 } from "../../runtime/keyring/KeyringService.js";
+import type { KeyringExportService } from "../../services/runtime/keyringExport.js";
 
 export type UiConfirmNewMnemonicParams = ConfirmNewMnemonicParams;
 export type UiImportMnemonicParams = ImportMnemonicParams;
@@ -31,13 +32,15 @@ export type UiKeyringsAccess = Pick<
 
 export type CreateUiKeyringsAccessDeps = {
   keyring: KeyringService;
+  keyringExport: Pick<KeyringExportService, "exportMnemonic" | "exportPrivateKeyByAccountKey">;
 };
 
-export const createUiKeyringsAccess = ({ keyring }: CreateUiKeyringsAccessDeps): UiKeyringsAccess => ({
+export const createUiKeyringsAccess = ({ keyring, keyringExport }: CreateUiKeyringsAccessDeps): UiKeyringsAccess => ({
   confirmNewMnemonic: (params) => keyring.confirmNewMnemonic(params),
   deriveAccount: (keyringId) => keyring.deriveAccount(keyringId),
-  exportMnemonic: (keyringId, password) => keyring.exportMnemonic(keyringId, password),
-  exportPrivateKeyByAccountKey: (accountKey, password) => keyring.exportPrivateKeyByAccountKey(accountKey, password),
+  exportMnemonic: (keyringId, password) => keyringExport.exportMnemonic(keyringId, password),
+  exportPrivateKeyByAccountKey: (accountKey, password) =>
+    keyringExport.exportPrivateKeyByAccountKey(accountKey, password),
   generateMnemonic: (wordCount) => keyring.generateMnemonic(wordCount),
   getAccountsByKeyring: (keyringId, includeHidden) => keyring.getAccountsByKeyring(keyringId, includeHidden),
   getKeyrings: () => keyring.getKeyrings(),

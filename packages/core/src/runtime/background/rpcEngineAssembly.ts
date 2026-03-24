@@ -93,7 +93,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
   }) as unknown as Middleware;
 
   const accessPolicyGuardDeps: Parameters<typeof createAccessPolicyGuardMiddleware>[0] = {
-    isUnlocked: () => runtime.services.session.unlock.isUnlocked(),
+    isUnlocked: () => runtime.services.sessionStatus.isUnlocked(),
     isInternalOrigin: envHooks.isInternalOrigin,
     requestAttention: (args) => {
       safeRequestAttention(runtime.services.attention as AttentionService, {

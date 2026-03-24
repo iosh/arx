@@ -18,9 +18,10 @@ describe("eip155 signer (vectors)", () => {
     const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
-    const keyring = {
-      waitForReady: async () => {},
-      hasAccountKey: (key: string) => key === accountKey,
+    const accountSigning = {
+      assertAccountUnlocked: async (key: string) => {
+        expect(key).toBe(accountKey);
+      },
       signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
         expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
@@ -28,7 +29,7 @@ describe("eip155 signer (vectors)", () => {
       },
     };
 
-    const signer = createEip155Signer({ keyring });
+    const signer = createEip155Signer({ accountSigning });
 
     const message = "0x68656c6c6f20776f726c64" as const; // "hello world"
     const signature = await signer.signPersonalMessage({ accountKey, message });
@@ -46,9 +47,10 @@ describe("eip155 signer (vectors)", () => {
     const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
-    const keyring = {
-      waitForReady: async () => {},
-      hasAccountKey: (key: string) => key === accountKey,
+    const accountSigning = {
+      assertAccountUnlocked: async (key: string) => {
+        expect(key).toBe(accountKey);
+      },
       signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
         expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
@@ -56,7 +58,7 @@ describe("eip155 signer (vectors)", () => {
       },
     };
 
-    const signer = createEip155Signer({ keyring });
+    const signer = createEip155Signer({ accountSigning });
 
     const typedData = {
       domain: {
@@ -99,9 +101,10 @@ describe("eip155 signer (vectors)", () => {
     const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
-    const keyring = {
-      waitForReady: async () => {},
-      hasAccountKey: (key: string) => key === accountKey,
+    const accountSigning = {
+      assertAccountUnlocked: async (key: string) => {
+        expect(key).toBe(accountKey);
+      },
       signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
         expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
@@ -109,7 +112,7 @@ describe("eip155 signer (vectors)", () => {
       },
     };
 
-    const signer = createEip155Signer({ keyring });
+    const signer = createEip155Signer({ accountSigning });
 
     const to = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
     const context: TransactionSignContext = {
@@ -148,9 +151,10 @@ describe("eip155 signer (vectors)", () => {
     const accountKey = toAccountKeyFromAddress({ chainRef, address, accountCodecs });
     const secret = Hex.toBytes(privateKey);
 
-    const keyring = {
-      waitForReady: async () => {},
-      hasAccountKey: (key: string) => key === accountKey,
+    const accountSigning = {
+      assertAccountUnlocked: async (key: string) => {
+        expect(key).toBe(accountKey);
+      },
       signDigestByAccountKey: async ({ accountKey: key, digest }: { accountKey: string; digest: Uint8Array }) => {
         expect(key).toBe(accountKey);
         const sig = secp256k1.sign(digest, secret, { lowS: true });
@@ -158,7 +162,7 @@ describe("eip155 signer (vectors)", () => {
       },
     };
 
-    const signer = createEip155Signer({ keyring });
+    const signer = createEip155Signer({ accountSigning });
 
     const to = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
     const context: TransactionSignContext = {

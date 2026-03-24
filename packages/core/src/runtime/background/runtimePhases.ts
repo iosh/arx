@@ -12,10 +12,13 @@ import {
 } from "../../namespaces/index.js";
 import type { HandlerControllers } from "../../rpc/handlers/types.js";
 import type { RpcRegistry } from "../../rpc/index.js";
+import { type AccountSigningService, createAccountSigningService } from "../../services/runtime/accountSigning.js";
 import { ATTENTION_TOPICS, createAttentionService } from "../../services/runtime/attention/index.js";
 import { createChainActivationService } from "../../services/runtime/chainActivation/index.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
+import { createKeyringExportService, type KeyringExportService } from "../../services/runtime/keyringExport.js";
 import { createPermissionViewsService } from "../../services/runtime/permissionViews/index.js";
+import { createSessionStatusService, type SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../../services/store/networkPreferences/port.js";
@@ -69,6 +72,9 @@ export type RuntimeSessionPhase = {
   attention: ReturnType<typeof createAttentionService>;
   networkPreferences: NetworkPreferencesService;
   sessionLayer: SessionLayerResult;
+  sessionStatus: SessionStatusService;
+  accountSigning: AccountSigningService;
+  keyringExport: KeyringExportService;
   keyringService: KeyringService;
   runtimeLifecycle: ReturnType<typeof createRuntimeLifecycle>;
   engine: ReturnType<typeof initEngine>;
@@ -246,6 +252,17 @@ export const initializeRuntimeSessionPhase = ({
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
     ...(resolvedSessionOptions ? { sessionOptions: resolvedSessionOptions } : {}),
   });
+  const sessionStatus = createSessionStatusService({
+    unlock: sessionLayer.session.unlock,
+    vault: sessionLayer.session.vault,
+  });
+  const accountSigning = createAccountSigningService({
+    keyring: sessionLayer.keyringService,
+  });
+  const keyringExport = createKeyringExportService({
+    sessionStatus,
+    keyring: sessionLayer.keyringService,
+  });
 
   const engine = initEngine(engineOptions);
 
@@ -259,6 +276,9 @@ export const initializeRuntimeSessionPhase = ({
     attention,
     networkPreferences,
     sessionLayer,
+    sessionStatus,
+    accountSigning,
+    keyringExport,
     keyringService: sessionLayer.keyringService,
     runtimeLifecycle,
     engine,
@@ -295,7 +315,7 @@ export const initializeRuntimeSupportPhase = ({
     transactionRegistry: sessionPhase.transactionRegistry,
     rpcClients: rpcClientRegistry,
     chains: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
-    keyring: sessionPhase.keyringService,
+    accountSigning: sessionPhase.accountSigning,
     rpcClientNamespaces: rpcClientFactoryNamespaces,
   });
 

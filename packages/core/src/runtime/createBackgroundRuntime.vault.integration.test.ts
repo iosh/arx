@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { decodePayload, encodePayload } from "./keyring/keyring-utils.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   createChainMetadata,
@@ -9,6 +8,7 @@ import {
   TEST_INITIAL_TIME,
   TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
+import { decodePayload, encodePayload } from "./keyring/keyring-utils.js";
 
 const TEST_PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
 const CORRUPTED_PRIVATE_KEY = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -94,6 +94,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       const sessionAccess = createUiSessionAccess({
         accounts: context.runtime.controllers.accounts,
         session: context.runtime.services.session,
+        sessionStatus: context.runtime.services.sessionStatus,
         keyring: context.runtime.services.keyring,
       });
 
@@ -132,6 +133,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       const sessionAccess = createUiSessionAccess({
         accounts: context.runtime.controllers.accounts,
         session: context.runtime.services.session,
+        sessionStatus: context.runtime.services.sessionStatus,
         keyring: context.runtime.services.keyring,
       });
 

@@ -143,12 +143,10 @@ export const createKeyringsHandlers = (
     },
 
     "ui.keyrings.exportMnemonic": async (params) => {
-      assertUnlocked(deps.session);
       return { words: (await deps.keyrings.exportMnemonic(params.keyringId, params.password)).split(" ") };
     },
 
     "ui.keyrings.exportPrivateKey": async (params) => {
-      assertUnlocked(deps.session);
       const secret = await deps.keyrings.exportPrivateKeyByAccountKey(params.accountKey, params.password);
       const privateKey = withSensitiveBytes(secret, (bytes) => toPlainHex(bytes));
       return { privateKey };

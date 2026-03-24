@@ -5,8 +5,8 @@ import type { ChainAddressCodecRegistry } from "../chains/registry.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { RpcClientFactory, RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
-import type { KeyringService } from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
+import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import type { TransactionRequest } from "../transactions/types.js";
 
@@ -61,9 +61,7 @@ export type NamespaceSignerRegistry = {
 
 export type NamespaceRuntimeManifest = {
   clientFactory?: RpcClientFactory;
-  createSigner?: (params: {
-    keyring: Pick<KeyringService, "waitForReady" | "hasAccountKey" | "signDigestByAccountKey">;
-  }) => unknown;
+  createSigner?: (params: { accountSigning: AccountSigningService }) => unknown;
   createApprovalBindings?: (params: { signer: unknown }) => NamespaceApprovalBindings;
   createUiBindings?: (params: {
     rpcClients: Pick<RpcClientRegistry, "getClient">;

@@ -13,6 +13,7 @@ import type { HandlerControllers } from "@arx/core/rpc";
 import { createRpcErrorEncoder, createRpcRegistry } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
+import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
@@ -580,16 +581,26 @@ const createUiAccessForTest = (input: {
     chainViews: Record<string, unknown>;
     permissionViews: { buildUiPermissionsSnapshot: () => unknown };
   };
+  const sessionStatus = createSessionStatusService({
+    unlock: input.session.unlock,
+    vault: input.session.vault,
+  });
+  const keyringExport = createKeyringExportService({
+    sessionStatus,
+    keyring: input.keyring,
+  });
   const sessionAccess = {
     ...createUiSessionAccess({
       accounts: input.controllers.accounts,
       session: input.session as BackgroundSessionServices,
+      sessionStatus,
       keyring: input.keyring,
     }),
     persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
   };
   const keyringsAccess = createUiKeyringsAccess({
     keyring: input.keyring,
+    keyringExport,
   });
 
   return createUiRuntimeAccess({
@@ -724,6 +735,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   } as unknown as HandlerControllers;
 
   const session = {
+    onStateChanged: () => () => {},
     unlock,
     withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
     vault: {
@@ -923,6 +935,7 @@ describe("uiBridge", () => {
     const uiAccess = createUiAccessForTest({
       controllers,
       session: {
+        onStateChanged: () => () => {},
         unlock: new FakeUnlock(true),
         withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
         persistVaultMeta: vi.fn(async () => {}),
@@ -1042,6 +1055,21 @@ describe("uiBridge", () => {
     const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: "wrong-password" });
     expectError(exportAttempt.envelope, ArxReasons.VaultInvalidPassword);
     expect(spy).toHaveBeenCalledWith("wrong-password");
+    spy.mockRestore();
+  });
+
+  it("rejects key exports while locked before password verification", async () => {
+    const words = TEST_MNEMONIC.split(" ");
+    const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
+    const { keyringId } = expectResponse(createRes.envelope, createRes.id) as { keyringId: string };
+
+    unlock.setUnlocked(false);
+    vault.setUnlocked(false);
+
+    const spy = vi.spyOn(vault, "verifyPassword");
+    const exportAttempt = await send("ui.keyrings.exportMnemonic", { keyringId, password: PASSWORD });
+    expectError(exportAttempt.envelope, ArxReasons.SessionLocked);
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 

@@ -5,8 +5,8 @@ import type { HandlerControllers } from "../rpc/handlers/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
-import type { KeyringService } from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
+import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
 import type {
   NamespaceApprovalBindings,
@@ -246,14 +246,14 @@ export const materializeNamespaceRuntimeSupport = (params: {
   transactionRegistry: TransactionAdapterRegistry;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   chains: ChainAddressCodecRegistry;
-  keyring: Pick<KeyringService, "waitForReady" | "hasAccountKey" | "signDigestByAccountKey">;
+  accountSigning: AccountSigningService;
   rpcClientNamespaces: ReadonlySet<string>;
 }): {
   signers: HandlerControllers["signers"];
   bindings: NamespaceRuntimeBindingsRegistry;
   runtimeSupport: NamespaceRuntimeSupportIndex;
 } => {
-  const { runtimeSupport, transactionRegistry, rpcClients, chains, keyring, rpcClientNamespaces } = params;
+  const { runtimeSupport, transactionRegistry, rpcClients, chains, accountSigning, rpcClientNamespaces } = params;
 
   const signerByNamespace = new Map<string, unknown>();
   const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();
@@ -263,7 +263,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
   for (const spec of runtimeSupport.namespaces) {
     const createSigner = spec.createSigner;
     if (!createSigner) continue;
-    signerByNamespace.set(spec.namespace, createSigner({ keyring }));
+    signerByNamespace.set(spec.namespace, createSigner({ accountSigning }));
   }
 
   for (const spec of runtimeSupport.namespaces) {

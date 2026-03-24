@@ -45,8 +45,8 @@ export const buildUiSnapshot = (deps: {
   const networks = chains.buildWalletNetworksSnapshot();
   const resolvedChain = chain.chainRef;
   const uiBindings = namespaceBindings.getUi(chain.namespace);
-  const sessionState = session.getState();
-  const unlocked = sessionState.isUnlocked;
+  const sessionStatus = session.getStatus();
+  const unlocked = sessionStatus.isUnlocked;
 
   const accountList = unlocked
     ? accounts.listOwnedForNamespace({ namespace: chain.namespace, chainRef: resolvedChain }).map((account) => ({
@@ -121,14 +121,14 @@ export const buildUiSnapshot = (deps: {
     },
     session: {
       isUnlocked: unlocked,
-      autoLockDurationMs: sessionState.timeoutMs,
-      nextAutoLockAt: sessionState.nextAutoLockAt,
+      autoLockDurationMs: sessionStatus.autoLockDurationMs,
+      nextAutoLockAt: sessionStatus.nextAutoLockAt,
     },
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
     permissions: permissions.buildUiPermissionsSnapshot(),
     vault: {
-      initialized: session.hasInitializedVault(),
+      initialized: sessionStatus.vaultInitialized,
     },
     warnings: {
       hdKeyringsNeedingBackup: keyringWarnings,

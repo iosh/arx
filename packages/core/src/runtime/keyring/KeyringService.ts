@@ -14,16 +14,13 @@ import {
 } from "../../storage/records.js";
 import { zeroize } from "../../utils/bytes.js";
 import { vaultErrors } from "../../vault/errors.js";
-import { KeyringHydration } from "./KeyringHydration.js";
-import { decodePayloadAndZeroize, encodePayload } from "./keyring-utils.js";
 import type { KeyringKind, NamespaceConfig } from "./namespaces.js";
+import { RuntimeKeyringState } from "./RuntimeKeyringState.js";
 import type {
   AccountKey,
   KeyringMetaRecord,
   KeyringPayloadListener,
   KeyringServiceOptions,
-  Payload,
-  RuntimeKeyring,
   VaultKeyringEntry,
 } from "./types.js";
 
@@ -49,42 +46,28 @@ export type ImportPrivateKeyParams = {
 export class KeyringService {
   #options: KeyringServiceOptions;
   #namespacesConfig: Map<string, NamespaceConfig>;
-
-  #keyrings = new Map<string, RuntimeKeyring>();
-  #keyringMetas = new Map<string, KeyringMetaRecord>();
-  #accounts = new Map<AccountKey, AccountRecord>();
-
-  #payload: Payload = { keyrings: [] };
-  #payloadListeners = new Set<KeyringPayloadListener>();
-
-  #addressIndex = new Map<AccountKey, { namespace: string; keyringId: string; accountKey: AccountKey }>();
-  #hydration: KeyringHydration;
+  #runtimeKeyringState: RuntimeKeyringState;
 
   constructor(options: KeyringServiceOptions) {
     this.#options = options;
     this.#namespacesConfig = new Map(options.namespaces.map((ns) => [ns.namespace, ns]));
-    this.#hydration = new KeyringHydration(
-      options,
-      { keyrings: this.#keyrings, keyringMetas: this.#keyringMetas, accounts: this.#accounts },
-      (payload) => this.#onHydrated(payload),
-    );
+    this.#runtimeKeyringState = new RuntimeKeyringState(options);
   }
 
   async attach() {
-    await this.#hydration.attach();
+    await this.#runtimeKeyringState.attach();
   }
 
   detach() {
-    this.#hydration.detach();
+    this.#runtimeKeyringState.detach();
   }
 
   async waitForReady(): Promise<void> {
-    await this.#hydration.waitForHydration();
+    await this.#runtimeKeyringState.waitForReady();
   }
 
   onPayloadUpdated(handler: KeyringPayloadListener): () => void {
-    this.#payloadListeners.add(handler);
-    return () => this.#payloadListeners.delete(handler);
+    return this.#runtimeKeyringState.onPayloadUpdated(handler);
   }
 
   hasNamespace(namespace: string): boolean {
@@ -96,20 +79,15 @@ export class KeyringService {
   }
 
   getKeyrings(): KeyringMetaRecord[] {
-    return Array.from(this.#keyringMetas.values())
-      .map((m) => ({ ...m }))
-      .sort((a, b) => a.createdAt - b.createdAt);
+    return this.#runtimeKeyringState.getKeyrings();
   }
 
   getAccounts(includeHidden = false): AccountRecord[] {
-    return Array.from(this.#accounts.values())
-      .filter((a) => includeHidden || !a.hidden)
-      .map((a) => ({ ...a }))
-      .sort((a, b) => a.createdAt - b.createdAt);
+    return this.#runtimeKeyringState.getAccounts(includeHidden);
   }
 
   getAccountsByKeyring(keyringId: string, includeHidden = false): AccountRecord[] {
-    return this.getAccounts(includeHidden).filter((a) => a.keyringId === keyringId);
+    return this.#runtimeKeyringState.getAccountsByKeyring(keyringId, includeHidden);
   }
 
   generateMnemonic(wordCount: 12 | 24 = 12): string {
@@ -194,11 +172,11 @@ export class KeyringService {
     await this.#waitForHydration();
     this.#assertUnlocked();
 
-    const runtime = this.#keyrings.get(keyringId);
+    const runtime = this.#runtimeKeyringState.getRuntimeKeyring(keyringId);
     if (!runtime) throw new Error(`Keyring "${keyringId}" not found`);
     if (runtime.kind !== "hd") throw keyringErrors.indexOutOfRange();
 
-    const meta = this.#keyringMetas.get(keyringId);
+    const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
     if (!meta) throw new Error(`Keyring metadata missing for ${keyringId}`);
 
     const instance = runtime.instance as HierarchicalDeterministicKeyring;
@@ -228,9 +206,8 @@ export class KeyringService {
     await this.#options.accountsStore.upsert(record);
     await this.#options.keyringMetas.upsert(nextMeta);
 
-    this.#accounts.set(record.accountKey, record);
-    this.#keyringMetas.set(keyringId, nextMeta);
-    this.#indexAccounts();
+    this.#runtimeKeyringState.replaceAccountRecord(record);
+    this.#runtimeKeyringState.replaceKeyringMeta(nextMeta);
 
     return { ...derived, address: canonical };
   }
@@ -244,38 +221,38 @@ export class KeyringService {
   }
 
   async renameKeyring(keyringId: string, alias: string): Promise<void> {
-    const meta = this.#keyringMetas.get(keyringId);
+    const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
     if (!meta) return;
 
     const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, alias });
     await this.#options.keyringMetas.upsert(next);
-    this.#keyringMetas.set(keyringId, next);
+    this.#runtimeKeyringState.replaceKeyringMeta(next);
   }
 
   async renameAccount(accountKey: AccountKey, alias: string): Promise<void> {
-    const record = this.#accounts.get(accountKey);
+    const record = this.#runtimeKeyringState.getAccount(accountKey);
     if (!record) return;
 
     const next: AccountRecord = AccountRecordSchema.parse({ ...record, alias });
     await this.#options.accountsStore.upsert(next);
-    this.#accounts.set(accountKey, next);
+    this.#runtimeKeyringState.replaceAccountRecord(next, false);
   }
 
   async markBackedUp(keyringId: string): Promise<void> {
-    const meta = this.#keyringMetas.get(keyringId);
+    const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
     if (!meta) return;
     if (meta.type !== "hd") return;
 
     const next: KeyringMetaRecord = KeyringMetaRecordSchema.parse({ ...meta, needsBackup: false });
     await this.#options.keyringMetas.upsert(next);
-    this.#keyringMetas.set(keyringId, next);
+    this.#runtimeKeyringState.replaceKeyringMeta(next);
   }
 
   async removePrivateKeyKeyring(keyringId: string): Promise<void> {
     await this.#waitForHydration();
 
-    const runtime = this.#keyrings.get(keyringId);
-    const meta = this.#keyringMetas.get(keyringId);
+    const runtime = this.#runtimeKeyringState.getRuntimeKeyring(keyringId);
+    const meta = this.#runtimeKeyringState.getKeyringMeta(keyringId);
 
     if (!runtime && !meta) return;
     if (runtime?.kind !== "private-key" && meta?.type !== "private-key") {
@@ -290,18 +267,14 @@ export class KeyringService {
 
     const canonical = this.#toCanonicalString(namespace, address);
     const accountKey = this.#toAccountKey(namespace, canonical);
-    const ref = this.#addressIndex.get(accountKey);
-    if (!ref) throw keyringErrors.accountNotFound();
-
-    const record = this.#accounts.get(ref.accountKey);
+    const record = this.#runtimeKeyringState.getAccount(accountKey);
     if (!record) throw keyringErrors.accountNotFound();
 
-    const meta = this.#keyringMetas.get(record.keyringId);
+    const meta = this.#runtimeKeyringState.getKeyringMeta(record.keyringId);
     if (!meta) {
       // Orphaned account metadata; drop it.
       await this.#options.accountsStore.remove(record.accountKey);
-      this.#accounts.delete(record.accountKey);
-      this.#indexAccounts(false);
+      this.#runtimeKeyringState.dropAccountRecord(record.accountKey, false);
       return;
     }
 
@@ -311,16 +284,15 @@ export class KeyringService {
     }
 
     await this.#options.accountsStore.remove(record.accountKey);
-    this.#accounts.delete(record.accountKey);
-    this.#indexAccounts(false);
+    this.#runtimeKeyringState.dropAccountRecord(record.accountKey, false);
   }
 
   async exportMnemonic(keyringId: string, password: string): Promise<string> {
     await this.#waitForHydration();
     await this.#verifyPassword(password);
 
-    const entry = this.#payload.keyrings.find((k) => k.keyringId === keyringId && k.type === "hd");
-    if (!entry) throw keyringErrors.accountNotFound();
+    const entry = this.#runtimeKeyringState.getPayloadEntry(keyringId);
+    if (!entry || entry.type !== "hd") throw keyringErrors.accountNotFound();
     const payload = entry.payload as { mnemonic: string[]; passphrase?: string };
     return payload.mnemonic.join(" ");
   }
@@ -338,7 +310,7 @@ export class KeyringService {
   }
 
   hasAccountKey(accountKey: AccountKey): boolean {
-    return this.#addressIndex.has(accountKey);
+    return this.#runtimeKeyringState.hasAccountKey(accountKey);
   }
 
   async exportPrivateKeyByAccountKey(accountKey: AccountKey, password: string): Promise<Uint8Array> {
@@ -376,23 +348,8 @@ export class KeyringService {
 
   // ----- private helpers -----
 
-  #onHydrated(payload?: Payload | null) {
-    if (payload) {
-      this.#payload = payload;
-    } else if (payload === null) {
-      this.#payload = { keyrings: [] };
-    } else if (this.#options.vault.isUnlocked()) {
-      this.#payload = decodePayloadAndZeroize(this.#options.vault.exportSecret(), this.#options.logger);
-    } else {
-      this.#payload = { keyrings: [] };
-    }
-
-    this.#indexAccounts(false);
-    void this.#notifyPayloadUpdated();
-  }
-
   async #waitForHydration(): Promise<void> {
-    await this.#hydration.waitForHydration();
+    await this.#runtimeKeyringState.waitForReady();
   }
 
   #assertUnlocked(): void {
@@ -419,8 +376,9 @@ export class KeyringService {
     }
 
     const namespace = params.namespace ?? this.#defaultNamespace();
+    const payload = this.#runtimeKeyringState.getPayload();
 
-    const existingHd = this.#payload.keyrings.find(
+    const existingHd = payload.keyrings.find(
       (entry) =>
         entry.type === "hd" &&
         (entry.namespace ?? this.#defaultNamespace()) === namespace &&
@@ -503,60 +461,15 @@ export class KeyringService {
       await this.#options.accountsStore.upsert(record);
     }
 
-    this.#keyrings.set(params.keyringId, {
-      id: params.keyringId,
-      kind: params.kind,
-      namespace: params.namespace,
-      instance: params.instance,
-    });
-    this.#keyringMetas.set(params.keyringId, params.meta);
-    for (const record of params.accounts) {
-      this.#accounts.set(record.accountKey, record);
-    }
-    this.#indexAccounts();
-
-    this.#payload.keyrings = [
-      ...this.#payload.keyrings.filter((k) => k.keyringId !== params.keyringId),
-      params.payloadEntry,
-    ];
-
-    await this.#notifyPayloadUpdated();
+    await this.#runtimeKeyringState.commitPersistedKeyring(params);
   }
 
   async #removeKeyring(params: { keyringId: string }): Promise<void> {
     const { keyringId } = params;
 
-    // Remove secrets from the vault payload first.
-    this.#payload.keyrings = this.#payload.keyrings.filter((entry) => entry.keyringId !== keyringId);
-    await this.#notifyPayloadUpdated();
-
-    this.#keyrings.delete(keyringId);
-    this.#keyringMetas.delete(keyringId);
-
-    for (const [accountKey, record] of Array.from(this.#accounts.entries())) {
-      if (record.keyringId === keyringId) {
-        this.#accounts.delete(accountKey);
-      }
-    }
-
+    await this.#runtimeKeyringState.dropKeyring(keyringId);
     await this.#options.keyringMetas.remove(keyringId);
     await this.#options.accountsStore.removeByKeyringId(keyringId);
-
-    this.#indexAccounts(false);
-  }
-
-  async #notifyPayloadUpdated(): Promise<void> {
-    const encoded = encodePayload(this.#payload);
-    for (const listener of this.#payloadListeners) {
-      const payload = encoded.length > 0 ? new Uint8Array(encoded) : null;
-      try {
-        await listener(payload);
-      } catch (error) {
-        this.#options.logger?.("keyring: payload listener threw", error);
-      } finally {
-        if (payload) zeroize(payload);
-      }
-    }
   }
 
   async #exportPrivateKeyUnsafe(namespace: string, address: string): Promise<Uint8Array> {
@@ -564,10 +477,13 @@ export class KeyringService {
 
     const canonical = this.#toCanonicalString(namespace, address);
     const accountKey = this.#toAccountKey(namespace, canonical);
-    const indexed = this.#addressIndex.get(accountKey);
-    if (!indexed) throw keyringErrors.accountNotFound();
+    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    if (!record) throw keyringErrors.accountNotFound();
 
-    const runtime = this.#keyrings.get(indexed.keyringId);
+    const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
+    if (!indexed) throw keyringErrors.secretUnavailable();
+
+    const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
     if (!runtime) throw keyringErrors.secretUnavailable();
 
     return runtime.instance.exportPrivateKey(canonical);
@@ -576,10 +492,13 @@ export class KeyringService {
   async #exportPrivateKeyByAccountKeyUnsafe(accountKey: AccountKey): Promise<Uint8Array> {
     await this.#waitForHydration();
 
-    const indexed = this.#addressIndex.get(accountKey);
-    if (!indexed) throw keyringErrors.accountNotFound();
+    const record = this.#runtimeKeyringState.getAccount(accountKey);
+    if (!record) throw keyringErrors.accountNotFound();
 
-    const runtime = this.#keyrings.get(indexed.keyringId);
+    const indexed = this.#runtimeKeyringState.getAccountRef(accountKey);
+    if (!indexed) throw keyringErrors.secretUnavailable();
+
+    const runtime = this.#runtimeKeyringState.getRuntimeKeyring(indexed.keyringId);
     if (!runtime) throw keyringErrors.secretUnavailable();
 
     const config = this.#getConfig(indexed.namespace);
@@ -591,7 +510,7 @@ export class KeyringService {
   async #setAccountHidden(accountKey: AccountKey, hidden: boolean): Promise<void> {
     await this.#waitForHydration();
 
-    const record = this.#accounts.get(accountKey);
+    const record = this.#runtimeKeyringState.getAccount(accountKey);
     if (!record) return;
     if (record.derivationIndex === undefined) {
       // Imported accounts (private-key) are not hideable in this UX.
@@ -604,39 +523,19 @@ export class KeyringService {
     });
 
     await this.#options.accountsStore.upsert(next);
-    this.#accounts.set(accountKey, next);
-    this.#indexAccounts(false);
+    this.#runtimeKeyringState.replaceAccountRecord(next, false);
   }
 
   #resolveNextDerivationIndex(keyringId: string, meta: KeyringMetaRecord): number {
-    const known = Array.from(this.#accounts.values()).filter((a) => a.keyringId === keyringId);
+    const known = this.#runtimeKeyringState.getAccountsByKeyring(keyringId, true);
     const maxIndex = Math.max(-1, ...known.map((a) => a.derivationIndex ?? -1));
     const expected = maxIndex + 1;
     const current = meta.nextDerivationIndex ?? 0;
     return Math.max(current, expected);
   }
 
-  #indexAccounts(strict = true) {
-    this.#addressIndex.clear();
-    for (const record of this.#accounts.values()) {
-      const key = record.accountKey;
-      if (this.#addressIndex.has(key)) {
-        if (strict) {
-          throw keyringErrors.duplicateAccount();
-        }
-        this.#options.logger?.(`keyring: duplicate account skipped during hydrate: ${key}`);
-        continue;
-      }
-      this.#addressIndex.set(key, {
-        namespace: record.namespace,
-        keyringId: record.keyringId,
-        accountKey: record.accountKey,
-      });
-    }
-  }
-
   #assertNoDuplicate(accountKey: AccountKey): void {
-    if (this.#addressIndex.has(accountKey)) {
+    if (this.#runtimeKeyringState.getAccount(accountKey)) {
       throw keyringErrors.duplicateAccount();
     }
   }

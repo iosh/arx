@@ -284,6 +284,10 @@ export const initSessionLayer = ({
       factories: { ...namespace.factories },
     })),
     logger: storageLogger,
+    onHydrationError: (error: unknown) => {
+      storageLogger("session: keyring hydration failed; locking session", error);
+      unlock.lock("reload");
+    },
   });
 
   void keyringService.attach().catch((error) => storageLogger("session: keyring attach failed", error));

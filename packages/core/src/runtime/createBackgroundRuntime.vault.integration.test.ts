@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { decodePayload, encodePayload } from "./keyring/keyring-utils.js";
+import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   createChainMetadata,
   FakeVault,
   setupBackground,
   TEST_AUTO_LOCK_DURATION,
   TEST_INITIAL_TIME,
+  TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
+
+const TEST_PRIVATE_KEY = "1111111111111111111111111111111111111111111111111111111111111111";
+const CORRUPTED_PRIVATE_KEY = "2222222222222222222222222222222222222222222222222222222222222222";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -72,6 +78,82 @@ describe("createBackgroundRuntime (vault integration)", () => {
       expect(second.vaultMetaPort.savedVaultMeta).toBeNull();
     } finally {
       second.destroy();
+    }
+  });
+
+  it("fails closed when unlock hydration cannot materialize a persisted keyring", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      const sessionAccess = createUiSessionAccess({
+        accounts: context.runtime.controllers.accounts,
+        session: context.runtime.services.session,
+        keyring: context.runtime.services.keyring,
+      });
+
+      await context.runtime.services.session.vault.initialize({ password: "secret" });
+      await sessionAccess.unlock({ password: "secret" });
+      await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+
+      const payload = decodePayload(context.runtime.services.session.vault.exportSecret());
+      const [entry] = payload.keyrings;
+      if (!entry || entry.type !== "hd") {
+        throw new Error("Expected persisted HD keyring payload");
+      }
+
+      entry.payload = { mnemonic: new Array(12).fill("invalid") };
+      await context.runtime.services.session.vault.commitSecret({ secret: encodePayload(payload) });
+      sessionAccess.lock("manual");
+
+      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
+      expect(sessionAccess.isUnlocked()).toBe(false);
+      expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("fails closed when a persisted private-key account no longer matches its secret", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      const sessionAccess = createUiSessionAccess({
+        accounts: context.runtime.controllers.accounts,
+        session: context.runtime.services.session,
+        keyring: context.runtime.services.keyring,
+      });
+
+      await context.runtime.services.session.vault.initialize({ password: "secret" });
+      await sessionAccess.unlock({ password: "secret" });
+      await context.runtime.services.keyring.importPrivateKey({ privateKey: TEST_PRIVATE_KEY });
+
+      const payload = decodePayload(context.runtime.services.session.vault.exportSecret());
+      const [entry] = payload.keyrings;
+      if (!entry || entry.type !== "private-key") {
+        throw new Error("Expected persisted private-key payload");
+      }
+
+      entry.payload = { privateKey: CORRUPTED_PRIVATE_KEY };
+      await context.runtime.services.session.vault.commitSecret({ secret: encodePayload(payload) });
+      sessionAccess.lock("manual");
+
+      await expect(sessionAccess.unlock({ password: "secret" })).rejects.toThrow();
+      expect(sessionAccess.isUnlocked()).toBe(false);
+      expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+    } finally {
+      context.destroy();
     }
   });
 });

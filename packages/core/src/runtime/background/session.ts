@@ -128,6 +128,45 @@ export const initSessionLayer = ({
 
   const sessionSubscriptions: Array<() => void> = [];
 
+  const listPersistedKeyringIds = async (): Promise<string[]> => {
+    const [storedMetas, storedAccounts] = await Promise.all([
+      keyringMetas.list(),
+      accountsStore.list({ includeHidden: true }),
+    ]);
+    return Array.from(
+      new Set([...storedMetas.map((meta) => meta.id), ...storedAccounts.map((account) => account.keyringId)]),
+    );
+  };
+
+  const clearPersistedKeyringProjectionForId = async (keyringId: string) => {
+    const removals = await Promise.allSettled([
+      keyringMetas.remove(keyringId),
+      accountsStore.removeByKeyringId(keyringId),
+    ]);
+    const rejected = removals.filter((result) => result.status === "rejected");
+
+    if (rejected.length === 0) {
+      return;
+    }
+
+    throw new AggregateError(
+      rejected.map((result) => result.reason),
+      `Failed to clear persisted keyring projection for ${keyringId}`,
+    );
+  };
+
+  const clearPersistedKeyringProjection = async (reason: string) => {
+    const staleKeyringIds = await listPersistedKeyringIds();
+
+    for (const keyringId of staleKeyringIds) {
+      try {
+        await clearPersistedKeyringProjectionForId(keyringId);
+      } catch (error) {
+        storageLogger(`session: failed to clear stale keyring projection for ${keyringId} after ${reason}`, error);
+      }
+    }
+  };
+
   const cleanupVaultPersistTimer = () => {
     if (persistTimer !== null) {
       sessionClearTimeout(persistTimer as Parameters<typeof clearTimeout>[0]);
@@ -383,6 +422,11 @@ export const initSessionLayer = ({
           } catch (clearError) {
             storageLogger("session: failed to clear vault meta", clearError);
           }
+          try {
+            await clearPersistedKeyringProjection("invalid vault envelope");
+          } catch (projectionError) {
+            storageLogger("session: failed to clear stale keyring projection", projectionError);
+          }
           vaultInitializedAt = null;
           lastPersistedVaultMeta = null;
           unlock.setAutoLockDuration(baseAutoLockDurationMs);
@@ -394,6 +438,12 @@ export const initSessionLayer = ({
   };
 
   const destroySessionLayer = () => {
+    try {
+      unlock.lock("suspend");
+    } catch (error) {
+      storageLogger("session: failed to lock during destroy", error);
+    }
+
     detachSessionListeners();
     cleanupVaultPersistTimer();
     try {

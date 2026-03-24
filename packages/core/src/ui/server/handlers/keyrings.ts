@@ -1,3 +1,5 @@
+import { ArxReasons, arxError } from "@arx/errors";
+import { getAccountKeyNamespace } from "../../../accounts/addressing/accountKey.js";
 import type {
   UiConfirmNewMnemonicParams,
   UiImportMnemonicParams,
@@ -126,6 +128,16 @@ export const createKeyringsHandlers = (
 
     "ui.keyrings.hideHdAccount": async (params) => {
       assertUnlocked(deps.session);
+      const namespace = getAccountKeyNamespace(params.accountKey);
+      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      const activeAccount = deps.accounts.getActiveAccountForNamespace({ namespace, chainRef });
+      if (activeAccount?.accountKey === params.accountKey) {
+        throw arxError({
+          reason: ArxReasons.PermissionDenied,
+          message: "Cannot hide the active account",
+          data: { accountKey: params.accountKey, namespace, chainRef },
+        });
+      }
       await deps.keyrings.hideHdAccount(params.accountKey);
       return null;
     },

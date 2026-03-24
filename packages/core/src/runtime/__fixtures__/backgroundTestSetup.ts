@@ -572,6 +572,8 @@ export class FakeVault implements VaultService {
 // Test context type
 export type TestBackgroundContext = {
   runtime: CreateBackgroundRuntimeResult;
+  accountsPort: MemoryAccountsPort;
+  keyringMetasPort: MemoryKeyringMetasPort;
   networkPreferencesPort: MemoryNetworkPreferencesPort;
   vaultMetaPort: MemoryVaultMetaPort;
   chainDefinitionsPort: MemoryChainDefinitionsPort;
@@ -693,6 +695,8 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   return {
     runtime,
+    accountsPort,
+    keyringMetasPort,
     networkPreferencesPort,
     vaultMetaPort,
     chainDefinitionsPort,

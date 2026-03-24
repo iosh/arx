@@ -1046,6 +1046,20 @@ describe("uiBridge", () => {
     expect(pkResult.privateKey.length).toBe(64);
   });
 
+  it("rejects hiding the active account", async () => {
+    const words = TEST_MNEMONIC.split(" ");
+    const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });
+    const createResult = expectResponse(createRes.envelope, createRes.id) as { address: string };
+    const activeAccountKey = toAccountKeyFromAddress({
+      chainRef: CHAIN.chainRef,
+      address: createResult.address,
+      accountCodecs,
+    });
+
+    const hideRes = await send("ui.keyrings.hideHdAccount", { accountKey: activeAccountKey });
+    expectError(hideRes.envelope, ArxReasons.PermissionDenied);
+  });
+
   it("requires valid password before exporting mnemonic", async () => {
     const words = TEST_MNEMONIC.split(" ");
     const createRes = await send("ui.keyrings.confirmNewMnemonic", { words, alias: "main" });

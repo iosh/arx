@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { VaultMetaSnapshot } from "../storage/index.js";
+import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import {
   createChainMetadata,
   FakeVault,
+  flushAsync,
   setupBackground,
   TEST_AUTO_LOCK_DURATION,
   TEST_INITIAL_TIME,
@@ -76,6 +79,62 @@ describe("createBackgroundRuntime (vault integration)", () => {
       expect(unlockState.isUnlocked).toBe(false);
       expect(unlockState.timeoutMs).toBe(TEST_AUTO_LOCK_DURATION);
       expect(second.vaultMetaPort.savedVaultMeta).toBeNull();
+    } finally {
+      second.destroy();
+    }
+  });
+
+  it("clears stale keyring projections when persisted vault metadata is invalid", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+
+    const first = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      persistDebounceMs: 0,
+    });
+
+    let persistedMeta: VaultMetaSnapshot | null = null;
+    let accountsSeed: AccountRecord[] = [];
+    let keyringMetasSeed: KeyringMetaRecord[] = [];
+
+    try {
+      await first.runtime.services.session.vault.initialize({ password: "secret" });
+      await first.runtime.services.session.unlock.unlock({ password: "secret" });
+      await first.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+      await first.runtime.services.session.persistVaultMeta();
+
+      persistedMeta = first.vaultMetaPort.savedVaultMeta ?? null;
+      accountsSeed = await first.accountsPort.list();
+      keyringMetasSeed = await first.keyringMetasPort.list();
+    } finally {
+      first.destroy();
+    }
+
+    if (!persistedMeta?.payload.envelope) {
+      throw new Error("Expected persisted vault envelope");
+    }
+
+    const corruptedMeta = structuredClone(persistedMeta);
+    const corruptedEnvelope = structuredClone(persistedMeta.payload.envelope);
+    (corruptedEnvelope as { version: number }).version = 999;
+    corruptedMeta.payload.envelope = corruptedEnvelope;
+
+    const second = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      persistDebounceMs: 0,
+      accountsSeed,
+      keyringMetasSeed,
+      vaultMeta: corruptedMeta,
+    });
+
+    try {
+      await flushAsync();
+      expect(second.runtime.services.sessionStatus.hasInitializedVault()).toBe(false);
+      expect(second.runtime.controllers.accounts.getState().namespaces).toEqual({});
+      await expect(second.accountsPort.list()).resolves.toEqual([]);
+      await expect(second.keyringMetasPort.list()).resolves.toEqual([]);
     } finally {
       second.destroy();
     }
@@ -157,5 +216,30 @@ describe("createBackgroundRuntime (vault integration)", () => {
     } finally {
       context.destroy();
     }
+  });
+
+  it("locks the session and clears runtime keyrings during destroy", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    await context.runtime.services.session.vault.initialize({ password: "secret" });
+    await context.runtime.services.session.unlock.unlock({ password: "secret" });
+    await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+
+    expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
+    expect(context.runtime.services.session.vault.isUnlocked()).toBe(true);
+    expect(context.runtime.services.keyring.getKeyrings()).toHaveLength(1);
+
+    context.destroy();
+
+    expect(context.runtime.services.session.unlock.isUnlocked()).toBe(false);
+    expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+    expect(context.runtime.services.keyring.getKeyrings()).toEqual([]);
+    expect(context.runtime.services.keyring.getAccounts(true)).toEqual([]);
   });
 });

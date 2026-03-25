@@ -65,6 +65,10 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     sessionByPort.set(port, sessionId);
   };
 
+  const clearSessionId = (port: Runtime.Port) => {
+    sessionByPort.delete(port);
+  };
+
   const readPortId = (port: Runtime.Port) => {
     return portIdByPort.get(port) ?? null;
   };
@@ -121,6 +125,7 @@ export const createProviderSessionRegistry = ({ createPortId }: ProviderSessionR
     writePortContext,
     readSessionId,
     writeSessionId,
+    clearSessionId,
     readPortId,
     allocatePortId,
     openPendingRequestMap,

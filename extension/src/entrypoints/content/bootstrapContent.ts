@@ -76,6 +76,17 @@ export const bootstrapContent = () => {
     emitDisconnectEvent(sessionId);
   };
 
+  const finalizeSessionFromBackgroundDisconnect = (
+    sessionId: string,
+    envelope: Extract<Envelope, { type: "event" }>,
+  ) => {
+    const entry = releaseSession(sessionId);
+    if (!entry) return;
+
+    window.postMessage(envelope, window.location.origin);
+    disconnectPort(entry.port);
+  };
+
   const createSessionPort = (sessionId: string, namespace: string): SessionPortEntry => {
     const nextPort = browser.runtime.connect({ name: CHANNEL });
     const entry: SessionPortEntry = {
@@ -89,7 +100,14 @@ export const bootstrapContent = () => {
         switch (envelope.type) {
           case "handshake_ack":
           case "response":
+            window.postMessage(envelope, window.location.origin);
+            return;
           case "event":
+            if (envelope.payload.event === PROVIDER_EVENTS.disconnect) {
+              finalizeSessionFromBackgroundDisconnect(sessionId, envelope);
+              return;
+            }
+
             window.postMessage(envelope, window.location.origin);
             return;
           default:

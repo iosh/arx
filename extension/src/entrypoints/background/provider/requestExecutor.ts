@@ -20,7 +20,7 @@ type ProviderRequestExecutorDeps = {
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
   clearPendingForPort: (port: Runtime.Port) => void;
-  sendReply: (port: Runtime.Port, id: string, payload: TransportResponse) => void;
+  sendReply: (port: Runtime.Port, sessionId: string, id: string, payload: TransportResponse) => void;
 };
 
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
@@ -74,7 +74,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       providerAccess = await getProviderAccess();
       const response = await providerAccess.executeRpcRequest(request);
 
-      sendReply(port, envelope.id, response as TransportResponse);
+      sendReply(port, envelope.sessionId, envelope.id, response as TransportResponse);
     } catch (error) {
       const rpcError = providerAccess
         ? providerAccess.encodeRpcError(error, {
@@ -84,7 +84,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
           })
         : ({ code: -32603, message: "Internal error" } as const);
 
-      sendReply(port, envelope.id, {
+      sendReply(port, envelope.sessionId, envelope.id, {
         id: rpcId,
         jsonrpc,
         error: rpcError,

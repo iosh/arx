@@ -461,6 +461,74 @@ describe("portRouter privacy and binding", () => {
     );
   });
 
+  it("rejects pending requests from the old session when handshake rotates on the same port", async () => {
+    let resolveRequest: (value: JsonRpcResponse) => void = () => {
+      throw new Error("executeRpcRequest resolver not initialized");
+    };
+    const { router, executeRpcRequest } = createRouterHarness({
+      executeRpcRequest: (input) => {
+        void input;
+        return new Promise<JsonRpcResponse>((resolve) => {
+          resolveRequest = resolve;
+        });
+      },
+      encodeRpcError: () => ({ code: 4900, message: "Disconnected" }),
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "session-1",
+      type: "request",
+      id: "transport-1",
+      payload: {
+        id: "rpc-1",
+        jsonrpc: "2.0",
+        method: "eth_chainId",
+      },
+    });
+
+    await vi.waitFor(() => expect(executeRpcRequest).toHaveBeenCalledTimes(1));
+
+    handshake(port, "session-2", "eip155");
+
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "session-1",
+          type: "response",
+          payload: {
+            id: "rpc-1",
+            jsonrpc: "2.0",
+            error: { code: 4900, message: "Disconnected" },
+          },
+        }),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sessionId: "session-2",
+          type: "handshake_ack",
+        }),
+      ),
+    );
+
+    const callCountBeforeResolve = port.postMessage.mock.calls.length;
+    resolveRequest({
+      id: "rpc-1",
+      jsonrpc: "2.0",
+      result: "0x1",
+    });
+    await Promise.resolve();
+    expect(port.postMessage).toHaveBeenCalledTimes(callCountBeforeResolve);
+  });
+
   it("rejects pending requests with a disconnect error when the port disconnects", async () => {
     let resolveRequest: (value: JsonRpcResponse) => void = () => {
       throw new Error("executeRpcRequest resolver not initialized");
@@ -519,5 +587,40 @@ describe("portRouter privacy and binding", () => {
     });
 
     await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
+  });
+
+  it("broadcastDisconnect finalizes connected provider sessions", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("33333333-3333-4333-8333-333333333333");
+
+    const { router, cancelSessionApprovals } = createRouterHarness();
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+    port.postMessage.mockClear();
+
+    router.broadcastDisconnect();
+
+    await vi.waitFor(() =>
+      expect(cancelSessionApprovals).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        portId: "33333333-3333-4333-8333-333333333333",
+        sessionId: "session-1",
+      }),
+    );
+    expect(port.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        type: "event",
+        payload: {
+          event: "disconnect",
+          params: [{ code: 4900, message: "Disconnected" }],
+        },
+      }),
+    );
+    expect(port.disconnect).toHaveBeenCalledTimes(1);
+    expect(router.listConnectedNamespaces()).toEqual([]);
   });
 });

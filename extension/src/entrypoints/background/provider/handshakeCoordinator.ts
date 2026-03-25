@@ -4,11 +4,11 @@ import type { ProviderBridgeConnectionState, ProviderBridgeSnapshot } from "../t
 
 type ProviderHandshakeCoordinatorDeps = {
   getExpectedSessionId: (port: Runtime.Port) => string | null;
+  clearSessionId: (port: Runtime.Port) => void;
   writeSessionId: (port: Runtime.Port, sessionId: string) => void;
   getProviderConnectionState: (port: Runtime.Port, namespace: string) => Promise<ProviderBridgeConnectionState | null>;
   syncPortContext: (port: Runtime.Port, snapshot: ProviderBridgeSnapshot) => void;
-  clearPendingForPort: (port: Runtime.Port) => void;
-  cancelApprovalsForSession: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
+  finalizeSessionRotation: (port: Runtime.Port, sessionId: string) => void;
   postEnvelopeOrDrop: (port: Runtime.Port, envelope: Envelope, reason: string) => boolean;
   dropStalePort: (port: Runtime.Port, reason: string, error?: unknown) => void;
 };
@@ -20,11 +20,11 @@ const parseHandshakeNamespace = (envelope: Extract<Envelope, { type: "handshake"
 
 export const createProviderHandshakeCoordinator = ({
   getExpectedSessionId,
+  clearSessionId,
   writeSessionId,
   getProviderConnectionState,
   syncPortContext,
-  clearPendingForPort,
-  cancelApprovalsForSession,
+  finalizeSessionRotation,
   postEnvelopeOrDrop,
   dropStalePort,
 }: ProviderHandshakeCoordinatorDeps) => {
@@ -38,8 +38,8 @@ export const createProviderHandshakeCoordinator = ({
 
       const expectedSessionId = getExpectedSessionId(port);
       if (expectedSessionId && envelope.sessionId !== expectedSessionId) {
-        clearPendingForPort(port);
-        await cancelApprovalsForSession(port, expectedSessionId, "failed to expire approvals on session rotation");
+        clearSessionId(port);
+        finalizeSessionRotation(port, expectedSessionId);
       }
 
       const connectionState = await getProviderConnectionState(port, namespace);

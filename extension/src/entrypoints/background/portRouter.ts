@@ -206,9 +206,9 @@ export const createPortRouter = ({ extensionOrigin, getOrInitProviderAccess }: P
     return sessionRegistry.allocatePortId(port);
   };
 
-  const sendReply = (port: Runtime.Port, id: string, payload: TransportResponse) => {
-    const sessionId = getSessionIdForPort(port);
-    if (!sessionId) return;
+  const sendReply = (port: Runtime.Port, sessionId: string, id: string, payload: TransportResponse) => {
+    const activeSessionId = getSessionIdForPort(port);
+    if (!activeSessionId || activeSessionId !== sessionId) return;
 
     postEnvelopeOrDrop(
       port,
@@ -235,11 +235,11 @@ export const createPortRouter = ({ extensionOrigin, getOrInitProviderAccess }: P
 
   const handshakeCoordinator = createProviderHandshakeCoordinator({
     getExpectedSessionId: getSessionIdForPort,
+    clearSessionId: (port) => sessionRegistry.clearSessionId(port),
     writeSessionId: (port, sessionId) => sessionRegistry.writeSessionId(port, sessionId),
     getProviderConnectionState: buildConnectionStateForPort,
     syncPortContext: (port, snapshot) => syncPortContext(port, snapshot, portContextStore, extensionOrigin),
-    clearPendingForPort: (port) => sessionRegistry.dropPendingRequests(port),
-    cancelApprovalsForSession,
+    finalizeSessionRotation: (port, sessionId) => disconnectFinalizer.finalizeSessionRotation(port, sessionId),
     postEnvelopeOrDrop,
     dropStalePort: disconnectFinalizer.dropStalePort,
   });

@@ -188,4 +188,50 @@ describe("bootstrapContent", () => {
       expect.objectContaining({ channel: CHANNEL, sessionId: "s-cfx", type: "handshake" }),
     );
   });
+
+  it("releases a session after relaying background disconnect and does not emit it twice", () => {
+    const postSpy = vi.spyOn(window, "postMessage");
+
+    bootstrapContent();
+
+    dispatchWindowMessage({
+      channel: CHANNEL,
+      sessionId: "s1",
+      type: "handshake",
+      payload: { protocolVersion: PROTOCOL_VERSION, handshakeId: "h1", namespace: "eip155" },
+    });
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    port.postMessage.mockClear();
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "s1",
+      type: "event",
+      payload: { event: PROVIDER_EVENTS.disconnect, params: [{ code: 4900, message: "Disconnected" }] },
+    });
+
+    expect(postSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        channel: CHANNEL,
+        sessionId: "s1",
+        type: "event",
+        payload: { event: PROVIDER_EVENTS.disconnect, params: [{ code: 4900, message: "Disconnected" }] },
+      }),
+      window.location.origin,
+    );
+    expect(port.disconnect).toHaveBeenCalledTimes(1);
+
+    dispatchWindowMessage({
+      channel: CHANNEL,
+      sessionId: "s1",
+      type: "request",
+      id: "m1",
+      payload: { jsonrpc: "2.0", id: "1", method: "eth_chainId" },
+    });
+    expect(port.postMessage).not.toHaveBeenCalled();
+
+    port.triggerDisconnect();
+    expect(postSpy).toHaveBeenCalledTimes(1);
+  });
 });

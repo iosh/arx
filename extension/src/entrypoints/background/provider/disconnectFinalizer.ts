@@ -59,15 +59,21 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     }) as JsonRpcError;
   };
 
-  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
+  const disconnectPort = (port: Runtime.Port) => {
+    try {
+      port.disconnect();
+    } catch {
+      // ignore disconnect failure
+    }
+  };
+
+  const rejectPendingWithDisconnectForSession = (
+    port: Runtime.Port,
+    sessionId: string,
+    overrideError?: JsonRpcError,
+  ) => {
     const requestMap = getPendingRequestMap(port);
     if (!requestMap) return;
-
-    const sessionId = getSessionIdForPort(port);
-    if (!sessionId) {
-      clearPendingForPort(port);
-      return;
-    }
 
     const error = encodeDisconnectError(port, overrideError);
     for (const [messageId, { rpcId, jsonrpc }] of requestMap) {
@@ -87,9 +93,30 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     clearPendingForPort(port);
   };
 
+  const rejectPendingWithDisconnect = (port: Runtime.Port, overrideError?: JsonRpcError) => {
+    const sessionId = getSessionIdForPort(port);
+    if (!sessionId) {
+      clearPendingForPort(port);
+      return;
+    }
+
+    rejectPendingWithDisconnectForSession(port, sessionId, overrideError);
+  };
+
   const cleanupPortState = (port: Runtime.Port) => {
     removePortState(port);
     detachPortListeners(port);
+  };
+
+  const finalizeSessionRotation = (port: Runtime.Port, sessionId: string) => {
+    void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on session rotation");
+
+    try {
+      rejectPendingWithDisconnectForSession(port, sessionId);
+    } catch (error) {
+      const origin = getPortOrigin(port, extensionOrigin);
+      portLog("session rotation cleanup error", { origin, error, sessionId });
+    }
   };
 
   const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
@@ -99,12 +126,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     }
 
     cleanupPortState(port);
-
-    try {
-      port.disconnect();
-    } catch {
-      // ignore disconnect failure
-    }
+    disconnectPort(port);
 
     const origin = getPortOrigin(port, extensionOrigin);
     portLog("drop stale port", { origin, reason, error });
@@ -130,40 +152,40 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   };
 
   const broadcastDisconnectForPorts = (ports: Runtime.Port[]) => {
-    const stalePorts: Runtime.Port[] = [];
-
     for (const port of ports) {
       const sessionId = getSessionIdForPort(port);
       if (!sessionId) continue;
 
       const error = encodeDisconnectError(port);
-      rejectPendingWithDisconnect(port, error);
+      const portContext = getPortContext(port);
+      const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
+      const origin = getPortOrigin(port, extensionOrigin);
+      const namespace = deriveRpcContextNamespace(rpcContext);
 
-      const success = postEnvelope(port, {
+      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on provider disconnect");
+
+      rejectPendingWithDisconnectForSession(port, sessionId, error);
+
+      const delivered = postEnvelope(port, {
         channel: CHANNEL,
         sessionId,
         type: "event",
         payload: { event: PROVIDER_EVENTS.disconnect, params: [error] },
       });
+      cleanupPortState(port);
+      disconnectPort(port);
 
-      if (success) {
-        const portContext = getPortContext(port);
-        const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
-        const origin = getPortOrigin(port, extensionOrigin);
-        const namespace = deriveRpcContextNamespace(rpcContext);
-        portLog("broadcastDisconnect", { origin, errorCode: error.code, namespace });
-        continue;
-      }
-
-      stalePorts.push(port);
-    }
-
-    for (const port of stalePorts) {
-      dropStalePort(port, "broadcast_disconnect_failed");
+      portLog("broadcastDisconnect", {
+        origin,
+        errorCode: error.code,
+        namespace,
+        delivered,
+      });
     }
   };
 
   return {
+    finalizeSessionRotation,
     dropStalePort,
     rejectPendingWithDisconnect,
     finalizePortDisconnect,

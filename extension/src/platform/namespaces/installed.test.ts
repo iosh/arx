@@ -16,6 +16,7 @@ describe("installed namespaces composition root", () => {
 
     expect(installedNamespaces).toEqual(["eip155"]);
     expect(INSTALLED_NAMESPACES.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(installedNamespaces);
+    expect(INSTALLED_NAMESPACES.provider.exposedNamespaces).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.provider.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
   });
 
@@ -41,6 +42,7 @@ describe("installed namespaces composition root", () => {
     );
 
     expect(hiddenNamespace.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
+    expect(hiddenNamespace.provider.exposedNamespaces).toEqual([]);
     expect(hiddenNamespace.provider.modules).toEqual([]);
     expect(hiddenNamespace.provider.registry.modules).toEqual([]);
     expect([...hiddenNamespace.provider.registry.byNamespace.keys()]).toEqual([]);

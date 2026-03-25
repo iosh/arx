@@ -8,6 +8,7 @@ const registry = {
   byNamespace: new Map(),
   modules: [],
 } as const;
+const exposedNamespaces = ["eip155"] as const;
 
 vi.mock("@arx/provider/inpage", () => ({
   bootstrapInpageProvider: bootstrapInpageProviderMock,
@@ -16,6 +17,7 @@ vi.mock("@arx/provider/inpage", () => ({
 vi.mock("@/platform/namespaces/installed", () => ({
   INSTALLED_NAMESPACES: {
     provider: {
+      exposedNamespaces,
       registry,
     },
   },
@@ -32,6 +34,7 @@ describe("inpage entrypoint", () => {
     runEntrypoint();
 
     expect(bootstrapInpageProviderMock).toHaveBeenCalledWith({
+      exposedNamespaces,
       registry,
     });
   });

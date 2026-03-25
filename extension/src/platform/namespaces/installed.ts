@@ -22,6 +22,7 @@ export type InstalledNamespacesRuntimeAssembly = Readonly<{
 }>;
 
 export type InstalledNamespacesProviderAssembly = Readonly<{
+  exposedNamespaces: readonly string[];
   modules: readonly ProviderModule[];
   registry: ProviderRegistry;
 }>;
@@ -66,9 +67,14 @@ export const createInstalledNamespacesComposition = (
 ): InstalledNamespacesComposition => {
   const validatedSpecs = defineInstalledNamespaceSpecs(specs);
   const manifests: readonly NamespaceManifest[] = validatedSpecs.map((spec) => spec.manifest);
-  const providerModules: readonly ProviderModule[] = validatedSpecs.flatMap((spec) =>
-    spec.provider.expose ? [spec.provider.module] : [],
+  const exposedProviderSpecs = validatedSpecs.filter(
+    (
+      spec,
+    ): spec is InstalledNamespaceSpec & { provider: Extract<InstalledNamespaceProviderExposure, { expose: true }> } =>
+      spec.provider.expose,
   );
+  const exposedNamespaces: readonly string[] = exposedProviderSpecs.map((spec) => spec.namespace);
+  const providerModules: readonly ProviderModule[] = exposedProviderSpecs.map((spec) => spec.provider.module);
   const providerRegistry = createProviderRegistryFromModules(providerModules);
 
   return {
@@ -77,6 +83,7 @@ export const createInstalledNamespacesComposition = (
       manifests,
     },
     provider: {
+      exposedNamespaces,
       modules: providerModules,
       registry: providerRegistry,
     },

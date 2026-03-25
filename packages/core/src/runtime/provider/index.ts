@@ -6,6 +6,8 @@ export type {
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
   ProviderRuntimeMeta,
+  ProviderRuntimeRequestContext,
+  ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSessionScope,
   ProviderRuntimeSnapshot,

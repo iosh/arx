@@ -251,9 +251,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitProviderAccess }: P
     sessionRegistry.registerConnectedPort(port, {
       origin,
       providerNamespace: null,
-      meta: null,
       chainRef: null,
-      chainId: null,
     });
     portLog("connect", { origin, portName: port.name, total: sessionRegistry.countConnectedPorts() });
 

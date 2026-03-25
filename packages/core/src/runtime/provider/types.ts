@@ -1,12 +1,7 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
-import type {
-  JsonRpcError,
-  JsonRpcParams,
-  JsonRpcRequest,
-  JsonRpcResponse,
-  RpcInvocationContext,
-} from "../../rpc/index.js";
+import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
 
 export type ProviderRuntimeMeta = {
@@ -34,15 +29,25 @@ export type ProviderRuntimeConnectionState = {
   accounts: string[];
 };
 
+export type ProviderRuntimeRequestContext = RequestContext & {
+  transport: "provider";
+};
+
+export type ProviderRuntimeRpcContext = {
+  chainRef?: ChainRef | null;
+  providerNamespace?: string | null;
+  requestContext?: ProviderRuntimeRequestContext | null;
+};
+
 export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
   origin: string;
-  arx?: RpcInvocationContext;
+  context?: ProviderRuntimeRpcContext;
 };
 
 export type ProviderRuntimeErrorContext = {
   origin: string;
   method: string;
-  rpcContext?: RpcInvocationContext | undefined;
+  rpcContext?: ProviderRuntimeRpcContext | undefined;
 };
 
 export type ProviderRuntimeAccountsQuery = {

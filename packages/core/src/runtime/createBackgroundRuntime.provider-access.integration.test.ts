@@ -327,7 +327,7 @@ describe("createBackgroundRuntime provider access", () => {
         jsonrpc: "2.0",
         method: "eth_accounts",
         origin: ORIGIN,
-        arx: buildProviderContext({
+        context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           requestId: "rpc-1",
@@ -376,7 +376,7 @@ describe("createBackgroundRuntime provider access", () => {
         jsonrpc: "2.0",
         method: "eth_requestAccounts",
         origin: ORIGIN,
-        arx: buildProviderContext({
+        context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           requestId: "rpc-2",
@@ -443,7 +443,7 @@ describe("createBackgroundRuntime provider access", () => {
           jsonrpc: "2.0",
           method: "sol_getBalance",
           origin: ORIGIN,
-          arx: buildProviderContext({
+          context: buildProviderContext({
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,
             requestId: "rpc-sol-1",

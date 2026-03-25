@@ -14,6 +14,7 @@ import {
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
   createRpcRegistry,
+  type JsonRpcError,
   type RpcErrorEncoder,
   type RpcInvocationContext,
   resolveRpcInvocation,
@@ -322,6 +323,35 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   });
   const errorEncoder = createRpcErrorEncoder(rpcRegistry);
 
+  const providerAccess = createProviderRuntimeAccess({
+    getSessionStatus: () => sessionPhase.sessionStatus.getStatus(),
+    getProviderChainView: (namespace) => sessionPhase.chainViews.getProviderChainView(namespace),
+    buildProviderMeta: (namespace) => sessionPhase.chainViews.buildProviderMeta(namespace),
+    getActiveChainByNamespace: () => sessionPhase.networkPreferences.getActiveChainByNamespace(),
+    listPermittedAccountsView: (origin, options) =>
+      runtimeSupportPhase.permissionViews.listPermittedAccounts(origin, options),
+    formatAddress: (input) => bootstrapPhase.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
+    resolveMethodNamespace,
+    handleRpcRequest: (request, callback) => sessionPhase.engine.handle(request, callback),
+    encodeDappError: (error, context) => errorEncoder.encodeDapp(error, context) as JsonRpcError,
+    cancelSessionApprovals: async (input) =>
+      await sessionPhase.controllersBase.approvals.cancelByScope({
+        scope: {
+          transport: "provider",
+          origin: input.origin,
+          portId: input.portId,
+          sessionId: input.sessionId,
+        },
+        reason: "session_lost",
+      }),
+    subscribeSessionUnlocked: (listener) => sessionPhase.sessionLayer.session.unlock.onUnlocked(listener),
+    subscribeSessionLocked: (listener) => sessionPhase.sessionLayer.session.unlock.onLocked(listener),
+    subscribeNetworkStateChanged: (listener) => sessionPhase.controllersBase.network.onStateChanged(listener),
+    subscribeNetworkPreferencesChanged: (listener) => sessionPhase.networkPreferences.subscribeChanged(listener),
+    subscribeAccountsStateChanged: (listener) => sessionPhase.controllersBase.accounts.onStateChanged(listener),
+    subscribePermissionsStateChanged: (listener) => sessionPhase.controllersBase.permissions.onStateChanged(listener),
+  });
+
   const runtime = {
     bus: bootstrapPhase.bus,
     controllers,
@@ -352,9 +382,9 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       errorEncoder,
     },
     lifecycle,
+    providerAccess,
   } as BackgroundRuntime;
 
-  runtime.providerAccess = createProviderRuntimeAccess(runtime);
   runtime.createUiAccess = (options) => createUiRuntimeAccess(createBackgroundRuntimeUiDeps(runtime, options));
 
   if (rpcEngineOptions.assemble !== false) {

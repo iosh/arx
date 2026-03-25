@@ -1,11 +1,16 @@
-import type { JsonRpcParams, JsonRpcRequest, RpcInvocationContext } from "@arx/core/rpc";
-import type { ProviderRuntimeAccess } from "@arx/core/runtime";
+import type { JsonRpcParams } from "@arx/core/rpc";
+import type {
+  ProviderRuntimeAccess,
+  ProviderRuntimeRequestContext,
+  ProviderRuntimeRpcContext,
+  ProviderRuntimeRpcRequest,
+} from "@arx/core/runtime";
 import type { Envelope } from "@arx/provider/protocol";
 import type { TransportResponse } from "@arx/provider/types";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
 import { buildRpcContext } from "../rpc";
-import type { ArxRpcContext, PortContext } from "../types";
+import type { PortContext } from "../types";
 import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
@@ -39,29 +44,28 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const portId = getOrCreatePortId(port);
 
-    const requestContext = {
+    const requestContext: ProviderRuntimeRequestContext = {
       transport: "provider" as const,
       portId,
       sessionId: envelope.sessionId,
       requestId: String(rpcId),
       origin,
     };
+    const context: ProviderRuntimeRpcContext | undefined = rpcContext
+      ? {
+          ...(rpcContext.chainRef !== undefined ? { chainRef: rpcContext.chainRef } : {}),
+          ...(rpcContext.providerNamespace !== undefined ? { providerNamespace: rpcContext.providerNamespace } : {}),
+          requestContext,
+        }
+      : undefined;
 
-    const request: JsonRpcRequest<JsonRpcParams> & ArxRpcContext = {
+    const request: ProviderRuntimeRpcRequest = {
       id: envelope.payload.id,
       jsonrpc: envelope.payload.jsonrpc,
       method: envelope.payload.method,
       params: envelope.payload.params as JsonRpcParams,
       origin,
-      ...(rpcContext && {
-        arx: {
-          chainRef: rpcContext.chainRef,
-          ...(rpcContext.namespace ? { namespace: rpcContext.namespace } : {}),
-          ...(rpcContext.providerNamespace ? { providerNamespace: rpcContext.providerNamespace } : {}),
-          requestContext,
-          meta: rpcContext.meta,
-        } satisfies RpcInvocationContext,
-      }),
+      ...(context ? { context } : {}),
     };
 
     let providerAccess: ProviderRuntimeAccess | null = null;
@@ -76,7 +80,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
         ? providerAccess.encodeRpcError(error, {
             origin,
             method,
-            rpcContext: request.arx,
+            rpcContext: context,
           })
         : ({ code: -32603, message: "Internal error" } as const);
 

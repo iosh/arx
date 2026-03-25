@@ -1,28 +1,102 @@
-import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
-import type { BackgroundRuntime } from "../createBackgroundRuntime.js";
+import type { ChainRef } from "../../chains/ids.js";
+import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
+import type {
+  JsonRpcError,
+  JsonRpcParams,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  RpcInvocationContext,
+} from "../../rpc/index.js";
+import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
 import type {
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
+  ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSnapshot,
 } from "./types.js";
 
 type ProviderRuntimeRequestEnvelope = JsonRpcRequest<JsonRpcParams> & {
   origin: string;
+  arx?: RpcInvocationContext;
 };
 
 const UNKNOWN_ORIGIN = "unknown://";
 
-export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): ProviderRuntimeAccess => {
-  const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
-  const getSessionStatus = () => runtime.services.sessionStatus.getStatus();
+type ProviderRuntimeChainView = {
+  chainId: string;
+  chainRef: ChainRef;
+};
 
+type ProviderRuntimeAccessDeps = {
+  getSessionStatus: () => { isUnlocked: boolean };
+  getProviderChainView: (namespace: string) => ProviderRuntimeChainView;
+  buildProviderMeta: (namespace: string) => {
+    activeChainByNamespace: Record<string, ChainRef>;
+    supportedChains: ChainRef[];
+  };
+  getActiveChainByNamespace: () => Record<string, ChainRef>;
+  listPermittedAccountsView: (origin: string, options: { chainRef: ChainRef }) => Array<{ canonicalAddress: string }>;
+  formatAddress: (input: { chainRef: ChainRef; canonical: string }) => string;
+  resolveMethodNamespace: (method: string, context?: RpcInvocationContext) => string | null;
+  handleRpcRequest: (
+    request: ProviderRuntimeRequestEnvelope,
+    callback: (error: unknown, response: JsonRpcResponse | null | undefined) => void,
+  ) => void;
+  encodeDappError: (
+    error: unknown,
+    context: {
+      namespace: string | null;
+      chainRef: ChainRef | null;
+      origin: string;
+      method: string;
+    },
+  ) => JsonRpcError;
+  cancelSessionApprovals: (input: { origin: string; portId: string; sessionId: string }) => Promise<number>;
+  subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
+  subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
+  subscribeNetworkStateChanged: (listener: () => void) => () => void;
+  subscribeNetworkPreferencesChanged: (listener: NetworkPreferencesChangedHandler) => () => void;
+  subscribeAccountsStateChanged: (listener: () => void) => () => void;
+  subscribePermissionsStateChanged: (listener: () => void) => () => void;
+};
+
+const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocationContext | undefined => {
+  if (!context) {
+    return undefined;
+  }
+
+  return {
+    ...(context.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
+    ...(context.providerNamespace !== undefined ? { providerNamespace: context.providerNamespace } : {}),
+    ...(context.requestContext !== undefined ? { requestContext: context.requestContext } : {}),
+  };
+};
+
+export const createProviderRuntimeAccess = ({
+  getSessionStatus,
+  getProviderChainView,
+  buildProviderMeta,
+  getActiveChainByNamespace,
+  listPermittedAccountsView,
+  formatAddress,
+  resolveMethodNamespace,
+  handleRpcRequest,
+  encodeDappError,
+  cancelSessionApprovals,
+  subscribeSessionUnlocked,
+  subscribeSessionLocked,
+  subscribeNetworkStateChanged,
+  subscribeNetworkPreferencesChanged,
+  subscribeAccountsStateChanged,
+  subscribePermissionsStateChanged,
+}: ProviderRuntimeAccessDeps): ProviderRuntimeAccess => {
   const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {
-    const providerMeta = runtime.services.chainViews.buildProviderMeta(namespace);
-    const providerChain = runtime.services.chainViews.getProviderChainView(namespace);
+    const providerMeta = buildProviderMeta(namespace);
+    const providerChain = getProviderChainView(namespace);
     const supportedChains = providerMeta.supportedChains.filter((chainRef) => chainRef.startsWith(`${namespace}:`));
 
     return {
@@ -45,8 +119,6 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     return buildSnapshotFromState(namespace, getSessionStatus().isUnlocked);
   };
 
-  const getActiveChainByNamespace = () => runtime.services.networkPreferences.getActiveChainByNamespace();
-
   const listPermittedAccountsForState = ({
     origin,
     chainRef,
@@ -60,8 +132,8 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
       return [];
     }
 
-    return runtime.services.permissionViews.listPermittedAccounts(origin, { chainRef }).map((account) =>
-      runtime.controllers.chainAddressCodecs.formatAddress({
+    return listPermittedAccountsView(origin, { chainRef }).map((account) =>
+      formatAddress({
         chainRef,
         canonical: account.canonicalAddress,
       }),
@@ -72,26 +144,29 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     error: unknown,
     { origin, method, rpcContext }: ProviderRuntimeErrorContext,
   ): JsonRpcError => {
-    return runtime.rpc.errorEncoder.encodeDapp(error, {
-      namespace: resolveMethodNamespace(method, rpcContext) ?? null,
+    const resolvedRpcContext = toRpcInvocationContext(rpcContext);
+
+    return encodeDappError(error, {
+      namespace: resolveMethodNamespace(method, resolvedRpcContext) ?? null,
       chainRef: rpcContext?.chainRef ?? null,
       origin,
       method,
-    }) as JsonRpcError;
+    });
   };
 
   const executeRpcRequest = async ({
     origin,
-    arx,
+    context,
     ...request
   }: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse> => {
-    const engineRequest: ProviderRuntimeRequestEnvelope & { arx?: ProviderRuntimeRpcRequest["arx"] } = {
+    const rpcContext = toRpcInvocationContext(context);
+    const engineRequest: ProviderRuntimeRequestEnvelope = {
       id: request.id,
       jsonrpc: request.jsonrpc,
       method: request.method,
       origin,
       ...(request.params !== undefined ? { params: request.params } : {}),
-      ...(arx ? { arx } : {}),
+      ...(rpcContext ? { arx: rpcContext } : {}),
     };
 
     const buildErrorResponse = (error: unknown): JsonRpcResponse => ({
@@ -100,13 +175,13 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
       error: encodeRpcError(error, {
         origin,
         method: request.method,
-        rpcContext: arx,
+        rpcContext: context,
       }),
     });
 
     try {
       return await new Promise<JsonRpcResponse>((resolve) => {
-        runtime.rpc.engine.handle(engineRequest, (error, response) => {
+        handleRpcRequest(engineRequest, (error, response) => {
           if (error) {
             resolve(buildErrorResponse(error));
             return;
@@ -150,31 +225,23 @@ export const createProviderRuntimeAccess = (runtime: BackgroundRuntime): Provide
     };
   };
 
-  const cancelSessionApprovals = async (input: { origin: string; portId: string; sessionId: string }) => {
-    return await runtime.controllers.approvals.cancelByScope({
-      scope: {
-        transport: "provider",
-        origin: input.origin,
-        portId: input.portId,
-        sessionId: input.sessionId,
-      },
-      reason: "session_lost",
-    });
+  const cancelProviderSessionApprovals = async (input: { origin: string; portId: string; sessionId: string }) => {
+    return await cancelSessionApprovals(input);
   };
 
   return {
     buildSnapshot,
     buildConnectionState,
     getActiveChainByNamespace,
-    subscribeSessionUnlocked: (listener) => runtime.services.session.unlock.onUnlocked(listener),
-    subscribeSessionLocked: (listener) => runtime.services.session.unlock.onLocked(listener),
-    subscribeNetworkStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
-    subscribeNetworkPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(listener),
-    subscribeAccountsStateChanged: (listener) => runtime.controllers.accounts.onStateChanged(listener),
-    subscribePermissionsStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
+    subscribeSessionUnlocked,
+    subscribeSessionLocked,
+    subscribeNetworkStateChanged,
+    subscribeNetworkPreferencesChanged,
+    subscribeAccountsStateChanged,
+    subscribePermissionsStateChanged,
     executeRpcRequest,
     encodeRpcError,
     listPermittedAccounts,
-    cancelSessionApprovals,
+    cancelSessionApprovals: cancelProviderSessionApprovals,
   };
 };

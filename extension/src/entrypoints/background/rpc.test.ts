@@ -15,9 +15,7 @@ describe("background rpc helpers", () => {
       {
         origin: "https://example.app",
         providerNamespace: "eip155",
-        meta: null,
         chainRef: "eip155:1",
-        chainId: "0x1",
       },
       "eip155:10",
     );
@@ -25,7 +23,6 @@ describe("background rpc helpers", () => {
     expect(rpcContext).toMatchObject({
       providerNamespace: "eip155",
       chainRef: "eip155:10",
-      meta: null,
     });
   });
 });

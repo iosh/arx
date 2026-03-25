@@ -1,11 +1,7 @@
 import { parseChainRef } from "@arx/core";
-import type { RpcInvocationContext } from "@arx/core/rpc";
-import type { TransportMeta } from "@arx/provider/types";
-import type { PortContext } from "./types";
+import type { PortContext, ProviderBridgeRpcContext } from "./types";
 
-export type ExtendedRpcContext = RpcInvocationContext & {
-  meta: TransportMeta | null;
-};
+export type ExtendedRpcContext = ProviderBridgeRpcContext;
 
 const normalizeNamespaceCandidate = (candidate: string | null | undefined): string | null => {
   if (typeof candidate !== "string") return null;
@@ -33,25 +29,17 @@ export const buildRpcContext = (
 ): ExtendedRpcContext | undefined => {
   if (!portContext) return undefined;
   const resolvedChainRef = chainRef ?? portContext.chainRef ?? null;
-  const baseContext: RpcInvocationContext = {
+  const baseContext: ProviderBridgeRpcContext = {
     ...(portContext.providerNamespace ? { providerNamespace: portContext.providerNamespace } : {}),
     ...(resolvedChainRef ? { chainRef: resolvedChainRef } : {}),
   };
-  return {
-    ...baseContext,
-    meta: portContext.meta,
-  };
+  return baseContext;
 };
 
 export const deriveRpcContextNamespace = (
-  rpcContext: RpcInvocationContext | null | undefined,
+  rpcContext: ProviderBridgeRpcContext | null | undefined,
   fallback: string | null = null,
 ): string | null => {
-  const explicit = normalizeNamespaceCandidate(rpcContext?.namespace);
-  if (explicit) {
-    return explicit;
-  }
-
   const fromChainRef = namespaceFromChainRefCandidate(rpcContext?.chainRef);
   if (fromChainRef) {
     return fromChainRef;

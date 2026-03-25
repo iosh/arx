@@ -391,14 +391,22 @@ describe("portRouter privacy and binding", () => {
 
     await vi.waitFor(() => expect(executeRpcRequest).toHaveBeenCalledTimes(1));
     const request = executeRpcRequest.mock.calls[0]?.[0] as {
-      arx?: { namespace?: string; providerNamespace?: string; chainRef?: string };
+      context?: {
+        providerNamespace?: string;
+        chainRef?: string;
+        requestContext?: { transport?: string; sessionId?: string; requestId?: string };
+      };
     };
 
-    expect(request.arx).toMatchObject({
+    expect(request.context).toMatchObject({
       providerNamespace: "eip155",
       chainRef: "eip155:1",
+      requestContext: {
+        transport: "provider",
+        sessionId: "s1",
+        requestId: "rpc-1",
+      },
     });
-    expect(request.arx?.namespace).toBeUndefined();
   });
 
   it("cancels provider-scoped approvals when the port disconnects", async () => {

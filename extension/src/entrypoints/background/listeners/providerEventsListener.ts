@@ -34,6 +34,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
   let started = false;
   let disposed = false;
   let startTask: Promise<void> | null = null;
+  let projectionQueue: Promise<void> = Promise.resolve();
   let readProviderSnapshot: (namespace: string) => ProviderBridgeSnapshot | null = () => null;
 
   const snapshotCache = new Map<string, ProviderBridgeSnapshot>();
@@ -46,7 +47,20 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
     ]);
   };
 
-  const reconcileNamespaces = (namespaces: Iterable<string>) => {
+  const enqueueProjection = (label: string, project: () => void | Promise<void>) => {
+    projectionQueue = projectionQueue
+      .then(async () => {
+        if (disposed) return;
+        await project();
+      })
+      .catch((error) => {
+        listenerLog(`failed to project provider event: ${label}`, error);
+      });
+
+    return projectionQueue;
+  };
+
+  const reconcileNamespaces = async (namespaces: Iterable<string>) => {
     const chainChanged = new Set<string>();
     const metaChanged = new Set<string>();
     const disconnected = new Set<string>();
@@ -67,12 +81,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
 
       snapshotCache.set(namespace, next);
 
-      if (
-        !previous ||
-        previous.chain.chainId !== next.chain.chainId ||
-        previous.chain.chainRef !== next.chain.chainRef ||
-        previous.isUnlocked !== next.isUnlocked
-      ) {
+      if (!previous || previous.chain.chainId !== next.chain.chainId || previous.chain.chainRef !== next.chain.chainRef) {
         chainChanged.add(namespace);
       }
 
@@ -81,12 +90,13 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
       }
     }
 
-    if (metaChanged.size > 0) {
-      portRouter.broadcastMetaChangedForNamespaces(metaChanged);
-    }
-
     if (chainChanged.size > 0) {
       portRouter.broadcastChainChangedForNamespaces(chainChanged);
+      await portRouter.broadcastAccountsChangedForNamespaces(chainChanged);
+    }
+
+    if (metaChanged.size > 0) {
+      portRouter.broadcastMetaChangedForNamespaces(metaChanged);
     }
 
     if (disconnected.size > 0) {
@@ -110,6 +120,7 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
   const resetDerivedState = () => {
     readProviderSnapshot = () => null;
     snapshotCache.clear();
+    projectionQueue = Promise.resolve();
   };
 
   const start = () => {
@@ -128,48 +139,65 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
           }
         };
 
-        const publishAccountsState = () => {
-          portRouter.broadcastAccountsChanged();
+        const publishAccountsState = async (namespaces?: Iterable<string>) => {
+          if (namespaces) {
+            await portRouter.broadcastAccountsChangedForNamespaces(namespaces);
+            return;
+          }
+
+          await portRouter.broadcastAccountsChanged();
         };
 
         subscriptions.push(
           providerAccess.subscribeSessionUnlocked((payload) => {
-            portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
-            publishAccountsState();
+            void enqueueProjection("session_unlocked", async () => {
+              portRouter.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
+              await publishAccountsState();
+            });
           }),
         );
 
         subscriptions.push(
           providerAccess.subscribeSessionLocked((payload) => {
-            portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
-            publishAccountsState();
-            portRouter.broadcastDisconnect();
+            void enqueueProjection("session_locked", async () => {
+              portRouter.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
+              await publishAccountsState();
+              portRouter.broadcastDisconnect();
+            });
           }),
         );
 
         subscriptions.push(
           providerAccess.subscribeNetworkStateChanged(() => {
-            const namespaces = collectRelevantNamespaces(providerAccess.getActiveChainByNamespace());
-            reconcileNamespaces(namespaces);
+            void enqueueProjection("network_state_changed", async () => {
+              const namespaces = collectRelevantNamespaces(providerAccess.getActiveChainByNamespace());
+              await reconcileNamespaces(namespaces);
+            });
           }),
         );
 
         subscriptions.push(
           providerAccess.subscribeNetworkPreferencesChanged(({ next }) => {
-            const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
-            reconcileNamespaces(namespaces);
+            void enqueueProjection("network_preferences_changed", async () => {
+              const namespaces = collectRelevantNamespaces(next.activeChainByNamespace);
+              await reconcileNamespaces(namespaces);
+            });
           }),
         );
 
         subscriptions.push(
           providerAccess.subscribeAccountsStateChanged(() => {
-            publishAccountsState();
+            void enqueueProjection("accounts_state_changed", async () => {
+              await publishAccountsState();
+            });
           }),
         );
 
         subscriptions.push(
           providerAccess.subscribePermissionsStateChanged(() => {
-            publishAccountsState();
+            void enqueueProjection("permissions_state_changed", async () => {
+              await publishAccountsState();
+            });
           }),
         );
 

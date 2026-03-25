@@ -25,6 +25,38 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
     getPermittedAccountsForPort,
   } = deps;
 
+  type ActivePortProjection = {
+    port: Runtime.Port;
+    sessionId: string;
+    snapshot: ProviderBridgeSnapshot;
+  };
+
+  const resolveActivePortProjections = (ports: Runtime.Port[], missingSnapshotReason: string): ActivePortProjection[] => {
+    syncPortContextsForPorts(ports);
+
+    const stalePorts: Runtime.Port[] = [];
+    const projections: ActivePortProjection[] = [];
+
+    for (const port of ports) {
+      const sessionId = getSessionIdForPort(port);
+      if (!sessionId) continue;
+
+      const snapshot = findPortSnapshot(port);
+      if (!snapshot) {
+        stalePorts.push(port);
+        continue;
+      }
+
+      projections.push({ port, sessionId, snapshot });
+    }
+
+    for (const port of stalePorts) {
+      dropStalePort(port, missingSnapshotReason);
+    }
+
+    return projections;
+  };
+
   const broadcastSafe = (
     shouldInclude: (port: Runtime.Port) => boolean,
     send: (port: Runtime.Port) => boolean,
@@ -45,22 +77,19 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
   };
 
   const broadcastMetaChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPorts = getPortsBoundToNamespaces(namespaces);
-    syncPortContextsForPorts(targetPorts);
-    const targetPortSet = new Set(targetPorts);
+    const targetPortSet = new Set(getPortsBoundToNamespaces(namespaces));
 
     broadcastSafe(
       (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
       (port) => {
-        const sessionId = getSessionIdForPort(port);
-        const snapshot = findPortSnapshot(port);
-        if (!sessionId || !snapshot) return false;
+        const [projection] = resolveActivePortProjections([port], "broadcast_meta_changed_snapshot_missing");
+        if (!projection) return false;
 
         return postEnvelope(port, {
           channel: CHANNEL,
-          sessionId,
+          sessionId: projection.sessionId,
           type: "event",
-          payload: { event: PROVIDER_EVENTS.metaChanged, params: [snapshot.meta] },
+          payload: { event: PROVIDER_EVENTS.metaChanged, params: [projection.snapshot.meta] },
         });
       },
       "broadcast_meta_changed_failed",
@@ -68,29 +97,26 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
   };
 
   const broadcastChainChangedForNamespaces = (namespaces: Iterable<string>) => {
-    const targetPorts = getPortsBoundToNamespaces(namespaces);
-    syncPortContextsForPorts(targetPorts);
-    const targetPortSet = new Set(targetPorts);
+    const targetPortSet = new Set(getPortsBoundToNamespaces(namespaces));
 
     broadcastSafe(
       (port) => targetPortSet.has(port) && !!getSessionIdForPort(port),
       (port) => {
-        const sessionId = getSessionIdForPort(port);
-        const snapshot = findPortSnapshot(port);
-        if (!sessionId || !snapshot) return false;
+        const [projection] = resolveActivePortProjections([port], "broadcast_chain_changed_snapshot_missing");
+        if (!projection) return false;
 
         return postEnvelope(port, {
           channel: CHANNEL,
-          sessionId,
+          sessionId: projection.sessionId,
           type: "event",
           payload: {
             event: PROVIDER_EVENTS.chainChanged,
             params: [
               {
-                chainId: snapshot.chain.chainId,
-                chainRef: snapshot.chain.chainRef,
-                isUnlocked: snapshot.isUnlocked,
-                meta: snapshot.meta,
+                chainId: projection.snapshot.chain.chainId,
+                chainRef: projection.snapshot.chain.chainRef,
+                isUnlocked: projection.snapshot.isUnlocked,
+                meta: projection.snapshot.meta,
               },
             ],
           },
@@ -100,15 +126,18 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
     );
   };
 
-  const broadcastAccountsChanged = () => {
-    for (const port of getConnectedPorts()) {
-      const sessionId = getSessionIdForPort(port);
-      const snapshot = findPortSnapshot(port);
-      if (!sessionId || !snapshot) continue;
+  const broadcastAccountsChangedForPorts = async (ports: Runtime.Port[]) => {
+    const projections = resolveActivePortProjections(ports, "broadcast_accounts_changed_snapshot_missing");
 
-      void (async () => {
+    await Promise.all(
+      projections.map(async ({ port, sessionId, snapshot }) => {
         try {
           const accounts = await getPermittedAccountsForPort(port, snapshot);
+          const activeSessionId = getSessionIdForPort(port);
+          if (!activeSessionId || activeSessionId !== sessionId) {
+            return;
+          }
+
           const ok = postEnvelope(port, {
             channel: CHANNEL,
             sessionId,
@@ -122,8 +151,16 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
         } catch (error) {
           dropStalePort(port, "broadcast_accounts_changed_error", error);
         }
-      })();
-    }
+      }),
+    );
+  };
+
+  const broadcastAccountsChanged = async () => {
+    await broadcastAccountsChangedForPorts(getConnectedPorts());
+  };
+
+  const broadcastAccountsChangedForNamespaces = async (namespaces: Iterable<string>) => {
+    await broadcastAccountsChangedForPorts(getPortsBoundToNamespaces(namespaces));
   };
 
   const broadcastEvent = (event: string, params: unknown[]) => {
@@ -147,6 +184,7 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
   return {
     broadcastMetaChangedForNamespaces,
     broadcastChainChangedForNamespaces,
+    broadcastAccountsChangedForNamespaces,
     broadcastAccountsChanged,
     broadcastEvent,
   };

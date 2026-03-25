@@ -317,6 +317,7 @@ export const createPortRouter = ({ extensionOrigin, getOrInitProviderAccess }: P
     listConnectedNamespaces,
     broadcastEvent: eventBroadcaster.broadcastEvent,
     broadcastAccountsChanged: eventBroadcaster.broadcastAccountsChanged,
+    broadcastAccountsChangedForNamespaces: eventBroadcaster.broadcastAccountsChangedForNamespaces,
     broadcastMetaChangedForNamespaces: eventBroadcaster.broadcastMetaChangedForNamespaces,
     broadcastChainChangedForNamespaces: eventBroadcaster.broadcastChainChangedForNamespaces,
     broadcastDisconnect,

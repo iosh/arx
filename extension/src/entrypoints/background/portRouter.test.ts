@@ -368,6 +368,105 @@ describe("portRouter privacy and binding", () => {
     );
   });
 
+  it("broadcasts accountsChanged only to ports bound to the matching namespace", async () => {
+    const { router, listPermittedAccounts } = createRouterHarness({
+      listPermittedAccounts: async ({ chainRef }) =>
+        chainRef === "conflux:1029" ? ["cfx:aatest"] : ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
+      snapshots: {
+        eip155: makeSnapshot("eip155", true, {
+          chain: { chainId: "0x1", chainRef: "eip155:1" },
+          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+        }),
+        conflux: makeSnapshot("conflux", true, {
+          chain: { chainId: "0x405", chainRef: "conflux:1029" },
+          meta: {
+            activeChainByNamespace: { conflux: "conflux:1029" },
+            supportedChains: ["conflux:1029"],
+          },
+        }),
+      },
+    });
+
+    const evmPort = new FakePort();
+    const confluxPort = new FakePort();
+    router.handleConnect(evmPort as unknown as Runtime.Port);
+    router.handleConnect(confluxPort as unknown as Runtime.Port);
+
+    handshake(evmPort, "s-evm", "eip155");
+    handshake(confluxPort, "s-cfx", "conflux");
+    await vi.waitFor(() => expect(evmPort.postMessage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(confluxPort.postMessage).toHaveBeenCalledTimes(1));
+
+    evmPort.postMessage.mockClear();
+    confluxPort.postMessage.mockClear();
+    listPermittedAccounts.mockClear();
+
+    await router.broadcastAccountsChangedForNamespaces(["conflux"]);
+
+    expect(evmPort.postMessage).not.toHaveBeenCalled();
+    expect(confluxPort.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "event",
+        payload: { event: "accountsChanged", params: [["cfx:aatest"]] },
+      }),
+    );
+    expect(listPermittedAccounts).toHaveBeenCalledTimes(1);
+    expect(listPermittedAccounts).toHaveBeenCalledWith({
+      origin: "https://example.com",
+      chainRef: "conflux:1029",
+    });
+  });
+
+  it("recomputes accountsChanged from the latest chainRef after chainChanged", async () => {
+    const { router, listPermittedAccounts, snapshots } = createRouterHarness({
+      listPermittedAccounts: async ({ chainRef }) => (chainRef === "eip155:2" ? ["0xbbb"] : ["0xaaa"]),
+      snapshots: {
+        eip155: makeSnapshot("eip155", true, {
+          chain: { chainId: "0x1", chainRef: "eip155:1" },
+          meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1", "eip155:2"] },
+        }),
+      },
+    });
+
+    const port = new FakePort();
+    router.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "s1", "eip155");
+
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+    port.postMessage.mockClear();
+    listPermittedAccounts.mockClear();
+
+    snapshots.eip155 = makeSnapshot("eip155", true, {
+      chain: { chainId: "0x2", chainRef: "eip155:2" },
+      meta: { activeChainByNamespace: { eip155: "eip155:2" }, supportedChains: ["eip155:1", "eip155:2"] },
+    });
+
+    router.broadcastChainChangedForNamespaces(["eip155"]);
+    await router.broadcastAccountsChangedForNamespaces(["eip155"]);
+
+    expect(port.postMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: "event",
+        payload: {
+          event: "chainChanged",
+          params: [expect.objectContaining({ chainId: "0x2", chainRef: "eip155:2" })],
+        },
+      }),
+    );
+    expect(port.postMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "event",
+        payload: { event: "accountsChanged", params: [["0xbbb"]] },
+      }),
+    );
+    expect(listPermittedAccounts).toHaveBeenCalledWith({
+      origin: "https://example.com",
+      chainRef: "eip155:2",
+    });
+  });
+
   it("forwards provider-bound requests with providerNamespace in rpc context", async () => {
     const { router, executeRpcRequest } = createRouterHarness();
 

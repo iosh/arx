@@ -27,6 +27,10 @@ const toNamespaceList = (value: Iterable<string>) => {
 
 const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
   const networkStateHandlers = new Set<() => void>();
+  const sessionUnlockedHandlers = new Set<(payload: { reason?: string }) => void>();
+  const sessionLockedHandlers = new Set<(payload: { reason?: string }) => void>();
+  const accountsStateHandlers = new Set<() => void>();
+  const permissionsStateHandlers = new Set<() => void>();
   const networkPreferenceHandlers = new Set<
     (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
   >();
@@ -39,7 +43,8 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
   const broadcastMetaChangedForNamespaces = vi.fn();
   const broadcastChainChangedForNamespaces = vi.fn();
   const broadcastDisconnectForNamespaces = vi.fn();
-  const broadcastAccountsChanged = vi.fn();
+  const broadcastAccountsChangedForNamespaces = vi.fn(async () => {});
+  const broadcastAccountsChanged = vi.fn(async () => {});
   const broadcastEvent = vi.fn();
   const broadcastDisconnect = vi.fn();
 
@@ -48,6 +53,7 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     broadcastMetaChangedForNamespaces,
     broadcastChainChangedForNamespaces,
     broadcastDisconnectForNamespaces,
+    broadcastAccountsChangedForNamespaces,
     broadcastAccountsChanged,
     broadcastEvent,
     broadcastDisconnect,
@@ -69,8 +75,14 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
       return { snapshot, accounts: [] };
     },
     getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
-    subscribeSessionUnlocked: () => () => {},
-    subscribeSessionLocked: () => () => {},
+    subscribeSessionUnlocked: (handler: (payload: { reason?: string }) => void) => {
+      sessionUnlockedHandlers.add(handler);
+      return () => sessionUnlockedHandlers.delete(handler);
+    },
+    subscribeSessionLocked: (handler: (payload: { reason?: string }) => void) => {
+      sessionLockedHandlers.add(handler);
+      return () => sessionLockedHandlers.delete(handler);
+    },
     subscribeNetworkStateChanged: (handler: () => void) => {
       networkStateHandlers.add(handler);
       return () => networkStateHandlers.delete(handler);
@@ -81,8 +93,14 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
       networkPreferenceHandlers.add(handler);
       return () => networkPreferenceHandlers.delete(handler);
     },
-    subscribeAccountsStateChanged: () => () => {},
-    subscribePermissionsStateChanged: () => () => {},
+    subscribeAccountsStateChanged: (handler: () => void) => {
+      accountsStateHandlers.add(handler);
+      return () => accountsStateHandlers.delete(handler);
+    },
+    subscribePermissionsStateChanged: (handler: () => void) => {
+      permissionsStateHandlers.add(handler);
+      return () => permissionsStateHandlers.delete(handler);
+    },
     executeRpcRequest: vi.fn(),
     encodeRpcError: vi.fn(),
     listPermittedAccounts: vi.fn(),
@@ -114,9 +132,16 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     runtimeHost,
     mocks: {
       listConnectedNamespaces,
-      broadcastMetaChangedForNamespaces,
-      broadcastChainChangedForNamespaces,
-      broadcastDisconnectForNamespaces,
+        broadcastMetaChangedForNamespaces,
+        broadcastChainChangedForNamespaces,
+        broadcastDisconnectForNamespaces,
+        broadcastAccountsChangedForNamespaces,
+        broadcastAccountsChanged,
+        broadcastEvent,
+        broadcastDisconnect,
+      },
+    setSnapshot(namespace: string, snapshot: ProviderBridgeSnapshot) {
+      snapshots[namespace] = snapshot;
     },
     getNetworkStateSubscriptionCount() {
       return networkStateHandlers.size;
@@ -129,6 +154,26 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     emitNetworkPreferencesChanged(next: Record<string, string>) {
       for (const handler of networkPreferenceHandlers) {
         handler({ next: { activeChainByNamespace: next } });
+      }
+    },
+    emitSessionUnlocked(payload: { reason?: string }) {
+      for (const handler of sessionUnlockedHandlers) {
+        handler(payload);
+      }
+    },
+    emitSessionLocked(payload: { reason?: string }) {
+      for (const handler of sessionLockedHandlers) {
+        handler(payload);
+      }
+    },
+    emitAccountsStateChanged() {
+      for (const handler of accountsStateHandlers) {
+        handler();
+      }
+    },
+    emitPermissionsStateChanged() {
+      for (const handler of permissionsStateHandlers) {
+        handler();
       }
     },
   };
@@ -155,10 +200,71 @@ describe("providerEventsListener", () => {
     expect(toNamespaceList(harness.mocks.broadcastChainChangedForNamespaces.mock.calls[0]?.[0] ?? [])).toEqual([
       "conflux",
     ]);
+    const accountsProjectionCalls =
+      harness.mocks.broadcastAccountsChangedForNamespaces.mock.calls as unknown as Array<[Iterable<string>]>;
+    const accountsProjectionNamespaces = accountsProjectionCalls[0]?.[0];
+    expect(toNamespaceList(accountsProjectionNamespaces ?? [])).toEqual(["conflux"]);
 
     harness.emitNetworkPreferencesChanged({ eip155: "eip155:1" });
 
     await vi.waitFor(() => expect(harness.mocks.listConnectedNamespaces).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not project unlock-only snapshot changes as chainChanged", async () => {
+    const harness = buildHarness();
+
+    harness.listener.start();
+    await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
+
+    harness.emitNetworkStateChanged();
+    await vi.waitFor(() => expect(harness.mocks.broadcastChainChangedForNamespaces).toHaveBeenCalledTimes(1));
+
+    harness.mocks.broadcastChainChangedForNamespaces.mockClear();
+    harness.mocks.broadcastMetaChangedForNamespaces.mockClear();
+    harness.mocks.broadcastAccountsChangedForNamespaces.mockClear();
+
+    harness.setSnapshot("conflux", makeSnapshot("conflux", { isUnlocked: false }));
+    harness.emitNetworkStateChanged();
+
+    await vi.waitFor(() => expect(harness.mocks.listConnectedNamespaces).toHaveBeenCalledTimes(2));
+    expect(harness.mocks.broadcastChainChangedForNamespaces).not.toHaveBeenCalled();
+    expect(harness.mocks.broadcastMetaChangedForNamespaces).not.toHaveBeenCalled();
+    expect(harness.mocks.broadcastAccountsChangedForNamespaces).not.toHaveBeenCalled();
+  });
+
+  it("serializes sessionLocked projection before disconnect finality", async () => {
+    const harness = buildHarness();
+    let resolveAccountsProjection: (() => void) | null = null;
+    harness.mocks.broadcastAccountsChanged.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAccountsProjection = resolve;
+        }),
+    );
+
+    harness.listener.start();
+    await vi.waitFor(() => expect(harness.getNetworkStateSubscriptionCount()).toBe(1));
+
+    harness.emitSessionLocked({ reason: "manual" });
+
+    await vi.waitFor(() =>
+      expect(harness.mocks.broadcastEvent).toHaveBeenCalledWith("session:locked", [{ reason: "manual" }]),
+    );
+    await vi.waitFor(() => expect(harness.mocks.broadcastAccountsChanged).toHaveBeenCalledTimes(1));
+    expect(harness.mocks.broadcastDisconnect).not.toHaveBeenCalled();
+
+    const completeAccountsProjection = resolveAccountsProjection as (() => void) | null;
+    if (typeof completeAccountsProjection === "function") {
+      completeAccountsProjection();
+    }
+
+    await vi.waitFor(() => expect(harness.mocks.broadcastDisconnect).toHaveBeenCalledTimes(1));
+    expect(harness.mocks.broadcastEvent.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.mocks.broadcastAccountsChanged.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
+    expect(harness.mocks.broadcastAccountsChanged.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.mocks.broadcastDisconnect.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it("retries initialization after the first provider access bootstrap failure", async () => {

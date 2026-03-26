@@ -5,10 +5,6 @@ type ProviderHostLogger = Readonly<{
   debug?: (message: string, meta?: unknown) => void;
 }>;
 
-export type ProviderHostFeatures = {
-  eip6963?: boolean;
-};
-
 // NOTE: TypeScript's lib.dom does not model Event/CustomEvent as properties on Window, but they exist at runtime per-realm.
 // We use constructors from the provided targetWindow to ensure events are created in the correct realm (e.g. JSDOM/iframes).
 export type ProviderHostWindow = Window & {
@@ -20,7 +16,6 @@ export type ProviderHostOptions = {
   targetWindow: ProviderHostWindow;
   createTransportForNamespace: (namespace: string) => Transport;
   registry: ProviderRegistry;
-  features?: ProviderHostFeatures;
   logger?: ProviderHostLogger;
 };
 
@@ -35,8 +30,6 @@ export class ProviderHost {
   #logger: ProviderHostLogger;
   #createTransportForNamespace: (namespace: string) => Transport;
 
-  #features: Required<ProviderHostFeatures>;
-
   // namespace -> provider instance
   #providers = new Map<string, ProviderCacheEntry>();
   #transports = new Map<string, Transport>();
@@ -50,10 +43,9 @@ export class ProviderHost {
   #initialized = false;
   #destroyed = false;
 
-  constructor({ targetWindow, createTransportForNamespace, registry, features, logger }: ProviderHostOptions) {
+  constructor({ targetWindow, createTransportForNamespace, registry, logger }: ProviderHostOptions) {
     this.#targetWindow = targetWindow;
     this.#registry = registry;
-    this.#features = { eip6963: features?.eip6963 ?? true };
     this.#logger = logger ?? {};
     this.#createTransportForNamespace = createTransportForNamespace;
   }
@@ -69,12 +61,16 @@ export class ProviderHost {
       }
     }
 
-    if (this.#features.eip6963 && this.#hasAnyEip6963Provider()) {
+    if (this.#hasAnyEip6963Provider()) {
       this.#registerEip6963Listener();
     }
 
     // Dispatch initialized events only when injection succeeds.
     this.#dispatchInitializedEvents();
+
+    if (this.#hasAnyEip6963Provider()) {
+      this.#announceProviders();
+    }
 
     for (const namespace of this.#transports.keys()) {
       void this.#connectTransport(namespace);

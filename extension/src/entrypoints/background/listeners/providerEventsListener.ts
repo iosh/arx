@@ -81,7 +81,11 @@ export const createProviderEventsListener = ({ runtimeHost, portRouter }: Provid
 
       snapshotCache.set(namespace, next);
 
-      if (!previous || previous.chain.chainId !== next.chain.chainId || previous.chain.chainRef !== next.chain.chainRef) {
+      if (
+        !previous ||
+        previous.chain.chainId !== next.chain.chainId ||
+        previous.chain.chainRef !== next.chain.chainRef
+      ) {
         chainChanged.add(namespace);
       }
 

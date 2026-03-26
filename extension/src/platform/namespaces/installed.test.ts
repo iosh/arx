@@ -3,10 +3,57 @@ import type { ProviderModule } from "@arx/provider/registry";
 import { describe, expect, it } from "vitest";
 import { createInstalledNamespacesComposition, defineInstalledNamespaceSpecs, INSTALLED_NAMESPACES } from "./installed";
 
-const createTestProviderModule = (namespace: string): ProviderModule => ({
+const createTestProviderModule = (
+  namespace: string,
+  options?: {
+    injection?: ProviderModule["injection"];
+  },
+): ProviderModule => ({
   namespace,
   create: () => {
     throw new Error("not used in test");
+  },
+  ...(options?.injection ? { injection: options.injection } : {}),
+});
+
+const createManifestForNamespace = (namespace: string): NamespaceManifest => ({
+  ...eip155NamespaceManifest,
+  namespace,
+  core: {
+    ...eip155NamespaceManifest.core,
+    namespace,
+    rpc: {
+      ...eip155NamespaceManifest.core.rpc,
+      namespace,
+      adapter: {
+        ...eip155NamespaceManifest.core.rpc.adapter,
+        namespace,
+      },
+    },
+    chainAddressCodec: {
+      ...eip155NamespaceManifest.core.chainAddressCodec,
+      namespace,
+    },
+    accountCodec: {
+      ...eip155NamespaceManifest.core.accountCodec,
+      namespace,
+    },
+    keyring: {
+      ...eip155NamespaceManifest.core.keyring,
+      namespace,
+      defaultChainRef: `${namespace}:1`,
+      codec: {
+        ...eip155NamespaceManifest.core.keyring.codec,
+        namespace,
+      },
+    },
+    chainSeeds: [
+      {
+        ...eip155NamespaceManifest.core.chainSeeds[0],
+        namespace,
+        chainRef: `${namespace}:1`,
+      },
+    ],
   },
 });
 
@@ -112,6 +159,68 @@ describe("installed namespaces composition root", () => {
         },
       ] as const),
     ).toThrow(/must use a provider module with the same namespace/);
+
+    expect(() =>
+      defineInstalledNamespaceSpecs([
+        {
+          namespace: "eip155",
+          manifest: eip155NamespaceManifest,
+          provider: {
+            expose: true,
+            module: createTestProviderModule("eip155", {
+              injection: {
+                windowKey: "ethereum",
+                initializedEvent: "ethereum#initialized",
+              },
+            }),
+          },
+        },
+        {
+          namespace: "conflux",
+          manifest: createManifestForNamespace("conflux"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("conflux", {
+              injection: {
+                windowKey: "ethereum",
+                initializedEvent: "conflux#initialized",
+              },
+            }),
+          },
+        },
+      ] as const),
+    ).toThrow(/cannot share injection\.windowKey "ethereum"/);
+
+    expect(() =>
+      defineInstalledNamespaceSpecs([
+        {
+          namespace: "eip155",
+          manifest: eip155NamespaceManifest,
+          provider: {
+            expose: true,
+            module: createTestProviderModule("eip155", {
+              injection: {
+                windowKey: "ethereum",
+                initializedEvent: "wallet#initialized",
+              },
+            }),
+          },
+        },
+        {
+          namespace: "conflux",
+          manifest: createManifestForNamespace("conflux"),
+          provider: {
+            expose: true,
+            module: createTestProviderModule("conflux", {
+              injection: {
+                windowKey: "conflux",
+                initializedEvent: "wallet#initialized",
+              },
+            }),
+          },
+        },
+      ] as const),
+    ).toThrow(/cannot share injection\.initializedEvent "wallet#initialized"/);
 
     expect(() =>
       defineInstalledNamespaceSpecs([

@@ -132,14 +132,14 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     runtimeHost,
     mocks: {
       listConnectedNamespaces,
-        broadcastMetaChangedForNamespaces,
-        broadcastChainChangedForNamespaces,
-        broadcastDisconnectForNamespaces,
-        broadcastAccountsChangedForNamespaces,
-        broadcastAccountsChanged,
-        broadcastEvent,
-        broadcastDisconnect,
-      },
+      broadcastMetaChangedForNamespaces,
+      broadcastChainChangedForNamespaces,
+      broadcastDisconnectForNamespaces,
+      broadcastAccountsChangedForNamespaces,
+      broadcastAccountsChanged,
+      broadcastEvent,
+      broadcastDisconnect,
+    },
     setSnapshot(namespace: string, snapshot: ProviderBridgeSnapshot) {
       snapshots[namespace] = snapshot;
     },
@@ -200,8 +200,9 @@ describe("providerEventsListener", () => {
     expect(toNamespaceList(harness.mocks.broadcastChainChangedForNamespaces.mock.calls[0]?.[0] ?? [])).toEqual([
       "conflux",
     ]);
-    const accountsProjectionCalls =
-      harness.mocks.broadcastAccountsChangedForNamespaces.mock.calls as unknown as Array<[Iterable<string>]>;
+    const accountsProjectionCalls = harness.mocks.broadcastAccountsChangedForNamespaces.mock.calls as unknown as Array<
+      [Iterable<string>]
+    >;
     const accountsProjectionNamespaces = accountsProjectionCalls[0]?.[0];
     expect(toNamespaceList(accountsProjectionNamespaces ?? [])).toEqual(["conflux"]);
 

@@ -200,13 +200,11 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
     expect((window as WindowWithBuiltinProviders).ethereum).toBe(existing);
     expect(initialized).toHaveBeenCalledTimes(0);
-
-    // EIP-6963 announcements are emitted in response to requestProvider.
-    expect(announced).toHaveBeenCalledTimes(0);
+    expect(announced).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-    expect(announced).toHaveBeenCalledTimes(1);
+    expect(announced).toHaveBeenCalledTimes(2);
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(detail?.provider).toBeDefined();
     expect(detail?.provider).not.toBe(existing);
@@ -214,7 +212,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     await waitForTransportConnect(transport);
   });
 
-  it("re-announces on eip6963:requestProvider and freezes announce detail", async () => {
+  it("announces on init, re-announces on eip6963:requestProvider, and freezes announce detail", async () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
@@ -223,11 +221,12 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const announced = onWindowEvent("eip6963:announceProvider");
 
     host.initialize();
+    expect(announced).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
     window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-    expect(announced).toHaveBeenCalledTimes(2);
+    expect(announced).toHaveBeenCalledTimes(3);
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.info)).toBe(true);
@@ -239,7 +238,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     await waitForTransportConnect(transport);
   });
 
-  it("supports requestProvider before host init (announce only after init + request)", async () => {
+  it("supports requestProvider before host init and announces on init before re-announcing on request", async () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
@@ -251,10 +250,10 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     expect(announced).toHaveBeenCalledTimes(0);
 
     host.initialize();
-    expect(announced).toHaveBeenCalledTimes(0);
+    expect(announced).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
-    expect(announced).toHaveBeenCalledTimes(1);
+    expect(announced).toHaveBeenCalledTimes(2);
 
     await waitForTransportConnect(transport);
   });

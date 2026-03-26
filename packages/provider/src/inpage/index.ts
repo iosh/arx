@@ -1,4 +1,4 @@
-import type { ProviderHost, ProviderHostFeatures, ProviderHostWindow } from "../host/index.js";
+import type { ProviderHost, ProviderHostWindow } from "../host/index.js";
 import { createProviderHost } from "../host/index.js";
 import type { ProviderRegistry } from "../registry/index.js";
 import { WindowPostMessageTransport } from "../transport/index.js";
@@ -9,7 +9,6 @@ export type BootstrapInpageProviderOptions = {
   exposedNamespaces?: readonly string[];
   targetWindow?: ProviderHostWindow;
   createTransportForNamespace?: (namespace: string) => Transport;
-  features?: ProviderHostFeatures;
   logger?: Readonly<{ debug?: (message: string, meta?: unknown) => void }>;
 };
 
@@ -22,7 +21,6 @@ type InpageBootstrapState = Readonly<{
   exposedNamespaces: readonly string[];
   targetWindow: ProviderHostWindow;
   createTransportForNamespace: (namespace: string) => Transport;
-  eip6963: boolean;
 }>;
 
 const DEFAULT_CREATE_TRANSPORT_FOR_NAMESPACE = (namespace: string) => new WindowPostMessageTransport({ namespace });
@@ -77,10 +75,6 @@ const assertStableBootstrapState = (current: InpageBootstrapState, next: Omit<In
   if (current.createTransportForNamespace !== next.createTransportForNamespace) {
     changedFields.push("createTransportForNamespace");
   }
-  if (current.eip6963 !== next.eip6963) {
-    changedFields.push("features.eip6963");
-  }
-
   if (changedFields.length === 0) {
     return;
   }
@@ -99,7 +93,6 @@ export const bootstrapInpageProvider = (options: BootstrapInpageProviderOptions)
   const exposedNamespaces = normalizeExposedNamespaces(
     options.exposedNamespaces ?? options.registry.modules.map((module) => module.namespace),
   );
-  const eip6963 = options.features?.eip6963 ?? true;
 
   assertExposedNamespacesMatchRegistry(options.registry, exposedNamespaces);
 
@@ -110,7 +103,6 @@ export const bootstrapInpageProvider = (options: BootstrapInpageProviderOptions)
       exposedNamespaces,
       targetWindow,
       createTransportForNamespace,
-      eip6963,
     });
     bootstrapState.host.initialize();
     return bootstrapState.host;
@@ -120,7 +112,6 @@ export const bootstrapInpageProvider = (options: BootstrapInpageProviderOptions)
     targetWindow,
     registry: options.registry,
     createTransportForNamespace,
-    features: { eip6963 },
     ...(options.logger ? { logger: options.logger } : {}),
   });
 
@@ -130,7 +121,6 @@ export const bootstrapInpageProvider = (options: BootstrapInpageProviderOptions)
     exposedNamespaces,
     targetWindow,
     createTransportForNamespace,
-    eip6963,
   };
 
   Object.defineProperty(g, HOST_KEY, {

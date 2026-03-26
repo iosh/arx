@@ -37,6 +37,8 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
   specs: TSpecs,
 ): TSpecs => {
   const seen = new Set<string>();
+  const exposedWindowKeyOwnerByKey = new Map<string, string>();
+  const exposedInitializedEventOwnerByName = new Map<string, string>();
 
   for (const spec of specs) {
     assertValidNamespaceManifest(spec.manifest);
@@ -57,6 +59,35 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
         `Installed namespace "${spec.namespace}" must use a provider module with the same namespace; received "${spec.provider.module.namespace}"`,
       );
     }
+
+    if (!spec.provider.expose) {
+      continue;
+    }
+
+    const injection = spec.provider.module.injection;
+    if (!injection) {
+      continue;
+    }
+
+    const existingWindowKeyOwner = exposedWindowKeyOwnerByKey.get(injection.windowKey);
+    if (existingWindowKeyOwner) {
+      throw new Error(
+        `Exposed provider modules for "${existingWindowKeyOwner}" and "${spec.namespace}" cannot share injection.windowKey "${injection.windowKey}"`,
+      );
+    }
+    exposedWindowKeyOwnerByKey.set(injection.windowKey, spec.namespace);
+
+    if (!injection.initializedEvent) {
+      continue;
+    }
+
+    const existingInitializedEventOwner = exposedInitializedEventOwnerByName.get(injection.initializedEvent);
+    if (existingInitializedEventOwner) {
+      throw new Error(
+        `Exposed provider modules for "${existingInitializedEventOwner}" and "${spec.namespace}" cannot share injection.initializedEvent "${injection.initializedEvent}"`,
+      );
+    }
+    exposedInitializedEventOwnerByName.set(injection.initializedEvent, spec.namespace);
   }
 
   return specs;

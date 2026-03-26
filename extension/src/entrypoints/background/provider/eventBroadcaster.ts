@@ -31,7 +31,10 @@ export const createProviderEventBroadcaster = (deps: ProviderEventBroadcasterDep
     snapshot: ProviderBridgeSnapshot;
   };
 
-  const resolveActivePortProjections = (ports: Runtime.Port[], missingSnapshotReason: string): ActivePortProjection[] => {
+  const resolveActivePortProjections = (
+    ports: Runtime.Port[],
+    missingSnapshotReason: string,
+  ): ActivePortProjection[] => {
     syncPortContextsForPorts(ports);
 
     const stalePorts: Runtime.Port[] = [];

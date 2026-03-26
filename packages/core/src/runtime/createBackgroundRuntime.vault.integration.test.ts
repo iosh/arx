@@ -151,7 +151,6 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
     try {
       const sessionAccess = createUiSessionAccess({
-        accounts: context.runtime.controllers.accounts,
         session: context.runtime.services.session,
         sessionStatus: context.runtime.services.sessionStatus,
         keyring: context.runtime.services.keyring,
@@ -190,7 +189,6 @@ describe("createBackgroundRuntime (vault integration)", () => {
 
     try {
       const sessionAccess = createUiSessionAccess({
-        accounts: context.runtime.controllers.accounts,
         session: context.runtime.services.session,
         sessionStatus: context.runtime.services.sessionStatus,
         keyring: context.runtime.services.keyring,

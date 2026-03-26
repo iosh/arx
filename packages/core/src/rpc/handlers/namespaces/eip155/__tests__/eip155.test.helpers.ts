@@ -204,7 +204,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           origin: args.origin,
         } as const),
     };
-    const result = await runtime.rpc.errorEncoder.executeWithEncoding(
+    const result = await runtime.surfaceErrors.executeWithEncoding(
       {
         surface: "dapp",
         namespace: "eip155",

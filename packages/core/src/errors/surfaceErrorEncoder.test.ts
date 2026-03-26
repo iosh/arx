@@ -1,16 +1,16 @@
 import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
-import { createRpcErrorEncoder } from "./errorEncoder.js";
+import { createSurfaceErrorEncoder } from "./surfaceErrorEncoder.js";
 
 const createAdapter = (): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: 4100, message: "adapter:dapp" }),
   encodeUiError: () => ({ reason: ArxReasons.RpcInternal, message: "adapter:ui" }),
 });
 
-describe("createRpcErrorEncoder", () => {
+describe("createSurfaceErrorEncoder", () => {
   it("routes dapp and ui encoding through the same adapter lookup", () => {
     const lookupCalls: string[] = [];
-    const encoder = createRpcErrorEncoder({
+    const encoder = createSurfaceErrorEncoder({
       getNamespaceProtocolAdapter: (namespace) => {
         lookupCalls.push(namespace);
         return createAdapter();
@@ -38,7 +38,7 @@ describe("createRpcErrorEncoder", () => {
   });
 
   it("executeWithEncoding() returns the encoded error payload", async () => {
-    const encoder = createRpcErrorEncoder({
+    const encoder = createSurfaceErrorEncoder({
       getNamespaceProtocolAdapter: () => createAdapter(),
     });
 

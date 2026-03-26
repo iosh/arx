@@ -1,13 +1,32 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
+import type { RequestContext } from "../../../rpc/requestContext.js";
 import type { TransactionRequest } from "../../../transactions/types.js";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type {
+  UiChainsAccess,
+  UiHandlers,
+  UiNamespaceBindingsAccess,
+  UiSessionAccess,
+  UiSurfaceIdentity,
+  UiTransactionsAccess,
+} from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
-export const createTransactionsHandlers = (
-  deps: Pick<UiRuntimeDeps, "transactions" | "chains" | "session" | "namespaceBindings" | "uiOrigin">,
-  uiSessionId: string,
-): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
+const createUiRequestContext = (surface: UiSurfaceIdentity): RequestContext => ({
+  transport: surface.transport,
+  portId: surface.portId,
+  sessionId: surface.surfaceId,
+  requestId: crypto.randomUUID(),
+  origin: surface.origin,
+});
+
+export const createTransactionsHandlers = (deps: {
+  transactions: UiTransactionsAccess;
+  chains: UiChainsAccess;
+  session: UiSessionAccess;
+  namespaceBindings: UiNamespaceBindingsAccess;
+  surface: UiSurfaceIdentity;
+}): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
   return {
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
@@ -39,13 +58,7 @@ export const createTransactionsHandlers = (
         });
       }
 
-      const requestContext = {
-        transport: "ui" as const,
-        portId: "ui",
-        sessionId: uiSessionId,
-        requestId: crypto.randomUUID(),
-        origin: deps.uiOrigin,
-      };
+      const requestContext = createUiRequestContext(deps.surface);
 
       const request: TransactionRequest = uiBindings.createSendTransactionRequest({
         chainRef: resolvedChainRef,

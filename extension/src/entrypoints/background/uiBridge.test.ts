@@ -6,11 +6,10 @@ import {
 } from "@arx/core/accounts";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
-import { ArxReasons, arxError } from "@arx/core/errors";
+import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
-import type { HandlerControllers } from "@arx/core/rpc";
-import { createRpcErrorEncoder, createRpcRegistry } from "@arx/core/rpc";
+import { createRpcRegistry, type HandlerControllers } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
 import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
@@ -23,7 +22,12 @@ import {
   type UiPortEnvelope,
   type UiSnapshot,
 } from "@arx/core/ui";
-import { createUiKeyringsAccess, createUiRuntimeAccess, createUiSessionAccess } from "@arx/core/ui/server";
+import {
+  createUiKeyringsAccess,
+  createUiRuntimeAccess,
+  createUiSessionAccess,
+  createUiWalletSetupAccess,
+} from "@arx/core/ui/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
@@ -32,7 +36,7 @@ import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
 registerRpcModulesFromManifests(rpcRegistry, [eip155NamespaceManifest]);
-const rpcErrorEncoder = createRpcErrorEncoder(rpcRegistry);
+const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 
 const TEST_MNEMONIC = "test test test test test test test test test test test junk";
@@ -553,7 +557,7 @@ const createUiAccessForTest = (input: {
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
-  uiOrigin: string;
+  surfaceOrigin: string;
   networkPreferences: {
     subscribeChanged: (
       handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
@@ -575,6 +579,7 @@ const createUiAccessForTest = (input: {
         }
       | undefined;
     hasTransaction: (namespace: string) => boolean;
+    hasTransactionReceiptTracking: (namespace: string) => boolean;
   };
 }) => {
   const controllerViews = input.controllers as unknown as {
@@ -591,12 +596,10 @@ const createUiAccessForTest = (input: {
   });
   const sessionAccess = {
     ...createUiSessionAccess({
-      accounts: input.controllers.accounts,
       session: input.session as BackgroundSessionServices,
       sessionStatus,
       keyring: input.keyring,
     }),
-    persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
   };
   const keyringsAccess = createUiKeyringsAccess({
     keyring: input.keyring,
@@ -604,66 +607,90 @@ const createUiAccessForTest = (input: {
   });
 
   return createUiRuntimeAccess({
-    accounts: input.controllers.accounts,
-    approvals: {
-      ...input.controllers.approvals,
-      resolve: vi.fn(async () => ({
-        id: "approval-id",
-        status: "rejected" as const,
-        terminalReason: "user_reject" as const,
-      })),
+    server: {
+      access: {
+        accounts: input.controllers.accounts,
+        approvals: {
+          ...input.controllers.approvals,
+          resolve: vi.fn(async () => ({
+            id: "approval-id",
+            status: "rejected" as const,
+            terminalReason: "user_reject" as const,
+          })),
+        },
+        permissions: {
+          buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)
+            .buildUiPermissionsSnapshot as never,
+        },
+        transactions: {
+          beginTransactionApproval:
+            "beginTransactionApproval" in input.controllers.transactions
+              ? input.controllers.transactions.beginTransactionApproval
+              : (vi.fn(
+                  async () =>
+                    ({
+                      transactionId: "approval-id",
+                      approvalId: "approval-id",
+                      pendingMeta: { id: "approval-id" },
+                      waitForApprovalDecision: async () => ({ id: "approval-id" }),
+                    }) as never,
+                ) as never),
+          getMeta:
+            "getMeta" in input.controllers.transactions
+              ? input.controllers.transactions.getMeta
+              : vi.fn(() => undefined),
+        } as never,
+        chains: {
+          ...(input.chainViewsOverride ?? controllerViews.chainViews),
+          selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
+        } as never,
+        accountCodecs,
+        session: sessionAccess,
+        walletSetup: createUiWalletSetupAccess({
+          accounts: input.controllers.accounts,
+          session: input.session as BackgroundSessionServices,
+          keyring: input.keyring,
+        }),
+        keyrings: keyringsAccess,
+        attention: {
+          getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
+        },
+        namespaceBindings: (input.namespaceBindings ?? {
+          getUi: () => ({
+            getNativeBalance: vi.fn(async () => 0n),
+          }),
+          hasTransaction: () => false,
+          hasTransactionReceiptTracking: () => false,
+        }) as never,
+      },
+      platform: input.platform,
+      surfaceOrigin: input.surfaceOrigin,
     },
-    permissions: {
-      buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)
-        .buildUiPermissionsSnapshot as never,
-      onStateChanged: input.controllers.permissions.onStateChanged,
-    },
-    transactions: {
-      beginTransactionApproval:
-        "beginTransactionApproval" in input.controllers.transactions
-          ? input.controllers.transactions.beginTransactionApproval
-          : (vi.fn(
-              async () =>
-                ({
-                  transactionId: "approval-id",
-                  approvalId: "approval-id",
-                  pendingMeta: { id: "approval-id" },
-                  waitForApprovalDecision: async () => ({ id: "approval-id" }),
-                }) as never,
-            ) as never),
-      getMeta:
-        "getMeta" in input.controllers.transactions ? input.controllers.transactions.getMeta : vi.fn(() => undefined),
-      onStateChanged: input.controllers.transactions.onStateChanged,
-    } as never,
-    chains: {
-      ...(input.chainViewsOverride ?? controllerViews.chainViews),
-      selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
-      onStateChanged: input.controllers.network.onStateChanged,
-      onPreferencesChanged: (listener: () => void) => input.networkPreferences.subscribeChanged(() => listener()),
-    } as never,
-    accountCodecs,
-    session: sessionAccess,
-    keyrings: keyringsAccess,
-    attention: {
-      getSnapshot: input.attentionSnapshot ?? (() => ({ queue: [], count: 0 })),
-      onStateChanged: input.subscribeAttentionStateChanged,
-    },
-    namespaceBindings: (input.namespaceBindings ?? {
-      getUi: () => ({
-        getNativeBalance: vi.fn(async () => 0n),
-      }),
-      hasTransaction: () => false,
-    }) as never,
-    errorEncoder: {
+    bridge: {
       encodeError: (error, context) =>
-        rpcErrorEncoder.encodeUi(error, {
+        surfaceErrorEncoder.encodeUi(error, {
           namespace: context.namespace,
           chainRef: context.chainRef,
           method: context.method,
         }) as never,
+      persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
+      stateChanged: {
+        accounts: input.controllers.accounts,
+        approvals: input.controllers.approvals,
+        permissions: {
+          onStateChanged: input.controllers.permissions.onStateChanged,
+        },
+        transactions: input.controllers.transactions as never,
+        chains: {
+          onStateChanged: input.controllers.network.onStateChanged,
+          onPreferencesChanged: (listener: () => void) => input.networkPreferences.subscribeChanged(() => listener()),
+        },
+        session: sessionAccess,
+        attention: {
+          onStateChanged: input.subscribeAttentionStateChanged,
+        },
+      },
     },
-    platform: input.platform,
-    uiOrigin: input.uiOrigin,
   });
 };
 
@@ -777,7 +804,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     },
     keyring,
     platform,
-    uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
+    surfaceOrigin: new URL(browserApi.runtime.getURL("")).origin,
     networkPreferences,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
@@ -945,7 +972,7 @@ describe("uiBridge", () => {
       } as unknown as BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> },
       keyring,
       platform,
-      uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
+      surfaceOrigin: new URL(browserApi.runtime.getURL("")).origin,
       networkPreferences: {
         subscribeChanged: (
           handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,

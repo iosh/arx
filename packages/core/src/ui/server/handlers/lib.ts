@@ -5,9 +5,9 @@ import * as Hex from "ox/Hex";
 import { keyringErrors } from "../../../keyring/errors.js";
 import type { AccountRecord, KeyringMetaRecord } from "../../../storage/records.js";
 import { zeroize } from "../../../utils/bytes.js";
-import type { UiRuntimeDeps } from "../types.js";
+import type { UiAccountCodecsAccess, UiChainsAccess, UiSessionAccess } from "../types.js";
 
-export const assertUnlocked = (session: UiRuntimeDeps["session"]) => {
+export const assertUnlocked = (session: Pick<UiSessionAccess, "isUnlocked">) => {
   if (!session.isUnlocked()) {
     throw arxError({ reason: ArxReasons.SessionLocked, message: "Wallet is locked" });
   }
@@ -49,17 +49,15 @@ export const parsePrivateKeyHex = (value: string): string => {
   return normalized;
 };
 
-export const hasAnyAccounts = (accounts: UiRuntimeDeps["accounts"]): boolean => {
-  const accountsState = accounts.getState();
-  return Object.values(accountsState.namespaces).some((ns) => ns.accountKeys.length > 0);
+export const resolveChainRefForNamespace = (
+  chains: Pick<UiChainsAccess, "getPreferredChainViewForNamespace">,
+  namespace: string,
+): string => {
+  return chains.getPreferredChainViewForNamespace(namespace).chainRef;
 };
 
-export const resolveChainRefForNamespace = (deps: Pick<UiRuntimeDeps, "chains">, namespace: string): string => {
-  return deps.chains.getPreferredChainViewForNamespace(namespace).chainRef;
-};
-
-export const toUiAccountMeta = (deps: Pick<UiRuntimeDeps, "accountCodecs">, record: AccountRecord) => {
-  const codec = deps.accountCodecs.get(record.namespace);
+export const toUiAccountMeta = (accountCodecs: UiAccountCodecsAccess, record: AccountRecord) => {
+  const codec = accountCodecs.get(record.namespace);
   if (!codec) {
     throw new Error(`No account codec registered for namespace "${record.namespace}"`);
   }

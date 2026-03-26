@@ -13,10 +13,12 @@ import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/i
 import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiKeyringsAccess } from "./keyringsAccess.js";
 import type { UiSessionAccess } from "./sessionAccess.js";
+import type { UiWalletSetupAccess } from "./walletSetupAccess.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
 export type { UiSessionAccess } from "./sessionAccess.js";
+export type { UiWalletSetupAccess } from "./walletSetupAccess.js";
 
 export type UiOnboardingOpenTabResult = {
   activationPath: "focus" | "create" | "debounced";
@@ -53,19 +55,14 @@ export type UiContextResolver = () => UiResolvedContext;
 
 export type UiAccountsAccess = Pick<
   AccountController,
-  "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "setActiveAccount" | "onStateChanged"
+  "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "setActiveAccount"
 >;
 
-export type UiApprovalsAccess = Pick<ApprovalController, "getState" | "get" | "resolve" | "onStateChanged">;
+export type UiApprovalsAccess = Pick<ApprovalController, "getState" | "get" | "resolve">;
 
-export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot"> & {
-  onStateChanged: Pick<PermissionController, "onStateChanged">["onStateChanged"];
-};
+export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
-export type UiTransactionsAccess = Pick<
-  TransactionController,
-  "beginTransactionApproval" | "getMeta" | "onStateChanged"
->;
+export type UiTransactionsAccess = Pick<TransactionController, "beginTransactionApproval" | "getMeta">;
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<
@@ -76,27 +73,23 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
     | "getPreferredChainViewForNamespace"
     | "getSelectedChainView"
     | "requireAvailableChainMetadata"
-  > & {
-    onStateChanged: (listener: () => void) => () => void;
-    onPreferencesChanged: (listener: () => void) => () => void;
-  };
+  >;
 
 export type UiAccountCodecsAccess = Pick<AccountCodecRegistry, "get" | "toAccountKeyFromAddress">;
 
-export type UiAttentionAccess = Pick<AttentionService, "getSnapshot"> & {
-  onStateChanged: (listener: () => void) => () => void;
-};
+export type UiAttentionAccess = Pick<AttentionService, "getSnapshot">;
 
 export type UiNamespaceBindingsAccess = Pick<
   NamespaceRuntimeBindingsRegistry,
   "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
 >;
 
-export type UiErrorEncoder = {
-  encodeError: (error: unknown, context: { namespace: string; chainRef: string; method: string }) => UiError;
-};
+export type UiEncodeError = (
+  error: unknown,
+  context: { namespace: string; chainRef: string; method: string },
+) => UiError;
 
-export type UiRuntimeDeps = {
+export type UiServerAccess = {
   accounts: UiAccountsAccess;
   approvals: UiApprovalsAccess;
   permissions: UiPermissionsAccess;
@@ -104,17 +97,64 @@ export type UiRuntimeDeps = {
   chains: UiChainsAccess;
   accountCodecs: UiAccountCodecsAccess;
   session: UiSessionAccess;
+  walletSetup: UiWalletSetupAccess;
   keyrings: UiKeyringsAccess;
   attention: UiAttentionAccess;
   namespaceBindings: UiNamespaceBindingsAccess;
-  errorEncoder: UiErrorEncoder;
-  uiOrigin: string;
-  platform: UiPlatformAdapter;
 };
 
-export type UiHandlerDeps = Omit<UiRuntimeDeps, "attention" | "errorEncoder"> & {
+export type UiSurfaceIdentity = {
+  transport: "ui";
+  portId: string;
+  origin: string;
+  surfaceId: string;
+};
+
+export type UiStateChangeSources = {
+  accounts: Pick<AccountController, "onStateChanged">;
+  approvals: Pick<ApprovalController, "onStateChanged">;
+  permissions: {
+    onStateChanged: Pick<PermissionController, "onStateChanged">["onStateChanged"];
+  };
+  transactions: Pick<TransactionController, "onStateChanged">;
+  chains: {
+    onStateChanged: (listener: () => void) => () => void;
+    onPreferencesChanged: (listener: () => void) => () => void;
+  };
+  session: Pick<UiSessionAccess, "onStateChanged">;
+  attention: {
+    onStateChanged: (listener: () => void) => () => void;
+  };
+};
+
+export type UiRuntimeBridgeAccess = {
+  encodeError: UiEncodeError;
+  persistVaultMeta: () => Promise<void>;
+  stateChanged: UiStateChangeSources;
+};
+
+export type UiRuntimeServerDeps = {
+  access: UiServerAccess;
+  platform: UiPlatformAdapter;
+  surfaceOrigin: string;
+};
+
+export type UiServerRuntimeDeps = {
+  access: UiServerAccess;
+  platform: UiPlatformAdapter;
+  surface: UiSurfaceIdentity;
+};
+
+export type UiRuntimeDeps = {
+  server: UiRuntimeServerDeps;
+  bridge: UiRuntimeBridgeAccess;
+};
+
+export type UiHandlerDeps = {
+  access: UiServerAccess;
+  platform: UiPlatformAdapter;
+  surface: UiSurfaceIdentity;
   buildSnapshot: UiSnapshotBuilder;
-  uiSessionId: string;
 };
 
 export type UiServerRuntime = {

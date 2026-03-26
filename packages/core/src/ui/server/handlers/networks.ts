@@ -1,7 +1,7 @@
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiChainsAccess, UiHandlers } from "../types.js";
 
 export const createNetworksHandlers = (
-  deps: Pick<UiRuntimeDeps, "chains">,
+  deps: { chains: UiChainsAccess },
   toChainSnapshot: () => {
     chainRef: string;
     chainId: string;

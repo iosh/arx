@@ -1,21 +1,63 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type {
-  UiCreateWalletFromMnemonicParams,
-  UiImportWalletFromMnemonicParams,
-  UiImportWalletFromPrivateKeyParams,
-} from "../sessionAccess.js";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+  UiAccountCodecsAccess,
+  UiAccountsAccess,
+  UiChainsAccess,
+  UiHandlers,
+  UiPlatformAdapter,
+  UiWalletSetupAccess,
+} from "../types.js";
 import {
-  hasAnyAccounts,
   parsePrivateKeyHex,
   resolveChainRefForNamespace,
   sanitizeMnemonicPhraseFromWords,
   validateBip39Mnemonic,
 } from "./lib.js";
 
-export const createOnboardingHandlers = (
-  deps: Pick<UiRuntimeDeps, "accounts" | "chains" | "accountCodecs" | "session" | "keyrings" | "platform">,
-): Pick<
+const buildCreateWalletRequest = (params: {
+  password: string;
+  mnemonic: string;
+  alias: string | undefined;
+  skipBackup: boolean | undefined;
+  namespace: string | undefined;
+}) => ({
+  password: params.password,
+  mnemonic: params.mnemonic,
+  ...(params.alias !== undefined ? { alias: params.alias } : {}),
+  ...(params.skipBackup !== undefined ? { skipBackup: params.skipBackup } : {}),
+  ...(params.namespace !== undefined ? { namespace: params.namespace } : {}),
+});
+
+const buildImportWalletFromMnemonicRequest = (params: {
+  password: string;
+  mnemonic: string;
+  alias: string | undefined;
+  namespace: string | undefined;
+}) => ({
+  password: params.password,
+  mnemonic: params.mnemonic,
+  ...(params.alias !== undefined ? { alias: params.alias } : {}),
+  ...(params.namespace !== undefined ? { namespace: params.namespace } : {}),
+});
+
+const buildImportWalletFromPrivateKeyRequest = (params: {
+  password: string;
+  privateKey: string;
+  alias: string | undefined;
+  namespace: string | undefined;
+}) => ({
+  password: params.password,
+  privateKey: params.privateKey,
+  ...(params.alias !== undefined ? { alias: params.alias } : {}),
+  ...(params.namespace !== undefined ? { namespace: params.namespace } : {}),
+});
+
+export const createOnboardingHandlers = (deps: {
+  accounts: Pick<UiAccountsAccess, "setActiveAccount">;
+  chains: UiChainsAccess;
+  accountCodecs: UiAccountCodecsAccess;
+  walletSetup: UiWalletSetupAccess;
+  platform: Pick<UiPlatformAdapter, "openOnboardingTab">;
+}): Pick<
   UiHandlers,
   | "ui.onboarding.openTab"
   | "ui.onboarding.generateMnemonic"
@@ -29,7 +71,7 @@ export const createOnboardingHandlers = (
     },
 
     "ui.onboarding.generateMnemonic": async (payload) => {
-      const mnemonic = deps.keyrings.generateMnemonic(payload?.wordCount ?? 12);
+      const mnemonic = deps.walletSetup.generateMnemonic(payload?.wordCount ?? 12);
       return { words: mnemonic.split(" ") };
     },
 
@@ -38,17 +80,17 @@ export const createOnboardingHandlers = (
       const mnemonic = sanitizeMnemonicPhraseFromWords(words);
       validateBip39Mnemonic(mnemonic);
 
-      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
-        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-      }
-
-      const { keyringId, address } = await deps.session.createWalletFromMnemonic({
+      const request = buildCreateWalletRequest({
         password,
         mnemonic,
-        ...keyringParams,
-      } as UiCreateWalletFromMnemonicParams);
+        alias: keyringParams.alias,
+        skipBackup: keyringParams.skipBackup,
+        namespace: keyringParams.namespace,
+      });
+
+      const { keyringId, address } = await deps.walletSetup.createWalletFromMnemonic(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
@@ -62,17 +104,16 @@ export const createOnboardingHandlers = (
       const mnemonic = sanitizeMnemonicPhraseFromWords(words);
       validateBip39Mnemonic(mnemonic);
 
-      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
-        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-      }
-
-      const { keyringId, address } = await deps.session.importWalletFromMnemonic({
+      const request = buildImportWalletFromMnemonicRequest({
         password,
         mnemonic,
-        ...keyringParams,
-      } as UiImportWalletFromMnemonicParams);
+        alias: keyringParams.alias,
+        namespace: keyringParams.namespace,
+      });
+
+      const { keyringId, address } = await deps.walletSetup.importWalletFromMnemonic(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
@@ -85,17 +126,16 @@ export const createOnboardingHandlers = (
       const { password, privateKey: privateKeyHex, ...keyringParams } = params;
       const privateKey = parsePrivateKeyHex(privateKeyHex);
 
-      if (deps.session.hasInitializedVault() && hasAnyAccounts(deps.accounts)) {
-        throw arxError({ reason: ArxReasons.RpcInvalidRequest, message: "Vault already initialized" });
-      }
-
-      const { keyringId, account } = await deps.session.importWalletFromPrivateKey({
+      const request = buildImportWalletFromPrivateKeyRequest({
         password,
         privateKey,
-        ...keyringParams,
-      } as UiImportWalletFromPrivateKeyParams);
+        alias: keyringParams.alias,
+        namespace: keyringParams.namespace,
+      });
+
+      const { keyringId, account } = await deps.walletSetup.importWalletFromPrivateKey(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps, namespace);
+      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,

@@ -68,7 +68,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
         (namespace ? controllers.networkPreferences.getActiveChainRef(namespace) : null) ??
         null;
 
-      return runtime.rpc.errorEncoder.encodeDapp(error, {
+      return runtime.surfaceErrors.encodeDapp(error, {
         namespace,
         chainRef,
         origin,

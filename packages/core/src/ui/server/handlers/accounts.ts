@@ -1,6 +1,6 @@
 import { parseChainRef } from "../../../chains/caip.js";
 import type { UiOwnedAccountSummary } from "../../protocol/schemas.js";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiAccountsAccess, UiHandlers } from "../types.js";
 
 const toUiOwnedAccountSummary = (account: {
   accountKey: string;
@@ -12,9 +12,9 @@ const toUiOwnedAccountSummary = (account: {
   displayAddress: account.displayAddress,
 });
 
-export const createAccountsHandlers = (
-  deps: Pick<UiRuntimeDeps, "accounts">,
-): Pick<UiHandlers, "ui.accounts.switchActive"> => {
+export const createAccountsHandlers = (deps: {
+  accounts: UiAccountsAccess;
+}): Pick<UiHandlers, "ui.accounts.switchActive"> => {
   return {
     "ui.accounts.switchActive": async ({ chainRef, accountKey }) => {
       const { namespace } = parseChainRef(chainRef);

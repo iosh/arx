@@ -27,7 +27,7 @@ export type BackgroundRuntimeHost = {
 
 export type BackgroundUiAccessParams = {
   platform: UiPlatformAdapter;
-  uiOrigin: string;
+  surfaceOrigin: string;
 };
 
 type BackgroundRuntimeApprovals = ReturnType<typeof createBackgroundRuntime>["controllers"]["approvals"];
@@ -140,23 +140,23 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
     if (!uiAccessParams) return;
-    if (uiAccessParams.platform === next.platform && uiAccessParams.uiOrigin === next.uiOrigin) return;
+    if (uiAccessParams.platform === next.platform && uiAccessParams.surfaceOrigin === next.surfaceOrigin) return;
 
     throw new Error("Background runtime host UI access parameters must remain stable across calls");
   };
 
-  const getOrInitUiAccess = async ({ platform, uiOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
+  const getOrInitUiAccess = async ({ platform, surfaceOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
     if (destroyed) {
       throw new Error("Background runtime host is destroyed");
     }
-    assertUiAccessParamsMatch({ platform, uiOrigin });
+    assertUiAccessParamsMatch({ platform, surfaceOrigin });
     if (uiAccess) return uiAccess;
     if (uiAccessPromise) return await uiAccessPromise;
-    uiAccessParams = { platform, uiOrigin };
+    uiAccessParams = { platform, surfaceOrigin };
 
     uiAccessPromise = (async () => {
       const active = await getOrInitRuntimeCache();
-      const access = active.runtime.createUiAccess({ platform, uiOrigin });
+      const access = active.runtime.createUiAccess({ platform, surfaceOrigin });
 
       if (destroyed) {
         throw new Error("Background runtime host is destroyed");

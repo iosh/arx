@@ -1,27 +1,27 @@
 import { createApprovalFlowRegistry } from "../../approvals/index.js";
 import { createUiHandlers } from "./handlers/index.js";
 import { buildUiSnapshot } from "./snapshot.js";
-import type { UiRuntimeDeps, UiServerRuntime } from "./types.js";
+import type { UiRuntimeServerDeps, UiServerRuntime, UiServerRuntimeDeps } from "./types.js";
 
-const buildUiContext = (deps: Pick<UiRuntimeDeps, "chains">) => {
-  const chain = deps.chains.getSelectedChainView();
+const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "access">) => {
+  const chain = deps.access.chains.getSelectedChainView();
   return { namespace: chain.namespace, chainRef: chain.chainRef };
 };
 
-export const createUiServerRuntime = (deps: UiRuntimeDeps): UiServerRuntime => {
+export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
   const approvalFlowRegistry = createApprovalFlowRegistry();
 
   const buildSnapshot = () =>
     buildUiSnapshot({
-      accounts: deps.accounts,
-      approvals: deps.approvals,
-      chains: deps.chains,
-      permissions: deps.permissions,
-      session: deps.session,
-      keyrings: deps.keyrings,
-      attention: deps.attention,
-      namespaceBindings: deps.namespaceBindings,
-      transactions: deps.transactions,
+      accounts: deps.access.accounts,
+      approvals: deps.access.approvals,
+      chains: deps.access.chains,
+      permissions: deps.access.permissions,
+      session: deps.access.session,
+      keyrings: deps.access.keyrings,
+      attention: deps.access.attention,
+      namespaceBindings: deps.access.namespaceBindings,
+      transactions: deps.access.transactions,
       approvalFlowRegistry,
     });
 
@@ -29,19 +29,10 @@ export const createUiServerRuntime = (deps: UiRuntimeDeps): UiServerRuntime => {
     buildSnapshot,
     getUiContext: () => buildUiContext(deps),
     handlers: createUiHandlers({
-      accounts: deps.accounts,
-      approvals: deps.approvals,
-      permissions: deps.permissions,
-      transactions: deps.transactions,
-      chains: deps.chains,
-      accountCodecs: deps.accountCodecs,
-      session: deps.session,
-      keyrings: deps.keyrings,
-      namespaceBindings: deps.namespaceBindings,
-      uiOrigin: deps.uiOrigin,
+      access: deps.access,
       platform: deps.platform,
+      surface: deps.surface,
       buildSnapshot,
-      uiSessionId: crypto.randomUUID(),
     }),
   };
 };

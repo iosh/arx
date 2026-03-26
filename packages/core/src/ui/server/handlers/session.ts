@@ -1,8 +1,8 @@
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiHandlers, UiSessionAccess } from "../types.js";
 
-export const createSessionHandlers = (
-  deps: Pick<UiRuntimeDeps, "session">,
-): Pick<
+export const createSessionHandlers = (deps: {
+  session: UiSessionAccess;
+}): Pick<
   UiHandlers,
   "ui.session.unlock" | "ui.session.lock" | "ui.session.resetAutoLockTimer" | "ui.session.setAutoLockDuration"
 > => {

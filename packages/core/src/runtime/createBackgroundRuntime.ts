@@ -1,5 +1,6 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
+import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
 import {
   assembleRuntimeNamespaceStages,
@@ -10,12 +11,10 @@ import {
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
 import {
   createRpcContextNamespaceResolver,
-  createRpcErrorEncoder,
   createRpcMethodExecutor,
   createRpcMethodNamespaceResolver,
   createRpcRegistry,
   type JsonRpcError,
-  type RpcErrorEncoder,
   type RpcInvocationContext,
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
@@ -41,6 +40,7 @@ import { createUiRuntimeAccess } from "../ui/server/access.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
 import type { UiPlatformAdapter, UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
+import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
 import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
@@ -61,7 +61,7 @@ export type { BackgroundSessionServices } from "./background/session.js";
 
 export type BackgroundRuntimeUiAccessOptions = {
   platform: UiPlatformAdapter;
-  uiOrigin: string;
+  surfaceOrigin: string;
 };
 
 export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainDefinitions"> & {
@@ -131,8 +131,8 @@ export type BackgroundRuntime = {
       context?: RpcInvocationContext,
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
     executeRequest: ReturnType<typeof createRpcMethodExecutor>;
-    errorEncoder: RpcErrorEncoder;
   };
+  surfaceErrors: SurfaceErrorEncoder;
   lifecycle: {
     initialize: () => Promise<void>;
     start: () => void;
@@ -145,54 +145,80 @@ export type BackgroundRuntime = {
 
 const createBackgroundRuntimeUiDeps = (
   runtime: BackgroundRuntime,
-  { platform, uiOrigin }: BackgroundRuntimeUiAccessOptions,
-): UiRuntimeDeps => ({
-  accounts: runtime.controllers.accounts,
-  approvals: runtime.controllers.approvals,
-  permissions: {
-    buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
-    onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
-  },
-  transactions: runtime.controllers.transactions,
-  chains: {
-    buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
-    findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
-    getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
-    getPreferredChainViewForNamespace: (namespace) =>
-      runtime.services.chainViews.getPreferredChainViewForNamespace(namespace),
-    getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
-    requireAvailableChainMetadata: (chainRef) => runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
-    selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
-    onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
-    onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
-  },
-  accountCodecs: runtime.services.accountCodecs,
-  session: createUiSessionAccess({
-    accounts: runtime.controllers.accounts,
+  { platform, surfaceOrigin }: BackgroundRuntimeUiAccessOptions,
+): UiRuntimeDeps => {
+  const session = createUiSessionAccess({
     session: runtime.services.session,
     sessionStatus: runtime.services.sessionStatus,
     keyring: runtime.services.keyring,
-  }),
-  keyrings: createUiKeyringsAccess({
-    keyring: runtime.services.keyring,
-    keyringExport: runtime.services.keyringExport,
-  }),
-  attention: {
-    getSnapshot: () => runtime.services.attention.getSnapshot(),
-    onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
-  },
-  namespaceBindings: runtime.services.namespaceBindings,
-  errorEncoder: {
-    encodeError: (error, context) =>
-      runtime.rpc.errorEncoder.encodeUi(error, {
-        namespace: context.namespace,
-        chainRef: context.chainRef,
-        method: context.method,
-      }) as UiError,
-  },
-  platform,
-  uiOrigin,
-});
+  });
+
+  return {
+    server: {
+      access: {
+        accounts: runtime.controllers.accounts,
+        approvals: runtime.controllers.approvals,
+        permissions: {
+          buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
+        },
+        transactions: runtime.controllers.transactions,
+        chains: {
+          buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
+          findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
+          getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
+          getPreferredChainViewForNamespace: (namespace) =>
+            runtime.services.chainViews.getPreferredChainViewForNamespace(namespace),
+          getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
+          requireAvailableChainMetadata: (chainRef) =>
+            runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
+          selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
+        },
+        accountCodecs: runtime.services.accountCodecs,
+        session,
+        walletSetup: createUiWalletSetupAccess({
+          accounts: runtime.controllers.accounts,
+          session: runtime.services.session,
+          keyring: runtime.services.keyring,
+        }),
+        keyrings: createUiKeyringsAccess({
+          keyring: runtime.services.keyring,
+          keyringExport: runtime.services.keyringExport,
+        }),
+        attention: {
+          getSnapshot: () => runtime.services.attention.getSnapshot(),
+        },
+        namespaceBindings: runtime.services.namespaceBindings,
+      },
+      platform,
+      surfaceOrigin,
+    },
+    bridge: {
+      encodeError: (error, context) =>
+        runtime.surfaceErrors.encodeUi(error, {
+          namespace: context.namespace,
+          chainRef: context.chainRef,
+          method: context.method,
+        }) as UiError,
+      persistVaultMeta: runtime.services.session.persistVaultMeta,
+      stateChanged: {
+        accounts: runtime.controllers.accounts,
+        approvals: runtime.controllers.approvals,
+        permissions: {
+          onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
+        },
+        transactions: runtime.controllers.transactions,
+        chains: {
+          onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
+          onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
+        },
+        session,
+        attention: {
+          onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
+        },
+      },
+    },
+  };
+};
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
   const rpcRegistry = createRpcRegistry();
@@ -321,7 +347,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       permissionViews: runtimeSupportPhase.permissionViews,
     },
   });
-  const errorEncoder = createRpcErrorEncoder(rpcRegistry);
+  const surfaceErrors = createSurfaceErrorEncoder(rpcRegistry);
 
   const providerAccess = createProviderRuntimeAccess({
     getSessionStatus: () => sessionPhase.sessionStatus.getStatus(),
@@ -333,7 +359,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     formatAddress: (input) => bootstrapPhase.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
     resolveMethodNamespace,
     handleRpcRequest: (request, callback) => sessionPhase.engine.handle(request, callback),
-    encodeDappError: (error, context) => errorEncoder.encodeDapp(error, context) as JsonRpcError,
+    encodeDappError: (error, context) => surfaceErrors.encodeDapp(error, context) as JsonRpcError,
     cancelSessionApprovals: async (input) =>
       await sessionPhase.controllersBase.approvals.cancelByScope({
         scope: {
@@ -379,8 +405,8 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       resolveInvocation,
       resolveInvocationDetails,
       executeRequest,
-      errorEncoder,
     },
+    surfaceErrors,
     lifecycle,
     providerAccess,
   } as BackgroundRuntime;

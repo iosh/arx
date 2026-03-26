@@ -797,7 +797,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
         (error, response) => {
           if (error) {
             reject(
-              runtime.rpc.errorEncoder.encodeDapp(error, {
+              runtime.surfaceErrors.encodeDapp(error, {
                 namespace,
                 chainRef: resolvedChainRef,
                 origin,

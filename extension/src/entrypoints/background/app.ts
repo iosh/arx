@@ -37,7 +37,7 @@ export const createBackgroundApp = () => {
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
-        uiOrigin: new URL(browser.runtime.getURL("")).origin,
+        surfaceOrigin: new URL(browser.runtime.getURL("")).origin,
       });
       if (stopped) throw new Error("Background app is stopped");
       const bridge = createUiBridge({ uiAccess });

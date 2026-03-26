@@ -1,10 +1,12 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import type { UiHandlers, UiRuntimeDeps } from "../types.js";
+import type { UiChainsAccess, UiHandlers, UiNamespaceBindingsAccess, UiSessionAccess } from "../types.js";
 import { assertUnlocked } from "./lib.js";
 
-export const createBalancesHandlers = (
-  deps: Pick<UiRuntimeDeps, "chains" | "session" | "namespaceBindings">,
-): Pick<UiHandlers, "ui.balances.getNative"> => {
+export const createBalancesHandlers = (deps: {
+  chains: UiChainsAccess;
+  session: UiSessionAccess;
+  namespaceBindings: UiNamespaceBindingsAccess;
+}): Pick<UiHandlers, "ui.balances.getNative"> => {
   return {
     "ui.balances.getNative": async ({ chainRef, address }) => {
       assertUnlocked(deps.session);

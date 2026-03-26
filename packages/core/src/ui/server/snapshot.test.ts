@@ -114,16 +114,6 @@ const createDeps = (options?: {
     }),
     setAutoLockDuration: () => ({ autoLockDurationMs: 900_000, nextAutoLockAt: null }),
     onStateChanged: () => () => {},
-    createWalletFromMnemonic: async () => {
-      throw new Error("not needed in snapshot test");
-    },
-    importWalletFromMnemonic: async () => {
-      throw new Error("not needed in snapshot test");
-    },
-    importWalletFromPrivateKey: async () => {
-      throw new Error("not needed in snapshot test");
-    },
-    persistVaultMeta: async () => {},
   } satisfies UiSessionAccess,
   keyrings: {
     getKeyrings: () => [],

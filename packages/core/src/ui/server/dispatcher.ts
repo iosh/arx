@@ -2,16 +2,16 @@ import { ArxReasons, arxError } from "@arx/errors";
 import type { UiError, UiPortEnvelope } from "../protocol/envelopes.js";
 import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
 import { EMPTY_UI_DISPATCH_EFFECTS, parseUiRequestMetadata, type UiDispatchEffects } from "./requestMetadata.js";
-import type { UiRuntimeDeps, UiServerRuntime } from "./types.js";
+import type { UiRuntimeBridgeAccess, UiServerRuntime } from "./types.js";
 
 export type UiDispatchOutput = {
   reply: UiPortEnvelope;
   effects: UiDispatchEffects;
 };
-type UiDispatcherDeps = Pick<UiRuntimeDeps, "errorEncoder"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
+type UiDispatcherDeps = Pick<UiRuntimeBridgeAccess, "encodeError"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
 
 export const createUiDispatcher = (deps: UiDispatcherDeps) => {
-  const { handlers, getUiContext, errorEncoder } = deps;
+  const { handlers, getUiContext, encodeError } = deps;
 
   const dispatch = async (raw: unknown): Promise<UiDispatchOutput | null> => {
     const requestMeta = parseUiRequestMetadata(raw);
@@ -21,7 +21,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
     const { request, method, effects } = requestMeta;
 
     if (!method) {
-      const encoded = errorEncoder.encodeError(
+      const encoded = encodeError(
         arxError({ reason: ArxReasons.RpcInvalidRequest, message: `Unknown UI method: ${request.method}` }),
         { namespace: ctx.namespace, chainRef: ctx.chainRef, method: request.method },
       );
@@ -41,7 +41,7 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
         effects,
       };
     } catch (error) {
-      const encoded = errorEncoder.encodeError(error, { namespace: ctx.namespace, chainRef: ctx.chainRef, method });
+      const encoded = encodeError(error, { namespace: ctx.namespace, chainRef: ctx.chainRef, method });
       return {
         reply: { type: "ui:error", id: request.id, error: encoded as unknown as UiError, context: ctx },
         effects: EMPTY_UI_DISPATCH_EFFECTS,

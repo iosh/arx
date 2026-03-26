@@ -15,7 +15,6 @@ export type UiKeyringsAccess = Pick<
   | "deriveAccount"
   | "exportMnemonic"
   | "exportPrivateKeyByAccountKey"
-  | "generateMnemonic"
   | "getAccountsByKeyring"
   | "getKeyrings"
   | "hideHdAccount"
@@ -41,7 +40,6 @@ export const createUiKeyringsAccess = ({ keyring, keyringExport }: CreateUiKeyri
   exportMnemonic: (keyringId, password) => keyringExport.exportMnemonic(keyringId, password),
   exportPrivateKeyByAccountKey: (accountKey, password) =>
     keyringExport.exportPrivateKeyByAccountKey(accountKey, password),
-  generateMnemonic: (wordCount) => keyring.generateMnemonic(wordCount),
   getAccountsByKeyring: (keyringId, includeHidden) => keyring.getAccountsByKeyring(keyringId, includeHidden),
   getKeyrings: () => keyring.getKeyrings(),
   hideHdAccount: (accountKey) => keyring.hideHdAccount(accountKey),

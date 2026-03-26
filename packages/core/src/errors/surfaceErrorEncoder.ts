@@ -8,14 +8,14 @@ import {
   encodeUiError as encodeGenericUiError,
 } from "@arx/errors";
 
-export type RpcSurfaceErrorContext = Omit<ErrorEncodeContext, "surface" | "namespace"> & {
+export type SurfaceErrorContext = Omit<ErrorEncodeContext, "surface" | "namespace"> & {
   surface: ErrorSurface;
   namespace?: string | null;
 };
 
-export type RpcEncodedExecutionResult<T> = { ok: true; result: T } | { ok: false; error: unknown };
+export type EncodedSurfaceExecutionResult<T> = { ok: true; result: T } | { ok: false; error: unknown };
 
-type ProtocolAdapterLookup = {
+type SurfaceProtocolAdapterLookup = {
   getNamespaceProtocolAdapter(namespace: string): NamespaceProtocolAdapter;
 };
 
@@ -25,7 +25,7 @@ const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: 
   return typeof candidate.code === "number";
 };
 
-const toInternalArxError = (error: unknown, ctx: RpcSurfaceErrorContext): ArxError => {
+const toInternalArxError = (error: unknown, ctx: SurfaceErrorContext): ArxError => {
   const message =
     error instanceof Error && typeof error.message === "string" && error.message.length > 0
       ? error.message
@@ -43,7 +43,7 @@ const toInternalArxError = (error: unknown, ctx: RpcSurfaceErrorContext): ArxErr
   });
 };
 
-const toGenericEncodeContext = (ctx: RpcSurfaceErrorContext): ErrorEncodeContext => {
+const toGenericEncodeContext = (ctx: SurfaceErrorContext): ErrorEncodeContext => {
   return {
     surface: ctx.surface,
     namespace: typeof ctx.namespace === "string" && ctx.namespace.length > 0 ? ctx.namespace : "unknown",
@@ -53,8 +53,8 @@ const toGenericEncodeContext = (ctx: RpcSurfaceErrorContext): ErrorEncodeContext
   };
 };
 
-export const createRpcErrorEncoder = (lookup: ProtocolAdapterLookup) => {
-  const encodeSurfaceError = (error: unknown, ctx: RpcSurfaceErrorContext): unknown => {
+export const createSurfaceErrorEncoder = (lookup: SurfaceProtocolAdapterLookup) => {
+  const encodeSurfaceError = (error: unknown, ctx: SurfaceErrorContext): unknown => {
     if (ctx.surface === "dapp" && isJsonRpcErrorLike(error)) {
       const message = typeof error.message === "string" && error.message.length > 0 ? error.message : "Unknown error";
       return {
@@ -88,9 +88,9 @@ export const createRpcErrorEncoder = (lookup: ProtocolAdapterLookup) => {
   };
 
   const executeWithEncoding = async <T>(
-    ctx: RpcSurfaceErrorContext,
+    ctx: SurfaceErrorContext,
     handler: () => Promise<T>,
-  ): Promise<RpcEncodedExecutionResult<T>> => {
+  ): Promise<EncodedSurfaceExecutionResult<T>> => {
     try {
       return { ok: true, result: await handler() };
     } catch (error) {
@@ -101,11 +101,11 @@ export const createRpcErrorEncoder = (lookup: ProtocolAdapterLookup) => {
   return {
     encodeSurfaceError,
     executeWithEncoding,
-    encodeDapp: (error: unknown, ctx: Omit<RpcSurfaceErrorContext, "surface">) =>
+    encodeDapp: (error: unknown, ctx: Omit<SurfaceErrorContext, "surface">) =>
       encodeSurfaceError(error, { ...ctx, surface: "dapp" }),
-    encodeUi: (error: unknown, ctx: Omit<RpcSurfaceErrorContext, "surface">) =>
+    encodeUi: (error: unknown, ctx: Omit<SurfaceErrorContext, "surface">) =>
       encodeSurfaceError(error, { ...ctx, surface: "ui" }),
   };
 };
 
-export type RpcErrorEncoder = ReturnType<typeof createRpcErrorEncoder>;
+export type SurfaceErrorEncoder = ReturnType<typeof createSurfaceErrorEncoder>;

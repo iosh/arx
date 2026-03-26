@@ -157,12 +157,12 @@ const makeRuntime = () => {
       resolveInvocation: vi.fn(),
       resolveInvocationDetails: vi.fn(),
       executeRequest: vi.fn(),
-      errorEncoder: {
-        encodeUi: vi.fn(),
-        encodeDapp: vi.fn(),
-        encodeSurfaceError: vi.fn(),
-        executeWithEncoding: vi.fn(),
-      },
+    },
+    surfaceErrors: {
+      encodeUi: vi.fn(),
+      encodeDapp: vi.fn(),
+      encodeSurfaceError: vi.fn(),
+      executeWithEncoding: vi.fn(),
     },
     lifecycle: {
       initialize,
@@ -237,11 +237,11 @@ describe("runtimeHost", () => {
     const providerAccess = await runtimeHost.getOrInitProviderAccess();
     const firstUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      uiOrigin: "chrome-extension://test",
+      surfaceOrigin: "chrome-extension://test",
     });
     const secondUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      uiOrigin: "chrome-extension://test",
+      surfaceOrigin: "chrome-extension://test",
     });
     const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
 
@@ -254,7 +254,7 @@ describe("runtimeHost", () => {
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
-      uiOrigin: "chrome-extension://test",
+      surfaceOrigin: "chrome-extension://test",
     });
     expect(runtimeHarness.initialize).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.start).toHaveBeenCalledTimes(1);
@@ -328,7 +328,7 @@ describe("runtimeHost", () => {
           openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
           openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
         },
-        uiOrigin: "chrome-extension://test",
+        surfaceOrigin: "chrome-extension://test",
       }),
     ).rejects.toThrow("Background runtime host is destroyed");
     await expect(runtimeHost.getOrInitApprovalPopupAccess()).rejects.toThrow("Background runtime host is destroyed");
@@ -355,13 +355,13 @@ describe("runtimeHost", () => {
 
     await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      uiOrigin: "chrome-extension://test",
+      surfaceOrigin: "chrome-extension://test",
     });
 
     await expect(
       runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
-        uiOrigin: "chrome-extension://different",
+        surfaceOrigin: "chrome-extension://different",
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
 
@@ -371,7 +371,7 @@ describe("runtimeHost", () => {
           openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
           openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
         },
-        uiOrigin: "chrome-extension://test",
+        surfaceOrigin: "chrome-extension://test",
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
 

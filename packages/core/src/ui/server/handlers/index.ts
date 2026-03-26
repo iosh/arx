@@ -10,32 +10,41 @@ import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
 export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
-  const {
-    accounts,
-    approvals,
-    transactions,
-    chains,
-    accountCodecs,
-    session,
-    keyrings,
-    namespaceBindings,
-    platform,
-    uiOrigin,
-    buildSnapshot,
-    uiSessionId,
-  } = deps;
+  const { access, platform, surface, buildSnapshot } = deps;
 
-  const toChainSnapshot = () => chains.getSelectedChainView();
+  const toChainSnapshot = () => access.chains.getSelectedChainView();
 
   return {
     ...createSnapshotHandlers(buildSnapshot),
-    ...createBalancesHandlers({ chains, session, namespaceBindings }),
-    ...createSessionHandlers({ session }),
-    ...createOnboardingHandlers({ accounts, chains, accountCodecs, session, keyrings, platform }),
-    ...createAccountsHandlers({ accounts }),
-    ...createNetworksHandlers({ chains }, toChainSnapshot),
-    ...createApprovalsHandlers({ approvals, platform }),
-    ...createKeyringsHandlers({ accounts, chains, accountCodecs, session, keyrings }),
-    ...createTransactionsHandlers({ transactions, chains, session, namespaceBindings, uiOrigin }, uiSessionId),
+    ...createBalancesHandlers({
+      chains: access.chains,
+      session: access.session,
+      namespaceBindings: access.namespaceBindings,
+    }),
+    ...createSessionHandlers({ session: access.session }),
+    ...createOnboardingHandlers({
+      accounts: access.accounts,
+      chains: access.chains,
+      accountCodecs: access.accountCodecs,
+      walletSetup: access.walletSetup,
+      platform,
+    }),
+    ...createAccountsHandlers({ accounts: access.accounts }),
+    ...createNetworksHandlers({ chains: access.chains }, toChainSnapshot),
+    ...createApprovalsHandlers({ approvals: access.approvals, platform }),
+    ...createKeyringsHandlers({
+      accounts: access.accounts,
+      chains: access.chains,
+      accountCodecs: access.accountCodecs,
+      session: access.session,
+      keyrings: access.keyrings,
+    }),
+    ...createTransactionsHandlers({
+      transactions: access.transactions,
+      chains: access.chains,
+      session: access.session,
+      namespaceBindings: access.namespaceBindings,
+      surface,
+    }),
   } as const satisfies UiHandlers;
 };

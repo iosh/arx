@@ -9,6 +9,7 @@ import type { TransactionRequest } from "../transactions/types.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
+import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -65,63 +66,64 @@ const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgr
 };
 
 const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
+  const session = createUiSessionAccess({
+    session: runtime.services.session,
+    sessionStatus: runtime.services.sessionStatus,
+    keyring: runtime.services.keyring,
+  });
+
   return createUiServerRuntime({
-    accounts: runtime.controllers.accounts,
-    approvals: runtime.controllers.approvals,
-    permissions: {
-      buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
-        runtime.services.permissionViews,
-      ),
-      onStateChanged: runtime.controllers.permissions.onStateChanged.bind(runtime.controllers.permissions),
-    },
-    transactions: runtime.controllers.transactions,
-    chains: {
-      buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
-        runtime.services.chainViews,
-      ),
-      findAvailableChainView: runtime.services.chainViews.findAvailableChainView.bind(runtime.services.chainViews),
-      getApprovalReviewChainView: runtime.services.chainViews.getApprovalReviewChainView.bind(
-        runtime.services.chainViews,
-      ),
-      getPreferredChainViewForNamespace: runtime.services.chainViews.getPreferredChainViewForNamespace.bind(
-        runtime.services.chainViews,
-      ),
-      getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
-      requireAvailableChainMetadata: runtime.services.chainViews.requireAvailableChainMetadata.bind(
-        runtime.services.chainViews,
-      ),
-      selectWalletChain: runtime.services.chainActivation.selectWalletChain.bind(runtime.services.chainActivation),
-      onStateChanged: runtime.controllers.network.onStateChanged.bind(runtime.controllers.network),
-      onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
-    },
-    accountCodecs: runtime.services.accountCodecs,
-    session: createUiSessionAccess({
+    access: {
       accounts: runtime.controllers.accounts,
-      session: runtime.services.session,
-      sessionStatus: runtime.services.sessionStatus,
-      keyring: runtime.services.keyring,
-    }),
-    keyrings: createUiKeyringsAccess({
-      keyring: runtime.services.keyring,
-      keyringExport: runtime.services.keyringExport,
-    }),
-    attention: {
-      getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),
-      onStateChanged: () => () => {},
+      approvals: runtime.controllers.approvals,
+      permissions: {
+        buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
+          runtime.services.permissionViews,
+        ),
+      },
+      transactions: runtime.controllers.transactions,
+      chains: {
+        buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
+          runtime.services.chainViews,
+        ),
+        findAvailableChainView: runtime.services.chainViews.findAvailableChainView.bind(runtime.services.chainViews),
+        getApprovalReviewChainView: runtime.services.chainViews.getApprovalReviewChainView.bind(
+          runtime.services.chainViews,
+        ),
+        getPreferredChainViewForNamespace: runtime.services.chainViews.getPreferredChainViewForNamespace.bind(
+          runtime.services.chainViews,
+        ),
+        getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
+        requireAvailableChainMetadata: runtime.services.chainViews.requireAvailableChainMetadata.bind(
+          runtime.services.chainViews,
+        ),
+        selectWalletChain: runtime.services.chainActivation.selectWalletChain.bind(runtime.services.chainActivation),
+      },
+      accountCodecs: runtime.services.accountCodecs,
+      session,
+      walletSetup: createUiWalletSetupAccess({
+        accounts: runtime.controllers.accounts,
+        session: runtime.services.session,
+        keyring: runtime.services.keyring,
+      }),
+      keyrings: createUiKeyringsAccess({
+        keyring: runtime.services.keyring,
+        keyringExport: runtime.services.keyringExport,
+      }),
+      attention: {
+        getSnapshot: runtime.services.attention.getSnapshot.bind(runtime.services.attention),
+      },
+      namespaceBindings: runtime.services.namespaceBindings,
     },
-    namespaceBindings: runtime.services.namespaceBindings,
-    errorEncoder: {
-      encodeError: (error, context) =>
-        runtime.rpc.errorEncoder.encodeUi(error, {
-          namespace: context.namespace,
-          chainRef: context.chainRef,
-          method: context.method,
-        }) as never,
-    },
-    uiOrigin: "chrome-extension://arx",
     platform: {
       openOnboardingTab: async () => ({ activationPath: "create" }),
       openNotificationPopup: async () => ({ activationPath: "create" }),
+    },
+    surface: {
+      transport: "ui",
+      portId: "ui",
+      origin: "chrome-extension://arx",
+      surfaceId: "11111111-1111-4111-8111-111111111111",
     },
   }).handlers;
 };
@@ -938,10 +940,135 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       expect.objectContaining({
         transport: "ui",
         portId: "ui",
+        sessionId: "11111111-1111-4111-8111-111111111111",
         requestId: expect.any(String),
         origin: "chrome-extension://arx",
       }),
     );
+
+    runtime.lifecycle.destroy();
+  });
+
+  it("reuses one UI surface correlation token per UiRuntimeAccess instance", async () => {
+    const createSendTransactionRequest = vi.fn(
+      ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
+        ({
+          namespace: "eip155",
+          chainRef,
+          payload: {
+            to,
+            value: `0x${valueWei.toString(16)}` as `0x${string}`,
+          },
+        }) satisfies TransactionRequest,
+    );
+
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+                createSendTransactionRequest,
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    const beginTransactionApproval = vi
+      .spyOn(runtime.controllers.transactions, "beginTransactionApproval")
+      .mockImplementation(async (request, requester) => ({
+        transactionId: requester.sessionId,
+        approvalId: requester.sessionId,
+        pendingMeta: { id: requester.sessionId, request } as never,
+        waitForApprovalDecision: async () => ({ id: requester.sessionId }) as never,
+      }));
+
+    const platform = {
+      openOnboardingTab: async () => ({ activationPath: "create" as const }),
+      openNotificationPopup: async () => ({ activationPath: "create" as const }),
+    };
+
+    const firstUiAccess = runtime.createUiAccess({
+      platform,
+      surfaceOrigin: "chrome-extension://arx",
+    });
+
+    await firstUiAccess.dispatchRequest({
+      type: "ui:request",
+      id: "1",
+      method: "ui.transactions.requestSendTransactionApproval",
+      params: {
+        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        valueEther: "0.01",
+        chainRef: MAINNET_CHAIN.chainRef,
+      },
+    });
+    await firstUiAccess.dispatchRequest({
+      type: "ui:request",
+      id: "2",
+      method: "ui.transactions.requestSendTransactionApproval",
+      params: {
+        to: "0xcccccccccccccccccccccccccccccccccccccccc",
+        valueEther: "0.02",
+        chainRef: MAINNET_CHAIN.chainRef,
+      },
+    });
+
+    const secondUiAccess = runtime.createUiAccess({
+      platform,
+      surfaceOrigin: "chrome-extension://arx",
+    });
+
+    await secondUiAccess.dispatchRequest({
+      type: "ui:request",
+      id: "3",
+      method: "ui.transactions.requestSendTransactionApproval",
+      params: {
+        to: "0xdddddddddddddddddddddddddddddddddddddddd",
+        valueEther: "0.03",
+        chainRef: MAINNET_CHAIN.chainRef,
+      },
+    });
+
+    expect(beginTransactionApproval).toHaveBeenCalledTimes(3);
+
+    const firstSurfaceId = beginTransactionApproval.mock.calls[0]?.[1].sessionId;
+    const repeatedSurfaceId = beginTransactionApproval.mock.calls[1]?.[1].sessionId;
+    const secondSurfaceId = beginTransactionApproval.mock.calls[2]?.[1].sessionId;
+
+    expect(firstSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(repeatedSurfaceId).toBe(firstSurfaceId);
+    expect(secondSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(secondSurfaceId).not.toBe(firstSurfaceId);
 
     runtime.lifecycle.destroy();
   });

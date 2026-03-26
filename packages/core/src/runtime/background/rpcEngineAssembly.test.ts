@@ -193,7 +193,7 @@ describe("background rpc engine assembly", () => {
       },
     });
 
-    const encodeSpy = vi.spyOn(runtime.rpc.errorEncoder, "encodeDapp");
+    const encodeSpy = vi.spyOn(runtime.surfaceErrors, "encodeDapp");
     const middlewares = createBackgroundRpcMiddlewares(runtime, {
       isInternalOrigin: () => false,
     });

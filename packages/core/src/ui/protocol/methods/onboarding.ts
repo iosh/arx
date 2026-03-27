@@ -64,23 +64,30 @@ const ImportWalletFromPrivateKeyResultSchema = z.strictObject({
 });
 
 export const onboardingMethods = {
-  "ui.onboarding.openTab": defineMethod(z.strictObject({ reason: z.string().min(1) }), OpenOnboardingTabResultSchema),
+  "ui.onboarding.openTab": defineMethod(
+    "command",
+    z.strictObject({ reason: z.string().min(1) }),
+    OpenOnboardingTabResultSchema,
+  ),
 
-  "ui.onboarding.generateMnemonic": defineMethod(GenerateMnemonicParamsSchema, GenerateMnemonicResultSchema),
+  "ui.onboarding.generateMnemonic": defineMethod("command", GenerateMnemonicParamsSchema, GenerateMnemonicResultSchema),
 
   "ui.onboarding.createWalletFromMnemonic": defineMethod(
+    "command",
     CreateWalletFromMnemonicParamsSchema,
     CreateWalletFromMnemonicResultSchema,
     { broadcastSnapshot: true, persistVaultMeta: true, holdBroadcast: true },
   ),
 
   "ui.onboarding.importWalletFromMnemonic": defineMethod(
+    "command",
     ImportWalletFromMnemonicParamsSchema,
     CreateWalletFromMnemonicResultSchema,
     { broadcastSnapshot: true, persistVaultMeta: true, holdBroadcast: true },
   ),
 
   "ui.onboarding.importWalletFromPrivateKey": defineMethod(
+    "command",
     ImportWalletFromPrivateKeyParamsSchema,
     ImportWalletFromPrivateKeyResultSchema,
     { broadcastSnapshot: true, persistVaultMeta: true, holdBroadcast: true },

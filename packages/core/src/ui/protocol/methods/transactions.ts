@@ -4,6 +4,7 @@ import { defineMethod } from "./types.js";
 
 export const transactionsMethods = {
   "ui.transactions.requestSendTransactionApproval": defineMethod(
+    "command",
     z.strictObject({
       to: z.string().min(1),
       valueEther: z.string().min(1),

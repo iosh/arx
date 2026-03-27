@@ -33,27 +33,39 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
     snapshotBroadcaster.requestBroadcast();
   });
 
-  const maybeWithHold = async (raw: unknown, fn: () => Promise<void>) => {
-    if (uiAccess.shouldHoldBroadcast(raw)) {
-      await snapshotBroadcaster.withBroadcastHold(fn);
+  const dispatchPortMessage = async (port: Parameters<typeof portHub.attach>[0], raw: unknown) => {
+    const broadcastPolicy = uiAccess.getRequestBroadcastPolicy(raw);
+
+    const processRequest = async () => {
+      const dispatched = await uiAccess.dispatchRequest(raw);
+      if (!dispatched) return;
+
+      portHub.send(port, dispatched.reply);
+
+      if (dispatched.shouldBroadcastSnapshot) {
+        snapshotBroadcaster.requestBroadcast();
+      }
+    };
+
+    const runRequest = async () => {
+      if (broadcastPolicy.holdBroadcast) {
+        await snapshotBroadcaster.withBroadcastHold(processRequest);
+        return;
+      }
+
+      await processRequest();
+    };
+
+    if (broadcastPolicy.fenceSnapshotBroadcast) {
+      await snapshotBroadcaster.withResponseFence(runRequest);
       return;
     }
-    await fn();
+
+    await runRequest();
   };
 
   const attachPort = (port: Parameters<typeof portHub.attach>[0]) => {
-    portHub.attach(port, async (raw) => {
-      await maybeWithHold(raw, async () => {
-        const dispatched = await uiAccess.dispatchRequest(raw);
-        if (!dispatched) return;
-
-        portHub.send(port, dispatched.reply);
-
-        if (dispatched.shouldBroadcastSnapshot) {
-          snapshotBroadcaster.requestBroadcast();
-        }
-      });
-    });
+    portHub.attach(port, async (raw) => await dispatchPortMessage(port, raw));
 
     snapshotBroadcaster.sendInitialSnapshot(port);
   };

@@ -220,7 +220,7 @@ describe("runtimeHost", () => {
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      shouldHoldBroadcast: vi.fn(),
+      getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
@@ -340,7 +340,7 @@ describe("runtimeHost", () => {
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
-      shouldHoldBroadcast: vi.fn(),
+      getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);

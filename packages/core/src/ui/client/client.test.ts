@@ -59,11 +59,12 @@ const SNAPSHOT_FIXTURE = {
   permissions: {
     origins: {},
   },
+  backup: {
+    pendingHdKeyringCount: 0,
+    nextHdKeyring: null,
+  },
   vault: {
     initialized: false,
-  },
-  warnings: {
-    hdKeyringsNeedingBackup: [],
   },
 } as const;
 

@@ -8,8 +8,8 @@ const ApprovalPopupOpenResultSchema = z.strictObject({
 });
 
 export const approvalsMethods = {
-  "ui.approvals.openPopup": defineMethod(z.undefined(), ApprovalPopupOpenResultSchema),
-  "ui.approvals.resolve": defineMethod(ApprovalResolveRequestSchema, ApprovalResolveResponseSchema, {
+  "ui.approvals.openPopup": defineMethod("command", z.undefined(), ApprovalPopupOpenResultSchema),
+  "ui.approvals.resolve": defineMethod("command", ApprovalResolveRequestSchema, ApprovalResolveResponseSchema, {
     broadcastSnapshot: true,
   }),
 } as const;

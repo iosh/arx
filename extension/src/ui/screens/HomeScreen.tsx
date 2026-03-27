@@ -28,7 +28,6 @@ import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
   snapshot: UiSnapshot;
-  backupWarnings: Array<{ keyringId: string; alias: string | null }>;
   nativeBalanceWei: string | null;
   nativeBalanceLoading: boolean;
   nativeBalanceError: string | null;
@@ -90,12 +89,12 @@ export const HomeScreen = ({
   onNavigateNetworks,
   onNavigateSend,
   onNavigateSettings,
-  backupWarnings,
   markingKeyringId,
 }: HomeScreenProps) => {
   const theme = useTheme();
   const { chain, accounts } = snapshot;
   const approvalsCount = snapshot.approvals.length;
+  const { backup } = snapshot;
 
   const [activeTab, setActiveTab] = useState<HomeTab>("tokens");
 
@@ -107,10 +106,11 @@ export const HomeScreen = ({
   const [exportError, setExportError] = useState<string | null>(null);
   const exportRequestIdRef = useRef(0);
 
-  const confirmingWarning = useMemo(
-    () => (confirmKeyringId ? (backupWarnings.find((w) => w.keyringId === confirmKeyringId) ?? null) : null),
-    [backupWarnings, confirmKeyringId],
-  );
+  const confirmingHdKeyring = useMemo(() => {
+    if (!confirmKeyringId) return null;
+    const nextHdKeyring = backup.nextHdKeyring;
+    return nextHdKeyring && nextHdKeyring.keyringId === confirmKeyringId ? nextHdKeyring : null;
+  }, [backup.nextHdKeyring, confirmKeyringId]);
   const confirmOpen = confirmKeyringId !== null;
   const confirmMarking = confirmKeyringId !== null && markingKeyringId === confirmKeyringId;
 
@@ -129,7 +129,8 @@ export const HomeScreen = ({
     setExporting(false);
   }, [confirmKeyringId]);
 
-  const hasAlerts = approvalsCount > 0 || backupWarnings.length > 0;
+  const hasBackupReminder = backup.pendingHdKeyringCount > 0 && backup.nextHdKeyring !== null;
+  const hasAlerts = approvalsCount > 0 || hasBackupReminder;
 
   return (
     <Screen padded={false} scroll>
@@ -225,51 +226,50 @@ export const HomeScreen = ({
               </Card>
             )}
 
-            {backupWarnings.map((warning) => {
-              const alias = warning.alias ?? "Wallet";
-              const markingThis = markingKeyringId === warning.keyringId;
-
-              return (
-                <Card
-                  key={warning.keyringId}
-                  padded
-                  bordered
-                  borderColor="$danger"
-                  backgroundColor="$dangerBackground"
-                  pressStyle={{ opacity: 0.9 }}
-                  onPress={() => setConfirmKeyringId(warning.keyringId)}
-                  cursor="pointer"
-                >
-                  <XStack alignItems="center" justifyContent="space-between">
-                    <XStack alignItems="center" gap="$3">
-                      <YStack
-                        width={36}
-                        height={36}
-                        borderRadius="$full"
-                        backgroundColor="$danger"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <ShieldAlert size={18} color={theme.dangerText.get()} />
-                      </YStack>
-                      <YStack gap="$0.5">
-                        <Paragraph fontWeight="600" fontSize="$3" color="$text">
-                          Backup Required
+            {hasBackupReminder ? (
+              <Card
+                padded
+                bordered
+                borderColor="$danger"
+                backgroundColor="$dangerBackground"
+                pressStyle={{ opacity: 0.9 }}
+                onPress={() => setConfirmKeyringId(backup.nextHdKeyring?.keyringId ?? null)}
+                cursor="pointer"
+              >
+                <XStack alignItems="center" justifyContent="space-between">
+                  <XStack alignItems="center" gap="$3">
+                    <YStack
+                      width={36}
+                      height={36}
+                      borderRadius="$full"
+                      backgroundColor="$danger"
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      <ShieldAlert size={18} color={theme.dangerText.get()} />
+                    </YStack>
+                    <YStack gap="$0.5">
+                      <Paragraph fontWeight="600" fontSize="$3" color="$text">
+                        Backup Required
+                      </Paragraph>
+                      <Paragraph color="$mutedText" fontSize="$2">
+                        {`${backup.nextHdKeyring?.alias ?? "Wallet"} needs backup`}
+                      </Paragraph>
+                      {backup.pendingHdKeyringCount > 1 ? (
+                        <Paragraph color="$mutedText" fontSize="$1">
+                          {backup.pendingHdKeyringCount} HD wallets still need backup
                         </Paragraph>
-                        <Paragraph color="$mutedText" fontSize="$2">
-                          {alias} needs backup
-                        </Paragraph>
-                      </YStack>
-                    </XStack>
-                    {markingThis ? (
-                      <Spinner size="small" color="$mutedText" />
-                    ) : (
-                      <ChevronRight size={18} color={theme.mutedText.get()} />
-                    )}
+                      ) : null}
+                    </YStack>
                   </XStack>
-                </Card>
-              );
-            })}
+                  {markingKeyringId === backup.nextHdKeyring?.keyringId ? (
+                    <Spinner size="small" color="$mutedText" />
+                  ) : (
+                    <ChevronRight size={18} color={theme.mutedText.get()} />
+                  )}
+                </XStack>
+              </Card>
+            ) : null}
           </YStack>
         )}
 
@@ -359,7 +359,7 @@ export const HomeScreen = ({
         <Paragraph color="$mutedText" fontSize="$3" lineHeight="$4">
           Only mark this as backed up if you have securely saved the recovery phrase for{" "}
           <Text fontWeight="700" color="$text">
-            {confirmingWarning?.alias ?? "this wallet"}
+            {confirmingHdKeyring?.alias ?? "this wallet"}
           </Text>
           .
         </Paragraph>
@@ -406,7 +406,7 @@ export const HomeScreen = ({
                 label="Password"
                 value={exportPassword}
                 onChangeText={setExportPassword}
-                disabled={!confirmingWarning || exporting || confirmMarking}
+                disabled={!confirmingHdKeyring || exporting || confirmMarking}
               />
 
               {exportError ? (
@@ -417,15 +417,15 @@ export const HomeScreen = ({
 
               <Button
                 variant="secondary"
-                disabled={!confirmingWarning || exporting || confirmMarking || exportPassword.trim().length === 0}
+                disabled={!confirmingHdKeyring || exporting || confirmMarking || exportPassword.trim().length === 0}
                 loading={exporting}
                 onPress={() => {
-                  if (!confirmingWarning || exporting) return;
+                  if (!confirmingHdKeyring || exporting) return;
                   const requestId = exportRequestIdRef.current + 1;
                   exportRequestIdRef.current = requestId;
                   setExporting(true);
                   setExportError(null);
-                  void onExportMnemonic({ keyringId: confirmingWarning.keyringId, password: exportPassword })
+                  void onExportMnemonic({ keyringId: confirmingHdKeyring.keyringId, password: exportPassword })
                     .then((words) => {
                       if (exportRequestIdRef.current !== requestId) return;
                       setExportPassword("");
@@ -459,10 +459,10 @@ export const HomeScreen = ({
               flex={1}
               variant="primary"
               loading={confirmMarking}
-              disabled={!confirmingWarning || confirmMarking || exporting}
+              disabled={!confirmingHdKeyring || confirmMarking || exporting}
               onPress={() => {
-                if (!confirmingWarning) return;
-                void onMarkBackedUp(confirmingWarning.keyringId)
+                if (!confirmingHdKeyring) return;
+                void onMarkBackedUp(confirmingHdKeyring.keyringId)
                   .then(() => setConfirmKeyringId(null))
                   .catch((err) => {
                     console.warn("[HomeScreen] failed to mark backed up", err);

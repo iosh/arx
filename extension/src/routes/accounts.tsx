@@ -1,7 +1,7 @@
 import type { UiKeyringMeta } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Check } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Paragraph, XStack, YStack } from "tamagui";
 import {
   AddressDisplay,
@@ -37,10 +37,6 @@ function AccountSwitchPage() {
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const [backupError, setBackupError] = useState<string | null>(null);
-  const backupWarnings = useMemo(
-    () => snapshot?.warnings.hdKeyringsNeedingBackup ?? [],
-    [snapshot?.warnings.hdKeyringsNeedingBackup],
-  );
 
   const [deriveOpen, setDeriveOpen] = useState(false);
   const [deriving, setDeriving] = useState(false);
@@ -108,6 +104,9 @@ function AccountSwitchPage() {
   if (isLoading || !snapshot) {
     return <LoadingScreen />;
   }
+
+  const nextBackupHdKeyring = snapshot.backup.nextHdKeyring;
+  const pendingHdKeyringCount = snapshot.backup.pendingHdKeyringCount;
 
   const handleAccountSwitch = async (accountKey: string | null) => {
     if (pendingAccountId) return;
@@ -202,28 +201,31 @@ function AccountSwitchPage() {
 
   return (
     <Screen>
-      {backupWarnings.length > 0 && (
+      {nextBackupHdKeyring ? (
         <Card padded bordered backgroundColor="$yellow2" gap="$2">
           <Paragraph fontWeight="600">Backup reminders</Paragraph>
-          {backupWarnings.map((warning) => (
-            <XStack key={warning.keyringId} alignItems="center" justifyContent="space-between" gap="$2">
-              <Paragraph>{warning.alias ?? "HD keyring"} needs backup</Paragraph>
-              <Button
-                size="$2"
-                loading={markingId === warning.keyringId}
-                onPress={() => void handleMarkBackedUp(warning.keyringId)}
-              >
-                Mark backed up
-              </Button>
-            </XStack>
-          ))}
+          <XStack alignItems="center" justifyContent="space-between" gap="$2">
+            <Paragraph>{nextBackupHdKeyring.alias ?? "HD keyring"} needs backup</Paragraph>
+            <Button
+              size="$2"
+              loading={markingId === nextBackupHdKeyring.keyringId}
+              onPress={() => void handleMarkBackedUp(nextBackupHdKeyring.keyringId)}
+            >
+              Mark backed up
+            </Button>
+          </XStack>
+          {pendingHdKeyringCount > 1 ? (
+            <Paragraph color="$color10" fontSize="$2">
+              {pendingHdKeyringCount} HD wallets still need backup.
+            </Paragraph>
+          ) : null}
           {backupError ? (
             <Paragraph color="$red10" fontSize="$2">
               {backupError}
             </Paragraph>
           ) : null}
         </Card>
-      )}
+      ) : null}
 
       <Button onPress={() => router.navigate({ to: ROUTES.HOME })}>Back</Button>
 

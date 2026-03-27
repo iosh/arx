@@ -27,6 +27,8 @@ import {
   createUiRuntimeAccess,
   createUiSessionAccess,
   createUiWalletSetupAccess,
+  type UiRuntimeAccess,
+  type UiRuntimeDispatchResult,
 } from "@arx/core/ui/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
@@ -762,7 +764,7 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
   } as unknown as HandlerControllers;
 
   const session = {
-    onStateChanged: () => () => {},
+    onStateChanged: (listener: () => void) => unlock.onStateChanged(() => listener()),
     unlock,
     withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
     vault: {
@@ -871,6 +873,7 @@ describe("uiBridge", () => {
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
   let _emitNetworkPreferencesChanged: ReturnType<typeof buildBridge>["emitNetworkPreferencesChanged"];
+  let persistVaultMeta: ReturnType<typeof buildBridge>["persistVaultMeta"];
 
   beforeEach(() => {
     const ctx = buildBridge({ unlocked: true });
@@ -881,6 +884,7 @@ describe("uiBridge", () => {
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
     _emitNetworkPreferencesChanged = ctx.emitNetworkPreferencesChanged;
+    persistVaultMeta = ctx.persistVaultMeta;
 
     port = createPort();
     bridge.attachPort(port as unknown as UiPort);
@@ -945,6 +949,109 @@ describe("uiBridge", () => {
     const snapshot = latestSnapshotFromMessages(port.messages);
     expect(snapshot.vault.initialized).toBe(true);
     expect(snapshot.accounts.totalCount).toBeGreaterThan(0);
+  });
+
+  it("session.lock persists vault meta and replies before snapshotChanged", async () => {
+    const id = crypto.randomUUID();
+
+    await port.triggerMessage({
+      type: "ui:request",
+      id,
+      method: "ui.session.lock",
+    } satisfies UiPortEnvelope);
+
+    const responseIndex = port.messages.findIndex((m) => isRecord(m) && m.type === "ui:response" && m.id === id);
+    expect(responseIndex).toBeGreaterThanOrEqual(0);
+
+    const firstSnapshotIndex = port.messages.findIndex(
+      (m) => isRecord(m) && m.type === "ui:event" && m.event === UI_EVENT_SNAPSHOT_CHANGED,
+    );
+    expect(firstSnapshotIndex).toBeGreaterThan(responseIndex);
+    expect(persistVaultMeta).toHaveBeenCalledTimes(1);
+
+    const snapshot = latestSnapshotFromMessages(port.messages);
+    expect(snapshot.session.isUnlocked).toBe(false);
+  });
+
+  it("does not block snapshotChanged behind slow snapshot-irrelevant queries", async () => {
+    const stateChangedListeners = new Set<() => void>();
+    let snapshotVersion = 0;
+    let resolveDispatch!: (value: UiRuntimeDispatchResult | null) => void;
+    let hasPendingDispatch = false;
+
+    const uiAccess: UiRuntimeAccess = {
+      buildSnapshotEvent: () => ({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: { version: snapshotVersion },
+        context: { namespace: CHAIN.namespace, chainRef: CHAIN.chainRef },
+      }),
+      dispatchRequest: vi.fn(
+        () =>
+          new Promise<UiRuntimeDispatchResult | null>((resolve) => {
+            resolveDispatch = resolve;
+            hasPendingDispatch = true;
+          }),
+      ),
+      getRequestBroadcastPolicy: vi.fn(() => ({
+        holdBroadcast: false,
+        fenceSnapshotBroadcast: false,
+      })),
+      subscribeStateChanged: vi.fn((listener) => {
+        stateChangedListeners.add(listener);
+        return () => stateChangedListeners.delete(listener);
+      }),
+    };
+    const bridge = createUiBridge({ uiAccess });
+    const queryPort = createPort();
+    const observerPort = createPort();
+
+    bridge.attachPort(queryPort as unknown as UiPort);
+    bridge.attachPort(observerPort as unknown as UiPort);
+    queryPort.messages = [];
+    observerPort.messages = [];
+
+    const pendingQuery = queryPort.triggerMessage({
+      type: "ui:request",
+      id: "req-query",
+      method: "ui.keyrings.list",
+    });
+    await vi.waitFor(() => expect(hasPendingDispatch).toBe(true));
+
+    snapshotVersion = 1;
+    for (const listener of stateChangedListeners) {
+      listener();
+    }
+
+    expect(observerPort.messages).toContainEqual(
+      expect.objectContaining({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: { version: 1 },
+      }),
+    );
+    expect(queryPort.messages).not.toContainEqual(expect.objectContaining({ type: "ui:response", id: "req-query" }));
+
+    resolveDispatch({
+      reply: {
+        type: "ui:response",
+        id: "req-query",
+        result: [],
+        context: { namespace: CHAIN.namespace, chainRef: CHAIN.chainRef },
+      },
+      shouldBroadcastSnapshot: false,
+    });
+    await pendingQuery;
+
+    const querySnapshotIndex = queryPort.messages.findIndex(
+      (message) => isRecord(message) && message.type === "ui:event" && message.event === UI_EVENT_SNAPSHOT_CHANGED,
+    );
+    const queryResponseIndex = queryPort.messages.findIndex(
+      (message) => isRecord(message) && message.type === "ui:response" && message.id === "req-query",
+    );
+
+    expect(querySnapshotIndex).toBeGreaterThanOrEqual(0);
+    expect(queryResponseIndex).toBeGreaterThan(querySnapshotIndex);
   });
 
   it("recovers snapshot broadcasting after a transient selected-chain resolution failure", () => {

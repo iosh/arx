@@ -6,6 +6,7 @@ import { defineMethod } from "./types.js";
 
 export const accountsMethods = {
   "ui.accounts.switchActive": defineMethod(
+    "command",
     z.strictObject({
       chainRef: ChainRefSchema,
       accountKey: AccountKeySchema.nullable().optional(),

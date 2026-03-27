@@ -1,7 +1,7 @@
 import { createLogger, extendLogger } from "../../utils/logger.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
 import { createUiDispatcher } from "./dispatcher.js";
-import { getUiRequestEffects } from "./requestMetadata.js";
+import { getUiRequestBroadcastPolicy } from "./requestMetadata.js";
 import { createUiServerRuntime } from "./runtime.js";
 import type { UiRuntimeAccess, UiRuntimeDeps, UiSurfaceIdentity } from "./types.js";
 
@@ -36,7 +36,7 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
     const dispatched = await dispatcher.dispatch(raw);
     if (!dispatched) return null;
 
-    if (dispatched.reply.type === "ui:response" && dispatched.effects.persistVaultMeta) {
+    if (dispatched.reply.type === "ui:response" && dispatched.plan.persistVaultMeta) {
       try {
         await bridge.persistVaultMeta();
       } catch (error) {
@@ -46,7 +46,7 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
 
     return {
       reply: dispatched.reply,
-      shouldBroadcastSnapshot: dispatched.reply.type === "ui:response" && dispatched.effects.broadcastSnapshot,
+      shouldBroadcastSnapshot: dispatched.reply.type === "ui:response" && dispatched.plan.broadcastSnapshot,
     };
   };
 
@@ -82,7 +82,7 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
       context: uiRuntime.getUiContext(),
     }),
     dispatchRequest,
-    shouldHoldBroadcast: (raw) => Boolean(getUiRequestEffects(raw)?.holdBroadcast),
+    getRequestBroadcastPolicy: (raw) => getUiRequestBroadcastPolicy(raw),
     subscribeStateChanged,
   };
 };

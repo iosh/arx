@@ -24,24 +24,26 @@ const AutoLockDurationMsSchema = z
   });
 
 export const sessionMethods = {
-  "ui.session.unlock": defineMethod(z.strictObject({ password: z.string().min(1) }), UnlockStateSchema, {
+  "ui.session.unlock": defineMethod("command", z.strictObject({ password: z.string().min(1) }), UnlockStateSchema, {
     broadcastSnapshot: true,
     persistVaultMeta: true,
     holdBroadcast: true,
   }),
 
   "ui.session.lock": defineMethod(
+    "command",
     z.strictObject({ reason: UnlockReasonSchema.optional() }).optional(),
     UnlockStateSchema,
     { broadcastSnapshot: true, persistVaultMeta: true },
   ),
 
-  "ui.session.resetAutoLockTimer": defineMethod(z.undefined(), UnlockStateSchema, {
+  "ui.session.resetAutoLockTimer": defineMethod("command", z.undefined(), UnlockStateSchema, {
     broadcastSnapshot: true,
     persistVaultMeta: true,
   }),
 
   "ui.session.setAutoLockDuration": defineMethod(
+    "command",
     z.strictObject({ durationMs: AutoLockDurationMsSchema }),
     SetAutoLockDurationResultSchema,
     { broadcastSnapshot: true, persistVaultMeta: true },

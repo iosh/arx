@@ -11,6 +11,7 @@ const NativeBalanceResultSchema = z.strictObject({
 
 export const balancesMethods = {
   "ui.balances.getNative": defineMethod(
+    "query",
     z.strictObject({
       chainRef: ChainRefSchema,
       address: z.string().min(1),

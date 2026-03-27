@@ -76,13 +76,11 @@ export const buildUiSnapshot = (deps: {
     });
   });
 
-  const keyringWarnings = keyrings
+  const pendingHdKeyrings = keyrings
     .getKeyrings()
     .filter((meta) => meta.type === "hd" && meta.needsBackup === true)
-    .map((meta) => ({
-      keyringId: meta.id,
-      alias: meta.alias ?? null,
-    }));
+    .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id));
+  const nextHdKeyring = pendingHdKeyrings[0] ?? null;
 
   const snapshot: UiSnapshot = {
     chain: {
@@ -127,11 +125,17 @@ export const buildUiSnapshot = (deps: {
     approvals: approvalSummaries,
     attention: attention.getSnapshot(),
     permissions: permissions.buildUiPermissionsSnapshot(),
+    backup: {
+      pendingHdKeyringCount: pendingHdKeyrings.length,
+      nextHdKeyring: nextHdKeyring
+        ? {
+            keyringId: nextHdKeyring.id,
+            alias: nextHdKeyring.alias ?? null,
+          }
+        : null,
+    },
     vault: {
       initialized: sessionStatus.vaultInitialized,
-    },
-    warnings: {
-      hdKeyringsNeedingBackup: keyringWarnings,
     },
   };
 

@@ -171,6 +171,9 @@ export type UiRuntimeDispatchResult = {
 export type UiRuntimeAccess = {
   buildSnapshotEvent: () => UiEventEnvelope;
   dispatchRequest: (raw: unknown) => Promise<UiRuntimeDispatchResult | null>;
-  shouldHoldBroadcast: (raw: unknown) => boolean;
+  getRequestBroadcastPolicy: (raw: unknown) => {
+    holdBroadcast: boolean;
+    fenceSnapshotBroadcast: boolean;
+  };
   subscribeStateChanged: (listener: () => void) => () => void;
 };

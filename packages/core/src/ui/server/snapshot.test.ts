@@ -175,8 +175,49 @@ describe("buildUiSnapshot approvals fallback", () => {
     expect(snapshot.vault).toEqual({
       initialized: true,
     });
+    expect(snapshot.backup).toEqual({
+      pendingHdKeyringCount: 0,
+      nextHdKeyring: null,
+    });
     expect(snapshot.accounts.list).toEqual([]);
     expect(snapshot.accounts.active).toBeNull();
+  });
+
+  it("summarizes pending HD backups as a single stable shell status", () => {
+    const deps = createDeps();
+    deps.keyrings.getKeyrings = () => [
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        type: "hd",
+        createdAt: 200,
+        alias: "Later wallet",
+        needsBackup: true,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        type: "hd",
+        createdAt: 100,
+        alias: "Primary wallet",
+        needsBackup: true,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000003",
+        type: "hd",
+        createdAt: 300,
+        alias: "Backed up wallet",
+        needsBackup: false,
+      },
+    ];
+
+    const snapshot = buildUiSnapshot(deps);
+
+    expect(snapshot.backup).toEqual({
+      pendingHdKeyringCount: 2,
+      nextHdKeyring: {
+        keyringId: "00000000-0000-4000-8000-000000000001",
+        alias: "Primary wallet",
+      },
+    });
   });
 
   it("keeps pending approvals visible when a record is missing or a fallback summary is returned", () => {

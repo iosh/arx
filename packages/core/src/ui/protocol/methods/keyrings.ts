@@ -36,6 +36,7 @@ const passwordSchema = z
 
 export const keyringsMethods = {
   "ui.keyrings.confirmNewMnemonic": defineMethod(
+    "command",
     z.strictObject({
       words: z.array(z.string().min(1)).min(12).max(24),
       alias: z.string().min(1).optional(),
@@ -47,6 +48,7 @@ export const keyringsMethods = {
   ),
 
   "ui.keyrings.importMnemonic": defineMethod(
+    "command",
     z.strictObject({
       words: z.array(z.string().min(1)).min(12).max(24),
       alias: z.string().min(1).optional(),
@@ -57,6 +59,7 @@ export const keyringsMethods = {
   ),
 
   "ui.keyrings.importPrivateKey": defineMethod(
+    "command",
     z.strictObject({
       privateKey: z.string().min(1),
       alias: z.string().min(1).optional(),
@@ -66,51 +69,56 @@ export const keyringsMethods = {
     { broadcastSnapshot: true },
   ),
 
-  "ui.keyrings.deriveAccount": defineMethod(z.strictObject({ keyringId: z.uuid() }), KeyringAccountSchema, {
+  "ui.keyrings.deriveAccount": defineMethod("command", z.strictObject({ keyringId: z.uuid() }), KeyringAccountSchema, {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.list": defineMethod(z.undefined(), z.array(UiKeyringMetaSchema.strict())),
+  "ui.keyrings.list": defineMethod("query", z.undefined(), z.array(UiKeyringMetaSchema.strict())),
 
   "ui.keyrings.getAccountsByKeyring": defineMethod(
+    "query",
     z.strictObject({ keyringId: z.uuid(), includeHidden: z.boolean().optional() }),
     z.array(UiAccountMetaSchema.strict()),
   ),
 
   "ui.keyrings.renameKeyring": defineMethod(
+    "command",
     z.strictObject({ keyringId: z.uuid(), alias: z.string().min(1) }),
     z.null(),
     { broadcastSnapshot: true },
   ),
 
   "ui.keyrings.renameAccount": defineMethod(
+    "command",
     z.strictObject({ accountKey: AccountKeySchema, alias: z.string().min(1) }),
     z.null(),
     { broadcastSnapshot: true },
   ),
 
-  "ui.keyrings.markBackedUp": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null(), {
+  "ui.keyrings.markBackedUp": defineMethod("command", z.strictObject({ keyringId: z.uuid() }), z.null(), {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.hideHdAccount": defineMethod(z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
+  "ui.keyrings.hideHdAccount": defineMethod("command", z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.unhideHdAccount": defineMethod(z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
+  "ui.keyrings.unhideHdAccount": defineMethod("command", z.strictObject({ accountKey: AccountKeySchema }), z.null(), {
     broadcastSnapshot: true,
   }),
 
-  "ui.keyrings.removePrivateKeyKeyring": defineMethod(z.strictObject({ keyringId: z.uuid() }), z.null(), {
+  "ui.keyrings.removePrivateKeyKeyring": defineMethod("command", z.strictObject({ keyringId: z.uuid() }), z.null(), {
     broadcastSnapshot: true,
   }),
 
   "ui.keyrings.exportMnemonic": defineMethod(
+    "command",
     z.strictObject({ keyringId: z.uuid(), password: passwordSchema }),
     ExportMnemonicResultSchema,
   ),
 
   "ui.keyrings.exportPrivateKey": defineMethod(
+    "command",
     z.strictObject({ accountKey: AccountKeySchema, password: passwordSchema }),
     ExportPrivateKeyResultSchema,
   ),

@@ -87,9 +87,14 @@ export const NetworkListSchema = z.object({
   known: z.array(ChainSnapshotSchema),
   available: z.array(ChainSnapshotSchema),
 });
-const HdBackupWarningSchema = z.object({
+const UiBackupKeyringReminderSchema = z.object({
   keyringId: z.uuid(),
   alias: z.string().nullable(),
+});
+
+export const UiBackupStatusSchema = z.object({
+  pendingHdKeyringCount: z.number().int().nonnegative(),
+  nextHdKeyring: UiBackupKeyringReminderSchema.nullable(),
 });
 
 export const AttentionRequestSchema = z.object({
@@ -114,10 +119,8 @@ export const UiSnapshotSchema = z.object({
     count: z.number().int().nonnegative(),
   }),
   permissions: UiPermissionsSnapshotSchema,
+  backup: UiBackupStatusSchema,
   vault: VaultSnapshotSchema,
-  warnings: z.object({
-    hdKeyringsNeedingBackup: z.array(HdBackupWarningSchema),
-  }),
 });
 
 export type ChainSnapshot = z.infer<typeof ChainSnapshotSchema>;
@@ -127,7 +130,8 @@ export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
 export type UiChainCapabilities = z.infer<typeof UiChainCapabilitiesSchema>;
 export type VaultSnapshot = z.infer<typeof VaultSnapshotSchema>;
 export type UiSnapshot = z.infer<typeof UiSnapshotSchema>;
-export type HdBackupWarning = z.infer<typeof HdBackupWarningSchema>;
+export type UiBackupKeyringReminder = z.infer<typeof UiBackupKeyringReminderSchema>;
+export type UiBackupStatus = z.infer<typeof UiBackupStatusSchema>;
 export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;

@@ -71,7 +71,7 @@ function GenerateMnemonicRoute() {
 
   const handleContinue = async () => {
     if (snapshot?.accounts.totalCount) {
-      const keyringId = mnemonicKeyringId ?? snapshot.warnings.hdKeyringsNeedingBackup[0]?.keyringId;
+      const keyringId = mnemonicKeyringId ?? snapshot.backup.nextHdKeyring?.keyringId;
       if (!keyringId) {
         router.navigate({ to: ROUTES.ONBOARDING_COMPLETE, replace: true });
         return;

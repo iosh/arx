@@ -4,6 +4,5 @@ export type {
   ChainViewsService,
   FindAvailableChainViewParams,
   ProviderMetaSnapshot,
-  ResolveEip155SwitchChainParams,
   UiNetworksSnapshot,
 } from "./types.js";

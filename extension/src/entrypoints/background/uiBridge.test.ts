@@ -528,8 +528,7 @@ const createControllers = () => {
   const chainViews = {
     findAvailableChainView: () => CHAIN,
     getApprovalReviewChainView: () => CHAIN,
-    getPreferredChainViewForNamespace: () => CHAIN,
-    getProviderChainView: () => CHAIN,
+    getActiveChainViewForNamespace: () => CHAIN,
     getSelectedChainView: () => CHAIN,
     listKnownChainViews: () => [CHAIN],
     listAvailableChainViews: () => [CHAIN],

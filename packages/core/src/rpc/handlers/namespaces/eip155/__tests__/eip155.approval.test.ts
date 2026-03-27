@@ -172,7 +172,7 @@ describe("eip155 handlers - approval metadata", () => {
     const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
-    const providerChain = runtime.services.chainViews.getProviderChainView("eip155");
+    const providerChain = runtime.services.chainViews.getActiveChainViewForNamespace("eip155");
     expect(selectedChain.chainRef).toBe("eip155:1");
     expect(providerChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await connectOrigin({

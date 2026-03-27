@@ -166,8 +166,8 @@ const createBackgroundRuntimeUiDeps = (
           buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
           findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
           getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
-          getPreferredChainViewForNamespace: (namespace) =>
-            runtime.services.chainViews.getPreferredChainViewForNamespace(namespace),
+          getActiveChainViewForNamespace: (namespace) =>
+            runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
           getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
           requireAvailableChainMetadata: (chainRef) =>
             runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
@@ -343,7 +343,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     controllers,
     rpcClientRegistry: runtimeSupportPhase.rpcClientRegistry,
     services: {
-      chainViews: sessionPhase.chainViews,
       permissionViews: runtimeSupportPhase.permissionViews,
     },
   });
@@ -351,7 +350,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const providerAccess = createProviderRuntimeAccess({
     getSessionStatus: () => sessionPhase.sessionStatus.getStatus(),
-    getProviderChainView: (namespace) => sessionPhase.chainViews.getProviderChainView(namespace),
+    getActiveChainViewForNamespace: (namespace) => sessionPhase.chainViews.getActiveChainViewForNamespace(namespace),
     buildProviderMeta: (namespace) => sessionPhase.chainViews.buildProviderMeta(namespace),
     getActiveChainByNamespace: () => sessionPhase.networkPreferences.getActiveChainByNamespace(),
     listPermittedAccountsView: (origin, options) =>

@@ -8,7 +8,7 @@ import type {
 } from "../types.js";
 import {
   parsePrivateKeyHex,
-  resolveChainRefForNamespace,
+  resolveUiChainRefForNamespace,
   sanitizeMnemonicPhraseFromWords,
   validateBip39Mnemonic,
 } from "./lib.js";
@@ -90,7 +90,7 @@ export const createOnboardingHandlers = (deps: {
 
       const { keyringId, address } = await deps.walletSetup.createWalletFromMnemonic(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
+      const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
@@ -113,7 +113,7 @@ export const createOnboardingHandlers = (deps: {
 
       const { keyringId, address } = await deps.walletSetup.importWalletFromMnemonic(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
+      const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,
@@ -135,7 +135,7 @@ export const createOnboardingHandlers = (deps: {
 
       const { keyringId, account } = await deps.walletSetup.importWalletFromPrivateKey(request);
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
+      const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
         chainRef,

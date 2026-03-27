@@ -7,6 +7,7 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
+import { resolveSwitchEthereumChainTarget } from "./resolveSwitchEthereumChainTarget.js";
 import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
 
 type WalletSwitchEthereumChainParams = {
@@ -98,7 +99,7 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       throw error;
     }
   },
-  handler: async ({ origin: _origin, params, controllers, services, rpcContext, invocation }) => {
+  handler: async ({ origin: _origin, params, controllers, rpcContext, invocation }) => {
     const rawChainId = params.chainId;
     const rawChainRef = params.chainRef;
     const normalizedChainId = params.normalizedChainId;
@@ -136,7 +137,9 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       }
     }
 
-    const target = services.chainViews.resolveEip155SwitchChain({
+    const target = resolveSwitchEthereumChainTarget({
+      chainDefinitions: controllers.chainDefinitions,
+      network: controllers.network,
       ...(normalizedChainId ? { chainId: normalizedChainId } : {}),
       ...(normalizedChainRef ? { chainRef: normalizedChainRef } : {}),
     });

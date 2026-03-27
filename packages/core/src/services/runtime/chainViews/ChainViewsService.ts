@@ -17,7 +17,6 @@ import type {
   ChainViewsService,
   FindAvailableChainViewParams,
   ProviderMetaSnapshot,
-  ResolveEip155SwitchChainParams,
   UiNetworksSnapshot,
 } from "./types.js";
 
@@ -60,17 +59,8 @@ class DefaultChainViewsService implements ChainViewsService {
     return toChainView(this.requireAvailableChainMetadata(this.#resolveSelectedChainRef()));
   }
 
-  getPreferredChainViewForNamespace(namespace: string): ChainView {
-    const selected = this.getSelectedChainView();
-    if (selected.namespace === namespace) {
-      return selected;
-    }
-
-    return this.getProviderChainView(namespace);
-  }
-
-  getProviderChainView(namespace: string): ChainView {
-    return toChainView(this.requireAvailableChainMetadata(this.#resolveProviderChainRef(namespace)));
+  getActiveChainViewForNamespace(namespace: string): ChainView {
+    return toChainView(this.requireAvailableChainMetadata(this.#resolveActiveChainRefForNamespace(namespace)));
   }
 
   getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView {
@@ -140,9 +130,9 @@ class DefaultChainViewsService implements ChainViewsService {
 
   buildProviderMeta(namespace: string): ProviderMetaSnapshot {
     const availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]);
-    const activeChainByNamespace = this.#resolveProviderActiveChainByNamespace(availableChainRefs);
+    const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
     const activeChain =
-      activeChainByNamespace[namespace] ?? this.#resolveProviderChainRef(namespace, availableChainRefs);
+      activeChainByNamespace[namespace] ?? this.#resolveActiveChainRefForNamespace(namespace, availableChainRefs);
 
     const active = this.#getRequiredChainMetadata(activeChain as ChainRef);
 
@@ -154,40 +144,6 @@ class DefaultChainViewsService implements ChainViewsService {
     };
   }
 
-  resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata {
-    const target = this.#listAvailableMetadata().find((item) => {
-      if (params.chainRef && item.chainRef === params.chainRef) {
-        return true;
-      }
-
-      if (params.chainId) {
-        const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
-        if (candidateChainId && candidateChainId === params.chainId) {
-          return true;
-        }
-      }
-
-      return false;
-    });
-
-    if (!target) {
-      throw chainErrors.notFound({
-        ...(params.chainId ? { chainId: params.chainId } : {}),
-        ...(params.chainRef ? { chainRef: params.chainRef } : {}),
-      });
-    }
-
-    if (target.namespace !== "eip155") {
-      throw arxError({
-        reason: ArxReasons.ChainNotCompatible,
-        message: "Requested chain is not compatible with wallet_switchEthereumChain",
-        data: { chainRef: target.chainRef },
-      });
-    }
-
-    return cloneChainMetadata(target);
-  }
-
   #listAvailableMetadata(): ChainMetadata[] {
     return this.#network.getState().availableChainRefs.map((chainRef) => this.requireAvailableChainMetadata(chainRef));
   }
@@ -196,11 +152,11 @@ class DefaultChainViewsService implements ChainViewsService {
     return deriveApprovalReviewContext(record, request ? { request } : undefined);
   }
 
-  #resolveProviderChainRef(
+  #resolveActiveChainRefForNamespace(
     namespace: string,
     availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]),
   ): ChainRef {
-    const activeChainByNamespace = this.#resolveProviderActiveChainByNamespace(availableChainRefs);
+    const activeChainByNamespace = this.#resolveActiveChainByNamespace(availableChainRefs);
     const activeChain = activeChainByNamespace[namespace];
     if (activeChain) {
       return activeChain;
@@ -213,7 +169,7 @@ class DefaultChainViewsService implements ChainViewsService {
     });
   }
 
-  #resolveProviderActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {
+  #resolveActiveChainByNamespace(availableChainRefs: ChainRef[]): Record<string, ChainRef> {
     const grouped = new Map<string, ChainRef[]>();
 
     for (const chainRef of availableChainRefs) {

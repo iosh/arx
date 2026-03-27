@@ -34,11 +34,6 @@ export type FindAvailableChainViewParams = {
   namespace?: string;
 };
 
-export type ResolveEip155SwitchChainParams = {
-  chainId?: string;
-  chainRef?: string;
-};
-
 export type ApprovalReviewChainViewParams = {
   record: ApprovalChainContextRecord;
   request?: ApprovalChainContextRequest;
@@ -48,13 +43,11 @@ export type ChainViewsService = {
   getSelectedChainView(): ChainView;
   requireChainMetadata(chainRef: ChainRef): ChainMetadata;
   requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata;
-  getPreferredChainViewForNamespace(namespace: string): ChainView;
-  getProviderChainView(namespace: string): ChainView;
+  getActiveChainViewForNamespace(namespace: string): ChainView;
   getApprovalReviewChainView(params: ApprovalReviewChainViewParams): ChainView;
   findAvailableChainView(params: FindAvailableChainViewParams): ChainView | null;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
   buildProviderMeta(namespace: string): ProviderMetaSnapshot;
-  resolveEip155SwitchChain(params: ResolveEip155SwitchChainParams): ChainMetadata;
 };

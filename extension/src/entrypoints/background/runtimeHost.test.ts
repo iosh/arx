@@ -121,7 +121,7 @@ const makeRuntime = () => {
           activeChainByNamespace: { eip155: "eip155:1" },
           supportedChains: ["eip155:1"],
         })),
-        getProviderChainView: vi.fn(() => ({
+        getActiveChainViewForNamespace: vi.fn(() => ({
           chainId: "0x1",
           chainRef: "eip155:1",
         })),

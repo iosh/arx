@@ -15,7 +15,7 @@ import type {
 } from "../types.js";
 import {
   assertUnlocked,
-  resolveChainRefForNamespace,
+  resolveUiChainRefForNamespace,
   toPlainHex,
   toUiAccountMeta,
   toUiKeyringMeta,
@@ -47,7 +47,7 @@ export const createKeyringsHandlers = (deps: {
 > => {
   const selectAccount = async (params: { namespace: string | undefined; accountKey: string }) => {
     const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
-    const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
+    const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
     await deps.accounts.setActiveAccount({ namespace, chainRef, accountKey: params.accountKey });
   };
 
@@ -62,7 +62,7 @@ export const createKeyringsHandlers = (deps: {
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps.chains, namespace),
+          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
           address: result.address,
         }),
         namespace: params.namespace,
@@ -80,7 +80,7 @@ export const createKeyringsHandlers = (deps: {
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps.chains, namespace),
+          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
           address: result.address,
         }),
         namespace: params.namespace,
@@ -94,7 +94,7 @@ export const createKeyringsHandlers = (deps: {
       const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
-          chainRef: resolveChainRefForNamespace(deps.chains, namespace),
+          chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
           address: result.account.address,
         }),
         namespace: params.namespace,
@@ -140,7 +140,7 @@ export const createKeyringsHandlers = (deps: {
     "ui.keyrings.hideHdAccount": async (params) => {
       assertUnlocked(deps.session);
       const namespace = getAccountKeyNamespace(params.accountKey);
-      const chainRef = resolveChainRefForNamespace(deps.chains, namespace);
+      const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       const activeAccount = deps.accounts.getActiveAccountForNamespace({ namespace, chainRef });
       if (activeAccount?.accountKey === params.accountKey) {
         throw arxError({

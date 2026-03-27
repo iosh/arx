@@ -90,7 +90,7 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
         getApprovalReviewChainView: runtime.services.chainViews.getApprovalReviewChainView.bind(
           runtime.services.chainViews,
         ),
-        getPreferredChainViewForNamespace: runtime.services.chainViews.getPreferredChainViewForNamespace.bind(
+        getActiveChainViewForNamespace: runtime.services.chainViews.getActiveChainViewForNamespace.bind(
           runtime.services.chainViews,
         ),
         getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),

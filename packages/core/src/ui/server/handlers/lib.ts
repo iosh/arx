@@ -49,11 +49,20 @@ export const parsePrivateKeyHex = (value: string): string => {
   return normalized;
 };
 
-export const resolveChainRefForNamespace = (
-  chains: Pick<UiChainsAccess, "getPreferredChainViewForNamespace">,
+export const resolveUiChainRefForNamespace = (
+  chains: Pick<UiChainsAccess, "getActiveChainViewForNamespace" | "getSelectedChainView">,
   namespace: string,
 ): string => {
-  return chains.getPreferredChainViewForNamespace(namespace).chainRef;
+  try {
+    const selectedChain = chains.getSelectedChainView();
+    if (selectedChain.namespace === namespace) {
+      return selectedChain.chainRef;
+    }
+  } catch {
+    // The UI edge still needs a namespace-specific active fallback even when the selected UI chain is unavailable.
+  }
+
+  return chains.getActiveChainViewForNamespace(namespace).chainRef;
 };
 
 export const toUiAccountMeta = (accountCodecs: UiAccountCodecsAccess, record: AccountRecord) => {

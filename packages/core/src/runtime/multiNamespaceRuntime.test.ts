@@ -141,7 +141,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    expect(runtime.services.chainViews.getProviderChainView("solana").chainRef).toBe(SOLANA_CHAIN.chainRef);
+    expect(runtime.services.chainViews.getActiveChainViewForNamespace("solana").chainRef).toBe(SOLANA_CHAIN.chainRef);
     expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
       namespace: "eip155",
       hasRpcClient: true,

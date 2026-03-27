@@ -33,7 +33,7 @@ type ProviderRuntimeChainView = {
 
 type ProviderRuntimeAccessDeps = {
   getSessionStatus: () => { isUnlocked: boolean };
-  getProviderChainView: (namespace: string) => ProviderRuntimeChainView;
+  getActiveChainViewForNamespace: (namespace: string) => ProviderRuntimeChainView;
   buildProviderMeta: (namespace: string) => {
     activeChainByNamespace: Record<string, ChainRef>;
     supportedChains: ChainRef[];
@@ -78,7 +78,7 @@ const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocat
 
 export const createProviderRuntimeAccess = ({
   getSessionStatus,
-  getProviderChainView,
+  getActiveChainViewForNamespace,
   buildProviderMeta,
   getActiveChainByNamespace,
   listPermittedAccountsView,
@@ -96,7 +96,7 @@ export const createProviderRuntimeAccess = ({
 }: ProviderRuntimeAccessDeps): ProviderRuntimeAccess => {
   const buildSnapshotFromState = (namespace: string, isUnlocked: boolean): ProviderRuntimeSnapshot => {
     const providerMeta = buildProviderMeta(namespace);
-    const providerChain = getProviderChainView(namespace);
+    const providerChain = getActiveChainViewForNamespace(namespace);
     const supportedChains = providerMeta.supportedChains.filter((chainRef) => chainRef.startsWith(`${namespace}:`));
 
     return {

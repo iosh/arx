@@ -74,6 +74,7 @@ const createMockTransport = () => {
 
   const sent: unknown[] = [];
   let connectCalls = 0;
+  let connected = false;
 
   // Deterministic test sync point: await the next postMessage().
   const sentWaiters: Array<(m: unknown) => void> = [];
@@ -91,6 +92,7 @@ const createMockTransport = () => {
   } = {
     connect: async () => {
       connectCalls += 1;
+      connected = true;
     },
     postMessage: (m) => {
       sent.push(m);
@@ -105,6 +107,7 @@ const createMockTransport = () => {
       disconnectListeners.add(fn);
       return () => disconnectListeners.delete(fn);
     },
+    isConnected: () => connected,
 
     sent,
     connectCalls: () => connectCalls,
@@ -112,6 +115,7 @@ const createMockTransport = () => {
       for (const fn of messageListeners) fn(m);
     },
     disconnectNow: (e) => {
+      connected = false;
       for (const fn of disconnectListeners) fn(e);
     },
     nextSent,
@@ -233,5 +237,112 @@ describe("ui client runtime", () => {
     client.destroy();
 
     vi.useRealTimers();
+  });
+
+  it("rejects pending requests when the bridge disconnects", async () => {
+    const transport = createMockTransport();
+    const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
+
+    try {
+      const pendingRequest = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
+
+      await transport.nextSent();
+      transport.disconnectNow(new Error("port disconnected"));
+
+      await expect(pendingRequest).rejects.toThrow("UI bridge disconnected");
+    } finally {
+      client.destroy();
+    }
+  });
+
+  it("waitForSnapshot requires a fresh snapshot after disconnect", async () => {
+    const transport = createMockTransport();
+    const client = createUiClient({ transport });
+
+    try {
+      transport.emit({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: SNAPSHOT_FIXTURE,
+      });
+
+      await expect(client.waitForSnapshot({ timeoutMs: 1_000 })).resolves.toMatchObject({ chain: { chainId: "0x1" } });
+
+      transport.disconnectNow(new Error("port disconnected"));
+
+      let resolved = false;
+      const pendingSnapshot = client.waitForSnapshot({ timeoutMs: 1_000 }).then((snapshot) => {
+        resolved = true;
+        return snapshot;
+      });
+
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      transport.emit({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+        payload: {
+          ...SNAPSHOT_FIXTURE,
+          chain: {
+            ...SNAPSHOT_FIXTURE.chain,
+            chainRef: "eip155:2",
+            chainId: "0x2",
+            displayName: "Sepolia",
+            shortName: "sep",
+          },
+          networks: {
+            ...SNAPSHOT_FIXTURE.networks,
+            active: "eip155:2",
+            known: [
+              {
+                ...SNAPSHOT_FIXTURE.networks.known[0],
+                chainRef: "eip155:2",
+                chainId: "0x2",
+                displayName: "Sepolia",
+                shortName: "sep",
+              },
+            ],
+            available: [
+              {
+                ...SNAPSHOT_FIXTURE.networks.available[0],
+                chainRef: "eip155:2",
+                chainId: "0x2",
+                displayName: "Sepolia",
+                shortName: "sep",
+              },
+            ],
+          },
+        },
+      });
+
+      await expect(pendingSnapshot).resolves.toMatchObject({ chain: { chainId: "0x2" } });
+    } finally {
+      client.destroy();
+    }
+  });
+
+  it("stops auto-reconnect once the last event listener unsubscribes", async () => {
+    vi.useFakeTimers();
+
+    const transport = createMockTransport();
+    const client = createUiClient({ transport });
+
+    try {
+      const unsubscribe = client.on(UI_EVENT_SNAPSHOT_CHANGED, () => {});
+
+      await Promise.resolve();
+      transport.disconnectNow(new Error("port disconnected"));
+
+      unsubscribe();
+
+      vi.advanceTimersByTime(300);
+      await vi.runAllTimersAsync();
+
+      expect(transport.connectCalls()).toBe(1);
+    } finally {
+      client.destroy();
+      vi.useRealTimers();
+    }
   });
 });

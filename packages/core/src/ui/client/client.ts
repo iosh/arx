@@ -139,6 +139,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     needsReconnect = true;
 
     connected = false;
+    lastSnapshot = null;
     rejectAllPending(new Error("UI bridge disconnected"));
 
     if (error) logger?.warn?.("[uiClient] disconnected", error);
@@ -261,6 +262,9 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
       if (!current) return;
       current.delete(listener as unknown as (payload: unknown) => void);
       if (current.size === 0) listeners.delete(event);
+      if (totalListenerCount() === 0) {
+        clearReconnectTimer();
+      }
     };
   };
 
@@ -332,7 +336,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     const predicate = opts?.predicate;
 
     const existing = lastSnapshot;
-    if (existing && (!predicate || predicate(existing))) return existing;
+    if (connected && existing && (!predicate || predicate(existing))) return existing;
 
     return await new Promise<UiSnapshot>((resolve, reject) => {
       let settled = false;

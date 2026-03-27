@@ -60,10 +60,14 @@ type Listener = (msg: unknown) => void;
 class FakePort {
   name = UI_CHANNEL;
   messages: unknown[] = [];
+  shouldThrowOnPostMessage = false;
   #messageListeners = new Set<Listener>();
   #disconnectListeners = new Set<() => void>();
 
   postMessage = (msg: unknown) => {
+    if (this.shouldThrowOnPostMessage) {
+      throw new Error("stale port");
+    }
     this.messages.push(msg);
   };
 
@@ -1052,6 +1056,49 @@ describe("uiBridge", () => {
 
     expect(querySnapshotIndex).toBeGreaterThanOrEqual(0);
     expect(queryResponseIndex).toBeGreaterThan(querySnapshotIndex);
+  });
+
+  it("drops a stale port without affecting snapshot broadcasts to other attached ports", () => {
+    const stalePort = createPort();
+    const healthyPort = createPort();
+
+    bridge.attachPort(stalePort as unknown as UiPort);
+    bridge.attachPort(healthyPort as unknown as UiPort);
+
+    stalePort.messages = [];
+    healthyPort.messages = [];
+    stalePort.shouldThrowOnPostMessage = true;
+
+    approvals.setPendingTasks([
+      {
+        id: crypto.randomUUID(),
+        kind: ApprovalKinds.RequestAccounts,
+        origin: "https://example.com",
+        namespace: CHAIN.namespace,
+        chainRef: CHAIN.chainRef,
+        request: { suggestedAccounts: [] },
+        createdAt: Date.now(),
+      },
+    ]);
+
+    expect(healthyPort.messages).toContainEqual(
+      expect.objectContaining({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+      }),
+    );
+    expect(stalePort.messages).toEqual([]);
+
+    healthyPort.messages = [];
+    approvals.setPendingTasks([]);
+
+    expect(healthyPort.messages).toContainEqual(
+      expect.objectContaining({
+        type: "ui:event",
+        event: UI_EVENT_SNAPSHOT_CHANGED,
+      }),
+    );
+    expect(stalePort.messages).toEqual([]);
   });
 
   it("recovers snapshot broadcasting after a transient selected-chain resolution failure", () => {

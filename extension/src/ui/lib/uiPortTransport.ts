@@ -1,5 +1,5 @@
 import type { UiTransport } from "@arx/core/ui";
-import { UI_CHANNEL, type UiPortEnvelope } from "@arx/core/ui";
+import { parseUiEnvelope, UI_CHANNEL, UI_EVENT_SNAPSHOT_CHANGED, type UiPortEnvelope } from "@arx/core/ui";
 import type Browser from "webextension-polyfill";
 
 type UnknownListener = (message: unknown) => void;
@@ -23,6 +23,15 @@ const toError = (message: string, cause?: unknown): Error => {
   const err = new Error(message);
   if (cause !== undefined) (err as { cause?: unknown }).cause = cause;
   return err;
+};
+
+const isReadyHandshakeMessage = (message: unknown): boolean => {
+  try {
+    const envelope = parseUiEnvelope(message);
+    return envelope.type === "ui:event" && envelope.event === UI_EVENT_SNAPSHOT_CHANGED;
+  } catch {
+    return false;
+  }
 };
 
 export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransport => {
@@ -75,7 +84,7 @@ export const createUiPortTransport = (deps?: { browser?: BrowserApi }): UiTransp
 
   const onPortMessage = (message: unknown, fromPort: Browser.Runtime.Port) => {
     if (fromPort !== port) return;
-    if (!ready) {
+    if (!ready && isReadyHandshakeMessage(message)) {
       ready = true;
       resolveConnectWaiter();
     }

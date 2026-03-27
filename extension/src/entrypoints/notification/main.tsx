@@ -9,7 +9,7 @@ import "../popup/style.css";
 import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { waitForInitialUiSnapshot } from "@/ui/lib/waitForInitialUiSnapshot";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 const queryClient = new QueryClient();
@@ -75,7 +75,7 @@ const boot = async () => {
   adjustWindowInnerSize();
 
   try {
-    const snapshot = await uiClient.snapshot.get();
+    const snapshot = await waitForInitialUiSnapshot();
     if (!snapshot.vault.initialized) {
       window.close();
       return;

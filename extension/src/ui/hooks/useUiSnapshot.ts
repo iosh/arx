@@ -2,10 +2,9 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { uiClient } from "../lib/uiBridgeClient";
+import { createUiSnapshotQueryOptions, writeCachedUiSnapshot } from "../lib/uiSnapshotQuery";
 import { useUiPort } from "./useUiPort";
 
-// Export query key for route guards to reuse
-export const UI_SNAPSHOT_QUERY_KEY = ["uiSnapshot"] as const;
 export const UI_KEYRINGS_QUERY_KEY = ["uiKeyrings"] as const;
 const UI_ACCOUNTS_BY_KEYRING_QUERY_KEY = (keyringId: string, includeHidden = false) =>
   ["uiAccountsByKeyring", keyringId, includeHidden] as const;
@@ -23,18 +22,12 @@ export const useUiSnapshot = () => {
     [queryClient],
   );
 
-  const snapshotQuery = useQuery<UiSnapshot>({
-    queryKey: UI_SNAPSHOT_QUERY_KEY,
-    queryFn: () => uiClient.waitForSnapshot(),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+  const snapshotQuery = useQuery<UiSnapshot>(createUiSnapshotQueryOptions());
 
   // Stable callback reference to avoid effect re-execution
   const handleSnapshot = useCallback(
     (snapshot: UiSnapshot) => {
-      queryClient.setQueryData(UI_SNAPSHOT_QUERY_KEY, snapshot);
+      writeCachedUiSnapshot(queryClient, snapshot);
     },
     [queryClient],
   );

@@ -2,7 +2,7 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { getEntryIntent } from "@/ui/lib/entryIntent";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { waitForAnyApprovalInSnapshot, waitForApprovalInSnapshot } from "./approvalSnapshotWait";
 import { getApprovalAttentionAction } from "./orchestration";
 import { getApprovalRoutePath } from "./routes";
 
@@ -69,16 +69,11 @@ export function ApprovalsOrchestrator({
       waitingForRequestedApprovalRef.current = true;
 
       let cancelled = false;
-      void uiClient
-        .waitForSnapshot({
-          timeoutMs: 2_000,
-          predicate: (s) => s.session.isUnlocked && s.approvals.some((item) => item.id === requestedApprovalId),
-        })
-        .then((s) => {
+      void waitForApprovalInSnapshot(requestedApprovalId, { requireUnlocked: true })
+        .then((approval) => {
           if (cancelled) return;
-          const next = s.approvals.find((item) => item.id === requestedApprovalId);
-          if (!next) return;
-          router.navigate({ to: getApprovalRoutePath(next), replace: true });
+          if (!approval) return;
+          router.navigate({ to: getApprovalRoutePath(approval), replace: true });
         })
         .catch(() => {
           // Keep the window open; the approval may arrive later.
@@ -98,11 +93,7 @@ export function ApprovalsOrchestrator({
       waitingForApprovalsRef.current = true;
 
       let cancelled = false;
-      void uiClient
-        .waitForSnapshot({
-          timeoutMs: 750,
-          predicate: (s) => s.session.isUnlocked && s.approvals.length > 0,
-        })
+      void waitForAnyApprovalInSnapshot()
         .catch(() => {
           if (cancelled) return;
           window.close();

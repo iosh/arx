@@ -1,7 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import type { QueryClient } from "@tanstack/react-query";
-import { UI_SNAPSHOT_QUERY_KEY } from "@/ui/hooks/useUiSnapshot";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
+import { loadUiSnapshotIntoCache, readCachedUiSnapshot, refreshUiSnapshotIntoCache } from "@/ui/lib/uiSnapshotQuery";
 
 type GetOrFetchUiSnapshotOpts = {
   /**
@@ -15,21 +14,11 @@ export async function getOrFetchUiSnapshot(
   queryClient: QueryClient,
   opts?: GetOrFetchUiSnapshotOpts,
 ): Promise<UiSnapshot | undefined> {
-  const cached = queryClient.getQueryData<UiSnapshot>(UI_SNAPSHOT_QUERY_KEY);
+  const cached = readCachedUiSnapshot(queryClient);
   if (cached && !opts?.fresh) return cached;
 
   try {
-    const snapshot = opts?.fresh
-      ? await uiClient.snapshot.get()
-      : await queryClient.fetchQuery({
-          queryKey: UI_SNAPSHOT_QUERY_KEY,
-          queryFn: () => uiClient.waitForSnapshot(),
-          staleTime: Infinity,
-        });
-
-    // Keep the React Query cache in sync even when we bypass fetchQuery.
-    queryClient.setQueryData(UI_SNAPSHOT_QUERY_KEY, snapshot);
-    return snapshot;
+    return opts?.fresh ? await refreshUiSnapshotIntoCache(queryClient) : await loadUiSnapshotIntoCache(queryClient);
   } catch (error) {
     console.warn("[getOrFetchUiSnapshot] failed to fetch snapshot", error);
     return undefined;

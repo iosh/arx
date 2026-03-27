@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { waitForApprovalInSnapshot } from "@/ui/approvals/approvalSnapshotWait";
 import { LoadingScreen } from "@/ui/components";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
@@ -42,11 +43,7 @@ function SendPage() {
             chainRef: snapshot.chain.chainRef,
           })
           .then(async ({ approvalId }) => {
-            // Wait for the snapshot to include the approval so the approve route doesn't bounce.
-            await uiClient.waitForSnapshot({
-              timeoutMs: 2_000,
-              predicate: (s) => s.approvals.some((item) => item.id === approvalId),
-            });
+            await waitForApprovalInSnapshot(approvalId);
 
             await router.navigate({
               to: "/approve/send-transaction/$id",

@@ -83,10 +83,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return { rpc, corrections };
   };
 
-  const resolveActiveChainByNamespace = (
-    registryChains: NetworkChainConfig[],
-    selectedChainRefHint: ChainRef,
-  ): Record<string, ChainRef> => {
+  const resolveActiveChainByNamespace = (registryChains: NetworkChainConfig[]): Record<string, ChainRef> => {
     const availableByNamespace = new Map<string, ChainRef[]>();
 
     for (const chain of registryChains) {
@@ -100,17 +97,11 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const next: Record<string, ChainRef> = {};
-    const selectedNamespace = getChainRefNamespace(selectedChainRefHint);
 
     for (const [namespace, chainRefs] of availableByNamespace) {
-      const preferred = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
-      if (preferred && chainRefs.includes(preferred)) {
-        next[namespace] = preferred;
-        continue;
-      }
-
-      if (namespace === selectedNamespace && chainRefs.includes(selectedChainRefHint)) {
-        next[namespace] = selectedChainRefHint;
+      const activeChainRef = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
+      if (activeChainRef && chainRefs.includes(activeChainRef)) {
+        next[namespace] = activeChainRef;
         continue;
       }
 
@@ -129,45 +120,43 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return next;
   };
 
-  const selectSelectedChainRef = (
+  const selectSelectedNamespace = (
     registryChains: NetworkChainConfig[],
     activeChainByNamespace: Record<string, ChainRef>,
-  ): ChainRef => {
+  ): string => {
     if (registryChains.length === 0) {
-      return cachedPreferences?.selectedChainRef ?? preferencesDefaults.selectedChainRef;
+      return cachedPreferences?.selectedNamespace ?? preferencesDefaults.selectedNamespace;
     }
 
-    const available = new Set(registryChains.map((chain) => chain.chainRef));
-    const preferredSelectedChainRef = cachedPreferences?.selectedChainRef ?? null;
-    if (preferredSelectedChainRef && available.has(preferredSelectedChainRef)) {
-      return preferredSelectedChainRef;
+    const availableNamespaces = new Set(Object.keys(activeChainByNamespace));
+    const preferredSelectedNamespace =
+      cachedPreferences?.selectedNamespace ??
+      (cachedPreferences?.selectedChainRef ? getChainRefNamespace(cachedPreferences.selectedChainRef) : null);
+    if (preferredSelectedNamespace && availableNamespaces.has(preferredSelectedNamespace)) {
+      return preferredSelectedNamespace;
     }
 
-    const preferredSelectedNamespace = preferredSelectedChainRef
-      ? getChainRefNamespace(preferredSelectedChainRef)
-      : null;
-    const preferredSelectedNamespaceActive = preferredSelectedNamespace
-      ? (activeChainByNamespace[preferredSelectedNamespace] ?? null)
-      : null;
-    if (preferredSelectedNamespaceActive && available.has(preferredSelectedNamespaceActive)) {
-      return preferredSelectedNamespaceActive;
-    }
-
-    const fallbackNamespace = getChainRefNamespace(preferencesDefaults.selectedChainRef);
-    const fallbackNamespaceActive = activeChainByNamespace[fallbackNamespace] ?? null;
-    if (fallbackNamespaceActive && available.has(fallbackNamespaceActive)) {
-      return fallbackNamespaceActive;
-    }
-
-    if (available.has(preferencesDefaults.selectedChainRef)) {
-      return preferencesDefaults.selectedChainRef;
+    if (availableNamespaces.has(preferencesDefaults.selectedNamespace)) {
+      return preferencesDefaults.selectedNamespace;
     }
 
     const first = registryChains[0];
     if (!first) {
       throw new Error("Network bootstrap expected chain registry to provide at least one chain");
     }
-    return first.chainRef;
+    return getChainRefNamespace(first.chainRef);
+  };
+
+  const deriveSelectedChainRef = (
+    selectedNamespace: string,
+    activeChainByNamespace: Record<string, ChainRef>,
+  ): ChainRef => {
+    const selectedChainRef = activeChainByNamespace[selectedNamespace];
+    if (selectedChainRef) {
+      return selectedChainRef;
+    }
+
+    throw new Error(`Missing active chain for selected namespace "${selectedNamespace}"`);
   };
 
   const pruneRpcPreferences = (available: Set<ChainRef>) => {
@@ -211,9 +200,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const current = network.getState();
-    const selectedChainRefHint = cachedPreferences?.selectedChainRef ?? preferencesDefaults.selectedChainRef;
-    const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains, selectedChainRefHint);
-    const nextSelectedChainRef = selectSelectedChainRef(registryChains, nextActiveChainByNamespace);
+    const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains);
+    const nextSelectedNamespace = selectSelectedNamespace(registryChains, nextActiveChainByNamespace);
+    const nextSelectedChainRef = deriveSelectedChainRef(nextSelectedNamespace, nextActiveChainByNamespace);
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
     const { rpc, corrections } = computeRpcState(registryChains, current);
@@ -237,8 +226,12 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
 
       const cachedActive = cachedPreferences?.activeChainByNamespace ?? {};
-      const cachedSelected = cachedPreferences?.selectedChainRef ?? null;
-      const shouldPersistSelected = cachedSelected !== nextSelectedChainRef;
+      const cachedSelectedNamespace =
+        cachedPreferences?.selectedNamespace ??
+        (cachedPreferences?.selectedChainRef ? getChainRefNamespace(cachedPreferences.selectedChainRef) : null);
+      const cachedSelectedChainRef = cachedPreferences?.selectedChainRef ?? null;
+      const shouldPersistSelected =
+        cachedSelectedNamespace !== nextSelectedNamespace || cachedSelectedChainRef !== nextSelectedChainRef;
       const shouldPersistActive =
         Object.keys(cachedActive).length !== Object.keys(nextActiveChainByNamespace).length ||
         Object.entries(nextActiveChainByNamespace).some(
@@ -249,7 +242,7 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       if (shouldPersistSelected || shouldPersistActive || shouldPersistRpc) {
         try {
           cachedPreferences = await preferences.update({
-            ...(shouldPersistSelected ? { selectedChainRef: nextSelectedChainRef } : {}),
+            ...(shouldPersistSelected ? { selectedNamespace: nextSelectedNamespace } : {}),
             ...(shouldPersistActive ? { activeChainByNamespace: nextActiveChainByNamespace } : {}),
             ...(shouldPersistRpc ? { rpcPatch: nextPatch } : {}),
           });

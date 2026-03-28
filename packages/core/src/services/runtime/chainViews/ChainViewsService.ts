@@ -23,7 +23,7 @@ import type {
 type CreateChainViewsServiceOptions = {
   chainDefinitions: ChainDefinitionsController;
   network: NetworkController;
-  preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedChainRef">;
+  preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedNamespace">;
 };
 
 const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
@@ -47,7 +47,7 @@ const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chain
 class DefaultChainViewsService implements ChainViewsService {
   readonly #chainDefinitions: ChainDefinitionsController;
   readonly #network: NetworkController;
-  readonly #preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedChainRef">;
+  readonly #preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedNamespace">;
 
   constructor(options: CreateChainViewsServiceOptions) {
     this.#chainDefinitions = options.chainDefinitions;
@@ -56,7 +56,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   getSelectedChainView(): ChainView {
-    return toChainView(this.requireAvailableChainMetadata(this.#resolveSelectedChainRef()));
+    return this.getActiveChainViewForNamespace(this.#resolveSelectedNamespace());
   }
 
   getActiveChainViewForNamespace(namespace: string): ChainView {
@@ -119,9 +119,11 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   buildWalletNetworksSnapshot(): UiNetworksSnapshot {
-    const active = this.#resolveSelectedChainRef();
+    const selectedNamespace = this.#resolveSelectedNamespace();
+    const active = this.getActiveChainViewForNamespace(selectedNamespace).chainRef;
 
     return {
+      selectedNamespace,
       active,
       known: this.listKnownChainViews(),
       available: this.listAvailableChainViews(),
@@ -182,19 +184,11 @@ class DefaultChainViewsService implements ChainViewsService {
       }
     }
 
-    const selectedChainRef = this.#tryResolveSelectedChainRef(availableChainRefs);
-    const selectedNamespace = selectedChainRef ? getChainRefNamespace(selectedChainRef) : null;
-
     const next: Record<string, ChainRef> = {};
     for (const [namespace, chainRefs] of grouped) {
-      const preferred = this.#preferences.getActiveChainRef(namespace);
-      if (preferred && chainRefs.includes(preferred)) {
-        next[namespace] = preferred;
-        continue;
-      }
-
-      if (selectedChainRef && selectedNamespace === namespace && chainRefs.includes(selectedChainRef)) {
-        next[namespace] = selectedChainRef;
+      const activeChainRef = this.#preferences.getActiveChainRef(namespace);
+      if (activeChainRef && chainRefs.includes(activeChainRef)) {
+        next[namespace] = activeChainRef;
         continue;
       }
 
@@ -207,31 +201,15 @@ class DefaultChainViewsService implements ChainViewsService {
     return next;
   }
 
-  #tryResolveSelectedChainRef(
-    availableChainRefs = sortChainRefs([...this.#network.getState().availableChainRefs]),
-  ): ChainRef | null {
-    const selectedChainRef = this.#preferences.getSelectedChainRef();
-    if (!this.#chainDefinitions.getChain(selectedChainRef)) {
-      return null;
+  #resolveSelectedNamespace(): string {
+    const selectedNamespace = this.#preferences.getSelectedNamespace().trim();
+    if (selectedNamespace.length === 0) {
+      throw arxError({
+        reason: ArxReasons.ChainNotSupported,
+        message: "Missing selected namespace",
+      });
     }
-
-    return availableChainRefs.some((availableChainRef) => availableChainRef === selectedChainRef)
-      ? selectedChainRef
-      : null;
-  }
-
-  #resolveSelectedChainRef(): ChainRef {
-    const selectedChainRef = this.#preferences.getSelectedChainRef();
-    const resolved = this.#tryResolveSelectedChainRef();
-    if (resolved) {
-      return resolved;
-    }
-
-    if (!this.#chainDefinitions.getChain(selectedChainRef)) {
-      throw chainErrors.notFound({ chainRef: selectedChainRef });
-    }
-
-    throw chainErrors.notAvailable({ chainRef: selectedChainRef });
+    return selectedNamespace;
   }
 
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {

@@ -22,6 +22,7 @@ import {
 const createCrossChainPreferencesPort = () =>
   new MemoryNetworkPreferencesPort({
     id: "network-preferences",
+    selectedNamespace: "eip155",
     selectedChainRef: "eip155:1",
     activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     rpc: {},
@@ -162,7 +163,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("presents personal_sign approvals on the derived review chain when wallet selected chain differs", async () => {
+  it("presents personal_sign approvals on the normalized selected UI chain", async () => {
     const runtime = createRuntime({
       networkPreferences: { port: createCrossChainPreferencesPort() },
     });
@@ -173,8 +174,9 @@ describe("eip155 handlers - approval metadata", () => {
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
     const providerChain = runtime.services.chainViews.getActiveChainViewForNamespace("eip155");
-    expect(selectedChain.chainRef).toBe("eip155:1");
+    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     expect(providerChain.chainRef).toBe(ALT_CHAIN.chainRef);
+    expect(selectedChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await connectOrigin({
       runtime,
       chainRefs: [ALT_CHAIN.chainRef],
@@ -203,7 +205,7 @@ describe("eip155 handlers - approval metadata", () => {
           namespace: "eip155",
           chainRef: ALT_CHAIN.chainRef,
         });
-        expect(summary.chainRef).not.toBe(selectedChain.chainRef);
+        expect(summary.chainRef).toBe(selectedChain.chainRef);
         void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
         return true;
       }
@@ -370,7 +372,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("presents eth_sendTransaction approvals on the derived review chain when wallet selected chain differs", async () => {
+  it("presents eth_sendTransaction approvals on the normalized selected UI chain", async () => {
     const registry = new TransactionAdapterRegistry();
     registry.register("eip155", {
       prepareTransaction: vi.fn(async () => ({
@@ -392,7 +394,8 @@ describe("eip155 handlers - approval metadata", () => {
     const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
-    expect(selectedChain.chainRef).toBe("eip155:1");
+    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+    expect(selectedChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await connectOrigin({
       runtime,
       chainRefs: [ALT_CHAIN.chainRef],
@@ -416,7 +419,7 @@ describe("eip155 handlers - approval metadata", () => {
         namespace: "eip155",
         chainRef: ALT_CHAIN.chainRef,
       });
-      expect(summary.chainRef).not.toBe(selectedChain.chainRef);
+      expect(summary.chainRef).toBe(selectedChain.chainRef);
       void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
       return true;
     });

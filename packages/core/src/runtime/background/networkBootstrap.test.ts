@@ -108,7 +108,7 @@ const createNetworkController = (chain: ChainMetadata) => {
 const createPreferencesService = (
   seed: NetworkPreferencesRecord | null,
   defaults = {
-    selectedChainRef: MAINNET_CHAIN.chainRef,
+    selectedNamespace: MAINNET_CHAIN.namespace,
     activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
   },
   now = () => 1_000,
@@ -146,6 +146,7 @@ describe("networkBootstrap", () => {
       chainDefinitions,
       preferences: service,
       preferencesDefaults: {
+        selectedNamespace: MAINNET_CHAIN.namespace,
         selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
@@ -166,6 +167,7 @@ describe("networkBootstrap", () => {
       },
     });
     await expect(port.get()).resolves.toMatchObject({
+      selectedNamespace: "eip155",
       selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
@@ -190,6 +192,7 @@ describe("networkBootstrap", () => {
       chainDefinitions,
       preferences: service,
       preferencesDefaults: {
+        selectedNamespace: MAINNET_CHAIN.namespace,
         selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
@@ -211,6 +214,7 @@ describe("networkBootstrap", () => {
     await bootstrap.flushPendingSync();
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     expect(chainViews.getSelectedChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
+    expect(service.getSelectedNamespace()).toBe("eip155");
     expect(service.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     bootstrap.destroy();
   });
@@ -231,6 +235,7 @@ describe("networkBootstrap", () => {
       chainDefinitions,
       preferences: service,
       preferencesDefaults: {
+        selectedNamespace: MAINNET_CHAIN.namespace,
         selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
@@ -246,6 +251,7 @@ describe("networkBootstrap", () => {
 
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     await expect(port.get()).resolves.toMatchObject({
+      selectedNamespace: "eip155",
       selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     });

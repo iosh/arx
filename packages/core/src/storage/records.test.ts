@@ -35,7 +35,7 @@ const createTransactionRecord = (
 };
 
 describe("NetworkPreferencesRecordSchema", () => {
-  it("requires selectedChainRef", () => {
+  it("requires selectedNamespace or selectedChainRef", () => {
     expect(() =>
       NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
@@ -49,7 +49,7 @@ describe("NetworkPreferencesRecordSchema", () => {
     ).toThrow();
   });
 
-  it("accepts records with an explicit selectedChainRef", () => {
+  it("derives selectedNamespace from a legacy selectedChainRef", () => {
     const parsed = NetworkPreferencesRecordSchema.parse({
       id: "network-preferences",
       selectedChainRef: "solana:101",
@@ -61,10 +61,42 @@ describe("NetworkPreferencesRecordSchema", () => {
       updatedAt: 0,
     });
 
+    expect(parsed.selectedNamespace).toBe("solana");
     expect(parsed.selectedChainRef).toBe("solana:101");
   });
 
-  it("rejects records that provide neither selectedChainRef nor namespace selections", () => {
+  it("derives selectedChainRef from selectedNamespace and activeChainByNamespace", () => {
+    const parsed = NetworkPreferencesRecordSchema.parse({
+      id: "network-preferences",
+      selectedNamespace: "solana",
+      activeChainByNamespace: {
+        solana: "solana:101",
+        eip155: "eip155:1",
+      },
+      rpc: {},
+      updatedAt: 0,
+    });
+
+    expect(parsed.selectedNamespace).toBe("solana");
+    expect(parsed.selectedChainRef).toBe("solana:101");
+  });
+
+  it("repairs legacy selectedChainRef drift using the selected namespace active chain", () => {
+    const parsed = NetworkPreferencesRecordSchema.parse({
+      id: "network-preferences",
+      selectedChainRef: "eip155:1",
+      activeChainByNamespace: {
+        eip155: "eip155:10",
+      },
+      rpc: {},
+      updatedAt: 0,
+    });
+
+    expect(parsed.selectedNamespace).toBe("eip155");
+    expect(parsed.selectedChainRef).toBe("eip155:10");
+  });
+
+  it("rejects records that provide neither selected owner field", () => {
     expect(() =>
       NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
@@ -79,6 +111,7 @@ describe("NetworkPreferencesRecordSchema", () => {
     expect(() =>
       NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
+        selectedNamespace: "solana",
         selectedChainRef: "solana:101",
         activeChainByNamespace: {
           solana: "eip155:1",

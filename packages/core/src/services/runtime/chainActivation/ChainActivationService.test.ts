@@ -13,7 +13,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update,
         setActiveChainRef,
       } as never,
@@ -22,7 +22,7 @@ describe("ChainActivationService", () => {
     await service.selectWalletChain("eip155:10");
 
     expect(update).toHaveBeenCalledWith({
-      selectedChainRef: "eip155:10",
+      selectedNamespace: "eip155",
       activeChainByNamespacePatch: { eip155: "eip155:10" },
     });
     expect(setActiveChainRef).not.toHaveBeenCalled();
@@ -34,7 +34,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update: vi.fn(),
         setActiveChainRef: vi.fn(),
       } as never,
@@ -53,7 +53,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update,
         setActiveChainRef: vi.fn(),
       } as never,
@@ -70,7 +70,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1", "solana:101"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update: vi.fn(),
         setActiveChainRef,
       } as never,
@@ -95,7 +95,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1", "eip155:10"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update,
         setActiveChainRef,
       } as never,
@@ -108,7 +108,7 @@ describe("ChainActivationService", () => {
     });
 
     expect(update).toHaveBeenCalledWith({
-      selectedChainRef: "eip155:10",
+      selectedNamespace: "eip155",
       activeChainByNamespacePatch: { eip155: "eip155:10" },
     });
     expect(setActiveChainRef).not.toHaveBeenCalled();
@@ -120,7 +120,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1", "solana:101"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update: vi.fn(),
         setActiveChainRef: vi.fn(),
       } as never,
@@ -141,7 +141,7 @@ describe("ChainActivationService", () => {
         getState: () => ({ availableChainRefs: ["eip155:1"] }),
       } as never,
       preferences: {
-        getSelectedChainRef: () => "eip155:1",
+        getSelectedNamespace: () => "eip155",
         update: vi.fn(),
         setActiveChainRef: vi.fn(),
       } as never,

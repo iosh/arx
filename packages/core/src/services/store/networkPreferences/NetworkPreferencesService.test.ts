@@ -22,9 +22,10 @@ describe("NetworkPreferencesService", () => {
     const { port } = createInMemoryPort();
     const service = createNetworkPreferencesService({
       port,
-      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+      defaults: { selectedNamespace: "eip155", activeChainByNamespace: { eip155: "eip155:1" } },
     });
     expect(await service.get()).toBeNull();
+    expect(service.getSelectedNamespace()).toBe("eip155");
     expect(service.getSelectedChainRef()).toBe("eip155:1");
     expect(service.getActiveChainRef("eip155")).toBe("eip155:1");
   });
@@ -33,7 +34,7 @@ describe("NetworkPreferencesService", () => {
     const { port } = createInMemoryPort();
     const service = createNetworkPreferencesService({
       port,
-      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+      defaults: { selectedNamespace: "eip155", activeChainByNamespace: { eip155: "eip155:1" } },
       now: () => 123,
     });
 
@@ -47,6 +48,7 @@ describe("NetworkPreferencesService", () => {
 
     expect(next).toEqual({
       id: "network-preferences",
+      selectedNamespace: "eip155",
       selectedChainRef: "eip155:10",
       activeChainByNamespace: { eip155: "eip155:10" },
       rpc: { "eip155:10": { activeIndex: 0, strategy: { id: "sticky" } } },
@@ -58,7 +60,7 @@ describe("NetworkPreferencesService", () => {
     const { port } = createInMemoryPort();
     const service = createNetworkPreferencesService({
       port,
-      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+      defaults: { selectedNamespace: "eip155", activeChainByNamespace: { eip155: "eip155:1" } },
       now: () => 500,
     });
 
@@ -76,29 +78,31 @@ describe("NetworkPreferencesService", () => {
 
     expect(after.rpc["eip155:10"]).toBeUndefined();
     expect(after.rpc["eip155:1"]).toMatchObject({ activeIndex: 2, strategy: { id: "failover" } });
+    expect(after.selectedNamespace).toBe("eip155");
     expect(after.selectedChainRef).toBe("eip155:1");
     expect(after.updatedAt).toBe(500);
   });
 
-  it("updates selectedChainRef independently from provider active chain selection", async () => {
+  it("treats selectedChainRef as a wallet chain alias and syncs the selected namespace active chain", async () => {
     const { port } = createInMemoryPort();
     const service = createNetworkPreferencesService({
       port,
-      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+      defaults: { selectedNamespace: "eip155", activeChainByNamespace: { eip155: "eip155:1" } },
       now: () => 999,
     });
 
     const next = await service.setSelectedChainRef("eip155:10");
 
+    expect(next.selectedNamespace).toBe("eip155");
     expect(next.selectedChainRef).toBe("eip155:10");
-    expect(next.activeChainByNamespace).toEqual({ eip155: "eip155:1" });
+    expect(next.activeChainByNamespace).toEqual({ eip155: "eip155:10" });
   });
 
   it("rejects invalid chainRef values when setting an active chain", async () => {
     const { port } = createInMemoryPort();
     const service = createNetworkPreferencesService({
       port,
-      defaults: { selectedChainRef: "eip155:1", activeChainByNamespace: { eip155: "eip155:1" } },
+      defaults: { selectedNamespace: "eip155", activeChainByNamespace: { eip155: "eip155:1" } },
     });
 
     await expect(service.setActiveChainRef("eip155" as never)).rejects.toMatchObject({

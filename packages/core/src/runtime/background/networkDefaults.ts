@@ -6,6 +6,7 @@ import type { NetworkStateInput, RpcStrategyConfig } from "../../controllers/net
 import { buildDefaultRoutingState } from "./constants.js";
 
 export type RuntimeNetworkPreferencesDefaults = {
+  selectedNamespace: string;
   selectedChainRef: ChainRef;
   activeChainByNamespace: Record<string, ChainRef>;
 };
@@ -77,6 +78,7 @@ export const buildRuntimeNetworkPlan = (params: {
     bootstrapState,
     deferredState: canResolveRequestedState ? null : requestedState,
     preferencesDefaults: {
+      selectedNamespace: selectedChain.namespace,
       selectedChainRef,
       activeChainByNamespace: createActiveChainDefaults(admittedChains, selectedChainRef),
     },

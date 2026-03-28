@@ -83,6 +83,7 @@ export const UiAccountMetaSchema = z.object({
 });
 
 export const NetworkListSchema = z.object({
+  selectedNamespace: z.string().min(1),
   active: ChainRefSchema,
   known: z.array(ChainSnapshotSchema),
   available: z.array(ChainSnapshotSchema),

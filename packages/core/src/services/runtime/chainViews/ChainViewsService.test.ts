@@ -55,12 +55,12 @@ const toEntity = (metadata: ChainMetadata): ChainDefinitionEntity => ({
 const setup = (params?: {
   known?: ChainMetadata[];
   available?: ChainMetadata[];
-  selected?: ChainMetadata;
+  selectedNamespace?: string;
   activeByNamespace?: Record<string, string>;
 }) => {
   const known = params?.known ?? [MAINNET, OPTIMISM, BASE, SOLANA];
   const available = params?.available ?? [MAINNET, OPTIMISM];
-  const selected = params?.selected ?? MAINNET;
+  const selectedNamespace = params?.selectedNamespace ?? MAINNET.namespace;
 
   return createChainViewsService({
     chainDefinitions: {
@@ -75,7 +75,7 @@ const setup = (params?: {
       }),
     } as never,
     preferences: {
-      getSelectedChainRef: () => selected.chainRef,
+      getSelectedNamespace: () => selectedNamespace,
       getActiveChainRef: (namespace: string) => params?.activeByNamespace?.[namespace] ?? null,
     } as never,
   });
@@ -87,6 +87,7 @@ describe("ChainViewsService", () => {
 
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
     expect(service.buildWalletNetworksSnapshot()).toEqual({
+      selectedNamespace: MAINNET.namespace,
       active: MAINNET.chainRef,
       known: expect.arrayContaining([
         expect.objectContaining({ chainRef: MAINNET.chainRef }),
@@ -111,7 +112,7 @@ describe("ChainViewsService", () => {
   it("builds provider meta from namespace-specific active preferences", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      selected: SOLANA,
+      selectedNamespace: SOLANA.namespace,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
@@ -125,10 +126,10 @@ describe("ChainViewsService", () => {
     expect(service.getActiveChainViewForNamespace("solana")).toMatchObject({ chainRef: SOLANA.chainRef });
   });
 
-  it("builds provider meta even when wallet selectedChainRef is currently unavailable", () => {
+  it("builds provider meta even when the selected namespace differs from the provider namespace", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      selected: BASE,
+      selectedNamespace: SOLANA.namespace,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
@@ -141,16 +142,20 @@ describe("ChainViewsService", () => {
     expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
-  it("throws when selectedChainRef is not mounted in the runtime", () => {
-    const service = setup({ selected: BASE, available: [MAINNET, SOLANA] });
+  it("throws when the selected namespace has no available chain in the runtime", () => {
+    const service = setup({
+      available: [MAINNET, SOLANA],
+      selectedNamespace: "cosmos",
+      activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
+    });
 
-    expect(() => service.getSelectedChainView()).toThrow(/not available/i);
+    expect(() => service.getSelectedChainView()).toThrow(/no available chain/i);
   });
 
   it("derives approval review chains without falling back to wallet selected chain", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
-      selected: SOLANA,
+      selectedNamespace: SOLANA.namespace,
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 

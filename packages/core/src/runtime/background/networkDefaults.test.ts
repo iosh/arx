@@ -31,13 +31,14 @@ const SOLANA_MAINNET: ChainMetadata = {
 };
 
 describe("buildRuntimeNetworkPlan", () => {
-  it("derives selectedChainRef and activeChainByNamespace from admitted chains", () => {
+  it("derives selectedNamespace and activeChainByNamespace from admitted chains", () => {
     const plan = buildRuntimeNetworkPlan({
       admittedChains: [BASE_MAINNET, SOLANA_MAINNET],
     });
 
     expect(plan.bootstrapState.availableChainRefs).toEqual([BASE_MAINNET.chainRef]);
     expect(plan.preferencesDefaults).toEqual({
+      selectedNamespace: BASE_MAINNET.namespace,
       selectedChainRef: BASE_MAINNET.chainRef,
       activeChainByNamespace: {
         eip155: BASE_MAINNET.chainRef,
@@ -63,6 +64,7 @@ describe("buildRuntimeNetworkPlan", () => {
     expect(plan.bootstrapState).toEqual(requestedInitialState);
     expect(plan.deferredState).toBeNull();
     expect(plan.preferencesDefaults).toEqual({
+      selectedNamespace: SOLANA_MAINNET.namespace,
       selectedChainRef: SOLANA_MAINNET.chainRef,
       activeChainByNamespace: {
         eip155: BASE_MAINNET.chainRef,
@@ -87,6 +89,7 @@ describe("buildRuntimeNetworkPlan", () => {
     expect(plan.bootstrapState.availableChainRefs).toEqual([BASE_MAINNET.chainRef]);
     expect(plan.deferredState).toEqual(requestedInitialState);
     expect(plan.preferencesDefaults).toEqual({
+      selectedNamespace: BASE_MAINNET.namespace,
       selectedChainRef: BASE_MAINNET.chainRef,
       activeChainByNamespace: {
         eip155: BASE_MAINNET.chainRef,

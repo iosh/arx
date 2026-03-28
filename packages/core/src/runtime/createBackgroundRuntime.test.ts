@@ -177,6 +177,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
+      selectedNamespace: ALT_CHAIN.namespace,
       selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
@@ -219,6 +220,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const networkState = runtime.controllers.network.getState();
+    expect(runtime.services.networkPreferences.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
     expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
@@ -304,7 +306,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.destroy();
   });
 
-  it("persists selectedChainRef when ui.networks.switchActive succeeds", async () => {
+  it("persists selectedNamespace-derived UI chain when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
     const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
@@ -313,6 +315,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
+      selectedNamespace: MAINNET_CHAIN.namespace,
       selectedChainRef: MAINNET_CHAIN.chainRef,
       activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       rpc: {},
@@ -359,6 +362,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
     await expect(networkPreferencesPort.get()).resolves.toMatchObject({
+      selectedNamespace: ALT_CHAIN.namespace,
       selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     });

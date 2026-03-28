@@ -14,6 +14,7 @@ const selectedChain = {
 };
 
 const networks = {
+  selectedNamespace: selectedChain.namespace,
   active: selectedChain.chainRef,
   known: [selectedChain],
   available: [selectedChain],

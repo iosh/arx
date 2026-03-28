@@ -17,6 +17,7 @@ export type ChainView = {
 };
 
 export type UiNetworksSnapshot = {
+  selectedNamespace: string;
   active: ChainRef;
   known: ChainView[];
   available: ChainView[];

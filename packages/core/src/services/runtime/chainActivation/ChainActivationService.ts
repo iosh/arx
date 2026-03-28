@@ -12,7 +12,7 @@ import {
 
 export type CreateChainActivationServiceOptions = {
   network: Pick<NetworkController, "getState">;
-  preferences: Pick<NetworkPreferencesService, "getSelectedChainRef" | "setActiveChainRef" | "update">;
+  preferences: Pick<NetworkPreferencesService, "getSelectedNamespace" | "setActiveChainRef" | "update">;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -28,7 +28,7 @@ export const createChainActivationService = ({
     const namespace = getChainRefNamespace(chainRef);
 
     return await preferences.update({
-      selectedChainRef: chainRef,
+      selectedNamespace: namespace,
       activeChainByNamespacePatch: { [namespace]: chainRef },
     });
   };
@@ -51,7 +51,7 @@ export const createChainActivationService = ({
       case ChainSelectionSyncPolicies.Never:
         return false;
       default:
-        return getChainRefNamespace(preferences.getSelectedChainRef()) === namespace;
+        return preferences.getSelectedNamespace() === namespace;
     }
   };
 

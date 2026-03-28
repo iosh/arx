@@ -24,6 +24,7 @@ const SNAPSHOT_FIXTURE = {
     sendTransaction: true,
   },
   networks: {
+    selectedNamespace: "eip155",
     active: "eip155:1",
     known: [
       {

@@ -1,7 +1,7 @@
 import type { JsonValue } from "./json.js";
 import { toJsonSafe } from "./json.js";
-import type { ArxReason } from "./spec.js";
-import { isArxReason } from "./spec.js";
+import type { ArxReason } from "./reasons.js";
+import { isArxReason } from "./reasons.js";
 
 export type ArxErrorJson = {
   kind: "ArxError";

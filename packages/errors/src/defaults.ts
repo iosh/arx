@@ -1,16 +1,16 @@
 import type { JsonRpcErrorObject } from "./jsonRpc.js";
+import type { ArxReason } from "./reasons.js";
 
-export type ErrorExposure = "ui_only" | "ui_and_dapp";
+export type GenericErrorExposure = "ui_only" | "ui_and_dapp";
 
-export type ArxReasonSpec = {
-  exposure: ErrorExposure;
+export type GenericSurfaceErrorDefaults = {
+  exposure: GenericErrorExposure;
   dapp: Pick<JsonRpcErrorObject, "code" | "message">;
   ui: { message: string };
 };
 
-// Single source of truth:
-// - adding a new reason requires adding its public surface semantics here.
-export const ArxErrorSpec = {
+// Generic surface defaults are fallback mappings, not the canonical error owner.
+export const GenericSurfaceErrorDefaultsByReason = {
   VaultNotInitialized: {
     exposure: "ui_only",
     dapp: { code: 4100, message: "Unauthorized" },
@@ -152,17 +152,8 @@ export const ArxErrorSpec = {
     dapp: { code: -32603, message: "Internal error" },
     ui: { message: "Internal error" },
   },
-} as const satisfies Record<string, ArxReasonSpec>;
+} as const satisfies Record<ArxReason, GenericSurfaceErrorDefaults>;
 
-export type ArxReasonKey = keyof typeof ArxErrorSpec;
-
-// Derived reasons map: ArxReasons.VaultLocked === "VaultLocked"
-export const ArxReasons = Object.fromEntries(Object.keys(ArxErrorSpec).map((k) => [k, k])) as {
-  [K in ArxReasonKey]: K;
-};
-
-export type ArxReason = (typeof ArxReasons)[keyof typeof ArxReasons];
-
-export const isArxReason = (value: unknown): value is ArxReason => {
-  return typeof value === "string" && Object.hasOwn(ArxErrorSpec, value);
+export const getGenericSurfaceErrorDefaults = (reason: ArxReason): GenericSurfaceErrorDefaults => {
+  return GenericSurfaceErrorDefaultsByReason[reason];
 };

@@ -59,4 +59,44 @@ describe("createSurfaceErrorEncoder", () => {
       error: { code: 4100, message: "adapter:dapp" },
     });
   });
+
+  it("does not leak unknown error messages through the RpcInternal fallback", () => {
+    const encoder = createSurfaceErrorEncoder({
+      getNamespaceProtocolAdapter: () => createAdapter(),
+    });
+
+    expect(
+      encoder.encodeDapp(new Error("boom"), {
+        method: "eth_chainId",
+      }),
+    ).toEqual({
+      code: -32603,
+      message: "Internal error",
+      data: {
+        method: "eth_chainId",
+      },
+    });
+  });
+
+  it("sanitizes passthrough JSON-RPC errors for dapp surfaces", () => {
+    const encoder = createSurfaceErrorEncoder({
+      getNamespaceProtocolAdapter: () => createAdapter(),
+    });
+
+    expect(
+      encoder.encodeDapp(
+        {
+          code: -32000,
+          message: "Upstream error",
+          data: { value: 1n },
+        },
+        {
+          method: "eth_call",
+        },
+      ),
+    ).toEqual({
+      code: -32000,
+      message: "Upstream error",
+    });
+  });
 });

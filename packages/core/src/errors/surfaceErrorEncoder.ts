@@ -6,6 +6,7 @@ import {
   coerceArxError,
   encodeDappError as encodeGenericDappError,
   encodeUiError as encodeGenericUiError,
+  sanitizeJsonRpcErrorObject,
 } from "@arx/errors";
 
 export type SurfaceErrorContext = Omit<ErrorEncodeContext, "surface" | "namespace"> & {
@@ -25,20 +26,23 @@ const isJsonRpcErrorLike = (value: unknown): value is { code: number; message?: 
   return typeof candidate.code === "number";
 };
 
-const toInternalArxError = (error: unknown, ctx: SurfaceErrorContext): ArxError => {
-  const message =
-    error instanceof Error && typeof error.message === "string" && error.message.length > 0
-      ? error.message
-      : "Internal error";
+const buildFallbackErrorData = (ctx: SurfaceErrorContext) => {
+  const data = {
+    ...(typeof ctx.namespace === "string" && ctx.namespace.length > 0 ? { namespace: ctx.namespace } : {}),
+    ...(ctx.chainRef ? { chainRef: ctx.chainRef } : {}),
+    ...(ctx.method ? { method: ctx.method } : {}),
+  };
+
+  return Object.keys(data).length > 0 ? data : undefined;
+};
+
+const toRpcInternalFallbackError = (error: unknown, ctx: SurfaceErrorContext): ArxError => {
+  const data = buildFallbackErrorData(ctx);
 
   return arxError({
     reason: ArxReasons.RpcInternal,
-    message,
-    data: {
-      namespace: ctx.namespace,
-      ...(ctx.chainRef ? { chainRef: ctx.chainRef } : {}),
-      ...(ctx.method ? { method: ctx.method } : {}),
-    },
+    message: "Internal error",
+    ...(data ? { data } : {}),
     cause: error,
   });
 };
@@ -56,15 +60,10 @@ const toGenericEncodeContext = (ctx: SurfaceErrorContext): ErrorEncodeContext =>
 export const createSurfaceErrorEncoder = (lookup: SurfaceProtocolAdapterLookup) => {
   const encodeSurfaceError = (error: unknown, ctx: SurfaceErrorContext): unknown => {
     if (ctx.surface === "dapp" && isJsonRpcErrorLike(error)) {
-      const message = typeof error.message === "string" && error.message.length > 0 ? error.message : "Unknown error";
-      return {
-        code: error.code,
-        message,
-        ...(error.data !== undefined ? { data: error.data } : {}),
-      };
+      return sanitizeJsonRpcErrorObject(error);
     }
 
-    const domain = coerceArxError(error) ?? toInternalArxError(error, ctx);
+    const domain = coerceArxError(error) ?? toRpcInternalFallbackError(error, ctx);
     const genericContext = toGenericEncodeContext(ctx);
 
     if (!ctx.namespace) {

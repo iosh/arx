@@ -36,7 +36,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({
         code: 4902,
-        message: "Requested chain is not registered with ARX",
+        message: "Unrecognized chain",
       });
     } finally {
       runtime.lifecycle.destroy();
@@ -290,7 +290,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({
         code: -32602,
-        message: "eth_sendTransaction requires at least one transaction parameter",
+        message: "Invalid params",
       });
     } finally {
       runtime.lifecycle.destroy();

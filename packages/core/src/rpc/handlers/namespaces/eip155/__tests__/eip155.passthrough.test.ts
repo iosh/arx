@@ -99,7 +99,7 @@ describe("eip155 passthrough executor", () => {
         }),
       ).rejects.toMatchObject({
         code: -32603,
-        message: 'Failed to execute "eth_getBalance"',
+        message: "Internal error",
         data: { namespace: "eip155", chainRef },
       });
     } finally {

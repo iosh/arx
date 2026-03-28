@@ -80,7 +80,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
         }),
       ).rejects.toMatchObject({
         code: 4100,
-        message: "Request eth_newFilter requires an unlocked session",
+        message: "Unauthorized",
       });
 
       expect(getClient).not.toHaveBeenCalled();

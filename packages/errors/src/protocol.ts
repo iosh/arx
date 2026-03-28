@@ -1,7 +1,7 @@
 import type { ArxError } from "./ArxError.js";
 import type { JsonValue } from "./json.js";
 import type { JsonRpcErrorObject } from "./jsonRpc.js";
-import type { ArxReason } from "./spec.js";
+import type { ArxReason } from "./reasons.js";
 
 export type ErrorSurface = "dapp" | "ui";
 

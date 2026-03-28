@@ -347,7 +347,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       permissionViews: runtimeSupportPhase.permissionViews,
     },
   });
-  const surfaceErrors = createSurfaceErrorEncoder(rpcRegistry);
+  const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
 
   const providerAccess = createProviderRuntimeAccess({
     getSessionStatus: () => sessionPhase.sessionStatus.getStatus(),
@@ -359,7 +359,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     formatAddress: (input) => bootstrapPhase.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
     resolveMethodNamespace,
     handleRpcRequest: (request, callback) => sessionPhase.engine.handle(request, callback),
-    encodeDappError: (error, context) => surfaceErrors.encodeDapp(error, context) as JsonRpcError,
+    encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
     cancelSessionApprovals: async (input) =>
       await sessionPhase.controllersBase.approvals.cancelByScope({
         scope: {
@@ -406,7 +406,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
       resolveInvocationDetails,
       executeRequest,
     },
-    surfaceErrors,
+    surfaceErrors: surfaceErrorEncoder,
     lifecycle,
     providerAccess,
   } as BackgroundRuntime;

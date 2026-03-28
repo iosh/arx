@@ -1,14 +1,14 @@
 import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
+import { createEip155ProtocolAdapter } from "../rpc/eip155ProtocolAdapter.js";
 import { createSurfaceErrorEncoder } from "./surfaceErrorEncoder.js";
 
 const createAdapter = (): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: 4100, message: "adapter:dapp" }),
-  encodeUiError: () => ({ reason: ArxReasons.RpcInternal, message: "adapter:ui" }),
 });
 
 describe("createSurfaceErrorEncoder", () => {
-  it("routes dapp and ui encoding through the same adapter lookup", () => {
+  it("routes only dapp encoding through namespace adapter lookup", () => {
     const lookupCalls: string[] = [];
     const encoder = createSurfaceErrorEncoder({
       getNamespaceProtocolAdapter: (namespace) => {
@@ -32,9 +32,9 @@ describe("createSurfaceErrorEncoder", () => {
         chainRef: "eip155:1",
         method: "ui.accounts.switch",
       }),
-    ).toEqual({ reason: ArxReasons.RpcInternal, message: "adapter:ui" });
+    ).toEqual({ reason: ArxReasons.RpcInternal, message: "boom" });
 
-    expect(lookupCalls).toEqual(["eip155", "eip155"]);
+    expect(lookupCalls).toEqual(["eip155"]);
   });
 
   it("executeWithEncoding() returns the encoded error payload", async () => {
@@ -97,6 +97,62 @@ describe("createSurfaceErrorEncoder", () => {
     ).toEqual({
       code: -32000,
       message: "Upstream error",
+    });
+  });
+
+  it("keeps ui encoding on the generic contract even when namespace is present", () => {
+    const lookupCalls: string[] = [];
+    const encoder = createSurfaceErrorEncoder({
+      getNamespaceProtocolAdapter: (namespace) => {
+        lookupCalls.push(namespace);
+        return createAdapter();
+      },
+    });
+
+    expect(
+      encoder.encodeUi(
+        arxError({
+          reason: ArxReasons.PermissionDenied,
+          message: "",
+          data: { retryable: true },
+        }),
+        {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          method: "ui.accounts.switch",
+        },
+      ),
+    ).toEqual({
+      reason: ArxReasons.PermissionDenied,
+      message: "Permission denied",
+      data: { retryable: true },
+    });
+
+    expect(lookupCalls).toEqual([]);
+  });
+
+  it("lets eip155 adapter own 4902 compatibility mapping for chain reasons", () => {
+    const encoder = createSurfaceErrorEncoder({
+      getNamespaceProtocolAdapter: () => createEip155ProtocolAdapter(),
+    });
+
+    expect(
+      encoder.encodeDapp(
+        arxError({
+          reason: ArxReasons.ChainNotSupported,
+          message: "Requested chain conflicts with a builtin chain definition",
+          data: { chainRef: "eip155:11155111" },
+        }),
+        {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          method: "wallet_addEthereumChain",
+        },
+      ),
+    ).toEqual({
+      code: 4902,
+      message: "Unrecognized chain",
+      data: { chainRef: "eip155:11155111" },
     });
   });
 });

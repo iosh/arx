@@ -1,10 +1,9 @@
-import { ArxReasons, type NamespaceProtocolAdapter } from "@arx/errors";
+import type { NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import { RpcRegistry } from "./RpcRegistry.js";
 
 const makeAdapter = (id: string): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: -32603, message: `adapter:${id}` }),
-  encodeUiError: () => ({ reason: ArxReasons.RpcInternal, message: `adapter:${id}` }),
 });
 
 describe("protocolAdapterRegistry", () => {

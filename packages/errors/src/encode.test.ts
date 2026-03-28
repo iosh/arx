@@ -54,6 +54,23 @@ describe("error encoders", () => {
     });
   });
 
+  it("keeps generic chain reasons off eip155-specific compatibility codes", () => {
+    expect(
+      encodeDappError(
+        arxError({
+          reason: ArxReasons.ChainNotSupported,
+          message: "chain is unavailable in this surface",
+          data: { chainRef: "solana:101" },
+        }),
+        { surface: "dapp", namespace: "unknown" },
+      ),
+    ).toEqual({
+      code: -32602,
+      message: "Invalid params",
+      data: { chainRef: "solana:101" },
+    });
+  });
+
   it("sanitizes passthrough JSON-RPC errors before surfacing them", () => {
     expect(
       sanitizeJsonRpcErrorObject({

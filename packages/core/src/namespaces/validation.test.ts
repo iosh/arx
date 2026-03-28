@@ -1,4 +1,4 @@
-import { ArxReasons, type NamespaceProtocolAdapter } from "@arx/errors";
+import type { NamespaceProtocolAdapter } from "@arx/errors";
 import { describe, expect, it } from "vitest";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
@@ -10,7 +10,6 @@ import { assertValidNamespaceManifest, defineNamespaceManifest } from "./validat
 
 const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
-  encodeUiError: () => ({ reason: ArxReasons.RpcInternal, message: `${namespace}:ui` }),
 });
 
 const createTestAccountCodec = (namespace: string): AccountCodec => ({

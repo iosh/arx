@@ -66,23 +66,20 @@ export const createSurfaceErrorEncoder = (lookup: SurfaceProtocolAdapterLookup) 
     const domain = coerceArxError(error) ?? toRpcInternalFallbackError(error, ctx);
     const genericContext = toGenericEncodeContext(ctx);
 
+    if (ctx.surface === "ui") {
+      return encodeGenericUiError(domain, genericContext);
+    }
+
     if (!ctx.namespace) {
-      return ctx.surface === "ui"
-        ? encodeGenericUiError(domain, genericContext)
-        : encodeGenericDappError(domain, genericContext);
+      return encodeGenericDappError(domain, genericContext);
     }
 
     try {
       const adapterContext: ErrorEncodeContext = { ...genericContext, namespace: ctx.namespace };
       const adapter = lookup.getNamespaceProtocolAdapter(ctx.namespace);
-      if (ctx.surface === "ui") {
-        return adapter.encodeUiError(domain, adapterContext);
-      }
       return adapter.encodeDappError(domain, adapterContext);
     } catch {
-      return ctx.surface === "ui"
-        ? encodeGenericUiError(domain, genericContext)
-        : encodeGenericDappError(domain, genericContext);
+      return encodeGenericDappError(domain, genericContext);
     }
   };
 

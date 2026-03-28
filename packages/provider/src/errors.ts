@@ -15,7 +15,6 @@ export type RpcErrorFactory = {
 
 export type ProviderErrorFactory = {
   disconnected(args?: ProviderErrorPayload): ProviderErrorInstance;
-  chainDisconnected(args?: ProviderErrorPayload): ProviderErrorInstance;
   unauthorized(args?: ProviderErrorPayload): ProviderErrorInstance;
   userRejectedRequest(args?: ProviderErrorPayload): ProviderErrorInstance;
   unsupportedMethod(args?: ProviderErrorPayload): ProviderErrorInstance;
@@ -35,7 +34,6 @@ const errorCodes = {
     unauthorized: 4100,
     unsupportedMethod: 4200,
     disconnected: 4900,
-    chainDisconnected: 4901,
   },
 } as const;
 
@@ -52,7 +50,6 @@ const defaultMessageByCode = new Map<number, string>([
   [errorCodes.provider.unauthorized, "The requested account and/or method has not been authorized by the user."],
   [errorCodes.provider.unsupportedMethod, "The requested method is not supported by this Ethereum provider."],
   [errorCodes.provider.disconnected, "The provider is disconnected from all chains."],
-  [errorCodes.provider.chainDisconnected, "The provider is disconnected from the specified chain."],
 ]);
 
 const makeError = (
@@ -78,7 +75,6 @@ export const createEvmRpcErrors = (): RpcErrorFactory => ({
 
 export const createEvmProviderErrors = (): ProviderErrorFactory => ({
   disconnected: (args) => makeError(errorCodes.provider.disconnected, args),
-  chainDisconnected: (args) => makeError(errorCodes.provider.chainDisconnected, args),
   unauthorized: (args) => makeError(errorCodes.provider.unauthorized, args),
   userRejectedRequest: (args) => makeError(errorCodes.provider.userRejectedRequest, args),
   unsupportedMethod: (args) => makeError(errorCodes.provider.unsupportedMethod, args),

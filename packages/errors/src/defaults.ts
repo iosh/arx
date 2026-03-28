@@ -108,17 +108,17 @@ export const GenericSurfaceErrorDefaultsByReason = {
 
   ChainNotFound: {
     exposure: "ui_and_dapp",
-    dapp: { code: 4902, message: "Unrecognized chain" },
+    dapp: { code: -32602, message: "Invalid params" },
     ui: { message: "Chain not found" },
   },
   ChainNotCompatible: {
     exposure: "ui_and_dapp",
-    dapp: { code: 4902, message: "Unrecognized chain" },
+    dapp: { code: -32602, message: "Invalid params" },
     ui: { message: "Chain not compatible" },
   },
   ChainNotSupported: {
     exposure: "ui_and_dapp",
-    dapp: { code: 4902, message: "Unrecognized chain" },
+    dapp: { code: -32602, message: "Invalid params" },
     ui: { message: "Chain not supported" },
   },
   ChainInvalidAddress: {

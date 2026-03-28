@@ -21,5 +21,4 @@ export type UiErrorPayload = {
 
 export type NamespaceProtocolAdapter = {
   encodeDappError(error: ArxError, ctx: ErrorEncodeContext): JsonRpcErrorObject;
-  encodeUiError(error: ArxError, ctx: ErrorEncodeContext): UiErrorPayload;
 };

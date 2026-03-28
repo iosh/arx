@@ -81,7 +81,6 @@ const buildProviderContext = (input: {
 
 const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
-  encodeUiError: () => ({ reason: ArxReasons.RpcInternal, message: `${namespace}:ui` }),
 });
 
 const createTestAccountCodec = (namespace: string): AccountCodec => ({

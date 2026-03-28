@@ -36,7 +36,7 @@ describe("@arx/storage-dexie", () => {
 
     const record = NetworkPreferencesRecordSchema.parse({
       id: "network-preferences",
-      selectedChainRef: "eip155:1",
+      selectedNamespace: "eip155",
       activeChainByNamespace: { eip155: "eip155:1" },
       rpc: {
         "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },

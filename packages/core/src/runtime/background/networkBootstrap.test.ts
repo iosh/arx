@@ -132,7 +132,7 @@ describe("networkBootstrap", () => {
     ]);
     const { port, service } = createPreferencesService({
       id: "network-preferences",
-      selectedChainRef: ALT_CHAIN.chainRef,
+      selectedNamespace: ALT_CHAIN.namespace,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 9, strategy: { id: "sticky" } },
@@ -147,7 +147,6 @@ describe("networkBootstrap", () => {
       preferences: service,
       preferencesDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
@@ -168,7 +167,6 @@ describe("networkBootstrap", () => {
     });
     await expect(port.get()).resolves.toMatchObject({
       selectedNamespace: "eip155",
-      selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
@@ -176,12 +174,12 @@ describe("networkBootstrap", () => {
     });
   });
 
-  it("repairs selectedChainRef when registry removes the current chain", async () => {
+  it("repairs the selected UI chain when registry removes the current chain", async () => {
     const network = createNetworkController(MAINNET_CHAIN);
     const chainDefinitions = createChainDefinitionsStub([{ metadata: MAINNET_CHAIN }, { metadata: ALT_CHAIN }]);
     const { service } = createPreferencesService({
       id: "network-preferences",
-      selectedChainRef: MAINNET_CHAIN.chainRef,
+      selectedNamespace: MAINNET_CHAIN.namespace,
       activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
@@ -193,7 +191,6 @@ describe("networkBootstrap", () => {
       preferences: service,
       preferencesDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
@@ -215,16 +212,15 @@ describe("networkBootstrap", () => {
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     expect(chainViews.getSelectedChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
     expect(service.getSelectedNamespace()).toBe("eip155");
-    expect(service.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     bootstrap.destroy();
   });
 
-  it("repairs unavailable selectedChainRef using the resolved provider chain for the same namespace", async () => {
+  it("repairs the selected namespace chain using the resolved active chain for the same namespace", async () => {
     const network = createNetworkController(MAINNET_CHAIN);
     const chainDefinitions = createChainDefinitionsStub([{ metadata: ALT_CHAIN }]);
     const { port, service } = createPreferencesService({
       id: "network-preferences",
-      selectedChainRef: MAINNET_CHAIN.chainRef,
+      selectedNamespace: MAINNET_CHAIN.namespace,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {},
       updatedAt: 10,
@@ -236,7 +232,6 @@ describe("networkBootstrap", () => {
       preferences: service,
       preferencesDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        selectedChainRef: MAINNET_CHAIN.chainRef,
         activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
@@ -252,7 +247,6 @@ describe("networkBootstrap", () => {
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     await expect(port.get()).resolves.toMatchObject({
       selectedNamespace: "eip155",
-      selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
   });

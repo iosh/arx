@@ -36,23 +36,6 @@ export const createNetworkPreferencesService = ({
   const getDefaultSelectedNamespace = () => defaults.selectedNamespace;
   const getDefaultActiveChainByNamespace = () => ({ ...defaults.activeChainByNamespace });
 
-  const deriveSelectedChainRef = (params: {
-    selectedNamespace: string;
-    activeChainByNamespace: Record<string, ChainRef>;
-    fallbackChainRef?: ChainRef | null;
-  }): ChainRef => {
-    const activeChainRef = params.activeChainByNamespace[params.selectedNamespace] ?? null;
-    if (activeChainRef) {
-      return activeChainRef;
-    }
-
-    if (params.fallbackChainRef && getChainRefNamespace(params.fallbackChainRef) === params.selectedNamespace) {
-      return params.fallbackChainRef;
-    }
-
-    throw new Error(`Missing active chain for selected namespace "${params.selectedNamespace}"`);
-  };
-
   const safeParse = (value: unknown): NetworkPreferencesRecord | null => {
     const parsed = NetworkPreferencesRecordSchema.safeParse(value);
     return parsed.success ? parsed.data : null;
@@ -93,15 +76,6 @@ export const createNetworkPreferencesService = ({
     return getActiveChainByNamespace()[normalized] ?? null;
   };
 
-  const getSelectedChainRef = (): ChainRef => {
-    const selectedNamespace = getSelectedNamespace();
-    return deriveSelectedChainRef({
-      selectedNamespace,
-      activeChainByNamespace: getActiveChainByNamespace(),
-      fallbackChainRef: cached?.selectedChainRef ?? null,
-    });
-  };
-
   const update = async (params: UpdateNetworkPreferencesParams): Promise<NetworkPreferencesRecord> => {
     return await run(async () => {
       const base = safeParse(await port.get());
@@ -127,16 +101,8 @@ export const createNetworkPreferencesService = ({
         }
       }
 
-      if (params.selectedChainRef) {
-        const selectedChainNamespace = getChainRefNamespace(params.selectedChainRef);
-        nextActiveChainByNamespace[selectedChainNamespace] = params.selectedChainRef;
-      }
-
       const nextSelectedNamespace =
-        params.selectedNamespace?.trim() ||
-        (params.selectedChainRef ? getChainRefNamespace(params.selectedChainRef) : null) ||
-        base?.selectedNamespace ||
-        getDefaultSelectedNamespace();
+        params.selectedNamespace?.trim() || base?.selectedNamespace || getDefaultSelectedNamespace();
 
       const nextRpcBase =
         "clearRpc" in params && params.clearRpc ? {} : params.rpc === undefined ? (base?.rpc ?? {}) : params.rpc;
@@ -154,16 +120,9 @@ export const createNetworkPreferencesService = ({
         }
       }
 
-      const nextSelectedChainRef = deriveSelectedChainRef({
-        selectedNamespace: nextSelectedNamespace,
-        activeChainByNamespace: nextActiveChainByNamespace,
-        fallbackChainRef: params.selectedChainRef ?? base?.selectedChainRef ?? null,
-      });
-
       const next: NetworkPreferencesRecord = NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
         selectedNamespace: nextSelectedNamespace,
-        selectedChainRef: nextSelectedChainRef,
         activeChainByNamespace: nextActiveChainByNamespace,
         rpc: nextRpc,
         updatedAt: clock(),
@@ -177,10 +136,6 @@ export const createNetworkPreferencesService = ({
 
   const setSelectedNamespace = async (namespace: string) => {
     return update({ selectedNamespace: namespace });
-  };
-
-  const setSelectedChainRef = async (chainRef: ChainRef) => {
-    return update({ selectedChainRef: chainRef });
   };
 
   const setActiveChainRef = async (chainRef: ChainRef) => {
@@ -204,12 +159,10 @@ export const createNetworkPreferencesService = ({
     get,
     getSnapshot,
     getSelectedNamespace,
-    getSelectedChainRef,
     getActiveChainByNamespace,
     getActiveChainRef,
     update,
     setSelectedNamespace,
-    setSelectedChainRef,
     setActiveChainRef,
     setRpcPreferences,
     clearRpcPreferences,

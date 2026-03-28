@@ -7,7 +7,6 @@ import { buildDefaultRoutingState } from "./constants.js";
 
 export type RuntimeNetworkPreferencesDefaults = {
   selectedNamespace: string;
-  selectedChainRef: ChainRef;
   activeChainByNamespace: Record<string, ChainRef>;
 };
 
@@ -30,7 +29,7 @@ const createBootstrapStateForChain = (
 
 const createActiveChainDefaults = (
   admittedChains: readonly ChainMetadata[],
-  selectedChainRef: ChainRef,
+  selectedUiChainRef: ChainRef,
 ): Record<string, ChainRef> => {
   const next: Record<string, ChainRef> = {};
 
@@ -40,7 +39,7 @@ const createActiveChainDefaults = (
     }
   }
 
-  next[getChainRefNamespace(selectedChainRef)] = selectedChainRef;
+  next[getChainRefNamespace(selectedUiChainRef)] = selectedUiChainRef;
   return next;
 };
 
@@ -62,10 +61,10 @@ export const buildRuntimeNetworkPlan = (params: {
     : cloneNetworkStateInput(fallbackState);
 
   const requestedSelectedChainRef = requestedState.availableChainRefs.find((chainRef) => chainByRef.has(chainRef));
-  const selectedChainRef = requestedSelectedChainRef ?? primaryChain.chainRef;
-  const selectedChain = chainByRef.get(selectedChainRef);
+  const selectedUiChainRef = requestedSelectedChainRef ?? primaryChain.chainRef;
+  const selectedChain = chainByRef.get(selectedUiChainRef);
   if (!selectedChain) {
-    throw new Error(`Missing admitted chain metadata for selected chain "${selectedChainRef}"`);
+    throw new Error(`Missing admitted chain metadata for selected chain "${selectedUiChainRef}"`);
   }
 
   const canResolveRequestedState = requestedState.availableChainRefs.every((chainRef) => chainByRef.has(chainRef));
@@ -79,8 +78,7 @@ export const buildRuntimeNetworkPlan = (params: {
     deferredState: canResolveRequestedState ? null : requestedState,
     preferencesDefaults: {
       selectedNamespace: selectedChain.namespace,
-      selectedChainRef,
-      activeChainByNamespace: createActiveChainDefaults(admittedChains, selectedChainRef),
+      activeChainByNamespace: createActiveChainDefaults(admittedChains, selectedUiChainRef),
     },
   };
 };

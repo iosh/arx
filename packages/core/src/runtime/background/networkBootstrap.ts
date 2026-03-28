@@ -129,11 +129,9 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
 
     const availableNamespaces = new Set(Object.keys(activeChainByNamespace));
-    const preferredSelectedNamespace =
-      cachedPreferences?.selectedNamespace ??
-      (cachedPreferences?.selectedChainRef ? getChainRefNamespace(cachedPreferences.selectedChainRef) : null);
-    if (preferredSelectedNamespace && availableNamespaces.has(preferredSelectedNamespace)) {
-      return preferredSelectedNamespace;
+    const cachedSelectedNamespace = cachedPreferences?.selectedNamespace ?? null;
+    if (cachedSelectedNamespace && availableNamespaces.has(cachedSelectedNamespace)) {
+      return cachedSelectedNamespace;
     }
 
     if (availableNamespaces.has(preferencesDefaults.selectedNamespace)) {
@@ -145,18 +143,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       throw new Error("Network bootstrap expected chain registry to provide at least one chain");
     }
     return getChainRefNamespace(first.chainRef);
-  };
-
-  const deriveSelectedChainRef = (
-    selectedNamespace: string,
-    activeChainByNamespace: Record<string, ChainRef>,
-  ): ChainRef => {
-    const selectedChainRef = activeChainByNamespace[selectedNamespace];
-    if (selectedChainRef) {
-      return selectedChainRef;
-    }
-
-    throw new Error(`Missing active chain for selected namespace "${selectedNamespace}"`);
   };
 
   const pruneRpcPreferences = (available: Set<ChainRef>) => {
@@ -202,7 +188,6 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     const current = network.getState();
     const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains);
     const nextSelectedNamespace = selectSelectedNamespace(registryChains, nextActiveChainByNamespace);
-    const nextSelectedChainRef = deriveSelectedChainRef(nextSelectedNamespace, nextActiveChainByNamespace);
 
     const available = new Set(registryChains.map((chain) => chain.chainRef));
     const { rpc, corrections } = computeRpcState(registryChains, current);
@@ -226,12 +211,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
 
       const cachedActive = cachedPreferences?.activeChainByNamespace ?? {};
-      const cachedSelectedNamespace =
-        cachedPreferences?.selectedNamespace ??
-        (cachedPreferences?.selectedChainRef ? getChainRefNamespace(cachedPreferences.selectedChainRef) : null);
-      const cachedSelectedChainRef = cachedPreferences?.selectedChainRef ?? null;
-      const shouldPersistSelected =
-        cachedSelectedNamespace !== nextSelectedNamespace || cachedSelectedChainRef !== nextSelectedChainRef;
+      const cachedSelectedNamespace = cachedPreferences?.selectedNamespace ?? null;
+      const shouldPersistSelected = cachedSelectedNamespace !== nextSelectedNamespace;
       const shouldPersistActive =
         Object.keys(cachedActive).length !== Object.keys(nextActiveChainByNamespace).length ||
         Object.entries(nextActiveChainByNamespace).some(

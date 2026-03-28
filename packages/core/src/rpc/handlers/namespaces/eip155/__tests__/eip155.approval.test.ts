@@ -23,7 +23,6 @@ const createCrossChainPreferencesPort = () =>
   new MemoryNetworkPreferencesPort({
     id: "network-preferences",
     selectedNamespace: "eip155",
-    selectedChainRef: "eip155:1",
     activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     rpc: {},
     updatedAt: 0,
@@ -174,7 +173,6 @@ describe("eip155 handlers - approval metadata", () => {
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
     const providerChain = runtime.services.chainViews.getActiveChainViewForNamespace("eip155");
-    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     expect(providerChain.chainRef).toBe(ALT_CHAIN.chainRef);
     expect(selectedChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await connectOrigin({
@@ -394,7 +392,6 @@ describe("eip155 handlers - approval metadata", () => {
     const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
-    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     expect(selectedChain.chainRef).toBe(ALT_CHAIN.chainRef);
     await connectOrigin({
       runtime,

@@ -42,8 +42,7 @@ const ActiveChainByNamespaceSchema = z.record(z.string().min(1), chainRefSchema)
 const NetworkPreferencesRecordInputSchema = z
   .strictObject({
     id: z.literal("network-preferences"),
-    selectedNamespace: z.string().min(1).optional(),
-    selectedChainRef: chainRefSchema.optional(),
+    selectedNamespace: z.string().min(1),
     activeChainByNamespace: ActiveChainByNamespaceSchema.default({}),
     // Preferences only: stable selections (e.g. manual RPC choice), not transient health.
     rpc: z.record(chainRefSchema, NetworkRpcPreferenceSchema).default({}),
@@ -60,45 +59,27 @@ const NetworkPreferencesRecordInputSchema = z
         });
       }
     }
+
+    const selectedNamespaceChainRef = value.activeChainByNamespace[value.selectedNamespace] ?? null;
+    if (!selectedNamespaceChainRef) {
+      ctx.addIssue({
+        code: "custom",
+        message: `activeChainByNamespace must include the selected namespace "${value.selectedNamespace}"`,
+        path: ["activeChainByNamespace", value.selectedNamespace],
+      });
+      return;
+    }
+
+    if (getChainRefNamespace(selectedNamespaceChainRef) !== value.selectedNamespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: "selected namespace must resolve to a chain in the same namespace",
+        path: ["selectedNamespace"],
+      });
+    }
   });
 
-export const NetworkPreferencesRecordSchema = NetworkPreferencesRecordInputSchema.transform((value, ctx) => {
-  const selectedNamespace =
-    value.selectedNamespace ?? (value.selectedChainRef ? getChainRefNamespace(value.selectedChainRef) : null);
-  if (!selectedNamespace) {
-    ctx.addIssue({
-      code: "custom",
-      message: "selectedNamespace or selectedChainRef is required",
-      path: ["selectedNamespace"],
-    });
-    return z.NEVER;
-  }
-
-  const selectedChainRef = value.activeChainByNamespace[selectedNamespace] ?? value.selectedChainRef ?? null;
-  if (!selectedChainRef) {
-    ctx.addIssue({
-      code: "custom",
-      message: `activeChainByNamespace must include the selected namespace "${selectedNamespace}"`,
-      path: ["activeChainByNamespace", selectedNamespace],
-    });
-    return z.NEVER;
-  }
-
-  if (getChainRefNamespace(selectedChainRef) !== selectedNamespace) {
-    ctx.addIssue({
-      code: "custom",
-      message: "selectedChainRef must belong to selectedNamespace",
-      path: ["selectedChainRef"],
-    });
-    return z.NEVER;
-  }
-
-  return {
-    ...value,
-    selectedNamespace,
-    selectedChainRef,
-  };
-});
+export const NetworkPreferencesRecordSchema = NetworkPreferencesRecordInputSchema;
 export type NetworkPreferencesRecord = z.infer<typeof NetworkPreferencesRecordSchema>;
 
 export const KeyringMetaRecordSchema = z.strictObject({

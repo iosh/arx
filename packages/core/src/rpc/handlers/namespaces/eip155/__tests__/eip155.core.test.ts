@@ -83,7 +83,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
       expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
       expect(
         runtime.controllers.accounts.getActiveAccountForNamespace({
@@ -122,7 +122,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toBeNull();
 
-      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
       expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
@@ -267,7 +267,7 @@ describe("eip155 handlers - core error paths", () => {
         },
       });
 
-      expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
       expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();

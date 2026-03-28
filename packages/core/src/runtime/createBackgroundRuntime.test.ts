@@ -156,7 +156,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
-    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(BASE_CHAIN.chainRef);
+    expect(runtime.services.networkPreferences.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
     expect(runtime.services.networkPreferences.getActiveChainByNamespace()).toEqual({
       [BASE_CHAIN.namespace]: BASE_CHAIN.chainRef,
     });
@@ -179,7 +179,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
       selectedNamespace: ALT_CHAIN.namespace,
-      selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
       rpc: {
         [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
@@ -222,7 +221,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const networkState = runtime.controllers.network.getState();
     expect(runtime.services.networkPreferences.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
-    expect(runtime.services.networkPreferences.getSelectedChainRef()).toBe(ALT_CHAIN.chainRef);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
@@ -317,7 +315,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
       selectedNamespace: MAINNET_CHAIN.namespace,
-      selectedChainRef: MAINNET_CHAIN.chainRef,
       activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       rpc: {},
       updatedAt: 0,
@@ -364,7 +361,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
     await expect(networkPreferencesPort.get()).resolves.toMatchObject({
       selectedNamespace: ALT_CHAIN.namespace,
-      selectedChainRef: ALT_CHAIN.chainRef,
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
 

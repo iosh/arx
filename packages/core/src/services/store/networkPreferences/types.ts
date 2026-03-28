@@ -11,7 +11,6 @@ export type NetworkPreferencesChangedHandler = (payload: NetworkPreferencesChang
 export type UpdateNetworkPreferencesParams =
   | {
       selectedNamespace?: string;
-      selectedChainRef?: ChainRef;
 
       activeChainByNamespace?: Record<string, ChainRef>;
 
@@ -30,7 +29,6 @@ export type UpdateNetworkPreferencesParams =
     }
   | {
       selectedNamespace?: string;
-      selectedChainRef?: ChainRef;
       activeChainByNamespace?: Record<string, ChainRef>;
       activeChainByNamespacePatch?: Record<string, ChainRef | null>;
 
@@ -47,13 +45,11 @@ export type NetworkPreferencesService = {
   get(): Promise<NetworkPreferencesRecord | null>;
   getSnapshot(): NetworkPreferencesRecord | null;
   getSelectedNamespace(): string;
-  getSelectedChainRef(): ChainRef;
   getActiveChainByNamespace(): Record<string, ChainRef>;
   getActiveChainRef(namespace: string): ChainRef | null;
   update(params: UpdateNetworkPreferencesParams): Promise<NetworkPreferencesRecord>;
 
   setSelectedNamespace(namespace: string): Promise<NetworkPreferencesRecord>;
-  setSelectedChainRef(chainRef: ChainRef): Promise<NetworkPreferencesRecord>;
   setActiveChainRef(chainRef: ChainRef): Promise<NetworkPreferencesRecord>;
   setRpcPreferences(rpc: Record<ChainRef, NetworkRpcPreference>): Promise<NetworkPreferencesRecord>;
   clearRpcPreferences(): Promise<NetworkPreferencesRecord>;

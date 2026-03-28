@@ -107,7 +107,7 @@ export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): Chai
 };
 
 export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
-  const chainRef = runtime.services.networkPreferences.getSelectedChainRef();
+  const chainRef = runtime.services.chainViews.getSelectedChainView().chainRef;
   const chain = getChainMetadata(runtime, chainRef);
   if (!chain) {
     throw new Error(`Missing chain metadata for selected chain ${chainRef}`);
@@ -190,7 +190,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
     const chainRef =
       args.context?.chainRef ??
       runtime.services.networkPreferences.getActiveChainRef("eip155") ??
-      runtime.services.networkPreferences.getSelectedChainRef();
+      runtime.services.chainViews.getSelectedChainView().chainRef;
     const ctx = args.context ?? {};
     const context = {
       ...ctx,

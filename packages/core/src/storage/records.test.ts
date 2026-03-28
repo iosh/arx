@@ -35,7 +35,7 @@ const createTransactionRecord = (
 };
 
 describe("NetworkPreferencesRecordSchema", () => {
-  it("requires selectedNamespace or selectedChainRef", () => {
+  it("requires selectedNamespace", () => {
     expect(() =>
       NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
@@ -49,23 +49,7 @@ describe("NetworkPreferencesRecordSchema", () => {
     ).toThrow();
   });
 
-  it("derives selectedNamespace from a legacy selectedChainRef", () => {
-    const parsed = NetworkPreferencesRecordSchema.parse({
-      id: "network-preferences",
-      selectedChainRef: "solana:101",
-      activeChainByNamespace: {
-        solana: "solana:101",
-        eip155: "eip155:1",
-      },
-      rpc: {},
-      updatedAt: 0,
-    });
-
-    expect(parsed.selectedNamespace).toBe("solana");
-    expect(parsed.selectedChainRef).toBe("solana:101");
-  });
-
-  it("derives selectedChainRef from selectedNamespace and activeChainByNamespace", () => {
+  it("accepts records whose selected namespace resolves through activeChainByNamespace", () => {
     const parsed = NetworkPreferencesRecordSchema.parse({
       id: "network-preferences",
       selectedNamespace: "solana",
@@ -78,22 +62,6 @@ describe("NetworkPreferencesRecordSchema", () => {
     });
 
     expect(parsed.selectedNamespace).toBe("solana");
-    expect(parsed.selectedChainRef).toBe("solana:101");
-  });
-
-  it("repairs legacy selectedChainRef drift using the selected namespace active chain", () => {
-    const parsed = NetworkPreferencesRecordSchema.parse({
-      id: "network-preferences",
-      selectedChainRef: "eip155:1",
-      activeChainByNamespace: {
-        eip155: "eip155:10",
-      },
-      rpc: {},
-      updatedAt: 0,
-    });
-
-    expect(parsed.selectedNamespace).toBe("eip155");
-    expect(parsed.selectedChainRef).toBe("eip155:10");
   });
 
   it("rejects records that provide neither selected owner field", () => {
@@ -107,12 +75,25 @@ describe("NetworkPreferencesRecordSchema", () => {
     ).toThrow();
   });
 
+  it("rejects records whose selected namespace is missing from activeChainByNamespace", () => {
+    expect(() =>
+      NetworkPreferencesRecordSchema.parse({
+        id: "network-preferences",
+        selectedNamespace: "solana",
+        activeChainByNamespace: {
+          eip155: "eip155:1",
+        },
+        rpc: {},
+        updatedAt: 0,
+      }),
+    ).toThrow(/must include the selected namespace/);
+  });
+
   it("rejects activeChainByNamespace entries whose chainRef namespace drifts", () => {
     expect(() =>
       NetworkPreferencesRecordSchema.parse({
         id: "network-preferences",
         selectedNamespace: "solana",
-        selectedChainRef: "solana:101",
         activeChainByNamespace: {
           solana: "eip155:1",
         },

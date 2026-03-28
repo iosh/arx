@@ -89,7 +89,7 @@ export const createOnboardingHandlers = (deps: {
       });
 
       const { keyringId, address } = await deps.walletSetup.createWalletFromMnemonic(request);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
@@ -112,7 +112,7 @@ export const createOnboardingHandlers = (deps: {
       });
 
       const { keyringId, address } = await deps.walletSetup.importWalletFromMnemonic(request);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,
@@ -134,7 +134,7 @@ export const createOnboardingHandlers = (deps: {
       });
 
       const { keyringId, account } = await deps.walletSetup.importWalletFromPrivateKey(request);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
       await deps.accounts.setActiveAccount({
         namespace,

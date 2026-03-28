@@ -529,10 +529,16 @@ const createControllers = () => {
     findAvailableChainView: () => CHAIN,
     getApprovalReviewChainView: () => CHAIN,
     getActiveChainViewForNamespace: () => CHAIN,
+    getSelectedNamespace: () => CHAIN.namespace,
     getSelectedChainView: () => CHAIN,
     listKnownChainViews: () => [CHAIN],
     listAvailableChainViews: () => [CHAIN],
-    buildWalletNetworksSnapshot: () => ({ active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] }),
+    buildWalletNetworksSnapshot: () => ({
+      selectedNamespace: CHAIN.namespace,
+      active: CHAIN.chainRef,
+      known: [CHAIN],
+      available: [CHAIN],
+    }),
     buildProviderMeta: () => ({
       activeChain: CHAIN.chainRef,
       activeNamespace: CHAIN.namespace,
@@ -1140,6 +1146,7 @@ describe("uiBridge", () => {
       },
       chainViewsOverride: {
         ...(controllers as unknown as { chainViews: Record<string, unknown> }).chainViews,
+        getSelectedNamespace: () => CHAIN.namespace,
         getSelectedChainView: () => {
           if (snapshotBroken) {
             throw new Error("selected chain temporarily unavailable");
@@ -1150,7 +1157,12 @@ describe("uiBridge", () => {
           if (snapshotBroken) {
             throw new Error("selected chain temporarily unavailable");
           }
-          return { active: CHAIN.chainRef, known: [CHAIN], available: [CHAIN] };
+          return {
+            selectedNamespace: CHAIN.namespace,
+            active: CHAIN.chainRef,
+            known: [CHAIN],
+            available: [CHAIN],
+          };
         },
       },
     });

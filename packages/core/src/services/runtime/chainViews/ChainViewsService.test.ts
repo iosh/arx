@@ -85,6 +85,7 @@ describe("ChainViewsService", () => {
   it("builds known and mounted views separately", () => {
     const service = setup();
 
+    expect(service.getSelectedNamespace()).toBe(MAINNET.namespace);
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: MAINNET.chainRef, chainId: MAINNET.chainId });
     expect(service.buildWalletNetworksSnapshot()).toEqual({
       selectedNamespace: MAINNET.namespace,
@@ -116,6 +117,7 @@ describe("ChainViewsService", () => {
       activeByNamespace: { eip155: MAINNET.chainRef, solana: SOLANA.chainRef },
     });
 
+    expect(service.getSelectedNamespace()).toBe(SOLANA.namespace);
     expect(service.getSelectedChainView()).toMatchObject({ chainRef: SOLANA.chainRef });
     expect(service.buildProviderMeta("eip155")).toEqual({
       activeChain: MAINNET.chainRef,

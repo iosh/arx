@@ -93,6 +93,7 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
         getActiveChainViewForNamespace: runtime.services.chainViews.getActiveChainViewForNamespace.bind(
           runtime.services.chainViews,
         ),
+        getSelectedNamespace: runtime.services.chainViews.getSelectedNamespace.bind(runtime.services.chainViews),
         getSelectedChainView: runtime.services.chainViews.getSelectedChainView.bind(runtime.services.chainViews),
         requireAvailableChainMetadata: runtime.services.chainViews.requireAvailableChainMetadata.bind(
           runtime.services.chainViews,

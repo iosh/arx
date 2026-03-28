@@ -168,6 +168,7 @@ const createBackgroundRuntimeUiDeps = (
           getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
           getActiveChainViewForNamespace: (namespace) =>
             runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
+          getSelectedNamespace: () => runtime.services.chainViews.getSelectedNamespace(),
           getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
           requireAvailableChainMetadata: (chainRef) =>
             runtime.services.chainViews.requireAvailableChainMetadata(chainRef),

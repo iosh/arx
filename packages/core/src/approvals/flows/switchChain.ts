@@ -1,5 +1,5 @@
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { ProviderChainActivationReasons } from "../../services/runtime/chainActivation/types.js";
+import { NamespaceChainActivationReasons } from "../../services/runtime/chainActivation/types.js";
 import { createApprovalSummaryBase } from "../presentation.js";
 import { deriveApprovalReviewContext, parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
@@ -27,10 +27,10 @@ export const switchChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.SwitchCh
   },
   async approve(record, _decision, deps) {
     const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, { request: record.request });
-    await deps.chainActivation.activateProviderChain({
+    await deps.chainActivation.activateNamespaceChain({
       namespace,
       chainRef: reviewChainRef,
-      reason: ProviderChainActivationReasons.SwitchChain,
+      reason: NamespaceChainActivationReasons.SwitchChain,
     });
     return null;
   },

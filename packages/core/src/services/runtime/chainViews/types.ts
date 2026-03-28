@@ -41,6 +41,7 @@ export type ApprovalReviewChainViewParams = {
 };
 
 export type ChainViewsService = {
+  getSelectedNamespace(): string;
   getSelectedChainView(): ChainView;
   requireChainMetadata(chainRef: ChainRef): ChainMetadata;
   requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata;

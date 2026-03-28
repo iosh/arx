@@ -18,7 +18,7 @@ export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   permissions: Pick<PermissionController, "getAuthorization" | "upsertAuthorization">;
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
-  chainActivation: Pick<ChainActivationService, "activateProviderChain">;
+  chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };

@@ -1,29 +1,21 @@
 import type { ChainRef } from "../../../chains/ids.js";
 
-export const ChainSelectionSyncPolicies = {
-  Always: "always",
-  Never: "never",
-  IfSelectedNamespaceMatches: "if-selected-namespace-matches",
-} as const;
-
-export type ChainSelectionSyncPolicy = (typeof ChainSelectionSyncPolicies)[keyof typeof ChainSelectionSyncPolicies];
-
-export const ProviderChainActivationReasons = {
+export const NamespaceChainActivationReasons = {
   SwitchChain: "switch-chain",
   Compatibility: "compatibility",
 } as const;
 
-export type ProviderChainActivationReason =
-  (typeof ProviderChainActivationReasons)[keyof typeof ProviderChainActivationReasons];
+export type NamespaceChainActivationReason =
+  (typeof NamespaceChainActivationReasons)[keyof typeof NamespaceChainActivationReasons];
 
-export type ActivateProviderChainParams = {
+export type ActivateNamespaceChainParams = {
   namespace: string;
   chainRef: ChainRef;
-  reason: ProviderChainActivationReason;
-  syncSelectedChain?: ChainSelectionSyncPolicy;
+  reason: NamespaceChainActivationReason;
 };
 
 export type ChainActivationService = {
   selectWalletChain(chainRef: ChainRef): Promise<void>;
-  activateProviderChain(params: ActivateProviderChainParams): Promise<void>;
+  selectWalletNamespace(namespace: string): Promise<void>;
+  activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
 };

@@ -71,6 +71,7 @@ export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
     | "findAvailableChainView"
     | "getApprovalReviewChainView"
     | "getActiveChainViewForNamespace"
+    | "getSelectedNamespace"
     | "getSelectedChainView"
     | "requireAvailableChainMetadata"
   >;

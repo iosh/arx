@@ -55,6 +55,10 @@ class DefaultChainViewsService implements ChainViewsService {
     this.#preferences = options.preferences;
   }
 
+  getSelectedNamespace(): string {
+    return this.#resolveSelectedNamespace();
+  }
+
   getSelectedChainView(): ChainView {
     return this.getActiveChainViewForNamespace(this.#resolveSelectedNamespace());
   }

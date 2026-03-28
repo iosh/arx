@@ -46,7 +46,7 @@ export const createKeyringsHandlers = (deps: {
   | "ui.keyrings.exportPrivateKey"
 > => {
   const selectAccount = async (params: { namespace: string | undefined; accountKey: string }) => {
-    const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+    const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
     const chainRef = resolveUiChainRefForNamespace(deps.chains, namespace);
     await deps.accounts.setActiveAccount({ namespace, chainRef, accountKey: params.accountKey });
   };
@@ -59,7 +59,7 @@ export const createKeyringsHandlers = (deps: {
         mnemonic: words.join(" "),
         ...keyringParams,
       } as UiConfirmNewMnemonicParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
@@ -77,7 +77,7 @@ export const createKeyringsHandlers = (deps: {
         mnemonic: words.join(" "),
         ...keyringParams,
       } as UiImportMnemonicParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),
@@ -91,7 +91,7 @@ export const createKeyringsHandlers = (deps: {
     "ui.keyrings.importPrivateKey": async (params) => {
       assertUnlocked(deps.session);
       const result = await deps.keyrings.importPrivateKey(params as UiImportPrivateKeyParams);
-      const namespace = params.namespace ?? deps.chains.getSelectedChainView().namespace;
+      const namespace = params.namespace ?? deps.chains.getSelectedNamespace();
       await selectAccount({
         accountKey: deps.accountCodecs.toAccountKeyFromAddress({
           chainRef: resolveUiChainRefForNamespace(deps.chains, namespace),

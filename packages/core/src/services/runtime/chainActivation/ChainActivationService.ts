@@ -1,18 +1,17 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { getChainRefNamespace, parseChainRef } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
 import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
-import {
-  type ActivateProviderChainParams,
-  type ChainActivationService,
-  ChainSelectionSyncPolicies,
-  type ChainSelectionSyncPolicy,
-} from "./types.js";
+import type { ActivateNamespaceChainParams, ChainActivationService } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
   network: Pick<NetworkController, "getState">;
-  preferences: Pick<NetworkPreferencesService, "getSelectedNamespace" | "setActiveChainRef" | "update">;
+  preferences: Pick<
+    NetworkPreferencesService,
+    "getActiveChainRef" | "setActiveChainRef" | "setSelectedNamespace" | "update"
+  >;
   logger?: (message: string, error?: unknown) => void;
 };
 
@@ -20,7 +19,49 @@ export const createChainActivationService = ({
   network,
   preferences,
 }: CreateChainActivationServiceOptions): ChainActivationService => {
-  const persistProviderChainSelection = async (chainRef: ChainRef) => {
+  const isAvailableChainRef = (chainRef: ChainRef): boolean => {
+    return network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
+  };
+
+  const assertAvailableChainRef = (chainRef: ChainRef): void => {
+    if (!isAvailableChainRef(chainRef)) {
+      throw chainErrors.notAvailable({ chainRef });
+    }
+  };
+
+  const resolveAvailableActiveChainRefForNamespace = (namespace: string): ChainRef => {
+    const normalizedNamespace = namespace.trim();
+    if (normalizedNamespace.length === 0) {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "Invalid namespace identifier",
+        data: { namespace },
+      });
+    }
+
+    const activeChainRef = preferences.getActiveChainRef(normalizedNamespace);
+    if (!activeChainRef) {
+      throw arxError({
+        reason: ArxReasons.ChainNotSupported,
+        message: `No active chain configured for namespace "${normalizedNamespace}"`,
+        data: { namespace: normalizedNamespace },
+      });
+    }
+
+    const parsed = parseChainRef(activeChainRef);
+    if (parsed.namespace !== normalizedNamespace) {
+      throw arxError({
+        reason: ArxReasons.ChainNotCompatible,
+        message: `Active chain "${activeChainRef}" does not belong to namespace "${normalizedNamespace}"`,
+        data: { namespace: normalizedNamespace, chainRef: activeChainRef, actualNamespace: parsed.namespace },
+      });
+    }
+
+    assertAvailableChainRef(activeChainRef);
+    return activeChainRef;
+  };
+
+  const persistNamespaceChainSelection = async (chainRef: ChainRef) => {
     return await preferences.setActiveChainRef(chainRef);
   };
 
@@ -34,47 +75,33 @@ export const createChainActivationService = ({
   };
 
   const selectWalletChain = async (chainRef: ChainRef): Promise<void> => {
-    const isAvailable = network
-      .getState()
-      .availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
-    if (!isAvailable) {
-      throw chainErrors.notAvailable({ chainRef });
-    }
-
+    assertAvailableChainRef(chainRef);
     await persistWalletChainSelection(chainRef);
   };
 
-  const shouldSyncSelectedChain = (policy: ChainSelectionSyncPolicy, namespace: string): boolean => {
-    switch (policy) {
-      case ChainSelectionSyncPolicies.Always:
-        return true;
-      case ChainSelectionSyncPolicies.Never:
-        return false;
-      default:
-        return preferences.getSelectedNamespace() === namespace;
-    }
+  const selectWalletNamespace = async (namespace: string): Promise<void> => {
+    const normalizedNamespace = namespace.trim();
+    resolveAvailableActiveChainRefForNamespace(normalizedNamespace);
+    await preferences.setSelectedNamespace(normalizedNamespace);
   };
 
-  const activateProviderChain = async ({
+  const activateNamespaceChain = async ({
     namespace,
     chainRef,
     reason,
-    syncSelectedChain = ChainSelectionSyncPolicies.IfSelectedNamespaceMatches,
-  }: ActivateProviderChainParams): Promise<void> => {
+  }: ActivateNamespaceChainParams): Promise<void> => {
     const parsed = parseChainRef(chainRef);
     if (parsed.namespace !== namespace) {
-      throw new Error(
-        `Chain activation namespace mismatch for reason "${reason}": expected "${namespace}", got "${parsed.namespace}"`,
-      );
+      throw arxError({
+        reason: ArxReasons.ChainNotCompatible,
+        message: `Chain activation namespace mismatch for reason "${reason}"`,
+        data: { reason, expectedNamespace: namespace, actualNamespace: parsed.namespace, chainRef },
+      });
     }
 
-    if (shouldSyncSelectedChain(syncSelectedChain, namespace)) {
-      await selectWalletChain(chainRef);
-      return;
-    }
-
-    await persistProviderChainSelection(chainRef);
+    assertAvailableChainRef(chainRef);
+    await persistNamespaceChainSelection(chainRef);
   };
 
-  return { selectWalletChain, activateProviderChain };
+  return { selectWalletChain, selectWalletNamespace, activateNamespaceChain };
 };

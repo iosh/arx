@@ -1,4 +1,4 @@
-import type { UiErrorPayload } from "@arx/errors";
+import { isArxReason, type UiErrorPayload } from "@arx/errors";
 import { z } from "zod";
 import { ChainRefSchema } from "../../chains/ids.js";
 import { isUiEventName, isUiMethodName, type UiEventName, type UiMethodName } from "./index.js";
@@ -55,7 +55,7 @@ const UiContextSchema = z
 
 const UiErrorSchema = z
   .object({
-    reason: z.string().min(1),
+    reason: z.string().refine(isArxReason, { message: "Unknown UI error reason" }),
     message: z.string().min(1),
     data: z.unknown().optional(),
   })

@@ -27,7 +27,7 @@ export class UiProtocolError extends Error {
 export class UiRemoteError extends Error {
   name = "UiRemoteError" as const;
 
-  reason?: UiError["reason"];
+  reason: UiError["reason"];
   data?: unknown;
   context?: UiContext | undefined;
 
@@ -38,6 +38,14 @@ export class UiRemoteError extends Error {
     this.context = context;
   }
 }
+
+export const isUiProtocolError = (error: unknown): error is UiProtocolError => {
+  return error instanceof UiProtocolError;
+};
+
+export const isUiRemoteError = (error: unknown): error is UiRemoteError => {
+  return error instanceof UiRemoteError;
+};
 
 export type UiClient = {
   connect: () => Promise<void>;

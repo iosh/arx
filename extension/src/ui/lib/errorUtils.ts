@@ -1,33 +1,40 @@
-import { type ArxReason, ArxReasons } from "@arx/core/errors";
+import { ArxReasons } from "@arx/core/errors";
+import { isUiProtocolError, isUiRemoteError, type UiRemoteError } from "@arx/core/ui";
 
-export type WalletError = Error & {
-  reason?: ArxReason;
-  data?: unknown;
-};
+export type WalletError = UiRemoteError;
 
 /**
  * Type guard to check if error is a WalletError
  */
 export const isWalletError = (error: unknown): error is WalletError => {
-  return error instanceof Error && typeof (error as WalletError).reason === "string";
+  return isUiRemoteError(error);
+};
+
+const getRemoteErrorMessage = (error: WalletError): string => {
+  switch (error.reason) {
+    case ArxReasons.ApprovalRejected:
+      return "Request rejected by user";
+    case ArxReasons.SessionLocked:
+    case ArxReasons.VaultLocked:
+      return "Wallet is locked. Please unlock first.";
+    case ArxReasons.PermissionNotConnected:
+      return "Not connected. Please connect first.";
+    case ArxReasons.RpcMethodNotFound:
+      return "Unsupported method";
+    default:
+      return error.message || "An unknown error occurred";
+  }
 };
 
 export const getErrorMessage = (error: unknown): string => {
+  if (isUiRemoteError(error)) {
+    return getRemoteErrorMessage(error);
+  }
+  if (isUiProtocolError(error)) {
+    return "Unexpected wallet response. Please try again.";
+  }
   if (error instanceof Error) {
-    const walletError = error as WalletError;
-    switch (walletError.reason) {
-      case ArxReasons.ApprovalRejected:
-        return "Request rejected by user";
-      case ArxReasons.SessionLocked:
-      case ArxReasons.VaultLocked:
-        return "Wallet is locked. Please unlock first.";
-      case ArxReasons.PermissionNotConnected:
-        return "Not connected. Please connect first.";
-      case ArxReasons.RpcMethodNotFound:
-        return "Unsupported method";
-      default:
-        return walletError.message || "An unknown error occurred";
-    }
+    return error.message || "An unknown error occurred";
   }
   return String(error ?? "An unknown error occurred");
 };
@@ -43,9 +50,8 @@ const getMessageText = (value: unknown) => {
 };
 
 export const getUnlockErrorMessage = (error: unknown): string => {
-  const walletError = error as WalletError | undefined;
-  if (walletError?.reason) {
-    if (walletError.reason === ArxReasons.VaultInvalidPassword) {
+  if (isUiRemoteError(error)) {
+    if (error.reason === ArxReasons.VaultInvalidPassword) {
       return "Incorrect password. Please try again.";
     }
     return getErrorMessage(error);
@@ -58,8 +64,7 @@ export const getUnlockErrorMessage = (error: unknown): string => {
 };
 
 export const getInitErrorMessage = (error: unknown): string => {
-  const walletError = error as WalletError | undefined;
-  if (walletError?.reason) {
+  if (isUiRemoteError(error)) {
     return getErrorMessage(error);
   }
   const message = getMessageText(error).toLowerCase();

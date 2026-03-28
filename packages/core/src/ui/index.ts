@@ -1,6 +1,6 @@
 export { uiActions } from "./actions.js";
-export type { UiClient, UiClientOptions, UiProtocolError, UiRemoteError, UiTransport } from "./client/index.js";
-export { createUiClient } from "./client/index.js";
+export type { UiClient, UiClientOptions, UiTransport } from "./client/index.js";
+export { createUiClient, isUiProtocolError, isUiRemoteError, UiProtocolError, UiRemoteError } from "./client/index.js";
 export type {
   UiContext,
   UiError,

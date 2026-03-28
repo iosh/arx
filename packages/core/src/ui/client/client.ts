@@ -22,6 +22,11 @@ import {
 const REQUEST_TIMEOUT_MS = 30_000;
 
 const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)));
+const createError = (message: string, cause?: unknown): Error => {
+  const error = new Error(message);
+  if (cause !== undefined) (error as { cause?: unknown }).cause = cause;
+  return error;
+};
 
 const defaultCreateRequestId = () => {
   return globalThis.crypto.randomUUID();
@@ -284,8 +289,9 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     return await new Promise<UiMethodResult<M>>((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (!pending.has(id)) return;
+        record.abortUnsubscribe?.();
         pending.delete(id);
-        reject(new Error("UI request timed out"));
+        reject(createError("UI request timed out"));
       }, requestTimeoutMs);
 
       const record: PendingRequest = {
@@ -304,7 +310,10 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
         }
 
         const onAbort = () => {
-          rejectPendingProtocolError(id, "Aborted locally");
+          if (!pending.has(id)) return;
+          clearTimeout(timeout);
+          pending.delete(id);
+          reject(createError("UI request aborted"));
         };
 
         signal.addEventListener("abort", onAbort, { once: true });

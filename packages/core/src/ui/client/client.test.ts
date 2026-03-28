@@ -199,6 +199,27 @@ describe("ui client runtime", () => {
       client.destroy();
     }
   });
+
+  it("rejects local aborts with a plain Error instead of UiProtocolError", async () => {
+    const transport = createMockTransport();
+    const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
+    const controller = new AbortController();
+
+    try {
+      const pendingRequest = client.call("ui.approvals.resolve", { id: "a", action: "reject" }, { signal: controller.signal });
+
+      await transport.nextSent();
+      controller.abort();
+
+      await expect(pendingRequest).rejects.toMatchObject({
+        name: "Error",
+        message: "UI request aborted",
+      });
+    } finally {
+      client.destroy();
+    }
+  });
+
   it("waitForSnapshot resolves after snapshotChanged", async () => {
     const transport = createMockTransport();
     const client = createUiClient({ transport });

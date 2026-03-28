@@ -218,6 +218,14 @@ describe("ui envelope parsing", () => {
 
     expect(() =>
       parseUiEnvelope({
+        type: "ui:error",
+        id: "1",
+        error: { reason: "UnknownReason", message: "nope" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseUiEnvelope({
         type: "ui:response",
         id: 1,
         result: {},

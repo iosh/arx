@@ -1,4 +1,4 @@
-import { eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
+import { createEip155WalletNamespaceModule, type WalletNamespaceModule } from "@arx/core/engine";
 import type { ProviderModule } from "@arx/provider/registry";
 import { describe, expect, it } from "vitest";
 import { createInstalledNamespacesComposition, defineInstalledNamespaceSpecs, INSTALLED_NAMESPACES } from "./installed";
@@ -16,52 +16,58 @@ const createTestProviderModule = (
   ...(options?.injection ? { injection: options.injection } : {}),
 });
 
-const createManifestForNamespace = (namespace: string): NamespaceManifest => ({
-  ...eip155NamespaceManifest,
-  namespace,
-  core: {
-    ...eip155NamespaceManifest.core,
+const createWalletModuleForNamespace = (namespace: string): WalletNamespaceModule => {
+  const module = createEip155WalletNamespaceModule();
+
+  return {
+    ...module,
     namespace,
-    rpc: {
-      ...eip155NamespaceManifest.core.rpc,
-      namespace,
-      adapter: {
-        ...eip155NamespaceManifest.core.rpc.adapter,
+    engine: {
+      ...module.engine,
+      facts: {
+        ...module.engine.facts,
         namespace,
+        rpc: {
+          ...module.engine.facts.rpc,
+          namespace,
+          adapter: {
+            ...module.engine.facts.rpc.adapter,
+            namespace,
+          },
+        },
+        chainAddressCodec: {
+          ...module.engine.facts.chainAddressCodec,
+          namespace,
+        },
+        accountCodec: {
+          ...module.engine.facts.accountCodec,
+          namespace,
+        },
+        keyring: {
+          ...module.engine.facts.keyring,
+          namespace,
+          defaultChainRef: `${namespace}:1`,
+          codec: {
+            ...module.engine.facts.keyring.codec,
+            namespace,
+          },
+        },
+        chainSeeds: module.engine.facts.chainSeeds?.map((chain) => ({
+          ...chain,
+          namespace,
+          chainRef: `${namespace}:1`,
+        })),
       },
     },
-    chainAddressCodec: {
-      ...eip155NamespaceManifest.core.chainAddressCodec,
-      namespace,
-    },
-    accountCodec: {
-      ...eip155NamespaceManifest.core.accountCodec,
-      namespace,
-    },
-    keyring: {
-      ...eip155NamespaceManifest.core.keyring,
-      namespace,
-      defaultChainRef: `${namespace}:1`,
-      codec: {
-        ...eip155NamespaceManifest.core.keyring.codec,
-        namespace,
-      },
-    },
-    chainSeeds: [
-      {
-        ...eip155NamespaceManifest.core.chainSeeds[0],
-        namespace,
-        chainRef: `${namespace}:1`,
-      },
-    ],
-  },
-});
+  };
+};
 
 describe("installed namespaces composition root", () => {
-  it("keeps runtime manifests and exposed provider modules aligned by namespace", () => {
+  it("keeps engine modules, compat runtime manifests, and exposed provider modules aligned by namespace", () => {
     const installedNamespaces = INSTALLED_NAMESPACES.specs.map((spec) => spec.namespace);
 
     expect(installedNamespaces).toEqual(["eip155"]);
+    expect(INSTALLED_NAMESPACES.engine.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.provider.exposedNamespaces).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.provider.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
@@ -80,7 +86,7 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: false,
           },
@@ -88,6 +94,7 @@ describe("installed namespaces composition root", () => {
       ] as const),
     );
 
+    expect(hiddenNamespace.engine.modules.map((module) => module.namespace)).toEqual(["eip155"]);
     expect(hiddenNamespace.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
     expect(hiddenNamespace.provider.exposedNamespaces).toEqual([]);
     expect(hiddenNamespace.provider.modules).toEqual([]);
@@ -102,13 +109,16 @@ describe("installed namespaces composition root", () => {
         throw new Error("not used in test");
       },
     };
-    const invalidManifest: NamespaceManifest = {
-      ...eip155NamespaceManifest,
-      core: {
-        ...eip155NamespaceManifest.core,
-        rpc: {
-          ...eip155NamespaceManifest.core.rpc,
-          namespace: "conflux",
+    const invalidModule: WalletNamespaceModule = {
+      ...createEip155WalletNamespaceModule(),
+      engine: {
+        ...createEip155WalletNamespaceModule().engine,
+        facts: {
+          ...createEip155WalletNamespaceModule().engine.facts,
+          rpc: {
+            ...createEip155WalletNamespaceModule().engine.facts.rpc,
+            namespace: "conflux",
+          },
         },
       },
     };
@@ -117,7 +127,7 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: createTestProviderModule("eip155"),
@@ -125,7 +135,7 @@ describe("installed namespaces composition root", () => {
         },
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: createTestProviderModule("eip155"),
@@ -138,20 +148,20 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "conflux",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: createTestProviderModule("conflux"),
           },
         },
       ] as const),
-    ).toThrow(/must use a manifest with the same namespace/);
+    ).toThrow(/must use a wallet namespace module with the same namespace/);
 
     expect(() =>
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: mismatchedProviderModule,
@@ -164,7 +174,7 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: createTestProviderModule("eip155", {
@@ -177,7 +187,7 @@ describe("installed namespaces composition root", () => {
         },
         {
           namespace: "conflux",
-          manifest: createManifestForNamespace("conflux"),
+          module: createWalletModuleForNamespace("conflux"),
           provider: {
             expose: true,
             module: createTestProviderModule("conflux", {
@@ -195,7 +205,7 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: eip155NamespaceManifest,
+          module: createEip155WalletNamespaceModule(),
           provider: {
             expose: true,
             module: createTestProviderModule("eip155", {
@@ -208,7 +218,7 @@ describe("installed namespaces composition root", () => {
         },
         {
           namespace: "conflux",
-          manifest: createManifestForNamespace("conflux"),
+          module: createWalletModuleForNamespace("conflux"),
           provider: {
             expose: true,
             module: createTestProviderModule("conflux", {
@@ -226,7 +236,7 @@ describe("installed namespaces composition root", () => {
       defineInstalledNamespaceSpecs([
         {
           namespace: "eip155",
-          manifest: invalidManifest,
+          module: invalidModule,
           provider: {
             expose: true,
             module: createTestProviderModule("eip155"),

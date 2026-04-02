@@ -1,3 +1,3 @@
 export { createUiClient } from "./client.js";
 export type { PendingRequest, UiClient, UiClientOptions, UiTransport } from "./types.js";
-export { UiProtocolError, UiRemoteError, isUiProtocolError, isUiRemoteError } from "./types.js";
+export { isUiProtocolError, isUiRemoteError, UiProtocolError, UiRemoteError } from "./types.js";

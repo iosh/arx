@@ -13,6 +13,7 @@
     "./controllers": "./src/controllers/index.ts",
     "./controllers/approval": "./src/controllers/approval/index.ts",
     "./controllers/unlock": "./src/controllers/unlock/types.ts",
+    "./engine": "./src/engine/index.ts",
     "./errors": "./src/errors/index.ts",
     "./logger": "./src/utils/logger.ts",
     "./messenger": "./src/messenger/index.ts",

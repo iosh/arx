@@ -1,6 +1,12 @@
 import { UiProtocolError, UiRemoteError } from "@arx/core/ui";
 import { describe, expect, it } from "vitest";
-import { getErrorMessage, getInitErrorMessage, getUnlockErrorMessage, isUserRejection, isWalletError } from "./errorUtils";
+import {
+  getErrorMessage,
+  getInitErrorMessage,
+  getUnlockErrorMessage,
+  isUserRejection,
+  isWalletError,
+} from "./errorUtils";
 
 describe("errorUtils", () => {
   it("treats UiRemoteError as the wallet-owned error shape", () => {

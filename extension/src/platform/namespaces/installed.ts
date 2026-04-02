@@ -1,4 +1,10 @@
-import { assertValidNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "@arx/core/namespaces";
+import {
+  assertValidWalletNamespaceModule,
+  createEip155WalletNamespaceModule,
+  createNamespaceManifestFromWalletNamespaceModule,
+  type WalletNamespaceModule,
+} from "@arx/core/engine";
+import type { NamespaceManifest } from "@arx/core/namespaces";
 import { createEip155Module } from "@arx/provider/namespaces";
 import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
 
@@ -13,8 +19,12 @@ export type InstalledNamespaceProviderExposure =
 
 export type InstalledNamespaceSpec = Readonly<{
   namespace: string;
-  manifest: NamespaceManifest;
+  module: WalletNamespaceModule;
   provider: InstalledNamespaceProviderExposure;
+}>;
+
+export type InstalledNamespacesEngineAssembly = Readonly<{
+  modules: readonly WalletNamespaceModule[];
 }>;
 
 export type InstalledNamespacesRuntimeAssembly = Readonly<{
@@ -29,6 +39,7 @@ export type InstalledNamespacesProviderAssembly = Readonly<{
 
 export type InstalledNamespacesComposition = Readonly<{
   specs: readonly InstalledNamespaceSpec[];
+  engine: InstalledNamespacesEngineAssembly;
   runtime: InstalledNamespacesRuntimeAssembly;
   provider: InstalledNamespacesProviderAssembly;
 }>;
@@ -41,16 +52,16 @@ export const defineInstalledNamespaceSpecs = <const TSpecs extends readonly Inst
   const exposedInitializedEventOwnerByName = new Map<string, string>();
 
   for (const spec of specs) {
-    assertValidNamespaceManifest(spec.manifest);
+    assertValidWalletNamespaceModule(spec.module);
 
     if (seen.has(spec.namespace)) {
       throw new Error(`Duplicate installed namespace "${spec.namespace}"`);
     }
     seen.add(spec.namespace);
 
-    if (spec.manifest.namespace !== spec.namespace) {
+    if (spec.module.namespace !== spec.namespace) {
       throw new Error(
-        `Installed namespace "${spec.namespace}" must use a manifest with the same namespace; received "${spec.manifest.namespace}"`,
+        `Installed namespace "${spec.namespace}" must use a wallet namespace module with the same namespace; received "${spec.module.namespace}"`,
       );
     }
 
@@ -97,7 +108,10 @@ export const createInstalledNamespacesComposition = (
   specs: readonly InstalledNamespaceSpec[],
 ): InstalledNamespacesComposition => {
   const validatedSpecs = defineInstalledNamespaceSpecs(specs);
-  const manifests: readonly NamespaceManifest[] = validatedSpecs.map((spec) => spec.manifest);
+  const engineModules: readonly WalletNamespaceModule[] = validatedSpecs.map((spec) => spec.module);
+  const manifests: readonly NamespaceManifest[] = engineModules.map((module) =>
+    createNamespaceManifestFromWalletNamespaceModule(module),
+  );
   const exposedProviderSpecs = validatedSpecs.filter(
     (
       spec,
@@ -110,6 +124,9 @@ export const createInstalledNamespacesComposition = (
 
   return {
     specs: validatedSpecs,
+    engine: {
+      modules: engineModules,
+    },
     runtime: {
       manifests,
     },
@@ -124,8 +141,8 @@ export const createInstalledNamespacesComposition = (
 export const INSTALLED_NAMESPACES = createInstalledNamespacesComposition(
   defineInstalledNamespaceSpecs([
     {
-      namespace: eip155NamespaceManifest.namespace,
-      manifest: eip155NamespaceManifest,
+      namespace: "eip155",
+      module: createEip155WalletNamespaceModule(),
       provider: {
         expose: true,
         module: createEip155Module(),

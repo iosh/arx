@@ -206,7 +206,11 @@ describe("ui client runtime", () => {
     const controller = new AbortController();
 
     try {
-      const pendingRequest = client.call("ui.approvals.resolve", { id: "a", action: "reject" }, { signal: controller.signal });
+      const pendingRequest = client.call(
+        "ui.approvals.resolve",
+        { id: "a", action: "reject" },
+        { signal: controller.signal },
+      );
 
       await transport.nextSent();
       controller.abort();

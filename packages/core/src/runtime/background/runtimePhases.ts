@@ -168,6 +168,7 @@ export const initializeRuntimeBootstrapPhase = ({
 };
 
 export const initializeRuntimeSessionPhase = ({
+  lifecycleLabel,
   bootstrapPhase,
   namespaceSession,
   settingsPort,
@@ -178,6 +179,7 @@ export const initializeRuntimeSessionPhase = ({
   createApprovalExecutor,
   sessionOptions,
 }: {
+  lifecycleLabel?: string;
   bootstrapPhase: RuntimeBootstrapPhase;
   namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
@@ -235,7 +237,7 @@ export const initializeRuntimeSessionPhase = ({
     now: bootstrapPhase.storageNow,
   });
 
-  const runtimeLifecycle = createRuntimeLifecycle("createBackgroundRuntime");
+  const runtimeLifecycle = createRuntimeLifecycle(lifecycleLabel ?? "createBackgroundRuntime");
   const resolvedKeyringNamespaces = sessionOptions?.keyringNamespaces ?? namespaceSession.keyringNamespaces;
   const resolvedSessionOptions = extractSessionLayerOptions(sessionOptions);
   const sessionLayer = initSessionLayer({

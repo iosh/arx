@@ -13,6 +13,7 @@ export type {
 export * from "./accounts/index.js";
 export * from "./chains/index.js";
 export * from "./controllers/index.js";
+export * from "./engine/index.js";
 export * from "./messenger/index.js";
 export * from "./namespaces/index.js";
 export type { HandlerControllers } from "./rpc/handlers/types.js";

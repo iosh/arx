@@ -704,7 +704,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
     settingsPort,
     enableAutoApproval,
     destroy: () => {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     },
   };
 };

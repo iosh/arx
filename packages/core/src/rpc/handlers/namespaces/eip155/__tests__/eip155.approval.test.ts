@@ -110,7 +110,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -158,7 +158,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       unsubscribe();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -226,7 +226,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -282,7 +282,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(activeChain.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -315,7 +315,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(ADDED_CHAIN_REF);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -366,7 +366,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(ADDED_CHAIN_REF);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -444,7 +444,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -531,7 +531,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(failedMeta?.error?.name).toBe("TransactionRejectedError");
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -645,7 +645,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(runtime.controllers.permissions.getState()).toEqual(beforePermissions);
     } finally {
       unsubscribe();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -714,7 +714,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(runtime.controllers.permissions.getState()).toEqual(beforePermissions);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -795,7 +795,7 @@ describe("eip155 handlers - approval metadata", () => {
       expect(runtime.controllers.permissions.getState()).toEqual(beforeState);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 });

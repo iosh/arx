@@ -1,4 +1,6 @@
 export type Unsubscribe = () => void;
+export type Subscribe<TListener> = (listener: TListener) => Unsubscribe;
+export type StateChangeSubscription = Subscribe<() => void>;
 
 export const createSignal = <T>(options?: { onListenerError?: (error: unknown) => void }) => {
   const listeners = new Set<(payload: T) => void>();

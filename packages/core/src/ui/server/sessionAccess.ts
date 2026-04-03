@@ -3,6 +3,8 @@ import type { BackgroundSessionServices } from "../../runtime/background/session
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
 import type { SessionStatus, SessionStatusService } from "../../services/runtime/sessionStatus.js";
 
+export type UiStateChangeSubscription = (listener: () => void) => () => void;
+
 export type UiSessionAccess = {
   getStatus: () => SessionStatus;
   getUnlockState: () => UnlockState;
@@ -12,7 +14,7 @@ export type UiSessionAccess = {
   lock: (reason: UnlockReason) => UnlockState;
   resetAutoLockTimer: () => UnlockState;
   setAutoLockDuration: (durationMs: number) => { autoLockDurationMs: number; nextAutoLockAt: number | null };
-  onStateChanged: (listener: () => void) => () => void;
+  onStateChanged: UiStateChangeSubscription;
 };
 
 export type CreateUiSessionAccessDeps = {

@@ -9,7 +9,7 @@ const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "access">) => {
 };
 
 export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
-  const approvalFlowRegistry = createApprovalFlowRegistry();
+  const approvalFlows = createApprovalFlowRegistry();
 
   const buildSnapshot = () =>
     buildUiSnapshot({
@@ -22,7 +22,7 @@ export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntim
       attention: deps.access.attention,
       namespaceBindings: deps.access.namespaceBindings,
       transactions: deps.access.transactions,
-      approvalFlowRegistry,
+      approvalFlows,
     });
 
   return {

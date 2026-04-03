@@ -12,12 +12,12 @@ import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envel
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiKeyringsAccess } from "./keyringsAccess.js";
-import type { UiSessionAccess } from "./sessionAccess.js";
+import type { UiSessionAccess, UiStateChangeSubscription } from "./sessionAccess.js";
 import type { UiWalletSetupAccess } from "./walletSetupAccess.js";
 
 export type { SessionStatus } from "../../services/runtime/sessionStatus.js";
 export type { UiKeyringsAccess } from "./keyringsAccess.js";
-export type { UiSessionAccess } from "./sessionAccess.js";
+export type { UiSessionAccess, UiStateChangeSubscription } from "./sessionAccess.js";
 export type { UiWalletSetupAccess } from "./walletSetupAccess.js";
 
 export type UiOnboardingOpenTabResult = {
@@ -119,12 +119,12 @@ export type UiStateChangeSources = {
   };
   transactions: Pick<TransactionController, "onStateChanged">;
   chains: {
-    onStateChanged: (listener: () => void) => () => void;
-    onPreferencesChanged: (listener: () => void) => () => void;
+    onStateChanged: UiStateChangeSubscription;
+    onPreferencesChanged: UiStateChangeSubscription;
   };
   session: Pick<UiSessionAccess, "onStateChanged">;
   attention: {
-    onStateChanged: (listener: () => void) => () => void;
+    onStateChanged: UiStateChangeSubscription;
   };
 };
 
@@ -176,5 +176,5 @@ export type UiRuntimeAccess = {
     holdBroadcast: boolean;
     fenceSnapshotBroadcast: boolean;
   };
-  subscribeStateChanged: (listener: () => void) => () => void;
+  subscribeStateChanged: UiStateChangeSubscription;
 };

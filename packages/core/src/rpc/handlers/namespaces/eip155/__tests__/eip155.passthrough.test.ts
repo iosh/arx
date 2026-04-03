@@ -28,7 +28,7 @@ describe("eip155 passthrough executor", () => {
       expect(rpcClient.request).toHaveBeenCalledWith({ method: "eth_getBalance", params });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -51,7 +51,7 @@ describe("eip155 passthrough executor", () => {
       expect(getClient).not.toHaveBeenCalled();
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -75,7 +75,7 @@ describe("eip155 passthrough executor", () => {
       ).rejects.toMatchObject({ code: -32000, message: "execution reverted" });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -104,7 +104,7 @@ describe("eip155 passthrough executor", () => {
       });
     } finally {
       getClient.mockRestore();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 });

@@ -39,7 +39,7 @@ describe("eip155 handlers - core error paths", () => {
         message: "Unrecognized chain",
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -97,7 +97,7 @@ describe("eip155 handlers - core error paths", () => {
       });
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -126,7 +126,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -151,7 +151,7 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -184,7 +184,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -208,7 +208,7 @@ describe("eip155 handlers - core error paths", () => {
         code: 4902,
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -244,7 +244,7 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -271,7 +271,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -293,7 +293,7 @@ describe("eip155 handlers - core error paths", () => {
         message: "Invalid params",
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -331,7 +331,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -362,7 +362,7 @@ describe("eip155 handlers - core error paths", () => {
         code: -32602,
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -396,7 +396,7 @@ describe("eip155 handlers - core error paths", () => {
       });
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -423,7 +423,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -450,7 +450,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -503,7 +503,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
       teardownApprovalResponder();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -585,7 +585,7 @@ describe("eip155 handlers - core error paths", () => {
       });
     } finally {
       unsubscribeApproval();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -621,7 +621,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(approvalRequested).toBe(false);
     } finally {
       unsubscribeApproval();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -648,7 +648,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
   it("returns empty array for wallet_getPermissions when origin lacks grants", async () => {
@@ -665,7 +665,7 @@ describe("eip155 handlers - core error paths", () => {
 
       expect(result).toEqual([]);
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -696,7 +696,7 @@ describe("eip155 handlers - core error paths", () => {
         },
       ]);
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -745,7 +745,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -804,7 +804,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([accountKey]);
     } finally {
       teardown();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -822,7 +822,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).rejects.toMatchObject({ code: -32602 });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -865,7 +865,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(authorization).toBeNull();
     } finally {
       teardown();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -927,7 +927,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(authorization?.chains[chain.chainRef]?.accountKeys).toEqual([secondAccountId]);
     } finally {
       teardown();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -970,7 +970,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(authorization).toBeNull();
     } finally {
       teardown();
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -991,7 +991,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -1029,7 +1029,7 @@ describe("eip155 handlers - core error paths", () => {
         }),
       ).resolves.toEqual([]);
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -1059,7 +1059,7 @@ describe("eip155 handlers - core error paths", () => {
       ).rejects.toMatchObject({ code: 4100 });
       expect(requestApprovalSpy).not.toHaveBeenCalled();
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -1099,7 +1099,7 @@ describe("eip155 handlers - core error paths", () => {
       ).rejects.toMatchObject({ code: 4100 });
       expect(requestApprovalSpy).not.toHaveBeenCalled();
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -1136,7 +1136,7 @@ describe("eip155 handlers - core error paths", () => {
       ).rejects.toMatchObject({ code: 4100 });
       expect(txSpy).not.toHaveBeenCalled();
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 });

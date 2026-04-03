@@ -26,7 +26,7 @@ export const buildUiSnapshot = (deps: {
   attention: Pick<UiAttentionAccess, "getSnapshot">;
   namespaceBindings: UiNamespaceBindingsAccess;
   transactions: Pick<UiTransactionsAccess, "getMeta">;
-  approvalFlowRegistry: Pick<ApprovalFlowRegistry, "present">;
+  approvalFlows: Pick<ApprovalFlowRegistry, "present">;
 }): UiSnapshot => {
   const {
     accounts,
@@ -38,7 +38,7 @@ export const buildUiSnapshot = (deps: {
     attention,
     namespaceBindings,
     transactions,
-    approvalFlowRegistry,
+    approvalFlows,
   } = deps;
 
   const chain = chains.getSelectedChainView();
@@ -69,7 +69,7 @@ export const buildUiSnapshot = (deps: {
       return toUnsupportedApprovalSummary(item);
     }
 
-    return approvalFlowRegistry.present(record, {
+    return approvalFlows.present(record, {
       accounts,
       chainViews: chains,
       transactions,

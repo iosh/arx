@@ -120,7 +120,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       runtime.lifecycle.start();
 
       if (destroyed) {
-        runtime.lifecycle.destroy();
+        runtime.lifecycle.shutdown();
         throw new Error("Background runtime host is destroyed");
       }
 
@@ -211,7 +211,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     destroyed = true;
     uiAccess = null;
     uiAccessParams = null;
-    runtimeCache?.runtime.lifecycle.destroy();
+    runtimeCache?.runtime.lifecycle.shutdown();
     runtimeCache = null;
   };
 

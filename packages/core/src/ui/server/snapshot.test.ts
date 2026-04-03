@@ -130,7 +130,7 @@ const createDeps = (options?: {
   transactions: {
     getMeta: () => undefined,
   },
-  approvalFlowRegistry: {
+  approvalFlows: {
     present:
       options?.present ??
       ((record: ApprovalRecord) => ({

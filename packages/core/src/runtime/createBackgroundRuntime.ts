@@ -47,10 +47,10 @@ import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./back
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "./background/runtimeLifecyclePlan.js";
 import {
-  initializeRuntimeBootstrapPhase,
-  initializeRuntimeSessionPhase,
-  initializeRuntimeSupportPhase,
-} from "./background/runtimePhases.js";
+  createRuntimeBootstrapScope,
+  createRuntimeSessionScope,
+  createRuntimeSupportScope,
+} from "./background/runtimeScopes.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
 import { createProviderRuntimeAccess } from "./provider/index.js";
@@ -136,7 +136,7 @@ export type BackgroundRuntime = {
   lifecycle: {
     initialize: () => Promise<void>;
     start: () => void;
-    destroy: () => void;
+    shutdown: () => void;
     getIsInitialized: () => boolean;
   };
   providerAccess: ProviderRuntimeAccess;
@@ -245,7 +245,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
 
   const namespaceManifests = namespacesOptions.manifests;
   const namespaceStages = assembleRuntimeNamespaceStages(namespaceManifests);
-  const bootstrapPhase = initializeRuntimeBootstrapPhase({
+  const bootstrapScope = createRuntimeBootstrapScope({
     rpcRegistry,
     namespaceBootstrap: namespaceStages.bootstrap,
     ...(messengerOptions ? { messengerOptions } : {}),
@@ -257,26 +257,26 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     ...(transactionOptions ? { transactionOptions } : {}),
     chainDefinitionsOptions,
   });
-  const approvalFlowRegistry = createApprovalFlowRegistry();
-  let sessionPhase: ReturnType<typeof initializeRuntimeSessionPhase> | null = null;
-  let runtimeSupportPhase: ReturnType<typeof initializeRuntimeSupportPhase> | null = null;
+  const approvalFlows = createApprovalFlowRegistry();
+  let sessionScope: ReturnType<typeof createRuntimeSessionScope> | null = null;
+  let runtimeSupportScope: ReturnType<typeof createRuntimeSupportScope> | null = null;
 
-  const requireSessionPhase = () => {
-    if (!sessionPhase) {
-      throw new Error("Runtime session phase is not initialized");
+  const requireSessionScope = () => {
+    if (!sessionScope) {
+      throw new Error("Runtime session scope is not initialized");
     }
-    return sessionPhase;
+    return sessionScope;
   };
 
-  const requireRuntimeSupportPhase = () => {
-    if (!runtimeSupportPhase) {
-      throw new Error("Runtime support phase is not initialized");
+  const requireRuntimeSupportScope = () => {
+    if (!runtimeSupportScope) {
+      throw new Error("Runtime support scope is not initialized");
     }
-    return runtimeSupportPhase;
+    return runtimeSupportScope;
   };
 
-  sessionPhase = initializeRuntimeSessionPhase({
-    bootstrapPhase,
+  sessionScope = createRuntimeSessionScope({
+    bootstrapScope,
     namespaceSession: namespaceStages.session,
     settingsPort: settingsOptions.port,
     networkPreferencesPort: networkPreferencesOptions.port,
@@ -286,51 +286,51 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     ...(sessionOptions ? { sessionOptions } : {}),
     createApprovalExecutor: (controllersBase) =>
       createApprovalExecutor({
-        registry: approvalFlowRegistry,
+        registry: approvalFlows,
         getDeps: () => {
-          const activeSessionPhase = requireSessionPhase();
-          const activeRuntimeSupportPhase = requireRuntimeSupportPhase();
+          const activeSessionScope = requireSessionScope();
+          const activeRuntimeSupportScope = requireRuntimeSupportScope();
 
           return {
             accounts: controllersBase.accounts,
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
-            chainActivation: activeSessionPhase.chainActivation,
+            chainActivation: activeSessionScope.chainActivation,
             chainDefinitions: controllersBase.chainDefinitions,
-            namespaceBindings: activeRuntimeSupportPhase.namespaceBindings,
+            namespaceBindings: activeRuntimeSupportScope.namespaceBindings,
           };
         },
       }),
   });
 
-  runtimeSupportPhase = initializeRuntimeSupportPhase({
-    bootstrapPhase,
-    sessionPhase,
+  runtimeSupportScope = createRuntimeSupportScope({
+    bootstrapScope,
+    sessionScope,
     namespaceRuntimeSupport: namespaceStages.runtimeSupport,
     ...(rpcClientOptions ? { rpcClientOptions } : {}),
   });
 
   const controllers: HandlerControllers = {
-    ...sessionPhase.controllersBase,
-    networkPreferences: sessionPhase.networkPreferences,
-    chainAddressCodecs: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
+    ...sessionScope.controllersBase,
+    networkPreferences: sessionScope.networkPreferences,
+    chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
-      now: bootstrapPhase.storageNow,
+      now: bootstrapScope.storageNow,
     },
-    signers: runtimeSupportPhase.signers,
+    signers: runtimeSupportScope.signers,
   };
   const lifecycle = createBackgroundRuntimeLifecycle({
-    runtimeLifecycle: sessionPhase.runtimeLifecycle,
-    controllersBase: sessionPhase.controllersBase,
-    deferredNetworkInitialState: sessionPhase.deferredNetworkInitialState,
-    registeredNamespaces: bootstrapPhase.registeredNamespaces,
-    transactionsLifecycle: runtimeSupportPhase.transactionsLifecycle,
-    networkBootstrap: runtimeSupportPhase.networkBootstrap,
-    sessionLayer: sessionPhase.sessionLayer,
-    rpcClientRegistry: runtimeSupportPhase.rpcClientRegistry,
-    engine: sessionPhase.engine,
-    bus: bootstrapPhase.bus,
-    logger: bootstrapPhase.storageLogger,
+    runtimeLifecycle: sessionScope.runtimeLifecycle,
+    controllersBase: sessionScope.controllersBase,
+    deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
+    registeredNamespaces: bootstrapScope.registeredNamespaces,
+    transactionsLifecycle: runtimeSupportScope.transactionsLifecycle,
+    networkBootstrap: runtimeSupportScope.networkBootstrap,
+    sessionLayer: sessionScope.sessionLayer,
+    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
+    engine: sessionScope.engine,
+    bus: bootstrapScope.bus,
+    logger: bootstrapScope.storageLogger,
   });
 
   const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
@@ -342,26 +342,26 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   const executeRequest = createRpcMethodExecutor({
     registry: rpcRegistry,
     controllers,
-    rpcClientRegistry: runtimeSupportPhase.rpcClientRegistry,
+    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
     services: {
-      permissionViews: runtimeSupportPhase.permissionViews,
+      permissionViews: runtimeSupportScope.permissionViews,
     },
   });
   const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
 
   const providerAccess = createProviderRuntimeAccess({
-    getSessionStatus: () => sessionPhase.sessionStatus.getStatus(),
-    getActiveChainViewForNamespace: (namespace) => sessionPhase.chainViews.getActiveChainViewForNamespace(namespace),
-    buildProviderMeta: (namespace) => sessionPhase.chainViews.buildProviderMeta(namespace),
-    getActiveChainByNamespace: () => sessionPhase.networkPreferences.getActiveChainByNamespace(),
+    getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
+    getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
+    buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
+    getActiveChainByNamespace: () => sessionScope.networkPreferences.getActiveChainByNamespace(),
     listPermittedAccountsView: (origin, options) =>
-      runtimeSupportPhase.permissionViews.listPermittedAccounts(origin, options),
-    formatAddress: (input) => bootstrapPhase.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
+      runtimeSupportScope.permissionViews.listPermittedAccounts(origin, options),
+    formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
     resolveMethodNamespace,
-    handleRpcRequest: (request, callback) => sessionPhase.engine.handle(request, callback),
+    handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
     encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
     cancelSessionApprovals: async (input) =>
-      await sessionPhase.controllersBase.approvals.cancelByScope({
+      await sessionScope.controllersBase.approvals.cancelByScope({
         scope: {
           transport: "provider",
           origin: input.origin,
@@ -370,36 +370,36 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         },
         reason: "session_lost",
       }),
-    subscribeSessionUnlocked: (listener) => sessionPhase.sessionLayer.session.unlock.onUnlocked(listener),
-    subscribeSessionLocked: (listener) => sessionPhase.sessionLayer.session.unlock.onLocked(listener),
-    subscribeNetworkStateChanged: (listener) => sessionPhase.controllersBase.network.onStateChanged(listener),
-    subscribeNetworkPreferencesChanged: (listener) => sessionPhase.networkPreferences.subscribeChanged(listener),
-    subscribeAccountsStateChanged: (listener) => sessionPhase.controllersBase.accounts.onStateChanged(listener),
-    subscribePermissionsStateChanged: (listener) => sessionPhase.controllersBase.permissions.onStateChanged(listener),
+    subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
+    subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
+    subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),
+    subscribeNetworkPreferencesChanged: (listener) => sessionScope.networkPreferences.subscribeChanged(listener),
+    subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(listener),
+    subscribePermissionsStateChanged: (listener) => sessionScope.controllersBase.permissions.onStateChanged(listener),
   });
 
   const runtime = {
-    bus: bootstrapPhase.bus,
+    bus: bootstrapScope.bus,
     controllers,
     services: {
-      attention: sessionPhase.attention,
-      chainActivation: sessionPhase.chainActivation,
-      chainViews: sessionPhase.chainViews,
-      permissionViews: runtimeSupportPhase.permissionViews,
-      accountCodecs: bootstrapPhase.namespaceBootstrap.accountCodecs,
-      networkPreferences: sessionPhase.networkPreferences,
-      namespaceBindings: runtimeSupportPhase.namespaceBindings,
-      namespaceRuntimeSupport: runtimeSupportPhase.namespaceRuntimeSupport,
-      session: sessionPhase.sessionLayer.session,
-      sessionStatus: sessionPhase.sessionStatus,
-      accountSigning: sessionPhase.accountSigning,
-      keyringExport: sessionPhase.keyringExport,
-      keyring: sessionPhase.keyringService,
+      attention: sessionScope.attention,
+      chainActivation: sessionScope.chainActivation,
+      chainViews: sessionScope.chainViews,
+      permissionViews: runtimeSupportScope.permissionViews,
+      accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+      networkPreferences: sessionScope.networkPreferences,
+      namespaceBindings: runtimeSupportScope.namespaceBindings,
+      namespaceRuntimeSupport: runtimeSupportScope.namespaceRuntimeSupport,
+      session: sessionScope.sessionLayer.session,
+      sessionStatus: sessionScope.sessionStatus,
+      accountSigning: sessionScope.accountSigning,
+      keyringExport: sessionScope.keyringExport,
+      keyring: sessionScope.keyringService,
     },
     rpc: {
-      engine: sessionPhase.engine,
+      engine: sessionScope.engine,
       registry: rpcRegistry,
-      clients: runtimeSupportPhase.rpcClientRegistry,
+      clients: runtimeSupportScope.rpcClientRegistry,
       resolveContextNamespace,
       resolveMethodNamespace,
       resolveInvocation,

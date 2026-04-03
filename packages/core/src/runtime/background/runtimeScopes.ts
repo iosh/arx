@@ -49,7 +49,7 @@ type MessengerOptions = {
   violationMode?: ViolationMode;
 };
 
-export type RuntimeBootstrapPhase = {
+export type RuntimeBootstrapScope = {
   bus: Messenger;
   rpcRegistry: RpcRegistry;
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
@@ -62,7 +62,7 @@ export type RuntimeBootstrapPhase = {
   controllerOptions: ControllerLayerOptions;
 };
 
-export type RuntimeSessionPhase = {
+export type RuntimeSessionScope = {
   namespaceSession: RuntimeSessionNamespaceAssembly;
   controllersBase: ControllersBase;
   deferredNetworkInitialState: ReturnType<typeof initControllers>["deferredNetworkInitialState"];
@@ -81,7 +81,7 @@ export type RuntimeSessionPhase = {
   transactionsService: ReturnType<typeof initRuntimeStoreServices>["transactionsService"];
 };
 
-export type RuntimeSupportPhase = {
+export type RuntimeSupportScope = {
   rpcClientRegistry: ReturnType<typeof initRpcLayer>;
   signers: HandlerControllers["signers"];
   namespaceBindings: NamespaceRuntimeBindingsRegistry;
@@ -100,7 +100,7 @@ const extractSessionLayerOptions = (sessionOptions?: SessionOptions): SessionLay
   return Object.keys(resolvedSessionOptions).length > 0 ? resolvedSessionOptions : undefined;
 };
 
-export const initializeRuntimeBootstrapPhase = ({
+export const createRuntimeBootstrapScope = ({
   rpcRegistry,
   namespaceBootstrap,
   messengerOptions,
@@ -122,7 +122,7 @@ export const initializeRuntimeBootstrapPhase = ({
   permissionOptions?: ControllerLayerOptions["permissions"];
   transactionOptions?: ControllerLayerOptions["transactions"];
   chainDefinitionsOptions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
-}): RuntimeBootstrapPhase => {
+}): RuntimeBootstrapScope => {
   registerRpcModules(rpcRegistry, namespaceBootstrap.rpcModules);
 
   const storageLogger = storageOptions?.logger ?? (() => {});
@@ -167,9 +167,9 @@ export const initializeRuntimeBootstrapPhase = ({
   };
 };
 
-export const initializeRuntimeSessionPhase = ({
+export const createRuntimeSessionScope = ({
   lifecycleLabel,
-  bootstrapPhase,
+  bootstrapScope,
   namespaceSession,
   settingsPort,
   networkPreferencesPort,
@@ -180,7 +180,7 @@ export const initializeRuntimeSessionPhase = ({
   sessionOptions,
 }: {
   lifecycleLabel?: string;
-  bootstrapPhase: RuntimeBootstrapPhase;
+  bootstrapScope: RuntimeBootstrapScope;
   namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
   networkPreferencesPort: NetworkPreferencesPort;
@@ -194,26 +194,26 @@ export const initializeRuntimeSessionPhase = ({
   vaultMetaPort?: VaultMetaPort;
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
   sessionOptions?: SessionOptions;
-}): RuntimeSessionPhase => {
+}): RuntimeSessionScope => {
   const { settingsService, networkPreferences, transactionsService, permissionsService, accountsStore, keyringMetas } =
     initRuntimeStoreServices({
       settingsPort,
       networkPreferencesPort,
       ports: storePorts,
-      networkDefaults: bootstrapPhase.networkPlan.preferencesDefaults,
-      now: bootstrapPhase.storageNow,
+      networkDefaults: bootstrapScope.networkPlan.preferencesDefaults,
+      now: bootstrapScope.storageNow,
     });
 
   const controllersInit = initControllers({
-    bus: bootstrapPhase.bus,
-    accountCodecs: bootstrapPhase.namespaceBootstrap.accountCodecs,
+    bus: bootstrapScope.bus,
+    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     accountsService: accountsStore,
     settingsService,
     permissionsService,
     transactionsService,
     networkPreferences,
-    networkPlan: bootstrapPhase.networkPlan,
-    options: bootstrapPhase.controllerOptions,
+    networkPlan: bootstrapScope.networkPlan,
+    options: bootstrapScope.controllerOptions,
     ...(createApprovalExecutor ? { createApprovalExecutor } : {}),
   });
 
@@ -229,26 +229,26 @@ export const initializeRuntimeSessionPhase = ({
   const chainActivation = createChainActivationService({
     network: networkController,
     preferences: networkPreferences,
-    logger: bootstrapPhase.storageLogger,
+    logger: bootstrapScope.storageLogger,
   });
 
   const attention = createAttentionService({
-    messenger: bootstrapPhase.bus.scope({ name: "attention", publish: ATTENTION_TOPICS }),
-    now: bootstrapPhase.storageNow,
+    messenger: bootstrapScope.bus.scope({ name: "attention", publish: ATTENTION_TOPICS }),
+    now: bootstrapScope.storageNow,
   });
 
   const runtimeLifecycle = createRuntimeLifecycle(lifecycleLabel ?? "createBackgroundRuntime");
   const resolvedKeyringNamespaces = sessionOptions?.keyringNamespaces ?? namespaceSession.keyringNamespaces;
   const resolvedSessionOptions = extractSessionLayerOptions(sessionOptions);
   const sessionLayer = initSessionLayer({
-    bus: bootstrapPhase.bus,
+    bus: bootstrapScope.bus,
     controllers: controllersBase,
     accountsStore,
     keyringMetas,
     keyringNamespaces: resolvedKeyringNamespaces,
-    storageLogger: bootstrapPhase.storageLogger,
-    storageNow: bootstrapPhase.storageNow,
-    hydrationEnabled: bootstrapPhase.hydrationEnabled,
+    storageLogger: bootstrapScope.storageLogger,
+    storageNow: bootstrapScope.storageNow,
+    hydrationEnabled: bootstrapScope.hydrationEnabled,
     getIsHydrating: () => runtimeLifecycle.getIsHydrating(),
     getIsDestroyed: () => runtimeLifecycle.getIsDestroyed(),
     ...(vaultMetaPort ? { vaultMetaPort } : {}),
@@ -288,17 +288,17 @@ export const initializeRuntimeSessionPhase = ({
   };
 };
 
-export const initializeRuntimeSupportPhase = ({
-  bootstrapPhase,
-  sessionPhase,
+export const createRuntimeSupportScope = ({
+  bootstrapScope,
+  sessionScope,
   namespaceRuntimeSupport,
   rpcClientOptions,
 }: {
-  bootstrapPhase: RuntimeBootstrapPhase;
-  sessionPhase: RuntimeSessionPhase;
+  bootstrapScope: RuntimeBootstrapScope;
+  sessionScope: RuntimeSessionScope;
   namespaceRuntimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
   rpcClientOptions?: RpcLayerOptions;
-}): RuntimeSupportPhase => {
+}): RuntimeSupportScope => {
   const manifestRpcClientFactories = namespaceRuntimeSupport.namespaces.flatMap((spec) =>
     spec.clientFactory ? [{ namespace: spec.namespace, factory: spec.clientFactory }] : [],
   );
@@ -307,41 +307,41 @@ export const initializeRuntimeSupportPhase = ({
     [...manifestRpcClientFactories, ...overrideRpcClientFactories].map((entry) => entry.namespace),
   );
   const rpcClientRegistry = initRpcLayer({
-    controllers: sessionPhase.controllersBase,
+    controllers: sessionScope.controllersBase,
     ...(rpcClientOptions?.options ? { rpcClientOptions: { options: rpcClientOptions.options } } : {}),
     factories: [...manifestRpcClientFactories, ...overrideRpcClientFactories],
   });
 
   const materializedRuntimeSupport = materializeNamespaceRuntimeSupport({
     runtimeSupport: namespaceRuntimeSupport,
-    transactionRegistry: sessionPhase.transactionRegistry,
+    transactionRegistry: sessionScope.transactionRegistry,
     rpcClients: rpcClientRegistry,
-    chains: bootstrapPhase.namespaceBootstrap.chainAddressCodecs,
-    accountSigning: sessionPhase.accountSigning,
+    chains: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
+    accountSigning: sessionScope.accountSigning,
     rpcClientNamespaces: rpcClientFactoryNamespaces,
   });
 
   const permissionViews = createPermissionViewsService({
-    accounts: sessionPhase.controllersBase.accounts,
-    permissions: sessionPhase.controllersBase.permissions,
+    accounts: sessionScope.controllersBase.accounts,
+    permissions: sessionScope.controllersBase.permissions,
   });
 
   const transactionsLifecycle = createTransactionsLifecycle({
-    controller: sessionPhase.controllersBase.transactions,
-    service: sessionPhase.transactionsService,
-    unlock: sessionPhase.sessionLayer.session.unlock,
-    logger: bootstrapPhase.storageLogger,
+    controller: sessionScope.controllersBase.transactions,
+    service: sessionScope.transactionsService,
+    unlock: sessionScope.sessionLayer.session.unlock,
+    logger: bootstrapScope.storageLogger,
   });
 
   const networkBootstrap = createNetworkBootstrap({
-    network: sessionPhase.controllersBase.network,
-    chainDefinitions: sessionPhase.controllersBase.chainDefinitions,
-    preferences: sessionPhase.networkPreferences,
-    preferencesDefaults: bootstrapPhase.networkPlan.preferencesDefaults,
-    hydrationEnabled: bootstrapPhase.hydrationEnabled,
-    logger: bootstrapPhase.storageLogger,
-    getIsHydrating: () => sessionPhase.runtimeLifecycle.getIsHydrating(),
-    getRegisteredNamespaces: () => bootstrapPhase.registeredNamespaces,
+    network: sessionScope.controllersBase.network,
+    chainDefinitions: sessionScope.controllersBase.chainDefinitions,
+    preferences: sessionScope.networkPreferences,
+    preferencesDefaults: bootstrapScope.networkPlan.preferencesDefaults,
+    hydrationEnabled: bootstrapScope.hydrationEnabled,
+    logger: bootstrapScope.storageLogger,
+    getIsHydrating: () => sessionScope.runtimeLifecycle.getIsHydrating(),
+    getRegisteredNamespaces: () => bootstrapScope.registeredNamespaces,
   });
 
   return {

@@ -1,17 +1,57 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
+import type {
+  NetworkController,
+  NetworkState,
+  RpcOutcomeReport,
+  RpcStrategyConfig,
+} from "../controllers/network/types.js";
+import type {
+  MutatePermittedChainsOptions,
+  PermissionAuthorization,
+  PermissionController,
+  PermissionsState,
+  SetChainAccountKeysOptions,
+  UpsertAuthorizationOptions,
+} from "../controllers/permission/types.js";
+import type {
+  UnlockLockedPayload,
+  UnlockParams,
+  UnlockReason,
+  UnlockState,
+  UnlockUnlockedPayload,
+} from "../controllers/unlock/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
+import type {
+  ProviderRuntimeConnectionQuery,
+  ProviderRuntimeConnectionState,
+  ProviderRuntimeSnapshot,
+} from "../runtime/provider/types.js";
+import type { AttentionService } from "../services/runtime/attention/types.js";
+import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
+import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
+import type {
+  ConnectionSnapshot,
+  PermissionViewsService,
+  PermittedAccountView,
+} from "../services/runtime/permissionViews/types.js";
+import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
 import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
+import type { NetworkPreferencesChangedHandler } from "../services/store/networkPreferences/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
-import type { VaultMetaPort } from "../storage/index.js";
+import type { VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
+import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
+import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
+import type { InitializeVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
 export type NamespaceEngineFacts = Readonly<{
@@ -71,6 +111,7 @@ export type WalletNamespaces = Readonly<{
   listNamespaces(): string[];
 }>;
 
+/** Storage ports required to boot a wallet. */
 export type ArxWalletStoragePorts = Readonly<{
   accounts: AccountsPort;
   chainDefinitions: ChainDefinitionsPort;
@@ -81,6 +122,7 @@ export type ArxWalletStoragePorts = Readonly<{
   transactions: TransactionsPort;
 }>;
 
+/** Arguments for `createArxWallet()`. */
 export type CreateArxWalletInput = Readonly<{
   namespaces: Readonly<{
     /** Modules to install. */
@@ -104,9 +146,144 @@ export type CreateArxWalletInput = Readonly<{
   }>;
 }>;
 
+/** Vault lifecycle, unlock state, and auto-lock controls. */
+export type WalletSession = Readonly<{
+  getStatus(): SessionStatus;
+  getUnlockState(): UnlockState;
+  isUnlocked(): boolean;
+  hasInitializedVault(): boolean;
+  initialize(params: InitializeVaultParams): Promise<VaultEnvelope>;
+  unlock(params: UnlockParams): Promise<UnlockState>;
+  lock(reason: UnlockReason): UnlockState;
+  resetAutoLockTimer(): UnlockState;
+  setAutoLockDuration(durationMs: number): {
+    autoLockDurationMs: number;
+    nextAutoLockAt: number | null;
+  };
+  verifyPassword(password: string): Promise<void>;
+  getVaultMetaState(): VaultMetaSnapshot["payload"];
+  getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
+  persistVaultMeta(): Promise<void>;
+  onStateChanged(listener: () => void): () => void;
+  onUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
+  onLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
+}>;
+
+/** Persistent permissions and permission read models. */
+export type WalletPermissions = Readonly<{
+  getState(): PermissionsState;
+  getAuthorization(origin: string, options: { namespace: string }): PermissionAuthorization | null;
+  getChainAuthorization: PermissionController["getChainAuthorization"];
+  listAuthorizations(origin: string): PermissionAuthorization[];
+  upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization>;
+  setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
+  addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization>;
+  revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void>;
+  clearOrigin(origin: string): Promise<void>;
+  getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot;
+  assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void>;
+  listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];
+  buildUiPermissionsSnapshot(): UiPermissionsSnapshot;
+  onStateChanged(listener: (state: PermissionsState) => void): () => void;
+  onOriginChanged: PermissionController["onOriginChanged"];
+}>;
+
+/** Selected namespace, active chains, and RPC preferences. */
+export type WalletNetworks = Readonly<{
+  getPreferences(): Promise<NetworkPreferencesRecord | null>;
+  getPreferencesSnapshot(): NetworkPreferencesRecord | null;
+  getSelectedNamespace(): string;
+  getActiveChainByNamespace(): Record<string, ChainRef>;
+  getActiveChainRef(namespace: string): ChainRef | null;
+  getSelectedChainView(): ChainView;
+  getActiveChainViewForNamespace(namespace: string): ChainView;
+  listKnownChainViews(): ChainView[];
+  listAvailableChainViews(): ChainView[];
+  buildWalletNetworksSnapshot(): UiNetworksSnapshot;
+  getNetworkState(): NetworkState;
+  getActiveEndpoint: NetworkController["getActiveEndpoint"];
+  selectWalletChain(chainRef: ChainRef): Promise<void>;
+  selectWalletNamespace(namespace: string): Promise<void>;
+  activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
+  setRpcPreferences(rpc: Record<ChainRef, NetworkRpcPreference>): Promise<NetworkPreferencesRecord>;
+  clearRpcPreferences(): Promise<NetworkPreferencesRecord>;
+  patchRpcPreference(params: {
+    chainRef: ChainRef;
+    preference: NetworkRpcPreference | null;
+  }): Promise<NetworkPreferencesRecord>;
+  setRpcStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
+  reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
+  onStateChanged(listener: (state: NetworkState) => void): () => void;
+  onPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
+}>;
+
+/** Ephemeral prompts outside the approvals flow. */
+export type WalletAttention = Readonly<{
+  requestAttention: AttentionService["requestAttention"];
+  getSnapshot: AttentionService["getSnapshot"];
+  clear: AttentionService["clear"];
+  clearExpired: AttentionService["clearExpired"];
+}>;
+
+/** One live dApp connection tracked in memory. */
+export type DappConnectionRecord = Readonly<{
+  origin: string;
+  namespace: string;
+  chainRef: ChainRef | null;
+  connectedAt: number;
+  updatedAt: number;
+}>;
+
+/** Current in-memory dApp connections. */
+export type DappConnectionsState = Readonly<{
+  connections: DappConnectionRecord[];
+  count: number;
+}>;
+
+/** Provider-facing connection state plus the live connected bit. */
+export type DappConnectionProjection = Readonly<
+  ProviderRuntimeConnectionState & {
+    connected: boolean;
+  }
+>;
+
+/**
+ * Live dApp connections kept only in memory.
+ * Separate from persisted permissions and provider transport sessions.
+ */
+export type WalletDappConnections = Readonly<{
+  getState(): DappConnectionsState;
+  getConnection(origin: string, options: { namespace: string }): DappConnectionRecord | null;
+  isConnected(origin: string, options: { namespace: string }): boolean;
+  connect(input: { origin: string; namespace: string }): DappConnectionRecord | null;
+  disconnect(input: { origin: string; namespace: string }): boolean;
+  disconnectOrigin(origin: string): number;
+  clear(): DappConnectionsState;
+  buildConnectionProjection(input: ProviderRuntimeConnectionQuery): DappConnectionProjection;
+  listPermittedAccounts(input: { origin: string; chainRef: ChainRef }): string[];
+  onStateChanged(listener: (state: DappConnectionsState) => void): () => void;
+}>;
+
+/** Provider and UI snapshot builders. */
+export type WalletSnapshots = Readonly<{
+  buildProviderSnapshot(namespace: string): ProviderRuntimeSnapshot;
+  buildProviderConnectionState(input: ProviderRuntimeConnectionQuery): ProviderRuntimeConnectionState;
+  buildUiSnapshot(): UiSnapshot;
+}>;
+
 export type ArxWallet = Readonly<{
-  // Installed namespaces. Invalid after destroy().
+  /** Installed namespace modules. */
   namespaces: WalletNamespaces;
-  /** Stop the wallet runtime. */
-  destroy(): Promise<void>;
+  /** Wallet session methods. */
+  session: WalletSession;
+  /** Persistent permissions and derived views. */
+  permissions: WalletPermissions;
+  /** Network selection and preferences. */
+  networks: WalletNetworks;
+  /** Ephemeral prompts. */
+  attention: WalletAttention;
+  /** In-memory dApp connections. */
+  dappConnections: WalletDappConnections;
+  /** Provider and UI snapshots. */
+  snapshots: WalletSnapshots;
 }>;

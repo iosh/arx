@@ -166,7 +166,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(BASE_CHAIN.chainRef);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("hydrates network preferences from NetworkPreferencesPort", async () => {
@@ -225,7 +225,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
     expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("prefers explicit session keyring namespaces over the default session stage output", () => {
@@ -264,7 +264,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(runtime.services.keyring.getNamespaces()[0]?.defaultChainRef).toBe(ALT_CHAIN.chainRef);
     expect(runtime.services.keyring.getNamespaces()[0]).not.toBe(overriddenKeyringNamespaces[0]);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("resolves unlocked session state through ui.session.unlock", async () => {
@@ -302,7 +302,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(result).toMatchObject({
       isUnlocked: true,
     });
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("persists selectedNamespace-derived UI chain when ui.networks.switchActive succeeds", async () => {
@@ -364,7 +364,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("does not change permissions when ui.networks.switchActive succeeds", async () => {
@@ -420,7 +420,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(runtime.controllers.permissions.getState()).toEqual(before);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("does not change permissions when switch-chain approval is approved", async () => {
@@ -504,7 +504,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await expect(approvalPromise).resolves.toBeNull();
     expect(runtime.controllers.permissions.getState()).toEqual(before);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("resolves ui.balances.getNative via namespace runtime bindings", async () => {
@@ -577,7 +577,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       timeoutMs: 15_000,
     });
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("fails closed when sign approvals are unsupported for the namespace", async () => {
@@ -651,7 +651,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     });
     expect(runtime.controllers.approvals.getState().pending).toEqual([]);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("tracks rpc client support separately from other runtime support", async () => {
@@ -706,7 +706,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       hasTransactionReplacementTracking: true,
     });
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("derives selected-chain UI capabilities from receipt-tracked transaction support", async () => {
@@ -774,7 +774,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("fails closed when ui.transactions.requestSendTransactionApproval lacks receipt-tracked transaction support", async () => {
@@ -847,7 +847,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     expect(runtime.controllers.approvals.getState().pending).toEqual([]);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("builds send-transaction requests through namespace UI bindings", async () => {
@@ -947,7 +947,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       }),
     );
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("reuses one UI surface correlation token per UiRuntimeAccess instance", async () => {
@@ -1071,7 +1071,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     expect(secondSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(secondSurfaceId).not.toBe(firstSurfaceId);
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 
   it("propagates transaction approval creation errors to the UI handler", async () => {
@@ -1117,6 +1117,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       }),
     ).rejects.toThrow("create approval failed");
 
-    runtime.lifecycle.destroy();
+    runtime.lifecycle.shutdown();
   });
 });

@@ -11,7 +11,7 @@ import type { TransactionsLifecycle } from "./transactionsLifecycle.js";
 export type BackgroundLifecycleHandle = {
   initialize(): Promise<void>;
   start(): void;
-  destroy(): void;
+  shutdown(): void;
   getIsInitialized(): boolean;
 };
 
@@ -168,7 +168,7 @@ export const createBackgroundRuntimeLifecycle = ({
       runtimeLifecycle.start(() => {
         startPlugins([...startOrder]);
       }),
-    destroy: () =>
+    shutdown: () =>
       runtimeLifecycle.destroy(() => {
         for (const plugin of destroyOrder) {
           try {

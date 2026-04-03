@@ -1,15 +1,8 @@
 import type { WalletNamespaceModule, WalletNamespaces } from "./types.js";
 import { assertValidWalletNamespaceModule } from "./validation.js";
 
-const createWalletDestroyedError = (): Error => {
-  return new Error("ArxWallet is destroyed");
-};
-
-export const createWalletNamespaces = (params: {
-  modules: readonly WalletNamespaceModule[];
-  getIsDestroyed: () => boolean;
-}): WalletNamespaces => {
-  const { modules, getIsDestroyed } = params;
+export const createWalletNamespaces = (params: { modules: readonly WalletNamespaceModule[] }): WalletNamespaces => {
+  const { modules } = params;
 
   const moduleByNamespace = new Map<string, WalletNamespaceModule>();
   for (const module of modules) {
@@ -24,16 +17,7 @@ export const createWalletNamespaces = (params: {
 
   const modulesSnapshot = [...moduleByNamespace.values()];
 
-  const assertWalletIsActive = () => {
-    if (getIsDestroyed()) {
-      throw createWalletDestroyedError();
-    }
-  };
-
-  const findModule = (namespace: string): WalletNamespaceModule | undefined => {
-    assertWalletIsActive();
-    return moduleByNamespace.get(namespace);
-  };
+  const findModule = (namespace: string): WalletNamespaceModule | undefined => moduleByNamespace.get(namespace);
 
   const requireModule = (namespace: string): WalletNamespaceModule => {
     const module = findModule(namespace);
@@ -46,13 +30,7 @@ export const createWalletNamespaces = (params: {
   return {
     findModule,
     requireModule,
-    listModules: () => {
-      assertWalletIsActive();
-      return [...modulesSnapshot];
-    },
-    listNamespaces: () => {
-      assertWalletIsActive();
-      return modulesSnapshot.map((module) => module.namespace);
-    },
+    listModules: () => [...modulesSnapshot],
+    listNamespaces: () => modulesSnapshot.map((module) => module.namespace),
   };
 };

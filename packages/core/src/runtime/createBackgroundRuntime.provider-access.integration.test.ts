@@ -428,7 +428,7 @@ describe("createBackgroundRuntime provider access", () => {
         message: "solana:dapp",
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 
@@ -457,7 +457,7 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
     } finally {
-      runtime.lifecycle.destroy();
+      runtime.lifecycle.shutdown();
     }
   });
 });

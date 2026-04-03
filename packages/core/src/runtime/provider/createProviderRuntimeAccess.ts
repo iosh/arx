@@ -7,6 +7,7 @@ import type {
   JsonRpcResponse,
   RpcInvocationContext,
 } from "../../rpc/index.js";
+import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
 import type {
   ProviderRuntimeAccess,
@@ -58,10 +59,10 @@ type ProviderRuntimeAccessDeps = {
   cancelSessionApprovals: (input: { origin: string; portId: string; sessionId: string }) => Promise<number>;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
-  subscribeNetworkStateChanged: (listener: () => void) => () => void;
+  subscribeNetworkStateChanged: StateChangeSubscription;
   subscribeNetworkPreferencesChanged: (listener: NetworkPreferencesChangedHandler) => () => void;
-  subscribeAccountsStateChanged: (listener: () => void) => () => void;
-  subscribePermissionsStateChanged: (listener: () => void) => () => void;
+  subscribeAccountsStateChanged: StateChangeSubscription;
+  subscribePermissionsStateChanged: StateChangeSubscription;
 };
 
 const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocationContext | undefined => {

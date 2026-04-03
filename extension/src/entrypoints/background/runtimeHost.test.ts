@@ -49,7 +49,7 @@ vi.mock("webextension-polyfill", () => ({
 const makeRuntime = () => {
   const initialize = vi.fn(async () => {});
   const start = vi.fn();
-  const destroy = vi.fn();
+  const shutdown = vi.fn();
   const onCreated = vi.fn(() => vi.fn());
   const onFinished = vi.fn(() => vi.fn());
   const onApprovalsStateChanged = vi.fn(() => vi.fn());
@@ -167,7 +167,7 @@ const makeRuntime = () => {
     lifecycle: {
       initialize,
       start,
-      destroy,
+      shutdown,
       getIsInitialized: vi.fn(),
     },
     providerAccess,
@@ -181,7 +181,7 @@ const makeRuntime = () => {
     providerSnapshot,
     initialize,
     start,
-    destroy,
+    shutdown,
     subscribe,
     onCreated,
     onFinished,
@@ -319,7 +319,7 @@ describe("runtimeHost", () => {
     await runtimeHost.initializeRuntime();
     runtimeHost.destroy();
 
-    expect(runtimeHarness.destroy).toHaveBeenCalledTimes(1);
+    expect(runtimeHarness.shutdown).toHaveBeenCalledTimes(1);
     await expect(runtimeHost.initializeRuntime()).rejects.toThrow("Background runtime host is destroyed");
     await expect(runtimeHost.getOrInitProviderAccess()).rejects.toThrow("Background runtime host is destroyed");
     await expect(

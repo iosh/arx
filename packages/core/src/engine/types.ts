@@ -40,6 +40,7 @@ import type {
   UnlockUnlockedPayload,
 } from "../controllers/unlock/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
+import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -51,6 +52,9 @@ import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
+  ProviderRuntimeErrorContext,
+  ProviderRuntimeRpcRequest,
+  ProviderRuntimeSessionScope,
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type { AttentionService } from "../services/runtime/attention/types.js";
@@ -73,7 +77,9 @@ import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
+import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
+import type { UiPlatformAdapter } from "../ui/server/types.js";
 import type { InitializeVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
@@ -341,6 +347,52 @@ export type DappConnectionProjection = Readonly<
   }
 >;
 
+/** Provider-facing connection projection with live connected state. */
+export type WalletProviderConnectionProjection = DappConnectionProjection;
+
+/** Engine-owned provider contract for wallet shells. */
+export type WalletProvider = Readonly<{
+  buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
+  buildConnectionProjection(input: ProviderRuntimeConnectionQuery): WalletProviderConnectionProjection;
+  executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse>;
+  encodeRpcError(error: unknown, context: ProviderRuntimeErrorContext): JsonRpcError;
+  connect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
+  disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
+  disconnectOrigin(origin: string): number;
+  cancelSessionApprovals(input: ProviderRuntimeSessionScope): Promise<number>;
+  subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
+  subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
+  subscribeNetworkStateChanged(listener: () => void): () => void;
+  subscribeNetworkPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
+  subscribeAccountsStateChanged(listener: () => void): () => void;
+  subscribePermissionsStateChanged(listener: () => void): () => void;
+}>;
+
+/** Options for creating a wallet UI contract. */
+export type WalletCreateUiOptions = Readonly<{
+  platform: UiPlatformAdapter;
+  surfaceOrigin: string;
+}>;
+
+/** UI method dispatch input. */
+export type WalletUiDispatchInput<M extends UiMethodName> =
+  undefined extends UiMethodParams<M>
+    ? Readonly<{
+        method: M;
+        params?: UiMethodParams<M>;
+      }>
+    : Readonly<{
+        method: M;
+        params: UiMethodParams<M>;
+      }>;
+
+/** Engine-owned UI contract for wallet shells. */
+export type WalletUi = Readonly<{
+  buildSnapshot(): UiSnapshot;
+  dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
+  subscribeStateChanged(listener: () => void): () => void;
+}>;
+
 /**
  * Live dApp connections kept only in memory.
  * Separate from persisted permissions and provider transport sessions.
@@ -384,6 +436,10 @@ export type ArxWallet = Readonly<{
   attention: WalletAttention;
   /** In-memory dApp connections. */
   dappConnections: WalletDappConnections;
+  /** Create a provider-facing contract. */
+  createProvider(): WalletProvider;
+  /** Create a UI-facing contract. */
+  createUi(options: WalletCreateUiOptions): WalletUi;
   /** Provider and UI snapshots. */
   snapshots: WalletSnapshots;
 }>;

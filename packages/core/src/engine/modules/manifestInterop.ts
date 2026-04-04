@@ -15,11 +15,12 @@ const cloneKeyringConfig = <T extends { factories: Record<string, unknown> }>(ke
 };
 
 const buildNamespaceEngineFactories = (manifest: NamespaceManifest): NamespaceEngineFactories | undefined => {
-  const clientFactory = manifest.runtime?.clientFactory ?? manifest.core.rpc.clientFactory;
   const factories: Record<string, unknown> = {};
 
-  if (clientFactory) {
-    factories.clientFactory = clientFactory;
+  if (manifest.runtime && "clientFactory" in manifest.runtime) {
+    factories.clientFactory = manifest.runtime.clientFactory;
+  } else if (manifest.core.rpc.clientFactory) {
+    factories.clientFactory = manifest.core.rpc.clientFactory;
   }
   if (manifest.runtime?.createSigner) {
     factories.createSigner = manifest.runtime.createSigner;
@@ -41,11 +42,12 @@ const buildNamespaceRuntimeManifest = (params: {
   module: WalletNamespaceModule;
 }): NamespaceRuntimeManifest | undefined => {
   const { module } = params;
-  const clientFactory = module.engine.factories?.clientFactory ?? module.engine.facts.rpc.clientFactory;
   const runtime: NamespaceRuntimeManifest = {};
 
-  if (clientFactory) {
-    runtime.clientFactory = clientFactory;
+  if (module.engine.factories && "clientFactory" in module.engine.factories) {
+    runtime.clientFactory = module.engine.factories.clientFactory;
+  } else if (module.engine.facts.rpc.clientFactory) {
+    runtime.clientFactory = module.engine.facts.rpc.clientFactory;
   }
   if (module.engine.factories?.createSigner) {
     runtime.createSigner = module.engine.factories.createSigner;

@@ -1,27 +1,13 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
-import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
+import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
+import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manifestInterop.js";
+import type { ArxWallet, WalletCreateUiOptions } from "../engine/types.js";
 import type { Messenger, ViolationMode } from "../messenger/Messenger.js";
-import {
-  assembleRuntimeNamespaceStages,
-  type NamespaceManifest,
-  type NamespaceRuntimeBindingsRegistry,
-  type NamespaceRuntimeSupportIndex,
-} from "../namespaces/index.js";
+import type { NamespaceManifest } from "../namespaces/types.js";
 import type { HandlerControllers, Namespace } from "../rpc/handlers/types.js";
-import {
-  createRpcContextNamespaceResolver,
-  createRpcMethodExecutor,
-  createRpcMethodNamespaceResolver,
-  createRpcRegistry,
-  type JsonRpcError,
-  type RpcInvocationContext,
-  resolveRpcInvocation,
-  resolveRpcInvocationDetails,
-} from "../rpc/index.js";
+import type { RpcInvocationContext, resolveRpcInvocation, resolveRpcInvocationDetails } from "../rpc/index.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
 import type { createAttentionService } from "../services/runtime/attention/index.js";
-import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { createChainActivationService } from "../services/runtime/chainActivation/index.js";
 import type { createChainViewsService } from "../services/runtime/chainViews/index.js";
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
@@ -35,34 +21,19 @@ import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
-import type { UiError } from "../ui/protocol/envelopes.js";
-import { createUiRuntimeAccess } from "../ui/server/access.js";
-import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
-import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
-import type { UiPlatformAdapter, UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
-import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
+import type { UiPlatformAdapter, UiRuntimeAccess } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
-import { type BackgroundRpcEnvHooks, createRpcEngineForBackground } from "./background/rpcEngineAssembly.js";
+import type { BackgroundRpcEnvHooks } from "./background/rpcEngineAssembly.js";
 import type { initRpcLayer, RpcLayerOptions } from "./background/rpcLayer.js";
-import { createBackgroundRuntimeLifecycle } from "./background/runtimeLifecyclePlan.js";
-import {
-  createRuntimeBootstrapScope,
-  createRuntimeSessionScope,
-  createRuntimeSupportScope,
-} from "./background/runtimeScopes.js";
 import type { BackgroundSessionServices, SessionOptions } from "./background/session.js";
 import type { KeyringService } from "./keyring/KeyringService.js";
-import { createProviderRuntimeAccess } from "./provider/index.js";
 import type { ProviderRuntimeAccess } from "./provider/types.js";
 
 export type { UiPlatformAdapter, UiRuntimeAccess } from "../ui/server/types.js";
 export type { BackgroundSessionServices } from "./background/session.js";
 
-export type BackgroundRuntimeUiAccessOptions = {
-  platform: UiPlatformAdapter;
-  surfaceOrigin: string;
-};
+export type BackgroundRuntimeUiAccessOptions = WalletCreateUiOptions;
 
 export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainDefinitions"> & {
   messenger?: {
@@ -111,8 +82,8 @@ export type BackgroundRuntime = {
     permissionViews: ReturnType<typeof createPermissionViewsService>;
     accountCodecs: AccountCodecRegistry;
     networkPreferences: NetworkPreferencesService;
-    namespaceBindings: NamespaceRuntimeBindingsRegistry;
-    namespaceRuntimeSupport: NamespaceRuntimeSupportIndex;
+    namespaceBindings: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceBindings"];
+    namespaceRuntimeSupport: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntimeSupport"];
     session: BackgroundSessionServices;
     sessionStatus: SessionStatusService;
     accountSigning: AccountSigningService;
@@ -121,7 +92,7 @@ export type BackgroundRuntime = {
   };
   rpc: {
     engine: ReturnType<typeof initEngine>;
-    registry: ReturnType<typeof createRpcRegistry>;
+    registry: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["namespaceIndex"];
     clients: ReturnType<typeof initRpcLayer>;
     resolveContextNamespace: (context?: RpcInvocationContext) => Namespace | null;
     resolveMethodNamespace: (method: string, context?: RpcInvocationContext) => Namespace | null;
@@ -130,292 +101,75 @@ export type BackgroundRuntime = {
       method: string,
       context?: RpcInvocationContext,
     ) => ReturnType<typeof resolveRpcInvocationDetails>;
-    executeRequest: ReturnType<typeof createRpcMethodExecutor>;
+    executeRequest: ReturnType<typeof assembleArxWalletRuntime>["rpc"]["executeRequest"];
   };
-  surfaceErrors: SurfaceErrorEncoder;
-  lifecycle: {
-    initialize: () => Promise<void>;
-    start: () => void;
-    shutdown: () => void;
-    getIsInitialized: () => boolean;
-  };
+  surfaceErrors: ReturnType<typeof assembleArxWalletRuntime>["surfaceErrors"];
+  lifecycle: ReturnType<typeof assembleArxWalletRuntime>["lifecycle"];
   providerAccess: ProviderRuntimeAccess;
   createUiAccess: (options: BackgroundRuntimeUiAccessOptions) => UiRuntimeAccess;
-};
-
-const createBackgroundRuntimeUiDeps = (
-  runtime: BackgroundRuntime,
-  { platform, surfaceOrigin }: BackgroundRuntimeUiAccessOptions,
-): UiRuntimeDeps => {
-  const session = createUiSessionAccess({
-    session: runtime.services.session,
-    sessionStatus: runtime.services.sessionStatus,
-    keyring: runtime.services.keyring,
-  });
-
-  return {
-    server: {
-      access: {
-        accounts: runtime.controllers.accounts,
-        approvals: runtime.controllers.approvals,
-        permissions: {
-          buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
-        },
-        transactions: runtime.controllers.transactions,
-        chains: {
-          buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
-          findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
-          getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
-          getActiveChainViewForNamespace: (namespace) =>
-            runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
-          getSelectedNamespace: () => runtime.services.chainViews.getSelectedNamespace(),
-          getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
-          requireAvailableChainMetadata: (chainRef) =>
-            runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
-          selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
-        },
-        accountCodecs: runtime.services.accountCodecs,
-        session,
-        walletSetup: createUiWalletSetupAccess({
-          accounts: runtime.controllers.accounts,
-          session: runtime.services.session,
-          keyring: runtime.services.keyring,
-        }),
-        keyrings: createUiKeyringsAccess({
-          keyring: runtime.services.keyring,
-          keyringExport: runtime.services.keyringExport,
-        }),
-        attention: {
-          getSnapshot: () => runtime.services.attention.getSnapshot(),
-        },
-        namespaceBindings: runtime.services.namespaceBindings,
-      },
-      platform,
-      surfaceOrigin,
-    },
-    bridge: {
-      encodeError: (error, context) =>
-        runtime.surfaceErrors.encodeUi(error, {
-          namespace: context.namespace,
-          chainRef: context.chainRef,
-          method: context.method,
-        }) as UiError,
-      persistVaultMeta: runtime.services.session.persistVaultMeta,
-      stateChanged: {
-        accounts: runtime.controllers.accounts,
-        approvals: runtime.controllers.approvals,
-        permissions: {
-          onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
-        },
-        transactions: runtime.controllers.transactions,
-        chains: {
-          onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
-          onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
-        },
-        session,
-        attention: {
-          onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
-        },
-      },
-    },
-  };
+  wallet: ArxWallet;
 };
 
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
-  const rpcRegistry = createRpcRegistry();
-
-  const {
-    messenger: messengerOptions,
-    network: networkOptions,
-    accounts: accountOptions,
-    approvals: approvalOptions,
-    permissions: permissionOptions,
-    transactions: transactionOptions,
-    engine: engineOptions,
-    rpcEngine: rpcEngineOptions,
-    networkPreferences: networkPreferencesOptions,
-    storage: storageOptions,
-    store: storeOptions,
-    settings: settingsOptions,
-    session: sessionOptions,
-    chainDefinitions: chainDefinitionsOptions,
-    rpcClients: rpcClientOptions,
-    namespaces: namespacesOptions,
-  } = options;
-
-  const namespaceManifests = namespacesOptions.manifests;
-  const namespaceStages = assembleRuntimeNamespaceStages(namespaceManifests);
-  const bootstrapScope = createRuntimeBootstrapScope({
-    rpcRegistry,
-    namespaceBootstrap: namespaceStages.bootstrap,
-    ...(messengerOptions ? { messengerOptions } : {}),
-    ...(storageOptions ? { storageOptions } : {}),
-    ...(networkOptions ? { networkOptions } : {}),
-    ...(accountOptions ? { accountOptions } : {}),
-    ...(approvalOptions ? { approvalOptions } : {}),
-    ...(permissionOptions ? { permissionOptions } : {}),
-    ...(transactionOptions ? { transactionOptions } : {}),
-    chainDefinitionsOptions,
-  });
-  const approvalFlows = createApprovalFlowRegistry();
-  let sessionScope: ReturnType<typeof createRuntimeSessionScope> | null = null;
-  let runtimeSupportScope: ReturnType<typeof createRuntimeSupportScope> | null = null;
-
-  const requireSessionScope = () => {
-    if (!sessionScope) {
-      throw new Error("Runtime session scope is not initialized");
-    }
-    return sessionScope;
-  };
-
-  const requireRuntimeSupportScope = () => {
-    if (!runtimeSupportScope) {
-      throw new Error("Runtime support scope is not initialized");
-    }
-    return runtimeSupportScope;
-  };
-
-  sessionScope = createRuntimeSessionScope({
-    bootstrapScope,
-    namespaceSession: namespaceStages.session,
-    settingsPort: settingsOptions.port,
-    networkPreferencesPort: networkPreferencesOptions.port,
-    storePorts: storeOptions.ports,
-    ...(engineOptions ? { engineOptions } : {}),
-    ...(storageOptions?.vaultMetaPort ? { vaultMetaPort: storageOptions.vaultMetaPort } : {}),
-    ...(sessionOptions ? { sessionOptions } : {}),
-    createApprovalExecutor: (controllersBase) =>
-      createApprovalExecutor({
-        registry: approvalFlows,
-        getDeps: () => {
-          const activeSessionScope = requireSessionScope();
-          const activeRuntimeSupportScope = requireRuntimeSupportScope();
-
-          return {
-            accounts: controllersBase.accounts,
-            permissions: controllersBase.permissions,
-            transactions: controllersBase.transactions,
-            chainActivation: activeSessionScope.chainActivation,
-            chainDefinitions: controllersBase.chainDefinitions,
-            namespaceBindings: activeRuntimeSupportScope.namespaceBindings,
-          };
-        },
-      }),
-  });
-
-  runtimeSupportScope = createRuntimeSupportScope({
-    bootstrapScope,
-    sessionScope,
-    namespaceRuntimeSupport: namespaceStages.runtimeSupport,
-    ...(rpcClientOptions ? { rpcClientOptions } : {}),
-  });
-
-  const controllers: HandlerControllers = {
-    ...sessionScope.controllersBase,
-    networkPreferences: sessionScope.networkPreferences,
-    chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
-    clock: {
-      now: bootstrapScope.storageNow,
+  const modules = options.namespaces.manifests.map((manifest) => createWalletNamespaceModuleFromManifest(manifest));
+  const runtime = assembleArxWalletRuntime({
+    namespaces: {
+      modules,
     },
-    signers: runtimeSupportScope.signers,
-  };
-  const lifecycle = createBackgroundRuntimeLifecycle({
-    runtimeLifecycle: sessionScope.runtimeLifecycle,
-    controllersBase: sessionScope.controllersBase,
-    deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
-    registeredNamespaces: bootstrapScope.registeredNamespaces,
-    transactionsLifecycle: runtimeSupportScope.transactionsLifecycle,
-    networkBootstrap: runtimeSupportScope.networkBootstrap,
-    sessionLayer: sessionScope.sessionLayer,
-    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
-    engine: sessionScope.engine,
-    bus: bootstrapScope.bus,
-    logger: bootstrapScope.storageLogger,
-  });
-
-  const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
-  const resolveContextNamespace = createRpcContextNamespaceResolver(rpcRegistry);
-  const resolveInvocation = (method: string, context?: RpcInvocationContext) =>
-    resolveRpcInvocation(rpcRegistry, controllers, method, context);
-  const resolveInvocationDetails = (method: string, context?: RpcInvocationContext) =>
-    resolveRpcInvocationDetails(rpcRegistry, controllers, method, context);
-  const executeRequest = createRpcMethodExecutor({
-    registry: rpcRegistry,
-    controllers,
-    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
-    services: {
-      permissionViews: runtimeSupportScope.permissionViews,
+    storage: {
+      ports: {
+        accounts: options.store.ports.accounts,
+        chainDefinitions: options.chainDefinitions.port,
+        keyringMetas: options.store.ports.keyringMetas,
+        networkPreferences: options.networkPreferences.port,
+        permissions: options.store.ports.permissions,
+        settings: options.settings.port,
+        transactions: options.store.ports.transactions,
+      },
+      ...(options.storage?.vaultMetaPort ? { vaultMetaPort: options.storage.vaultMetaPort } : {}),
+      ...(options.storage?.hydrate !== undefined ? { hydrate: options.storage.hydrate } : {}),
+    },
+    env: {
+      ...(options.storage?.now ? { now: options.storage.now } : {}),
+      ...(options.storage?.logger ? { logger: options.storage.logger } : {}),
+    },
+    runtime: {
+      boot: false,
+      lifecycleLabel: "createBackgroundRuntime",
+      ...(options.messenger ? { messenger: options.messenger } : {}),
+      controllerOptions: {
+        ...(options.network ? { network: options.network } : {}),
+        ...(options.accounts ? { accounts: options.accounts } : {}),
+        ...(options.approvals ? { approvals: options.approvals } : {}),
+        ...(options.permissions ? { permissions: options.permissions } : {}),
+        ...(options.transactions ? { transactions: options.transactions } : {}),
+        chainDefinitions: options.chainDefinitions,
+      },
+      ...(options.engine ? { engine: options.engine } : {}),
+      ...(options.rpcClients ? { rpcClients: options.rpcClients } : {}),
+      rpcEngine: options.rpcEngine,
+      ...(options.session ? { session: options.session } : {}),
     },
   });
-  const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
 
-  const providerAccess = createProviderRuntimeAccess({
-    getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
-    getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
-    buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
-    getActiveChainByNamespace: () => sessionScope.networkPreferences.getActiveChainByNamespace(),
-    listPermittedAccountsView: (origin, options) =>
-      runtimeSupportScope.permissionViews.listPermittedAccounts(origin, options),
-    formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
-    resolveMethodNamespace,
-    handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
-    encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
-    cancelSessionApprovals: async (input) =>
-      await sessionScope.controllersBase.approvals.cancelByScope({
-        scope: {
-          transport: "provider",
-          origin: input.origin,
-          portId: input.portId,
-          sessionId: input.sessionId,
-        },
-        reason: "session_lost",
-      }),
-    subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
-    subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
-    subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),
-    subscribeNetworkPreferencesChanged: (listener) => sessionScope.networkPreferences.subscribeChanged(listener),
-    subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(listener),
-    subscribePermissionsStateChanged: (listener) => sessionScope.controllersBase.permissions.onStateChanged(listener),
-  });
-
-  const runtime = {
-    bus: bootstrapScope.bus,
-    controllers,
-    services: {
-      attention: sessionScope.attention,
-      chainActivation: sessionScope.chainActivation,
-      chainViews: sessionScope.chainViews,
-      permissionViews: runtimeSupportScope.permissionViews,
-      accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
-      networkPreferences: sessionScope.networkPreferences,
-      namespaceBindings: runtimeSupportScope.namespaceBindings,
-      namespaceRuntimeSupport: runtimeSupportScope.namespaceRuntimeSupport,
-      session: sessionScope.sessionLayer.session,
-      sessionStatus: sessionScope.sessionStatus,
-      accountSigning: sessionScope.accountSigning,
-      keyringExport: sessionScope.keyringExport,
-      keyring: sessionScope.keyringService,
-    },
+  return {
+    bus: runtime.bus,
+    controllers: runtime.controllers,
+    services: runtime.services,
     rpc: {
-      engine: sessionScope.engine,
-      registry: rpcRegistry,
-      clients: runtimeSupportScope.rpcClientRegistry,
-      resolveContextNamespace,
-      resolveMethodNamespace,
-      resolveInvocation,
-      resolveInvocationDetails,
-      executeRequest,
+      engine: runtime.rpc.engine,
+      registry: runtime.rpc.namespaceIndex,
+      clients: runtime.rpc.clients,
+      resolveContextNamespace: runtime.rpc.resolveContextNamespace,
+      resolveMethodNamespace: runtime.rpc.resolveMethodNamespace,
+      resolveInvocation: runtime.rpc.resolveInvocation,
+      resolveInvocationDetails: runtime.rpc.resolveInvocationDetails,
+      executeRequest: runtime.rpc.executeRequest,
     },
-    surfaceErrors: surfaceErrorEncoder,
-    lifecycle,
-    providerAccess,
-  } as BackgroundRuntime;
-
-  runtime.createUiAccess = (options) => createUiRuntimeAccess(createBackgroundRuntimeUiDeps(runtime, options));
-
-  if (rpcEngineOptions.assemble !== false) {
-    createRpcEngineForBackground(runtime, rpcEngineOptions.env);
-  }
-
-  return runtime;
+    surfaceErrors: runtime.surfaceErrors,
+    lifecycle: runtime.lifecycle,
+    providerAccess: runtime.providerAccess,
+    createUiAccess: runtime.createUiAccess,
+    wallet: runtime.wallet,
+  };
 };

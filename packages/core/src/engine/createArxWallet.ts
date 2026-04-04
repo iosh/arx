@@ -1,5 +1,6 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
 import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
+import type { ViolationMode } from "../messenger/Messenger.js";
 import {
   createRpcContextNamespaceResolver,
   createRpcMethodExecutor,
@@ -10,22 +11,33 @@ import {
   resolveRpcInvocation,
   resolveRpcInvocationDetails,
 } from "../rpc/index.js";
+import type { ControllerLayerOptions } from "../runtime/background/controllers.js";
+import type { EngineOptions } from "../runtime/background/engine.js";
 import {
   type BackgroundRpcEnvHooks,
   type BackgroundRpcRuntime,
   createRpcEngineForBackground,
 } from "../runtime/background/rpcEngineAssembly.js";
+import type { RpcLayerOptions } from "../runtime/background/rpcLayer.js";
 import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
 import {
   createRuntimeBootstrapScope,
   createRuntimeSessionScope,
   createRuntimeSupportScope,
 } from "../runtime/background/runtimeScopes.js";
+import type { SessionOptions } from "../runtime/background/session.js";
 import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
+import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
+import type { UiError } from "../ui/protocol/envelopes.js";
+import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
+import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
+import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
+import type { UiRuntimeAccess, UiRuntimeDeps } from "../ui/server/types.js";
+import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
-import type { ArxWallet, CreateArxWalletInput } from "./types.js";
+import type { ArxWallet, CreateArxWalletInput, WalletCreateUiOptions, WalletProvider } from "./types.js";
 import {
   createWalletAccounts,
   createWalletApprovals,
@@ -33,10 +45,92 @@ import {
   createWalletDappConnections,
   createWalletNetworks,
   createWalletPermissions,
+  createWalletProvider,
   createWalletSession,
   createWalletSnapshots,
   createWalletTransactions,
 } from "./wallet.js";
+
+type RuntimeBootstrapScope = ReturnType<typeof createRuntimeBootstrapScope>;
+type RuntimeSessionScope = ReturnType<typeof createRuntimeSessionScope>;
+type RuntimeSupportScope = ReturnType<typeof createRuntimeSupportScope>;
+type RuntimeLifecycle = ReturnType<typeof createBackgroundRuntimeLifecycle>;
+
+const DEFAULT_RPC_ENV_HOOKS = {
+  isInternalOrigin: () => false,
+  shouldRequestUnlockAttention: () => false,
+} satisfies BackgroundRpcEnvHooks;
+
+type WalletRuntimeServices = Readonly<{
+  attention: RuntimeSessionScope["attention"];
+  chainActivation: RuntimeSessionScope["chainActivation"];
+  chainViews: RuntimeSessionScope["chainViews"];
+  permissionViews: RuntimeSupportScope["permissionViews"];
+  accountCodecs: RuntimeBootstrapScope["namespaceBootstrap"]["accountCodecs"];
+  networkPreferences: RuntimeSessionScope["networkPreferences"];
+  namespaceBindings: RuntimeSupportScope["namespaceBindings"];
+  namespaceRuntimeSupport: RuntimeSupportScope["namespaceRuntimeSupport"];
+  session: RuntimeSessionScope["sessionLayer"]["session"];
+  sessionStatus: RuntimeSessionScope["sessionStatus"];
+  accountSigning: RuntimeSessionScope["accountSigning"];
+  keyringExport: RuntimeSessionScope["keyringExport"];
+  keyring: RuntimeSessionScope["keyringService"];
+}>;
+
+type ArxWalletRuntimeCore = Readonly<{
+  bus: RuntimeBootstrapScope["bus"];
+  controllers: HandlerControllers;
+  services: WalletRuntimeServices;
+  surfaceErrors: SurfaceErrorEncoder;
+}>;
+
+type CreateArxWalletRuntimeInput = CreateArxWalletInput &
+  Readonly<{
+    runtime?: Readonly<{
+      boot?: boolean;
+      lifecycleLabel?: string;
+      messenger?: Readonly<{
+        violationMode?: ViolationMode;
+      }>;
+      controllerOptions?: ControllerLayerOptions;
+      engine?: EngineOptions;
+      rpcClients?: RpcLayerOptions;
+      rpcEngine?: Readonly<{
+        env?: BackgroundRpcEnvHooks;
+        assemble?: boolean;
+      }>;
+      session?: SessionOptions;
+    }>;
+  }>;
+
+type ArxWalletRuntime = Readonly<{
+  wallet: ArxWallet;
+  shutdown(): Promise<void>;
+  bus: RuntimeBootstrapScope["bus"];
+  controllers: HandlerControllers;
+  services: WalletRuntimeServices;
+  lifecycle: RuntimeLifecycle;
+  rpc: Readonly<{
+    engine: RuntimeSessionScope["engine"];
+    namespaceIndex: RuntimeBootstrapScope["rpcRegistry"];
+    clients: RuntimeSupportScope["rpcClientRegistry"];
+    resolveContextNamespace: ReturnType<typeof createRpcContextNamespaceResolver>;
+    resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
+    resolveInvocation: (
+      method: string,
+      context?: Parameters<typeof resolveRpcInvocation>[3],
+    ) => ReturnType<typeof resolveRpcInvocation>;
+    resolveInvocationDetails: (
+      method: string,
+      context?: Parameters<typeof resolveRpcInvocationDetails>[3],
+    ) => ReturnType<typeof resolveRpcInvocationDetails>;
+    executeRequest: ReturnType<typeof createRpcMethodExecutor>;
+  }>;
+  provider: WalletProvider;
+  providerAccess: ProviderRuntimeAccess;
+  createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
+  surfaceErrors: SurfaceErrorEncoder;
+}>;
 
 const buildStorageOptions = (
   input: CreateArxWalletInput,
@@ -60,46 +154,96 @@ const buildStorageOptions = (
   return Object.keys(storageOptions).length > 0 ? storageOptions : undefined;
 };
 
-const bootWalletLifecycle = async (
-  lifecycle: Pick<ReturnType<typeof createBackgroundRuntimeLifecycle>, "initialize" | "start">,
-): Promise<void> => {
+const bootWalletLifecycle = async (lifecycle: Pick<RuntimeLifecycle, "initialize" | "start">): Promise<void> => {
   await lifecycle.initialize();
   lifecycle.start();
 };
 
-type RuntimeBootstrapScope = ReturnType<typeof createRuntimeBootstrapScope>;
-type RuntimeSessionScope = ReturnType<typeof createRuntimeSessionScope>;
-type RuntimeSupportScope = ReturnType<typeof createRuntimeSupportScope>;
+const buildRuntimeSessionOptions = (input: CreateArxWalletRuntimeInput): SessionOptions | undefined => {
+  const sessionOptions: SessionOptions = {
+    ...(input.runtime?.session ?? {}),
+    ...(input.env?.randomUuid ? { uuid: input.env.randomUuid } : {}),
+  };
 
-const DEFAULT_RPC_ENV_HOOKS = {
-  isInternalOrigin: () => false,
-  shouldRequestUnlockAttention: () => false,
-} satisfies BackgroundRpcEnvHooks;
+  return Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined;
+};
 
-type ArxWalletRuntime = Readonly<{
-  wallet: ArxWallet;
-  shutdown(): Promise<void>;
-  rpc: Readonly<{
-    engine: RuntimeSessionScope["engine"];
-    namespaceIndex: RuntimeBootstrapScope["rpcRegistry"];
-    clients: RuntimeSupportScope["rpcClientRegistry"];
-    resolveContextNamespace: ReturnType<typeof createRpcContextNamespaceResolver>;
-    resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
-    resolveInvocation: (
-      method: string,
-      context?: Parameters<typeof resolveRpcInvocation>[3],
-    ) => ReturnType<typeof resolveRpcInvocation>;
-    resolveInvocationDetails: (
-      method: string,
-      context?: Parameters<typeof resolveRpcInvocationDetails>[3],
-    ) => ReturnType<typeof resolveRpcInvocationDetails>;
-    executeRequest: ReturnType<typeof createRpcMethodExecutor>;
-  }>;
-  providerAccess: ProviderRuntimeAccess;
-  surfaceErrors: SurfaceErrorEncoder;
-}>;
+const createWalletUiDeps = (runtime: ArxWalletRuntimeCore, options: WalletCreateUiOptions): UiRuntimeDeps => {
+  const session = createUiSessionAccess({
+    session: runtime.services.session,
+    sessionStatus: runtime.services.sessionStatus,
+    keyring: runtime.services.keyring,
+  });
 
-export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promise<ArxWalletRuntime> => {
+  return {
+    server: {
+      access: {
+        accounts: runtime.controllers.accounts,
+        approvals: runtime.controllers.approvals,
+        permissions: {
+          buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
+        },
+        transactions: runtime.controllers.transactions,
+        chains: {
+          buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
+          findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
+          getApprovalReviewChainView: (chainRef) => runtime.services.chainViews.getApprovalReviewChainView(chainRef),
+          getActiveChainViewForNamespace: (namespace) =>
+            runtime.services.chainViews.getActiveChainViewForNamespace(namespace),
+          getSelectedNamespace: () => runtime.services.chainViews.getSelectedNamespace(),
+          getSelectedChainView: () => runtime.services.chainViews.getSelectedChainView(),
+          requireAvailableChainMetadata: (chainRef) =>
+            runtime.services.chainViews.requireAvailableChainMetadata(chainRef),
+          selectWalletChain: (chainRef) => runtime.services.chainActivation.selectWalletChain(chainRef),
+        },
+        accountCodecs: runtime.services.accountCodecs,
+        session,
+        walletSetup: createUiWalletSetupAccess({
+          accounts: runtime.controllers.accounts,
+          session: runtime.services.session,
+          keyring: runtime.services.keyring,
+        }),
+        keyrings: createUiKeyringsAccess({
+          keyring: runtime.services.keyring,
+          keyringExport: runtime.services.keyringExport,
+        }),
+        attention: {
+          getSnapshot: () => runtime.services.attention.getSnapshot(),
+        },
+        namespaceBindings: runtime.services.namespaceBindings,
+      },
+      platform: options.platform,
+      surfaceOrigin: options.surfaceOrigin,
+    },
+    bridge: {
+      encodeError: (error, context) =>
+        runtime.surfaceErrors.encodeUi(error, {
+          namespace: context.namespace,
+          chainRef: context.chainRef,
+          method: context.method,
+        }) as UiError,
+      persistVaultMeta: runtime.services.session.persistVaultMeta,
+      stateChanged: {
+        accounts: runtime.controllers.accounts,
+        approvals: runtime.controllers.approvals,
+        permissions: {
+          onStateChanged: (listener) => runtime.controllers.permissions.onStateChanged(listener),
+        },
+        transactions: runtime.controllers.transactions,
+        chains: {
+          onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
+          onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
+        },
+        session,
+        attention: {
+          onStateChanged: (listener) => runtime.bus.subscribe(ATTENTION_STATE_CHANGED, listener),
+        },
+      },
+    },
+  };
+};
+
+export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): ArxWalletRuntime => {
   const modules = input.namespaces.modules;
   if (modules.length === 0) {
     throw new Error("createArxWallet requires at least one wallet namespace module");
@@ -128,17 +272,28 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     return runtimeSupportScope;
   };
 
+  const controllerOptions = input.runtime?.controllerOptions;
+  const runtimeSessionOptions = buildRuntimeSessionOptions(input);
+  const runtimeRpcEnv = input.runtime?.rpcEngine?.env ?? DEFAULT_RPC_ENV_HOOKS;
+
   const bootstrapScope: RuntimeBootstrapScope = createRuntimeBootstrapScope({
     rpcRegistry,
     namespaceBootstrap: namespaceStages.bootstrap,
+    ...(input.runtime?.messenger ? { messengerOptions: input.runtime.messenger } : {}),
     ...(storageOptions ? { storageOptions } : {}),
+    ...(controllerOptions?.network ? { networkOptions: controllerOptions.network } : {}),
+    ...(controllerOptions?.accounts ? { accountOptions: controllerOptions.accounts } : {}),
+    ...(controllerOptions?.approvals ? { approvalOptions: controllerOptions.approvals } : {}),
+    ...(controllerOptions?.permissions ? { permissionOptions: controllerOptions.permissions } : {}),
+    ...(controllerOptions?.transactions ? { transactionOptions: controllerOptions.transactions } : {}),
     chainDefinitionsOptions: {
+      ...(controllerOptions?.chainDefinitions ?? {}),
       port: input.storage.ports.chainDefinitions,
     },
   });
 
   sessionScope = createRuntimeSessionScope({
-    lifecycleLabel: "createArxWallet",
+    lifecycleLabel: input.runtime?.lifecycleLabel ?? "createArxWallet",
     bootstrapScope,
     namespaceSession: namespaceStages.session,
     settingsPort: input.storage.ports.settings,
@@ -149,6 +304,7 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
       permissions: input.storage.ports.permissions,
       transactions: input.storage.ports.transactions,
     },
+    ...(input.runtime?.engine ? { engineOptions: input.runtime.engine } : {}),
     createApprovalExecutor: (controllersBase) =>
       createApprovalExecutor({
         registry: approvalFlows,
@@ -167,13 +323,14 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
         },
       }),
     ...(input.storage.vaultMetaPort ? { vaultMetaPort: input.storage.vaultMetaPort } : {}),
-    ...(input.env?.randomUuid ? { sessionOptions: { uuid: input.env.randomUuid } } : {}),
+    ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
   });
 
   runtimeSupportScope = createRuntimeSupportScope({
     bootstrapScope,
     sessionScope,
     namespaceRuntimeSupport: namespaceStages.runtimeSupport,
+    ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
 
   const lifecycle = createBackgroundRuntimeLifecycle({
@@ -230,9 +387,11 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     lifecycle,
   };
 
-  // Keep request middleware assembly shared so provider execution and error
-  // handling stay on the same path.
-  createRpcEngineForBackground(engineRuntime, DEFAULT_RPC_ENV_HOOKS);
+  if (input.runtime?.rpcEngine?.assemble !== false) {
+    // Keep request middleware assembly shared so provider execution and error
+    // handling stay on the same path.
+    createRpcEngineForBackground(engineRuntime, runtimeRpcEnv);
+  }
 
   const providerAccess = createProviderRuntimeAccess({
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
@@ -328,6 +487,35 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
       chainViews: sessionScope.chainViews,
     },
   });
+  const services: WalletRuntimeServices = {
+    attention: sessionScope.attention,
+    chainActivation: sessionScope.chainActivation,
+    chainViews: sessionScope.chainViews,
+    permissionViews: runtimeSupportScope.permissionViews,
+    accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
+    networkPreferences: sessionScope.networkPreferences,
+    namespaceBindings: runtimeSupportScope.namespaceBindings,
+    namespaceRuntimeSupport: runtimeSupportScope.namespaceRuntimeSupport,
+    session: sessionScope.sessionLayer.session,
+    sessionStatus: sessionScope.sessionStatus,
+    accountSigning: sessionScope.accountSigning,
+    keyringExport: sessionScope.keyringExport,
+    keyring: sessionScope.keyringService,
+  };
+  const runtimeCore: ArxWalletRuntimeCore = {
+    bus: bootstrapScope.bus,
+    controllers,
+    services,
+    surfaceErrors: surfaceErrorEncoder,
+  };
+  const provider = createWalletProvider({
+    runtimeAccess: providerAccess,
+    dappConnections,
+    snapshots,
+  });
+  const createUi = (options: WalletCreateUiOptions) => createUiContract(createWalletUiDeps(runtimeCore, options));
+  const createUiAccess = (options: WalletCreateUiOptions) =>
+    createUiRuntimeAccess(createWalletUiDeps(runtimeCore, options));
 
   const wallet: ArxWallet = {
     namespaces,
@@ -339,6 +527,8 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     transactions,
     attention,
     dappConnections,
+    createProvider: () => provider,
+    createUi,
     snapshots,
   };
   let shutdownPromise: Promise<void> | null = null;
@@ -371,26 +561,44 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     await shutdownPromise;
   };
 
+  const runtime: ArxWalletRuntime = {
+    wallet,
+    shutdown,
+    bus: bootstrapScope.bus,
+    controllers,
+    services,
+    lifecycle,
+    rpc: {
+      engine: sessionScope.engine,
+      namespaceIndex: rpcRegistry,
+      clients: runtimeSupportScope.rpcClientRegistry,
+      resolveContextNamespace,
+      resolveMethodNamespace,
+      resolveInvocation,
+      resolveInvocationDetails,
+      executeRequest,
+    },
+    provider,
+    providerAccess,
+    createUiAccess,
+    surfaceErrors: surfaceErrorEncoder,
+  };
+
+  return runtime;
+};
+
+export const createArxWalletRuntime = async (input: CreateArxWalletRuntimeInput): Promise<ArxWalletRuntime> => {
+  const runtime = assembleArxWalletRuntime(input);
+
+  if (input.runtime?.boot === false) {
+    return runtime;
+  }
+
   try {
-    await bootWalletLifecycle(lifecycle);
-    return {
-      wallet,
-      shutdown,
-      rpc: {
-        engine: sessionScope.engine,
-        namespaceIndex: rpcRegistry,
-        clients: runtimeSupportScope.rpcClientRegistry,
-        resolveContextNamespace,
-        resolveMethodNamespace,
-        resolveInvocation,
-        resolveInvocationDetails,
-        executeRequest,
-      },
-      providerAccess,
-      surfaceErrors: surfaceErrorEncoder,
-    };
+    await bootWalletLifecycle(runtime.lifecycle);
+    return runtime;
   } catch (error) {
-    await shutdown();
+    await runtime.shutdown();
     throw error;
   }
 };

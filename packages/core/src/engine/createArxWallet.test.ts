@@ -98,6 +98,11 @@ const createWalletRuntime = async (params?: Parameters<typeof createWalletInput>
   return await createArxWalletRuntime(createWalletInput(params));
 };
 
+const createUiPlatform = () => ({
+  openOnboardingTab: vi.fn(async () => ({ activationPath: "focus" as const })),
+  openNotificationPopup: vi.fn(async () => ({ activationPath: "focus" as const })),
+});
+
 const createProviderRpcContext = (requestId: string = PROVIDER_REQUEST_ID) => ({
   chainRef: EIP155_CHAIN_REF,
   providerNamespace: EIP155_NAMESPACE,
@@ -430,6 +435,40 @@ describe("createArxWallet", () => {
     }
   });
 
+  it("creates provider contracts with live connection projections", async () => {
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      permissionsPort: createSeededPermissionsPort(),
+    });
+
+    try {
+      const { wallet } = runtime;
+      const provider = wallet.createProvider();
+
+      expect(provider.buildConnectionProjection({ origin: ORIGIN, namespace: EIP155_NAMESPACE })).toMatchObject({
+        connected: false,
+        accounts: [],
+      });
+
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+
+      const connected = provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      expect(connected.connected).toBe(true);
+      expect(connected.accounts).toHaveLength(1);
+      expect(connected.snapshot.chain.chainRef).toBe(EIP155_CHAIN_REF);
+
+      const disconnected = provider.disconnect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      expect(disconnected.connected).toBe(false);
+
+      provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
+      expect(provider.disconnectOrigin(ORIGIN)).toBe(1);
+      expect(provider.buildConnectionProjection({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).connected).toBe(false);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
   it("builds UI snapshots from wallet session, network, and attention surfaces", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
@@ -670,7 +709,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes engine-owned provider dispatch and surface error encoding", async () => {
+  it("exposes engine-owned provider, UI, and surface error contracts", async () => {
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
       permissionsPort: createSeededPermissionsPort(),
@@ -678,12 +717,29 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
+      const provider = wallet.createProvider();
+      const ui = wallet.createUi({
+        platform: createUiPlatform(),
+        surfaceOrigin: "chrome-extension://arx/popup.html",
+      });
+      const stateChanged = vi.fn();
+      const unsubscribe = ui.subscribeStateChanged(stateChanged);
+
       await wallet.session.initialize({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
+      await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
+        vault: { initialized: true },
+        session: { isUnlocked: false },
+      });
+      await expect(ui.dispatch({ method: "ui.session.unlock", params: { password: PASSWORD } })).resolves.toMatchObject(
+        {
+          isUnlocked: true,
+        },
+      );
+      expect(stateChanged).toHaveBeenCalled();
       wallet.session.lock("manual");
 
       await expect(
-        runtime.providerAccess.executeRpcRequest({
+        provider.executeRpcRequest({
           id: "rpc-accounts-locked",
           jsonrpc: "2.0",
           method: "eth_accounts",
@@ -697,7 +753,7 @@ describe("createArxWallet", () => {
       });
 
       expect(
-        runtime.providerAccess.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
+        provider.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
           origin: ORIGIN,
           method: "eth_sendTransaction",
           rpcContext: createProviderRpcContext("rpc-encode"),
@@ -716,6 +772,8 @@ describe("createArxWallet", () => {
         reason: ArxReasons.RpcInternal,
         message: "boom",
       });
+
+      unsubscribe();
     } finally {
       await runtime.shutdown();
     }

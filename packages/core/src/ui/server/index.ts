@@ -1,4 +1,4 @@
-export { createUiRuntimeAccess } from "./access.js";
+export { createUiContract, createUiRuntimeAccess } from "./access.js";
 export type {
   UiConfirmNewMnemonicParams,
   UiImportMnemonicParams,

@@ -176,13 +176,6 @@ export const createApprovalUiListener = ({ runtimeHost, platform }: ApprovalUiOr
         );
 
         subscriptions.push(
-          approvalPopupAccess.subscribeSessionLocked(() => {
-            clearWindowTracking();
-            void approvalPopupAccess.cancelPendingApprovals("locked");
-          }),
-        );
-
-        subscriptions.push(
           approvalPopupAccess.subscribeApprovalStateChanged(() => {
             if (approvalPopupAccess.getPendingApprovalCount() === 0) {
               clearWindowTracking();

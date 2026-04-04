@@ -280,7 +280,7 @@ describe("approvalUiListener", () => {
     listener.destroy();
   });
 
-  it("cancels all pending approvals with locked when the session locks", async () => {
+  it("keeps pending approvals alive when the session locks and still cancels them if the tracked popup closes", async () => {
     const harness = buildHarness([41]);
     const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
@@ -301,18 +301,19 @@ describe("approvalUiListener", () => {
       }),
     );
 
+    await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
+
     harness.unlock.lock();
+    expect(harness.approvals.cancel).not.toHaveBeenCalled();
+    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["provider-approval", "ui-approval"]);
+
+    harness.closeWindow(41);
 
     await vi.waitFor(() =>
-      expect(harness.approvals.cancel.mock.calls).toEqual(
-        expect.arrayContaining([
-          [{ id: "provider-approval", reason: "locked" }],
-          [{ id: "ui-approval", reason: "locked" }],
-        ]),
-      ),
+      expect(harness.approvals.cancel).toHaveBeenCalledWith({ id: "provider-approval", reason: "window_closed" }),
     );
 
-    expect(harness.approvals.getState().pending).toHaveLength(0);
+    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["ui-approval"]);
 
     listener.destroy();
   });

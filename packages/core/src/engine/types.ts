@@ -1,7 +1,22 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
+import type { ApprovalSummary } from "../approvals/summary.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
+import type { AccountController, MultiNamespaceAccountsState } from "../controllers/account/types.js";
+import type {
+  ApprovalController,
+  ApprovalCreatedEvent,
+  ApprovalCreateParams,
+  ApprovalFinishedEvent,
+  ApprovalHandle,
+  ApprovalKind,
+  ApprovalRecord,
+  ApprovalRequester,
+  ApprovalResolveInput,
+  ApprovalResolveResult,
+  ApprovalState,
+} from "../controllers/approval/types.js";
 import type {
   NetworkController,
   NetworkState,
@@ -25,6 +40,12 @@ import type {
 } from "../controllers/unlock/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
+import type {
+  ConfirmNewMnemonicParams,
+  ImportMnemonicParams,
+  ImportPrivateKeyParams,
+  KeyringService,
+} from "../runtime/keyring/KeyringService.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type {
   ProviderRuntimeConnectionQuery,
@@ -34,6 +55,7 @@ import type {
 import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
 import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
+import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type {
   ConnectionSnapshot,
   PermissionViewsService,
@@ -48,7 +70,7 @@ import type { NetworkPreferencesChangedHandler } from "../services/store/network
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
-import type { VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
+import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
 import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
 import type { InitializeVaultParams, VaultEnvelope } from "../vault/types.js";
@@ -169,6 +191,65 @@ export type WalletSession = Readonly<{
   onLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
 }>;
 
+/** HD backup reminder state derived from keyring metadata. */
+export type WalletBackupStatus = Readonly<{
+  pendingHdKeyringCount: number;
+  nextHdKeyring: Readonly<{
+    keyringId: string;
+    alias: string | null;
+  }> | null;
+}>;
+
+/** Wallet-setup projection derived from owned accounts. */
+export type WalletSetupState = Readonly<{
+  totalAccountCount: number;
+  hasOwnedAccounts: boolean;
+}>;
+
+/** Accounts, keyrings, and related projections. */
+export type WalletAccounts = Readonly<{
+  getState(): MultiNamespaceAccountsState;
+  listOwnedForNamespace: AccountController["listOwnedForNamespace"];
+  getOwnedAccount: AccountController["getOwnedAccount"];
+  getAccountKeysForNamespace: AccountController["getAccountKeysForNamespace"];
+  getSelectedAccountKey: AccountController["getSelectedAccountKey"];
+  getActiveAccountForNamespace: AccountController["getActiveAccountForNamespace"];
+  setActiveAccount: AccountController["setActiveAccount"];
+  generateMnemonic: KeyringService["generateMnemonic"];
+  confirmNewMnemonic: (params: ConfirmNewMnemonicParams) => ReturnType<KeyringService["confirmNewMnemonic"]>;
+  importMnemonic: (params: ImportMnemonicParams) => ReturnType<KeyringService["importMnemonic"]>;
+  importPrivateKey: (params: ImportPrivateKeyParams) => ReturnType<KeyringService["importPrivateKey"]>;
+  deriveAccount: KeyringService["deriveAccount"];
+  exportMnemonic: KeyringExportService["exportMnemonic"];
+  exportPrivateKeyByAccountKey: KeyringExportService["exportPrivateKeyByAccountKey"];
+  hideHdAccount: KeyringService["hideHdAccount"];
+  unhideHdAccount: KeyringService["unhideHdAccount"];
+  renameKeyring: KeyringService["renameKeyring"];
+  renameAccount: KeyringService["renameAccount"];
+  markBackedUp: KeyringService["markBackedUp"];
+  removePrivateKeyKeyring: KeyringService["removePrivateKeyKeyring"];
+  getKeyrings(): KeyringMetaRecord[];
+  getAccountsByKeyring(keyringId: string, includeHidden?: boolean): AccountRecord[];
+  getBackupStatus(): WalletBackupStatus;
+  getWalletSetupState(): WalletSetupState;
+}>;
+
+/** In-memory approvals and their stable read models. */
+export type WalletApprovals = Readonly<{
+  getState(): ApprovalState;
+  get(id: string): ApprovalRecord | undefined;
+  listPending(): ApprovalRecord[];
+  getSummary(id: string): ApprovalSummary | undefined;
+  listPendingSummaries(): ApprovalSummary[];
+  create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
+  resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
+  cancel: ApprovalController["cancel"];
+  cancelByScope: ApprovalController["cancelByScope"];
+  onStateChanged: ApprovalController["onStateChanged"];
+  onCreated(listener: (event: ApprovalCreatedEvent) => void): () => void;
+  onFinished(listener: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
+}>;
+
 /** Persistent permissions and permission read models. */
 export type WalletPermissions = Readonly<{
   getState(): PermissionsState;
@@ -276,6 +357,10 @@ export type ArxWallet = Readonly<{
   namespaces: WalletNamespaces;
   /** Wallet session methods. */
   session: WalletSession;
+  /** Accounts, keyrings, and account projections. */
+  accounts: WalletAccounts;
+  /** In-memory approvals and approval read models. */
+  approvals: WalletApprovals;
   /** Persistent permissions and derived views. */
   permissions: WalletPermissions;
   /** Network selection and preferences. */

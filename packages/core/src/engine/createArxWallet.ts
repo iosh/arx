@@ -10,6 +10,8 @@ import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manif
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput } from "./types.js";
 import {
+  createWalletAccounts,
+  createWalletApprovals,
   createWalletAttention,
   createWalletDappConnections,
   createWalletNetworks,
@@ -151,6 +153,17 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     sessionStatus: sessionScope.sessionStatus,
     keyring: sessionScope.keyringService,
   });
+  const accounts = createWalletAccounts({
+    accounts: sessionScope.controllersBase.accounts,
+    keyring: sessionScope.keyringService,
+    keyringExport: sessionScope.keyringExport,
+  });
+  const approvals = createWalletApprovals({
+    approvals: sessionScope.controllersBase.approvals,
+    accounts,
+    chainViews: sessionScope.chainViews,
+    transactions: sessionScope.controllersBase.transactions,
+  });
   const permissions = createWalletPermissions({
     permissions: sessionScope.controllersBase.permissions,
     permissionViews: runtimeSupportScope.permissionViews,
@@ -185,12 +198,11 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     session: sessionScope.sessionLayer.session,
     sessionStatus: sessionScope.sessionStatus,
     keyring: sessionScope.keyringService,
-    keyringExport: sessionScope.keyringExport,
     attention: sessionScope.attention,
     chainViews: sessionScope.chainViews,
     permissionViews: runtimeSupportScope.permissionViews,
-    accounts: sessionScope.controllersBase.accounts,
-    approvals: sessionScope.controllersBase.approvals,
+    accounts,
+    approvals,
     transactions: sessionScope.controllersBase.transactions,
     namespaceBindings: runtimeSupportScope.namespaceBindings,
     dappConnections,
@@ -203,6 +215,8 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
   const wallet: ArxWallet = {
     namespaces,
     session,
+    accounts,
+    approvals,
     permissions,
     networks,
     attention,

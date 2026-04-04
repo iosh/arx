@@ -11,13 +11,17 @@ export type {
   NamespaceEngineDefinition,
   NamespaceEngineFactories,
   NamespaceEngineFacts,
+  WalletAccounts,
+  WalletApprovals,
   WalletAttention,
+  WalletBackupStatus,
   WalletDappConnections,
   WalletNamespaceModule,
   WalletNamespaces,
   WalletNetworks,
   WalletPermissions,
   WalletSession,
+  WalletSetupState,
   WalletSnapshots,
 } from "./types.js";
 export { assertValidWalletNamespaceModule } from "./validation.js";

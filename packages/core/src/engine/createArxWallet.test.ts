@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
+import { ApprovalKinds } from "../controllers/approval/types.js";
 import {
   flushAsync,
   MemoryAccountsPort,
@@ -10,6 +11,7 @@ import {
   MemorySettingsPort,
   MemoryTransactionsPort,
   TEST_ACCOUNT_CODECS,
+  TEST_MNEMONIC,
   toRegistryEntity,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
@@ -89,7 +91,7 @@ const createWalletRuntime = async (params?: Parameters<typeof createWalletInput>
 };
 
 describe("createArxWallet", () => {
-  it("boots an eip155 wallet, exposes 20b wallet surfaces, and corrects invalid persisted preferences", async () => {
+  it("boots an eip155 wallet, exposes 20b/20c wallet surfaces, and corrects invalid persisted preferences", async () => {
     const networkPreferencesPort = new MemoryNetworkPreferencesPort({
       id: "network-preferences",
       selectedNamespace: "solana",
@@ -115,6 +117,11 @@ describe("createArxWallet", () => {
       expect(eip155Module.engine.facts.chainSeeds?.length).toBeGreaterThan(0);
       expect(eip155Module.engine.factories?.createSigner).toBeTypeOf("function");
       expect(wallet.session.getStatus().phase).toBe("uninitialized");
+      expect(wallet.accounts.getWalletSetupState()).toEqual({
+        totalAccountCount: 0,
+        hasOwnedAccounts: false,
+      });
+      expect(wallet.approvals.getState()).toEqual({ pending: [] });
       expect(wallet.networks.getSelectedNamespace()).toBe("eip155");
       expect(wallet.attention.getSnapshot()).toEqual({ queue: [], count: 0 });
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
@@ -134,6 +141,128 @@ describe("createArxWallet", () => {
         selectedNamespace: "eip155",
       });
       expect(correctedPreferences?.activeChainByNamespace.eip155).toBeDefined();
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("exposes accounts owner methods for keyring mutations and backup/setup projections", async () => {
+    const runtime = await createWalletRuntime();
+
+    try {
+      const { wallet } = runtime;
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+
+      const created = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC, alias: "Primary wallet" });
+      const derived = await wallet.accounts.deriveAccount(created.keyringId);
+
+      expect(wallet.accounts.getWalletSetupState()).toEqual({
+        totalAccountCount: 2,
+        hasOwnedAccounts: true,
+      });
+      expect(wallet.accounts.getBackupStatus()).toEqual({
+        pendingHdKeyringCount: 1,
+        nextHdKeyring: {
+          keyringId: created.keyringId,
+          alias: "Primary wallet",
+        },
+      });
+      expect(wallet.accounts.getKeyrings()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: created.keyringId,
+            type: "hd",
+            alias: "Primary wallet",
+            needsBackup: true,
+          }),
+        ]),
+      );
+      expect(wallet.accounts.getAccountsByKeyring(created.keyringId).map((account) => account.accountKey)).toHaveLength(
+        2,
+      );
+
+      await wallet.accounts.markBackedUp(created.keyringId);
+      expect(wallet.accounts.getBackupStatus()).toEqual({
+        pendingHdKeyringCount: 0,
+        nextHdKeyring: null,
+      });
+
+      const ownedAccounts = wallet.accounts.listOwnedForNamespace({
+        namespace: EIP155_NAMESPACE,
+        chainRef: EIP155_CHAIN_REF,
+      });
+      expect(ownedAccounts.map((account) => account.displayAddress.toLowerCase())).toEqual(
+        expect.arrayContaining([created.address.toLowerCase(), derived.address.toLowerCase()]),
+      );
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("keeps approvals pending while locked and resolves them through the approvals owner after unlock", async () => {
+    const runtime = await createWalletRuntime();
+
+    try {
+      const { wallet } = runtime;
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+
+      const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+      wallet.session.lock("manual");
+
+      const approvalId = "approval-sign-message";
+      const handle = wallet.approvals.create(
+        {
+          id: approvalId,
+          kind: ApprovalKinds.SignMessage,
+          origin: ORIGIN,
+          namespace: EIP155_NAMESPACE,
+          chainRef: EIP155_CHAIN_REF,
+          createdAt: 1_000,
+          request: {
+            chainRef: EIP155_CHAIN_REF,
+            from: address,
+            message: "0x68656c6c6f",
+          },
+        },
+        {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "11111111-1111-4111-8111-111111111111",
+          requestId: "request-1",
+        },
+      );
+
+      expect(wallet.approvals.getState()).toEqual({
+        pending: [
+          expect.objectContaining({
+            id: approvalId,
+            kind: ApprovalKinds.SignMessage,
+          }),
+        ],
+      });
+      expect(wallet.approvals.listPendingSummaries()).toEqual([
+        expect.objectContaining({
+          id: approvalId,
+          type: "signMessage",
+          payload: expect.objectContaining({
+            from: address,
+            message: "0x68656c6c6f",
+          }),
+        }),
+      ]);
+
+      await wallet.session.unlock({ password: PASSWORD });
+      await expect(wallet.approvals.resolve({ id: approvalId, action: "approve" })).resolves.toMatchObject({
+        id: approvalId,
+        status: "approved",
+        terminalReason: "user_approve",
+        value: expect.stringMatching(/^0x[0-9a-f]+$/i),
+      });
+      await expect(handle.settled).resolves.toMatch(/^0x[0-9a-f]+$/i);
+      expect(wallet.approvals.getState()).toEqual({ pending: [] });
     } finally {
       await runtime.shutdown();
     }

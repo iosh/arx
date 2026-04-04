@@ -31,6 +31,7 @@ import type {
   SetChainAccountKeysOptions,
   UpsertAuthorizationOptions,
 } from "../controllers/permission/types.js";
+import type { TransactionController } from "../controllers/transaction/types.js";
 import type {
   UnlockLockedPayload,
   UnlockParams,
@@ -298,6 +299,18 @@ export type WalletNetworks = Readonly<{
   onPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
 }>;
 
+/** Transaction approvals, execution, and status tracking. */
+export type WalletTransactions = Readonly<{
+  getMeta: TransactionController["getMeta"];
+  beginTransactionApproval: TransactionController["beginTransactionApproval"];
+  waitForTransactionSubmission: TransactionController["waitForTransactionSubmission"];
+  approveTransaction: TransactionController["approveTransaction"];
+  rejectTransaction: TransactionController["rejectTransaction"];
+  processTransaction: TransactionController["processTransaction"];
+  onStatusChanged: TransactionController["onStatusChanged"];
+  onStateChanged: TransactionController["onStateChanged"];
+}>;
+
 /** Ephemeral prompts outside the approvals flow. */
 export type WalletAttention = Readonly<{
   requestAttention: AttentionService["requestAttention"];
@@ -365,6 +378,8 @@ export type ArxWallet = Readonly<{
   permissions: WalletPermissions;
   /** Network selection and preferences. */
   networks: WalletNetworks;
+  /** Transaction approvals, execution, and status tracking. */
+  transactions: WalletTransactions;
   /** Ephemeral prompts. */
   attention: WalletAttention;
   /** In-memory dApp connections. */

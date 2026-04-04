@@ -1,11 +1,28 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import { createRpcRegistry } from "../rpc/index.js";
+import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
+import {
+  createRpcContextNamespaceResolver,
+  createRpcMethodExecutor,
+  createRpcMethodNamespaceResolver,
+  createRpcRegistry,
+  type HandlerControllers,
+  type JsonRpcError,
+  resolveRpcInvocation,
+  resolveRpcInvocationDetails,
+} from "../rpc/index.js";
+import {
+  type BackgroundRpcEnvHooks,
+  type BackgroundRpcRuntime,
+  createRpcEngineForBackground,
+} from "../runtime/background/rpcEngineAssembly.js";
 import { createBackgroundRuntimeLifecycle } from "../runtime/background/runtimeLifecyclePlan.js";
 import {
   createRuntimeBootstrapScope,
   createRuntimeSessionScope,
   createRuntimeSupportScope,
 } from "../runtime/background/runtimeScopes.js";
+import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
+import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { assembleRuntimeNamespaceStagesFromWalletModules } from "./modules/manifestInterop.js";
 import { createWalletNamespaces } from "./namespaces.js";
 import type { ArxWallet, CreateArxWalletInput } from "./types.js";
@@ -18,6 +35,7 @@ import {
   createWalletPermissions,
   createWalletSession,
   createWalletSnapshots,
+  createWalletTransactions,
 } from "./wallet.js";
 
 const buildStorageOptions = (
@@ -53,9 +71,32 @@ type RuntimeBootstrapScope = ReturnType<typeof createRuntimeBootstrapScope>;
 type RuntimeSessionScope = ReturnType<typeof createRuntimeSessionScope>;
 type RuntimeSupportScope = ReturnType<typeof createRuntimeSupportScope>;
 
+const DEFAULT_RPC_ENV_HOOKS = {
+  isInternalOrigin: () => false,
+  shouldRequestUnlockAttention: () => false,
+} satisfies BackgroundRpcEnvHooks;
+
 type ArxWalletRuntime = Readonly<{
   wallet: ArxWallet;
   shutdown(): Promise<void>;
+  rpc: Readonly<{
+    engine: RuntimeSessionScope["engine"];
+    namespaceIndex: RuntimeBootstrapScope["rpcRegistry"];
+    clients: RuntimeSupportScope["rpcClientRegistry"];
+    resolveContextNamespace: ReturnType<typeof createRpcContextNamespaceResolver>;
+    resolveMethodNamespace: ReturnType<typeof createRpcMethodNamespaceResolver>;
+    resolveInvocation: (
+      method: string,
+      context?: Parameters<typeof resolveRpcInvocation>[3],
+    ) => ReturnType<typeof resolveRpcInvocation>;
+    resolveInvocationDetails: (
+      method: string,
+      context?: Parameters<typeof resolveRpcInvocationDetails>[3],
+    ) => ReturnType<typeof resolveRpcInvocationDetails>;
+    executeRequest: ReturnType<typeof createRpcMethodExecutor>;
+  }>;
+  providerAccess: ProviderRuntimeAccess;
+  surfaceErrors: SurfaceErrorEncoder;
 }>;
 
 export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promise<ArxWalletRuntime> => {
@@ -148,6 +189,79 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     bus: bootstrapScope.bus,
     logger: bootstrapScope.storageLogger,
   });
+  const controllers: HandlerControllers = {
+    ...sessionScope.controllersBase,
+    networkPreferences: sessionScope.networkPreferences,
+    chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
+    clock: {
+      now: bootstrapScope.storageNow,
+    },
+    signers: runtimeSupportScope.signers,
+  };
+  const resolveMethodNamespace = createRpcMethodNamespaceResolver(rpcRegistry);
+  const resolveContextNamespace = createRpcContextNamespaceResolver(rpcRegistry);
+  const resolveInvocation = (method: string, context?: Parameters<typeof resolveRpcInvocation>[3]) =>
+    resolveRpcInvocation(rpcRegistry, controllers, method, context);
+  const resolveInvocationDetails = (method: string, context?: Parameters<typeof resolveRpcInvocationDetails>[3]) =>
+    resolveRpcInvocationDetails(rpcRegistry, controllers, method, context);
+  const executeRequest = createRpcMethodExecutor({
+    registry: rpcRegistry,
+    controllers,
+    rpcClientRegistry: runtimeSupportScope.rpcClientRegistry,
+    services: {
+      permissionViews: runtimeSupportScope.permissionViews,
+    },
+  });
+  const surfaceErrorEncoder = createSurfaceErrorEncoder(rpcRegistry);
+  const engineRuntime: BackgroundRpcRuntime = {
+    controllers,
+    services: {
+      attention: sessionScope.attention,
+      permissionViews: runtimeSupportScope.permissionViews,
+      sessionStatus: sessionScope.sessionStatus,
+    },
+    rpc: {
+      engine: sessionScope.engine,
+      resolveMethodNamespace,
+      resolveInvocationDetails,
+      executeRequest,
+    },
+    surfaceErrors: surfaceErrorEncoder,
+    lifecycle,
+  };
+
+  // Keep request middleware assembly shared so provider execution and error
+  // handling stay on the same path.
+  createRpcEngineForBackground(engineRuntime, DEFAULT_RPC_ENV_HOOKS);
+
+  const providerAccess = createProviderRuntimeAccess({
+    getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
+    getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
+    buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
+    getActiveChainByNamespace: () => sessionScope.networkPreferences.getActiveChainByNamespace(),
+    listPermittedAccountsView: (origin, options) =>
+      runtimeSupportScope.permissionViews.listPermittedAccounts(origin, options),
+    formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
+    resolveMethodNamespace,
+    handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
+    encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
+    cancelSessionApprovals: async (input) =>
+      await sessionScope.controllersBase.approvals.cancelByScope({
+        scope: {
+          transport: "provider",
+          origin: input.origin,
+          portId: input.portId,
+          sessionId: input.sessionId,
+        },
+        reason: "session_lost",
+      }),
+    subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
+    subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
+    subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),
+    subscribeNetworkPreferencesChanged: (listener) => sessionScope.networkPreferences.subscribeChanged(listener),
+    subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(listener),
+    subscribePermissionsStateChanged: (listener) => sessionScope.controllersBase.permissions.onStateChanged(listener),
+  });
   const session = createWalletSession({
     session: sessionScope.sessionLayer.session,
     sessionStatus: sessionScope.sessionStatus,
@@ -173,6 +287,9 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     chainViews: sessionScope.chainViews,
     chainActivation: sessionScope.chainActivation,
     network: sessionScope.controllersBase.network,
+  });
+  const transactions = createWalletTransactions({
+    transactions: sessionScope.controllersBase.transactions,
   });
   const attention = createWalletAttention({
     attention: sessionScope.attention,
@@ -219,17 +336,39 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     approvals,
     permissions,
     networks,
+    transactions,
     attention,
     dappConnections,
     snapshots,
   };
+  let shutdownPromise: Promise<void> | null = null;
   const shutdown = async () => {
-    cleanupTasks.splice(0).forEach((cleanup) => {
-      try {
-        cleanup();
-      } catch {}
-    });
-    lifecycle.shutdown();
+    if (shutdownPromise) {
+      await shutdownPromise;
+      return;
+    }
+
+    shutdownPromise = (async () => {
+      const pendingApprovalIds = sessionScope.controllersBase.approvals.getState().pending.map(({ id }) => id);
+
+      await Promise.allSettled(
+        pendingApprovalIds.map((id) =>
+          sessionScope.controllersBase.approvals.cancel({
+            id,
+            reason: "session_lost",
+          }),
+        ),
+      );
+
+      cleanupTasks.splice(0).forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch {}
+      });
+      lifecycle.shutdown();
+    })();
+
+    await shutdownPromise;
   };
 
   try {
@@ -237,6 +376,18 @@ export const createArxWalletRuntime = async (input: CreateArxWalletInput): Promi
     return {
       wallet,
       shutdown,
+      rpc: {
+        engine: sessionScope.engine,
+        namespaceIndex: rpcRegistry,
+        clients: runtimeSupportScope.rpcClientRegistry,
+        resolveContextNamespace,
+        resolveMethodNamespace,
+        resolveInvocation,
+        resolveInvocationDetails,
+        executeRequest,
+      },
+      providerAccess,
+      surfaceErrors: surfaceErrorEncoder,
     };
   } catch (error) {
     await shutdown();

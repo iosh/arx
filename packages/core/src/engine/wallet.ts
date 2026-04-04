@@ -6,3 +6,4 @@ export { createWalletNetworks } from "./wallet/networks.js";
 export { createWalletPermissions } from "./wallet/permissions.js";
 export { createWalletSession } from "./wallet/session.js";
 export { createWalletSnapshots } from "./wallet/snapshots.js";
+export { createWalletTransactions } from "./wallet/transactions.js";

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { ArxReasons, arxError } from "@arx/errors";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import { ApprovalKinds } from "../controllers/approval/types.js";
 import {
@@ -12,8 +13,11 @@ import {
   MemoryTransactionsPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
+  TEST_RECEIPT_POLL_INTERVAL,
   toRegistryEntity,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
+import type { TransactionRecord } from "../storage/records.js";
+import type { TransactionAdapter } from "../transactions/adapters/types.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
 import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 import type { CreateArxWalletInput, WalletNamespaceModule } from "./types.js";
@@ -29,6 +33,9 @@ const ACCOUNT_KEY = toAccountKeyFromAddress({
   accountCodecs: TEST_ACCOUNT_CODECS,
 });
 const KEYRING_ID = "11111111-1111-4111-8111-111111111111";
+const PROVIDER_PORT_ID = "provider-port";
+const PROVIDER_SESSION_ID = "11111111-1111-4111-8111-111111111111";
+const PROVIDER_REQUEST_ID = "provider-request";
 
 const createWalletInput = (params?: {
   modules?: readonly WalletNamespaceModule[];
@@ -37,6 +44,7 @@ const createWalletInput = (params?: {
   permissionsPort?: MemoryPermissionsPort;
   settingsPort?: MemorySettingsPort;
   keyringMetasPort?: MemoryKeyringMetasPort;
+  transactionsPort?: MemoryTransactionsPort;
 }): CreateArxWalletInput => {
   const modules = params?.modules ?? [createEip155WalletNamespaceModule()];
   const chainSeeds = modules.flatMap((module) => module.engine.facts.chainSeeds ?? []);
@@ -55,7 +63,7 @@ const createWalletInput = (params?: {
         networkPreferences: params?.networkPreferencesPort ?? new MemoryNetworkPreferencesPort(),
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
-        transactions: new MemoryTransactionsPort(),
+        transactions: params?.transactionsPort ?? new MemoryTransactionsPort(),
       },
     },
   };
@@ -89,6 +97,69 @@ const createSeededPermissionsPort = (origins: readonly string[] = [ORIGIN]) =>
 const createWalletRuntime = async (params?: Parameters<typeof createWalletInput>[0]) => {
   return await createArxWalletRuntime(createWalletInput(params));
 };
+
+const createProviderRpcContext = (requestId: string = PROVIDER_REQUEST_ID) => ({
+  chainRef: EIP155_CHAIN_REF,
+  providerNamespace: EIP155_NAMESPACE,
+  requestContext: {
+    transport: "provider" as const,
+    portId: PROVIDER_PORT_ID,
+    sessionId: PROVIDER_SESSION_ID,
+    requestId,
+    origin: ORIGIN,
+  },
+});
+
+const createWalletModuleWithTransactionAdapter = (adapter: TransactionAdapter): WalletNamespaceModule => {
+  const module = createEip155WalletNamespaceModule();
+  return {
+    ...module,
+    engine: {
+      ...module.engine,
+      factories: {
+        ...module.engine.factories,
+        createTransactionAdapter: () => adapter,
+      },
+    },
+  };
+};
+
+const createTransactionRecord = (
+  overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status">,
+): TransactionRecord => ({
+  id: overrides.id,
+  namespace: EIP155_NAMESPACE,
+  chainRef: EIP155_CHAIN_REF,
+  origin: ORIGIN,
+  fromAccountKey: ACCOUNT_KEY,
+  status: overrides.status,
+  request: {
+    namespace: EIP155_NAMESPACE,
+    chainRef: EIP155_CHAIN_REF,
+    payload: {
+      chainId: "0x1",
+      from: ACCOUNT_ADDRESS,
+      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      value: "0x0",
+      data: "0x",
+    },
+  },
+  prepared: null,
+  hash: null,
+  receipt: undefined,
+  error: undefined,
+  userRejected: false,
+  warnings: [],
+  issues: [],
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  ...overrides,
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("createArxWallet", () => {
   it("boots an eip155 wallet, exposes 20b/20c wallet surfaces, and corrects invalid persisted preferences", async () => {
@@ -432,6 +503,221 @@ describe("createArxWallet", () => {
       ).toBe(true);
     } finally {
       await reopened.shutdown();
+    }
+  });
+
+  it("exposes transactions and keeps cold-start approved records from auto-resuming on unlock", async () => {
+    const prepareTransaction = vi.fn(async () => ({ prepared: { ready: true }, warnings: [], issues: [] }));
+    const signTransaction = vi.fn(async () => ({
+      raw: "0x1111",
+      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+    const broadcastTransaction = vi.fn(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      transactionsPort: new MemoryTransactionsPort([
+        createTransactionRecord({
+          id: "33333333-3333-4333-8333-333333333333",
+          status: "approved",
+        }),
+      ]),
+      modules: [
+        createWalletModuleWithTransactionAdapter({
+          prepareTransaction,
+          signTransaction,
+          broadcastTransaction,
+          receiptTracking: {
+            fetchReceipt: vi.fn(async () => null),
+          },
+        }),
+      ],
+    });
+
+    try {
+      const { wallet } = runtime;
+
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+      await flushAsync();
+
+      expect(prepareTransaction).toHaveBeenCalledTimes(0);
+      expect(signTransaction).toHaveBeenCalledTimes(0);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+      expect(wallet.transactions.getMeta("33333333-3333-4333-8333-333333333333")?.status).toBe("approved");
+
+      await wallet.transactions.processTransaction("33333333-3333-4333-8333-333333333333");
+
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      expect(wallet.transactions.getMeta("33333333-3333-4333-8333-333333333333")?.status).toBe("broadcast");
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("releases a retained cold-start transaction after an explicit retry", async () => {
+    const prepareTransaction = vi.fn(async () => ({ prepared: { ready: true }, warnings: [], issues: [] }));
+    const signTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(arxError({ reason: ArxReasons.SessionLocked, message: "locked" }))
+      .mockResolvedValue({
+        raw: "0x1111",
+        hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      });
+    const broadcastTransaction = vi.fn(async (_ctx, signed) => ({
+      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    }));
+
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      transactionsPort: new MemoryTransactionsPort([
+        createTransactionRecord({
+          id: "55555555-5555-4555-8555-555555555555",
+          status: "approved",
+        }),
+      ]),
+      modules: [
+        createWalletModuleWithTransactionAdapter({
+          prepareTransaction,
+          signTransaction,
+          broadcastTransaction,
+          receiptTracking: {
+            fetchReceipt: vi.fn(async () => null),
+          },
+        }),
+      ],
+    });
+
+    try {
+      const { wallet } = runtime;
+
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+      await flushAsync();
+
+      expect(signTransaction).toHaveBeenCalledTimes(0);
+
+      await wallet.transactions.processTransaction("55555555-5555-4555-8555-555555555555");
+
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
+      expect(wallet.transactions.getMeta("55555555-5555-4555-8555-555555555555")?.status).toBe("approved");
+
+      wallet.session.lock("manual");
+      await wallet.session.unlock({ password: PASSWORD });
+      await vi.waitFor(() => {
+        expect(signTransaction).toHaveBeenCalledTimes(2);
+      });
+
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      expect(wallet.transactions.getMeta("55555555-5555-4555-8555-555555555555")?.status).toBe("broadcast");
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("resumes broadcast receipt tracking during engine boot", async () => {
+    vi.useFakeTimers();
+
+    const fetchReceipt = vi.fn(async () => ({
+      status: "success" as const,
+      receipt: {
+        status: "0x1",
+        blockNumber: "0x10",
+      },
+    }));
+
+    const runtime = await createWalletRuntime({
+      transactionsPort: new MemoryTransactionsPort([
+        createTransactionRecord({
+          id: "44444444-4444-4444-8444-444444444444",
+          status: "broadcast",
+          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }),
+      ]),
+      modules: [
+        createWalletModuleWithTransactionAdapter({
+          prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
+          signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
+          broadcastTransaction: vi.fn(async () => ({
+            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          })),
+          receiptTracking: {
+            fetchReceipt,
+          },
+        }),
+      ],
+    });
+
+    try {
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
+      await flushAsync();
+
+      expect(fetchReceipt).toHaveBeenCalledTimes(1);
+      expect(runtime.wallet.transactions.getMeta("44444444-4444-4444-8444-444444444444")).toMatchObject({
+        status: "confirmed",
+        receipt: {
+          status: "0x1",
+        },
+      });
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("exposes engine-owned provider dispatch and surface error encoding", async () => {
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      permissionsPort: createSeededPermissionsPort(),
+    });
+
+    try {
+      const { wallet } = runtime;
+      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+      wallet.session.lock("manual");
+
+      await expect(
+        runtime.providerAccess.executeRpcRequest({
+          id: "rpc-accounts-locked",
+          jsonrpc: "2.0",
+          method: "eth_accounts",
+          origin: ORIGIN,
+          context: createProviderRpcContext("rpc-accounts-locked"),
+        }),
+      ).resolves.toMatchObject({
+        id: "rpc-accounts-locked",
+        jsonrpc: "2.0",
+        result: [],
+      });
+
+      expect(
+        runtime.providerAccess.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
+          origin: ORIGIN,
+          method: "eth_sendTransaction",
+          rpcContext: createProviderRpcContext("rpc-encode"),
+        }),
+      ).toMatchObject({
+        code: 4100,
+      });
+
+      expect(
+        runtime.surfaceErrors.encodeUi(arxError({ reason: ArxReasons.RpcInternal, message: "boom" }), {
+          namespace: EIP155_NAMESPACE,
+          chainRef: EIP155_CHAIN_REF,
+          method: "ui.test",
+        }),
+      ).toEqual({
+        reason: ArxReasons.RpcInternal,
+        message: "boom",
+      });
+    } finally {
+      await runtime.shutdown();
     }
   });
 });

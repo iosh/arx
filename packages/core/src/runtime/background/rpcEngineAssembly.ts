@@ -1,14 +1,20 @@
 import { createAsyncMiddleware, type JsonRpcEngine, type JsonRpcMiddleware } from "@metamask/json-rpc-engine";
 import type { Json, JsonRpcError, JsonRpcParams } from "@metamask/utils";
 import type { AttentionService, RequestAttentionParams } from "../../services/runtime/attention/index.js";
-import type { createBackgroundRuntime } from "../createBackgroundRuntime.js";
+import type { BackgroundRuntime } from "../createBackgroundRuntime.js";
 import { UNKNOWN_ORIGIN } from "./constants.js";
 import { createAccessPolicyGuardMiddleware } from "./middlewares/accessPolicyGuard.js";
 import { createInvocationContextMiddleware } from "./middlewares/invocationContext.js";
 import type { ArxMiddlewareRequest } from "./middlewares/requestTypes.js";
 import { createRequireInitializedMiddleware } from "./middlewares/requireInitialized.js";
 
-export type BackgroundRuntimeInstance = ReturnType<typeof createBackgroundRuntime>;
+export type BackgroundRpcRuntime = Pick<BackgroundRuntime, "controllers" | "surfaceErrors" | "lifecycle"> & {
+  services: Pick<BackgroundRuntime["services"], "attention" | "permissionViews" | "sessionStatus">;
+  rpc: Pick<
+    BackgroundRuntime["rpc"],
+    "engine" | "resolveMethodNamespace" | "resolveInvocationDetails" | "executeRequest"
+  >;
+};
 
 export type BackgroundRpcEnvHooks = {
   isInternalOrigin(origin: string): boolean;
@@ -46,7 +52,7 @@ const safeRequestAttention = (service: AttentionService, params: RequestAttentio
   }
 };
 
-export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
+export const createBackgroundRpcMiddlewares = (runtime: BackgroundRpcRuntime, envHooks: BackgroundRpcEnvHooks) => {
   const controllers = runtime.controllers;
   const resolveMethodNamespace = runtime.rpc.resolveMethodNamespace;
   const executeRequest = runtime.rpc.executeRequest;
@@ -140,7 +146,7 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRuntimeInstanc
   return [errorBoundary, requireInitialized, invocationContext, accessPolicyGuard, executor];
 };
 
-export const createRpcEngineForBackground = (runtime: BackgroundRuntimeInstance, envHooks: BackgroundRpcEnvHooks) => {
+export const createRpcEngineForBackground = (runtime: BackgroundRpcRuntime, envHooks: BackgroundRpcEnvHooks) => {
   const engine = runtime.rpc.engine as EngineWithAssemblyFlag;
 
   if (engine[BACKGROUND_RPC_ENGINE_ASSEMBLED]) {

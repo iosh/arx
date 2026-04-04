@@ -16,6 +16,7 @@ import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./st
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
+  ResumePendingTransactionsOptions,
   TransactionApprovalChainMetadata,
   TransactionApprovalHandoff,
   TransactionApprovalRequestPayload,
@@ -86,6 +87,7 @@ export class TransactionExecutor
   #processing: Set<string> = new Set();
   #scheduled = false;
   #cancelledByUser: Set<string> = new Set();
+  #releasedRetainedExecutionIds: Set<string> = new Set();
 
   constructor(deps: Deps) {
     this.#view = deps.view;
@@ -392,8 +394,9 @@ export class TransactionExecutor
     return !this.#isCancelled(id);
   }
 
-  async resumePending(params?: { includeSigning?: boolean }): Promise<void> {
+  async resumePending(params?: ResumePendingTransactionsOptions): Promise<void> {
     const includeSigning = params?.includeSigning ?? true;
+    const skippedExecutionIds = new Set(params?.skipExecutionIds ?? []);
 
     // Warm cache first (best-effort).
     this.#view.requestSync();
@@ -404,6 +407,9 @@ export class TransactionExecutor
 
     if (includeSigning) {
       for (const record of [...approved, ...signed]) {
+        if (skippedExecutionIds.has(record.id) && !this.#releasedRetainedExecutionIds.has(record.id)) {
+          continue;
+        }
         const meta = this.#view.commitRecord(record).next;
         this.#enqueue(meta.id);
       }
@@ -413,6 +419,10 @@ export class TransactionExecutor
       const meta = this.#view.commitRecord(record).next;
       this.#tracking.resumeBroadcast(meta);
     }
+  }
+
+  markRetainedExecutionResumed(id: string) {
+    this.#releasedRetainedExecutionIds.add(id);
   }
 
   #enqueue(id: string) {

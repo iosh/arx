@@ -80,6 +80,15 @@ export type TransactionSubmissionResolution = {
   meta: TransactionMeta;
 };
 
+export type ResumePendingTransactionsOptions = {
+  includeSigning?: boolean;
+  /**
+   * Cold-start retained transactions that should remain visible but must not
+   * resume signing/broadcast automatically.
+   */
+  skipExecutionIds?: readonly string[];
+};
+
 export class TransactionSubmissionError extends Error {
   readonly meta: TransactionMeta;
 
@@ -103,7 +112,7 @@ export type TransactionController = {
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;
-  resumePending(params?: { includeSigning?: boolean }): Promise<void>;
+  resumePending(params?: ResumePendingTransactionsOptions): Promise<void>;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };

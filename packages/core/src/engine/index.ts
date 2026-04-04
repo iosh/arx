@@ -23,5 +23,6 @@ export type {
   WalletSession,
   WalletSetupState,
   WalletSnapshots,
+  WalletTransactions,
 } from "./types.js";
 export { assertValidWalletNamespaceModule } from "./validation.js";

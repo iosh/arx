@@ -13,6 +13,7 @@ import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
+  ResumePendingTransactionsOptions,
   TransactionApprovalHandoff,
   TransactionController,
   TransactionError,
@@ -164,10 +165,11 @@ export class StoreTransactionController implements TransactionController {
   }
 
   processTransaction(id: string): Promise<void> {
+    this.#executor.markRetainedExecutionResumed(id);
     return this.#executor.processTransaction(id);
   }
 
-  resumePending(params?: { includeSigning?: boolean }): Promise<void> {
+  resumePending(params?: ResumePendingTransactionsOptions): Promise<void> {
     return this.#executor.resumePending(params);
   }
 

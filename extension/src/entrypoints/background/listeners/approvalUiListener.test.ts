@@ -190,7 +190,7 @@ const buildHarness = (
         hasInitializedVault: () => true,
       };
     }) as unknown as BackgroundRuntimeHost["getOrInitApprovalPopupAccess"],
-    destroy: vi.fn(),
+    shutdown: vi.fn(async () => {}),
     applyDebugNamespacesFromEnv: vi.fn(),
   };
 

@@ -1,11 +1,7 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
+import { createArxWalletRuntime } from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import {
-  createBackgroundRuntime,
-  type ProviderRuntimeAccess,
-  type UiPlatformAdapter,
-  type UiRuntimeAccess,
-} from "@arx/core/runtime";
+import type { ProviderRuntimeAccess, UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
@@ -13,7 +9,7 @@ import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
 
 type BackgroundRuntimeCache = {
-  runtime: ReturnType<typeof createBackgroundRuntime>;
+  runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>;
 };
 
 export type BackgroundRuntimeHost = {
@@ -21,7 +17,7 @@ export type BackgroundRuntimeHost = {
   getOrInitProviderAccess: () => Promise<ProviderRuntimeAccess>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
   getOrInitApprovalPopupAccess: () => Promise<BackgroundApprovalPopupAccess>;
-  destroy: () => void;
+  shutdown: () => Promise<void>;
   applyDebugNamespacesFromEnv: () => void;
 };
 
@@ -30,8 +26,9 @@ export type BackgroundUiAccessParams = {
   surfaceOrigin: string;
 };
 
-type BackgroundRuntimeApprovals = ReturnType<typeof createBackgroundRuntime>["controllers"]["approvals"];
-type BackgroundRuntimeUnlock = ReturnType<typeof createBackgroundRuntime>["services"]["session"]["unlock"];
+type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
+type BackgroundRuntimeApprovals = BackgroundRuntime["controllers"]["approvals"];
+type BackgroundRuntimeUnlock = BackgroundRuntime["services"]["session"]["unlock"];
 
 type ApprovalCreatedListener = Parameters<BackgroundRuntimeApprovals["onCreated"]>[0];
 type ApprovalFinishedListener = Parameters<BackgroundRuntimeApprovals["onFinished"]>[0];
@@ -64,7 +61,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   let uiAccess: UiRuntimeAccess | null = null;
   let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
   let uiAccessParams: BackgroundUiAccessParams | null = null;
-  let destroyed = false;
+  let runtimeGeneration = 0;
 
   const runtimeLog = createLogger("bg:runtime");
   const hostLog = extendLogger(runtimeLog, "host");
@@ -86,42 +83,41 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   };
 
   const getOrInitRuntimeCache = async (): Promise<BackgroundRuntimeCache> => {
-    if (destroyed) {
-      throw new Error("Background runtime host is destroyed");
-    }
     if (runtimeCache) return runtimeCache;
     if (runtimeCachePromise) return runtimeCachePromise;
 
+    const bootGeneration = runtimeGeneration;
+
     runtimeCachePromise = (async () => {
       const storage = getExtensionStorage();
-      const runtime = createBackgroundRuntime({
-        store: {
+      const runtime = await createArxWalletRuntime({
+        namespaces: INSTALLED_NAMESPACES.engine,
+        storage: {
           ports: {
             accounts: storage.ports.accounts,
+            chainDefinitions: storage.ports.chainDefinitions,
             keyringMetas: storage.ports.keyringMetas,
+            networkPreferences: storage.ports.networkPreferences,
             permissions: storage.ports.permissions,
+            settings: storage.ports.settings,
             transactions: storage.ports.transactions,
           },
+          vaultMetaPort: storage.ports.vaultMeta,
         },
-        networkPreferences: { port: storage.ports.networkPreferences },
-        storage: { vaultMetaPort: storage.ports.vaultMeta },
-        settings: { port: storage.ports.settings },
-        chainDefinitions: { port: storage.ports.chainDefinitions },
-        rpcEngine: {
-          env: {
-            isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
-            shouldRequestUnlockAttention: () => true,
+        runtime: {
+          lifecycleLabel: "createBackgroundRuntimeHost",
+          rpcEngine: {
+            env: {
+              isInternalOrigin: (origin) => isInternalOrigin(origin, deps.extensionOrigin),
+              shouldRequestUnlockAttention: () => true,
+            },
           },
         },
-        namespaces: INSTALLED_NAMESPACES.runtime,
       });
 
-      await runtime.lifecycle.initialize();
-      runtime.lifecycle.start();
-
-      if (destroyed) {
-        runtime.lifecycle.shutdown();
-        throw new Error("Background runtime host is destroyed");
+      if (bootGeneration !== runtimeGeneration) {
+        await runtime.shutdown();
+        throw new Error("Background runtime host was reset during boot");
       }
 
       const next: BackgroundRuntimeCache = { runtime };
@@ -146,20 +142,18 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   };
 
   const getOrInitUiAccess = async ({ platform, surfaceOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
-    if (destroyed) {
-      throw new Error("Background runtime host is destroyed");
-    }
     assertUiAccessParamsMatch({ platform, surfaceOrigin });
     if (uiAccess) return uiAccess;
     if (uiAccessPromise) return await uiAccessPromise;
     uiAccessParams = { platform, surfaceOrigin };
+    const accessGeneration = runtimeGeneration;
 
     uiAccessPromise = (async () => {
       const active = await getOrInitRuntimeCache();
       const access = active.runtime.createUiAccess({ platform, surfaceOrigin });
 
-      if (destroyed) {
-        throw new Error("Background runtime host is destroyed");
+      if (accessGeneration !== runtimeGeneration) {
+        throw new Error("Background runtime host was reset during UI access bootstrap");
       }
 
       uiAccess = access;
@@ -207,12 +201,31 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     };
   };
 
-  const destroy = () => {
-    destroyed = true;
+  const shutdown = async () => {
+    runtimeGeneration += 1;
     uiAccess = null;
     uiAccessParams = null;
-    runtimeCache?.runtime.lifecycle.shutdown();
+    const activeRuntime = runtimeCache?.runtime ?? null;
+    const pendingRuntimeCachePromise = runtimeCachePromise;
     runtimeCache = null;
+    runtimeCachePromise = null;
+
+    if (activeRuntime) {
+      await activeRuntime.shutdown();
+      return;
+    }
+
+    if (!pendingRuntimeCachePromise) {
+      return;
+    }
+
+    try {
+      await pendingRuntimeCachePromise;
+    } catch {
+      // Boot failed or was interrupted while shutting down. Nothing else to do.
+    } finally {
+      runtimeCache = null;
+    }
   };
 
   return {
@@ -220,7 +233,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     getOrInitProviderAccess,
     getOrInitUiAccess,
     getOrInitApprovalPopupAccess,
-    destroy,
+    shutdown,
     applyDebugNamespacesFromEnv,
   };
 };

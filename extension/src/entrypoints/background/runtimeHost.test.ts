@@ -1,11 +1,10 @@
-import type { BackgroundRuntime } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 
-const { createBackgroundRuntimeMock, getExtensionStorageMock, disableDebugNamespacesMock, enableDebugNamespacesMock } =
+const { createArxWalletRuntimeMock, getExtensionStorageMock, disableDebugNamespacesMock, enableDebugNamespacesMock } =
   vi.hoisted(() => ({
-    createBackgroundRuntimeMock: vi.fn(),
+    createArxWalletRuntimeMock: vi.fn(),
     getExtensionStorageMock: vi.fn(),
     disableDebugNamespacesMock: vi.fn(),
     enableDebugNamespacesMock: vi.fn(),
@@ -13,14 +12,14 @@ const { createBackgroundRuntimeMock, getExtensionStorageMock, disableDebugNamesp
 
 const { installedNamespaces } = vi.hoisted(() => ({
   installedNamespaces: {
-    runtime: {
-      manifests: [],
+    engine: {
+      modules: [],
     },
   } as const,
 }));
 
-vi.mock("@arx/core/runtime", () => ({
-  createBackgroundRuntime: createBackgroundRuntimeMock,
+vi.mock("@arx/core/engine", () => ({
+  createArxWalletRuntime: createArxWalletRuntimeMock,
 }));
 
 vi.mock("@/platform/namespaces/installed", () => ({
@@ -47,9 +46,7 @@ vi.mock("webextension-polyfill", () => ({
 }));
 
 const makeRuntime = () => {
-  const initialize = vi.fn(async () => {});
-  const start = vi.fn();
-  const shutdown = vi.fn();
+  const shutdown = vi.fn(async () => {});
   const onCreated = vi.fn(() => vi.fn());
   const onFinished = vi.fn(() => vi.fn());
   const onApprovalsStateChanged = vi.fn(() => vi.fn());
@@ -164,23 +161,16 @@ const makeRuntime = () => {
       encodeSurfaceError: vi.fn(),
       executeWithEncoding: vi.fn(),
     },
-    lifecycle: {
-      initialize,
-      start,
-      shutdown,
-      getIsInitialized: vi.fn(),
-    },
     providerAccess,
     createUiAccess,
-  } as unknown as BackgroundRuntime;
+    shutdown,
+  };
 
   return {
     runtime,
     providerAccess,
     createUiAccess,
     providerSnapshot,
-    initialize,
-    start,
     shutdown,
     subscribe,
     onCreated,
@@ -216,7 +206,7 @@ describe("runtimeHost", () => {
 
   it("initializes runtime once across repeated UI bridge accessors", async () => {
     const runtimeHarness = makeRuntime();
-    createBackgroundRuntimeMock.mockReturnValue(runtimeHarness.runtime);
+    createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),
@@ -245,10 +235,10 @@ describe("runtimeHost", () => {
     });
     const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
 
-    expect(createBackgroundRuntimeMock).toHaveBeenCalledTimes(1);
-    expect(createBackgroundRuntimeMock).toHaveBeenCalledWith(
+    expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
+    expect(createArxWalletRuntimeMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        namespaces: installedNamespaces.runtime,
+        namespaces: installedNamespaces.engine,
       }),
     );
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
@@ -256,8 +246,6 @@ describe("runtimeHost", () => {
       platform: uiPlatform,
       surfaceOrigin: "chrome-extension://test",
     });
-    expect(runtimeHarness.initialize).toHaveBeenCalledTimes(1);
-    expect(runtimeHarness.start).toHaveBeenCalledTimes(1);
     expect(providerAccess).toBe(runtimeHarness.providerAccess);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);
@@ -308,35 +296,30 @@ describe("runtimeHost", () => {
     });
   });
 
-  it("destroys runtime and rejects new access after destroy", async () => {
+  it("shuts down runtime and allows a fresh boot on the next access", async () => {
     const runtimeHarness = makeRuntime();
-    createBackgroundRuntimeMock.mockReturnValue(runtimeHarness.runtime);
+    const nextRuntimeHarness = makeRuntime();
+    createArxWalletRuntimeMock
+      .mockResolvedValueOnce(runtimeHarness.runtime)
+      .mockResolvedValueOnce(nextRuntimeHarness.runtime);
 
     const runtimeHost = createBackgroundRuntimeHost({
       extensionOrigin: "chrome-extension://test",
     });
 
     await runtimeHost.initializeRuntime();
-    runtimeHost.destroy();
+    await runtimeHost.shutdown();
 
     expect(runtimeHarness.shutdown).toHaveBeenCalledTimes(1);
-    await expect(runtimeHost.initializeRuntime()).rejects.toThrow("Background runtime host is destroyed");
-    await expect(runtimeHost.getOrInitProviderAccess()).rejects.toThrow("Background runtime host is destroyed");
-    await expect(
-      runtimeHost.getOrInitUiAccess({
-        platform: {
-          openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
-          openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
-        },
-        surfaceOrigin: "chrome-extension://test",
-      }),
-    ).rejects.toThrow("Background runtime host is destroyed");
-    await expect(runtimeHost.getOrInitApprovalPopupAccess()).rejects.toThrow("Background runtime host is destroyed");
+    await runtimeHost.initializeRuntime();
+
+    expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(2);
+    expect(nextRuntimeHarness.shutdown).not.toHaveBeenCalled();
   });
 
   it("rejects repeated UI access requests with different parameters", async () => {
     const runtimeHarness = makeRuntime();
-    createBackgroundRuntimeMock.mockReturnValue(runtimeHarness.runtime);
+    createArxWalletRuntimeMock.mockResolvedValue(runtimeHarness.runtime);
     const uiAccess = {
       buildSnapshotEvent: vi.fn(),
       dispatchRequest: vi.fn(),

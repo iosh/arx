@@ -123,7 +123,7 @@ const buildHarness = (options?: { failFirstProviderAccess?: boolean }) => {
     getOrInitApprovalPopupAccess: vi.fn(async () => {
       throw new Error("Approval popup access should not be requested in providerEventsListener tests");
     }),
-    destroy: vi.fn(),
+    shutdown: vi.fn(async () => {}),
     applyDebugNamespacesFromEnv: vi.fn(),
   };
 

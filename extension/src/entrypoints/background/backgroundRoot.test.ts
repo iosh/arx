@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   createApprovalUiListenerMock,
   createBackgroundRuntimeHostMock,
-  createPortRouterMock,
-  createProviderEventsListenerMock,
+  createProviderPortServerMock,
   createUiBridgeMock,
   createUiPlatformMock,
   getExtensionOriginMock,
@@ -15,8 +14,7 @@ const {
 } = vi.hoisted(() => ({
   createApprovalUiListenerMock: vi.fn(),
   createBackgroundRuntimeHostMock: vi.fn(),
-  createPortRouterMock: vi.fn(),
-  createProviderEventsListenerMock: vi.fn(),
+  createProviderPortServerMock: vi.fn(),
   createUiBridgeMock: vi.fn(),
   createUiPlatformMock: vi.fn(),
   getExtensionOriginMock: vi.fn(),
@@ -38,12 +36,8 @@ vi.mock("./platform/uiPlatform", () => ({
   createUiPlatform: createUiPlatformMock,
 }));
 
-vi.mock("./portRouter", () => ({
-  createPortRouter: createPortRouterMock,
-}));
-
-vi.mock("./listeners/providerEventsListener", () => ({
-  createProviderEventsListener: createProviderEventsListenerMock,
+vi.mock("./providerPortServer", () => ({
+  createProviderPortServer: createProviderPortServerMock,
 }));
 
 vi.mock("./listeners/approvalUiListener", () => ({
@@ -98,21 +92,10 @@ describe("backgroundRoot", () => {
       clearWindowCloseTracks: vi.fn(),
       teardown: vi.fn(),
     });
-    createPortRouterMock.mockReturnValue({
-      destroy: vi.fn(),
-      handleConnect: vi.fn(),
-      listConnectedNamespaces: vi.fn(() => []),
-      broadcastEvent: vi.fn(),
-      broadcastAccountsChanged: vi.fn(async () => {}),
-      broadcastAccountsChangedForNamespaces: vi.fn(async () => {}),
-      broadcastMetaChangedForNamespaces: vi.fn(),
-      broadcastChainChangedForNamespaces: vi.fn(),
-      broadcastDisconnect: vi.fn(),
-      broadcastDisconnectForNamespaces: vi.fn(),
-    });
-    createProviderEventsListenerMock.mockReturnValue({
+    createProviderPortServerMock.mockReturnValue({
       destroy: vi.fn(),
       start: vi.fn(),
+      handleConnect: vi.fn(),
     });
     createApprovalUiListenerMock.mockReturnValue({
       destroy: vi.fn(),
@@ -139,7 +122,7 @@ describe("backgroundRoot", () => {
         events.push("boot");
         return Promise.resolve();
       }),
-      getOrInitProviderAccess: vi.fn(),
+      getOrInitProvider: vi.fn(),
       getOrInitApprovalPopupAccess: vi.fn(),
       getOrInitUiAccess: vi.fn(async () => {
         events.push("uiAccess");
@@ -163,7 +146,7 @@ describe("backgroundRoot", () => {
     expect(runtimeHost.initializeRuntime).toHaveBeenCalledTimes(1);
     expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(1);
     expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
-    expect(createProviderEventsListenerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
+    expect(createProviderPortServerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(createApprovalUiListenerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(events.indexOf("onConnect")).toBeLessThan(events.indexOf("boot"));
     expect(events.indexOf("onInstalled")).toBeLessThan(events.indexOf("boot"));
@@ -173,7 +156,7 @@ describe("backgroundRoot", () => {
     const runtimeHost = {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
-      getOrInitProviderAccess: vi.fn(),
+      getOrInitProvider: vi.fn(),
       getOrInitApprovalPopupAccess: vi.fn(),
       getOrInitUiAccess: vi
         .fn()
@@ -195,8 +178,7 @@ describe("backgroundRoot", () => {
     await root.initialize();
 
     expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
-    expect(createPortRouterMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createProviderEventsListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(createApprovalUiListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(onConnectRemoveListenerMock).toHaveBeenCalledTimes(1);
     expect(onInstalledRemoveListenerMock).toHaveBeenCalledTimes(1);
@@ -216,7 +198,7 @@ describe("backgroundRoot", () => {
     const runtimeHost = {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn(() => runtimeBoot.promise),
-      getOrInitProviderAccess: vi.fn(),
+      getOrInitProvider: vi.fn(),
       getOrInitApprovalPopupAccess: vi.fn(),
       getOrInitUiAccess: vi.fn(() => uiAccessBoot.promise),
       shutdown: vi.fn(async () => {
@@ -235,8 +217,7 @@ describe("backgroundRoot", () => {
     await expect(initializePromise).rejects.toThrow("Background root is shut down");
     await expect(root.initialize()).rejects.toThrow("Background root is shut down");
     expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
-    expect(createPortRouterMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createProviderEventsListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(createApprovalUiListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
   });
 });

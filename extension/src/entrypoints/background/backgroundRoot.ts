@@ -4,10 +4,9 @@ import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
 import { createApprovalUiListener } from "./listeners/approvalUiListener";
-import { createProviderEventsListener } from "./listeners/providerEventsListener";
 import { getExtensionOrigin } from "./origin";
 import { createUiPlatform } from "./platform/uiPlatform";
-import { createPortRouter } from "./portRouter";
+import { createProviderPortServer } from "./providerPortServer";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
 import { createUiBridge } from "./uiBridge";
 
@@ -22,11 +21,10 @@ export const createBackgroundRoot = (): BackgroundRoot => {
   const surfaceOrigin = new URL(browser.runtime.getURL("")).origin;
   const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
   const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
-  const portRouter = createPortRouter({
+  const providerPortServer = createProviderPortServer({
     extensionOrigin,
-    getOrInitProviderAccess: runtimeHost.getOrInitProviderAccess,
+    getOrInitProvider: runtimeHost.getOrInitProvider,
   });
-  const providerEvents = createProviderEventsListener({ runtimeHost, portRouter });
   const approvalUi = createApprovalUiListener({ runtimeHost, platform: uiPlatform });
 
   let initialized = false;
@@ -127,15 +125,14 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       return;
     }
 
-    portRouter.handleConnect(port);
+    providerPortServer.handleConnect(port);
   };
 
   const cleanupOwnedComponents = async () => {
     lifecycleGeneration += 1;
     detachBrowserListeners();
-    providerEvents.destroy();
     approvalUi.destroy();
-    portRouter.destroy();
+    providerPortServer.destroy();
 
     const activeUiBridge = uiBridge;
     const pendingUiBridgePromise = uiBridgePromise;
@@ -172,7 +169,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       attachBrowserListeners();
 
       const runtimeBootPromise = runtimeHost.initializeRuntime();
-      providerEvents.start();
+      providerPortServer.start();
       approvalUi.start();
       const uiBridgeWarmupPromise = getOrInitUiBridge();
 

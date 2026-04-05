@@ -69,25 +69,36 @@ const makeRuntime = () => {
       supportedChains: ["eip155:1"],
     },
   };
-  const providerAccess = {
+  const provider = {
     buildSnapshot: vi.fn(() => providerSnapshot),
-    buildConnectionState: vi.fn(async () => ({
+    buildConnectionProjection: vi.fn(async () => ({
       snapshot: providerSnapshot,
       accounts: [],
+      connected: false,
     })),
-    getActiveChainByNamespace: vi.fn(() => ({ eip155: "eip155:1" })),
     subscribeSessionUnlocked: onUnlocked,
     subscribeSessionLocked: onLocked,
     subscribeNetworkStateChanged: onNetworkStateChanged,
     subscribeNetworkPreferencesChanged: subscribeNetworkPreferencesChanged,
     subscribeAccountsStateChanged: onAccountsStateChanged,
     subscribePermissionsStateChanged: onPermissionsStateChanged,
+    connect: vi.fn(() => ({
+      snapshot: providerSnapshot,
+      accounts: [],
+      connected: false,
+    })),
+    disconnect: vi.fn(() => ({
+      snapshot: providerSnapshot,
+      accounts: [],
+      connected: false,
+    })),
+    disconnectOrigin: vi.fn(() => 0),
     executeRpcRequest: vi.fn(),
     encodeRpcError: vi.fn(),
-    listPermittedAccounts: vi.fn(),
     cancelSessionApprovals: vi.fn(async () => 0),
   };
   const createUiAccess = vi.fn();
+  const createProvider = vi.fn(() => provider);
 
   const runtime = {
     bus: { subscribe },
@@ -161,14 +172,17 @@ const makeRuntime = () => {
       encodeSurfaceError: vi.fn(),
       executeWithEncoding: vi.fn(),
     },
-    providerAccess,
+    wallet: {
+      createProvider,
+    },
     createUiAccess,
     shutdown,
   };
 
   return {
     runtime,
-    providerAccess,
+    provider,
+    createProvider,
     createUiAccess,
     providerSnapshot,
     shutdown,
@@ -224,7 +238,7 @@ describe("runtimeHost", () => {
     };
 
     await runtimeHost.initializeRuntime();
-    const providerAccess = await runtimeHost.getOrInitProviderAccess();
+    const provider = await runtimeHost.getOrInitProvider();
     const firstUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
       surfaceOrigin: "chrome-extension://test",
@@ -246,12 +260,12 @@ describe("runtimeHost", () => {
       platform: uiPlatform,
       surfaceOrigin: "chrome-extension://test",
     });
-    expect(providerAccess).toBe(runtimeHarness.providerAccess);
+    expect(runtimeHarness.createProvider).toHaveBeenCalledTimes(1);
+    expect(provider).toBe(runtimeHarness.provider);
     expect(firstUiAccess).toBe(uiAccess);
     expect(secondUiAccess).toBe(uiAccess);
-    expect(providerAccess.getActiveChainByNamespace()).toEqual({ eip155: "eip155:1" });
-    expect(providerAccess.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
-    expect(runtimeHarness.providerAccess.buildSnapshot).toHaveBeenCalledWith("eip155");
+    expect(provider.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
+    expect(runtimeHarness.provider.buildSnapshot).toHaveBeenCalledWith("eip155");
     expect(approvalPopupAccess.hasInitializedVault()).toBe(true);
 
     const unlockListener = vi.fn();

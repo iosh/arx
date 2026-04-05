@@ -1,22 +1,24 @@
+import type { WalletProvider } from "@arx/core/engine";
 import { ArxReasons, arxError } from "@arx/core/errors";
 import type { JsonRpcError } from "@arx/core/rpc";
-import type { ProviderRuntimeAccess } from "@arx/core/runtime";
 import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
 import { buildRpcContext, deriveRpcContextNamespace } from "../rpc";
 import type { PortContext } from "../types";
+import type { ProviderBinding } from "./bindingRegistry";
 import type { PendingEntry } from "./types";
 
 type ProviderDisconnectFinalizerDeps = {
   extensionOrigin: string;
-  getProviderAccess: () => ProviderRuntimeAccess | null;
+  getProvider: () => WalletProvider | null;
   getSessionIdForPort: (port: Runtime.Port) => string | null;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry> | undefined;
   clearPendingForPort: (port: Runtime.Port) => void;
   detachPortListeners: (port: Runtime.Port) => void;
   postEnvelope: (port: Runtime.Port, envelope: Envelope) => boolean;
+  releaseBinding: (port: Runtime.Port) => { binding: ProviderBinding; bindingBecameInactive: boolean } | null;
   removePortState: (port: Runtime.Port) => void;
   cancelApprovalsForSession: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
   portLog: (message: string, details?: Record<string, unknown>) => void;
@@ -25,13 +27,14 @@ type ProviderDisconnectFinalizerDeps = {
 export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinalizerDeps) => {
   const {
     extensionOrigin,
-    getProviderAccess,
+    getProvider,
     getSessionIdForPort,
     getPortContext,
     getPendingRequestMap,
     clearPendingForPort,
     detachPortListeners,
     postEnvelope,
+    releaseBinding,
     removePortState,
     cancelApprovalsForSession,
     portLog,
@@ -45,14 +48,14 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     const portContext = getPortContext(port);
     const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const providerAccess = getProviderAccess();
+    const provider = getProvider();
     const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
 
-    if (!providerAccess) {
+    if (!provider) {
       return { code: 4900, message: "Disconnected" } as const;
     }
 
-    return providerAccess.encodeRpcError(disconnectError, {
+    return provider.encodeRpcError(disconnectError, {
       origin,
       method: PROVIDER_EVENTS.disconnect,
       rpcContext,
@@ -104,6 +107,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   };
 
   const cleanupPortState = (port: Runtime.Port) => {
+    releaseBinding(port);
     removePortState(port);
     detachPortListeners(port);
   };

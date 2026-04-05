@@ -1,7 +1,7 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
-import { createArxWalletRuntime } from "@arx/core/engine";
+import { createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
-import type { ProviderRuntimeAccess, UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
+import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
 import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
@@ -14,7 +14,7 @@ type BackgroundRuntimeCache = {
 
 export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
-  getOrInitProviderAccess: () => Promise<ProviderRuntimeAccess>;
+  getOrInitProvider: () => Promise<WalletProvider>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
   getOrInitApprovalPopupAccess: () => Promise<BackgroundApprovalPopupAccess>;
   shutdown: () => Promise<void>;
@@ -58,6 +58,7 @@ const isUnlockAttentionRequest = (payload: AttentionRequest): payload is Backgro
 export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): BackgroundRuntimeHost => {
   let runtimeCache: BackgroundRuntimeCache | null = null;
   let runtimeCachePromise: Promise<BackgroundRuntimeCache> | null = null;
+  let provider: WalletProvider | null = null;
   let uiAccess: UiRuntimeAccess | null = null;
   let uiAccessPromise: Promise<UiRuntimeAccess> | null = null;
   let uiAccessParams: BackgroundUiAccessParams | null = null;
@@ -170,9 +171,19 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     }
   };
 
-  const getOrInitProviderAccess = async (): Promise<ProviderRuntimeAccess> => {
+  const getOrInitProvider = async (): Promise<WalletProvider> => {
+    if (provider) {
+      return provider;
+    }
+
+    const providerGeneration = runtimeGeneration;
     const active = await getOrInitRuntimeCache();
-    return active.runtime.providerAccess;
+    if (providerGeneration !== runtimeGeneration) {
+      throw new Error("Background runtime host was reset during provider bootstrap");
+    }
+
+    provider = active.runtime.wallet.createProvider();
+    return provider;
   };
 
   const getOrInitApprovalPopupAccess = async (): Promise<BackgroundApprovalPopupAccess> => {
@@ -203,6 +214,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const shutdown = async () => {
     runtimeGeneration += 1;
+    provider = null;
     uiAccess = null;
     uiAccessParams = null;
     const activeRuntime = runtimeCache?.runtime ?? null;
@@ -230,7 +242,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   return {
     initializeRuntime,
-    getOrInitProviderAccess,
+    getOrInitProvider,
     getOrInitUiAccess,
     getOrInitApprovalPopupAccess,
     shutdown,

@@ -161,9 +161,9 @@ const buildHarness = (
 
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
-    getOrInitProviderAccess: vi.fn(async () => {
+    getOrInitProvider: vi.fn(async () => {
       throw new Error("Provider bridge access should not be requested in approvalUiListener tests");
-    }) as unknown as BackgroundRuntimeHost["getOrInitProviderAccess"],
+    }) as unknown as BackgroundRuntimeHost["getOrInitProvider"],
     getOrInitUiAccess: vi.fn(async () => {
       throw new Error("UI bridge access should not be requested in approvalUiListener tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],

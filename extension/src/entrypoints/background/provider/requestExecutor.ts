@@ -1,6 +1,6 @@
+import type { WalletProvider } from "@arx/core/engine";
 import type { JsonRpcParams } from "@arx/core/rpc";
 import type {
-  ProviderRuntimeAccess,
   ProviderRuntimeRequestContext,
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
@@ -15,7 +15,7 @@ import type { PendingEntry } from "./types";
 
 type ProviderRequestExecutorDeps = {
   extensionOrigin: string;
-  getProviderAccess: () => Promise<ProviderRuntimeAccess>;
+  getProvider: () => Promise<WalletProvider>;
   getPortContext: (port: Runtime.Port) => PortContext | undefined;
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
@@ -26,7 +26,7 @@ type ProviderRequestExecutorDeps = {
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
   const {
     extensionOrigin,
-    getProviderAccess,
+    getProvider,
     getPortContext,
     getOrCreatePortId,
     getPendingRequestMap,
@@ -68,16 +68,16 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       ...(context ? { context } : {}),
     };
 
-    let providerAccess: ProviderRuntimeAccess | null = null;
+    let provider: WalletProvider | null = null;
 
     try {
-      providerAccess = await getProviderAccess();
-      const response = await providerAccess.executeRpcRequest(request);
+      provider = await getProvider();
+      const response = await provider.executeRpcRequest(request);
 
       sendReply(port, envelope.sessionId, envelope.id, response as TransportResponse);
     } catch (error) {
-      const rpcError = providerAccess
-        ? providerAccess.encodeRpcError(error, {
+      const rpcError = provider
+        ? provider.encodeRpcError(error, {
             origin,
             method,
             rpcContext: context,

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { Eip155Provider } from "../../provider/index.js";
-import type { TransportState } from "../../types/transport.js";
 import { buildMeta, StubTransport } from "./eip155.test.helpers.js";
+import { Eip155Provider } from "./provider.js";
+import type { ProviderSnapshot } from "./state.js";
 
-const INITIAL_STATE: TransportState = {
+const INITIAL_STATE: ProviderSnapshot = {
   connected: true,
   chainId: "0x1",
   chainRef: "eip155:1",
@@ -12,7 +12,7 @@ const INITIAL_STATE: TransportState = {
   meta: buildMeta(),
 };
 
-const createProvider = (initialState: TransportState = INITIAL_STATE) => {
+const createProvider = (initialState: ProviderSnapshot = INITIAL_STATE) => {
   const transport = new StubTransport(initialState);
   const provider = new Eip155Provider({ transport });
   return { transport, provider };
@@ -22,6 +22,7 @@ type LegacyEip155Provider = Eip155Provider & {
   send: (...args: unknown[]) => unknown;
   sendAsync: (payload: unknown, callback: (...args: unknown[]) => void) => void;
 };
+
 const asLegacyProvider = (provider: Eip155Provider): LegacyEip155Provider =>
   provider as unknown as LegacyEip155Provider;
 
@@ -78,11 +79,13 @@ describe("Eip155Provider legacy API compatibility", () => {
     expect(responses[1]).toMatchObject({ id: "b", jsonrpc: "2.0", error: { code: -32603 } });
   });
 
-  it("send(payload) supports a minimal sync subset (eth_accounts/eth_coinbase/net_version)", () => {
+  it("send(payload) supports a minimal sync subset (eth_accounts/eth_coinbase/net_version)", async () => {
     const { provider } = createProvider({
       ...INITIAL_STATE,
       accounts: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
     });
+
+    await provider.request({ method: "eth_chainId" });
 
     expect(asLegacyProvider(provider).send({ id: 1, jsonrpc: "2.0", method: "eth_accounts" })).toEqual({
       id: 1,

@@ -10,19 +10,14 @@ describe("background rpc helpers", () => {
     expect(deriveRpcContextNamespace({ chainRef: "solana", providerNamespace: "eip155" })).toBe("eip155");
   });
 
-  it("builds rpc context from port context and explicit chainRef override", () => {
-    const rpcContext = buildRpcContext(
-      {
-        origin: "https://example.app",
-        providerNamespace: "eip155",
-        chainRef: "eip155:1",
-      },
-      "eip155:10",
-    );
+  it("builds rpc context from provider binding only", () => {
+    const rpcContext = buildRpcContext({
+      origin: "https://example.app",
+      providerNamespace: "eip155",
+    });
 
     expect(rpcContext).toMatchObject({
       providerNamespace: "eip155",
-      chainRef: "eip155:10",
     });
   });
 });

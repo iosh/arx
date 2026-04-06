@@ -1,5 +1,6 @@
-import type { ProviderEntry, ProviderModule, ProviderRegistry } from "../registry/index.js";
-import type { EIP1193Provider, Transport } from "../types/index.js";
+import type { ProviderModule, ProviderModuleInstance } from "../modules.js";
+import type { Transport } from "../types/index.js";
+import { createEip6963Bridge, type Eip6963Bridge } from "./eip6963Bridge.js";
 
 type ProviderHostLogger = Readonly<{
   debug?: (message: string, meta?: unknown) => void;
@@ -15,18 +16,81 @@ export type ProviderHostWindow = Window & {
 export type ProviderHostOptions = {
   targetWindow: ProviderHostWindow;
   createTransportForNamespace: (namespace: string) => Transport;
-  registry: ProviderRegistry;
+  modules: readonly ProviderModule[];
   logger?: ProviderHostLogger;
 };
 
 type ProviderCacheEntry = Readonly<{
   module: ProviderModule;
-  entry: ProviderEntry;
+  entry: ProviderModuleInstance;
 }>;
 
+const indexProviderModules = (modules: readonly ProviderModule[]) => {
+  const byNamespace = new Map<string, ProviderModule>();
+
+  for (const module of modules) {
+    if (byNamespace.has(module.namespace)) {
+      throw new Error(`Duplicate provider module namespace "${module.namespace}"`);
+    }
+
+    byNamespace.set(module.namespace, module);
+  }
+
+  return byNamespace;
+};
+
+const assertUniqueModuleInjectionBindings = (modules: readonly ProviderModule[]) => {
+  const windowKeyOwners = new Map<string, string>();
+  const initializedEventOwners = new Map<string, string>();
+
+  for (const module of modules) {
+    const injection = module.injection;
+    if (!injection) continue;
+
+    const windowKey = injection.windowKey.trim();
+    if (windowKey.length > 0) {
+      const existingNamespace = windowKeyOwners.get(windowKey);
+      if (existingNamespace) {
+        throw new Error(
+          `Provider modules expose duplicate injection windowKey "${windowKey}" for namespaces "${existingNamespace}" and "${module.namespace}"`,
+        );
+      }
+
+      windowKeyOwners.set(windowKey, module.namespace);
+    }
+
+    const initializedEvent = injection.initializedEvent?.trim();
+    if (!initializedEvent) continue;
+
+    const existingNamespace = initializedEventOwners.get(initializedEvent);
+    if (existingNamespace) {
+      throw new Error(
+        `Provider modules expose duplicate injection initializedEvent "${initializedEvent}" for namespaces "${existingNamespace}" and "${module.namespace}"`,
+      );
+    }
+
+    initializedEventOwners.set(initializedEvent, module.namespace);
+  }
+};
+
+const shouldCreateProviderOnInitialize = (module: ProviderModule) => {
+  return !!module.injection || !!module.discovery?.eip6963;
+};
+
+const hasEip6963Discovery = (module: ProviderModule) => {
+  return !!module.discovery?.eip6963;
+};
+
+/**
+ * Composes page-side providers from installed modules and exposes them to the page.
+ */
 export class ProviderHost {
   #targetWindow: ProviderHostWindow;
-  #registry: ProviderRegistry;
+  #modules: readonly ProviderModule[];
+  #modulesByNamespace: ReadonlyMap<string, ProviderModule>;
+  #modulesToInitialize: readonly ProviderModule[];
+  #eip6963Modules: readonly ProviderModule[];
+  #eip6963Bridge: Eip6963Bridge | null;
   #logger: ProviderHostLogger;
   #createTransportForNamespace: (namespace: string) => Transport;
 
@@ -35,98 +99,109 @@ export class ProviderHost {
   #transports = new Map<string, Transport>();
 
   // windowKey -> injected provider
-  #injectedByWindowKey = new Map<string, EIP1193Provider>();
+  #injectedByWindowKey = new Map<string, object>();
   #initializedEventsDispatched = new Set<string>();
-
-  #eip6963Registered = false;
-
   #initialized = false;
   #destroyed = false;
 
-  constructor({ targetWindow, createTransportForNamespace, registry, logger }: ProviderHostOptions) {
+  constructor({ targetWindow, createTransportForNamespace, modules, logger }: ProviderHostOptions) {
     this.#targetWindow = targetWindow;
-    this.#registry = registry;
+    this.#modules = modules;
+    this.#modulesByNamespace = indexProviderModules(modules);
+    assertUniqueModuleInjectionBindings(modules);
+    this.#modulesToInitialize = modules.filter(shouldCreateProviderOnInitialize);
+    this.#eip6963Modules = modules.filter(hasEip6963Discovery);
+    this.#eip6963Bridge =
+      this.#eip6963Modules.length > 0
+        ? createEip6963Bridge({
+            targetWindow,
+            getProviders: () => this.#getEip6963Providers(),
+          })
+        : null;
     this.#logger = logger ?? {};
     this.#createTransportForNamespace = createTransportForNamespace;
   }
 
+  /**
+   * Creates the configured page-side providers and exposes their page bindings once.
+   */
   initialize() {
-    if (this.#initialized || this.#destroyed) return;
+    this.#assertUsable("initialize");
+    if (this.#initialized) return;
     this.#initialized = true;
 
-    // Eagerly create providers that are meant to be injected and/or discovered.
-    for (const module of this.#registry.modules) {
-      if (module.injection || module.discovery?.eip6963) {
-        this.#getOrCreateProvider(module.namespace);
-      }
+    this.#eip6963Bridge?.initialize();
+
+    for (const module of this.#modulesToInitialize) {
+      this.#getOrCreateProvider(module.namespace);
     }
 
-    if (this.#hasAnyEip6963Provider()) {
-      this.#registerEip6963Listener();
-    }
-
-    // Dispatch initialized events only when injection succeeds.
     this.#dispatchInitializedEvents();
+  }
 
-    if (this.#hasAnyEip6963Provider()) {
-      this.#announceProviders();
+  /**
+   * Starts bootstrap for one namespace without waiting for a dapp request.
+   */
+  async prewarm(namespace: string) {
+    this.#assertUsable("prewarm");
+    const provider = this.#getOrCreateProvider(namespace);
+    if (!provider) {
+      return;
     }
 
-    for (const namespace of this.#transports.keys()) {
-      void this.#connectTransport(namespace);
+    try {
+      await this.#getOrCreateTransport(namespace).bootstrap();
+    } catch (error) {
+      this.#logger.debug?.(`[provider-host] transport bootstrap failed for namespace "${namespace}"`, error);
     }
   }
 
+  /**
+   * Starts bootstrap for each namespace in parallel.
+   */
+  async prewarmNamespaces(namespaces: readonly string[]) {
+    this.#assertUsable("prewarmNamespaces");
+    await Promise.all(namespaces.map((namespace) => this.prewarm(namespace)));
+  }
+
+  /**
+   * Releases listeners and transports owned by this host.
+   *
+   * This does not remove providers that were already injected onto `window`.
+   */
   destroy() {
     if (this.#destroyed) return;
+
     this.#destroyed = true;
+    this.#initialized = false;
+    this.#eip6963Bridge?.destroy();
 
-    if (this.#eip6963Registered) {
-      this.#targetWindow.removeEventListener("eip6963:requestProvider", this.#handleProviderRequest);
-      this.#eip6963Registered = false;
-    }
-
-    for (const { entry } of this.#providers.values()) {
+    for (const [namespace, transport] of this.#transports) {
       try {
-        entry.destroy?.();
-      } catch {
-        // ignore teardown errors
+        if (transport.destroy) {
+          transport.destroy();
+          continue;
+        }
+
+        void transport.disconnect().catch((error) => {
+          this.#logger.debug?.(
+            `[provider-host] transport disconnect failed during destroy for namespace "${namespace}"`,
+            error,
+          );
+        });
+      } catch (error) {
+        this.#logger.debug?.(`[provider-host] transport cleanup failed for namespace "${namespace}"`, error);
       }
     }
 
     this.#providers.clear();
-
-    for (const transport of this.#transports.values()) {
-      void transport.disconnect().catch(() => {
-        // ignore disconnect failures during teardown
-      });
-      this.#destroyTransport(transport);
-    }
-
     this.#transports.clear();
     this.#injectedByWindowKey.clear();
     this.#initializedEventsDispatched.clear();
   }
 
-  async #connectTransport(namespace: string) {
-    if (this.#destroyed) return;
-    const transport = this.#transports.get(namespace);
-    if (!transport) return;
-
-    try {
-      await transport.connect();
-    } catch (error) {
-      // Best-effort: never block injection flow.
-      this.#logger.debug?.(`[provider-host] transport connect failed for namespace "${namespace}"`, error);
-    }
-  }
-
-  #hasAnyEip6963Provider() {
-    return this.#registry.modules.some((module) => !!module.discovery?.eip6963);
-  }
-
   #dispatchInitializedEvents() {
-    for (const module of this.#registry.modules) {
+    for (const module of this.#modules) {
       const injection = module.injection;
       if (!injection?.initializedEvent) continue;
 
@@ -141,11 +216,11 @@ export class ProviderHost {
     }
   }
 
-  #getOrCreateProvider(namespace: string): EIP1193Provider | null {
+  #getOrCreateProvider(namespace: string): object | null {
     const cached = this.#providers.get(namespace);
     if (cached) return cached.entry.injected;
 
-    const module = this.#registry.byNamespace.get(namespace);
+    const module = this.#modulesByNamespace.get(namespace);
     if (!module) return null;
 
     const entry = module.create({ transport: this.#getOrCreateTransport(namespace) });
@@ -177,7 +252,7 @@ export class ProviderHost {
     return transport;
   }
 
-  #maybeInjectProvider(windowKey: string, provider: EIP1193Provider, mode: "if_absent" | "never" | undefined) {
+  #maybeInjectProvider(windowKey: string, provider: object, mode: "if_absent" | "never" | undefined) {
     if (mode === "never") return;
 
     const hostWindow = this.#targetWindow as unknown as Window;
@@ -206,43 +281,35 @@ export class ProviderHost {
     }
   }
 
-  #destroyTransport(transport: Transport) {
-    const candidate = transport as Transport & { destroy?: () => void };
-    try {
-      candidate.destroy?.();
-    } catch {
-      // ignore teardown errors
-    }
-  }
+  #getEip6963Providers() {
+    const providers: Array<{
+      info: NonNullable<NonNullable<ProviderModule["discovery"]>["eip6963"]>["info"];
+      provider: object;
+    }> = [];
 
-  #registerEip6963Listener() {
-    if (this.#eip6963Registered) return;
-    this.#targetWindow.addEventListener("eip6963:requestProvider", this.#handleProviderRequest);
-    this.#eip6963Registered = true;
-  }
-
-  #handleProviderRequest = () => {
-    if (this.#destroyed) return;
-    this.#announceProviders();
-  };
-
-  #announceProviders() {
-    for (const { module, entry } of this.#providers.values()) {
+    for (const module of this.#eip6963Modules) {
       const info = module.discovery?.eip6963?.info;
       if (!info) continue;
 
-      const detail = Object.freeze({
-        info: Object.freeze({ ...info }),
-        provider: entry.injected,
-      });
+      const provider = this.#getOrCreateProvider(module.namespace);
+      if (!provider) continue;
 
-      this.#targetWindow.dispatchEvent(
-        new this.#targetWindow.CustomEvent("eip6963:announceProvider", {
-          detail,
-        }),
-      );
+      providers.push({ info, provider });
     }
+
+    return providers;
+  }
+
+  #assertUsable(action: "initialize" | "prewarm" | "prewarmNamespaces") {
+    if (!this.#destroyed) {
+      return;
+    }
+
+    throw new Error(`ProviderHost cannot ${action} after destroy()`);
   }
 }
 
+/**
+ * Creates a host for page-side provider injection and discovery.
+ */
 export const createProviderHost = (options: ProviderHostOptions) => new ProviderHost(options);

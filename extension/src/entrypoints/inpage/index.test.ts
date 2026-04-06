@@ -4,11 +4,7 @@ const { bootstrapInpageProviderMock } = vi.hoisted(() => ({
   bootstrapInpageProviderMock: vi.fn(),
 }));
 
-const registry = {
-  byNamespace: new Map(),
-  modules: [],
-} as const;
-const exposedNamespaces = ["eip155"] as const;
+const modules = [] as const;
 
 vi.mock("@arx/provider/inpage", () => ({
   bootstrapInpageProvider: bootstrapInpageProviderMock,
@@ -17,8 +13,7 @@ vi.mock("@arx/provider/inpage", () => ({
 vi.mock("@/platform/namespaces/installed", () => ({
   INSTALLED_NAMESPACES: {
     provider: {
-      exposedNamespaces,
-      registry,
+      modules,
     },
   },
 }));
@@ -34,8 +29,8 @@ describe("inpage entrypoint", () => {
     runEntrypoint();
 
     expect(bootstrapInpageProviderMock).toHaveBeenCalledWith({
-      exposedNamespaces,
-      registry,
+      modules,
+      prewarmNamespaces: [],
     });
   });
 });

@@ -125,11 +125,13 @@ export class MockContentBridge {
       payload: {
         protocolVersion: PROTOCOL_VERSION,
         handshakeId: this.#handshakeId,
-        chainId,
-        chainRef,
-        accounts,
-        isUnlocked: true,
-        meta: buildMeta(chainRef),
+        state: {
+          chainId,
+          chainRef,
+          accounts,
+          isUnlocked: true,
+          meta: buildMeta(chainRef),
+        },
       },
     });
   }
@@ -216,5 +218,16 @@ export class MockContentBridge {
       id,
       payload: { jsonrpc: "2.0", id, result: resultByMethod[method] },
     });
+
+    if (method === "eth_requestAccounts") {
+      const nextAccounts = [...this.#requestAccountsResult];
+      queueMicrotask(() => {
+        if (this.#sessionId !== sessionId) {
+          return;
+        }
+
+        this.emitAccountsChanged(nextAccounts);
+      });
+    }
   };
 }

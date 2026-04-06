@@ -52,7 +52,7 @@ const defaultMessageByCode = new Map<number, string>([
   [errorCodes.provider.disconnected, "The provider is disconnected from all chains."],
 ]);
 
-const makeError = (
+const createError = (
   code: number,
   payload?: { message?: string; data?: unknown },
 ): Error & { code: number; data?: unknown } => {
@@ -65,21 +65,21 @@ const makeError = (
   return error;
 };
 
-export const createEvmRpcErrors = (): RpcErrorFactory => ({
-  parse: (args) => makeError(errorCodes.rpc.parse, args),
-  invalidRequest: (args) => makeError(errorCodes.rpc.invalidRequest, args),
-  invalidParams: (args) => makeError(errorCodes.rpc.invalidParams, args),
-  methodNotFound: (args) => makeError(errorCodes.rpc.methodNotFound, args),
-  internal: (args) => makeError(errorCodes.rpc.internal, args),
+export const createRpcErrors = (): RpcErrorFactory => ({
+  parse: (args) => createError(errorCodes.rpc.parse, args),
+  invalidRequest: (args) => createError(errorCodes.rpc.invalidRequest, args),
+  invalidParams: (args) => createError(errorCodes.rpc.invalidParams, args),
+  methodNotFound: (args) => createError(errorCodes.rpc.methodNotFound, args),
+  internal: (args) => createError(errorCodes.rpc.internal, args),
 });
 
-export const createEvmProviderErrors = (): ProviderErrorFactory => ({
-  disconnected: (args) => makeError(errorCodes.provider.disconnected, args),
-  unauthorized: (args) => makeError(errorCodes.provider.unauthorized, args),
-  userRejectedRequest: (args) => makeError(errorCodes.provider.userRejectedRequest, args),
-  unsupportedMethod: (args) => makeError(errorCodes.provider.unsupportedMethod, args),
-  custom: (args) => makeError(args.code, args),
+export const createProviderErrors = (): ProviderErrorFactory => ({
+  disconnected: (args) => createError(errorCodes.provider.disconnected, args),
+  unauthorized: (args) => createError(errorCodes.provider.unauthorized, args),
+  userRejectedRequest: (args) => createError(errorCodes.provider.userRejectedRequest, args),
+  unsupportedMethod: (args) => createError(errorCodes.provider.unsupportedMethod, args),
+  custom: (args) => createError(args.code, args),
 });
 
-export const evmRpcErrors = createEvmRpcErrors();
-export const evmProviderErrors = createEvmProviderErrors();
+export const rpcErrors = createRpcErrors();
+export const providerErrors = createProviderErrors();

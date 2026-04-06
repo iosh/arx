@@ -23,17 +23,14 @@ const namespaceFromChainRefCandidate = (candidate: string | null | undefined): s
   }
 };
 
-export const buildRpcContext = (
-  portContext: PortContext | undefined,
-  chainRef: string | null,
-): ExtendedRpcContext | undefined => {
-  if (!portContext) return undefined;
-  const resolvedChainRef = chainRef ?? portContext.chainRef ?? null;
-  const baseContext: ProviderBridgeRpcContext = {
-    ...(portContext.providerNamespace ? { providerNamespace: portContext.providerNamespace } : {}),
-    ...(resolvedChainRef ? { chainRef: resolvedChainRef } : {}),
+export const buildRpcContext = (portContext: PortContext | undefined): ExtendedRpcContext | undefined => {
+  if (!portContext?.providerNamespace) {
+    return undefined;
+  }
+
+  return {
+    providerNamespace: portContext.providerNamespace,
   };
-  return baseContext;
 };
 
 export const deriveRpcContextNamespace = (

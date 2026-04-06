@@ -1,6 +1,7 @@
 import { EventEmitter } from "eventemitter3";
 import type { RequestArguments } from "../../types/eip1193.js";
-import type { Transport, TransportMeta, TransportState } from "../../types/transport.js";
+import type { Transport, TransportMeta } from "../../types/transport.js";
+import type { ProviderPatch, ProviderSnapshot } from "./state.js";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
@@ -13,32 +14,34 @@ const unimplemented: RequestHandler = async ({ method }) => {
   );
 };
 
-export class StubTransport extends EventEmitter implements Transport {
-  #state: TransportState;
+export class StubTransport extends EventEmitter implements Transport<ProviderSnapshot, ProviderPatch> {
+  #snapshot: ProviderSnapshot;
   #requestHandler: RequestHandler = unimplemented;
+  #bootstrapHandler: () => Promise<ProviderSnapshot>;
 
-  constructor(initial: TransportState) {
+  constructor(initial: ProviderSnapshot) {
     super();
-    this.#state = clone(initial);
+    this.#snapshot = clone(initial);
+    this.#bootstrapHandler = async () => clone(this.#snapshot);
   }
 
-  connect = async () => {};
+  bootstrap = async () => this.#bootstrapHandler();
   disconnect = async () => {};
 
   isConnected = () => {
-    return this.#state.connected;
+    return this.#snapshot.connected;
   };
-
-  getConnectionState(): TransportState {
-    return clone(this.#state);
-  }
 
   request = async (args: RequestArguments, _options?: { timeoutMs?: number }) => {
     return this.#requestHandler(args);
   };
 
-  updateState(state: Partial<TransportState>) {
-    this.#state = { ...this.#state, ...state };
+  setBootstrapHandler(handler: () => Promise<ProviderSnapshot>) {
+    this.#bootstrapHandler = handler;
+  }
+
+  updateSnapshot(snapshot: Partial<ProviderSnapshot>) {
+    this.#snapshot = { ...this.#snapshot, ...snapshot };
   }
 
   setRequestHandler(handler: RequestHandler) {

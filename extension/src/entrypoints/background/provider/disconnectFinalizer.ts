@@ -46,7 +46,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     }
 
     const portContext = getPortContext(port);
-    const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
+    const rpcContext = buildRpcContext(portContext);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
     const provider = getProvider();
     const disconnectError = arxError({ reason: ArxReasons.TransportDisconnected, message: "Disconnected" });
@@ -162,7 +162,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
 
       const error = encodeDisconnectError(port);
       const portContext = getPortContext(port);
-      const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
+      const rpcContext = buildRpcContext(portContext);
       const origin = getPortOrigin(port, extensionOrigin);
       const namespace = deriveRpcContextNamespace(rpcContext);
 

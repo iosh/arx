@@ -1,7 +1,7 @@
 import type { ProviderHostWindow } from "@arx/provider/host";
 import { createProviderHost } from "@arx/provider/host";
-import { createEip155Module } from "@arx/provider/namespaces";
-import { createProviderRegistryFromModules, type ProviderModule, type ProviderRegistry } from "@arx/provider/registry";
+import type { ProviderModule } from "@arx/provider/modules";
+import { createEip155Module, eip155TransportCodec } from "@arx/provider/namespaces";
 import { WindowPostMessageTransport } from "@arx/provider/transport";
 import type { EIP1193Provider, Transport } from "@arx/provider/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,23 +27,22 @@ type InjectedProvider = {
 };
 
 const createStubTransport = (): Transport => ({
-  connect: async () => {},
+  bootstrap: async () => ({
+    connected: true,
+    chainId: "0x1",
+    chainRef: "eip155:1",
+    accounts: [],
+    isUnlocked: true,
+    meta: { activeChainByNamespace: { eip155: "eip155:1" }, supportedChains: ["eip155:1"] },
+  }),
   disconnect: async () => {},
   isConnected: () => false,
-  getConnectionState: () => ({
-    connected: false,
-    chainId: null,
-    chainRef: null,
-    accounts: [],
-    isUnlocked: null,
-    meta: null,
-  }),
   request: async () => null,
   on: () => {},
   removeListener: () => {},
 });
 
-const createMultiNamespaceRegistry = (): ProviderRegistry => {
+const createMultiNamespaceModules = (): readonly ProviderModule[] => {
   const createModule = (namespace: string): ProviderModule => {
     const provider = {
       request: vi.fn(async () => null),
@@ -64,21 +63,17 @@ const createMultiNamespaceRegistry = (): ProviderRegistry => {
           },
         },
       },
-      create: (_ctx) => ({
-        raw: provider,
+      create: () => ({
+        core: provider,
         injected: provider,
       }),
     };
   };
 
-  const modules: ProviderModule[] = [createModule("eip155"), createModule("conflux")];
-  return {
-    modules,
-    byNamespace: new Map(modules.map((module) => [module.namespace, module])),
-  };
+  return [createModule("eip155"), createModule("conflux")];
 };
 
-const createInjectedMultiNamespaceRegistry = (): ProviderRegistry => {
+const createInjectedMultiNamespaceModules = (): readonly ProviderModule[] => {
   const createModule = (namespace: string, windowKey: string): ProviderModule => {
     const provider = {
       request: vi.fn(async () => null),
@@ -95,23 +90,62 @@ const createInjectedMultiNamespaceRegistry = (): ProviderRegistry => {
         initializedEvent: `${windowKey}#initialized`,
       },
       create: () => ({
-        raw: provider,
+        core: provider,
         injected: provider,
       }),
     };
   };
 
-  const modules: ProviderModule[] = [createModule("eip155", "ethereum"), createModule("conflux", "conflux")];
-  return {
-    modules,
-    byNamespace: new Map(modules.map((module) => [module.namespace, module])),
-  };
+  return [createModule("eip155", "ethereum"), createModule("conflux", "conflux")];
 };
 
-const createEmptyRegistry = (): ProviderRegistry => ({
-  modules: [],
-  byNamespace: new Map(),
-});
+const createDuplicateWindowKeyModules = (): readonly ProviderModule[] => {
+  const createModule = (namespace: string): ProviderModule => {
+    const provider = {
+      request: vi.fn(async () => null),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      isConnected: vi.fn(() => false),
+    } as unknown as EIP1193Provider;
+
+    return {
+      namespace,
+      injection: {
+        windowKey: "ethereum",
+        mode: "if_absent",
+      },
+      create: () => ({
+        core: provider,
+        injected: provider,
+      }),
+    };
+  };
+
+  return [createModule("eip155"), createModule("conflux")];
+};
+
+const createEmptyModules = (): readonly ProviderModule[] => [];
+
+const createDuplicateNamespaceModules = (): readonly ProviderModule[] => {
+  const createModule = (): ProviderModule => {
+    const provider = {
+      request: vi.fn(async () => null),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+      isConnected: vi.fn(() => false),
+    } as unknown as EIP1193Provider;
+
+    return {
+      namespace: "eip155",
+      create: () => ({
+        core: provider,
+        injected: provider,
+      }),
+    };
+  };
+
+  return [createModule(), createModule()];
+};
 
 describe("ProviderHost (inpage injection + EIP-6963)", () => {
   let ctx: TestDomContext;
@@ -134,40 +168,25 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     return listener;
   };
 
-  const createHarness = (options?: { registry?: ProviderRegistry }) => {
-    const transport = new WindowPostMessageTransport({ namespace: "eip155" });
-    cleanups.push(() => transport.destroy());
+  const createHarness = (options?: { modules?: readonly ProviderModule[] }) => {
+    const transport = new WindowPostMessageTransport({ namespace: "eip155", codec: eip155TransportCodec });
 
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
-      registry: options?.registry ?? INSTALLED_NAMESPACES.provider.registry,
+      modules: options?.modules ?? INSTALLED_NAMESPACES.provider.modules,
       createTransportForNamespace: () => transport,
     });
+    cleanups.push(() => host.destroy());
 
     return { transport, host };
   };
 
-  const waitForTransportConnect = async (transport: WindowPostMessageTransport, timeoutMs = 2000) => {
-    if (transport.isConnected()) return;
-    await new Promise<void>((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        reject(new Error("Timed out waiting for transport connect"));
-      }, timeoutMs);
-
-      transport.once("connect", () => {
-        window.clearTimeout(timeoutId);
-        resolve();
-      });
-    });
-  };
-
-  it("injects window.ethereum idempotently and dispatches ethereum#initialized once", async () => {
+  it("injects window.ethereum idempotently and dispatches ethereum#initialized once", () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
-
+    const { host } = createHarness();
     const initialized = onWindowEvent("ethereum#initialized");
 
     host.initialize();
@@ -179,11 +198,9 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
     const descriptor = Object.getOwnPropertyDescriptor(window, "ethereum");
     expect(descriptor).toMatchObject({ configurable: true, enumerable: false, writable: false });
-
-    await waitForTransportConnect(transport);
   });
 
-  it("does not override an existing window.ethereum (no throw, no ethereum#initialized)", async () => {
+  it("does not override an existing window.ethereum (no throw, no ethereum#initialized)", () => {
     const existing = { name: "Other Wallet" };
     (window as WindowWithBuiltinProviders).ethereum = existing;
 
@@ -191,7 +208,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
+    const { host } = createHarness();
 
     const initialized = onWindowEvent("ethereum#initialized");
     const announced = onWindowEvent("eip6963:announceProvider");
@@ -208,16 +225,14 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const detail = announced.mock.calls[0]?.[0]?.detail;
     expect(detail?.provider).toBeDefined();
     expect(detail?.provider).not.toBe(existing);
-
-    await waitForTransportConnect(transport);
   });
 
-  it("announces on init, re-announces on eip6963:requestProvider, and freezes announce detail", async () => {
+  it("announces on init, re-announces on eip6963:requestProvider, and freezes announce detail", () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
+    const { host } = createHarness();
     const announced = onWindowEvent("eip6963:announceProvider");
 
     host.initialize();
@@ -234,16 +249,14 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     expect(detail?.info?.name).toBe("ARX Wallet");
     expect(detail?.info?.rdns).toBe("com.arx.wallet");
     expect(isEip6963Info(detail?.info)).toBe(true);
-
-    await waitForTransportConnect(transport);
   });
 
-  it("supports requestProvider before host init and announces on init before re-announcing on request", async () => {
+  it("supports requestProvider before host init and announces on init before re-announcing on request", () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
+    const { host } = createHarness();
     const announced = onWindowEvent("eip6963:announceProvider");
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
@@ -254,17 +267,32 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
 
     window.dispatchEvent(new Event("eip6963:requestProvider"));
     expect(announced).toHaveBeenCalledTimes(2);
-
-    await waitForTransportConnect(transport);
   });
 
-  it("fails closed when the provider registry exposes no provider modules", () => {
+  it("cleans up host-owned listeners and transports on destroy", () => {
+    const { host, transport } = createHarness();
+    const transportDestroy = vi.spyOn(transport, "destroy");
+    const announced = onWindowEvent("eip6963:announceProvider");
+
+    host.initialize();
+    expect(announced).toHaveBeenCalledTimes(1);
+
+    host.destroy();
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+    expect(transportDestroy).toHaveBeenCalledTimes(1);
+    expect(announced).toHaveBeenCalledTimes(1);
+
+    host.destroy();
+    expect(transportDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when the provider modules list is empty", () => {
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
-      registry: createEmptyRegistry(),
+      modules: createEmptyModules(),
       createTransportForNamespace: () => createStubTransport(),
     });
-    cleanups.push(() => host.destroy());
 
     const initialized = onWindowEvent("ethereum#initialized");
     const announced = onWindowEvent("eip6963:announceProvider");
@@ -277,13 +305,12 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     expect(announced).toHaveBeenCalledTimes(0);
   });
 
-  it("injects multiple provider window keys when the registry includes another namespace", () => {
+  it("injects multiple provider window keys when the modules include another namespace", () => {
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
-      registry: createInjectedMultiNamespaceRegistry(),
+      modules: createInjectedMultiNamespaceModules(),
       createTransportForNamespace: () => createStubTransport(),
     });
-    cleanups.push(() => host.destroy());
 
     const ethereumInitialized = onWindowEvent("ethereum#initialized");
     const confluxInitialized = onWindowEvent("conflux#initialized");
@@ -302,7 +329,7 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const sharedTransport = createStubTransport();
     const host = createProviderHost({
       targetWindow: window as unknown as ProviderHostWindow,
-      registry: createMultiNamespaceRegistry(),
+      modules: createMultiNamespaceModules(),
       createTransportForNamespace: () => sharedTransport,
     });
 
@@ -311,28 +338,98 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     );
   });
 
+  it("rejects duplicate provider module namespaces", () => {
+    expect(() =>
+      createProviderHost({
+        targetWindow: window as unknown as ProviderHostWindow,
+        modules: createDuplicateNamespaceModules(),
+        createTransportForNamespace: () => createStubTransport(),
+      }),
+    ).toThrow(/Duplicate provider module namespace "eip155"/);
+  });
+
+  it("rejects duplicate injected window keys across namespaces", () => {
+    expect(() =>
+      createProviderHost({
+        targetWindow: window as unknown as ProviderHostWindow,
+        modules: createDuplicateWindowKeyModules(),
+        createTransportForNamespace: () => createStubTransport(),
+      }),
+    ).toThrow(/duplicate injection windowKey "ethereum"/i);
+  });
+
+  it("rejects duplicate initialized events across namespaces", () => {
+    const createModule = (namespace: string): ProviderModule => {
+      const provider = {
+        request: vi.fn(async () => null),
+        on: vi.fn(),
+        removeListener: vi.fn(),
+        isConnected: vi.fn(() => false),
+      } as unknown as EIP1193Provider;
+
+      return {
+        namespace,
+        injection: {
+          windowKey: namespace === "eip155" ? "ethereum" : "conflux",
+          mode: "if_absent",
+          initializedEvent: "wallet#initialized",
+        },
+        create: () => ({
+          core: provider,
+          injected: provider,
+        }),
+      };
+    };
+
+    expect(() =>
+      createProviderHost({
+        targetWindow: window as unknown as ProviderHostWindow,
+        modules: [createModule("eip155"), createModule("conflux")],
+        createTransportForNamespace: () => createStubTransport(),
+      }),
+    ).toThrow(/duplicate injection initializedEvent "wallet#initialized"/i);
+  });
+
+  it("keeps transport bootstrap lazy until the injected provider is used", async () => {
+    const bridge = new MockContentBridge(ctx.dom, { autoHandshake: false });
+    bridge.attach();
+    cleanups.push(() => bridge.detach());
+
+    const { host } = createHarness();
+    host.initialize();
+
+    await Promise.resolve();
+    expect(bridge.getRequestCount("eth_chainId")).toBe(0);
+
+    const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
+    const pending = provider.request({ method: "eth_chainId" });
+
+    await bridge.waitForHandshake();
+    bridge.ackHandshake();
+
+    await expect(pending).resolves.toBe("0x1");
+  });
+
   it("does not throw for eth_accounts before ready, then returns accounts after handshake", async () => {
-    const registry = createProviderRegistryFromModules([
+    const modules = [
       createEip155Module({
         timeouts: { ethAccountsWaitMs: 0, readyTimeoutMs: 2000 },
       }),
-    ]);
+    ] satisfies readonly ProviderModule[];
 
     const bridge = new MockContentBridge(ctx.dom, { autoHandshake: false });
     bridge.setAccounts(["0xabc"]);
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness({ registry });
+    const { host } = createHarness({ modules });
     host.initialize();
 
     const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([]);
 
     await bridge.waitForHandshake();
-    const connected = new Promise<void>((resolve) => transport.once("connect", () => resolve()));
     bridge.ackHandshake({ accounts: ["0xabc"] });
-    await connected;
 
     await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual(["0xabc"]);
   });
@@ -343,13 +440,11 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
-
-    const connected = new Promise<void>((resolve) => transport.once("connect", () => resolve()));
+    const { host } = createHarness();
     host.initialize();
-    await connected;
 
     const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x1");
 
     const chainChanged = new Promise<string>((resolve) =>
       provider.once("chainChanged", (...args: unknown[]) => resolve(args[0] as string)),
@@ -373,12 +468,11 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
-    const { host, transport } = createHarness();
-    const connected = new Promise<void>((resolve) => transport.once("connect", () => resolve()));
+    const { host } = createHarness();
     host.initialize();
-    await connected;
 
     const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
+    await provider.request({ method: "eth_chainId" });
 
     const onAccountsChanged = vi.fn();
     provider.on("accountsChanged", onAccountsChanged);
@@ -387,29 +481,29 @@ describe("ProviderHost (inpage injection + EIP-6963)", () => {
     const p2 = provider.request({ method: "eth_requestAccounts" });
     await expect(Promise.all([p1, p2])).resolves.toEqual([["0xabc"], ["0xabc"]]);
 
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
     expect(bridge.getRequestCount("eth_requestAccounts")).toBe(2);
     expect(onAccountsChanged).toHaveBeenCalledTimes(1);
     expect(onAccountsChanged).toHaveBeenCalledWith(["0xabc"]);
   });
 
-  it("keeps window.ethereum reference stable across disconnect/reconnect", async () => {
+  it("keeps window.ethereum reference stable across disconnect/rebootstrap", async () => {
     const bridge = new MockContentBridge(ctx.dom);
     bridge.setAccounts(["0xabc"]);
     bridge.attach();
     cleanups.push(() => bridge.detach());
 
     const { host, transport } = createHarness();
-    const firstConnect = new Promise<void>((resolve) => transport.once("connect", () => resolve()));
     host.initialize();
-    await firstConnect;
 
     const provider = (window as WindowWithBuiltinProviders).ethereum as unknown as InjectedProvider;
+    await provider.request({ method: "eth_chainId" });
 
-    const onDisconnect = new Promise<void>((resolve) => transport.once("disconnect", () => resolve()));
     bridge.emitDisconnect();
-    await onDisconnect;
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
 
-    await transport.connect();
+    await transport.bootstrap();
     expect((window as WindowWithBuiltinProviders).ethereum).toBe(provider);
   });
 });

@@ -1,4 +1,4 @@
-import type { ProviderModule } from "../registry/types.js";
+import type { ProviderModule } from "../modules.js";
 import { createEip155Module } from "./eip155/module.js";
 
 type BuiltinProviderModuleFactory<TNamespace extends string = string, TOptions = never> = Readonly<{

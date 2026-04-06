@@ -1,7 +1,6 @@
 import type { WalletProvider } from "@arx/core/engine";
 import { createLogger, extendLogger } from "@arx/core/logger";
-import { CHANNEL, type Envelope, PROVIDER_EVENTS } from "@arx/provider/protocol";
-import type { TransportResponse } from "@arx/provider/types";
+import { CHANNEL, type Envelope, PROVIDER_EVENTS, type ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "./origin";
 import { syncAllPortContexts, syncPortContext } from "./portContext";
@@ -267,7 +266,7 @@ export const createProviderPortServer = ({
     },
   });
 
-  const sendReply = (port: Runtime.Port, sessionId: string, id: string, payload: TransportResponse) => {
+  const sendReply = (port: Runtime.Port, sessionId: string, id: string, payload: ProviderRpcResponse) => {
     const activeSessionId = sessionRegistry.readSessionId(port);
     if (!activeSessionId || activeSessionId !== sessionId) {
       return;
@@ -438,7 +437,6 @@ export const createProviderPortServer = ({
             void enqueueProjection("session_locked", async () => {
               eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionLocked, [payload]);
               await publishAccountsState();
-              disconnectFinalizer.broadcastDisconnectForPorts(sessionRegistry.listConnectedPorts());
             });
           }),
         );
@@ -495,7 +493,6 @@ export const createProviderPortServer = ({
     sessionRegistry.registerConnectedPort(port, {
       origin,
       providerNamespace: null,
-      chainRef: null,
     });
     portLog("connect", { origin, portName: port.name, total: sessionRegistry.countConnectedPorts() });
 

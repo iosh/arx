@@ -325,12 +325,14 @@ describe("providerPortServer", () => {
         sessionId: "session-1",
         type: "handshake_ack",
         payload: expect.objectContaining({
-          accounts: [],
-          chainId: "0x1",
-          chainRef: "eip155:1",
           handshakeId: "h-session-1",
-          isUnlocked: false,
-          meta: lockedSnapshot.meta,
+          state: {
+            accounts: [],
+            chainId: "0x1",
+            chainRef: "eip155:1",
+            isUnlocked: false,
+            meta: lockedSnapshot.meta,
+          },
         }),
       }),
     );
@@ -459,20 +461,19 @@ describe("providerPortServer", () => {
     const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as {
       context?: {
         providerNamespace?: string;
-        chainRef?: string;
         requestContext?: { transport?: string; sessionId?: string; requestId?: string };
       };
     };
 
     expect(request.context).toMatchObject({
       providerNamespace: "eip155",
-      chainRef: "eip155:1",
       requestContext: {
         transport: "provider",
         requestId: "rpc-1",
         sessionId: "session-1",
       },
     });
+    expect(request.context).not.toHaveProperty("chainRef");
   });
 
   it("finalizes disconnect state and cancels provider-scoped approvals when a port disconnects", async () => {
@@ -625,7 +626,7 @@ describe("providerPortServer", () => {
     expect(evmPort.postMessage).not.toHaveBeenCalled();
   });
 
-  it("serializes sessionLocked projection before disconnect finality", async () => {
+  it("keeps the provider session alive while projecting lock state", async () => {
     const harness = createServerHarness({
       snapshots: {
         eip155: makeSnapshot("eip155", true),
@@ -644,7 +645,7 @@ describe("providerPortServer", () => {
     harness.setSnapshot("eip155", makeSnapshot("eip155", false));
     harness.emitSessionLocked({ reason: "manual" });
 
-    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
     expect(port.postMessage).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -659,19 +660,70 @@ describe("providerPortServer", () => {
         payload: { event: "accountsChanged", params: [[]] },
       }),
     );
-    expect(port.postMessage).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        type: "event",
-        payload: {
-          event: "disconnect",
-          params: [{ code: 4900, message: "Disconnected" }],
+    expect(harness.mocks.disconnect).not.toHaveBeenCalled();
+    expect(port.disconnect).not.toHaveBeenCalled();
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "session-1",
+      type: "request",
+      id: "transport-after-lock",
+      payload: {
+        id: "rpc-after-lock",
+        jsonrpc: "2.0",
+        method: "eth_chainId",
+      },
+    });
+
+    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not forward a stale chainRef after the active chain changes", async () => {
+    const harness = createServerHarness({
+      snapshots: {
+        eip155: makeSnapshot("eip155", true),
+      },
+    });
+    const port = new FakePort();
+
+    harness.server.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    harness.setSnapshot(
+      "eip155",
+      makeSnapshot("eip155", true, {
+        chain: { chainId: "0xa", chainRef: "eip155:10" },
+        meta: {
+          activeChainByNamespace: { eip155: "eip155:10" },
+          supportedChains: ["eip155:1", "eip155:10"],
         },
       }),
     );
-    expect(harness.mocks.disconnect).toHaveBeenCalledWith({
-      origin: "https://example.com",
-      namespace: "eip155",
+
+    port.triggerMessage({
+      channel: CHANNEL,
+      sessionId: "session-1",
+      type: "request",
+      id: "transport-1",
+      payload: {
+        id: "rpc-1",
+        jsonrpc: "2.0",
+        method: "wallet_requestPermissions",
+      },
     });
+
+    await vi.waitFor(() => expect(harness.mocks.executeRpcRequest).toHaveBeenCalledTimes(1));
+    const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as {
+      context?: {
+        providerNamespace?: string;
+        chainRef?: string;
+      };
+    };
+
+    expect(request.context).toMatchObject({
+      providerNamespace: "eip155",
+    });
+    expect(request.context).not.toHaveProperty("chainRef");
   });
 });

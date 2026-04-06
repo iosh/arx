@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createProviderRegistry } from "../registry/index.js";
 import {
   BUILTIN_PROVIDER_MODULE_FACTORIES,
   BUILTIN_PROVIDER_MODULES,
@@ -17,15 +16,33 @@ describe("builtin provider modules", () => {
       mode: "if_absent",
       initializedEvent: "ethereum#initialized",
     });
-    expect(module?.discovery?.eip6963?.info?.name).toBe("ARX Wallet");
+    expect(module?.discovery).toBeUndefined();
   });
 
-  it("builds registries from the builtin provider module list", () => {
+  it("builds the builtin provider module list", () => {
     const modules = createBuiltinProviderModules();
-    const registry = createProviderRegistry();
+    expect(modules.map((module) => module.namespace)).toEqual(["eip155"]);
+  });
 
-    expect(registry.modules.map((module) => module.namespace)).toEqual(modules.map((module) => module.namespace));
-    expect([...registry.byNamespace.keys()]).toEqual(["eip155"]);
-    expect(registry.byNamespace.get("eip155")).toEqual(registry.modules[0]);
+  it("lets callers opt into discovery metadata during assembly", () => {
+    const [module] = createBuiltinProviderModules({
+      eip155: {
+        discovery: {
+          eip6963: {
+            info: {
+              uuid: "90ef60ca-8ea5-4638-b577-6990dc93ef2f",
+              name: "ARX Wallet",
+              icon: "data:image/svg+xml;base64,PHN2Zy8+",
+              rdns: "com.arx.wallet",
+            },
+          },
+        },
+      },
+    });
+
+    expect(module?.discovery?.eip6963?.info).toMatchObject({
+      name: "ARX Wallet",
+      rdns: "com.arx.wallet",
+    });
   });
 });

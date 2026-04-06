@@ -1,5 +1,5 @@
 import { createEip155WalletNamespaceModule, type WalletNamespaceModule } from "@arx/core/engine";
-import type { ProviderModule } from "@arx/provider/registry";
+import type { ProviderModule } from "@arx/provider/modules";
 import { describe, expect, it } from "vitest";
 import { createInstalledNamespacesComposition, defineInstalledNamespaceSpecs, INSTALLED_NAMESPACES } from "./installed";
 
@@ -69,16 +69,15 @@ describe("installed namespaces composition root", () => {
     expect(installedNamespaces).toEqual(["eip155"]);
     expect(INSTALLED_NAMESPACES.engine.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(installedNamespaces);
-    expect(INSTALLED_NAMESPACES.provider.exposedNamespaces).toEqual(installedNamespaces);
     expect(INSTALLED_NAMESPACES.provider.modules.map((module) => module.namespace)).toEqual(installedNamespaces);
   });
 
-  it("builds provider registries from the provider stage output", () => {
-    const registry = INSTALLED_NAMESPACES.provider.registry;
-
-    expect(registry.modules).toBe(INSTALLED_NAMESPACES.provider.modules);
-    expect(registry.modules.map((module) => module.namespace)).toEqual(["eip155"]);
-    expect([...registry.byNamespace.keys()]).toEqual(["eip155"]);
+  it("keeps exposed provider modules stable in the provider stage output", () => {
+    expect(INSTALLED_NAMESPACES.provider.modules.map((module) => module.namespace)).toEqual(["eip155"]);
+    expect(INSTALLED_NAMESPACES.provider.modules[0]?.discovery?.eip6963?.info).toMatchObject({
+      name: "ARX Wallet",
+      rdns: "com.arx.wallet",
+    });
   });
 
   it("supports installed namespaces that are not exposed to dapps", () => {
@@ -96,10 +95,7 @@ describe("installed namespaces composition root", () => {
 
     expect(hiddenNamespace.engine.modules.map((module) => module.namespace)).toEqual(["eip155"]);
     expect(hiddenNamespace.runtime.manifests.map((manifest) => manifest.namespace)).toEqual(["eip155"]);
-    expect(hiddenNamespace.provider.exposedNamespaces).toEqual([]);
     expect(hiddenNamespace.provider.modules).toEqual([]);
-    expect(hiddenNamespace.provider.registry.modules).toEqual([]);
-    expect([...hiddenNamespace.provider.registry.byNamespace.keys()]).toEqual([]);
   });
 
   it("rejects invalid installed namespace specs", () => {

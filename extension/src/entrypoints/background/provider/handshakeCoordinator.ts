@@ -61,11 +61,13 @@ export const createProviderHandshakeCoordinator = ({
           payload: {
             protocolVersion: PROTOCOL_VERSION,
             handshakeId: envelope.payload.handshakeId,
-            chainId: snapshot.chain.chainId,
-            chainRef: snapshot.chain.chainRef,
-            accounts,
-            isUnlocked: snapshot.isUnlocked,
-            meta: snapshot.meta,
+            state: {
+              chainId: snapshot.chain.chainId,
+              chainRef: snapshot.chain.chainRef,
+              accounts,
+              isUnlocked: snapshot.isUnlocked,
+              meta: snapshot.meta,
+            },
           },
         },
         "send_handshake_failed",

@@ -7,7 +7,6 @@ import type {
 export type PortContext = {
   origin: string;
   providerNamespace: string | null;
-  chainRef: string | null;
 };
 
 export type ProviderBridgeSnapshot = ProviderRuntimeSnapshot;

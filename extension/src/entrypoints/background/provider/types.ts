@@ -1,6 +1,7 @@
-import type { JsonRpcId, JsonRpcVersion2 } from "@arx/provider/types";
+import type { JsonRpcVersion2 } from "@arx/core";
+import type { ProviderRpcId } from "@arx/provider/protocol";
 
 export type PendingEntry = {
-  rpcId: JsonRpcId;
+  rpcId: ProviderRpcId;
   jsonrpc: JsonRpcVersion2;
 };

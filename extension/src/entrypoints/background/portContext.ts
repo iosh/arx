@@ -20,7 +20,6 @@ export const syncPortContext = (
   portContextStore.writePortContext(port, {
     origin,
     providerNamespace: snapshot.namespace,
-    chainRef: snapshot.chain.chainRef,
   });
 };
 

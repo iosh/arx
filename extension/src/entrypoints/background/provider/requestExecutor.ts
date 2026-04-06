@@ -5,8 +5,7 @@ import type {
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
 } from "@arx/core/runtime";
-import type { Envelope } from "@arx/provider/protocol";
-import type { TransportResponse } from "@arx/provider/types";
+import type { Envelope, ProviderRpcResponse } from "@arx/provider/protocol";
 import type { Runtime } from "webextension-polyfill";
 import { getPortOrigin } from "../origin";
 import { buildRpcContext } from "../rpc";
@@ -20,7 +19,7 @@ type ProviderRequestExecutorDeps = {
   getOrCreatePortId: (port: Runtime.Port) => string;
   getPendingRequestMap: (port: Runtime.Port) => Map<string, PendingEntry>;
   clearPendingForPort: (port: Runtime.Port) => void;
-  sendReply: (port: Runtime.Port, sessionId: string, id: string, payload: TransportResponse) => void;
+  sendReply: (port: Runtime.Port, sessionId: string, id: string, payload: ProviderRpcResponse) => void;
 };
 
 export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps) => {
@@ -41,7 +40,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
 
     const portContext = getPortContext(port);
     const origin = portContext?.origin ?? getPortOrigin(port, extensionOrigin);
-    const rpcContext = buildRpcContext(portContext, portContext?.chainRef ?? null);
+    const rpcContext = buildRpcContext(portContext);
     const portId = getOrCreatePortId(port);
 
     const requestContext: ProviderRuntimeRequestContext = {
@@ -53,7 +52,6 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     };
     const context: ProviderRuntimeRpcContext | undefined = rpcContext
       ? {
-          ...(rpcContext.chainRef !== undefined ? { chainRef: rpcContext.chainRef } : {}),
           ...(rpcContext.providerNamespace !== undefined ? { providerNamespace: rpcContext.providerNamespace } : {}),
           requestContext,
         }
@@ -74,7 +72,7 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
       provider = await getProvider();
       const response = await provider.executeRpcRequest(request);
 
-      sendReply(port, envelope.sessionId, envelope.id, response as TransportResponse);
+      sendReply(port, envelope.sessionId, envelope.id, response as ProviderRpcResponse);
     } catch (error) {
       const rpcError = provider
         ? provider.encodeRpcError(error, {

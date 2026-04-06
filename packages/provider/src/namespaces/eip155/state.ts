@@ -1,7 +1,7 @@
 import { parseChainRef } from "@arx/core";
+import { cloneTransportMeta } from "../../transport/transportMeta.js";
 import type { TransportMeta } from "../../types/transport.js";
-import { cloneTransportMeta } from "../../utils/transportMeta.js";
-import { DEFAULT_NAMESPACE } from "./constants.js";
+import { EIP155_NAMESPACE } from "./constants.js";
 
 export type ProviderStateSnapshot = {
   accounts: string[];
@@ -25,13 +25,85 @@ export type ProviderPatch =
   | { type: "unlock"; isUnlocked: boolean }
   | { type: "meta"; meta: TransportMeta | null };
 
+export const cloneProviderSnapshot = (snapshot: ProviderSnapshot): ProviderSnapshot => ({
+  connected: snapshot.connected,
+  chainId: snapshot.chainId,
+  chainRef: snapshot.chainRef,
+  accounts: [...snapshot.accounts],
+  isUnlocked: snapshot.isUnlocked,
+  meta: snapshot.meta ? cloneTransportMeta(snapshot.meta) : null,
+});
+
+export const cloneProviderPatch = (patch: ProviderPatch): ProviderPatch => {
+  switch (patch.type) {
+    case "accounts":
+      return { type: "accounts", accounts: [...patch.accounts] };
+
+    case "chain":
+      return {
+        type: "chain",
+        chainId: patch.chainId,
+        ...(patch.chainRef === undefined ? {} : { chainRef: patch.chainRef }),
+        ...(patch.isUnlocked === undefined ? {} : { isUnlocked: patch.isUnlocked }),
+        ...(patch.meta === undefined ? {} : { meta: patch.meta ? cloneTransportMeta(patch.meta) : null }),
+      };
+
+    case "unlock":
+      return { type: "unlock", isUnlocked: patch.isUnlocked };
+
+    case "meta":
+      return { type: "meta", meta: patch.meta ? cloneTransportMeta(patch.meta) : null };
+
+    default: {
+      const exhaustive: never = patch;
+      return exhaustive;
+    }
+  }
+};
+
+export const applyProviderPatch = (snapshot: ProviderSnapshot, patch: ProviderPatch): ProviderSnapshot => {
+  const nextSnapshot = cloneProviderSnapshot(snapshot);
+
+  switch (patch.type) {
+    case "accounts":
+      nextSnapshot.accounts = [...patch.accounts];
+      return nextSnapshot;
+
+    case "unlock":
+      nextSnapshot.isUnlocked = patch.isUnlocked;
+      return nextSnapshot;
+
+    case "meta":
+      nextSnapshot.meta = patch.meta ? cloneTransportMeta(patch.meta) : null;
+      return nextSnapshot;
+
+    case "chain":
+      nextSnapshot.chainId = patch.chainId;
+      if (patch.chainRef !== undefined) {
+        nextSnapshot.chainRef = patch.chainRef;
+      }
+      if (patch.isUnlocked !== undefined) {
+        nextSnapshot.isUnlocked = patch.isUnlocked;
+      }
+      if (patch.meta !== undefined) {
+        nextSnapshot.meta = patch.meta ? cloneTransportMeta(patch.meta) : null;
+      }
+      return nextSnapshot;
+
+    default: {
+      const exhaustive: never = patch;
+      return exhaustive;
+    }
+  }
+};
+
 const didAccountsChange = (prev: string[], next: string[]) => {
   if (prev.length !== next.length) return true;
   return prev.some((value, index) => value !== next[index]);
 };
 
 export class Eip155ProviderState {
-  #namespace: string = DEFAULT_NAMESPACE;
+  #namespace: string = EIP155_NAMESPACE;
   #chainId: string | null = null;
   #chainRef: string | null = null;
   #accounts: string[] = [];
@@ -58,6 +130,10 @@ export class Eip155ProviderState {
     return this.#accounts[0] ?? null;
   }
 
+  get networkVersion() {
+    return this.#deriveNetworkVersion();
+  }
+
   get accounts() {
     return [...this.#accounts];
   }
@@ -66,7 +142,7 @@ export class Eip155ProviderState {
     return {
       accounts: [...this.#accounts],
       chainId: this.#chainId,
-      networkVersion: this.#deriveNetworkVersion(),
+      networkVersion: this.networkVersion,
       isUnlocked: this.#isUnlocked ?? false,
     };
   }
@@ -142,7 +218,7 @@ export class Eip155ProviderState {
   }
 
   reset() {
-    this.#namespace = DEFAULT_NAMESPACE;
+    this.#namespace = EIP155_NAMESPACE;
     this.#chainId = null;
     this.#chainRef = null;
     this.#accounts = [];
@@ -158,13 +234,13 @@ export class Eip155ProviderState {
       try {
         this.#namespace = parseChainRef(chainRef as never).namespace;
       } catch {
-        this.#namespace = DEFAULT_NAMESPACE;
+        this.#namespace = EIP155_NAMESPACE;
       }
       return;
     }
 
     this.#chainRef = null;
-    this.#namespace = DEFAULT_NAMESPACE;
+    this.#namespace = EIP155_NAMESPACE;
   }
 
   #updateMeta(meta: TransportMeta | null | undefined) {
@@ -176,7 +252,7 @@ export class Eip155ProviderState {
     if (typeof candidate === "string" && candidate.length > 0) {
       return candidate;
     }
-    return this.#meta?.activeChainByNamespace[DEFAULT_NAMESPACE] ?? null;
+    return this.#meta?.activeChainByNamespace[EIP155_NAMESPACE] ?? null;
   }
 
   #parseNumericReference(candidate: string | null | undefined) {
@@ -200,7 +276,7 @@ export class Eip155ProviderState {
     }
     return (
       this.#parseNumericReference(this.#chainRef) ??
-      this.#parseNumericReference(this.#meta?.activeChainByNamespace[DEFAULT_NAMESPACE])
+      this.#parseNumericReference(this.#meta?.activeChainByNamespace[EIP155_NAMESPACE])
     );
   }
 }

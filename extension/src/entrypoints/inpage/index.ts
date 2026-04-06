@@ -4,7 +4,9 @@ import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 
 export default defineUnlistedScript(() => {
   bootstrapInpageProvider({
-    exposedNamespaces: INSTALLED_NAMESPACES.provider.exposedNamespaces,
-    registry: INSTALLED_NAMESPACES.provider.registry,
+    modules: INSTALLED_NAMESPACES.provider.modules,
+    prewarmNamespaces: INSTALLED_NAMESPACES.provider.modules.some((module) => module.namespace === "eip155")
+      ? ["eip155"]
+      : [],
   });
 });

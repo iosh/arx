@@ -12,8 +12,10 @@ export interface EIP1193Provider extends EIP1193Events {
   isConnected(): boolean;
 }
 
-export interface EIP1193ProviderRpcError {
+export interface ProviderRpcError {
   code: number;
   message: string;
   data?: unknown;
 }
+
+export type EIP1193ProviderRpcError = ProviderRpcError;

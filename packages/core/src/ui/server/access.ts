@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import type { WalletUi, WalletUiDispatchInput } from "../../engine/types.js";
 import { createLogger, extendLogger } from "../../utils/logger.js";
 import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
@@ -6,7 +7,7 @@ import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
 import { createUiDispatcher } from "./dispatcher.js";
 import { getUiRequestBroadcastPolicy } from "./requestMetadata.js";
 import { createUiServerRuntime } from "./runtime.js";
-import type { UiRuntimeAccess, UiRuntimeDeps, UiSurfaceIdentity } from "./types.js";
+import type { UiHandlerFn, UiRuntimeAccess, UiRuntimeDeps, UiSurfaceIdentity } from "./types.js";
 
 type CreateUiRuntimeAccessOptions = UiRuntimeDeps;
 
@@ -14,10 +15,25 @@ const uiLog = createLogger("ui:runtime");
 const accessLog = extendLogger(uiLog, "access");
 const UI_SURFACE_PORT_ID = "ui";
 
-const createUiSurfaceIdentity = (surfaceOrigin: string): UiSurfaceIdentity => ({
+const requireUiHandler = <M extends UiMethodName>(
+  handlers: ReturnType<typeof createUiServerRuntime>["handlers"],
+  method: M,
+): UiHandlerFn<M> => {
+  const handler = handlers[method];
+  if (!handler) {
+    throw arxError({
+      reason: ArxReasons.RpcUnsupportedMethod,
+      message: `Unsupported UI method: ${method}`,
+    });
+  }
+
+  return handler as UiHandlerFn<M>;
+};
+
+const createUiSurfaceIdentity = (uiOrigin: string): UiSurfaceIdentity => ({
   transport: "ui" as const,
   portId: UI_SURFACE_PORT_ID,
-  origin: surfaceOrigin,
+  origin: uiOrigin,
   surfaceId: crypto.randomUUID(),
 });
 
@@ -50,17 +66,19 @@ const createUiStateChangedSubscription = ({
 };
 
 const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
-  const surface = createUiSurfaceIdentity(server.surfaceOrigin);
+  const surface = createUiSurfaceIdentity(server.uiOrigin);
   const uiRuntime = createUiServerRuntime({
     access: server.access,
     platform: server.platform,
     surface,
+    ...(server.extensions ? { extensions: server.extensions } : {}),
   });
   const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {
+    const handler = requireUiHandler(uiRuntime.handlers, input.method);
     const params = parseUiMethodParams(input.method, input.params);
-    const result = await (uiRuntime.handlers[input.method] as (params: unknown) => unknown)(params);
+    const result = await handler(params);
     return parseUiMethodResult(input.method, result);
   }) satisfies WalletUi["dispatch"];
 

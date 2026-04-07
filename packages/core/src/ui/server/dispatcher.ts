@@ -1,18 +1,30 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { UiError, UiPortEnvelope } from "../protocol/envelopes.js";
-import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
+import { parseUiMethodParams, parseUiMethodResult, type UiMethodName } from "../protocol/index.js";
 import {
   EMPTY_UI_REQUEST_EXECUTION_PLAN,
   parseUiRequestMetadata,
   type UiRequestExecutionPlan,
 } from "./requestMetadata.js";
-import type { UiRuntimeBridgeAccess, UiServerRuntime } from "./types.js";
+import type { UiHandlerFn, UiRuntimeBridgeAccess, UiServerRuntime } from "./types.js";
 
 export type UiDispatchOutput = {
   reply: UiPortEnvelope;
   plan: UiRequestExecutionPlan;
 };
 type UiDispatcherDeps = Pick<UiRuntimeBridgeAccess, "encodeError"> & Pick<UiServerRuntime, "getUiContext" | "handlers">;
+
+const requireUiHandler = <M extends UiMethodName>(handlers: UiServerRuntime["handlers"], method: M): UiHandlerFn<M> => {
+  const handler = handlers[method];
+  if (!handler) {
+    throw arxError({
+      reason: ArxReasons.RpcUnsupportedMethod,
+      message: `Unsupported UI method: ${method}`,
+    });
+  }
+
+  return handler as UiHandlerFn<M>;
+};
 
 export const createUiDispatcher = (deps: UiDispatcherDeps) => {
   const { handlers, getUiContext, encodeError } = deps;
@@ -36,9 +48,9 @@ export const createUiDispatcher = (deps: UiDispatcherDeps) => {
     }
 
     try {
+      const handler = requireUiHandler(handlers, method);
       const params = parseUiMethodParams(method, request.params);
-
-      const result = await (handlers[method] as (params: unknown) => unknown)(params);
+      const result = await handler(params);
       const parsed = parseUiMethodResult(method, result);
       return {
         reply: { type: "ui:response", id: request.id, result: parsed, context: ctx },

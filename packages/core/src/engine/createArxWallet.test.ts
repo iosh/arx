@@ -720,7 +720,7 @@ describe("createArxWallet", () => {
       const provider = wallet.createProvider();
       const ui = wallet.createUi({
         platform: createUiPlatform(),
-        surfaceOrigin: "chrome-extension://arx/popup.html",
+        uiOrigin: "chrome-extension://arx/popup.html",
       });
       const stateChanged = vi.fn();
       const unsubscribe = ui.subscribeStateChanged(stateChanged);
@@ -774,6 +774,29 @@ describe("createArxWallet", () => {
       });
 
       unsubscribe();
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("treats missing extension-owned UI methods as unsupported before validating params", async () => {
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      permissionsPort: createSeededPermissionsPort(),
+    });
+
+    try {
+      const ui = runtime.wallet.createUi({
+        platform: createUiPlatform(),
+        uiOrigin: "chrome-extension://arx/popup.html",
+      });
+
+      await expect(
+        ui.dispatch({
+          method: "ui.onboarding.openTab",
+          params: {} as never,
+        }),
+      ).rejects.toMatchObject({ reason: ArxReasons.RpcUnsupportedMethod });
     } finally {
       await runtime.shutdown();
     }

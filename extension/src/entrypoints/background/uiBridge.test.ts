@@ -34,6 +34,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
 import { createUiPlatform } from "./platform/uiPlatform";
 import type { UiPort } from "./ui/portHub";
+import { createUiActivationExtension } from "./ui/uiActivationExtension";
 import { createUiBridge } from "./uiBridge";
 
 const rpcRegistry = createRpcRegistry();
@@ -568,7 +569,7 @@ const createUiAccessForTest = (input: {
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
-  surfaceOrigin: string;
+  uiOrigin: string;
   networkPreferences: {
     subscribeChanged: (
       handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
@@ -592,6 +593,7 @@ const createUiAccessForTest = (input: {
     hasTransaction: (namespace: string) => boolean;
     hasTransactionReceiptTracking: (namespace: string) => boolean;
   };
+  installSurfaceActivationExtension?: boolean;
 }) => {
   const controllerViews = input.controllers as unknown as {
     chainViews: Record<string, unknown>;
@@ -675,7 +677,10 @@ const createUiAccessForTest = (input: {
         }) as never,
       },
       platform: input.platform,
-      surfaceOrigin: input.surfaceOrigin,
+      uiOrigin: input.uiOrigin,
+      ...(input.installSurfaceActivationExtension === false
+        ? {}
+        : { extensions: [createUiActivationExtension({ platform: input.platform })] }),
     },
     bridge: {
       encodeError: (error, context) =>
@@ -729,7 +734,11 @@ const makeBrowser = (): MockBrowserApi => {
   };
 };
 
-const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
+const buildBridge = (opts?: {
+  unlocked?: boolean;
+  hasEnvelope?: boolean;
+  installSurfaceActivationExtension?: boolean;
+}) => {
   const vault = new FakeVault(new Uint8Array(), opts?.unlocked ?? true);
   const unlock = new FakeUnlock(opts?.unlocked ?? true);
   const keyringMetas = createMemoryKeyringMetasStore();
@@ -815,7 +824,8 @@ const buildBridge = (opts?: { unlocked?: boolean; hasEnvelope?: boolean }) => {
     },
     keyring,
     platform,
-    surfaceOrigin: new URL(browserApi.runtime.getURL("")).origin,
+    uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
+    installSurfaceActivationExtension: opts?.installSurfaceActivationExtension,
     networkPreferences,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
@@ -1131,7 +1141,7 @@ describe("uiBridge", () => {
       } as unknown as BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> },
       keyring,
       platform,
-      surfaceOrigin: new URL(browserApi.runtime.getURL("")).origin,
+      uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
       networkPreferences: {
         subscribeChanged: (
           handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
@@ -1369,5 +1379,43 @@ describe("uiBridge", () => {
     expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();
 
     nowSpy.mockRestore();
+  });
+
+  it("returns unsupported when surface activation extension is not installed", async () => {
+    const ctx = buildBridge({ unlocked: true, installSurfaceActivationExtension: false });
+    const localPort = createPort();
+
+    ctx.bridge.attachPort(localPort as unknown as UiPort);
+    localPort.messages = [];
+
+    const id = crypto.randomUUID();
+    await localPort.triggerMessage({
+      type: "ui:request",
+      id,
+      method: "ui.onboarding.openTab",
+      params: { reason: "manual_open" },
+    });
+
+    const message = localPort.messages.find((entry) => isRecord(entry) && entry.id === id);
+    expectError(message, ArxReasons.RpcUnsupportedMethod);
+  });
+
+  it("returns unsupported before validating params when surface activation extension is not installed", async () => {
+    const ctx = buildBridge({ unlocked: true, installSurfaceActivationExtension: false });
+    const localPort = createPort();
+
+    ctx.bridge.attachPort(localPort as unknown as UiPort);
+    localPort.messages = [];
+
+    const id = crypto.randomUUID();
+    await localPort.triggerMessage({
+      type: "ui:request",
+      id,
+      method: "ui.onboarding.openTab",
+      params: {},
+    });
+
+    const message = localPort.messages.find((entry) => isRecord(entry) && entry.id === id);
+    expectError(message, ArxReasons.RpcUnsupportedMethod);
   });
 });

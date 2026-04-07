@@ -9,6 +9,7 @@ import type { TransactionRequest } from "../transactions/types.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
+import type { UiServerExtension } from "../ui/server/types.js";
 import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
@@ -65,7 +66,10 @@ const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgr
   await runtime.services.session.unlock.unlock({ password: "test" });
 };
 
-const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRuntime>) => {
+const createHandlersForRuntime = (
+  runtime: ReturnType<typeof createBackgroundRuntime>,
+  options?: { extensions?: readonly UiServerExtension[] },
+) => {
   const session = createUiSessionAccess({
     session: runtime.services.session,
     sessionStatus: runtime.services.sessionStatus,
@@ -126,6 +130,7 @@ const createHandlersForRuntime = (runtime: ReturnType<typeof createBackgroundRun
       origin: "chrome-extension://arx",
       surfaceId: "11111111-1111-4111-8111-111111111111",
     },
+    ...(options?.extensions ? { extensions: options.extensions } : {}),
   }).handlers;
 };
 
@@ -950,6 +955,93 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
+  it("rejects extension handlers that override common UI methods", () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    const overrideResolveExtension = {
+      id: "test.overrideResolve",
+      createHandlers: () => ({
+        "ui.approvals.resolve": (async () => ({
+          id: "approval-id",
+          status: "rejected" as const,
+          terminalReason: "user_reject" as const,
+        })) as never,
+      }),
+    } satisfies UiServerExtension;
+
+    expect(() => createHandlersForRuntime(runtime, { extensions: [overrideResolveExtension] })).toThrow(
+      'UI method "ui.approvals.resolve" is already registered by "core.uiCommon" and cannot be registered again by "test.overrideResolve"',
+    );
+  });
+
+  it("rejects conflicting UI methods across extensions", () => {
+    const runtime = createBackgroundRuntime({
+      chainDefinitions: {
+        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
+        seed: [MAINNET_CHAIN],
+      },
+      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+      rpcEngine: {
+        env: {
+          isInternalOrigin: () => false,
+          shouldRequestUnlockAttention: () => false,
+        },
+      },
+      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      store: {
+        ports: {
+          permissions: new MemoryPermissionsPort(),
+          transactions: new MemoryTransactionsPort(),
+          accounts: new MemoryAccountsPort(),
+          keyringMetas: new MemoryKeyringMetasPort(),
+        },
+      },
+      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    });
+
+    const firstActivationExtension = {
+      id: "test.activationOne",
+      createHandlers: () => ({
+        "ui.onboarding.openTab": (async () => ({ activationPath: "create" as const })) as never,
+      }),
+    } satisfies UiServerExtension;
+
+    const secondActivationExtension = {
+      id: "test.activationTwo",
+      createHandlers: () => ({
+        "ui.onboarding.openTab": (async () => ({ activationPath: "focus" as const })) as never,
+      }),
+    } satisfies UiServerExtension;
+
+    expect(() =>
+      createHandlersForRuntime(runtime, { extensions: [firstActivationExtension, secondActivationExtension] }),
+    ).toThrow(
+      'UI method "ui.onboarding.openTab" is already registered by "test.activationOne" and cannot be registered again by "test.activationTwo"',
+    );
+  });
+
   it("reuses one UI surface correlation token per UiRuntimeAccess instance", async () => {
     const createSendTransactionRequest = vi.fn(
       ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
@@ -1020,7 +1112,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const firstUiAccess = runtime.createUiAccess({
       platform,
-      surfaceOrigin: "chrome-extension://arx",
+      uiOrigin: "chrome-extension://arx",
     });
 
     await firstUiAccess.dispatchRequest({
@@ -1046,7 +1138,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const secondUiAccess = runtime.createUiAccess({
       platform,
-      surfaceOrigin: "chrome-extension://arx",
+      uiOrigin: "chrome-extension://arx",
     });
 
     await secondUiAccess.dispatchRequest({

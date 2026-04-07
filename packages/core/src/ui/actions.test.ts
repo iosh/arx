@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { uiActions } from "./actions.js";
+import { uiActions, uiCommonActions } from "./actions.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "./protocol/index.js";
 import { parseUiMethodParams } from "./protocol/index.js";
 import { uiMethods } from "./protocol/methods.js";
@@ -163,5 +163,16 @@ describe("ui actions", () => {
     expect(typeof actions.accounts.switchActive).toBe("function");
     expect(typeof actions.networks.switchActive).toBe("function");
     expect(typeof actions.approvals.resolve).toBe("function");
+  });
+
+  it("does not include activation helpers in uiCommonActions", () => {
+    const client = createTestClient(async <M extends UiMethodName>(_method: M, _params?: UiMethodParams<M>) => {
+      return null as unknown as UiMethodResult<M>;
+    });
+
+    const actions = uiCommonActions(client);
+
+    expect("openTab" in actions.onboarding).toBe(false);
+    expect("openPopup" in actions.approvals).toBe(false);
   });
 });

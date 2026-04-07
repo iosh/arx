@@ -18,7 +18,7 @@ export type BackgroundRoot = {
 export const createBackgroundRoot = (): BackgroundRoot => {
   const rootLog = createLogger("bg:root");
   const extensionOrigin = getExtensionOrigin();
-  const surfaceOrigin = new URL(browser.runtime.getURL("")).origin;
+  const uiOrigin = new URL(browser.runtime.getURL("")).origin;
   const runtimeHost = createBackgroundRuntimeHost({ extensionOrigin });
   const uiPlatform = createUiPlatform({ browser, entrypoints: ENTRYPOINTS });
   const providerPortServer = createProviderPortServer({
@@ -76,7 +76,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
-        surfaceOrigin,
+        uiOrigin,
       });
 
       if (closed || bridgeGeneration !== lifecycleGeneration || shutdownPromise) {

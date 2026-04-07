@@ -21,7 +21,7 @@ import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
-import type { UiPlatformAdapter, UiRuntimeAccess } from "../ui/server/types.js";
+import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
 import type { BackgroundRpcEnvHooks } from "./background/rpcEngineAssembly.js";
@@ -30,7 +30,7 @@ import type { BackgroundSessionServices, SessionOptions } from "./background/ses
 import type { KeyringService } from "./keyring/KeyringService.js";
 import type { ProviderRuntimeAccess } from "./provider/types.js";
 
-export type { UiPlatformAdapter, UiRuntimeAccess } from "../ui/server/types.js";
+export type { UiMethodHandlerMap, UiPlatformAdapter, UiRuntimeAccess, UiServerExtension } from "../ui/server/types.js";
 export type { BackgroundSessionServices } from "./background/session.js";
 
 export type BackgroundRuntimeUiAccessOptions = WalletCreateUiOptions;

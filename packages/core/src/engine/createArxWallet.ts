@@ -213,7 +213,8 @@ const createWalletUiDeps = (runtime: ArxWalletRuntimeCore, options: WalletCreate
         namespaceBindings: runtime.services.namespaceBindings,
       },
       platform: options.platform,
-      surfaceOrigin: options.surfaceOrigin,
+      uiOrigin: options.uiOrigin,
+      ...(options.extensions ? { extensions: options.extensions } : {}),
     },
     bridge: {
       encodeError: (error, context) =>

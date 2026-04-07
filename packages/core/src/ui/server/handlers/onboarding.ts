@@ -3,7 +3,6 @@ import type {
   UiAccountsAccess,
   UiChainsAccess,
   UiHandlers,
-  UiPlatformAdapter,
   UiWalletSetupAccess,
 } from "../types.js";
 import {
@@ -56,20 +55,14 @@ export const createOnboardingHandlers = (deps: {
   chains: UiChainsAccess;
   accountCodecs: UiAccountCodecsAccess;
   walletSetup: UiWalletSetupAccess;
-  platform: Pick<UiPlatformAdapter, "openOnboardingTab">;
 }): Pick<
   UiHandlers,
-  | "ui.onboarding.openTab"
   | "ui.onboarding.generateMnemonic"
   | "ui.onboarding.createWalletFromMnemonic"
   | "ui.onboarding.importWalletFromMnemonic"
   | "ui.onboarding.importWalletFromPrivateKey"
 > => {
   return {
-    "ui.onboarding.openTab": async ({ reason }) => {
-      return await deps.platform.openOnboardingTab(reason);
-    },
-
     "ui.onboarding.generateMnemonic": async (payload) => {
       const mnemonic = deps.walletSetup.generateMnemonic(payload?.wordCount ?? 12);
       return { words: mnemonic.split(" ") };

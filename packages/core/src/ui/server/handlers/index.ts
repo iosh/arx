@@ -1,4 +1,4 @@
-import type { UiHandlerDeps, UiHandlers } from "../types.js";
+import type { UiHandlerDeps, UiMethodHandlerMap } from "../types.js";
 import { createAccountsHandlers } from "./accounts.js";
 import { createApprovalsHandlers } from "./approvals.js";
 import { createBalancesHandlers } from "./balances.js";
@@ -9,8 +9,8 @@ import { createSessionHandlers } from "./session.js";
 import { createSnapshotHandlers } from "./snapshot.js";
 import { createTransactionsHandlers } from "./transactions.js";
 
-export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
-  const { access, platform, surface, buildSnapshot } = deps;
+export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap => {
+  const { access, surface, buildSnapshot } = deps;
 
   const toChainSnapshot = () => access.chains.getSelectedChainView();
 
@@ -27,11 +27,10 @@ export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
       chains: access.chains,
       accountCodecs: access.accountCodecs,
       walletSetup: access.walletSetup,
-      platform,
     }),
     ...createAccountsHandlers({ accounts: access.accounts }),
     ...createNetworksHandlers({ chains: access.chains }, toChainSnapshot),
-    ...createApprovalsHandlers({ approvals: access.approvals, platform }),
+    ...createApprovalsHandlers({ approvals: access.approvals }),
     ...createKeyringsHandlers({
       accounts: access.accounts,
       chains: access.chains,
@@ -46,5 +45,5 @@ export const createUiHandlers = (deps: UiHandlerDeps): UiHandlers => {
       namespaceBindings: access.namespaceBindings,
       surface,
     }),
-  } as const satisfies UiHandlers;
+  } as const satisfies UiMethodHandlerMap;
 };

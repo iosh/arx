@@ -44,6 +44,8 @@ export type UiHandlers = {
   [M in UiMethodName]: UiHandlerFn<M>;
 };
 
+export type UiMethodHandlerMap = Partial<UiHandlers>;
+
 export type UiSnapshotBuilder = () => UiSnapshot;
 
 export type UiResolvedContext = {
@@ -137,13 +139,15 @@ export type UiRuntimeBridgeAccess = {
 export type UiRuntimeServerDeps = {
   access: UiServerAccess;
   platform: UiPlatformAdapter;
-  surfaceOrigin: string;
+  uiOrigin: string;
+  extensions?: readonly UiServerExtension[];
 };
 
 export type UiServerRuntimeDeps = {
   access: UiServerAccess;
   platform: UiPlatformAdapter;
   surface: UiSurfaceIdentity;
+  extensions?: readonly UiServerExtension[];
 };
 
 export type UiRuntimeDeps = {
@@ -158,10 +162,15 @@ export type UiHandlerDeps = {
   buildSnapshot: UiSnapshotBuilder;
 };
 
+export type UiServerExtension = {
+  id: string;
+  createHandlers: (deps: UiHandlerDeps) => UiMethodHandlerMap;
+};
+
 export type UiServerRuntime = {
   buildSnapshot: UiSnapshotBuilder;
   getUiContext: UiContextResolver;
-  handlers: UiHandlers;
+  handlers: UiMethodHandlerMap;
 };
 
 export type UiRuntimeDispatchResult = {

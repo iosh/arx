@@ -9,10 +9,12 @@ export { createUiKeyringsAccess } from "./keyringsAccess.js";
 export type { UiSessionAccess } from "./sessionAccess.js";
 export { createUiSessionAccess } from "./sessionAccess.js";
 export type {
+  UiMethodHandlerMap,
   UiOnboardingOpenTabResult,
   UiPlatformAdapter,
   UiRuntimeAccess,
   UiRuntimeDispatchResult,
+  UiServerExtension,
 } from "./types.js";
 export type {
   UiCreateWalletFromMnemonicParams,

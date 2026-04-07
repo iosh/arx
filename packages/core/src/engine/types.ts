@@ -79,7 +79,7 @@ import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
-import type { UiPlatformAdapter } from "../ui/server/types.js";
+import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { InitializeVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
@@ -371,7 +371,8 @@ export type WalletProvider = Readonly<{
 /** Options for creating a wallet UI contract. */
 export type WalletCreateUiOptions = Readonly<{
   platform: UiPlatformAdapter;
-  surfaceOrigin: string;
+  uiOrigin: string;
+  extensions?: readonly UiServerExtension[];
 }>;
 
 /** UI method dispatch input. */

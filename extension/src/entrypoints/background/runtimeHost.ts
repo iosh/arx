@@ -7,6 +7,7 @@ import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
+import { createUiActivationExtension } from "./ui/uiActivationExtension";
 
 type BackgroundRuntimeCache = {
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>;
@@ -23,7 +24,7 @@ export type BackgroundRuntimeHost = {
 
 export type BackgroundUiAccessParams = {
   platform: UiPlatformAdapter;
-  surfaceOrigin: string;
+  uiOrigin: string;
 };
 
 type BackgroundRuntime = Awaited<ReturnType<typeof createArxWalletRuntime>>;
@@ -137,21 +138,25 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
     if (!uiAccessParams) return;
-    if (uiAccessParams.platform === next.platform && uiAccessParams.surfaceOrigin === next.surfaceOrigin) return;
+    if (uiAccessParams.platform === next.platform && uiAccessParams.uiOrigin === next.uiOrigin) return;
 
     throw new Error("Background runtime host UI access parameters must remain stable across calls");
   };
 
-  const getOrInitUiAccess = async ({ platform, surfaceOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
-    assertUiAccessParamsMatch({ platform, surfaceOrigin });
+  const getOrInitUiAccess = async ({ platform, uiOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
+    assertUiAccessParamsMatch({ platform, uiOrigin });
     if (uiAccess) return uiAccess;
     if (uiAccessPromise) return await uiAccessPromise;
-    uiAccessParams = { platform, surfaceOrigin };
+    uiAccessParams = { platform, uiOrigin };
     const accessGeneration = runtimeGeneration;
 
     uiAccessPromise = (async () => {
       const active = await getOrInitRuntimeCache();
-      const access = active.runtime.createUiAccess({ platform, surfaceOrigin });
+      const access = active.runtime.createUiAccess({
+        platform,
+        uiOrigin,
+        extensions: [createUiActivationExtension({ platform })],
+      });
 
       if (accessGeneration !== runtimeGeneration) {
         throw new Error("Background runtime host was reset during UI access bootstrap");

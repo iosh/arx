@@ -12,6 +12,31 @@ export const uiActions = (client: UiClient) => {
       return params === undefined ? client.call(method) : client.call(method, params);
     };
 
+  const common = uiCommonActions(client);
+
+  return {
+    ...common,
+
+    onboarding: {
+      ...common.onboarding,
+      openTab: call("ui.onboarding.openTab"),
+    },
+
+    approvals: {
+      ...common.approvals,
+      openPopup: call("ui.approvals.openPopup"),
+    },
+  };
+};
+
+export const uiCommonActions = (client: UiClient) => {
+  const call =
+    <M extends UiMethodName>(method: M) =>
+    (...args: UiActionArgs<M>): Promise<UiMethodResult<M>> => {
+      const [params] = args;
+      return params === undefined ? client.call(method) : client.call(method, params);
+    };
+
   return {
     snapshot: {
       get: call("ui.snapshot.get"),
@@ -29,7 +54,6 @@ export const uiActions = (client: UiClient) => {
     },
 
     onboarding: {
-      openTab: call("ui.onboarding.openTab"),
       generateMnemonic: call("ui.onboarding.generateMnemonic"),
       createWalletFromMnemonic: call("ui.onboarding.createWalletFromMnemonic"),
       importWalletFromMnemonic: call("ui.onboarding.importWalletFromMnemonic"),
@@ -45,7 +69,6 @@ export const uiActions = (client: UiClient) => {
     },
 
     approvals: {
-      openPopup: call("ui.approvals.openPopup"),
       resolve: call("ui.approvals.resolve"),
     },
 

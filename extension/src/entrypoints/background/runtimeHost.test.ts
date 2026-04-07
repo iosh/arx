@@ -241,11 +241,11 @@ describe("runtimeHost", () => {
     const provider = await runtimeHost.getOrInitProvider();
     const firstUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      surfaceOrigin: "chrome-extension://test",
+      uiOrigin: "chrome-extension://test",
     });
     const secondUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      surfaceOrigin: "chrome-extension://test",
+      uiOrigin: "chrome-extension://test",
     });
     const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
 
@@ -258,7 +258,8 @@ describe("runtimeHost", () => {
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledTimes(1);
     expect(runtimeHarness.createUiAccess).toHaveBeenCalledWith({
       platform: uiPlatform,
-      surfaceOrigin: "chrome-extension://test",
+      uiOrigin: "chrome-extension://test",
+      extensions: [expect.objectContaining({ id: "extension.uiActivation" })],
     });
     expect(runtimeHarness.createProvider).toHaveBeenCalledTimes(1);
     expect(provider).toBe(runtimeHarness.provider);
@@ -352,13 +353,13 @@ describe("runtimeHost", () => {
 
     await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
-      surfaceOrigin: "chrome-extension://test",
+      uiOrigin: "chrome-extension://test",
     });
 
     await expect(
       runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
-        surfaceOrigin: "chrome-extension://different",
+        uiOrigin: "chrome-extension://different",
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
 
@@ -368,7 +369,7 @@ describe("runtimeHost", () => {
           openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
           openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
         },
-        surfaceOrigin: "chrome-extension://test",
+        uiOrigin: "chrome-extension://test",
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
 

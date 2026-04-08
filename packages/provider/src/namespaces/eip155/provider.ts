@@ -208,7 +208,7 @@ export class Eip155Provider extends EventEmitter implements EIP1193Provider {
   send(
     methodOrPayload: string | LegacyPayload,
     paramsOrCallback?: RequestArguments["params"] | LegacyCallback,
-  ): Promise<LegacyResponse> | LegacyResponse | void {
+  ): Promise<LegacyResponse> | LegacyResponse | undefined {
     if (typeof methodOrPayload === "string") {
       const requestArgs = this.#createRequestArgs(methodOrPayload, paramsOrCallback as RequestArguments["params"]);
       return this.request(requestArgs).then((result) => ({ id: undefined, jsonrpc: "2.0", result }));

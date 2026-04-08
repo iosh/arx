@@ -247,7 +247,7 @@ describe("runtimeHost", () => {
       platform: uiPlatform,
       uiOrigin: "chrome-extension://test",
     });
-    const approvalPopupAccess = await runtimeHost.getOrInitApprovalPopupAccess();
+    const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
 
     expect(createArxWalletRuntimeMock).toHaveBeenCalledTimes(1);
     expect(createArxWalletRuntimeMock).toHaveBeenCalledWith(
@@ -267,10 +267,10 @@ describe("runtimeHost", () => {
     expect(secondUiAccess).toBe(uiAccess);
     expect(provider.buildSnapshot("eip155")).toEqual(runtimeHarness.providerSnapshot);
     expect(runtimeHarness.provider.buildSnapshot).toHaveBeenCalledWith("eip155");
-    expect(approvalPopupAccess.hasInitializedVault()).toBe(true);
+    expect(uiEntryAccess.hasInitializedVault()).toBe(true);
 
     const unlockListener = vi.fn();
-    approvalPopupAccess.subscribeUnlockAttentionRequested(unlockListener);
+    uiEntryAccess.subscribeUnlockAttentionRequested(unlockListener);
     expect(runtimeHarness.subscribe).toHaveBeenCalledWith(ATTENTION_REQUESTED, expect.any(Function));
 
     const attentionSubscription = (

@@ -3,11 +3,11 @@ import { UI_CHANNEL } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
-import { createApprovalUiListener } from "./listeners/approvalUiListener";
 import { getExtensionOrigin } from "./origin";
 import { createUiPlatform } from "./platform/uiPlatform";
 import { createProviderPortServer } from "./providerPortServer";
 import { createBackgroundRuntimeHost } from "./runtimeHost";
+import { createUiEntryCoordinator } from "./ui/uiEntryCoordinator";
 import { createUiBridge } from "./uiBridge";
 
 export type BackgroundRoot = {
@@ -25,7 +25,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     extensionOrigin,
     getOrInitProvider: runtimeHost.getOrInitProvider,
   });
-  const approvalUi = createApprovalUiListener({ runtimeHost, platform: uiPlatform });
+  const uiEntries = createUiEntryCoordinator({ runtimeHost, platform: uiPlatform });
 
   let initialized = false;
   let initializePromise: Promise<void> | null = null;
@@ -75,7 +75,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
 
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
-        platform: uiPlatform,
+        platform: uiEntries,
         uiOrigin,
       });
 
@@ -108,7 +108,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
       return;
     }
 
-    void uiPlatform.openOnboardingTab("install").catch((error) => {
+    void uiEntries.openOnboardingTab("install").catch((error) => {
       rootLog("failed to open onboarding tab on install", error);
     });
   };
@@ -131,7 +131,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
   const cleanupOwnedComponents = async () => {
     lifecycleGeneration += 1;
     detachBrowserListeners();
-    approvalUi.destroy();
+    uiEntries.destroy();
     providerPortServer.destroy();
 
     const activeUiBridge = uiBridge;
@@ -170,7 +170,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
 
       const runtimeBootPromise = runtimeHost.initializeRuntime();
       providerPortServer.start();
-      approvalUi.start();
+      uiEntries.start();
       const uiBridgeWarmupPromise = getOrInitUiBridge();
 
       try {

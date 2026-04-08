@@ -3,7 +3,7 @@ import { createPopupActivator, type PopupOpenContext, type PopupOpenResult } fro
 
 export type OnboardingOpenResult = { activationPath: "focus" | "create" | "debounced"; tabId?: number };
 
-export type UiPlatform = {
+export type UiEntryPlatform = {
   openOnboardingTab: (reason: string) => Promise<OnboardingOpenResult>;
   openNotificationPopup: (ctx?: PopupOpenContext) => Promise<PopupOpenResult>;
   trackWindowClose: (windowId: number, onClose: () => void) => void;
@@ -16,7 +16,7 @@ type UiPlatformDeps = {
   entrypoints: { ONBOARDING: string; NOTIFICATION: string };
 };
 
-export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiPlatform => {
+export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiEntryPlatform => {
   const onboardingCooldownMs = 500;
   let lastOnboardingAttemptAt: number | null = null;
   let onboardingInFlight: Promise<OnboardingOpenResult> | null = null;

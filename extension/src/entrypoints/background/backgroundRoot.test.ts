@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  createApprovalUiListenerMock,
+  createUiEntryCoordinatorMock,
   createBackgroundRuntimeHostMock,
   createProviderPortServerMock,
   createUiBridgeMock,
@@ -12,7 +12,7 @@ const {
   onInstalledAddListenerMock,
   onInstalledRemoveListenerMock,
 } = vi.hoisted(() => ({
-  createApprovalUiListenerMock: vi.fn(),
+  createUiEntryCoordinatorMock: vi.fn(),
   createBackgroundRuntimeHostMock: vi.fn(),
   createProviderPortServerMock: vi.fn(),
   createUiBridgeMock: vi.fn(),
@@ -40,8 +40,8 @@ vi.mock("./providerPortServer", () => ({
   createProviderPortServer: createProviderPortServerMock,
 }));
 
-vi.mock("./listeners/approvalUiListener", () => ({
-  createApprovalUiListener: createApprovalUiListenerMock,
+vi.mock("./ui/uiEntryCoordinator", () => ({
+  createUiEntryCoordinator: createUiEntryCoordinatorMock,
 }));
 
 vi.mock("./uiBridge", () => ({
@@ -97,7 +97,9 @@ describe("backgroundRoot", () => {
       start: vi.fn(),
       handleConnect: vi.fn(),
     });
-    createApprovalUiListenerMock.mockReturnValue({
+    createUiEntryCoordinatorMock.mockReturnValue({
+      openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
+      openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       destroy: vi.fn(),
       start: vi.fn(),
     });
@@ -123,7 +125,7 @@ describe("backgroundRoot", () => {
         return Promise.resolve();
       }),
       getOrInitProvider: vi.fn(),
-      getOrInitApprovalPopupAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(),
       getOrInitUiAccess: vi.fn(async () => {
         events.push("uiAccess");
         return {
@@ -147,7 +149,7 @@ describe("backgroundRoot", () => {
     expect(runtimeHost.getOrInitUiAccess).toHaveBeenCalledTimes(1);
     expect(createUiBridgeMock).toHaveBeenCalledTimes(1);
     expect(createProviderPortServerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
-    expect(createApprovalUiListenerMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
+    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.start).toHaveBeenCalledTimes(1);
     expect(events.indexOf("onConnect")).toBeLessThan(events.indexOf("boot"));
     expect(events.indexOf("onInstalled")).toBeLessThan(events.indexOf("boot"));
   });
@@ -157,7 +159,7 @@ describe("backgroundRoot", () => {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
       getOrInitProvider: vi.fn(),
-      getOrInitApprovalPopupAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(),
       getOrInitUiAccess: vi
         .fn()
         .mockRejectedValueOnce(new Error("ui access failed"))
@@ -179,7 +181,7 @@ describe("backgroundRoot", () => {
 
     expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
     expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createApprovalUiListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
     expect(onConnectRemoveListenerMock).toHaveBeenCalledTimes(1);
     expect(onInstalledRemoveListenerMock).toHaveBeenCalledTimes(1);
     expect(runtimeHost.initializeRuntime).toHaveBeenCalledTimes(2);
@@ -199,7 +201,7 @@ describe("backgroundRoot", () => {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn(() => runtimeBoot.promise),
       getOrInitProvider: vi.fn(),
-      getOrInitApprovalPopupAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(),
       getOrInitUiAccess: vi.fn(() => uiAccessBoot.promise),
       shutdown: vi.fn(async () => {
         runtimeBoot.reject(new Error("runtime interrupted"));
@@ -218,6 +220,6 @@ describe("backgroundRoot", () => {
     await expect(root.initialize()).rejects.toThrow("Background root is shut down");
     expect(runtimeHost.shutdown).toHaveBeenCalledTimes(1);
     expect(createProviderPortServerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
-    expect(createApprovalUiListenerMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
+    expect(createUiEntryCoordinatorMock.mock.results[0]?.value.destroy).toHaveBeenCalledTimes(1);
   });
 });

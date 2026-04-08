@@ -17,7 +17,7 @@ export type BackgroundRuntimeHost = {
   initializeRuntime: () => Promise<void>;
   getOrInitProvider: () => Promise<WalletProvider>;
   getOrInitUiAccess: (params: BackgroundUiAccessParams) => Promise<UiRuntimeAccess>;
-  getOrInitApprovalPopupAccess: () => Promise<BackgroundApprovalPopupAccess>;
+  getOrInitUiEntryAccess: () => Promise<BackgroundUiEntryAccess>;
   shutdown: () => Promise<void>;
   applyDebugNamespacesFromEnv: () => void;
 };
@@ -38,7 +38,7 @@ type ApprovalSessionLockedListener = Parameters<BackgroundRuntimeUnlock["onLocke
 
 export type BackgroundUnlockAttentionRequestedPayload = AttentionRequest & { reason: "unlock_required" };
 
-export type BackgroundApprovalPopupAccess = {
+export type BackgroundUiEntryAccess = {
   subscribeUnlockAttentionRequested: (
     listener: (payload: BackgroundUnlockAttentionRequestedPayload) => void,
   ) => () => void;
@@ -155,7 +155,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       const access = active.runtime.createUiAccess({
         platform,
         uiOrigin,
-        extensions: [createUiActivationExtension({ platform })],
+        extensions: [createUiActivationExtension({ entries: platform })],
       });
 
       if (accessGeneration !== runtimeGeneration) {
@@ -191,7 +191,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     return provider;
   };
 
-  const getOrInitApprovalPopupAccess = async (): Promise<BackgroundApprovalPopupAccess> => {
+  const getOrInitUiEntryAccess = async (): Promise<BackgroundUiEntryAccess> => {
     const active = await getOrInitRuntimeCache();
 
     return {
@@ -249,7 +249,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
     initializeRuntime,
     getOrInitProvider,
     getOrInitUiAccess,
-    getOrInitApprovalPopupAccess,
+    getOrInitUiEntryAccess,
     shutdown,
     applyDebugNamespacesFromEnv,
   };

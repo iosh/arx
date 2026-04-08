@@ -1,9 +1,9 @@
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/controllers/approval";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { UiPlatform } from "../platform/uiPlatform";
+import type { UiEntryPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
-import { createApprovalUiListener } from "./approvalUiListener";
+import { createUiEntryCoordinator } from "./uiEntryCoordinator";
 
 type ApprovalRecordLike = Pick<
   ApprovalRecord,
@@ -134,7 +134,7 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
 const buildHarness = (
   windowIds: number[],
   options?: {
-    failFirstApprovalUiAccess?: boolean;
+    failFirstUiEntryAccess?: boolean;
   },
 ) => {
   const bus = new FakeBus();
@@ -142,9 +142,9 @@ const buildHarness = (
   const unlock = new FakeUnlock();
   const trackedWindowClosers = new Map<number, () => void>();
   let openCallIndex = 0;
-  let shouldFailFirstApprovalUiAccess = options?.failFirstApprovalUiAccess ?? false;
+  let shouldFailFirstUiEntryAccess = options?.failFirstUiEntryAccess ?? false;
 
-  const platform: UiPlatform = {
+  const platform: UiEntryPlatform = {
     openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
     openNotificationPopup: vi.fn(async () => ({
       activationPath: "create" as const,
@@ -162,15 +162,15 @@ const buildHarness = (
   const runtimeHost: BackgroundRuntimeHost = {
     initializeRuntime: vi.fn(async () => {}),
     getOrInitProvider: vi.fn(async () => {
-      throw new Error("Provider bridge access should not be requested in approvalUiListener tests");
+      throw new Error("Provider bridge access should not be requested in uiEntryCoordinator tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitProvider"],
     getOrInitUiAccess: vi.fn(async () => {
-      throw new Error("UI bridge access should not be requested in approvalUiListener tests");
+      throw new Error("UI bridge access should not be requested in uiEntryCoordinator tests");
     }) as unknown as BackgroundRuntimeHost["getOrInitUiAccess"],
-    getOrInitApprovalPopupAccess: vi.fn(async () => {
-      if (shouldFailFirstApprovalUiAccess) {
-        shouldFailFirstApprovalUiAccess = false;
-        throw new Error("approval ui access bootstrap failed");
+    getOrInitUiEntryAccess: vi.fn(async () => {
+      if (shouldFailFirstUiEntryAccess) {
+        shouldFailFirstUiEntryAccess = false;
+        throw new Error("ui entry access bootstrap failed");
       }
 
       return {
@@ -189,7 +189,7 @@ const buildHarness = (
         getPendingApprovalCount: () => approvals.getState().pending.length,
         hasInitializedVault: () => true,
       };
-    }) as unknown as BackgroundRuntimeHost["getOrInitApprovalPopupAccess"],
+    }) as unknown as BackgroundRuntimeHost["getOrInitUiEntryAccess"],
     shutdown: vi.fn(async () => {}),
     applyDebugNamespacesFromEnv: vi.fn(),
   };
@@ -206,17 +206,17 @@ const buildHarness = (
   };
 };
 
-describe("approvalUiListener", () => {
+describe("uiEntryCoordinator", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it("cancels only approvals attached to the closed popup window", async () => {
     const harness = buildHarness([11, 22]);
-    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
-    listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(1));
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
     harness.approvals.add(createRecord({ id: "approval-1" }));
     harness.approvals.add(
@@ -243,15 +243,15 @@ describe("approvalUiListener", () => {
     expect(harness.approvals.cancel).not.toHaveBeenCalledWith({ id: "approval-2", reason: "window_closed" });
     expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["approval-2"]);
 
-    listener.destroy();
+    coordinator.destroy();
   });
 
   it("does not cancel UI-origin approvals when a provider popup closes", async () => {
     const harness = buildHarness([31]);
-    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
-    listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(1));
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
     harness.approvals.add(createRecord({ id: "provider-approval" }));
     harness.approvals.add(
@@ -277,15 +277,15 @@ describe("approvalUiListener", () => {
 
     expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["ui-approval"]);
 
-    listener.destroy();
+    coordinator.destroy();
   });
 
   it("keeps pending approvals alive when the session locks and still cancels them if the tracked popup closes", async () => {
     const harness = buildHarness([41]);
-    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
-    listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(1));
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
     harness.approvals.add(createRecord({ id: "provider-approval" }));
     harness.approvals.add(
@@ -315,15 +315,15 @@ describe("approvalUiListener", () => {
 
     expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["ui-approval"]);
 
-    listener.destroy();
+    coordinator.destroy();
   });
 
   it("tracks unlock attention popups without cancelling unrelated approvals", async () => {
     const harness = buildHarness([51]);
-    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
-    listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(1));
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
     harness.bus.emit(ATTENTION_REQUESTED, {
       reason: "unlock_required",
@@ -339,20 +339,20 @@ describe("approvalUiListener", () => {
 
     expect(harness.approvals.cancel).not.toHaveBeenCalled();
 
-    listener.destroy();
+    coordinator.destroy();
   });
 
-  it("retries initialization after the first approval UI access bootstrap failure", async () => {
-    const harness = buildHarness([61], { failFirstApprovalUiAccess: true });
-    const listener = createApprovalUiListener({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+  it("retries initialization after the first ui entry access bootstrap failure", async () => {
+    const harness = buildHarness([61], { failFirstUiEntryAccess: true });
+    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
 
-    listener.start();
-    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(1));
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
     expect(harness.platform.openNotificationPopup).not.toHaveBeenCalled();
 
     await vi.waitFor(() => {
-      listener.start();
-      expect(harness.runtimeHost.getOrInitApprovalPopupAccess).toHaveBeenCalledTimes(2);
+      coordinator.start();
+      expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(2);
     });
 
     harness.bus.emit(ATTENTION_REQUESTED, {
@@ -365,6 +365,6 @@ describe("approvalUiListener", () => {
 
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 
-    listener.destroy();
+    coordinator.destroy();
   });
 });

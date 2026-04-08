@@ -680,7 +680,7 @@ const createUiAccessForTest = (input: {
       uiOrigin: input.uiOrigin,
       ...(input.installSurfaceActivationExtension === false
         ? {}
-        : { extensions: [createUiActivationExtension({ platform: input.platform })] }),
+        : { extensions: [createUiActivationExtension({ entries: input.platform })] }),
     },
     bridge: {
       encodeError: (error, context) =>

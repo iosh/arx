@@ -44,6 +44,7 @@ describe("ui actions", () => {
 
     // Execute all sugar functions once to record which underlying methods are used.
     void actions.snapshot.get();
+    void actions.entry.getLaunchContext({ environment: "popup" });
 
     void actions.balances.getNative({ chainRef: "eip155:1", address: "0x0" });
 
@@ -159,6 +160,7 @@ describe("ui actions", () => {
 
     // These should all be type-safe
     expect(typeof actions.snapshot.get).toBe("function");
+    expect(typeof actions.entry.getLaunchContext).toBe("function");
     expect(typeof actions.session.unlock).toBe("function");
     expect(typeof actions.accounts.switchActive).toBe("function");
     expect(typeof actions.networks.switchActive).toBe("function");

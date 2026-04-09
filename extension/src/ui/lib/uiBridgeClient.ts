@@ -16,6 +16,7 @@ const uiExtensionActions = (client: UiClient) => {
 
   return {
     ...common,
+    entry: activation.entry,
     onboarding: {
       ...common.onboarding,
       ...activation.onboarding,

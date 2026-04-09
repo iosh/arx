@@ -8,7 +8,7 @@ import "../popup/style.css";
 import "./style.css";
 
 import { ErrorState, Screen } from "@/ui/components";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { loadUiEntryLaunchContext, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { routeTree } from "../../routeTree.gen";
 
 const queryClient = new QueryClient();
@@ -45,13 +45,13 @@ const renderApp = () => {
   );
 };
 
-const renderEntryIntentError = (message: string) => {
+const renderStartupError = (message: string) => {
   ReactDOM.createRoot(getRootElement()).render(
     <React.StrictMode>
       <AppProviders>
         <Screen title="Startup error" scroll={false}>
           <ErrorState
-            title="Invalid entry intent"
+            title="Failed to start wallet UI"
             message={message}
             primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
             secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
@@ -62,16 +62,19 @@ const renderEntryIntentError = (message: string) => {
   );
 };
 
-const boot = () => {
+const boot = async () => {
+  startUiEntryLaunchContextSync();
+
   try {
-    getEntryIntent();
+    await loadUiEntryLaunchContext();
+    await preloadUiSnapshot(queryClient);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    renderEntryIntentError(message);
+    renderStartupError(message);
     return;
   }
 
   renderApp();
 };
 
-boot();
+void boot();

@@ -4,6 +4,8 @@ import {
   getApprovalType,
 } from "@arx/core/controllers/approval";
 import { createLogger, extendLogger } from "@arx/core/logger";
+import type { UiMethodParams, UiMethodResult } from "@arx/core/ui";
+import { createUiEntryMetadata, parseUiEntryReason, type UiEntryReason } from "@/lib/uiEntryMetadata";
 import { createApprovalWindowTracker } from "../approvals/approvalWindowTracker";
 import type { OnboardingOpenResult, UiEntryPlatform } from "../platform/uiPlatform";
 import type {
@@ -16,26 +18,85 @@ import type { PopupOpenResult } from "../services/popupActivator";
 type UiEntryCoordinatorDeps = {
   runtimeHost: BackgroundRuntimeHost;
   platform: UiEntryPlatform;
+  onEntryChanged?: (entry: UiEntryLaunchContext) => void;
 };
 
 type UiApprovalRecord = ApprovalCreatedEvent["record"];
+type UiEntryLaunchContextParams = UiMethodParams<"ui.entry.getLaunchContext">;
+type UiEntryLaunchContext = UiMethodResult<"ui.entry.getLaunchContext">;
 
 export type UiEntryCoordinator = {
   start(): void;
   destroy(): void;
+  getEntryLaunchContext(params: UiEntryLaunchContextParams): UiEntryLaunchContext;
   openOnboardingTab(reason: string): Promise<OnboardingOpenResult>;
   openNotificationPopup(): Promise<PopupOpenResult>;
 };
 
-export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoordinatorDeps): UiEntryCoordinator => {
+const createDefaultEntryLaunchContext = (
+  environment: UiEntryLaunchContextParams["environment"],
+): UiEntryLaunchContext => {
+  switch (environment) {
+    case "popup":
+      return createUiEntryMetadata({ environment, reason: "manual_open" });
+    case "notification":
+      return createUiEntryMetadata({ environment, reason: "manual_open" });
+    case "onboarding":
+      return createUiEntryMetadata({ environment, reason: "onboarding_required" });
+  }
+};
+
+const toOnboardingEntryReason = (reason: string): UiEntryReason => {
+  const parsed = parseUiEntryReason(reason);
+  if (parsed === "install" || parsed === "onboarding_required") {
+    return parsed;
+  }
+
+  return "onboarding_required";
+};
+
+export const createUiEntryCoordinator = ({
+  runtimeHost,
+  platform,
+  onEntryChanged,
+}: UiEntryCoordinatorDeps): UiEntryCoordinator => {
   const log = createLogger("bg:ui");
   const entryLog = extendLogger(log, "entries");
   const subscriptions: Array<() => void> = [];
   const trackedWindowIds = new Set<number>();
   const approvalWindowTracker = createApprovalWindowTracker();
+  const entryByEnvironment = new Map<UiEntryLaunchContextParams["environment"], UiEntryLaunchContext>();
   let started = false;
   let disposed = false;
   let startTask: Promise<void> | null = null;
+
+  const resetEntries = () => {
+    entryByEnvironment.clear();
+    entryByEnvironment.set("popup", createDefaultEntryLaunchContext("popup"));
+    entryByEnvironment.set("notification", createDefaultEntryLaunchContext("notification"));
+    entryByEnvironment.set("onboarding", createDefaultEntryLaunchContext("onboarding"));
+  };
+
+  resetEntries();
+
+  const publishEntryChange = (entry: UiEntryLaunchContext) => {
+    try {
+      onEntryChanged?.(entry);
+    } catch (error) {
+      entryLog("failed to publish entry change", { entry, error });
+    }
+  };
+
+  const setEntry = (metadata: UiEntryLaunchContext): UiEntryLaunchContext => {
+    const next = createUiEntryMetadata(metadata);
+    entryByEnvironment.set(next.environment, next);
+    publishEntryChange(next);
+    return next;
+  };
+
+  const getEntryLaunchContext = ({ environment }: UiEntryLaunchContextParams): UiEntryLaunchContext => {
+    return entryByEnvironment.get(environment) ?? createDefaultEntryLaunchContext(environment);
+  };
 
   const clearWindowTracking = () => {
     trackedWindowIds.clear();
@@ -108,6 +169,19 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
       return;
     }
 
+    setEntry(
+      createUiEntryMetadata({
+        environment: "notification",
+        reason: request.reason,
+        context: {
+          origin: request.origin,
+          method: request.method,
+          chainRef: request.chainRef,
+          namespace: request.namespace,
+        },
+      }),
+    );
+
     void platform
       .openNotificationPopup({
         reason: request.reason,
@@ -116,7 +190,7 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
         chainRef: request.chainRef,
         namespace: request.namespace,
       })
-      .then((result) => {
+      .then(async (result) => {
         if (disposed || !result.windowId) {
           return;
         }
@@ -152,6 +226,20 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
       return;
     }
 
+    setEntry(
+      createUiEntryMetadata({
+        environment: "notification",
+        reason: "approval_created",
+        context: {
+          approvalId: record.id,
+          origin: record.origin,
+          method,
+          chainRef: record.chainRef,
+          namespace: record.namespace,
+        },
+      }),
+    );
+
     void platform
       .openNotificationPopup({
         reason: "approval_created",
@@ -159,9 +247,8 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
         method,
         chainRef: record.chainRef,
         namespace: record.namespace,
-        urlSearchParams: { approvalId: record.id },
       })
-      .then((result) => {
+      .then(async (result) => {
         if (disposed || !result.windowId) {
           return;
         }
@@ -181,9 +268,30 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
       });
   };
 
-  const openOnboardingTab = async (reason: string) => await platform.openOnboardingTab(reason);
+  const openOnboardingTab = async (reason: string) => {
+    setEntry(
+      createUiEntryMetadata({
+        environment: "onboarding",
+        reason: toOnboardingEntryReason(reason),
+      }),
+    );
 
-  const openNotificationPopup = async () => await platform.openNotificationPopup();
+    return await platform.openOnboardingTab(reason);
+  };
+
+  const openNotificationPopup = async () => {
+    setEntry(
+      createUiEntryMetadata({
+        environment: "notification",
+        reason: "manual_open",
+      }),
+    );
+
+    const result = await platform.openNotificationPopup({
+      reason: "manual_open",
+    });
+    return result;
+  };
 
   const start = () => {
     if (started || startTask) {
@@ -237,11 +345,13 @@ export const createUiEntryCoordinator = ({ runtimeHost, platform }: UiEntryCoord
     disposed = true;
     clearSubscriptions();
     clearWindowTracking();
+    resetEntries();
   };
 
   return {
     start,
     destroy,
+    getEntryLaunchContext,
     openOnboardingTab,
     openNotificationPopup,
   };

@@ -2,11 +2,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, redirect } from "@tanstack/react-router";
 import { YStack } from "tamagui";
+import { getUiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { ApprovalsOrchestrator } from "@/ui/approvals";
 import { SessionGate } from "@/ui/components/SessionGate";
 import { useIdleTimer } from "@/ui/hooks/useIdleTimer";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { getOrFetchUiSnapshot } from "@/ui/lib/getOrFetchUiSnapshot";
 import { isOnboardingPath } from "@/ui/lib/onboardingPaths";
 import { decideRootBeforeLoad } from "@/ui/lib/rootBeforeLoad";
@@ -19,11 +19,11 @@ export interface RouterContext {
 // Root layout component that wraps all routes
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async ({ context, location }) => {
-    const entryIntent = getEntryIntent();
+    const entry = getUiEntryMetadata();
 
     // Fast-path: enforce onboarding surface rules without needing snapshot.
     const preDecision = decideRootBeforeLoad({
-      entryIntent,
+      entry,
       pathname: location.pathname,
       snapshot: null,
     });
@@ -39,15 +39,19 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       return;
     }
 
+    if (preDecision.type === "redirect") {
+      throw redirect({ to: preDecision.to, replace: preDecision.replace });
+    }
+
     if (isOnboardingPath(location.pathname)) {
-      // Only onboarding_tab is allowed to reach here.
+      // Only the onboarding environment is allowed to reach onboarding routes.
       return;
     }
 
     const snapshot = await getOrFetchUiSnapshot(context.queryClient);
 
     const decision = decideRootBeforeLoad({
-      entryIntent,
+      entry,
       pathname: location.pathname,
       snapshot: snapshot ?? null,
     });

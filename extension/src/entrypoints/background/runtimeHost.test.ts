@@ -201,6 +201,18 @@ const makeRuntime = () => {
   };
 };
 
+const createEntryBootstrap = (environment: "popup" | "notification" | "onboarding") => ({
+  environment,
+  reason: environment === "onboarding" ? ("onboarding_required" as const) : ("manual_open" as const),
+  context: {
+    approvalId: null,
+    origin: null,
+    method: null,
+    chainRef: null,
+    namespace: null,
+  },
+});
+
 describe("runtimeHost", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -236,15 +248,23 @@ describe("runtimeHost", () => {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
     };
+    const uiActivation = {
+      ...uiPlatform,
+      getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
+        createEntryBootstrap(environment),
+      ),
+    };
 
     await runtimeHost.initializeRuntime();
     const provider = await runtimeHost.getOrInitProvider();
     const firstUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
+      activation: uiActivation,
       uiOrigin: "chrome-extension://test",
     });
     const secondUiAccess = await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
+      activation: uiActivation,
       uiOrigin: "chrome-extension://test",
     });
     const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
@@ -350,15 +370,23 @@ describe("runtimeHost", () => {
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
     };
+    const uiActivation = {
+      ...uiPlatform,
+      getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
+        createEntryBootstrap(environment),
+      ),
+    };
 
     await runtimeHost.getOrInitUiAccess({
       platform: uiPlatform,
+      activation: uiActivation,
       uiOrigin: "chrome-extension://test",
     });
 
     await expect(
       runtimeHost.getOrInitUiAccess({
         platform: uiPlatform,
+        activation: uiActivation,
         uiOrigin: "chrome-extension://different",
       }),
     ).rejects.toThrow("UI access parameters must remain stable");
@@ -368,6 +396,21 @@ describe("runtimeHost", () => {
         platform: {
           openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
           openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
+        },
+        activation: uiActivation,
+        uiOrigin: "chrome-extension://test",
+      }),
+    ).rejects.toThrow("UI access parameters must remain stable");
+
+    await expect(
+      runtimeHost.getOrInitUiAccess({
+        platform: uiPlatform,
+        activation: {
+          openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
+          openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
+          getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
+            createEntryBootstrap(environment),
+          ),
         },
         uiOrigin: "chrome-extension://test",
       }),

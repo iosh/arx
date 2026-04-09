@@ -98,6 +98,17 @@ describe("backgroundRoot", () => {
       handleConnect: vi.fn(),
     });
     createUiEntryCoordinatorMock.mockReturnValue({
+      getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+        environment,
+        reason: environment === "onboarding" ? "onboarding_required" : "manual_open",
+        context: {
+          approvalId: null,
+          origin: null,
+          method: null,
+          chainRef: null,
+          namespace: null,
+        },
+      })),
       openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       destroy: vi.fn(),
@@ -105,6 +116,7 @@ describe("backgroundRoot", () => {
     });
     createUiBridgeMock.mockReturnValue({
       attachPort: vi.fn(),
+      broadcastEvent: vi.fn(),
       teardown: vi.fn(),
     });
   });

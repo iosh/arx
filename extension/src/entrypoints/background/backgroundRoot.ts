@@ -1,5 +1,5 @@
 import { createLogger } from "@arx/core/logger";
-import { UI_CHANNEL } from "@arx/core/ui";
+import { UI_CHANNEL, UI_EVENT_ENTRY_CHANGED } from "@arx/core/ui";
 import type { Runtime } from "webextension-polyfill";
 import browser from "webextension-polyfill";
 import { ENTRYPOINTS } from "./constants";
@@ -25,7 +25,17 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     extensionOrigin,
     getOrInitProvider: runtimeHost.getOrInitProvider,
   });
-  const uiEntries = createUiEntryCoordinator({ runtimeHost, platform: uiPlatform });
+  const uiEntries = createUiEntryCoordinator({
+    runtimeHost,
+    platform: uiPlatform,
+    onEntryChanged: (entry) => {
+      uiBridge?.broadcastEvent({
+        type: "ui:event",
+        event: UI_EVENT_ENTRY_CHANGED,
+        payload: entry,
+      });
+    },
+  });
 
   let initialized = false;
   let initializePromise: Promise<void> | null = null;
@@ -76,6 +86,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
         platform: uiEntries,
+        activation: uiEntries,
         uiOrigin,
       });
 

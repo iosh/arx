@@ -17,6 +17,10 @@ export const uiActions = (client: UiClient) => {
   return {
     ...common,
 
+    entry: {
+      getLaunchContext: call("ui.entry.getLaunchContext"),
+    },
+
     onboarding: {
       ...common.onboarding,
       openTab: call("ui.onboarding.openTab"),

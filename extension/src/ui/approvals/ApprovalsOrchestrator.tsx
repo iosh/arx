@@ -1,7 +1,7 @@
 import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
+import { useEffect, useRef } from "react";
+import { useUiEntryMetadata } from "@/ui/hooks/useUiEntryMetadata";
 import { waitForAnyApprovalInSnapshot, waitForApprovalInSnapshot } from "./approvalSnapshotWait";
 import { getApprovalAttentionAction } from "./orchestration";
 import { getApprovalRoutePath } from "./routes";
@@ -15,14 +15,8 @@ export function ApprovalsOrchestrator({
 }) {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const entryIntent = useMemo(() => getEntryIntent(), []);
-  const requestedApprovalId = useMemo(() => {
-    try {
-      return new URL(window.location.href).searchParams.get("approvalId");
-    } catch {
-      return null;
-    }
-  }, []);
+  const entry = useUiEntryMetadata();
+  const requestedApprovalId = entry.context.approvalId;
   const hadApprovalsSinceUnlockRef = useRef(false);
   const waitingForApprovalsRef = useRef(false);
   const waitingForRequestedApprovalRef = useRef(false);
@@ -31,7 +25,7 @@ export function ApprovalsOrchestrator({
     const plan = getApprovalAttentionAction({
       snapshot,
       isLoading,
-      entryIntent,
+      entry,
       pathname,
       requestedApprovalId,
       hadApprovalsSinceUnlock: hadApprovalsSinceUnlockRef.current,
@@ -107,7 +101,7 @@ export function ApprovalsOrchestrator({
         cancelled = true;
       };
     }
-  }, [entryIntent, isLoading, pathname, requestedApprovalId, router, snapshot]);
+  }, [entry, isLoading, pathname, requestedApprovalId, router, snapshot]);
 
   return null;
 }

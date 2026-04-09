@@ -1,5 +1,5 @@
 export { uiActions, uiCommonActions } from "./actions.js";
-export type { UiClient, UiClientOptions, UiTransport } from "./client/index.js";
+export type { UiClient, UiClientConnectionStatus, UiClientOptions, UiTransport } from "./client/index.js";
 export { createUiClient, isUiProtocolError, isUiRemoteError, UiProtocolError, UiRemoteError } from "./client/index.js";
 export type {
   UiContext,
@@ -11,7 +11,7 @@ export type {
   UiResponseEnvelope,
 } from "./protocol/envelopes.js";
 export { parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
-export { UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./protocol/events.js";
+export { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./protocol/events.js";
 export {
   isUiEventName,
   isUiMethodName,

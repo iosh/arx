@@ -16,6 +16,7 @@ import { createKeyringExportService, createSessionStatusService } from "@arx/cor
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
+  UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
   type UiMethodName,
   type UiMethodParams,
@@ -569,6 +570,7 @@ const createUiAccessForTest = (input: {
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
+  activationEntries?: Parameters<typeof createUiActivationExtension>[0]["entries"];
   uiOrigin: string;
   networkPreferences: {
     subscribeChanged: (
@@ -618,6 +620,20 @@ const createUiAccessForTest = (input: {
     keyring: input.keyring,
     keyringExport,
   });
+  const activationEntries = input.activationEntries ?? {
+    ...input.platform,
+    getEntryLaunchContext: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+      environment,
+      reason: environment === "onboarding" ? "onboarding_required" : "manual_open",
+      context: {
+        approvalId: null,
+        origin: null,
+        method: null,
+        chainRef: null,
+        namespace: null,
+      },
+    }),
+  };
 
   return createUiRuntimeAccess({
     server: {
@@ -680,7 +696,7 @@ const createUiAccessForTest = (input: {
       uiOrigin: input.uiOrigin,
       ...(input.installSurfaceActivationExtension === false
         ? {}
-        : { extensions: [createUiActivationExtension({ entries: input.platform })] }),
+        : { extensions: [createUiActivationExtension({ entries: activationEntries })] }),
     },
     bridge: {
       encodeError: (error, context) =>
@@ -1353,7 +1369,10 @@ describe("uiBridge", () => {
 
     const first = await send("ui.onboarding.openTab", { reason: "manual_open" });
     expect(expectResponse(first.envelope, first.id)).toMatchObject({ activationPath: "create", tabId: 1 });
-    expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({ url: "ext://onboarding.html", active: true });
+    expect(runtimeBrowser.tabs.create).toHaveBeenCalledWith({
+      url: "ext://onboarding.html",
+      active: true,
+    });
 
     t = 100;
     const second = await send("ui.onboarding.openTab", { reason: "manual_open" });
@@ -1379,6 +1398,62 @@ describe("uiBridge", () => {
     expect(runtimeBrowser.tabs.create).not.toHaveBeenCalled();
 
     nowSpy.mockRestore();
+  });
+
+  it("entry.getLaunchContext returns runtime-owned entry metadata", async () => {
+    const res = await send("ui.entry.getLaunchContext", { environment: "notification" });
+
+    expect(expectResponse(res.envelope, res.id)).toEqual({
+      environment: "notification",
+      reason: "manual_open",
+      context: {
+        approvalId: null,
+        origin: null,
+        method: null,
+        chainRef: null,
+        namespace: null,
+      },
+    });
+  });
+
+  it("broadcasts entry-changed events to attached UI ports", () => {
+    const ctx = buildBridge({ unlocked: true });
+    const localPort = createPort();
+
+    ctx.bridge.attachPort(localPort as unknown as UiPort);
+    localPort.messages = [];
+
+    ctx.bridge.broadcastEvent({
+      type: "ui:event",
+      event: UI_EVENT_ENTRY_CHANGED,
+      payload: {
+        environment: "notification",
+        reason: "approval_created",
+        context: {
+          approvalId: "approval-1",
+          origin: "https://dapp.example",
+          method: "eth_requestAccounts",
+          chainRef: "eip155:1",
+          namespace: "eip155",
+        },
+      },
+    });
+
+    expect(localPort.messages).toContainEqual({
+      type: "ui:event",
+      event: UI_EVENT_ENTRY_CHANGED,
+      payload: {
+        environment: "notification",
+        reason: "approval_created",
+        context: {
+          approvalId: "approval-1",
+          origin: "https://dapp.example",
+          method: "eth_requestAccounts",
+          chainRef: "eip155:1",
+          namespace: "eip155",
+        },
+      },
+    });
   });
 
   it("returns unsupported when surface activation extension is not installed", async () => {

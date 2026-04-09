@@ -8,8 +8,7 @@ import "../popup/style.css";
 
 import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
-import { waitForInitialUiSnapshot } from "@/ui/lib/waitForInitialUiSnapshot";
+import { loadUiEntryLaunchContext, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 const queryClient = new QueryClient();
@@ -46,13 +45,13 @@ const renderApp = () => {
   );
 };
 
-const renderEntryIntentError = (message: string) => {
+const renderStartupError = (message: string) => {
   ReactDOM.createRoot(getRootElement()).render(
     <React.StrictMode>
       <AppProviders>
         <Screen title="Startup error" scroll={false}>
           <ErrorState
-            title="Invalid entry intent"
+            title="Failed to start wallet UI"
             message={message}
             primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
             secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
@@ -64,25 +63,27 @@ const renderEntryIntentError = (message: string) => {
 };
 
 const boot = async () => {
+  startUiEntryLaunchContextSync();
+
   try {
-    getEntryIntent();
+    await loadUiEntryLaunchContext();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    renderEntryIntentError(message);
+    renderStartupError(message);
     return;
   }
 
   adjustWindowInnerSize();
 
   try {
-    const snapshot = await waitForInitialUiSnapshot();
+    const snapshot = await preloadUiSnapshot(queryClient);
     if (!snapshot.vault.initialized) {
       window.close();
       return;
     }
-  } catch {
-    // Fail-closed for attention surface to avoid showing UI under unknown state.
-    window.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderStartupError(message);
     return;
   }
 

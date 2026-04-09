@@ -8,11 +8,6 @@ export type PopupOpenContext = {
   method?: string;
   chainRef?: string | null;
   namespace?: string | null;
-  /**
-   * Optional query params to include when creating a new popup window.
-   * Window reuse ignores search/hash to avoid duplicates.
-   */
-  urlSearchParams?: Record<string, string>;
 };
 
 export type PopupOpenResult = { activationPath: "create" | "focus" | "debounced" } & (
@@ -83,15 +78,6 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
         }
       };
 
-      const popupUrl = (() => {
-        if (!ctx.urlSearchParams) return baseUrl.toString();
-        const u = new URL(baseUrl);
-        for (const [key, value] of Object.entries(ctx.urlSearchParams)) {
-          u.searchParams.set(key, value);
-        }
-        return u.toString();
-      })();
-
       if (cachedWindowId !== null && (await focusWindow(cachedWindowId))) {
         log("open focused (cached)", { windowId: cachedWindowId, ...ctx });
         return { activationPath: "focus", windowId: cachedWindowId };
@@ -116,7 +102,7 @@ export const createPopupActivator = (deps: PopupActivatorDeps = {}) => {
       const created = await browser.windows.create({
         type: "popup",
         focused: true,
-        url: popupUrl,
+        url: baseUrl.toString(),
         width: size.width,
         height: size.height,
       });

@@ -18,6 +18,7 @@ type UiPlatformDeps = {
 
 export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiEntryPlatform => {
   const onboardingCooldownMs = 500;
+  const onboardingBaseUrl = browser.runtime.getURL(entrypoints.ONBOARDING);
   let lastOnboardingAttemptAt: number | null = null;
   let onboardingInFlight: Promise<OnboardingOpenResult> | null = null;
   let cachedOnboardingTabId: number | null = null;
@@ -34,8 +35,6 @@ export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiEn
           : { activationPath: "debounced" as const };
       }
       lastOnboardingAttemptAt = now;
-
-      const onboardingBaseUrl = browser.runtime.getURL(entrypoints.ONBOARDING);
 
       let existingTabs: browserDefaultType.Tabs.Tab[] = [];
       try {
@@ -104,5 +103,11 @@ export const createUiPlatform = ({ browser, entrypoints }: UiPlatformDeps): UiEn
     clearWindowCloseTracks();
   };
 
-  return { openOnboardingTab, openNotificationPopup, trackWindowClose, clearWindowCloseTracks, teardown };
+  return {
+    openOnboardingTab,
+    openNotificationPopup,
+    trackWindowClose,
+    clearWindowCloseTracks,
+    teardown,
+  };
 };

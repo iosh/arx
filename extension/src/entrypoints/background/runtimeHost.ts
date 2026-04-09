@@ -7,7 +7,7 @@ import browser from "webextension-polyfill";
 import { INSTALLED_NAMESPACES } from "@/platform/namespaces/installed";
 import { getExtensionStorage } from "@/platform/storage";
 import { isInternalOrigin } from "./origin";
-import { createUiActivationExtension } from "./ui/uiActivationExtension";
+import { createUiActivationExtension, type UiActivationEntries } from "./ui/uiActivationExtension";
 
 type BackgroundRuntimeCache = {
   runtime: Awaited<ReturnType<typeof createArxWalletRuntime>>;
@@ -24,6 +24,7 @@ export type BackgroundRuntimeHost = {
 
 export type BackgroundUiAccessParams = {
   platform: UiPlatformAdapter;
+  activation: UiActivationEntries;
   uiOrigin: string;
 };
 
@@ -138,16 +139,26 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
 
   const assertUiAccessParamsMatch = (next: BackgroundUiAccessParams) => {
     if (!uiAccessParams) return;
-    if (uiAccessParams.platform === next.platform && uiAccessParams.uiOrigin === next.uiOrigin) return;
+    if (
+      uiAccessParams.platform === next.platform &&
+      uiAccessParams.activation === next.activation &&
+      uiAccessParams.uiOrigin === next.uiOrigin
+    ) {
+      return;
+    }
 
     throw new Error("Background runtime host UI access parameters must remain stable across calls");
   };
 
-  const getOrInitUiAccess = async ({ platform, uiOrigin }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
-    assertUiAccessParamsMatch({ platform, uiOrigin });
+  const getOrInitUiAccess = async ({
+    platform,
+    activation,
+    uiOrigin,
+  }: BackgroundUiAccessParams): Promise<UiRuntimeAccess> => {
+    assertUiAccessParamsMatch({ platform, activation, uiOrigin });
     if (uiAccess) return uiAccess;
     if (uiAccessPromise) return await uiAccessPromise;
-    uiAccessParams = { platform, uiOrigin };
+    uiAccessParams = { platform, activation, uiOrigin };
     const accessGeneration = runtimeGeneration;
 
     uiAccessPromise = (async () => {
@@ -155,7 +166,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       const access = active.runtime.createUiAccess({
         platform,
         uiOrigin,
-        extensions: [createUiActivationExtension({ entries: platform })],
+        extensions: [createUiActivationExtension({ entries: activation })],
       });
 
       if (accessGeneration !== runtimeGeneration) {

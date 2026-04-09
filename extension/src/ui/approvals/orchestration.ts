@@ -1,5 +1,6 @@
 import type { UiSnapshot } from "@arx/core/ui";
-import type { EntryIntent } from "@/ui/lib/entryIntent";
+import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
+import { ROUTES } from "@/ui/lib/routes";
 import { getApprovalRoutePath } from "./routes";
 
 export type ApprovalAttentionAction =
@@ -18,7 +19,7 @@ export function getCurrentApprovalRouteId(pathname: string): string | null {
 export function getApprovalAttentionAction(params: {
   snapshot: UiSnapshot | undefined;
   isLoading: boolean;
-  entryIntent: EntryIntent;
+  entry: UiEntryMetadata;
   pathname: string;
   requestedApprovalId: string | null;
   hadApprovalsSinceUnlock: boolean;
@@ -26,14 +27,26 @@ export function getApprovalAttentionAction(params: {
   action: ApprovalAttentionAction;
   nextHadApprovalsSinceUnlock: boolean;
 } {
-  const { snapshot, isLoading, entryIntent, pathname, requestedApprovalId, hadApprovalsSinceUnlock } = params;
+  const { snapshot, isLoading, entry, pathname, requestedApprovalId, hadApprovalsSinceUnlock } = params;
 
   if (isLoading || !snapshot) {
     return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: hadApprovalsSinceUnlock };
   }
 
-  if (entryIntent !== "attention_open" || !snapshot.vault.initialized) {
+  if (entry.environment !== "notification" || !snapshot.vault.initialized) {
     return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: hadApprovalsSinceUnlock };
+  }
+
+  if (entry.reason === "manual_open") {
+    if (pathname === ROUTES.APPROVALS) {
+      return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: false };
+    }
+
+    return { action: { type: "navigate", to: ROUTES.APPROVALS }, nextHadApprovalsSinceUnlock: false };
+  }
+
+  if (entry.reason !== "approval_created" && entry.reason !== "unlock_required") {
+    return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: false };
   }
 
   if (!snapshot.session.isUnlocked) {
@@ -46,7 +59,7 @@ export function getApprovalAttentionAction(params: {
       return { action: { type: "close" }, nextHadApprovalsSinceUnlock };
     }
 
-    if (requestedApprovalId) {
+    if (entry.reason === "approval_created" && requestedApprovalId) {
       return { action: { type: "waitForRequestedApproval" }, nextHadApprovalsSinceUnlock };
     }
 

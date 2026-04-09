@@ -1,4 +1,4 @@
-import type { EntryIntent } from "./entryIntent";
+import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { isOnboardingPath } from "./onboardingPaths";
 import { ROUTES } from "./routes";
 
@@ -19,25 +19,29 @@ export function needsOnboarding(snapshot: SnapshotLike): boolean {
 export type RootBeforeLoadDecision =
   | { type: "allow" }
   | { type: "close" }
-  | { type: "openOnboardingAndClose"; reason: "manual_open" }
+  | { type: "openOnboardingAndClose"; reason: "onboarding_required" }
   | { type: "redirect"; to: string; replace: true };
 
 export function decideRootBeforeLoad(params: {
-  entryIntent: EntryIntent;
+  entry: UiEntryMetadata;
   pathname: string;
   snapshot?: SnapshotLike | null;
 }): RootBeforeLoadDecision {
-  const { entryIntent, pathname, snapshot } = params;
+  const { entry, pathname, snapshot } = params;
 
   if (isOnboardingPath(pathname)) {
-    if (entryIntent === "onboarding_tab") return { type: "allow" };
-    if (entryIntent === "manual_open") return { type: "openOnboardingAndClose", reason: "manual_open" };
+    if (entry.environment === "onboarding") return { type: "allow" };
+    if (entry.environment === "popup") return { type: "openOnboardingAndClose", reason: "onboarding_required" };
     return { type: "close" };
   }
 
-  // Fail-safe: onboarding_tab should never land on non-onboarding surfaces under unknown state.
+  if (entry.environment === "notification" && entry.reason === "manual_open" && pathname === ROUTES.HOME) {
+    return { type: "redirect", to: ROUTES.APPROVALS, replace: true };
+  }
+
+  // Fail-safe: onboarding should never land on non-onboarding surfaces under unknown state.
   if (!snapshot) {
-    if (entryIntent === "onboarding_tab") {
+    if (entry.environment === "onboarding") {
       return { type: "redirect", to: ROUTES.WELCOME, replace: true };
     }
     return { type: "allow" };
@@ -46,7 +50,7 @@ export function decideRootBeforeLoad(params: {
   const onboardingNeeded = needsOnboarding(snapshot);
   const hasAccounts = (snapshot.accounts.totalCount ?? 0) > 0;
 
-  if (entryIntent === "onboarding_tab") {
+  if (entry.environment === "onboarding") {
     const target = !snapshot.vault.initialized
       ? ROUTES.WELCOME
       : !snapshot.session.isUnlocked
@@ -59,16 +63,16 @@ export function decideRootBeforeLoad(params: {
     return { type: "redirect", to: target, replace: true };
   }
 
-  if (entryIntent === "manual_open" && onboardingNeeded) {
-    return { type: "openOnboardingAndClose", reason: "manual_open" };
+  if (entry.environment === "popup" && onboardingNeeded) {
+    return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   }
 
-  if (entryIntent === "attention_open" && !snapshot.vault.initialized) {
+  if (entry.environment === "notification" && !snapshot.vault.initialized) {
     return { type: "close" };
   }
 
   if (snapshot.vault.initialized) return { type: "allow" };
 
-  if (entryIntent === "manual_open") return { type: "openOnboardingAndClose", reason: "manual_open" };
+  if (entry.environment === "popup") return { type: "openOnboardingAndClose", reason: "onboarding_required" };
   return { type: "close" };
 }

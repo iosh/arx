@@ -20,6 +20,8 @@ export type UiClientOptions = {
   logger?: Pick<Console, "warn" | "error" | "debug">;
 };
 
+export type UiClientConnectionStatus = "connected" | "disconnected";
+
 export class UiProtocolError extends Error {
   name = "UiProtocolError" as const;
 }
@@ -57,6 +59,7 @@ export type UiClient = {
   ) => Promise<UiMethodResult<M>>;
 
   on: <E extends UiEventName>(event: E, listener: (payload: UiEventPayload<E>) => void) => () => void;
+  onConnectionStatus: (listener: (status: UiClientConnectionStatus) => void) => () => void;
 
   getLastSnapshot: () => UiSnapshot | null;
   waitForSnapshot: (opts?: { timeoutMs?: number; predicate?: (s: UiSnapshot) => boolean }) => Promise<UiSnapshot>;

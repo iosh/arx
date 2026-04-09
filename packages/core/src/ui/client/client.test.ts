@@ -281,6 +281,36 @@ describe("ui client runtime", () => {
     }
   });
 
+  it("emits connection status transitions across reconnects", async () => {
+    vi.useFakeTimers();
+
+    const transport = createMockTransport();
+    const client = createUiClient({ transport });
+
+    try {
+      const statuses: string[] = [];
+      const unsubscribe = client.onConnectionStatus((status) => {
+        statuses.push(status);
+      });
+
+      await Promise.resolve();
+      expect(statuses).toEqual(["connected"]);
+
+      transport.disconnectNow(new Error("port disconnected"));
+      expect(statuses).toEqual(["connected", "disconnected"]);
+
+      vi.advanceTimersByTime(300);
+      await vi.runAllTimersAsync();
+
+      expect(statuses).toEqual(["connected", "disconnected", "connected"]);
+
+      unsubscribe();
+    } finally {
+      client.destroy();
+      vi.useRealTimers();
+    }
+  });
+
   it("waitForSnapshot requires a fresh snapshot after disconnect", async () => {
     const transport = createMockTransport();
     const client = createUiClient({ transport });

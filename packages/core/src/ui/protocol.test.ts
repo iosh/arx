@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseUiEnvelope } from "./protocol/envelopes.js";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
+import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
 import {
   isUiEventName,
   isUiMethodName,
@@ -81,6 +81,7 @@ describe("ui protocol registry", () => {
     expect(isUiMethodName("ui.snapshot.get")).toBe(true);
     expect(isUiMethodName("ui.snapshot.nope")).toBe(false);
 
+    expect(isUiEventName(UI_EVENT_ENTRY_CHANGED)).toBe(true);
     expect(isUiEventName(UI_EVENT_SNAPSHOT_CHANGED)).toBe(true);
     expect(isUiEventName("ui:unknown")).toBe(false);
   });
@@ -150,6 +151,19 @@ describe("ui protocol registry", () => {
   it("validates event payloads (strict)", () => {
     const payload = parseUiEventPayload(UI_EVENT_SNAPSHOT_CHANGED, SNAPSHOT_FIXTURE);
     expect(payload.chain.chainId).toBe("0x1");
+
+    const entryPayload = parseUiEventPayload(UI_EVENT_ENTRY_CHANGED, {
+      environment: "notification",
+      reason: "approval_created",
+      context: {
+        approvalId: "approval-1",
+        origin: "https://dapp.example",
+        method: "eth_requestAccounts",
+        chainRef: "eip155:1",
+        namespace: "eip155",
+      },
+    });
+    expect(entryPayload.context.approvalId).toBe("approval-1");
   });
 });
 

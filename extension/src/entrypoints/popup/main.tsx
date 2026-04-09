@@ -8,10 +8,9 @@ import "./style.css";
 // Import the generated route tree
 import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
-import { getEntryIntent } from "@/ui/lib/entryIntent";
 import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
-import { waitForInitialUiSnapshot } from "@/ui/lib/waitForInitialUiSnapshot";
+import { loadUiEntryLaunchContext, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 // Create QueryClient instance (shared across entire app)
@@ -53,13 +52,13 @@ const renderApp = () => {
   );
 };
 
-const renderEntryIntentError = (message: string) => {
+const renderStartupError = (message: string) => {
   ReactDOM.createRoot(getRootElement()).render(
     <React.StrictMode>
       <AppProviders>
         <Screen title="Startup error" scroll={false}>
           <ErrorState
-            title="Invalid entry intent"
+            title="Failed to start wallet UI"
             message={message}
             primaryAction={{ label: "Reload", onPress: () => window.location.reload() }}
             secondaryAction={{ label: "Close", onPress: () => window.close(), variant: "secondary" }}
@@ -71,28 +70,31 @@ const renderEntryIntentError = (message: string) => {
 };
 
 const boot = async () => {
+  startUiEntryLaunchContextSync();
+
   try {
-    // Guard against running under wrong entrypoint semantics.
-    getEntryIntent();
+    await loadUiEntryLaunchContext();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    renderEntryIntentError(message);
+    renderStartupError(message);
     return;
   }
 
   adjustWindowInnerSize();
 
   try {
-    const snapshot = await waitForInitialUiSnapshot();
+    const snapshot = await preloadUiSnapshot(queryClient);
     const needsOnboardingNow = needsOnboarding(snapshot);
 
     if (needsOnboardingNow) {
-      void uiClient.onboarding.openTab({ reason: "onboarding" });
+      void uiClient.onboarding.openTab({ reason: "onboarding_required" });
       window.close();
       return;
     }
   } catch (error) {
-    console.error("[popup] preflight snapshot failed; rendering popup", error);
+    const message = error instanceof Error ? error.message : String(error);
+    renderStartupError(message);
+    return;
   }
 
   renderApp();

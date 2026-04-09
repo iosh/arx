@@ -13,6 +13,7 @@ import type { UiSnapshot } from "../protocol/schemas.js";
 import {
   type PendingRequest,
   type UiClient,
+  type UiClientConnectionStatus,
   type UiClientOptions,
   UiProtocolError,
   UiRemoteError,
@@ -47,6 +48,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
   const pending = new Map<string, PendingRequest>();
 
   const listeners = new Map<UiEventName, Set<(payload: unknown) => void>>();
+  const connectionStatusListeners = new Set<(status: UiClientConnectionStatus) => void>();
 
   // Connection state + generation token to avoid connect/disconnect races.
   let connected = false;
@@ -60,7 +62,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
   const totalListenerCount = () => {
     let total = 0;
     for (const set of listeners.values()) total += set.size;
-    return total;
+    return total + connectionStatusListeners.size;
   };
 
   const clearReconnectTimer = () => {
@@ -79,6 +81,16 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
       }
     }
     pending.clear();
+  };
+
+  const emitConnectionStatus = (status: UiClientConnectionStatus) => {
+    for (const listener of connectionStatusListeners) {
+      try {
+        listener(status);
+      } catch (error) {
+        logger?.error?.("[uiClient] connection status listener threw", error);
+      }
+    }
   };
 
   const scheduleReconnect = () => {
@@ -118,6 +130,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
         if (needsReconnect) return;
 
         connected = true;
+        emitConnectionStatus("connected");
       })
       .finally(() => {
         connectPromise = null;
@@ -138,6 +151,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
 
   const handleDisconnect = (error?: unknown) => {
     if (destroyed) return;
+    const wasConnected = connected;
 
     // Invalidate any in-flight connect completion.
     connectGen += 1;
@@ -146,6 +160,10 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     connected = false;
     lastSnapshot = null;
     rejectAllPending(new Error("UI bridge disconnected"));
+
+    if (wasConnected) {
+      emitConnectionStatus("disconnected");
+    }
 
     if (error) logger?.warn?.("[uiClient] disconnected", error);
     scheduleReconnect();
@@ -267,6 +285,23 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
       if (!current) return;
       current.delete(listener as unknown as (payload: unknown) => void);
       if (current.size === 0) listeners.delete(event);
+      if (totalListenerCount() === 0) {
+        clearReconnectTimer();
+      }
+    };
+  };
+
+  const onConnectionStatus: UiClient["onConnectionStatus"] = (listener) => {
+    if (destroyed) throw new Error("UiClient is destroyed");
+
+    connectionStatusListeners.add(listener);
+
+    void connect().catch((error) => {
+      logger?.warn?.("[uiClient] connect failed", error);
+    });
+
+    return () => {
+      connectionStatusListeners.delete(listener);
       if (totalListenerCount() === 0) {
         clearReconnectTimer();
       }
@@ -397,6 +432,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     rejectAllPending(new Error("UiClient destroyed"));
 
     listeners.clear();
+    connectionStatusListeners.clear();
 
     try {
       onMessageUnsub();
@@ -418,7 +454,7 @@ export const createUiClient = (args: { transport: UiTransport } & UiClientOption
     lastSnapshot = null;
   };
 
-  const base = { connect, call, on, getLastSnapshot, waitForSnapshot, destroy };
+  const base = { connect, call, on, onConnectionStatus, getLastSnapshot, waitForSnapshot, destroy };
 
   const extend: UiClient["extend"] = function <E extends Record<string, unknown>>(
     this: UiClient & Record<string, unknown>,

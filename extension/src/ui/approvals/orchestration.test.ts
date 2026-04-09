@@ -1,5 +1,6 @@
 import type { ApprovalSummary, UiSnapshot } from "@arx/core/ui";
 import { describe, expect, it } from "vitest";
+import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { getApprovalAttentionAction, getCurrentApprovalRouteId } from "./orchestration";
 
 function createApproval(overrides?: Partial<ApprovalSummary>): ApprovalSummary {
@@ -26,6 +27,18 @@ function createSnapshot(approvals: ApprovalSummary[], isUnlocked = true): UiSnap
   } as UiSnapshot;
 }
 
+const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => ({
+  environment: overrides?.environment ?? "notification",
+  reason: overrides?.reason ?? "approval_created",
+  context: overrides?.context ?? {
+    approvalId: null,
+    origin: null,
+    method: null,
+    chainRef: null,
+    namespace: null,
+  },
+});
+
 describe("getCurrentApprovalRouteId", () => {
   it("extracts the approval id from approval detail routes", () => {
     expect(getCurrentApprovalRouteId("/approve/sign-message/approval-1")).toBe("approval-1");
@@ -39,7 +52,7 @@ describe("getApprovalAttentionAction", () => {
       getApprovalAttentionAction({
         snapshot: createSnapshot([]),
         isLoading: false,
-        entryIntent: "attention_open",
+        entry: createEntry({ reason: "unlock_required" }),
         pathname: "/approve/sign-message/approval-1",
         requestedApprovalId: null,
         hadApprovalsSinceUnlock: true,
@@ -55,7 +68,7 @@ describe("getApprovalAttentionAction", () => {
       getApprovalAttentionAction({
         snapshot: createSnapshot([]),
         isLoading: false,
-        entryIntent: "attention_open",
+        entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
         requestedApprovalId: "approval-2",
         hadApprovalsSinceUnlock: false,
@@ -71,7 +84,7 @@ describe("getApprovalAttentionAction", () => {
       getApprovalAttentionAction({
         snapshot: createSnapshot([createApproval()]),
         isLoading: false,
-        entryIntent: "attention_open",
+        entry: createEntry({ reason: "approval_created" }),
         pathname: "/approve/sign-message/approval-1",
         requestedApprovalId: null,
         hadApprovalsSinceUnlock: false,
@@ -90,7 +103,7 @@ describe("getApprovalAttentionAction", () => {
           createApproval({ id: "approval-2", type: "switchChain", payload: { chainRef: "eip155:10" } }),
         ]),
         isLoading: false,
-        entryIntent: "attention_open",
+        entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
         requestedApprovalId: "approval-2",
         hadApprovalsSinceUnlock: false,
@@ -109,7 +122,7 @@ describe("getApprovalAttentionAction", () => {
           createApproval({ id: "approval-2" }),
         ]),
         isLoading: false,
-        entryIntent: "attention_open",
+        entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
         requestedApprovalId: "missing",
         hadApprovalsSinceUnlock: false,
@@ -117,6 +130,38 @@ describe("getApprovalAttentionAction", () => {
     ).toEqual({
       action: { type: "navigate", to: "/approve/switch-chain/approval-1" },
       nextHadApprovalsSinceUnlock: true,
+    });
+  });
+
+  it("does not auto-orchestrate manual notification entries", () => {
+    expect(
+      getApprovalAttentionAction({
+        snapshot: createSnapshot([]),
+        isLoading: false,
+        entry: createEntry({ reason: "manual_open" }),
+        pathname: "/approvals",
+        requestedApprovalId: null,
+        hadApprovalsSinceUnlock: false,
+      }),
+    ).toEqual({
+      action: { type: "noop" },
+      nextHadApprovalsSinceUnlock: false,
+    });
+  });
+
+  it("redirects reused manual-open notifications back to the approvals list", () => {
+    expect(
+      getApprovalAttentionAction({
+        snapshot: createSnapshot([createApproval()]),
+        isLoading: false,
+        entry: createEntry({ reason: "manual_open" }),
+        pathname: "/approve/sign-message/approval-1",
+        requestedApprovalId: null,
+        hadApprovalsSinceUnlock: true,
+      }),
+    ).toEqual({
+      action: { type: "navigate", to: "/approvals" },
+      nextHadApprovalsSinceUnlock: false,
     });
   });
 });

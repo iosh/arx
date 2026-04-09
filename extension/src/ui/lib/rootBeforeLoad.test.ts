@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { decideRootBeforeLoad, needsOnboarding } from "./rootBeforeLoad";
 
 const SNAPSHOT_UNINITIALIZED = {
@@ -25,24 +26,36 @@ const SNAPSHOT_LOCKED = {
   session: { isUnlocked: false },
 };
 
+const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => ({
+  environment: overrides?.environment ?? "popup",
+  reason: overrides?.reason ?? "manual_open",
+  context: overrides?.context ?? {
+    approvalId: null,
+    origin: null,
+    method: null,
+    chainRef: null,
+    namespace: null,
+  },
+});
+
 describe("decideRootBeforeLoad", () => {
   it("needsOnboarding is false when locked (unknown account state)", () => {
     expect(needsOnboarding(SNAPSHOT_LOCKED)).toBe(false);
   });
 
-  it("manual_open + onboarding path => openOnboardingAndClose", () => {
+  it("popup + onboarding path => openOnboardingAndClose", () => {
     const decision = decideRootBeforeLoad({
-      entryIntent: "manual_open",
+      entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/welcome",
       snapshot: null,
     });
 
-    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "manual_open" });
+    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
   });
 
-  it("attention_open + onboarding path => close (fail-closed)", () => {
+  it("notification + onboarding path => close (fail-closed)", () => {
     const decision = decideRootBeforeLoad({
-      entryIntent: "attention_open",
+      entry: createEntry({ environment: "notification", reason: "approval_created" }),
       pathname: "/onboarding/generate",
       snapshot: null,
     });
@@ -50,9 +63,9 @@ describe("decideRootBeforeLoad", () => {
     expect(decision).toEqual({ type: "close" });
   });
 
-  it("onboarding_tab + onboarding path => allow", () => {
+  it("onboarding environment + onboarding path => allow", () => {
     const decision = decideRootBeforeLoad({
-      entryIntent: "onboarding_tab",
+      entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
       pathname: "/onboarding/verify",
       snapshot: null,
     });
@@ -60,10 +73,10 @@ describe("decideRootBeforeLoad", () => {
     expect(decision).toEqual({ type: "allow" });
   });
 
-  it("onboarding_tab + non-onboarding path => redirect based on snapshot", () => {
+  it("onboarding environment + non-onboarding path => redirect based on snapshot", () => {
     expect(
       decideRootBeforeLoad({
-        entryIntent: "onboarding_tab",
+        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
         snapshot: SNAPSHOT_UNINITIALIZED,
       }),
@@ -71,7 +84,7 @@ describe("decideRootBeforeLoad", () => {
 
     expect(
       decideRootBeforeLoad({
-        entryIntent: "onboarding_tab",
+        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
         snapshot: SNAPSHOT_LOCKED,
       }),
@@ -79,7 +92,7 @@ describe("decideRootBeforeLoad", () => {
 
     expect(
       decideRootBeforeLoad({
-        entryIntent: "onboarding_tab",
+        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/accounts",
         snapshot: SNAPSHOT_LOCKED,
       }),
@@ -87,7 +100,7 @@ describe("decideRootBeforeLoad", () => {
 
     expect(
       decideRootBeforeLoad({
-        entryIntent: "onboarding_tab",
+        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
         snapshot: SNAPSHOT_NO_ACCOUNTS,
       }),
@@ -95,26 +108,36 @@ describe("decideRootBeforeLoad", () => {
 
     expect(
       decideRootBeforeLoad({
-        entryIntent: "onboarding_tab",
+        entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
         pathname: "/",
         snapshot: SNAPSHOT_READY,
       }),
     ).toEqual({ type: "redirect", to: "/onboarding/complete", replace: true });
   });
 
-  it("manual_open + non-onboarding path + no accounts => openOnboardingAndClose (best practice)", () => {
+  it("popup + non-onboarding path + no accounts => openOnboardingAndClose", () => {
     const decision = decideRootBeforeLoad({
-      entryIntent: "manual_open",
+      entry: createEntry({ environment: "popup", reason: "manual_open" }),
       pathname: "/",
       snapshot: SNAPSHOT_NO_ACCOUNTS,
     });
 
-    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "manual_open" });
+    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
   });
 
-  it("onboarding_tab + non-onboarding path + missing snapshot => redirect to /welcome (fail-safe)", () => {
+  it("manual notification entry redirects root to approvals", () => {
     const decision = decideRootBeforeLoad({
-      entryIntent: "onboarding_tab",
+      entry: createEntry({ environment: "notification", reason: "manual_open" }),
+      pathname: "/",
+      snapshot: null,
+    });
+
+    expect(decision).toEqual({ type: "redirect", to: "/approvals", replace: true });
+  });
+
+  it("onboarding environment + non-onboarding path + missing snapshot => redirect to /welcome", () => {
+    const decision = decideRootBeforeLoad({
+      entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
       pathname: "/",
       snapshot: null,
     });

@@ -1,5 +1,6 @@
 import { createLogger, extendLogger } from "@arx/core/logger";
 import type { UiRuntimeAccess } from "@arx/core/runtime";
+import type { UiEventEnvelope } from "@arx/core/ui";
 import { createUiPortHub } from "./ui/portHub";
 import { createUiSnapshotBroadcaster } from "./ui/snapshotBroadcaster";
 
@@ -70,6 +71,10 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
     snapshotBroadcaster.sendInitialSnapshot(port);
   };
 
+  const broadcastEvent = (event: UiEventEnvelope) => {
+    portHub.broadcast(event);
+  };
+
   const teardown = () => {
     try {
       unsubscribeStateChanged();
@@ -82,6 +87,7 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
 
   return {
     attachPort,
+    broadcastEvent,
     teardown,
   };
 };

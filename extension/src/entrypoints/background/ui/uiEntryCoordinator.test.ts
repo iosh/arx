@@ -11,6 +11,8 @@ type ApprovalRecordLike = Pick<
 >;
 
 type ApprovalQueueItemLike = Pick<ApprovalQueueItem, "id" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt">;
+type NotificationOpenResult = Awaited<ReturnType<UiEntryPlatform["openNotificationPopup"]>>;
+type OnboardingOpenResult = Awaited<ReturnType<UiEntryPlatform["openOnboardingTab"]>>;
 
 class FakeBus {
   #handlers = new Map<unknown, Set<(payload: unknown) => void>>();
@@ -135,21 +137,41 @@ const buildHarness = (
   windowIds: number[],
   options?: {
     failFirstUiEntryAccess?: boolean;
+    notificationOpenResults?: NotificationOpenResult[];
+    onboardingOpenResults?: OnboardingOpenResult[];
   },
 ) => {
   const bus = new FakeBus();
   const approvals = new FakeApprovalsController();
   const unlock = new FakeUnlock();
   const trackedWindowClosers = new Map<number, () => void>();
-  let openCallIndex = 0;
+  const notificationOpenResults =
+    options?.notificationOpenResults ??
+    windowIds.map((windowId) => ({
+      activationPath: "create" as const,
+      windowId,
+    }));
+  const onboardingOpenResults = options?.onboardingOpenResults ?? [{ activationPath: "create" as const }];
+  let notificationOpenCallIndex = 0;
+  let onboardingOpenCallIndex = 0;
   let shouldFailFirstUiEntryAccess = options?.failFirstUiEntryAccess ?? false;
+  const onEntryChanged = vi.fn();
 
   const platform: UiEntryPlatform = {
-    openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
-    openNotificationPopup: vi.fn(async () => ({
-      activationPath: "create" as const,
-      windowId: windowIds[openCallIndex++],
-    })),
+    openOnboardingTab: vi.fn(async () => {
+      const result =
+        onboardingOpenResults[Math.min(onboardingOpenCallIndex, onboardingOpenResults.length - 1)] ??
+        ({ activationPath: "create" as const } satisfies OnboardingOpenResult);
+      onboardingOpenCallIndex += 1;
+      return result;
+    }),
+    openNotificationPopup: vi.fn(async () => {
+      const result =
+        notificationOpenResults[Math.min(notificationOpenCallIndex, notificationOpenResults.length - 1)] ??
+        ({ activationPath: "create" as const } satisfies NotificationOpenResult);
+      notificationOpenCallIndex += 1;
+      return result;
+    }),
     trackWindowClose: vi.fn((windowId: number, onClose: () => void) => {
       trackedWindowClosers.set(windowId, onClose);
     }),
@@ -197,6 +219,7 @@ const buildHarness = (
   return {
     approvals,
     bus,
+    onEntryChanged,
     platform,
     runtimeHost,
     unlock,
@@ -213,7 +236,11 @@ describe("uiEntryCoordinator", () => {
 
   it("cancels only approvals attached to the closed popup window", async () => {
     const harness = buildHarness([11, 22]);
-    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
 
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
@@ -248,7 +275,11 @@ describe("uiEntryCoordinator", () => {
 
   it("does not cancel UI-origin approvals when a provider popup closes", async () => {
     const harness = buildHarness([31]);
-    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
 
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
@@ -282,7 +313,11 @@ describe("uiEntryCoordinator", () => {
 
   it("keeps pending approvals alive when the session locks and still cancels them if the tracked popup closes", async () => {
     const harness = buildHarness([41]);
-    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
 
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
@@ -320,7 +355,11 @@ describe("uiEntryCoordinator", () => {
 
   it("tracks unlock attention popups without cancelling unrelated approvals", async () => {
     const harness = buildHarness([51]);
-    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
 
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
@@ -344,7 +383,11 @@ describe("uiEntryCoordinator", () => {
 
   it("retries initialization after the first ui entry access bootstrap failure", async () => {
     const harness = buildHarness([61], { failFirstUiEntryAccess: true });
-    const coordinator = createUiEntryCoordinator({ runtimeHost: harness.runtimeHost, platform: harness.platform });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
 
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
@@ -366,5 +409,57 @@ describe("uiEntryCoordinator", () => {
     await vi.waitFor(() => expect(harness.platform.openNotificationPopup).toHaveBeenCalledTimes(1));
 
     coordinator.destroy();
+  });
+
+  it("publishes notification entry changes without reloading a reused window", async () => {
+    const harness = buildHarness([], {
+      notificationOpenResults: [{ activationPath: "focus", windowId: 71 }],
+    });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
+
+    await coordinator.openNotificationPopup();
+
+    expect(harness.onEntryChanged).toHaveBeenCalledWith({
+      environment: "notification",
+      reason: "manual_open",
+      context: {
+        approvalId: null,
+        origin: null,
+        method: null,
+        chainRef: null,
+        namespace: null,
+      },
+    });
+    expect(coordinator.getEntryLaunchContext({ environment: "notification" })).toEqual({
+      environment: "notification",
+      reason: "manual_open",
+      context: {
+        approvalId: null,
+        origin: null,
+        method: null,
+        chainRef: null,
+        namespace: null,
+      },
+    });
+  });
+
+  it("reuses an existing onboarding tab without reloading it", async () => {
+    const harness = buildHarness([], {
+      onboardingOpenResults: [{ activationPath: "focus", tabId: 9 }],
+    });
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
+
+    await coordinator.openOnboardingTab("install");
+
+    expect(harness.platform.openOnboardingTab).toHaveBeenCalledWith("install");
+    expect(coordinator.getEntryLaunchContext({ environment: "onboarding" }).reason).toBe("install");
   });
 });

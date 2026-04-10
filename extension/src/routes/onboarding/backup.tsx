@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { requireVaultInitialized } from "@/ui/lib/routeGuards";
+import { buildBackupEntryRedirect } from "@/ui/lib/onboardingFlow";
 import { ROUTES } from "@/ui/lib/routes";
 import { VerifyMnemonicScreen } from "@/ui/screens/onboarding/VerifyMnemonicScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
@@ -18,39 +18,31 @@ const buildQuizIndexes = (count: number): number[] => {
   return Array.from(indexes.values()).sort((a, b) => a - b);
 };
 
-export const Route = createFileRoute("/onboarding/verify")({
-  beforeLoad: requireVaultInitialized,
-  validateSearch: (search): { keyringId?: string } => ({
-    keyringId: typeof search?.keyringId === "string" ? search.keyringId : undefined,
-  }),
+export const Route = createFileRoute("/onboarding/backup")({
   component: VerifyMnemonicRoute,
 });
 function VerifyMnemonicRoute() {
   const router = useRouter();
-  const search = Route.useSearch();
-  const { markBackedUp } = useUiSnapshot();
+  const { snapshot, markBackedUp } = useUiSnapshot();
   const mnemonicWords = useOnboardingStore((s) => s.mnemonicWords);
   const mnemonicKeyringId = useOnboardingStore((s) => s.mnemonicKeyringId);
   const clearMnemonicWords = useOnboardingStore((s) => s.clearMnemonicWords);
 
-  const [words, setWords] = useState<string[]>([]);
-  const [pending, setPending] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const words = mnemonicWords ?? [];
 
   useEffect(() => {
-    if (!mnemonicWords || mnemonicWords.length === 0) {
-      // After refresh/reopen we may not have the mnemonic in-memory anymore; send the user to Home where
-      // backup reminders can still be handled (export + mark backed up) without completing Verify.
-      router.navigate({ to: ROUTES.HOME, replace: true });
-      return;
+    const redirect = buildBackupEntryRedirect({ snapshot, mnemonicWords, mnemonicKeyringId });
+    if (redirect) {
+      router.navigate(redirect);
     }
-    setWords(mnemonicWords);
-  }, [mnemonicWords, router]);
+  }, [mnemonicKeyringId, mnemonicWords, router, snapshot]);
 
   const quizIndexes = useMemo(() => buildQuizIndexes(words.length), [words.length]);
 
   const handleSubmit = async (answers: Record<number, string>) => {
-    if (quizIndexes.length === 0 || pending) return;
+    if (quizIndexes.length === 0 || isSubmitting) return;
 
     for (const index of quizIndexes) {
       const expected = words[index]?.trim().toLowerCase();
@@ -61,26 +53,33 @@ function VerifyMnemonicRoute() {
       }
     }
 
-    setPending(true);
+    setIsSubmitting(true);
     setError(null);
     try {
-      const keyringId = search.keyringId ?? mnemonicKeyringId;
+      const keyringId = mnemonicKeyringId ?? snapshot?.backup.nextHdKeyring?.keyringId;
       if (keyringId) await markBackedUp(keyringId);
       clearMnemonicWords();
       router.navigate({ to: ROUTES.ONBOARDING_COMPLETE, replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
-      setPending(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
     <VerifyMnemonicScreen
       quizIndexes={quizIndexes}
-      pending={pending}
+      isSubmitting={isSubmitting}
       error={error}
-      onBack={() => router.navigate({ to: ROUTES.ONBOARDING_GENERATE, replace: true })}
+      onAnswerChange={() => {
+        if (error) setError(null);
+      }}
+      onBack={() => router.navigate({ to: ROUTES.ONBOARDING_CREATE, replace: true })}
+      onSkip={() => {
+        clearMnemonicWords();
+        router.navigate({ to: ROUTES.ONBOARDING_COMPLETE, replace: true });
+      }}
       onSubmit={handleSubmit}
     />
   );

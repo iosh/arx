@@ -40,3 +40,30 @@ export const refreshUiSnapshotIntoCache = async (queryClient: QueryClient): Prom
   writeCachedUiSnapshot(queryClient, snapshot);
   return snapshot;
 };
+
+/**
+ * Waits for a snapshot that satisfies the predicate and mirrors it into the query cache.
+ * If the snapshot event stream lags behind a mutation reply, falls back to one fresh snapshot query.
+ */
+export const waitForUiSnapshotMatch = async (
+  queryClient: QueryClient,
+  predicate: (snapshot: UiSnapshot) => boolean,
+  opts?: { timeoutMs?: number },
+): Promise<UiSnapshot | undefined> => {
+  try {
+    const snapshot = await uiClient.waitForSnapshot({
+      timeoutMs: opts?.timeoutMs,
+      predicate,
+    });
+    writeCachedUiSnapshot(queryClient, snapshot);
+    return snapshot;
+  } catch {
+    try {
+      const snapshot = await refreshUiSnapshotIntoCache(queryClient);
+      if (!predicate(snapshot)) return undefined;
+      return snapshot;
+    } catch {
+      return undefined;
+    }
+  }
+};

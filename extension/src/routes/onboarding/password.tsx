@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
-import { requireVaultUninitialized } from "@/ui/lib/routeGuards";
+import { requireOnboardingPasswordAllowed } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { PasswordSetupScreen } from "@/ui/screens/onboarding/PasswordSetupScreen";
 import { useOnboardingStore } from "@/ui/stores/onboardingStore";
@@ -8,7 +8,7 @@ import { useOnboardingStore } from "@/ui/stores/onboardingStore";
 type PasswordSetupIntent = "create" | "import";
 
 export const Route = createFileRoute("/onboarding/password")({
-  beforeLoad: requireVaultUninitialized,
+  beforeLoad: requireOnboardingPasswordAllowed,
   validateSearch: (search): { intent: PasswordSetupIntent } => ({
     intent: (search.intent === "import" ? "import" : "create") as PasswordSetupIntent,
   }),
@@ -29,7 +29,7 @@ function PasswordSetupRoute() {
         return;
       }
 
-      router.navigate({ to: ROUTES.ONBOARDING_GENERATE });
+      router.navigate({ to: ROUTES.ONBOARDING_CREATE });
     },
     [router, search.intent, setPassword],
   );

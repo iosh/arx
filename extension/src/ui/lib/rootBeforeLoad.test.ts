@@ -39,14 +39,14 @@ const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => (
 });
 
 describe("decideRootBeforeLoad", () => {
-  it("needsOnboarding is false when locked (unknown account state)", () => {
-    expect(needsOnboarding(SNAPSHOT_LOCKED)).toBe(false);
+  it("needsOnboarding stays true when setup is incomplete even if the session is locked", () => {
+    expect(needsOnboarding(SNAPSHOT_LOCKED)).toBe(true);
   });
 
   it("popup + onboarding path => openOnboardingAndClose", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "popup", reason: "manual_open" }),
-      pathname: "/welcome",
+      pathname: "/onboarding/welcome",
       snapshot: null,
     });
 
@@ -56,7 +56,7 @@ describe("decideRootBeforeLoad", () => {
   it("notification + onboarding path => close (fail-closed)", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "notification", reason: "approval_created" }),
-      pathname: "/onboarding/generate",
+      pathname: "/onboarding/create",
       snapshot: null,
     });
 
@@ -66,7 +66,7 @@ describe("decideRootBeforeLoad", () => {
   it("onboarding environment + onboarding path => allow", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
-      pathname: "/onboarding/verify",
+      pathname: "/onboarding/backup",
       snapshot: null,
     });
 
@@ -80,7 +80,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/",
         snapshot: SNAPSHOT_UNINITIALIZED,
       }),
-    ).toEqual({ type: "redirect", to: "/welcome", replace: true });
+    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
     expect(
       decideRootBeforeLoad({
@@ -88,7 +88,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/",
         snapshot: SNAPSHOT_LOCKED,
       }),
-    ).toEqual({ type: "allow" });
+    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
     expect(
       decideRootBeforeLoad({
@@ -96,7 +96,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/accounts",
         snapshot: SNAPSHOT_LOCKED,
       }),
-    ).toEqual({ type: "redirect", to: "/", replace: true });
+    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
     expect(
       decideRootBeforeLoad({
@@ -104,7 +104,7 @@ describe("decideRootBeforeLoad", () => {
         pathname: "/",
         snapshot: SNAPSHOT_NO_ACCOUNTS,
       }),
-    ).toEqual({ type: "redirect", to: "/onboarding/generate", replace: true });
+    ).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
 
     expect(
       decideRootBeforeLoad({
@@ -125,6 +125,16 @@ describe("decideRootBeforeLoad", () => {
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
   });
 
+  it("popup + non-onboarding path + locked no-accounts setup => openOnboardingAndClose", () => {
+    const decision = decideRootBeforeLoad({
+      entry: createEntry({ environment: "popup", reason: "manual_open" }),
+      pathname: "/",
+      snapshot: SNAPSHOT_LOCKED,
+    });
+
+    expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
+  });
+
   it("manual notification entry redirects root to approvals", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "notification", reason: "manual_open" }),
@@ -135,13 +145,13 @@ describe("decideRootBeforeLoad", () => {
     expect(decision).toEqual({ type: "redirect", to: "/approvals", replace: true });
   });
 
-  it("onboarding environment + non-onboarding path + missing snapshot => redirect to /welcome", () => {
+  it("onboarding environment + non-onboarding path + missing snapshot => redirect to /onboarding/welcome", () => {
     const decision = decideRootBeforeLoad({
       entry: createEntry({ environment: "onboarding", reason: "onboarding_required" }),
       pathname: "/",
       snapshot: null,
     });
 
-    expect(decision).toEqual({ type: "redirect", to: "/welcome", replace: true });
+    expect(decision).toEqual({ type: "redirect", to: "/onboarding/welcome", replace: true });
   });
 });

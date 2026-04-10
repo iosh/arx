@@ -10,9 +10,6 @@ type SnapshotLike = {
 
 export function needsOnboarding(snapshot: SnapshotLike): boolean {
   if (!snapshot.vault.initialized) return true;
-  // When locked we may not have access to account state; treat onboarding as unknown
-  // and avoid forcing onboarding routes (SessionGate will prompt for unlock).
-  if (!snapshot.session.isUnlocked) return false;
   return (snapshot.accounts.totalCount ?? 0) === 0;
 }
 
@@ -42,7 +39,7 @@ export function decideRootBeforeLoad(params: {
   // Fail-safe: onboarding should never land on non-onboarding surfaces under unknown state.
   if (!snapshot) {
     if (entry.environment === "onboarding") {
-      return { type: "redirect", to: ROUTES.WELCOME, replace: true };
+      return { type: "redirect", to: ROUTES.ONBOARDING_WELCOME, replace: true };
     }
     return { type: "allow" };
   }
@@ -51,13 +48,7 @@ export function decideRootBeforeLoad(params: {
   const hasAccounts = (snapshot.accounts.totalCount ?? 0) > 0;
 
   if (entry.environment === "onboarding") {
-    const target = !snapshot.vault.initialized
-      ? ROUTES.WELCOME
-      : !snapshot.session.isUnlocked
-        ? ROUTES.HOME
-        : hasAccounts
-          ? ROUTES.ONBOARDING_COMPLETE
-          : ROUTES.ONBOARDING_GENERATE;
+    const target = hasAccounts ? ROUTES.ONBOARDING_COMPLETE : ROUTES.ONBOARDING_WELCOME;
 
     if (pathname === target) return { type: "allow" };
     return { type: "redirect", to: target, replace: true };

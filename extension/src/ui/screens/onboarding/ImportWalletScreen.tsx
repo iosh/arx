@@ -1,20 +1,27 @@
 import { ArrowDownToLine } from "lucide-react";
 import { useState } from "react";
-import { Form, H2, Paragraph, TextArea, useTheme, YStack } from "tamagui";
+import { Form, H2, Paragraph, TextArea, useTheme, XStack, YStack } from "tamagui";
 import { Button, Screen, TextField } from "@/ui/components";
 
+type ImportMode = "mnemonic" | "privateKey";
+
 type ImportWalletScreenProps = {
-  isLoading: boolean;
+  isSubmitting: boolean;
   error: string | null;
-  onSubmit: (value: string, alias?: string) => void;
+  onChange?: () => void;
+  onSubmit: (params: { value: string; mode: ImportMode; alias?: string }) => void;
 };
 
-export function ImportWalletScreen({ isLoading, error, onSubmit }: ImportWalletScreenProps) {
+export function ImportWalletScreen({ isSubmitting, error, onChange, onSubmit }: ImportWalletScreenProps) {
   const theme = useTheme();
+  const [mode, setMode] = useState<ImportMode>("mnemonic");
   const [value, setValue] = useState("");
   const [alias, setAlias] = useState("");
+  const canSubmit = value.trim().length > 0 && !isSubmitting;
+
   const handleSubmit = () => {
-    onSubmit(value, alias.trim() || undefined);
+    if (!canSubmit) return;
+    onSubmit({ value, mode, alias: alias.trim() || undefined });
   };
 
   return (
@@ -37,16 +44,43 @@ export function ImportWalletScreen({ isLoading, error, onSubmit }: ImportWalletS
 
         <Form onSubmit={handleSubmit} gap="$4">
           <YStack gap="$2">
+            <XStack gap="$2">
+              <Button
+                flex={1}
+                variant={mode === "mnemonic" ? "primary" : "secondary"}
+                disabled={isSubmitting}
+                onPress={() => {
+                  onChange?.();
+                  setMode("mnemonic");
+                }}
+              >
+                Recovery Phrase
+              </Button>
+              <Button
+                flex={1}
+                variant={mode === "privateKey" ? "primary" : "secondary"}
+                disabled={isSubmitting}
+                onPress={() => {
+                  onChange?.();
+                  setMode("privateKey");
+                }}
+              >
+                Private Key
+              </Button>
+            </XStack>
             <Paragraph fontWeight="600" fontSize="$3" color="$text">
-              Recovery Phrase or Private Key
+              {mode === "mnemonic" ? "Recovery Phrase" : "Private Key"}
             </Paragraph>
             <TextArea
               value={value}
-              placeholder={"e.g. word1 word2 ... word12\nor 0x..."}
+              placeholder={mode === "mnemonic" ? "e.g. word1 word2 ... word12" : "e.g. 0x..."}
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!isLoading}
-              onChangeText={setValue}
+              editable={!isSubmitting}
+              onChangeText={(nextValue) => {
+                onChange?.();
+                setValue(nextValue);
+              }}
               minHeight={120}
               borderWidth={1}
               borderRadius="$md"
@@ -63,8 +97,11 @@ export function ImportWalletScreen({ isLoading, error, onSubmit }: ImportWalletS
           <TextField
             label="Wallet Alias (Optional)"
             value={alias}
-            disabled={isLoading}
-            onChangeText={setAlias}
+            disabled={isSubmitting}
+            onChangeText={(nextAlias) => {
+              onChange?.();
+              setAlias(nextAlias);
+            }}
             placeholder="e.g. Main Wallet"
           />
 
@@ -75,8 +112,15 @@ export function ImportWalletScreen({ isLoading, error, onSubmit }: ImportWalletS
           ) : null}
 
           <Form.Trigger asChild>
-            <Button variant="primary" size="$5" loading={isLoading} fontWeight="600" marginTop="$2">
-              Import Wallet
+            <Button
+              variant="primary"
+              size="$5"
+              loading={isSubmitting}
+              disabled={!canSubmit}
+              fontWeight="600"
+              marginTop="$2"
+            >
+              {mode === "mnemonic" ? "Import Phrase" : "Import Key"}
             </Button>
           </Form.Trigger>
         </Form>

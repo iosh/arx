@@ -4,22 +4,23 @@ import { Button, Screen } from "@/ui/components";
 
 type GenerateMnemonicScreenProps = {
   words: string[];
-  isLoading: boolean;
+  isGenerating: boolean;
+  isSubmitting: boolean;
   error: string | null;
   onRefresh: () => void;
   onContinue: () => void;
-  onSkip: () => void;
 };
 
 export function GenerateMnemonicScreen({
   words,
-  isLoading,
+  isGenerating,
+  isSubmitting,
   error,
   onRefresh,
   onContinue,
-  onSkip,
 }: GenerateMnemonicScreenProps) {
   const theme = useTheme();
+  const isBusy = isGenerating || isSubmitting;
 
   return (
     <Screen padded={false} scroll={false}>
@@ -50,7 +51,7 @@ export function GenerateMnemonicScreen({
           minHeight={180}
           justifyContent="center"
         >
-          {isLoading ? (
+          {isGenerating ? (
             <YStack alignItems="center" gap="$3">
               <Spinner size="large" color="$accent" />
               <Paragraph color="$mutedText">Generating phrase...</Paragraph>
@@ -100,10 +101,11 @@ export function GenerateMnemonicScreen({
             variant="primary"
             size="$5"
             onPress={onContinue}
-            disabled={isLoading || words.length === 0}
+            disabled={isBusy || words.length === 0}
+            loading={isSubmitting}
             fontWeight="600"
           >
-            Verify Phrase
+            Continue
           </Button>
 
           <XStack gap="$3">
@@ -112,8 +114,8 @@ export function GenerateMnemonicScreen({
               variant="secondary"
               icon={<RefreshCw size={16} />}
               onPress={onRefresh}
-              loading={isLoading}
-              disabled={isLoading}
+              loading={isGenerating}
+              disabled={isBusy}
             >
               Regenerate
             </Button>
@@ -122,18 +124,6 @@ export function GenerateMnemonicScreen({
                 but typically we want to encourage writing it down.
             */}
           </XStack>
-
-          <Button
-            variant="ghost"
-            size="$3"
-            onPress={onSkip}
-            disabled={isLoading || words.length === 0}
-            color="$danger"
-            opacity={0.8}
-            hoverStyle={{ opacity: 1, backgroundColor: "$red2" }}
-          >
-            I'll do this later (Not Recommended)
-          </Button>
         </YStack>
       </YStack>
     </Screen>

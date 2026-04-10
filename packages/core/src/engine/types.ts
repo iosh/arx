@@ -61,11 +61,7 @@ import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
 import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
-import type {
-  ConnectionSnapshot,
-  PermissionViewsService,
-  PermittedAccountView,
-} from "../services/runtime/permissionViews/types.js";
+import type { ConnectionSnapshot, PermittedAccountView } from "../services/runtime/permissionViews/types.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";

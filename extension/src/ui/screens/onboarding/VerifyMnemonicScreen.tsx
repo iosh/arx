@@ -1,30 +1,45 @@
 import { ArrowLeft, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form, H2, Paragraph, useTheme, YStack } from "tamagui";
 import { Button, Screen, TextField } from "@/ui/components";
 
+const buildInitialAnswers = (quizIndexes: number[]) => Object.fromEntries(quizIndexes.map((index) => [index, ""]));
+
 type VerifyMnemonicScreenProps = {
   quizIndexes: number[];
-  pending: boolean;
+  isSubmitting: boolean;
   error: string | null;
+  onAnswerChange?: () => void;
   onBack: () => void;
+  onSkip: () => void;
   onSubmit: (answers: Record<number, string>) => void;
 };
 
-export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSubmit }: VerifyMnemonicScreenProps) {
+export function VerifyMnemonicScreen({
+  quizIndexes,
+  isSubmitting,
+  error,
+  onAnswerChange,
+  onBack,
+  onSkip,
+  onSubmit,
+}: VerifyMnemonicScreenProps) {
   const theme = useTheme();
-  const [answers, setAnswers] = useState<Record<number, string>>(
-    Object.fromEntries(quizIndexes.map((index) => [index, ""])),
-  );
+  const [answers, setAnswers] = useState<Record<number, string>>(() => buildInitialAnswers(quizIndexes));
+
+  useEffect(() => {
+    setAnswers(buildInitialAnswers(quizIndexes));
+  }, [quizIndexes]);
 
   const handleChange = (index: number, value: string) => {
+    onAnswerChange?.();
     setAnswers((prev) => ({ ...prev, [index]: value }));
   };
 
   const allFilled = quizIndexes.every((index) => answers[index]?.trim().length > 0);
 
   const handleSubmit = () => {
-    if (pending || !allFilled) return;
+    if (isSubmitting || !allFilled) return;
     onSubmit(answers);
   };
 
@@ -57,7 +72,7 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
                 onChangeText={(value) => handleChange(index, value)}
                 autoCapitalize="none"
                 autoCorrect={false}
-                disabled={pending}
+                disabled={isSubmitting}
               />
             ))}
           </YStack>
@@ -70,12 +85,21 @@ export function VerifyMnemonicScreen({ quizIndexes, pending, error, onBack, onSu
 
           <YStack gap="$3" marginTop="$2">
             <Form.Trigger asChild>
-              <Button variant="primary" size="$5" loading={pending} disabled={!allFilled || pending} fontWeight="600">
+              <Button
+                variant="primary"
+                size="$5"
+                loading={isSubmitting}
+                disabled={!allFilled || isSubmitting}
+                fontWeight="600"
+              >
                 Verify & Complete
               </Button>
             </Form.Trigger>
-            <Button variant="ghost" icon={<ArrowLeft size={16} />} onPress={onBack} disabled={pending} size="$3">
+            <Button variant="ghost" icon={<ArrowLeft size={16} />} onPress={onBack} disabled={isSubmitting} size="$3">
               Back to Phrase
+            </Button>
+            <Button variant="ghost" onPress={onSkip} disabled={isSubmitting} size="$3" color="$danger">
+              Skip for Now
             </Button>
           </YStack>
         </Form>

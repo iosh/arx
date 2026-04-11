@@ -100,7 +100,12 @@ describe("backgroundRoot", () => {
     createUiEntryCoordinatorMock.mockReturnValue({
       getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
         environment,
-        reason: environment === "onboarding" ? "onboarding_required" : "manual_open",
+        reason:
+          environment === "onboarding"
+            ? "onboarding_required"
+            : environment === "notification"
+              ? "idle"
+              : "manual_open",
         context: {
           approvalId: null,
           origin: null,
@@ -109,7 +114,6 @@ describe("backgroundRoot", () => {
           namespace: null,
         },
       })),
-      openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       destroy: vi.fn(),
       start: vi.fn(),

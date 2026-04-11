@@ -74,7 +74,23 @@ describe("getApprovalAttentionAction", () => {
         hadApprovalsSinceUnlock: false,
       }),
     ).toEqual({
-      action: { type: "waitForRequestedApproval" },
+      action: { type: "navigate", to: "/approvals" },
+      nextHadApprovalsSinceUnlock: false,
+    });
+  });
+
+  it("keeps the holding route while waiting for the first approval to materialize", () => {
+    expect(
+      getApprovalAttentionAction({
+        snapshot: createSnapshot([]),
+        isLoading: false,
+        entry: createEntry({ reason: "approval_created" }),
+        pathname: "/approvals",
+        requestedApprovalId: "approval-2",
+        hadApprovalsSinceUnlock: false,
+      }),
+    ).toEqual({
+      action: { type: "noop" },
       nextHadApprovalsSinceUnlock: false,
     });
   });
@@ -133,34 +149,18 @@ describe("getApprovalAttentionAction", () => {
     });
   });
 
-  it("does not auto-orchestrate manual notification entries", () => {
+  it("closes idle notifications without an active launch context", () => {
     expect(
       getApprovalAttentionAction({
         snapshot: createSnapshot([]),
         isLoading: false,
-        entry: createEntry({ reason: "manual_open" }),
+        entry: createEntry({ reason: "idle" }),
         pathname: "/approvals",
         requestedApprovalId: null,
         hadApprovalsSinceUnlock: false,
       }),
     ).toEqual({
-      action: { type: "noop" },
-      nextHadApprovalsSinceUnlock: false,
-    });
-  });
-
-  it("redirects reused manual-open notifications back to the approvals list", () => {
-    expect(
-      getApprovalAttentionAction({
-        snapshot: createSnapshot([createApproval()]),
-        isLoading: false,
-        entry: createEntry({ reason: "manual_open" }),
-        pathname: "/approve/sign-message/approval-1",
-        requestedApprovalId: null,
-        hadApprovalsSinceUnlock: true,
-      }),
-    ).toEqual({
-      action: { type: "navigate", to: "/approvals" },
+      action: { type: "close" },
       nextHadApprovalsSinceUnlock: false,
     });
   });

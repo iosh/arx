@@ -81,7 +81,6 @@ describe("ui actions", () => {
       chainRef: "eip155:1",
     });
 
-    void actions.approvals.openPopup();
     void actions.approvals.resolve({ id: "id", action: "approve" });
     void actions.approvals.resolve({ id: "id", action: "reject" });
     void actions.approvals.resolve({ id: "id", action: "reject", reason: "reason" });

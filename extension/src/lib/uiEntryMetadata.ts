@@ -2,6 +2,7 @@ export const UI_ENVIRONMENTS = ["popup", "notification", "onboarding"] as const;
 export type UiEnvironment = (typeof UI_ENVIRONMENTS)[number];
 
 export const UI_ENTRY_REASONS = [
+  "idle",
   "manual_open",
   "install",
   "onboarding_required",

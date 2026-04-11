@@ -8,17 +8,12 @@ export const uiActivationActions = (client: UiClient) => {
   const openTab = (params: UiMethodParams<"ui.onboarding.openTab">): Promise<UiMethodResult<"ui.onboarding.openTab">> =>
     client.call("ui.onboarding.openTab", params);
 
-  const openPopup = (): Promise<UiMethodResult<"ui.approvals.openPopup">> => client.call("ui.approvals.openPopup");
-
   return {
     entry: {
       getLaunchContext,
     },
     onboarding: {
       openTab,
-    },
-    approvals: {
-      openPopup,
     },
   };
 };

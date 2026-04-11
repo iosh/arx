@@ -44,7 +44,8 @@ describe("parseUiRequestMetadata", () => {
       getUiRequestExecutionPlan({
         type: "ui:request",
         id: "req-3",
-        method: "ui.approvals.openPopup",
+        method: "ui.onboarding.openTab",
+        params: { reason: "manual_open" },
       }),
     ).toEqual({
       kind: "command",

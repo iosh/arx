@@ -203,7 +203,12 @@ const makeRuntime = () => {
 
 const createEntryBootstrap = (environment: "popup" | "notification" | "onboarding") => ({
   environment,
-  reason: environment === "onboarding" ? ("onboarding_required" as const) : ("manual_open" as const),
+  reason:
+    environment === "onboarding"
+      ? ("onboarding_required" as const)
+      : environment === "notification"
+        ? ("idle" as const)
+        : ("manual_open" as const),
   context: {
     approvalId: null,
     origin: null,
@@ -407,7 +412,6 @@ describe("runtimeHost", () => {
         platform: uiPlatform,
         activation: {
           openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
-          openNotificationPopup: vi.fn(async () => ({ activationPath: "create" as const })),
           getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
             createEntryBootstrap(environment),
           ),

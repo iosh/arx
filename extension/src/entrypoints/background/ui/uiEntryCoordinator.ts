@@ -13,7 +13,6 @@ import type {
   BackgroundUiEntryAccess,
   BackgroundUnlockAttentionRequestedPayload,
 } from "../runtimeHost";
-import type { PopupOpenResult } from "../services/popupActivator";
 
 type UiEntryCoordinatorDeps = {
   runtimeHost: BackgroundRuntimeHost;
@@ -30,7 +29,6 @@ export type UiEntryCoordinator = {
   destroy(): void;
   getEntryLaunchContext(params: UiEntryLaunchContextParams): UiEntryLaunchContext;
   openOnboardingTab(reason: string): Promise<OnboardingOpenResult>;
-  openNotificationPopup(): Promise<PopupOpenResult>;
 };
 
 const createDefaultEntryLaunchContext = (
@@ -40,7 +38,7 @@ const createDefaultEntryLaunchContext = (
     case "popup":
       return createUiEntryMetadata({ environment, reason: "manual_open" });
     case "notification":
-      return createUiEntryMetadata({ environment, reason: "manual_open" });
+      return createUiEntryMetadata({ environment, reason: "idle" });
     case "onboarding":
       return createUiEntryMetadata({ environment, reason: "onboarding_required" });
   }
@@ -279,20 +277,6 @@ export const createUiEntryCoordinator = ({
     return await platform.openOnboardingTab(reason);
   };
 
-  const openNotificationPopup = async () => {
-    setEntry(
-      createUiEntryMetadata({
-        environment: "notification",
-        reason: "manual_open",
-      }),
-    );
-
-    const result = await platform.openNotificationPopup({
-      reason: "manual_open",
-    });
-    return result;
-  };
-
   const start = () => {
     if (started || startTask) {
       return;
@@ -353,6 +337,5 @@ export const createUiEntryCoordinator = ({
     destroy,
     getEntryLaunchContext,
     openOnboardingTab,
-    openNotificationPopup,
   };
 };

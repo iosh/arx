@@ -57,6 +57,7 @@ describe("uiEntryMetadata", () => {
   it("parses known environments and reasons", () => {
     expect(parseUiEnvironment("popup")).toBe("popup");
     expect(parseUiEnvironment("bad")).toBeNull();
+    expect(parseUiEntryReason("idle")).toBe("idle");
     expect(parseUiEntryReason("approval_created")).toBe("approval_created");
     expect(parseUiEntryReason("bad")).toBeNull();
   });

@@ -7,8 +7,6 @@ export type ApprovalAttentionAction =
   | { type: "noop" }
   | { type: "reset" }
   | { type: "close" }
-  | { type: "waitForRequestedApproval" }
-  | { type: "waitForAnyApproval" }
   | { type: "navigate"; to: string };
 
 export function getCurrentApprovalRouteId(pathname: string): string | null {
@@ -37,12 +35,8 @@ export function getApprovalAttentionAction(params: {
     return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: hadApprovalsSinceUnlock };
   }
 
-  if (entry.reason === "manual_open") {
-    if (pathname === ROUTES.APPROVALS) {
-      return { action: { type: "noop" }, nextHadApprovalsSinceUnlock: false };
-    }
-
-    return { action: { type: "navigate", to: ROUTES.APPROVALS }, nextHadApprovalsSinceUnlock: false };
+  if (entry.reason === "idle") {
+    return { action: { type: "close" }, nextHadApprovalsSinceUnlock: false };
   }
 
   if (entry.reason !== "approval_created" && entry.reason !== "unlock_required") {
@@ -59,11 +53,11 @@ export function getApprovalAttentionAction(params: {
       return { action: { type: "close" }, nextHadApprovalsSinceUnlock };
     }
 
-    if (entry.reason === "approval_created" && requestedApprovalId) {
-      return { action: { type: "waitForRequestedApproval" }, nextHadApprovalsSinceUnlock };
+    if (pathname === ROUTES.APPROVALS) {
+      return { action: { type: "noop" }, nextHadApprovalsSinceUnlock };
     }
 
-    return { action: { type: "waitForAnyApproval" }, nextHadApprovalsSinceUnlock };
+    return { action: { type: "navigate", to: ROUTES.APPROVALS }, nextHadApprovalsSinceUnlock };
   }
 
   const currentApprovalId = getCurrentApprovalRouteId(pathname);

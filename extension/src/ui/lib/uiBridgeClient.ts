@@ -21,10 +21,6 @@ const uiExtensionActions = (client: UiClient) => {
       ...common.onboarding,
       ...activation.onboarding,
     },
-    approvals: {
-      ...common.approvals,
-      ...activation.approvals,
-    },
   };
 };
 

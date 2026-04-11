@@ -32,8 +32,8 @@ export function decideRootBeforeLoad(params: {
     return { type: "close" };
   }
 
-  if (entry.environment === "notification" && entry.reason === "manual_open" && pathname === ROUTES.HOME) {
-    return { type: "redirect", to: ROUTES.APPROVALS, replace: true };
+  if (entry.environment === "notification" && entry.reason === "idle") {
+    return { type: "close" };
   }
 
   // Fail-safe: onboarding should never land on non-onboarding surfaces under unknown state.

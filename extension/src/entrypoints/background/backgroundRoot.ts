@@ -85,7 +85,7 @@ export const createBackgroundRoot = (): BackgroundRoot => {
 
     uiBridgePromise = (async () => {
       const uiAccess = await runtimeHost.getOrInitUiAccess({
-        platform: uiEntries,
+        platform: uiPlatform,
         activation: uiEntries,
         uiOrigin,
       });

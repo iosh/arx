@@ -411,32 +411,17 @@ describe("uiEntryCoordinator", () => {
     coordinator.destroy();
   });
 
-  it("publishes notification entry changes without reloading a reused window", async () => {
-    const harness = buildHarness([], {
-      notificationOpenResults: [{ activationPath: "focus", windowId: 71 }],
-    });
+  it("defaults notification launch context to idle until shell state activates it", async () => {
+    const harness = buildHarness([]);
     const coordinator = createUiEntryCoordinator({
       runtimeHost: harness.runtimeHost,
       platform: harness.platform,
       onEntryChanged: harness.onEntryChanged,
     });
 
-    await coordinator.openNotificationPopup();
-
-    expect(harness.onEntryChanged).toHaveBeenCalledWith({
-      environment: "notification",
-      reason: "manual_open",
-      context: {
-        approvalId: null,
-        origin: null,
-        method: null,
-        chainRef: null,
-        namespace: null,
-      },
-    });
     expect(coordinator.getEntryLaunchContext({ environment: "notification" })).toEqual({
       environment: "notification",
-      reason: "manual_open",
+      reason: "idle",
       context: {
         approvalId: null,
         origin: null,
@@ -445,6 +430,7 @@ describe("uiEntryCoordinator", () => {
         namespace: null,
       },
     });
+    expect(harness.onEntryChanged).not.toHaveBeenCalled();
   });
 
   it("reuses an existing onboarding tab without reloading it", async () => {

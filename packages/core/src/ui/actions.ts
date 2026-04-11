@@ -28,7 +28,6 @@ export const uiActions = (client: UiClient) => {
 
     approvals: {
       ...common.approvals,
-      openPopup: call("ui.approvals.openPopup"),
     },
   };
 };

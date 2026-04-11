@@ -4,6 +4,7 @@ import { defineMethod } from "./types.js";
 
 const UiEnvironmentSchema = z.enum(["popup", "notification", "onboarding"]);
 const UiEntryReasonSchema = z.enum([
+  "idle",
   "manual_open",
   "install",
   "onboarding_required",

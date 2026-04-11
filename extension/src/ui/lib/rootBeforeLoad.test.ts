@@ -135,14 +135,14 @@ describe("decideRootBeforeLoad", () => {
     expect(decision).toEqual({ type: "openOnboardingAndClose", reason: "onboarding_required" });
   });
 
-  it("manual notification entry redirects root to approvals", () => {
+  it("idle notification entry closes immediately", () => {
     const decision = decideRootBeforeLoad({
-      entry: createEntry({ environment: "notification", reason: "manual_open" }),
+      entry: createEntry({ environment: "notification", reason: "idle" }),
       pathname: "/",
       snapshot: null,
     });
 
-    expect(decision).toEqual({ type: "redirect", to: "/approvals", replace: true });
+    expect(decision).toEqual({ type: "close" });
   });
 
   it("onboarding environment + non-onboarding path + missing snapshot => redirect to /onboarding/welcome", () => {

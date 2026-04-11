@@ -624,7 +624,8 @@ const createUiAccessForTest = (input: {
     ...input.platform,
     getEntryLaunchContext: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
       environment,
-      reason: environment === "onboarding" ? "onboarding_required" : "manual_open",
+      reason:
+        environment === "onboarding" ? "onboarding_required" : environment === "notification" ? "idle" : "manual_open",
       context: {
         approvalId: null,
         origin: null,
@@ -1405,7 +1406,7 @@ describe("uiBridge", () => {
 
     expect(expectResponse(res.envelope, res.id)).toEqual({
       environment: "notification",
-      reason: "manual_open",
+      reason: "idle",
       context: {
         approvalId: null,
         origin: null,

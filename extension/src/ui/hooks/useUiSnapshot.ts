@@ -2,12 +2,14 @@ import type { UiSnapshot } from "@arx/core/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { uiClient } from "../lib/uiBridgeClient";
+import {
+  createUiKeyringsQueryOptions,
+  UI_ACCOUNTS_BY_KEYRING_QUERY_KEY,
+  UI_KEYRINGS_QUERY_KEY,
+} from "../lib/uiKeyringQueries";
 import { createUiSnapshotQueryOptions, writeCachedUiSnapshot } from "../lib/uiSnapshotQuery";
 import { useUiPort } from "./useUiPort";
 
-export const UI_KEYRINGS_QUERY_KEY = ["uiKeyrings"] as const;
-const UI_ACCOUNTS_BY_KEYRING_QUERY_KEY = (keyringId: string, includeHidden = false) =>
-  ["uiAccountsByKeyring", keyringId, includeHidden] as const;
 export const useUiSnapshot = () => {
   const queryClient = useQueryClient();
 
@@ -18,7 +20,7 @@ export const useUiSnapshot = () => {
 
   const invalidateAccountsByKeyring = useCallback(
     (keyringId: string) =>
-      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring", keyringId], exact: false }),
+      void queryClient.invalidateQueries({ queryKey: [...UI_ACCOUNTS_BY_KEYRING_QUERY_KEY, keyringId], exact: false }),
     [queryClient],
   );
 
@@ -86,7 +88,7 @@ export const useUiSnapshot = () => {
   const renameAccountMutation = useMutation({
     mutationFn: (params: { accountKey: string; alias: string }) => uiClient.keyrings.renameAccount(params),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+      void queryClient.invalidateQueries({ queryKey: UI_ACCOUNTS_BY_KEYRING_QUERY_KEY, exact: false });
     },
   });
 
@@ -101,14 +103,14 @@ export const useUiSnapshot = () => {
   const hideHdAccountMutation = useMutation({
     mutationFn: (accountKey: string) => uiClient.keyrings.hideHdAccount({ accountKey }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+      void queryClient.invalidateQueries({ queryKey: UI_ACCOUNTS_BY_KEYRING_QUERY_KEY, exact: false });
     },
   });
 
   const unhideHdAccountMutation = useMutation({
     mutationFn: (accountKey: string) => uiClient.keyrings.unhideHdAccount({ accountKey }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["uiAccountsByKeyring"], exact: false });
+      void queryClient.invalidateQueries({ queryKey: UI_ACCOUNTS_BY_KEYRING_QUERY_KEY, exact: false });
     },
   });
 
@@ -128,25 +130,7 @@ export const useUiSnapshot = () => {
     mutationFn: (params: { accountKey: string; password: string }) => uiClient.keyrings.exportPrivateKey(params),
   });
 
-  const fetchKeyrings = useCallback(
-    () =>
-      queryClient.fetchQuery({
-        queryKey: UI_KEYRINGS_QUERY_KEY,
-        queryFn: () => uiClient.keyrings.list(),
-        staleTime: 30_000,
-      }),
-    [queryClient],
-  );
-
-  const fetchAccountsByKeyring = useCallback(
-    (keyringId: string, includeHidden = false) =>
-      queryClient.fetchQuery({
-        queryKey: UI_ACCOUNTS_BY_KEYRING_QUERY_KEY(keyringId, includeHidden),
-        queryFn: () => uiClient.keyrings.getAccountsByKeyring({ keyringId, includeHidden }),
-        staleTime: 15_000,
-      }),
-    [queryClient],
-  );
+  const fetchKeyrings = useCallback(() => queryClient.fetchQuery(createUiKeyringsQueryOptions()), [queryClient]);
 
   return {
     snapshot: snapshotQuery.data,
@@ -169,6 +153,5 @@ export const useUiSnapshot = () => {
     exportMnemonic: exportMnemonicMutation.mutateAsync,
     exportPrivateKey: exportPrivateKeyMutation.mutateAsync,
     fetchKeyrings,
-    fetchAccountsByKeyring,
   };
 };

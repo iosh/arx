@@ -25,46 +25,45 @@ import { pushToast } from "@/ui/lib/toast";
 
 export const Route = createFileRoute("/accounts")({
   beforeLoad: requireVaultInitialized,
-  component: AccountSwitchPage,
+  component: AccountsPage,
 });
 
-function AccountSwitchPage() {
+function AccountsPage() {
   const router = useRouter();
   const { snapshot, isLoading, switchAccount, markBackedUp, deriveAccount, importPrivateKey, fetchKeyrings } =
     useUiSnapshot();
-  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [markingId, setMarkingId] = useState<string | null>(null);
-
-  const [backupError, setBackupError] = useState<string | null>(null);
+  const [pendingAccountKey, setPendingAccountKey] = useState<string | null>(null);
+  const [accountErrorMessage, setAccountErrorMessage] = useState<string | null>(null);
+  const [markingKeyringId, setMarkingKeyringId] = useState<string | null>(null);
+  const [backupErrorMessage, setBackupErrorMessage] = useState<string | null>(null);
 
   const [deriveOpen, setDeriveOpen] = useState(false);
   const [deriving, setDeriving] = useState(false);
-  const [deriveError, setDeriveError] = useState<string | null>(null);
+  const [deriveErrorMessage, setDeriveErrorMessage] = useState<string | null>(null);
   const [hdKeyrings, setHdKeyrings] = useState<UiKeyringMeta[]>([]);
   const [selectedHdKeyringId, setSelectedHdKeyringId] = useState<string | null>(null);
   const [loadingHdKeyrings, setLoadingHdKeyrings] = useState(false);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importPrivateKeyValue, setImportPrivateKeyValue] = useState("");
+  const [importErrorMessage, setImportErrorMessage] = useState<string | null>(null);
+  const [privateKeyValue, setPrivateKeyValue] = useState("");
   const [importAlias, setImportAlias] = useState("");
 
-  const importPkValid = isValidPrivateKey(importPrivateKeyValue);
-  const importValidationError =
-    !importError && importPrivateKeyValue.trim().length > 0 && !importPkValid
+  const importPrivateKeyValid = isValidPrivateKey(privateKeyValue);
+  const importValidationErrorMessage =
+    !importErrorMessage && privateKeyValue.trim().length > 0 && !importPrivateKeyValid
       ? "Invalid private key (32-byte hex, 64 characters)."
       : undefined;
 
   const closeDeriveSheet = () => {
-    setDeriveError(null);
+    setDeriveErrorMessage(null);
     setDeriveOpen(false);
   };
 
   const closeImportSheet = () => {
-    setImportError(null);
-    setImportPrivateKeyValue("");
+    setImportErrorMessage(null);
+    setPrivateKeyValue("");
     setImportAlias("");
     setImportOpen(false);
   };
@@ -74,22 +73,22 @@ function AccountSwitchPage() {
     let cancelled = false;
 
     setLoadingHdKeyrings(true);
-    setDeriveError(null);
+    setDeriveErrorMessage(null);
 
     void fetchKeyrings()
       .then((keyrings) => {
         if (cancelled) return;
-        const hd = keyrings.filter((k) => k.type === "hd");
-        setHdKeyrings(hd);
+        const nextHdKeyrings = keyrings.filter((keyring) => keyring.type === "hd");
+        setHdKeyrings(nextHdKeyrings);
         setSelectedHdKeyringId((current) => {
-          if (current && hd.some((k) => k.id === current)) return current;
-          return hd[0]?.id ?? null;
+          if (current && nextHdKeyrings.some((keyring) => keyring.id === current)) return current;
+          return nextHdKeyrings[0]?.id ?? null;
         });
       })
       .catch((error) => {
         if (cancelled) return;
-        console.warn("[AccountSwitchPage] failed to load keyrings", error);
-        setDeriveError(getErrorMessage(error));
+        console.warn("[AccountsPage] failed to load keyrings", error);
+        setDeriveErrorMessage(getErrorMessage(error));
       })
       .finally(() => {
         if (cancelled) return;
@@ -105,32 +104,32 @@ function AccountSwitchPage() {
     return <LoadingScreen />;
   }
 
-  const nextBackupHdKeyring = snapshot.backup.nextHdKeyring;
-  const pendingHdKeyringCount = snapshot.backup.pendingHdKeyringCount;
-
   const handleAccountSwitch = async (accountKey: string | null) => {
-    if (pendingAccountId) return;
+    if (pendingAccountKey) return;
 
-    setErrorMessage(null);
-    setPendingAccountId(accountKey);
+    setAccountErrorMessage(null);
+    setPendingAccountKey(accountKey);
+
     try {
       await switchAccount({ chainRef: snapshot.chain.chainRef, accountKey });
       router.navigate({ to: ROUTES.HOME });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error));
+      setAccountErrorMessage(getErrorMessage(error));
     } finally {
-      setPendingAccountId(null);
+      setPendingAccountKey(null);
     }
   };
+
   const handleMarkBackedUp = async (keyringId: string) => {
-    setMarkingId(keyringId);
-    setBackupError(null);
+    setMarkingKeyringId(keyringId);
+    setBackupErrorMessage(null);
+
     try {
       await markBackedUp(keyringId);
     } catch (error) {
-      setBackupError(getErrorMessage(error));
+      setBackupErrorMessage(getErrorMessage(error));
     } finally {
-      setMarkingId((current) => (current === keyringId ? null : current));
+      setMarkingKeyringId((current) => (current === keyringId ? null : current));
     }
   };
 
@@ -140,22 +139,21 @@ function AccountSwitchPage() {
       return;
     }
 
-    const keyringId = selectedHdKeyringId;
-    if (!keyringId) {
-      setDeriveError("No HD wallet found. Create or import a recovery phrase wallet first.");
+    if (!selectedHdKeyringId) {
+      setDeriveErrorMessage("No HD wallet found. Create or import a recovery phrase wallet first.");
       return;
     }
 
     setDeriving(true);
-    setDeriveError(null);
+    setDeriveErrorMessage(null);
 
     try {
-      await deriveAccount({ keyringId });
+      await deriveAccount({ keyringId: selectedHdKeyringId });
       pushToast({ kind: "success", message: "New account derived", dedupeKey: "derive-success" });
-      setDeriveOpen(false);
+      closeDeriveSheet();
     } catch (error) {
-      console.warn("[AccountSwitchPage] failed to derive account", error);
-      setDeriveError(getErrorMessage(error));
+      console.warn("[AccountsPage] failed to derive account", error);
+      setDeriveErrorMessage(getErrorMessage(error));
     } finally {
       setDeriving(false);
     }
@@ -167,61 +165,66 @@ function AccountSwitchPage() {
       return;
     }
 
-    const normalized = formatPrivateKeyHex(importPrivateKeyValue);
-    if (!normalized) {
-      setImportError("Enter a private key");
+    const formattedPrivateKey = formatPrivateKeyHex(privateKeyValue);
+    if (!formattedPrivateKey) {
+      setImportErrorMessage("Enter a private key");
       return;
     }
-    if (!isValidPrivateKey(normalized)) {
-      setImportError("Invalid private key format. Expected 64 hex characters (optionally prefixed with 0x).");
+
+    if (!isValidPrivateKey(formattedPrivateKey)) {
+      setImportErrorMessage("Invalid private key format. Expected 64 hex characters (optionally prefixed with 0x).");
       return;
     }
 
     setImporting(true);
-    setImportError(null);
+    setImportErrorMessage(null);
 
     try {
       const alias = importAlias.trim() || undefined;
-      const res = await importPrivateKey({ privateKey: normalized, alias, namespace: snapshot.chain.namespace });
+      const result = await importPrivateKey({
+        privateKey: formattedPrivateKey,
+        alias,
+        namespace: snapshot.chain.namespace,
+      });
       pushToast({
         kind: "success",
-        message: `Imported account ${res.account.address.slice(0, 6)}...${res.account.address.slice(-4)}`,
-        dedupeKey: `import-pk-success:${res.account.address}`,
+        message: `Imported account ${result.account.address.slice(0, 6)}...${result.account.address.slice(-4)}`,
+        dedupeKey: `import-pk-success:${result.account.address}`,
       });
-      setImportPrivateKeyValue("");
-      setImportAlias("");
-      setImportOpen(false);
+      closeImportSheet();
     } catch (error) {
-      console.warn("[AccountSwitchPage] failed to import private key", error);
-      setImportError(getErrorMessage(error));
+      console.warn("[AccountsPage] failed to import private key", error);
+      setImportErrorMessage(getErrorMessage(error));
     } finally {
       setImporting(false);
     }
   };
 
+  const nextHdKeyring = snapshot.backup.nextHdKeyring;
+
   return (
     <Screen>
-      {nextBackupHdKeyring ? (
+      {nextHdKeyring ? (
         <Card padded bordered backgroundColor="$yellow2" gap="$2">
           <Paragraph fontWeight="600">Backup reminders</Paragraph>
           <XStack alignItems="center" justifyContent="space-between" gap="$2">
-            <Paragraph>{nextBackupHdKeyring.alias ?? "HD keyring"} needs backup</Paragraph>
+            <Paragraph>{nextHdKeyring.alias ?? "HD keyring"} needs backup</Paragraph>
             <Button
               size="$2"
-              loading={markingId === nextBackupHdKeyring.keyringId}
-              onPress={() => void handleMarkBackedUp(nextBackupHdKeyring.keyringId)}
+              loading={markingKeyringId === nextHdKeyring.keyringId}
+              onPress={() => void handleMarkBackedUp(nextHdKeyring.keyringId)}
             >
               Mark backed up
             </Button>
           </XStack>
-          {pendingHdKeyringCount > 1 ? (
+          {snapshot.backup.pendingHdKeyringCount > 1 ? (
             <Paragraph color="$color10" fontSize="$2">
-              {pendingHdKeyringCount} HD wallets still need backup.
+              {snapshot.backup.pendingHdKeyringCount} HD wallets still need backup.
             </Paragraph>
           ) : null}
-          {backupError ? (
+          {backupErrorMessage ? (
             <Paragraph color="$red10" fontSize="$2">
-              {backupError}
+              {backupErrorMessage}
             </Paragraph>
           ) : null}
         </Card>
@@ -242,7 +245,8 @@ function AccountSwitchPage() {
         ) : (
           snapshot.accounts.list.map((account) => {
             const isActive = snapshot.accounts.active?.accountKey === account.accountKey;
-            const loading = pendingAccountId === account.accountKey;
+            const loading = pendingAccountKey === account.accountKey;
+
             return (
               <Card key={account.accountKey} padded bordered borderColor={isActive ? "$accent" : "$border"} gap="$2">
                 <AddressDisplay address={account.canonicalAddress} displayAddress={account.displayAddress} />
@@ -262,9 +266,10 @@ function AccountSwitchPage() {
             );
           })
         )}
-        {errorMessage ? (
+
+        {accountErrorMessage ? (
           <Paragraph color="$red10" fontSize="$2">
-            {errorMessage}
+            {accountErrorMessage}
           </Paragraph>
         ) : null}
       </Card>
@@ -290,7 +295,7 @@ function AccountSwitchPage() {
         dismissOnOverlayPress={false}
         onOpenChange={(open) => {
           if (!open && deriving) return;
-          setDeriveError(null);
+          setDeriveErrorMessage(null);
           setDeriveOpen(open);
         }}
       >
@@ -307,12 +312,12 @@ function AccountSwitchPage() {
             <Paragraph fontWeight="600">Choose wallet</Paragraph>
             {hdKeyrings.map((keyring) => {
               const selected = selectedHdKeyringId === keyring.id;
-              const alias = keyring.alias ?? "HD wallet";
               const derivedCount = keyring.derivedCount ?? 0;
+
               return (
                 <ListItem
                   key={keyring.id}
-                  title={alias}
+                  title={keyring.alias ?? "HD wallet"}
                   subtitle={`Next derivation index: ${derivedCount}`}
                   right={selected ? <Check size={18} /> : null}
                   onPress={deriving ? undefined : () => setSelectedHdKeyringId(keyring.id)}
@@ -326,9 +331,9 @@ function AccountSwitchPage() {
           </Paragraph>
         ) : null}
 
-        {deriveError ? (
+        {deriveErrorMessage ? (
           <Paragraph color="$danger" fontSize="$2">
-            {deriveError}
+            {deriveErrorMessage}
           </Paragraph>
         ) : null}
 
@@ -355,8 +360,8 @@ function AccountSwitchPage() {
         onOpenChange={(open) => {
           if (!open && importing) return;
           if (!open) {
-            setImportError(null);
-            setImportPrivateKeyValue("");
+            setImportErrorMessage(null);
+            setPrivateKeyValue("");
             setImportAlias("");
           }
           setImportOpen(open);
@@ -369,15 +374,15 @@ function AccountSwitchPage() {
 
           <PasswordInput
             label="Private key"
-            value={importPrivateKeyValue}
+            value={privateKeyValue}
             onChangeText={(value) => {
-              setImportPrivateKeyValue(value);
-              if (importError) setImportError(null);
+              setPrivateKeyValue(value);
+              if (importErrorMessage) setImportErrorMessage(null);
             }}
             placeholder="0x..."
             autoCapitalize="none"
             autoCorrect={false}
-            errorText={importValidationError}
+            errorText={importValidationErrorMessage}
             disabled={importing}
           />
 
@@ -389,9 +394,9 @@ function AccountSwitchPage() {
             disabled={importing}
           />
 
-          {importError ? (
+          {importErrorMessage ? (
             <Paragraph color="$danger" fontSize="$2">
-              {importError}
+              {importErrorMessage}
             </Paragraph>
           ) : null}
         </YStack>
@@ -404,7 +409,7 @@ function AccountSwitchPage() {
             flex={1}
             variant="primary"
             loading={importing}
-            disabled={importing || !importPkValid}
+            disabled={importing || !importPrivateKeyValid}
             onPress={() => void handleImportPrivateKey()}
           >
             Import

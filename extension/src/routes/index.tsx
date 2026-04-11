@@ -6,7 +6,6 @@ import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 import { pushToast } from "@/ui/lib/toast";
-import { uiClient } from "@/ui/lib/uiBridgeClient";
 import { HomeScreen } from "@/ui/screens/HomeScreen";
 
 export const Route = createFileRoute("/")({
@@ -56,15 +55,7 @@ function HomePage() {
       onMarkBackedUp={handleMarkBackedUp}
       onExportMnemonic={handleExportMnemonic}
       markingKeyringId={markingId}
-      onOpenApprovals={() => {
-        void uiClient.approvals
-          .openPopup()
-          .then(() => window.close())
-          .catch((error) => {
-            pushToast({ kind: "error", message: getErrorMessage(error), dedupeKey: "open-approvals" });
-            router.navigate({ to: ROUTES.APPROVALS });
-          });
-      }}
+      onOpenApprovals={() => void router.navigate({ to: ROUTES.APPROVALS })}
       onNavigateAccounts={() => router.navigate({ to: ROUTES.ACCOUNTS })}
       onNavigateNetworks={() => router.navigate({ to: ROUTES.NETWORKS })}
       onNavigateSend={() => router.navigate({ to: ROUTES.SEND })}

@@ -76,7 +76,7 @@ import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
-import type { InitializeVaultParams, VaultEnvelope } from "../vault/types.js";
+import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 
 // Static namespace description that can be indexed and validated before boot.
 export type NamespaceEngineFacts = Readonly<{
@@ -177,7 +177,8 @@ export type WalletSession = Readonly<{
   getUnlockState(): UnlockState;
   isUnlocked(): boolean;
   hasInitializedVault(): boolean;
-  initialize(params: InitializeVaultParams): Promise<VaultEnvelope>;
+  createVault(params: CreateVaultParams): Promise<VaultEnvelope>;
+  importVault(envelope: VaultEnvelope): Promise<VaultEnvelope>;
   unlock(params: UnlockParams): Promise<UnlockState>;
   lock(reason: UnlockReason): UnlockState;
   resetAutoLockTimer(): UnlockState;

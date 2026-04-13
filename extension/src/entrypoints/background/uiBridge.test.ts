@@ -802,6 +802,23 @@ const buildBridge = (opts?: {
     onStateChanged: (listener: () => void) => unlock.onStateChanged(() => listener()),
     unlock,
     withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
+    createVault: async (params: { password: string }) => {
+      void params;
+      hasEnvelope = true;
+      vault.setUnlocked(false);
+      unlock.setUnlocked(false);
+      return {
+        version: 1,
+        kdf: { name: "pbkdf2", hash: "sha256", salt: "salt", iterations: 1 },
+        cipher: { name: "aes-gcm", iv: "iv", data: "data" },
+      };
+    },
+    importVault: async (envelope: Parameters<BackgroundSessionServices["importVault"]>[0]) => {
+      hasEnvelope = true;
+      vault.setUnlocked(false);
+      unlock.setUnlocked(false);
+      return envelope;
+    },
     vault: {
       getStatus: () => ({ isUnlocked: vault.isUnlocked(), hasEnvelope }),
       initialize: async (params: { password: string }) => {
@@ -1152,6 +1169,12 @@ describe("uiBridge", () => {
         unlock: new FakeUnlock(true),
         withVaultMetaPersistHold: async <T>(fn: () => Promise<T>) => await fn(),
         persistVaultMeta: vi.fn(async () => {}),
+        createVault: vi.fn(async () => ({
+          version: 1 as const,
+          kdf: { name: "pbkdf2" as const, hash: "sha256" as const, salt: "salt", iterations: 1 },
+          cipher: { name: "aes-gcm" as const, iv: "iv", data: "data" },
+        })),
+        importVault: vi.fn(async (envelope: Parameters<BackgroundSessionServices["importVault"]>[0]) => envelope),
         vault: {
           getStatus: () => ({ isUnlocked: true, hasEnvelope: true }),
         },

@@ -9,7 +9,7 @@ const ORIGIN = "https://dapp.example";
 
 type RpcHarnessInstance = Awaited<ReturnType<typeof createRpcHarness>>;
 const initializeSession = async (runtime: RpcHarnessInstance["runtime"]) => {
-  await runtime.services.session.vault.initialize({ password: PASSWORD });
+  await runtime.services.session.createVault({ password: PASSWORD });
   await runtime.services.session.unlock.unlock({ password: PASSWORD });
 };
 

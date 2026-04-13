@@ -48,7 +48,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const execute = createExecutor(runtime);
@@ -755,7 +755,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const account = await runtime.services.keyring.deriveAccount(keyringId);
@@ -832,7 +832,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
@@ -875,7 +875,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     const first = await runtime.services.keyring.deriveAccount(keyringId);
@@ -937,7 +937,7 @@ describe("eip155 handlers - core error paths", () => {
     runtime.lifecycle.start();
 
     const chain = getActiveChainMetadata(runtime);
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
     await runtime.services.keyring.deriveAccount(keyringId);
@@ -979,7 +979,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const execute = createExecutor(runtime);
@@ -1000,7 +1000,7 @@ describe("eip155 handlers - core error paths", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const chain = getActiveChainMetadata(runtime);

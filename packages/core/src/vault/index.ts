@@ -1,7 +1,8 @@
 export type {
   CommitSecretParams,
-  InitializeVaultParams,
+  CreateVaultParams,
   ReencryptParams,
+  SealVaultParams,
   UnlockVaultParams,
   VaultConfig,
   VaultEnvelope,

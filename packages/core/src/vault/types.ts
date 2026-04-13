@@ -22,12 +22,14 @@ export type VaultStatus = {
   hasEnvelope: boolean;
 };
 
-export type InitializeVaultParams = {
+export type CreateVaultParams = {
   password: string;
-  // The secret bytes that the vault protects (e.g. keyring payload).
-  // If omitted, a random secret will be generated.
-  secret?: Uint8Array;
 };
+
+export type SealVaultParams = {
+  // Payload bytes to seal into a new vault envelope.
+  secret: Uint8Array;
+} & CreateVaultParams;
 
 export type UnlockVaultParams = {
   password: string;
@@ -49,11 +51,11 @@ export type VaultConfig = {
   iterations?: number;
   saltBytes?: number;
   ivBytes?: number;
-  secretBytes?: number;
 };
 
 export interface VaultService {
-  initialize(params: InitializeVaultParams): Promise<VaultEnvelope>;
+  // Creates or reseals the vault envelope and keeps secret material out of the unlocked session.
+  initialize(params: SealVaultParams): Promise<VaultEnvelope>;
   unlock(params: UnlockVaultParams): Promise<void>;
   lock(): void;
 
@@ -61,6 +63,7 @@ export interface VaultService {
   commitSecret(params: CommitSecretParams): Promise<VaultEnvelope>; // uses current derived key, unlocked only
   reencrypt(params: ReencryptParams): Promise<VaultEnvelope>;
 
+  // Imports an existing envelope without reviving an unlocked session.
   importEnvelope(envelope: VaultEnvelope): void;
   verifyPassword(password: string): Promise<void>;
   getEnvelope(): VaultEnvelope | null;

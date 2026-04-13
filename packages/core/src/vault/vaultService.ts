@@ -3,8 +3,8 @@ import { copyBytes, zeroize } from "../utils/bytes.js";
 import { vaultErrors } from "./errors.js";
 import type {
   CommitSecretParams,
-  InitializeVaultParams,
   ReencryptParams,
+  SealVaultParams,
   UnlockVaultParams,
   VaultConfig,
   VaultEnvelope,
@@ -25,7 +25,6 @@ type ResolvedVaultConfig = {
   iterations: number;
   saltBytes: number;
   ivBytes: number;
-  secretBytes: number;
 };
 
 const DEFAULT_CONFIG: ResolvedVaultConfig = {
@@ -33,7 +32,6 @@ const DEFAULT_CONFIG: ResolvedVaultConfig = {
   iterations: 600_000,
   saltBytes: 16,
   ivBytes: 12,
-  secretBytes: 32,
 };
 
 export const VAULT_VERSION = 1 as const;
@@ -51,14 +49,12 @@ const deriveVaultConfig = (config?: VaultConfig): ResolvedVaultConfig => {
   const iterations = config?.iterations ?? DEFAULT_CONFIG.iterations;
   const saltBytes = config?.saltBytes ?? DEFAULT_CONFIG.saltBytes;
   const ivBytes = config?.ivBytes ?? DEFAULT_CONFIG.ivBytes;
-  const secretBytes = config?.secretBytes ?? DEFAULT_CONFIG.secretBytes;
 
   assertPositiveInteger(iterations, "PBKDF2 iteration count");
   assertPositiveInteger(saltBytes, "Salt length");
   assertPositiveInteger(ivBytes, "AES-GCM IV length");
-  assertPositiveInteger(secretBytes, "Secret byte length");
 
-  return { iterations, saltBytes, ivBytes, secretBytes };
+  return { iterations, saltBytes, ivBytes };
 };
 
 const cloneEnvelope = (envelope: VaultEnvelope): VaultEnvelope => ({
@@ -173,20 +169,18 @@ export const createVaultService = (config?: VaultConfig): VaultService => {
   };
 
   return {
-    async initialize(params: InitializeVaultParams): Promise<VaultEnvelope> {
+    async initialize(params: SealVaultParams): Promise<VaultEnvelope> {
       const saltBytes = randomBytes(resolved.saltBytes);
-      const sessionSecret = params.secret ? copyBytes(params.secret) : randomBytes(resolved.secretBytes);
+      const sessionSecret = copyBytes(params.secret);
 
       clearSession();
-      const { keyMaterial, envelope: next } = await encryptWithPassword({
+      const { envelope: next } = await encryptWithPassword({
         password: params.password,
         secret: sessionSecret,
         saltBytes,
         iterations: resolved.iterations,
       });
 
-      derivedKey = keyMaterial;
-      secret = sessionSecret;
       envelope = next;
 
       return cloneEnvelope(next);

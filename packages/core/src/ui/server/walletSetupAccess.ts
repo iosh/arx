@@ -64,7 +64,7 @@ export const createUiWalletSetupAccess = ({
       }
 
       if (!status.hasEnvelope) {
-        await session.vault.initialize({ password });
+        await session.createVault({ password });
         await unlockForSetup(password);
       } else if (!session.unlock.isUnlocked()) {
         await unlockForSetup(password);

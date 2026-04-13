@@ -227,7 +227,7 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
       const created = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC, alias: "Primary wallet" });
@@ -281,7 +281,7 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
       const { address } = await wallet.accounts.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
@@ -393,7 +393,7 @@ describe("createArxWallet", () => {
           .supportedChains,
       ).toContain(EIP155_CHAIN_REF);
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
       expect(
         wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).accounts,
@@ -450,7 +450,7 @@ describe("createArxWallet", () => {
         accounts: [],
       });
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
       const connected = provider.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
@@ -495,7 +495,7 @@ describe("createArxWallet", () => {
         },
       });
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
       expect(wallet.snapshots.buildUiSnapshot()).toMatchObject({
@@ -522,7 +522,7 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
       wallet.dappConnections.connect({ origin: ORIGIN, namespace: EIP155_NAMESPACE });
       expect(wallet.dappConnections.getState().count).toBe(1);
@@ -578,7 +578,7 @@ describe("createArxWallet", () => {
     try {
       const { wallet } = runtime;
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
       await flushAsync();
 
@@ -634,7 +634,7 @@ describe("createArxWallet", () => {
     try {
       const { wallet } = runtime;
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
       await flushAsync();
 
@@ -725,7 +725,7 @@ describe("createArxWallet", () => {
       const stateChanged = vi.fn();
       const unsubscribe = ui.subscribeStateChanged(stateChanged);
 
-      await wallet.session.initialize({ password: PASSWORD });
+      await wallet.session.createVault({ password: PASSWORD });
       await expect(ui.dispatch({ method: "ui.snapshot.get" })).resolves.toMatchObject({
         vault: { initialized: true },
         session: { isUnlocked: false },

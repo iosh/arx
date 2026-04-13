@@ -36,7 +36,7 @@ const SOLANA_CHAIN: ChainMetadata = {
 };
 
 const initializeUnlockedSession = async (runtime: CreateBackgroundRuntimeResult) => {
-  await runtime.services.session.vault.initialize({ password: PASSWORD });
+  await runtime.services.session.createVault({ password: PASSWORD });
   await runtime.services.session.unlock.unlock({ password: PASSWORD });
 };
 

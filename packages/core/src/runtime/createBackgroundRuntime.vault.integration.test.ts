@@ -1,3 +1,4 @@
+import { ArxReasons } from "@arx/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VaultMetaSnapshot } from "../storage/index.js";
 import type { AccountRecord, KeyringMetaRecord } from "../storage/records.js";
@@ -25,6 +26,123 @@ afterEach(() => {
 });
 
 describe("createBackgroundRuntime (vault integration)", () => {
+  it("imports a vault without reviving an unlocked session", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const sourceVault = new FakeVault(clock);
+    const envelope = await sourceVault.initialize({ password: "secret", secret: encodePayload({ keyrings: [] }) });
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      await context.runtime.services.session.importVault(envelope);
+
+      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+        phase: "locked",
+        vaultInitialized: true,
+        isUnlocked: false,
+      });
+      expect(context.runtime.services.session.unlock.isUnlocked()).toBe(false);
+      expect(context.runtime.services.session.vault.isUnlocked()).toBe(false);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("rejects createVault while the session is unlocked", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await context.runtime.services.session.unlock.unlock({ password: "secret" });
+
+      await expect(context.runtime.services.session.createVault({ password: "next-secret" })).rejects.toMatchObject({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: "createVault requires the session to be locked",
+      });
+
+      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+        phase: "unlocked",
+        vaultInitialized: true,
+        isUnlocked: true,
+      });
+      expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
+      expect(context.runtime.services.session.vault.isUnlocked()).toBe(true);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("rejects importVault while the session is unlocked", async () => {
+    const chain = createChainMetadata();
+    const clock = () => TEST_INITIAL_TIME;
+    const sourceVault = new FakeVault(clock);
+    const envelope = await sourceVault.initialize({ password: "secret", secret: encodePayload({ keyrings: [] }) });
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+    });
+
+    try {
+      await context.runtime.services.session.createVault({ password: "secret" });
+      await context.runtime.services.session.unlock.unlock({ password: "secret" });
+
+      await expect(context.runtime.services.session.importVault(envelope)).rejects.toMatchObject({
+        reason: ArxReasons.RpcInvalidRequest,
+        message: "importVault requires the session to be locked",
+      });
+
+      expect(context.runtime.services.sessionStatus.getStatus()).toMatchObject({
+        phase: "unlocked",
+        vaultInitialized: true,
+        isUnlocked: true,
+      });
+      expect(context.runtime.services.session.unlock.isUnlocked()).toBe(true);
+      expect(context.runtime.services.session.vault.isUnlocked()).toBe(true);
+    } finally {
+      context.destroy();
+    }
+  });
+
+  it("persists imported vault metadata before importVault resolves", async () => {
+    const chain = createChainMetadata();
+    let currentTime = TEST_INITIAL_TIME;
+    const clock = () => currentTime;
+    const sourceVault = new FakeVault(clock);
+    const envelope = await sourceVault.initialize({ password: "secret", secret: encodePayload({ keyrings: [] }) });
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      now: clock,
+      vault: () => new FakeVault(clock),
+      persistDebounceMs: 30_000,
+    });
+
+    try {
+      expect(context.vaultMetaPort.savedVaultMeta).toBeNull();
+
+      currentTime += 50;
+      await context.runtime.services.session.importVault(envelope);
+
+      expect(context.vaultMetaPort.savedVaultMeta?.payload.envelope).toEqual(envelope);
+      expect(context.runtime.services.session.getLastPersistedVaultMeta()?.payload.envelope).toEqual(envelope);
+    } finally {
+      context.destroy();
+    }
+  });
+
   it("persists vault metadata for recovery workflows", async () => {
     const chain = createChainMetadata();
     let currentTime = TEST_INITIAL_TIME;
@@ -42,7 +160,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
     let persistedMeta = null;
 
     try {
-      await first.runtime.services.session.vault.initialize({ password: "secret" });
+      await first.runtime.services.session.createVault({ password: "secret" });
       await first.runtime.services.session.unlock.unlock({ password: "secret" });
       const unlockedState = first.runtime.services.session.unlock.getState();
       expect(unlockedState.isUnlocked).toBe(true);
@@ -99,7 +217,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
     let keyringMetasSeed: KeyringMetaRecord[] = [];
 
     try {
-      await first.runtime.services.session.vault.initialize({ password: "secret" });
+      await first.runtime.services.session.createVault({ password: "secret" });
       await first.runtime.services.session.unlock.unlock({ password: "secret" });
       await first.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
       await first.runtime.services.session.persistVaultMeta();
@@ -156,7 +274,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
         keyring: context.runtime.services.keyring,
       });
 
-      await context.runtime.services.session.vault.initialize({ password: "secret" });
+      await context.runtime.services.session.createVault({ password: "secret" });
       await sessionAccess.unlock({ password: "secret" });
       await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
@@ -194,7 +312,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
         keyring: context.runtime.services.keyring,
       });
 
-      await context.runtime.services.session.vault.initialize({ password: "secret" });
+      await context.runtime.services.session.createVault({ password: "secret" });
       await sessionAccess.unlock({ password: "secret" });
       await context.runtime.services.keyring.importPrivateKey({ privateKey: TEST_PRIVATE_KEY });
 
@@ -225,7 +343,7 @@ describe("createBackgroundRuntime (vault integration)", () => {
       vault: () => new FakeVault(clock),
     });
 
-    await context.runtime.services.session.vault.initialize({ password: "secret" });
+    await context.runtime.services.session.createVault({ password: "secret" });
     await context.runtime.services.session.unlock.unlock({ password: "secret" });
     await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 

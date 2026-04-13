@@ -5,13 +5,14 @@ import { randomBytes } from "./utils.js";
 import { createVaultService, VAULT_VERSION } from "./vaultService.js";
 
 const PASSWORD = "correct horse battery staple";
+const SECRET = Uint8Array.from({ length: 32 }, (_, index) => index);
 const toArray = (bytes: Uint8Array) => Array.from(bytes);
 
 describe("vaultService", () => {
-  it("initializes a vault and exposes envelope metadata", async () => {
+  it("initializes a vault in locked state and exposes envelope metadata", async () => {
     const vault = createVaultService();
 
-    const envelope = await vault.initialize({ password: PASSWORD });
+    const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
 
     expect(envelope.version).toBe(VAULT_VERSION);
     expect(envelope.kdf).toEqual({
@@ -24,27 +25,14 @@ describe("vaultService", () => {
     expect(typeof envelope.cipher.iv).toBe("string");
     expect(typeof envelope.cipher.data).toBe("string");
 
-    expect(vault.isUnlocked()).toBe(true);
-    expect(vault.getStatus()).toEqual({ isUnlocked: true, hasEnvelope: true });
-
-    const exported = vault.exportSecret();
-    expect(exported).toBeInstanceOf(Uint8Array);
-    expect(exported.length).toBe(32);
-
-    exported.fill(42);
-    const second = vault.exportSecret();
-    expect(toArray(second)).not.toEqual(toArray(exported));
-
-    vault.lock();
     expect(vault.getStatus()).toEqual({ isUnlocked: false, hasEnvelope: true });
     expect(() => vault.exportSecret()).toThrowError(/locked/i);
   });
 
   it("rejects unlock attempts with an incorrect password", async () => {
     const vault = createVaultService();
-    const envelope = await vault.initialize({ password: PASSWORD });
+    const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
 
-    vault.lock();
     await expect(vault.unlock({ password: "wrong", envelope })).rejects.toMatchObject({
       reason: ArxReasons.VaultInvalidPassword,
     });
@@ -65,14 +53,13 @@ describe("vaultService", () => {
 
   it("throws when envelope metadata is tampered", async () => {
     const vault = createVaultService();
-    const envelope = await vault.initialize({ password: PASSWORD });
+    const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
 
     const tampered = {
       ...envelope,
       kdf: { ...envelope.kdf, hash: "sha512" },
     } as unknown as VaultEnvelope;
 
-    vault.lock();
     await expect(vault.unlock({ password: PASSWORD, envelope: tampered })).rejects.toMatchObject({
       reason: ArxReasons.VaultInvalidCiphertext,
     });
@@ -80,10 +67,9 @@ describe("vaultService", () => {
 
   it("allows exporting secret after unlock", async () => {
     const vault = createVaultService();
-    const envelope = await vault.initialize({ password: PASSWORD });
-    const secret = vault.exportSecret();
+    const secret = Uint8Array.from({ length: 32 }, (_, index) => index);
+    const envelope = await vault.initialize({ password: PASSWORD, secret });
 
-    vault.lock();
     await vault.unlock({ password: PASSWORD, envelope });
 
     expect(vault.isUnlocked()).toBe(true);
@@ -92,18 +78,18 @@ describe("vaultService", () => {
 
   it("respects custom config", async () => {
     const vault = createVaultService({ iterations: 100_000 });
-    const envelope = await vault.initialize({ password: PASSWORD });
+    const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
     expect(envelope.kdf.iterations).toBe(100_000);
   });
 
   it("rejects empty passwords", async () => {
     const vault = createVaultService();
-    await expect(vault.initialize({ password: "   " })).rejects.toThrowError(/password/i);
+    await expect(vault.initialize({ password: "   ", secret: SECRET })).rejects.toThrowError(/password/i);
   });
 
   it("commitSecret reseals using the current derived key without a password", async () => {
     const vault = createVaultService();
-    const envelope = await vault.initialize({ password: PASSWORD });
+    const envelope = await vault.initialize({ password: PASSWORD, secret: SECRET });
     await vault.unlock({ password: PASSWORD, envelope });
 
     const nextSecret = randomBytes(32);
@@ -119,7 +105,8 @@ describe("vaultService", () => {
 
   it("reencrypt changes password and keeps the vault unlocked", async () => {
     const vault = createVaultService();
-    await vault.initialize({ password: "old-password" });
+    const envelope = await vault.initialize({ password: "old-password", secret: SECRET });
+    await vault.unlock({ password: "old-password", envelope });
     const secret = vault.exportSecret();
 
     const nextEnvelope = await vault.reencrypt({ newPassword: "new-password" });

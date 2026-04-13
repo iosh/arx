@@ -62,7 +62,7 @@ const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinition
 });
 
 const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgroundRuntime>) => {
-  await runtime.services.session.vault.initialize({ password: "test" });
+  await runtime.services.session.createVault({ password: "test" });
   await runtime.services.session.unlock.unlock({ password: "test" });
 };
 
@@ -299,7 +299,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
 
     const handlers = createHandlersForRuntime(runtime);
     const result = await handlers["ui.session.unlock"]({ password: "test" });

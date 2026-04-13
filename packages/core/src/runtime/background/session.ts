@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { DEFAULT_AUTO_LOCK_MS } from "../../controllers/unlock/constants.js";
 import { UNLOCK_STATE_CHANGED, UNLOCK_TOPICS } from "../../controllers/unlock/topics.js";
 import type { UnlockController, UnlockControllerOptions } from "../../controllers/unlock/types.js";
@@ -7,7 +8,7 @@ import type { AccountsService, KeyringMetasService } from "../../services/index.
 import type { VaultMetaPort, VaultMetaSnapshot } from "../../storage/index.js";
 import { VAULT_META_SNAPSHOT_VERSION } from "../../storage/index.js";
 import { zeroize } from "../../utils/bytes.js";
-import type { VaultService } from "../../vault/types.js";
+import type { CreateVaultParams, VaultEnvelope, VaultService } from "../../vault/types.js";
 import { createVaultService } from "../../vault/vaultService.js";
 import { KeyringService } from "../keyring/KeyringService.js";
 import { encodePayload } from "../keyring/keyring-utils.js";
@@ -18,6 +19,7 @@ const DEFAULT_PERSIST_DEBOUNCE_MS = 250;
 
 type VaultFactory = () => VaultService;
 type UnlockFactory = (options: UnlockControllerOptions) => UnlockController;
+type SessionVaultLifecycleAction = "createVault" | "importVault";
 
 export type SessionOptions = {
   vault?: VaultService | VaultFactory;
@@ -34,6 +36,8 @@ export type SessionLayerOptions = Omit<SessionOptions, "keyringNamespaces">;
 export type BackgroundSessionServices = {
   vault: VaultService;
   unlock: UnlockController;
+  createVault(params: CreateVaultParams): Promise<VaultEnvelope>;
+  importVault(envelope: VaultEnvelope): Promise<VaultEnvelope>;
   getVaultMetaState(): VaultMetaSnapshot["payload"];
   getLastPersistedVaultMeta(): VaultMetaSnapshot | null;
   persistVaultMeta(): Promise<void>;
@@ -82,7 +86,7 @@ export const initSessionLayer = ({
   getIsHydrating,
   getIsDestroyed,
 }: SessionLayerParams): SessionLayerResult => {
-  const createVault = (): VaultService => {
+  const createBaseVaultService = (): VaultService => {
     const candidate = sessionOptions?.vault;
     if (!candidate) {
       return createVaultService();
@@ -90,7 +94,7 @@ export const initSessionLayer = ({
     return typeof candidate === "function" ? (candidate as VaultFactory)() : candidate;
   };
 
-  const baseVault = createVault();
+  const baseVault = createBaseVaultService();
   const unlockFactory =
     sessionOptions?.unlock ?? ((options: UnlockControllerOptions) => new InMemoryUnlockController(options));
 
@@ -174,7 +178,7 @@ export const initSessionLayer = ({
     }
   };
 
-  const persistVaultMetaImmediate = async (): Promise<void> => {
+  const persistVaultMetaImmediate = async (options?: { throwOnError?: boolean }): Promise<void> => {
     if (!vaultMetaPort || getIsDestroyed()) {
       return;
     }
@@ -201,6 +205,9 @@ export const initSessionLayer = ({
       lastPersistedVaultMeta = envelope;
     } catch (error) {
       storageLogger("session: failed to persist vault meta", error);
+      if (options?.throwOnError) {
+        throw error;
+      }
     }
   };
 
@@ -245,9 +252,15 @@ export const initSessionLayer = ({
           cleanupVaultPersistTimer();
         } else if (vaultMetaPersistPending) {
           vaultMetaPersistPending = false;
-          await persistVaultMetaImmediate();
+          await persistVaultMetaImmediate({ throwOnError: true });
         }
       }
+    }
+  };
+
+  const assertVaultLockedAfterMutation = (operation: "initialize" | "importEnvelope") => {
+    if (baseVault.isUnlocked()) {
+      throw new Error(`VaultService.${operation}() must keep the vault locked`);
     }
   };
 
@@ -255,14 +268,10 @@ export const initSessionLayer = ({
     async initialize(params) {
       // Re-initializing should also reset the initializedAt marker.
       vaultInitializedAt = storageNow();
-      const envelope = await baseVault.initialize({
-        ...params,
-        // The vault secret is used to store the keyring payload; seed it with a valid empty payload so
-        // first-time hydration doesn't attempt to JSON.parse random bytes.
-        secret: params.secret ?? encodePayload({ keyrings: [] }),
-      });
+      const envelope = await baseVault.initialize(params);
+      assertVaultLockedAfterMutation("initialize");
       if (!getIsHydrating()) {
-        await persistVaultMetaImmediate();
+        await persistVaultMetaImmediate({ throwOnError: true });
       }
       notifySessionStateChanged();
       return envelope;
@@ -292,6 +301,7 @@ export const initSessionLayer = ({
     },
     importEnvelope(value) {
       baseVault.importEnvelope(value);
+      assertVaultLockedAfterMutation("importEnvelope");
       scheduleVaultMetaPersist();
       notifySessionStateChanged();
     },
@@ -324,6 +334,50 @@ export const initSessionLayer = ({
   }
 
   const unlock = unlockFactory(unlockOptions);
+
+  const assertSessionLockedForVaultLifecycle = (action: SessionVaultLifecycleAction) => {
+    const unlockState = unlock.getState();
+    const vaultUnlocked = vaultProxy.isUnlocked();
+
+    if (!unlockState.isUnlocked && !vaultUnlocked) {
+      return;
+    }
+
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `${action} requires the session to be locked`,
+      data: {
+        action,
+        unlockState: unlockState.isUnlocked ? "unlocked" : "locked",
+        vaultState: vaultUnlocked ? "unlocked" : "locked",
+      },
+    });
+  };
+
+  const createSessionVault = async (params: CreateVaultParams): Promise<VaultEnvelope> => {
+    assertSessionLockedForVaultLifecycle("createVault");
+    return await vaultProxy.initialize({
+      password: params.password,
+      secret: encodePayload({ keyrings: [] }),
+    });
+  };
+
+  const importSessionVault = async (envelope: VaultEnvelope): Promise<VaultEnvelope> => {
+    assertSessionLockedForVaultLifecycle("importVault");
+    vaultProxy.importEnvelope(envelope);
+    vaultInitializedAt = storageNow();
+    cleanupVaultPersistTimer();
+    if (!getIsHydrating()) {
+      await persistVaultMetaImmediate({ throwOnError: true });
+    }
+
+    const importedEnvelope = baseVault.getEnvelope();
+    if (!importedEnvelope) {
+      throw new Error("Session vault import completed without an envelope");
+    }
+
+    return importedEnvelope;
+  };
 
   const keyringService = new KeyringService({
     now: storageNow,
@@ -456,6 +510,8 @@ export const initSessionLayer = ({
   const session: BackgroundSessionServices = {
     vault: vaultProxy,
     unlock,
+    createVault: createSessionVault,
+    importVault: importSessionVault,
     getVaultMetaState: () => {
       const unlockState = unlock.getState();
 
@@ -466,7 +522,7 @@ export const initSessionLayer = ({
       };
     },
     getLastPersistedVaultMeta: () => lastPersistedVaultMeta,
-    persistVaultMeta: () => persistVaultMetaImmediate(),
+    persistVaultMeta: () => persistVaultMetaImmediate({ throwOnError: true }),
     withVaultMetaPersistHold,
     onStateChanged: (listener) => {
       stateChangedListeners.add(listener);

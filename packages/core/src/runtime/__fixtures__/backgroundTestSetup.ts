@@ -487,13 +487,11 @@ export class FakeVault implements VaultService {
     };
   }
 
-  async initialize(params: { password: string; secret?: Uint8Array }): Promise<VaultEnvelope> {
+  async initialize(params: { password: string; secret: Uint8Array }): Promise<VaultEnvelope> {
     this.#password = params.password;
     this.#envelope = this.createEnvelope();
-    this.#unlocked = true;
-    this.#secret = params.secret
-      ? new Uint8Array(params.secret)
-      : new TextEncoder().encode(JSON.stringify({ keyrings: [] }));
+    this.#unlocked = false;
+    this.#secret = new Uint8Array(params.secret);
     return structuredClone(this.#envelope);
   }
 

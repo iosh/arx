@@ -41,7 +41,7 @@ describe("eip155 handlers - approval metadata", () => {
     const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
     await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
 
@@ -119,7 +119,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const execute = createExecutor(runtime);
@@ -472,7 +472,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const mainnet = getActiveChainMetadata(runtime);
@@ -568,7 +568,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     // Setup auto-approval for transactions
@@ -654,7 +654,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
@@ -723,7 +723,7 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.services.session.vault.initialize({ password: "test" });
+    await runtime.services.session.createVault({ password: "test" });
     await runtime.services.session.unlock.unlock({ password: "test" });
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {

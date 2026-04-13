@@ -13,7 +13,7 @@ export const createWalletSession = (deps: {
 
   const getUnlockState = () => session.unlock.getState();
 
-  // Keyring state settles asynchronously after vault init and unlock.
+  // Keyring state settles asynchronously after vault mutations and unlock.
   const waitForReady = async () => {
     await keyring.waitForReady();
   };
@@ -23,10 +23,15 @@ export const createWalletSession = (deps: {
     getUnlockState,
     isUnlocked: () => sessionStatus.isUnlocked(),
     hasInitializedVault: () => sessionStatus.hasInitializedVault(),
-    initialize: async (params) => {
-      const envelope = await session.vault.initialize(params);
+    createVault: async (params) => {
+      const envelope = await session.createVault(params);
       await waitForReady();
       return envelope;
+    },
+    importVault: async (envelope) => {
+      const importedEnvelope = await session.importVault(envelope);
+      await waitForReady();
+      return importedEnvelope;
     },
     unlock: async (params) => {
       await session.unlock.unlock(params);

@@ -1,13 +1,11 @@
-import type { PermissionController } from "../../controllers/permission/types.js";
-import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import type { WalletPermissions } from "../types.js";
 
-// Persistent permissions and their derived read models.
+// Persistent authorization facts owned by the permissions domain.
 export const createWalletPermissions = (deps: {
-  permissions: PermissionController;
-  permissionViews: PermissionViewsService;
+  permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
 }): WalletPermissions => {
-  const { permissions, permissionViews } = deps;
+  const { permissions } = deps;
 
   return {
     getState: () => permissions.getState(),
@@ -19,10 +17,6 @@ export const createWalletPermissions = (deps: {
     revokeChainAuthorization: (origin, options) => permissions.revokeChainAuthorization(origin, options),
     revokeNamespaceAuthorization: (origin, options) => permissions.revokeNamespaceAuthorization(origin, options),
     revokeOriginPermissions: (origin) => permissions.revokeOriginPermissions(origin),
-    getConnectionSnapshot: (origin, options) => permissionViews.getConnectionSnapshot(origin, options),
-    assertConnected: (origin, options) => permissionViews.assertConnected(origin, options),
-    listPermittedAccounts: (origin, options) => permissionViews.listPermittedAccounts(origin, options),
-    buildUiPermissionsSnapshot: () => permissionViews.buildUiPermissionsSnapshot(),
     onStateChanged: (listener) => permissions.onStateChanged(listener),
     onOriginChanged: (listener) => permissions.onOriginChanged(listener),
   };

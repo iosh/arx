@@ -2,14 +2,14 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { AccountController } from "../../../controllers/account/types.js";
-import type { PermissionController } from "../../../controllers/permission/types.js";
+import type { PermissionsReader } from "../../../controllers/permission/types.js";
 import type { AccountKey } from "../../../storage/records.js";
 import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
 import type { ConnectionSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
   accounts: Pick<AccountController, "getOwnedAccount">;
-  permissions: Pick<PermissionController, "getAuthorization" | "getState">;
+  permissions: Pick<PermissionsReader, "getAuthorization" | "getState">;
 };
 
 const sortChainRefs = (values: readonly ChainRef[]): ChainRef[] => {
@@ -33,7 +33,7 @@ const uniqAccountKeys = (values: readonly AccountKey[]): AccountKey[] => {
 
 class DefaultPermissionViewsService implements PermissionViewsService {
   readonly #accounts: Pick<AccountController, "getOwnedAccount">;
-  readonly #permissions: Pick<PermissionController, "getAuthorization" | "getState">;
+  readonly #permissions: Pick<PermissionsReader, "getAuthorization" | "getState">;
 
   constructor(options: CreatePermissionViewsServiceOptions) {
     this.#accounts = options.accounts;

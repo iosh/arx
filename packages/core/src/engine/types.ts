@@ -24,13 +24,11 @@ import type {
   RpcStrategyConfig,
 } from "../controllers/network/types.js";
 import type {
-  GrantAuthorizationOptions,
   PermissionAuthorization,
-  PermissionController,
+  PermissionsEvents,
+  PermissionsReader,
   PermissionsState,
-  RevokeChainAuthorizationOptions,
-  RevokeNamespaceAuthorizationOptions,
-  SetChainAccountKeysOptions,
+  PermissionsWriter,
 } from "../controllers/permission/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
 import type {
@@ -62,7 +60,6 @@ import type { AttentionService } from "../services/runtime/attention/types.js";
 import type { ActivateNamespaceChainParams } from "../services/runtime/chainActivation/types.js";
 import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainViews/types.js";
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
-import type { ConnectionSnapshot, PermittedAccountView } from "../services/runtime/permissionViews/types.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
 import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
@@ -75,7 +72,7 @@ import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
-import type { UiPermissionsSnapshot, UiSnapshot } from "../ui/protocol/schemas.js";
+import type { UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
 
@@ -255,23 +252,19 @@ export type WalletApprovals = Readonly<{
   onFinished(listener: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
 }>;
 
-/** Persistent permissions and permission read models. */
+/** Persistent authorization facts owned by the permissions domain. */
 export type WalletPermissions = Readonly<{
   getState(): PermissionsState;
   getAuthorization(origin: string, options: { namespace: string }): PermissionAuthorization | null;
-  getChainAuthorization: PermissionController["getChainAuthorization"];
+  getChainAuthorization: PermissionsReader["getChainAuthorization"];
   listOriginPermissions(origin: string): PermissionAuthorization[];
-  grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
-  setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
-  revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
-  revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
-  revokeOriginPermissions(origin: string): Promise<void>;
-  getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot;
-  assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void>;
-  listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];
-  buildUiPermissionsSnapshot(): UiPermissionsSnapshot;
+  grantAuthorization: PermissionsWriter["grantAuthorization"];
+  setChainAccountKeys: PermissionsWriter["setChainAccountKeys"];
+  revokeChainAuthorization: PermissionsWriter["revokeChainAuthorization"];
+  revokeNamespaceAuthorization: PermissionsWriter["revokeNamespaceAuthorization"];
+  revokeOriginPermissions: PermissionsWriter["revokeOriginPermissions"];
   onStateChanged(listener: (state: PermissionsState) => void): () => void;
-  onOriginChanged: PermissionController["onOriginChanged"];
+  onOriginChanged: PermissionsEvents["onOriginChanged"];
 }>;
 
 /** Selected namespace, active chains, and RPC preferences. */

@@ -141,7 +141,6 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         ...(options.network ? { network: options.network } : {}),
         ...(options.accounts ? { accounts: options.accounts } : {}),
         ...(options.approvals ? { approvals: options.approvals } : {}),
-        ...(options.permissions ? { permissions: options.permissions } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
         chainDefinitions: options.chainDefinitions,
       },

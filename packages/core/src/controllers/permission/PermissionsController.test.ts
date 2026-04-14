@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
-import { createPermissionsService } from "../../services/store/permissions/PermissionsService.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import { type PermissionRecord, PermissionRecordSchema } from "../../storage/records.js";
-import { StorePermissionController } from "./StorePermissionController.js";
+import { PermissionsController } from "./PermissionsController.js";
 import { PERMISSION_TOPICS } from "./topics.js";
 
 const ORIGIN = "https://dapp.example";
@@ -20,13 +19,11 @@ const createRecord = (args: {
   origin?: string;
   namespace?: string;
   chains: Array<{ chainRef: string; accountKeys: string[] }>;
-  updatedAt: number;
 }) =>
   PermissionRecordSchema.parse({
     origin: args.origin ?? ORIGIN,
     namespace: args.namespace ?? NAMESPACE,
-    chains: args.chains,
-    updatedAt: args.updatedAt,
+    chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
   });
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
@@ -62,15 +59,14 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
   return { port, store };
 };
 
-describe("StorePermissionController", () => {
+describe("PermissionsController", () => {
   it("grantAuthorization() writes one authorization record and publishes originChanged", async () => {
     const { port, store } = createInMemoryPort();
-    const service = createPermissionsService({ port, now: () => 1000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
 
-    const controller = new StorePermissionController({
+    const controller = new PermissionsController({
       messenger,
-      service,
+      port,
     });
 
     const originEvents: unknown[] = [];
@@ -78,7 +74,7 @@ describe("StorePermissionController", () => {
       originEvents.push(payload);
     });
 
-    await controller.whenReady();
+    await controller.waitForHydration();
     await controller.grantAuthorization(ORIGIN, {
       namespace: NAMESPACE,
       chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
@@ -102,16 +98,14 @@ describe("StorePermissionController", () => {
     const seed = [
       createRecord({
         chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
-        updatedAt: 1000,
       }),
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createPermissionsService({ port, now: () => 2000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-    const controller = new StorePermissionController({ messenger, service });
+    const controller = new PermissionsController({ messenger, port });
 
-    await controller.whenReady();
+    await controller.waitForHydration();
     await controller.grantAuthorization(ORIGIN, {
       namespace: NAMESPACE,
       chains: [{ chainRef: POLYGON, accountKeys: [] }],
@@ -138,16 +132,14 @@ describe("StorePermissionController", () => {
           { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
           { chainRef: POLYGON, accountKeys: [] },
         ],
-        updatedAt: 1000,
       }),
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createPermissionsService({ port, now: () => 2000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-    const controller = new StorePermissionController({ messenger, service });
+    const controller = new PermissionsController({ messenger, port });
 
-    await controller.whenReady();
+    await controller.waitForHydration();
     await controller.setChainAccountKeys(ORIGIN, {
       namespace: NAMESPACE,
       chainRef: MAINNET,
@@ -175,16 +167,14 @@ describe("StorePermissionController", () => {
           { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
           { chainRef: POLYGON, accountKeys: [] },
         ],
-        updatedAt: 1000,
       }),
     ];
 
     const { port, store } = createInMemoryPort(seed);
-    const service = createPermissionsService({ port, now: () => 2000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-    const controller = new StorePermissionController({ messenger, service });
+    const controller = new PermissionsController({ messenger, port });
 
-    await controller.whenReady();
+    await controller.waitForHydration();
     await controller.revokeChainAuthorization(ORIGIN, {
       namespace: NAMESPACE,
       chainRef: MAINNET,
@@ -214,21 +204,18 @@ describe("StorePermissionController", () => {
       createRecord({
         namespace: NAMESPACE,
         chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
-        updatedAt: 1000,
       }),
       createRecord({
         namespace: SOLANA_NAMESPACE,
         chains: [{ chainRef: SOLANA_DEVNET, accountKeys: [SOLANA_ACCOUNT_ID] }],
-        updatedAt: 1000,
       }),
     ];
 
     const { port } = createInMemoryPort(seed);
-    const service = createPermissionsService({ port, now: () => 2000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-    const controller = new StorePermissionController({ messenger, service });
+    const controller = new PermissionsController({ messenger, port });
 
-    await controller.whenReady();
+    await controller.waitForHydration();
     await controller.revokeNamespaceAuthorization(ORIGIN, {
       namespace: NAMESPACE,
     });
@@ -245,5 +232,20 @@ describe("StorePermissionController", () => {
         },
       },
     ]);
+  });
+
+  it("grantAuthorization() rejects chainRefs that drift across namespaces", async () => {
+    const { port } = createInMemoryPort();
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const controller = new PermissionsController({ messenger, port });
+
+    await controller.waitForHydration();
+
+    await expect(
+      controller.grantAuthorization(ORIGIN, {
+        namespace: NAMESPACE,
+        chains: [{ chainRef: SOLANA_DEVNET, accountKeys: [SOLANA_ACCOUNT_ID] }],
+      }),
+    ).rejects.toThrow(/does not belong to namespace/i);
   });
 });

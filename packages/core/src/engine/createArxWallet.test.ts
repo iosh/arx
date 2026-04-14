@@ -84,13 +84,9 @@ const createSeededPermissionsPort = (origins: readonly string[] = [ORIGIN]) =>
     origins.map((origin) => ({
       origin,
       namespace: EIP155_NAMESPACE,
-      chains: [
-        {
-          chainRef: EIP155_CHAIN_REF,
-          accountKeys: [ACCOUNT_KEY],
-        },
-      ],
-      updatedAt: 1,
+      chainScopes: {
+        [EIP155_CHAIN_REF]: [ACCOUNT_KEY],
+      },
     })),
   );
 
@@ -366,7 +362,9 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
-      const permissionSnapshot = wallet.permissions.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF });
+      const permissionSnapshot = runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, {
+        chainRef: EIP155_CHAIN_REF,
+      });
       expect(permissionSnapshot.isConnected).toBe(true);
       expect(permissionSnapshot.accounts).toHaveLength(1);
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
@@ -413,7 +411,9 @@ describe("createArxWallet", () => {
       await wallet.permissions.revokeOriginPermissions(ORIGIN);
       await flushAsync();
       expect(wallet.dappConnections.getState().count).toBe(0);
-      expect(wallet.permissions.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected).toBe(false);
+      expect(
+        runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+      ).toBe(false);
 
       await wallet.permissions.grantAuthorization(ORIGIN, {
         namespace: EIP155_NAMESPACE,
@@ -426,7 +426,9 @@ describe("createArxWallet", () => {
       wallet.session.lock("manual");
       await flushAsync();
       expect(wallet.dappConnections.getState().count).toBe(0);
-      expect(wallet.permissions.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected).toBe(true);
+      expect(
+        runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+      ).toBe(true);
       expect(
         wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).accounts,
       ).toEqual([]);
@@ -538,7 +540,7 @@ describe("createArxWallet", () => {
     try {
       expect(reopened.wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
       expect(
-        reopened.wallet.permissions.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+        reopened.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
       ).toBe(true);
     } finally {
       await reopened.shutdown();

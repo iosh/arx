@@ -22,6 +22,7 @@ type Destroyable = {
 export const createBackgroundRuntimeLifecycle = ({
   runtimeLifecycle,
   controllersBase,
+  permissionsReady,
   deferredNetworkInitialState,
   registeredNamespaces,
   transactionsLifecycle,
@@ -34,6 +35,7 @@ export const createBackgroundRuntimeLifecycle = ({
 }: {
   runtimeLifecycle: RuntimeLifecycle;
   controllersBase: ControllersBase;
+  permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
   registeredNamespaces: ReadonlySet<string>;
   transactionsLifecycle: TransactionsLifecycle;
@@ -69,8 +71,7 @@ export const createBackgroundRuntimeLifecycle = ({
           logger("network: skipped deferred initial state with unregistered namespace chain");
         }
       }
-
-      await controllersBase.permissions.whenReady();
+      await permissionsReady;
     },
   };
 
@@ -114,17 +115,6 @@ export const createBackgroundRuntimeLifecycle = ({
     },
   };
 
-  const permissionsControllerPlugin: RuntimePlugin = {
-    name: "permissionsController",
-    destroy: () => {
-      try {
-        controllersBase.permissions.destroy?.();
-      } catch (error) {
-        logger("lifecycle: failed to destroy permissions controller", error);
-      }
-    },
-  };
-
   const rpcClientsPlugin: RuntimePlugin = {
     name: "rpcClients",
     destroy: () => rpcClientRegistry.destroy(),
@@ -149,7 +139,6 @@ export const createBackgroundRuntimeLifecycle = ({
     sessionPlugin,
     networkBootstrapPlugin,
     accountsControllerPlugin,
-    permissionsControllerPlugin,
     rpcClientsPlugin,
     enginePlugin,
     busPlugin,

@@ -6,7 +6,7 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
-import type { PermissionController } from "../../controllers/permission/types.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
@@ -20,7 +20,7 @@ export type HandlerControllers = {
   networkPreferences: NetworkPreferencesService;
   accounts: AccountController;
   approvals: ApprovalController;
-  permissions: PermissionController;
+  permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   transactions: TransactionController;
   chainDefinitions: ChainDefinitionsController;
   chainAddressCodecs: ChainAddressCodecRegistry;

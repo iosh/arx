@@ -285,7 +285,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(controllerOptions?.network ? { networkOptions: controllerOptions.network } : {}),
     ...(controllerOptions?.accounts ? { accountOptions: controllerOptions.accounts } : {}),
     ...(controllerOptions?.approvals ? { approvalOptions: controllerOptions.approvals } : {}),
-    ...(controllerOptions?.permissions ? { permissionOptions: controllerOptions.permissions } : {}),
     ...(controllerOptions?.transactions ? { transactionOptions: controllerOptions.transactions } : {}),
     chainDefinitionsOptions: {
       ...(controllerOptions?.chainDefinitions ?? {}),
@@ -337,6 +336,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const lifecycle = createBackgroundRuntimeLifecycle({
     runtimeLifecycle: sessionScope.runtimeLifecycle,
     controllersBase: sessionScope.controllersBase,
+    permissionsReady: sessionScope.permissionsReady,
     deferredNetworkInitialState: sessionScope.deferredNetworkInitialState,
     registeredNamespaces: bootstrapScope.registeredNamespaces,
     transactionsLifecycle: runtimeSupportScope.transactionsLifecycle,
@@ -440,7 +440,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const permissions = createWalletPermissions({
     permissions: sessionScope.controllersBase.permissions,
-    permissionViews: runtimeSupportScope.permissionViews,
   });
   const networks = createWalletNetworks({
     networkPreferences: sessionScope.networkPreferences,

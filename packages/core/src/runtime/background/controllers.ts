@@ -1,7 +1,6 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import { StoreAccountsController } from "../../controllers/account/StoreAccountsController.js";
 import { ACCOUNTS_TOPICS } from "../../controllers/account/topics.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../../controllers/account/types.js";
@@ -20,9 +19,9 @@ import type {
   RpcEventLogger,
   RpcStrategyConfig,
 } from "../../controllers/network/types.js";
-import { StorePermissionController } from "../../controllers/permission/StorePermissionController.js";
+import { PermissionsController } from "../../controllers/permission/PermissionsController.js";
 import { PERMISSION_TOPICS } from "../../controllers/permission/topics.js";
-import type { PermissionController, PermissionsState } from "../../controllers/permission/types.js";
+import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
 import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
@@ -30,7 +29,7 @@ import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
 import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { PermissionsService } from "../../services/store/permissions/types.js";
+import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
@@ -53,10 +52,6 @@ export type ControllerLayerOptions = {
     ttlMs?: number;
     logger?: (message: string, error?: unknown) => void;
   };
-  permissions?: {
-    initialState?: PermissionsState;
-    chains?: ChainAddressCodecRegistry;
-  };
   transactions?: {
     registry?: TransactionAdapterRegistry;
   };
@@ -73,7 +68,7 @@ export type ControllersBase = {
   network: NetworkController;
   accounts: AccountController;
   approvals: ApprovalController;
-  permissions: PermissionController;
+  permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   transactions: TransactionController;
   chainDefinitions: ChainDefinitionsController;
 };
@@ -83,7 +78,8 @@ export type ControllersInitResult = {
   transactionRegistry: TransactionAdapterRegistry;
   networkController: NetworkController;
   chainDefinitionsController: ChainDefinitionsController;
-  permissionController: PermissionController;
+  permissionsController: PermissionsController;
+  permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
 };
 
@@ -92,7 +88,7 @@ export const initControllers = ({
   accountCodecs,
   accountsService,
   settingsService,
-  permissionsService,
+  permissionsPort,
   transactionsService,
   networkPreferences,
   networkPlan,
@@ -103,7 +99,7 @@ export const initControllers = ({
   accountCodecs: AccountCodecRegistry;
   accountsService: AccountsService;
   settingsService: SettingsService;
-  permissionsService: PermissionsService;
+  permissionsPort: PermissionsPort;
   transactionsService: TransactionsService;
   networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
   networkPlan: RuntimeNetworkPlan;
@@ -151,10 +147,11 @@ export const initControllers = ({
     getExecutor: () => approvalExecutor,
   });
 
-  const permissionController = new StorePermissionController({
+  const permissionsController = new PermissionsController({
     messenger: bus.scope({ name: "permissions", publish: PERMISSION_TOPICS }),
-    service: permissionsService,
+    port: permissionsPort,
   });
+  const permissionsReady = permissionsController.waitForHydration();
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
 
@@ -192,7 +189,7 @@ export const initControllers = ({
     network: networkController,
     accounts: accountController,
     approvals: approvalController,
-    permissions: permissionController,
+    permissions: permissionsController,
     transactions: transactionController,
     chainDefinitions: chainDefinitionsController,
   };
@@ -204,7 +201,8 @@ export const initControllers = ({
     transactionRegistry,
     networkController,
     chainDefinitionsController,
-    permissionController,
+    permissionsController,
+    permissionsReady,
     deferredNetworkInitialState: networkPlan.deferredState,
   };
 };

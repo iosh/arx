@@ -116,12 +116,64 @@ export const AccountRecordSchema = z
   });
 export type AccountRecord = z.infer<typeof AccountRecordSchema>;
 
-export const PermissionChainScopeSchema = z.strictObject({
-  chainRef: chainRefSchema,
-  // Empty means the origin is connected to the chain but has no account access on it.
-  accountKeys: z.array(AccountKeySchema),
-});
-export type PermissionChainScope = z.infer<typeof PermissionChainScopeSchema>;
+// Empty means the origin is connected to the chain but has no account access on it.
+export const PermissionChainAccountKeysSchema = z.array(AccountKeySchema);
+export type PermissionChainAccountKeys = z.infer<typeof PermissionChainAccountKeysSchema>;
+
+export const PermissionChainScopesSchema = z.record(chainRefSchema, PermissionChainAccountKeysSchema);
+export type PermissionChainScopes = z.infer<typeof PermissionChainScopesSchema>;
+
+const getAccountKeyNamespace = (accountKey: AccountKey): string | null => {
+  const separatorIndex = accountKey.indexOf(":");
+  return separatorIndex >= 0 ? accountKey.slice(0, separatorIndex) : null;
+};
+
+const validatePermissionRecord = (
+  value: {
+    namespace: string;
+    chainScopes: PermissionChainScopes;
+  },
+  ctx: z.RefinementCtx,
+): void => {
+  const chainEntries = Object.entries(value.chainScopes);
+  if (chainEntries.length === 0) {
+    ctx.addIssue({
+      code: "custom",
+      message: "chainScopes must not be empty",
+      path: ["chainScopes"],
+    });
+  }
+
+  for (const [chainRef, accountKeys] of chainEntries) {
+    const chainNamespace = getChainRefNamespace(chainRef);
+    if (chainNamespace !== value.namespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: `chainScopes[${chainRef}] must belong to namespace "${value.namespace}"`,
+        path: ["chainScopes", chainRef],
+      });
+    }
+
+    const uniqueAccounts = new Set(accountKeys);
+    if (uniqueAccounts.size !== accountKeys.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: `chainScopes[${chainRef}] must not contain duplicate accountKeys`,
+        path: ["chainScopes", chainRef],
+      });
+    }
+
+    for (const [accountIndex, accountKey] of accountKeys.entries()) {
+      if (getAccountKeyNamespace(accountKey) !== value.namespace) {
+        ctx.addIssue({
+          code: "custom",
+          message: `chainScopes[${chainRef}][${accountIndex}] must belong to namespace "${value.namespace}"`,
+          path: ["chainScopes", chainRef, accountIndex],
+        });
+      }
+    }
+  }
+};
 
 export const PermissionRecordSchema = z
   .strictObject({
@@ -129,51 +181,9 @@ export const PermissionRecordSchema = z
     namespace: z.string().min(1),
     // One persistent connection-authorization record per (origin, namespace).
     // Request-level signing and transaction approvals remain runtime state.
-    chains: z.array(PermissionChainScopeSchema).min(1),
-    updatedAt: epochMillisecondsSchema,
+    chainScopes: PermissionChainScopesSchema,
   })
-  .superRefine((value, ctx) => {
-    const uniqueChains = new Set(value.chains.map((chain) => chain.chainRef));
-    if (uniqueChains.size !== value.chains.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: "chains must not contain duplicate chainRef values",
-        path: ["chains"],
-      });
-    }
-
-    for (const [index, chain] of value.chains.entries()) {
-      const chainNamespace = getChainRefNamespace(chain.chainRef);
-      if (chainNamespace !== value.namespace) {
-        ctx.addIssue({
-          code: "custom",
-          message: `chains[${index}].chainRef must belong to namespace "${value.namespace}"`,
-          path: ["chains", index, "chainRef"],
-        });
-      }
-
-      const uniqueAccounts = new Set(chain.accountKeys);
-      if (uniqueAccounts.size !== chain.accountKeys.length) {
-        ctx.addIssue({
-          code: "custom",
-          message: `chains[${index}].accountKeys must not contain duplicates`,
-          path: ["chains", index, "accountKeys"],
-        });
-      }
-
-      for (const [accountIndex, accountKey] of chain.accountKeys.entries()) {
-        const separatorIndex = accountKey.indexOf(":");
-        const accountNamespace = separatorIndex >= 0 ? accountKey.slice(0, separatorIndex) : null;
-        if (accountNamespace !== value.namespace) {
-          ctx.addIssue({
-            code: "custom",
-            message: `chains[${index}].accountKeys[${accountIndex}] must belong to namespace "${value.namespace}"`,
-            path: ["chains", index, "accountKeys", accountIndex],
-          });
-        }
-      }
-    }
-  });
+  .superRefine(validatePermissionRecord);
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 
 export const TransactionStatusSchema = z.enum([

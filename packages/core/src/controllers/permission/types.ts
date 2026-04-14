@@ -91,9 +91,7 @@ export type RequestPermissionsApprovalResult = {
   grantedGrants: ConnectionGrantRequest[];
 };
 
-export type PermissionController = {
-  whenReady(): Promise<void>;
-
+export type PermissionsReader = {
   getState(): PermissionsState;
   getAuthorization(origin: string, options: { namespace: ChainNamespace }): PermissionAuthorization | null;
   getChainAuthorization(
@@ -101,15 +99,17 @@ export type PermissionController = {
     options: { namespace: ChainNamespace; chainRef: ChainRef },
   ): ChainPermissionAuthorization | null;
   listOriginPermissions(origin: string): PermissionAuthorization[];
+};
 
+export type PermissionsWriter = {
   grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
   setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
   revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
   revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
   revokeOriginPermissions(origin: string): Promise<void>;
+};
 
+export type PermissionsEvents = {
   onStateChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginChanged(handler: (payload: OriginPermissions) => void): () => void;
-
-  destroy?(): void;
 };

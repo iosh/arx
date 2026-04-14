@@ -27,16 +27,11 @@ afterEach(async () => {
 });
 
 describe("DexiePermissionsPort", () => {
-  const createRecord = (args: {
-    origin?: string;
-    chains: Array<{ chainRef: string; accountKeys: string[] }>;
-    updatedAt?: number;
-  }) =>
+  const createRecord = (args: { origin?: string; chains: Array<{ chainRef: string; accountKeys: string[] }> }) =>
     PermissionRecordSchema.parse({
       origin: args.origin ?? "https://dapp.example",
       namespace: "eip155",
-      chains: args.chains,
-      updatedAt: args.updatedAt ?? 1000,
+      chainScopes: Object.fromEntries(args.chains.map((chain) => [chain.chainRef, chain.accountKeys])),
     });
 
   it("upsert() + get() roundtrip", async () => {
@@ -128,7 +123,7 @@ describe("DexiePermissionsPort", () => {
     await storage.__debug.db.table("permissions").put({
       origin: "https://dapp.example",
       namespace: "eip155",
-      // missing required fields on purpose (chains/updatedAt)
+      // missing required fields on purpose (chainScopes)
     } as unknown as Record<string, unknown>);
 
     const loaded = await storage.ports.permissions.get({ origin: "https://dapp.example", namespace: "eip155" });

@@ -3,7 +3,7 @@ import type { PermissionRecord } from "../../../storage/records.js";
 export interface PermissionsPort {
   /**
    * Returns all permission records.
-   * Used by the store-backed PermissionController to rebuild its in-memory view.
+   * Used by the permissions owner to hydrate its in-memory authorization ledger.
    */
   listAll(): Promise<PermissionRecord[]>;
 

@@ -1,7 +1,7 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
-import type { PermissionController } from "../../controllers/permission/types.js";
+import type { PermissionsEvents } from "../../controllers/permission/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
@@ -117,7 +117,7 @@ export type UiStateChangeSources = {
   accounts: Pick<AccountController, "onStateChanged">;
   approvals: Pick<ApprovalController, "onStateChanged">;
   permissions: {
-    onStateChanged: Pick<PermissionController, "onStateChanged">["onStateChanged"];
+    onStateChanged: PermissionsEvents["onStateChanged"];
   };
   transactions: Pick<TransactionController, "onStateChanged">;
   chains: {

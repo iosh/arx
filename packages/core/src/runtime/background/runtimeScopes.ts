@@ -65,6 +65,7 @@ export type RuntimeBootstrapScope = {
 export type RuntimeSessionScope = {
   namespaceSession: RuntimeSessionNamespaceAssembly;
   controllersBase: ControllersBase;
+  permissionsReady: Promise<void>;
   deferredNetworkInitialState: ReturnType<typeof initControllers>["deferredNetworkInitialState"];
   transactionRegistry: ReturnType<typeof initControllers>["transactionRegistry"];
   chainViews: ReturnType<typeof createChainViewsService>;
@@ -108,7 +109,6 @@ export const createRuntimeBootstrapScope = ({
   networkOptions,
   accountOptions,
   approvalOptions,
-  permissionOptions,
   transactionOptions,
   chainDefinitionsOptions,
 }: {
@@ -119,7 +119,6 @@ export const createRuntimeBootstrapScope = ({
   networkOptions?: ControllerLayerOptions["network"];
   accountOptions?: ControllerLayerOptions["accounts"];
   approvalOptions?: ControllerLayerOptions["approvals"];
-  permissionOptions?: ControllerLayerOptions["permissions"];
   transactionOptions?: ControllerLayerOptions["transactions"];
   chainDefinitionsOptions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
 }): RuntimeBootstrapScope => {
@@ -146,9 +145,6 @@ export const createRuntimeBootstrapScope = ({
     ...(networkOptions ? { network: networkOptions } : {}),
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
-    ...(permissionOptions
-      ? { permissions: { ...permissionOptions, chains: namespaceBootstrap.chainAddressCodecs } }
-      : { permissions: { chains: namespaceBootstrap.chainAddressCodecs } }),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
     chainDefinitions: { ...chainDefinitionsOptions, seed: [...chainDefinitionSeed] },
   };
@@ -195,7 +191,7 @@ export const createRuntimeSessionScope = ({
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
   sessionOptions?: SessionOptions;
 }): RuntimeSessionScope => {
-  const { settingsService, networkPreferences, transactionsService, permissionsService, accountsStore, keyringMetas } =
+  const { settingsService, networkPreferences, transactionsService, accountsStore, keyringMetas } =
     initRuntimeStoreServices({
       settingsPort,
       networkPreferencesPort,
@@ -209,7 +205,7 @@ export const createRuntimeSessionScope = ({
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
     accountsService: accountsStore,
     settingsService,
-    permissionsService,
+    permissionsPort: storePorts.permissions,
     transactionsService,
     networkPreferences,
     networkPlan: bootstrapScope.networkPlan,
@@ -217,8 +213,13 @@ export const createRuntimeSessionScope = ({
     ...(createApprovalExecutor ? { createApprovalExecutor } : {}),
   });
 
-  const { controllersBase, networkController, chainDefinitionsController, deferredNetworkInitialState } =
-    controllersInit;
+  const {
+    controllersBase,
+    networkController,
+    chainDefinitionsController,
+    permissionsReady,
+    deferredNetworkInitialState,
+  } = controllersInit;
 
   const chainViews = createChainViewsService({
     chainDefinitions: chainDefinitionsController,
@@ -271,6 +272,7 @@ export const createRuntimeSessionScope = ({
   return {
     namespaceSession,
     controllersBase,
+    permissionsReady,
     deferredNetworkInitialState,
     transactionRegistry: controllersInit.transactionRegistry,
     chainViews,

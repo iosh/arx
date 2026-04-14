@@ -8,4 +8,4 @@ export const PERMISSION_ORIGIN_CHANGED = eventTopic<OriginPermissions>("permissi
 
 export const PERMISSION_TOPICS = [PERMISSION_STATE_CHANGED, PERMISSION_ORIGIN_CHANGED] as const;
 
-export type PermissionMessenger = ScopedMessenger<typeof PERMISSION_TOPICS>;
+export type PermissionsMessenger = ScopedMessenger<typeof PERMISSION_TOPICS>;

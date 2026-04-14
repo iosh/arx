@@ -410,12 +410,12 @@ describe("createArxWallet", () => {
       ).toBe(true);
       expect(wallet.dappConnections.getState().count).toBe(1);
 
-      await wallet.permissions.clearOrigin(ORIGIN);
+      await wallet.permissions.revokeOriginPermissions(ORIGIN);
       await flushAsync();
       expect(wallet.dappConnections.getState().count).toBe(0);
       expect(wallet.permissions.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected).toBe(false);
 
-      await wallet.permissions.upsertAuthorization(ORIGIN, {
+      await wallet.permissions.grantAuthorization(ORIGIN, {
         namespace: EIP155_NAMESPACE,
         chains: [{ chainRef: EIP155_CHAIN_REF, accountKeys: [ACCOUNT_KEY] }],
       });

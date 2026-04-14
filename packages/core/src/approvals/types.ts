@@ -16,7 +16,7 @@ import type { ApprovalSummary } from "./summary.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  permissions: Pick<PermissionController, "getAuthorization" | "upsertAuthorization">;
+  permissions: Pick<PermissionController, "grantAuthorization">;
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
   chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;

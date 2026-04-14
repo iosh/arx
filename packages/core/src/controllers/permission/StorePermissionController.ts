@@ -9,14 +9,15 @@ import type {
   AuthorizationChainInput,
   ChainPermissionAuthorization,
   ChainPermissionState,
-  MutatePermittedChainsOptions,
+  GrantAuthorizationOptions,
   OriginPermissionState,
   OriginPermissions,
   PermissionAuthorization,
   PermissionController,
   PermissionsState,
+  RevokeChainAuthorizationOptions,
+  RevokeNamespaceAuthorizationOptions,
   SetChainAccountKeysOptions,
-  UpsertAuthorizationOptions,
 } from "./types.js";
 
 const sortStrings = <T extends string>(values: readonly T[]): T[] => {
@@ -235,6 +236,34 @@ const toChainMap = (chains: readonly AuthorizationChainInput[]): Record<ChainRef
   ) as Record<ChainRef, ChainPermissionState>;
 };
 
+const listStoredAuthorizationChains = (record: PermissionRecord): AuthorizationChainInput[] => {
+  return [...stablePermissionRecordSnapshot(record).chains];
+};
+
+const mergeGrantedChains = (
+  record: PermissionRecord | null,
+  grantedChains: readonly AuthorizationChainInput[],
+): AuthorizationChainInput[] => {
+  // Grant only the requested chain scopes and leave unrelated stored chains intact.
+  const nextChains = new Map<ChainRef, AuthorizationChainInput>();
+
+  for (const chain of record ? listStoredAuthorizationChains(record) : []) {
+    nextChains.set(chain.chainRef, {
+      chainRef: chain.chainRef,
+      accountKeys: [...chain.accountKeys],
+    });
+  }
+
+  for (const chain of grantedChains) {
+    nextChains.set(chain.chainRef, {
+      chainRef: chain.chainRef,
+      accountKeys: [...chain.accountKeys],
+    });
+  }
+
+  return [...nextChains.values()].sort((left, right) => left.chainRef.localeCompare(right.chainRef));
+};
+
 const sameAuthorizationRecord = (record: PermissionRecord | null, next: readonly AuthorizationChainInput[]) => {
   if (!record) return false;
   return (
@@ -332,7 +361,7 @@ export class StorePermissionController implements PermissionController {
     };
   }
 
-  listAuthorizations(origin: string): PermissionAuthorization[] {
+  listOriginPermissions(origin: string): PermissionAuthorization[] {
     const namespaces = this.#state.origins[origin];
     if (!namespaces) return [];
 
@@ -344,21 +373,23 @@ export class StorePermissionController implements PermissionController {
     });
   }
 
-  async upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization> {
+  async grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization> {
     const namespace = assertNamespace(options.namespace);
-    const chains = normalizeChains(namespace, options.chains);
+    const grantedChains = normalizeChains(namespace, options.chains);
 
     const existing = await this.#service.get({ origin, namespace });
-    if (!sameAuthorizationRecord(existing, chains)) {
+    const nextChains = mergeGrantedChains(existing, grantedChains);
+
+    if (!sameAuthorizationRecord(existing, nextChains)) {
       await this.#service.upsert({
         origin,
         namespace,
-        chains,
+        chains: normalizeChains(namespace, nextChains),
       });
       await this.#queueSyncFromStore({ origin });
     }
 
-    return toAuthorization(origin, namespace, toChainMap(chains));
+    return toAuthorization(origin, namespace, toChainMap(nextChains));
   }
 
   async setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization> {
@@ -374,7 +405,7 @@ export class StorePermissionController implements PermissionController {
 
     const chainRef = normalizeChainRef(namespace, options.chainRef);
     const accountKeys = normalizeAccountKeys(namespace, options.accountKeys);
-    const nextChains = [...stablePermissionRecordSnapshot(existing).chains];
+    const nextChains = listStoredAuthorizationChains(existing);
     const targetIndex = nextChains.findIndex((chain) => chain.chainRef === chainRef);
 
     if (targetIndex < 0) {
@@ -399,50 +430,15 @@ export class StorePermissionController implements PermissionController {
     return toAuthorization(origin, namespace, toChainMap(nextChains));
   }
 
-  async addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization> {
-    const namespace = assertNamespace(options.namespace);
-    const existing = await this.#service.get({ origin, namespace });
-    if (!existing) {
-      throw arxError({
-        reason: ArxReasons.PermissionNotConnected,
-        message: `Origin "${origin}" is not connected to namespace "${namespace}"`,
-        data: { origin, namespace },
-      });
-    }
-
-    const nextChains = [...stablePermissionRecordSnapshot(existing).chains];
-    const existingChainRefs = new Set(nextChains.map((chain) => chain.chainRef));
-    for (const chainRef of options.chainRefs) {
-      const normalizedChainRef = normalizeChainRef(namespace, chainRef);
-      if (existingChainRefs.has(normalizedChainRef)) continue;
-      existingChainRefs.add(normalizedChainRef);
-      nextChains.push({
-        chainRef: normalizedChainRef,
-        accountKeys: [],
-      });
-    }
-
-    if (!sameAuthorizationRecord(existing, nextChains)) {
-      await this.#service.upsert({
-        origin,
-        namespace,
-        chains: normalizeChains(namespace, nextChains),
-      });
-      await this.#queueSyncFromStore({ origin });
-    }
-
-    return toAuthorization(origin, namespace, toChainMap(nextChains));
-  }
-
-  async revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void> {
+  async revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void> {
     const namespace = assertNamespace(options.namespace);
     const existing = await this.#service.get({ origin, namespace });
     if (!existing) {
       return;
     }
 
-    const revokeSet = new Set(options.chainRefs.map((chainRef) => normalizeChainRef(namespace, chainRef)));
-    const remaining = stablePermissionRecordSnapshot(existing).chains.filter((chain) => !revokeSet.has(chain.chainRef));
+    const chainRef = normalizeChainRef(namespace, options.chainRef);
+    const remaining = listStoredAuthorizationChains(existing).filter((chain) => chain.chainRef !== chainRef);
 
     if (remaining.length === 0) {
       await this.#service.remove({ origin, namespace });
@@ -460,7 +456,13 @@ export class StorePermissionController implements PermissionController {
     }
   }
 
-  async clearOrigin(origin: string): Promise<void> {
+  async revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void> {
+    const namespace = assertNamespace(options.namespace);
+    await this.#service.remove({ origin, namespace });
+    await this.#queueSyncFromStore({ origin });
+  }
+
+  async revokeOriginPermissions(origin: string): Promise<void> {
     await this.#service.clearOrigin(origin);
     await this.#queueSyncFromStore({ origin });
   }

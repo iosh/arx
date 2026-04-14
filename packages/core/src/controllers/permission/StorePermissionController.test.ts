@@ -8,17 +8,25 @@ import { PERMISSION_TOPICS } from "./topics.js";
 
 const ORIGIN = "https://dapp.example";
 const NAMESPACE = "eip155";
+const SOLANA_NAMESPACE = "solana";
 const MAINNET = "eip155:1";
 const POLYGON = "eip155:137";
+const SOLANA_DEVNET = "solana:101";
 const ACCOUNT_ID = "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_ACCOUNT_ID = "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const SOLANA_ACCOUNT_ID = "solana:cccc";
 
-const createRecord = (chains: Array<{ chainRef: string; accountKeys: string[] }>, updatedAt: number) =>
+const createRecord = (args: {
+  origin?: string;
+  namespace?: string;
+  chains: Array<{ chainRef: string; accountKeys: string[] }>;
+  updatedAt: number;
+}) =>
   PermissionRecordSchema.parse({
-    origin: ORIGIN,
-    namespace: NAMESPACE,
-    chains,
-    updatedAt,
+    origin: args.origin ?? ORIGIN,
+    namespace: args.namespace ?? NAMESPACE,
+    chains: args.chains,
+    updatedAt: args.updatedAt,
   });
 
 const createInMemoryPort = (seed: PermissionRecord[] = []) => {
@@ -55,7 +63,7 @@ const createInMemoryPort = (seed: PermissionRecord[] = []) => {
 };
 
 describe("StorePermissionController", () => {
-  it("upsertAuthorization() writes one authorization record and publishes originChanged", async () => {
+  it("grantAuthorization() writes one authorization record and publishes originChanged", async () => {
     const { port, store } = createInMemoryPort();
     const service = createPermissionsService({ port, now: () => 1000 });
     const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
@@ -71,7 +79,7 @@ describe("StorePermissionController", () => {
     });
 
     await controller.whenReady();
-    await controller.upsertAuthorization(ORIGIN, {
+    await controller.grantAuthorization(ORIGIN, {
       namespace: NAMESPACE,
       chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
     });
@@ -86,11 +94,53 @@ describe("StorePermissionController", () => {
         },
       },
     });
+    expect(controller.listOriginPermissions(ORIGIN)).toHaveLength(1);
     expect(originEvents.length).toBeGreaterThan(0);
   });
 
+  it("grantAuthorization() merges granted chains without dropping existing chains", async () => {
+    const seed = [
+      createRecord({
+        chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
+        updatedAt: 1000,
+      }),
+    ];
+
+    const { port } = createInMemoryPort(seed);
+    const service = createPermissionsService({ port, now: () => 2000 });
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const controller = new StorePermissionController({ messenger, service });
+
+    await controller.whenReady();
+    await controller.grantAuthorization(ORIGIN, {
+      namespace: NAMESPACE,
+      chains: [{ chainRef: POLYGON, accountKeys: [] }],
+    });
+
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      chains: {
+        [MAINNET]: {
+          accountKeys: [ACCOUNT_ID],
+        },
+        [POLYGON]: {
+          accountKeys: [],
+        },
+      },
+    });
+  });
+
   it("setChainAccountKeys() updates only the targeted chain authorization", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
+    const seed = [
+      createRecord({
+        chains: [
+          { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
+          { chainRef: POLYGON, accountKeys: [] },
+        ],
+        updatedAt: 1000,
+      }),
+    ];
 
     const { port } = createInMemoryPort(seed);
     const service = createPermissionsService({ port, now: () => 2000 });
@@ -111,31 +161,6 @@ describe("StorePermissionController", () => {
         [MAINNET]: {
           accountKeys: [OTHER_ACCOUNT_ID],
         },
-      },
-    });
-  });
-
-  it("addPermittedChains() merges chains into the existing authorization", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
-
-    const { port } = createInMemoryPort(seed);
-    const service = createPermissionsService({ port, now: () => 2000 });
-    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
-    const controller = new StorePermissionController({ messenger, service });
-
-    await controller.whenReady();
-    await controller.addPermittedChains(ORIGIN, {
-      namespace: NAMESPACE,
-      chainRefs: [POLYGON],
-    });
-
-    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
-      origin: ORIGIN,
-      namespace: NAMESPACE,
-      chains: {
-        [MAINNET]: {
-          accountKeys: [ACCOUNT_ID],
-        },
         [POLYGON]: {
           accountKeys: [],
         },
@@ -143,8 +168,16 @@ describe("StorePermissionController", () => {
     });
   });
 
-  it("revokePermittedChains() deletes the authorization when the last chain is removed", async () => {
-    const seed = [createRecord([{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }], 1000)];
+  it("revokeChainAuthorization() removes only the targeted chain and deletes the record when the last chain is removed", async () => {
+    const seed = [
+      createRecord({
+        chains: [
+          { chainRef: MAINNET, accountKeys: [ACCOUNT_ID] },
+          { chainRef: POLYGON, accountKeys: [] },
+        ],
+        updatedAt: 1000,
+      }),
+    ];
 
     const { port, store } = createInMemoryPort(seed);
     const service = createPermissionsService({ port, now: () => 2000 });
@@ -152,12 +185,65 @@ describe("StorePermissionController", () => {
     const controller = new StorePermissionController({ messenger, service });
 
     await controller.whenReady();
-    await controller.revokePermittedChains(ORIGIN, {
+    await controller.revokeChainAuthorization(ORIGIN, {
       namespace: NAMESPACE,
-      chainRefs: [MAINNET],
+      chainRef: MAINNET,
+    });
+
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toEqual({
+      origin: ORIGIN,
+      namespace: NAMESPACE,
+      chains: {
+        [POLYGON]: {
+          accountKeys: [],
+        },
+      },
+    });
+
+    await controller.revokeChainAuthorization(ORIGIN, {
+      namespace: NAMESPACE,
+      chainRef: POLYGON,
     });
 
     expect(store.size).toBe(0);
     expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toBeNull();
+  });
+
+  it("revokeNamespaceAuthorization() only removes the targeted namespace record", async () => {
+    const seed = [
+      createRecord({
+        namespace: NAMESPACE,
+        chains: [{ chainRef: MAINNET, accountKeys: [ACCOUNT_ID] }],
+        updatedAt: 1000,
+      }),
+      createRecord({
+        namespace: SOLANA_NAMESPACE,
+        chains: [{ chainRef: SOLANA_DEVNET, accountKeys: [SOLANA_ACCOUNT_ID] }],
+        updatedAt: 1000,
+      }),
+    ];
+
+    const { port } = createInMemoryPort(seed);
+    const service = createPermissionsService({ port, now: () => 2000 });
+    const messenger = new Messenger().scope({ publish: PERMISSION_TOPICS });
+    const controller = new StorePermissionController({ messenger, service });
+
+    await controller.whenReady();
+    await controller.revokeNamespaceAuthorization(ORIGIN, {
+      namespace: NAMESPACE,
+    });
+
+    expect(controller.getAuthorization(ORIGIN, { namespace: NAMESPACE })).toBeNull();
+    expect(controller.listOriginPermissions(ORIGIN)).toEqual([
+      {
+        origin: ORIGIN,
+        namespace: SOLANA_NAMESPACE,
+        chains: {
+          [SOLANA_DEVNET]: {
+            accountKeys: [SOLANA_ACCOUNT_ID],
+          },
+        },
+      },
+    ]);
   });
 });

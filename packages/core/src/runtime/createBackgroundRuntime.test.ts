@@ -402,7 +402,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.upsertAuthorization("https://dapp.example", {
+    await runtime.controllers.permissions.grantAuthorization("https://dapp.example", {
       namespace: MAINNET_CHAIN.namespace,
       chains: [
         {
@@ -458,7 +458,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    await runtime.controllers.permissions.upsertAuthorization("https://dapp.example", {
+    await runtime.controllers.permissions.grantAuthorization("https://dapp.example", {
       namespace: MAINNET_CHAIN.namespace,
       chains: [
         {

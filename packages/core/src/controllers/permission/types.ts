@@ -49,7 +49,7 @@ export type AuthorizationChainInput = {
   accountKeys: AccountKey[];
 };
 
-export type UpsertAuthorizationOptions = {
+export type GrantAuthorizationOptions = {
   namespace: ChainNamespace;
   chains: [AuthorizationChainInput, ...AuthorizationChainInput[]];
 };
@@ -60,9 +60,13 @@ export type SetChainAccountKeysOptions = {
   accountKeys: AccountKey[];
 };
 
-export type MutatePermittedChainsOptions = {
+export type RevokeChainAuthorizationOptions = {
   namespace: ChainNamespace;
-  chainRefs: [ChainRef, ...ChainRef[]];
+  chainRef: ChainRef;
+};
+
+export type RevokeNamespaceAuthorizationOptions = {
+  namespace: ChainNamespace;
 };
 
 export type ConnectionGrantChainRefs = [ChainRef, ...ChainRef[]];
@@ -96,13 +100,13 @@ export type PermissionController = {
     origin: string,
     options: { namespace: ChainNamespace; chainRef: ChainRef },
   ): ChainPermissionAuthorization | null;
-  listAuthorizations(origin: string): PermissionAuthorization[];
+  listOriginPermissions(origin: string): PermissionAuthorization[];
 
-  upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization>;
+  grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
   setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
-  addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization>;
-  revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void>;
-  clearOrigin(origin: string): Promise<void>;
+  revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
+  revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
+  revokeOriginPermissions(origin: string): Promise<void>;
 
   onStateChanged(handler: (state: PermissionsState) => void): () => void;
   onOriginChanged(handler: (payload: OriginPermissions) => void): () => void;

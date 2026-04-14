@@ -24,12 +24,13 @@ import type {
   RpcStrategyConfig,
 } from "../controllers/network/types.js";
 import type {
-  MutatePermittedChainsOptions,
+  GrantAuthorizationOptions,
   PermissionAuthorization,
   PermissionController,
   PermissionsState,
+  RevokeChainAuthorizationOptions,
+  RevokeNamespaceAuthorizationOptions,
   SetChainAccountKeysOptions,
-  UpsertAuthorizationOptions,
 } from "../controllers/permission/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
 import type {
@@ -259,12 +260,12 @@ export type WalletPermissions = Readonly<{
   getState(): PermissionsState;
   getAuthorization(origin: string, options: { namespace: string }): PermissionAuthorization | null;
   getChainAuthorization: PermissionController["getChainAuthorization"];
-  listAuthorizations(origin: string): PermissionAuthorization[];
-  upsertAuthorization(origin: string, options: UpsertAuthorizationOptions): Promise<PermissionAuthorization>;
+  listOriginPermissions(origin: string): PermissionAuthorization[];
+  grantAuthorization(origin: string, options: GrantAuthorizationOptions): Promise<PermissionAuthorization>;
   setChainAccountKeys(origin: string, options: SetChainAccountKeysOptions): Promise<PermissionAuthorization>;
-  addPermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<PermissionAuthorization>;
-  revokePermittedChains(origin: string, options: MutatePermittedChainsOptions): Promise<void>;
-  clearOrigin(origin: string): Promise<void>;
+  revokeChainAuthorization(origin: string, options: RevokeChainAuthorizationOptions): Promise<void>;
+  revokeNamespaceAuthorization(origin: string, options: RevokeNamespaceAuthorizationOptions): Promise<void>;
+  revokeOriginPermissions(origin: string): Promise<void>;
   getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot;
   assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void>;
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];

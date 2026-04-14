@@ -107,7 +107,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       await initializeSession(runtime);
       const { chain, address } = await deriveAccount(runtime);
 
-      await runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
+      await runtime.controllers.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {

@@ -72,7 +72,6 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       });
     }
 
-    const existing = deps.permissions.getAuthorization(record.origin, { namespace });
     const primaryChainRef = grantedGrants[0]?.chainRefs[0] ?? record.request.chainRef;
     const { reviewChainRef } = deriveApprovalReviewContext(record, {
       request: { chainRef: primaryChainRef },
@@ -97,23 +96,14 @@ export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.R
       selectableAccounts,
     });
 
-    const nextChains = new Map<string, string[]>(
-      Object.entries(existing?.chains ?? {}).map(([chainRef, chainState]) => [chainRef, [...chainState.accountKeys]]),
-    );
-    for (const chainRef of requestedChainRefs) {
-      nextChains.set(
-        chainRef,
-        selectedAccounts.map((account) => account.accountKey),
-      );
-    }
-
-    await deps.permissions.upsertAuthorization(record.origin, {
+    const grantedAccountKeys = selectedAccounts.map((account) => account.accountKey);
+    await deps.permissions.grantAuthorization(record.origin, {
       namespace,
-      chains: [...nextChains.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([chainRef, accountKeys]) => ({
+      chains: [...requestedChainRefs]
+        .sort((left, right) => left.localeCompare(right))
+        .map((chainRef) => ({
           chainRef: chainRef as typeof primaryChainRef,
-          accountKeys,
+          accountKeys: grantedAccountKeys,
         })) as [
         { chainRef: typeof primaryChainRef; accountKeys: string[] },
         ...Array<{ chainRef: typeof primaryChainRef; accountKeys: string[] }>,

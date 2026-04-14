@@ -50,28 +50,13 @@ export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Requ
       selectableAccounts,
     });
 
-    const existing = deps.permissions.getAuthorization(record.origin, { namespace });
-    const nextChains = new Map<string, string[]>(
-      Object.entries(existing?.chains ?? {}).map(([existingChainRef, chainState]) => [
-        existingChainRef,
-        [...chainState.accountKeys],
-      ]),
-    );
-    nextChains.set(
-      chainRef,
-      selectedAccounts.map((account) => account.accountKey),
-    );
-
-    await deps.permissions.upsertAuthorization(record.origin, {
+    await deps.permissions.grantAuthorization(record.origin, {
       namespace,
-      chains: [...nextChains.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([entryChainRef, accountKeys]) => ({
-          chainRef: entryChainRef as typeof chainRef,
-          accountKeys,
-        })) as [
-        { chainRef: typeof chainRef; accountKeys: string[] },
-        ...Array<{ chainRef: typeof chainRef; accountKeys: string[] }>,
+      chains: [
+        {
+          chainRef,
+          accountKeys: selectedAccounts.map((account) => account.accountKey),
+        },
       ],
     });
 

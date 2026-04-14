@@ -125,7 +125,7 @@ export const connectOrigin = async (args: {
   const [firstChainRef] = chainRefs;
   const [namespace] = firstChainRef.split(":");
 
-  await runtime.controllers.permissions.upsertAuthorization(origin, {
+  await runtime.controllers.permissions.grantAuthorization(origin, {
     namespace,
     chains: chainRefs.map((chainRef, index) => ({
       chainRef,

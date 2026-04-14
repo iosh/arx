@@ -228,7 +228,7 @@ describe("createBackgroundRuntime provider access", () => {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
+      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -263,7 +263,7 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain, address } = await deriveActiveAccount(background.runtime);
       const unlockedSnapshot = background.runtime.providerAccess.buildSnapshot(chain.namespace);
 
-      await background.runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
+      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {
@@ -305,7 +305,7 @@ describe("createBackgroundRuntime provider access", () => {
       await initializeUnlockedSession(background.runtime);
       const { chain, address } = await deriveActiveAccount(background.runtime);
 
-      await background.runtime.controllers.permissions.upsertAuthorization(ORIGIN, {
+      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
         namespace: chain.namespace,
         chains: [
           {

@@ -7,9 +7,9 @@ import type { RequestPermissionsApprovalPayload, RequestPermissionsApprovalResul
 import type { TransactionApprovalRequestPayload, TransactionMeta } from "../transaction/types.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
-export { ApprovalKinds, ApprovalTypes };
-export type { ApprovalKind, ApprovalType };
 export { getApprovalKind, getApprovalType } from "./constants.js";
+export type { ApprovalKind, ApprovalType };
+export { ApprovalKinds, ApprovalTypes };
 
 export type ApprovalTerminalReason =
   | "user_approve"

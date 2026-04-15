@@ -137,5 +137,5 @@ export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;
 export type UiPermissionsSnapshot = z.infer<typeof UiPermissionsSnapshotSchema>;
-export { ApprovalSelectableAccountSchema, ApprovalSummarySchema };
 export type { ApprovalSelectableAccount, ApprovalSummary };
+export { ApprovalSelectableAccountSchema, ApprovalSummarySchema };

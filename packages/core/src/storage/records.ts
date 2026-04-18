@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getChainRefNamespace } from "../chains/caip.js";
+import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
@@ -36,6 +37,94 @@ export const NetworkRpcPreferenceSchema = z.strictObject({
   strategy: RpcStrategySchema,
 });
 export type NetworkRpcPreference = z.infer<typeof NetworkRpcPreferenceSchema>;
+
+export const CustomChainRecordSchema = z
+  .strictObject({
+    chainRef: chainRefSchema,
+    namespace: z.string().min(1),
+    metadata: chainMetadataSchema,
+    createdByOrigin: originStringSchema.optional(),
+    updatedAt: epochMillisecondsSchema,
+  })
+  .refine((value) => value.metadata.chainRef === value.chainRef, {
+    error: "metadata.chainRef must match the record chainRef",
+    path: ["metadata", "chainRef"],
+  })
+  .refine((value) => value.metadata.namespace === value.namespace, {
+    error: "metadata.namespace must match the record namespace",
+    path: ["metadata", "namespace"],
+  });
+export type CustomChainRecord = z.infer<typeof CustomChainRecordSchema>;
+
+const validateRpcEndpoints = (
+  value: {
+    rpcEndpoints: readonly { url: string }[];
+  },
+  ctx: z.RefinementCtx,
+): void => {
+  const urls = new Set<string>();
+  for (const [index, endpoint] of value.rpcEndpoints.entries()) {
+    if (urls.has(endpoint.url)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `rpcEndpoints[${index}] duplicates URL "${endpoint.url}"`,
+        path: ["rpcEndpoints", index, "url"],
+      });
+      continue;
+    }
+    urls.add(endpoint.url);
+  }
+};
+
+export const CustomRpcRecordSchema = z
+  .strictObject({
+    chainRef: chainRefSchema,
+    rpcEndpoints: z.array(rpcEndpointSchema).min(1),
+    updatedAt: epochMillisecondsSchema,
+  })
+  .superRefine(validateRpcEndpoints);
+export type CustomRpcRecord = z.infer<typeof CustomRpcRecordSchema>;
+
+const ChainRefByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
+
+export const NetworkSelectionRecordSchema = z
+  .strictObject({
+    id: z.literal("network-selection"),
+    selectedNamespace: z.string().min(1),
+    chainRefByNamespace: ChainRefByNamespaceSchema.default({}),
+    updatedAt: epochMillisecondsSchema,
+  })
+  .superRefine((value, ctx) => {
+    for (const [namespace, chainRef] of Object.entries(value.chainRefByNamespace)) {
+      const chainNamespace = getChainRefNamespace(chainRef);
+      if (chainNamespace !== namespace) {
+        ctx.addIssue({
+          code: "custom",
+          message: `chainRefByNamespace[${namespace}] must point to the same namespace`,
+          path: ["chainRefByNamespace", namespace],
+        });
+      }
+    }
+
+    const selectedNamespaceChainRef = value.chainRefByNamespace[value.selectedNamespace] ?? null;
+    if (!selectedNamespaceChainRef) {
+      ctx.addIssue({
+        code: "custom",
+        message: `chainRefByNamespace must include the selected namespace "${value.selectedNamespace}"`,
+        path: ["chainRefByNamespace", value.selectedNamespace],
+      });
+      return;
+    }
+
+    if (getChainRefNamespace(selectedNamespaceChainRef) !== value.selectedNamespace) {
+      ctx.addIssue({
+        code: "custom",
+        message: "selected namespace must resolve to a chain in the same namespace",
+        path: ["selectedNamespace"],
+      });
+    }
+  });
+export type NetworkSelectionRecord = z.infer<typeof NetworkSelectionRecordSchema>;
 
 const ActiveChainByNamespaceSchema = z.record(z.string().min(1), chainRefSchema);
 

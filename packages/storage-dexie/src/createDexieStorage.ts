@@ -1,8 +1,9 @@
 import type {
   AccountsPort,
-  ChainDefinitionsPort,
+  CustomChainsPort,
+  CustomRpcPort,
   KeyringMetasPort,
-  NetworkPreferencesPort,
+  NetworkSelectionPort,
   PermissionsPort,
   SettingsPort,
   TransactionsPort,
@@ -12,9 +13,10 @@ import type { VaultMetaPort } from "@arx/core/storage";
 import { ArxStorageDatabase } from "./db.js";
 import { createDexieCtx, type DexieCtx, type StorageDexieLogger } from "./internal/ctx.js";
 import { DexieAccountsPort } from "./ports/accountsPort.js";
-import { DexieChainDefinitionsPort } from "./ports/chainDefinitionsPort.js";
+import { DexieCustomChainsPort } from "./ports/customChainsPort.js";
+import { DexieCustomRpcPort } from "./ports/customRpcPort.js";
 import { DexieKeyringMetasPort } from "./ports/keyringMetasPort.js";
-import { DexieNetworkPreferencesPort } from "./ports/networkPreferencesPort.js";
+import { DexieNetworkSelectionPort } from "./ports/networkSelectionPort.js";
 import { DexiePermissionsPort } from "./ports/permissionsPort.js";
 import { DexieSettingsPort } from "./ports/settingsPort.js";
 import { DexieTransactionsPort } from "./ports/transactionsPort.js";
@@ -23,8 +25,9 @@ import { DEFAULT_DB_NAME, getOrCreateDatabase } from "./sharedDb.js";
 
 export type DexieStoragePorts = {
   settings: SettingsPort;
-  chainDefinitions: ChainDefinitionsPort;
-  networkPreferences: NetworkPreferencesPort;
+  customChains: CustomChainsPort;
+  customRpc: CustomRpcPort;
+  networkSelection: NetworkSelectionPort;
   vaultMeta: VaultMetaPort;
 
   accounts: AccountsPort;
@@ -60,8 +63,9 @@ export const createDexieStorage = (options: CreateDexieStorageOptions = {}): Dex
   return {
     ports: {
       settings: new DexieSettingsPort(ctx),
-      chainDefinitions: new DexieChainDefinitionsPort(ctx),
-      networkPreferences: new DexieNetworkPreferencesPort(ctx),
+      customChains: new DexieCustomChainsPort(ctx),
+      customRpc: new DexieCustomRpcPort(ctx),
+      networkSelection: new DexieNetworkSelectionPort(ctx),
       vaultMeta: new DexieVaultMetaPort(ctx),
 
       accounts: new DexieAccountsPort(ctx),

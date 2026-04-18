@@ -1,8 +1,9 @@
 import type {
   AccountRecord,
-  ChainDefinitionEntity,
+  CustomChainRecord,
+  CustomRpcRecord,
   KeyringMetaRecord,
-  NetworkPreferencesRecord,
+  NetworkSelectionRecord,
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
@@ -10,15 +11,17 @@ import type {
 import { Dexie, type Table } from "dexie";
 import type { VaultMetaEntity } from "./types.js";
 
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
-type ChainDefinitionsRow = ChainDefinitionEntity;
+type CustomChainRow = CustomChainRecord;
+type CustomRpcRow = CustomRpcRecord;
 type KeyringMetaRow = KeyringMetaRecord;
 
 export class ArxStorageDatabase extends Dexie {
   settings!: Table<SettingsRecord, string>;
-  chains!: Table<ChainDefinitionsRow, string>;
-  networkPreferences!: Table<NetworkPreferencesRecord, string>;
+  customChains!: Table<CustomChainRow, string>;
+  customRpc!: Table<CustomRpcRow, string>;
+  networkSelection!: Table<NetworkSelectionRecord, string>;
   accounts!: Table<AccountRecord, string>;
   permissions!: Table<PermissionRecord, [string, string]>;
   transactions!: Table<TransactionRecord, string>;
@@ -31,8 +34,9 @@ export class ArxStorageDatabase extends Dexie {
     super(name);
     this.version(DB_SCHEMA_VERSION).stores({
       settings: "&id",
-      chains: "&chainRef",
-      networkPreferences: "&id",
+      customChains: "&chainRef, namespace, updatedAt",
+      customRpc: "&chainRef, updatedAt",
+      networkSelection: "&id",
       accounts: "&accountKey, namespace, keyringId",
       permissions: "[origin+namespace], origin",
       transactions:

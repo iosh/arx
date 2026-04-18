@@ -316,6 +316,27 @@ export const createProviderPortServer = ({
     return new Set([...snapshotCache.keys(), ...bindingRegistry.listActiveNamespaces()]);
   };
 
+  const reconcileActiveBindings = async (bindings = bindingRegistry.listActiveBindings()) => {
+    const activeProvider = await loadProvider();
+
+    for (const binding of bindings) {
+      try {
+        const projection = activeProvider.buildConnectionProjection(binding);
+        if (projection.connected || projection.accounts.length === 0) {
+          continue;
+        }
+
+        activeProvider.connect(binding);
+      } catch (error) {
+        portLog("failed to reconcile active provider binding", {
+          error,
+          namespace: binding.namespace,
+          origin: binding.origin,
+        });
+      }
+    }
+  };
+
   const enqueueProjection = (label: string, project: () => void | Promise<void>) => {
     projectionQueue = projectionQueue
       .then(async () => {
@@ -426,6 +447,7 @@ export const createProviderPortServer = ({
         subscriptions.push(
           activeProvider.subscribeSessionUnlocked((payload) => {
             void enqueueProjection("session_unlocked", async () => {
+              await reconcileActiveBindings();
               eventBroadcaster.broadcastEvent(PROVIDER_EVENTS.sessionUnlocked, [payload]);
               await publishAccountsState();
             });
@@ -444,6 +466,7 @@ export const createProviderPortServer = ({
         subscriptions.push(
           activeProvider.subscribeNetworkStateChanged(() => {
             void enqueueProjection("network_state_changed", async () => {
+              await reconcileActiveBindings();
               await reconcileNamespaces(collectRelevantNamespaces());
             });
           }),
@@ -452,6 +475,7 @@ export const createProviderPortServer = ({
         subscriptions.push(
           activeProvider.subscribeNetworkSelectionChanged(() => {
             void enqueueProjection("network_selection_changed", async () => {
+              await reconcileActiveBindings();
               await reconcileNamespaces(collectRelevantNamespaces());
             });
           }),
@@ -460,6 +484,7 @@ export const createProviderPortServer = ({
         subscriptions.push(
           activeProvider.subscribeAccountsStateChanged(() => {
             void enqueueProjection("accounts_state_changed", async () => {
+              await reconcileActiveBindings();
               await publishAccountsState();
             });
           }),
@@ -468,6 +493,7 @@ export const createProviderPortServer = ({
         subscriptions.push(
           activeProvider.subscribePermissionsStateChanged(() => {
             void enqueueProjection("permissions_state_changed", async () => {
+              await reconcileActiveBindings();
               await publishAccountsState();
             });
           }),

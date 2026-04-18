@@ -3,7 +3,7 @@ import { createAsyncMiddleware, type JsonRpcMiddleware } from "@metamask/json-rp
 import type { Json, JsonRpcParams } from "@metamask/utils";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { ChainNamespace } from "../../../controllers/index.js";
-import { type ConnectionRequirement, ConnectionRequirements } from "../../../rpc/handlers/types.js";
+import { type AuthorizationRequirement, AuthorizationRequirements } from "../../../rpc/handlers/types.js";
 import { UNKNOWN_ORIGIN } from "../constants.js";
 import type { ArxMiddlewareRequest } from "./requestTypes.js";
 
@@ -24,11 +24,11 @@ type AccessPolicyGuardDeps = {
     chainRef: string | null;
     namespace: string | null;
   }): void;
-  isConnected(origin: string, options: { namespace: ChainNamespace; chainRef: ChainRef }): boolean;
+  isAuthorized(origin: string, options: { namespace: ChainNamespace; chainRef: ChainRef }): boolean;
 };
 
 const assertNever = (value: never): never => {
-  throw new Error(`Unexpected connectionRequirement: ${String(value)}`);
+  throw new Error(`Unexpected authorizationRequirement: ${String(value)}`);
 };
 
 export const createAccessPolicyGuardMiddleware = ({
@@ -36,7 +36,7 @@ export const createAccessPolicyGuardMiddleware = ({
   isInternalOrigin,
   requestAttention,
   shouldRequestUnlockAttention,
-  isConnected,
+  isAuthorized,
 }: AccessPolicyGuardDeps): JsonRpcMiddleware<JsonRpcParams, Json> => {
   const shouldRequestUnlock = shouldRequestUnlockAttention ?? (() => true);
 
@@ -127,28 +127,28 @@ export const createAccessPolicyGuardMiddleware = ({
       }
     }
 
-    const connectionRequirement: ConnectionRequirement = definition.connectionRequirement;
+    const authorizationRequirement: AuthorizationRequirement = definition.authorizationRequirement;
 
-    switch (connectionRequirement) {
-      case ConnectionRequirements.None: {
+    switch (authorizationRequirement) {
+      case AuthorizationRequirements.None: {
         await next();
         return;
       }
-      case ConnectionRequirements.Required: {
+      case AuthorizationRequirements.Required: {
         const chainRef = invocation?.chainRef ?? rpcContext?.chainRef ?? null;
         const namespace = invocation?.namespace ?? rpcContext?.namespace ?? null;
 
-        const connected =
+        const authorized =
           origin !== UNKNOWN_ORIGIN &&
           namespace !== null &&
           chainRef !== null &&
           chainRef.length > 0 &&
-          isConnected(origin, {
+          isAuthorized(origin, {
             namespace,
             chainRef: chainRef as ChainRef,
           });
 
-        if (!connected) {
+        if (!authorized) {
           throw arxError({
             reason: ArxReasons.PermissionNotConnected,
             message: `Origin "${origin}" is not connected`,
@@ -166,6 +166,6 @@ export const createAccessPolicyGuardMiddleware = ({
       }
     }
 
-    return assertNever(connectionRequirement);
+    return assertNever(authorizationRequirement);
   });
 };

@@ -358,10 +358,10 @@ describe("createArxWallet", () => {
 
     try {
       const { wallet } = runtime;
-      const permissionSnapshot = runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, {
+      const permissionSnapshot = runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
         chainRef: EIP155_CHAIN_REF,
       });
-      expect(permissionSnapshot.isConnected).toBe(true);
+      expect(permissionSnapshot.isAuthorized).toBe(true);
       expect(permissionSnapshot.accounts).toHaveLength(1);
       expect(wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
       expect(
@@ -408,7 +408,7 @@ describe("createArxWallet", () => {
       await flushAsync();
       expect(wallet.dappConnections.getState().count).toBe(0);
       expect(
-        runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+        runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(false);
 
       await wallet.permissions.grantAuthorization(ORIGIN, {
@@ -423,7 +423,7 @@ describe("createArxWallet", () => {
       await flushAsync();
       expect(wallet.dappConnections.getState().count).toBe(0);
       expect(
-        runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+        runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(true);
       expect(
         wallet.snapshots.buildProviderConnectionState({ origin: ORIGIN, namespace: EIP155_NAMESPACE }).accounts,
@@ -536,7 +536,7 @@ describe("createArxWallet", () => {
     try {
       expect(reopened.wallet.dappConnections.getState()).toEqual({ connections: [], count: 0 });
       expect(
-        reopened.services.permissionViews.getConnectionSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isConnected,
+        reopened.services.permissionViews.getAuthorizationSnapshot(ORIGIN, { chainRef: EIP155_CHAIN_REF }).isAuthorized,
       ).toBe(true);
     } finally {
       await reopened.shutdown();

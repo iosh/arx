@@ -5,7 +5,7 @@ import type { AccountController } from "../../../controllers/account/types.js";
 import type { PermissionsReader } from "../../../controllers/permission/types.js";
 import type { AccountKey } from "../../../storage/records.js";
 import { type UiPermissionsSnapshot, UiPermissionsSnapshotSchema } from "../../../ui/protocol/schemas.js";
-import type { ConnectionSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
+import type { AuthorizationSnapshot, PermissionViewsService, PermittedAccountView } from "./types.js";
 
 type CreatePermissionViewsServiceOptions = {
   accounts: Pick<AccountController, "getOwnedAccount">;
@@ -40,7 +40,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
     this.#permissions = options.permissions;
   }
 
-  getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot {
+  getAuthorizationSnapshot(origin: string, options: { chainRef: ChainRef }): AuthorizationSnapshot {
     const { chainRef } = options;
     const { namespace } = parseChainRef(chainRef);
     const authorization = this.#permissions.getAuthorization(origin, { namespace });
@@ -57,13 +57,13 @@ class DefaultPermissionViewsService implements PermissionViewsService {
       permittedChainRefs,
       permittedAccountKeys,
       accounts,
-      isConnected: isPermittedChain && accounts.length > 0,
+      isAuthorized: isPermittedChain && accounts.length > 0,
     };
   }
 
-  async assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void> {
-    const snapshot = this.getConnectionSnapshot(origin, options);
-    if (snapshot.isConnected) {
+  async assertAuthorized(origin: string, options: { chainRef: ChainRef }): Promise<void> {
+    const snapshot = this.getAuthorizationSnapshot(origin, options);
+    if (snapshot.isAuthorized) {
       return;
     }
 
@@ -79,7 +79,7 @@ class DefaultPermissionViewsService implements PermissionViewsService {
   }
 
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[] {
-    return this.getConnectionSnapshot(origin, options).accounts;
+    return this.getAuthorizationSnapshot(origin, options).accounts;
   }
 
   buildUiPermissionsSnapshot(): UiPermissionsSnapshot {

@@ -61,7 +61,7 @@ describe("createPermissionViewsService", () => {
       },
     });
 
-    expect(service.getConnectionSnapshot(ORIGIN, { chainRef: "eip155:1" })).toEqual({
+    expect(service.getAuthorizationSnapshot(ORIGIN, { chainRef: "eip155:1" })).toEqual({
       namespace: "eip155",
       chainRef: "eip155:1",
       isPermittedChain: true,
@@ -74,20 +74,20 @@ describe("createPermissionViewsService", () => {
           displayAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         },
       ],
-      isConnected: true,
+      isAuthorized: true,
     });
 
-    expect(service.getConnectionSnapshot(ORIGIN, { chainRef: "eip155:10" })).toMatchObject({
+    expect(service.getAuthorizationSnapshot(ORIGIN, { chainRef: "eip155:10" })).toMatchObject({
       namespace: "eip155",
       chainRef: "eip155:10",
       isPermittedChain: true,
       permittedChainRefs: ["eip155:1", "eip155:10"],
       permittedAccountKeys: [],
       accounts: [],
-      isConnected: false,
+      isAuthorized: false,
     });
 
-    await expect(service.assertConnected(ORIGIN, { chainRef: "eip155:10" })).rejects.toMatchObject({
+    await expect(service.assertAuthorized(ORIGIN, { chainRef: "eip155:10" })).rejects.toMatchObject({
       reason: ArxReasons.PermissionNotConnected,
     });
 

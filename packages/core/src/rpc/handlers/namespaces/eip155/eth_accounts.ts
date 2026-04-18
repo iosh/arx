@@ -2,14 +2,14 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedResponse } from "../../locked.js";
 import {
   ApprovalRequirements,
+  AuthorizationRequirements,
   AuthorizedScopeChecks,
-  ConnectionRequirements,
   defineNoParamsMethod,
 } from "../../types.js";
 
 export const ethAccountsDefinition = defineNoParamsMethod({
   requestKind: RpcRequestKinds.AccountAccess,
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedResponse([]),

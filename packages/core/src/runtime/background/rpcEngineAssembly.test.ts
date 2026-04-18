@@ -3,7 +3,7 @@ import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import type { Json, PendingJsonRpcResponse } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { eip155NamespaceManifest } from "../../namespaces/index.js";
-import { ApprovalRequirements, AuthorizedScopeChecks, ConnectionRequirements } from "../../rpc/handlers/types.js";
+import { ApprovalRequirements, AuthorizationRequirements, AuthorizedScopeChecks } from "../../rpc/handlers/types.js";
 import {
   MemoryAccountsPort,
   MemoryCustomChainsPort,
@@ -243,7 +243,7 @@ describe("background rpc engine assembly", () => {
       "eip155",
       {
         arx_secureTest: {
-          connectionRequirement: ConnectionRequirements.Required,
+          authorizationRequirement: AuthorizationRequirements.Required,
           approvalRequirement: ApprovalRequirements.None,
           authorizedScopeCheck: AuthorizedScopeChecks.None,
           locked: { type: "allow" },

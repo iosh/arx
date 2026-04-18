@@ -1,6 +1,6 @@
 import { buildEip2255Permissions, type Eip2255PermissionDescriptor } from "../permissions/eip2255.js";
 
-type ConnectionSnapshotAccountsProjection = {
+type AuthorizationSnapshotAccountsProjection = {
   accounts: readonly { canonicalAddress: string }[];
 };
 
@@ -11,9 +11,9 @@ export type {
 } from "../permissions/eip2255.js";
 export { buildEip2255Permissions } from "../permissions/eip2255.js";
 
-export const buildEip2255PermissionsFromConnectionSnapshot = (args: {
+export const buildEip2255PermissionsFromAuthorizationSnapshot = (args: {
   origin: string;
-  snapshot: ConnectionSnapshotAccountsProjection;
+  snapshot: AuthorizationSnapshotAccountsProjection;
 }): Eip2255PermissionDescriptor[] => {
   const { origin, snapshot } = args;
 

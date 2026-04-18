@@ -3,8 +3,8 @@ import { JsonRpcEngine } from "@metamask/json-rpc-engine";
 import { describe, expect, it, vi } from "vitest";
 import {
   ApprovalRequirements,
+  AuthorizationRequirements,
   AuthorizedScopeChecks,
-  ConnectionRequirements,
   type MethodDefinition,
 } from "../../../rpc/handlers/types.js";
 import type { RpcInvocationContext } from "../../../rpc/index.js";
@@ -18,7 +18,7 @@ const ORIGINS = {
 };
 
 const buildMethodDefinition = (overrides: Partial<MethodDefinition> = {}): MethodDefinition => ({
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   handler: vi.fn(),
@@ -93,7 +93,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isUnlocked: () => false,
           isInternalOrigin: (origin) => origin === ORIGINS.internal,
           requestAttention: attention,
-          isConnected: vi.fn(() => false),
+          isAuthorized: vi.fn(() => false),
         },
       }),
     ).resolves.toBeDefined();
@@ -116,7 +116,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isUnlocked: () => true,
           isInternalOrigin: () => false,
           requestAttention: attention,
-          isConnected: vi.fn(() => false),
+          isAuthorized: vi.fn(() => false),
         },
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.RpcUnsupportedMethod });
@@ -140,7 +140,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isInternalOrigin: () => false,
           requestAttention: attention,
           shouldRequestUnlockAttention: () => true,
-          isConnected: vi.fn(() => false),
+          isAuthorized: vi.fn(() => false),
         },
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.SessionLocked });
@@ -170,7 +170,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
         isUnlocked: () => false,
         isInternalOrigin: () => false,
         requestAttention: attention,
-        isConnected: vi.fn(() => false),
+        isAuthorized: vi.fn(() => false),
       },
     });
     expect(result.handler).not.toHaveBeenCalled();
@@ -195,14 +195,14 @@ describe("createAccessPolicyGuardMiddleware", () => {
         isInternalOrigin: () => false,
         requestAttention: attention,
         shouldRequestUnlockAttention: () => true,
-        isConnected: vi.fn(() => false),
+        isAuthorized: vi.fn(() => false),
       },
     });
     expect(result.handler).toHaveBeenCalledTimes(1);
     expect(attention).not.toHaveBeenCalled();
   });
 
-  it("enforces connected check when connectionRequirement is required", async () => {
+  it("enforces connected check when authorizationRequirement is required", async () => {
     const attention = vi.fn();
     await expect(
       run({
@@ -213,7 +213,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           namespace: "eip155",
           chainRef: "eip155:1",
           definition: buildMethodDefinition({
-            connectionRequirement: ConnectionRequirements.Required,
+            authorizationRequirement: AuthorizationRequirements.Required,
             locked: { type: "allow" },
           }),
           passthrough: { isPassthrough: false, allowWhenLocked: false },
@@ -222,7 +222,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
           isUnlocked: () => true,
           isInternalOrigin: () => false,
           requestAttention: attention,
-          isConnected: vi.fn(() => false),
+          isAuthorized: vi.fn(() => false),
         },
       }),
     ).rejects.toMatchObject({ reason: ArxReasons.PermissionNotConnected });
@@ -245,7 +245,7 @@ describe("createAccessPolicyGuardMiddleware", () => {
         isUnlocked: () => true,
         isInternalOrigin: () => false,
         requestAttention: attention,
-        isConnected: vi.fn(() => true),
+        isAuthorized: vi.fn(() => true),
       },
     });
     expect(result.handler).toHaveBeenCalledTimes(1);

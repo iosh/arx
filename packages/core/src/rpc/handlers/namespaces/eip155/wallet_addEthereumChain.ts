@@ -9,13 +9,13 @@ import {
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
+import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
 
 export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<ChainMetadata>({
   requestKind: RpcRequestKinds.ChainManagement,
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params) => {

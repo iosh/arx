@@ -1,6 +1,6 @@
 export { createPermissionViewsService } from "./PermissionViewsService.js";
 export type {
-  ConnectionSnapshot,
+  AuthorizationSnapshot,
   PermissionViewsService,
   PermittedAccountView,
 } from "./types.js";

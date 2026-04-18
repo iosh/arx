@@ -31,7 +31,7 @@ export type HandlerControllers = {
 };
 
 export type HandlerRuntimeServices = {
-  permissionViews: Pick<PermissionViewsService, "getConnectionSnapshot" | "listPermittedAccounts">;
+  permissionViews: Pick<PermissionViewsService, "getAuthorizationSnapshot" | "listPermittedAccounts">;
 };
 
 export type RpcRequest = {
@@ -67,16 +67,16 @@ export type MethodHandler<P = unknown> = BivariantCallback<
   Promise<unknown> | unknown
 >;
 
-export const ConnectionRequirements = {
+export const AuthorizationRequirements = {
   None: "none",
   Required: "required",
 } as const;
-export type ConnectionRequirement = (typeof ConnectionRequirements)[keyof typeof ConnectionRequirements];
+export type AuthorizationRequirement = (typeof AuthorizationRequirements)[keyof typeof AuthorizationRequirements];
 
-export const deriveConnectionRequirement = (definition: {
-  connectionRequirement: ConnectionRequirement;
-}): ConnectionRequirement => {
-  return definition.connectionRequirement;
+export const deriveAuthorizationRequirement = (definition: {
+  authorizationRequirement: AuthorizationRequirement;
+}): AuthorizationRequirement => {
+  return definition.authorizationRequirement;
 };
 
 export type LockedPolicy =
@@ -115,12 +115,12 @@ export type MethodDefinition<P = unknown> = {
    */
   requestKind?: RpcRequestKind;
   /**
-   * Connection precondition enforced by the generic access-policy middleware.
+   * Authorization precondition enforced by the generic access-policy middleware.
    *
    * - "none": the request does not require prior connection authorization.
-   * - "required": the request requires origin+namespace+chainRef to be connected.
+   * - "required": the request requires origin+namespace+chainRef to be authorized.
    */
-  connectionRequirement: ConnectionRequirement;
+  authorizationRequirement: AuthorizationRequirement;
   /**
    * Request-level approval fact declared by the method definition.
    *

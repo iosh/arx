@@ -8,20 +8,20 @@ export type PermittedAccountView = {
   displayAddress: string;
 };
 
-export type ConnectionSnapshot = {
+export type AuthorizationSnapshot = {
   namespace: string;
   chainRef: ChainRef;
   isPermittedChain: boolean;
   permittedChainRefs: ChainRef[];
   permittedAccountKeys: AccountKey[];
   accounts: PermittedAccountView[];
-  isConnected: boolean;
+  isAuthorized: boolean;
 };
 
 export type PermissionViewsService = {
-  // Generic connection projection consumed by RPC, provider, and UI surfaces.
-  getConnectionSnapshot(origin: string, options: { chainRef: ChainRef }): ConnectionSnapshot;
-  assertConnected(origin: string, options: { chainRef: ChainRef }): Promise<void>;
+  // Generic permission authorization projection consumed by RPC and UI surfaces.
+  getAuthorizationSnapshot(origin: string, options: { chainRef: ChainRef }): AuthorizationSnapshot;
+  assertAuthorized(origin: string, options: { chainRef: ChainRef }): Promise<void>;
   listPermittedAccounts(origin: string, options: { chainRef: ChainRef }): PermittedAccountView[];
   // Protocol-specific permission surfaces adapt from the generic connection projection.
   buildUiPermissionsSnapshot(): UiPermissionsSnapshot;

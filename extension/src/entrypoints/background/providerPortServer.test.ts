@@ -611,6 +611,119 @@ describe("providerPortServer", () => {
     expect(evmPort.postMessage).not.toHaveBeenCalled();
   });
 
+  it("reconciles an active binding on session unlock without requiring another handshake", async () => {
+    const harness = createServerHarness({
+      snapshots: {
+        eip155: makeSnapshot("eip155", false),
+      },
+    });
+    const port = new FakePort();
+
+    harness.server.start();
+    harness.server.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
+    harness.mocks.connect.mockClear();
+
+    harness.setSnapshot("eip155", makeSnapshot("eip155", true));
+    harness.emitSessionUnlocked({ reason: "manual" });
+
+    await vi.waitFor(() =>
+      expect(harness.mocks.connect).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        namespace: "eip155",
+      }),
+    );
+    expect(port.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("reconciles active bindings after permissions restore without requiring another handshake", async () => {
+    let canExposeAccounts = false;
+    const harness = createServerHarness({
+      resolveAccounts: () => (canExposeAccounts ? ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"] : []),
+      snapshots: {
+        eip155: makeSnapshot("eip155", true),
+      },
+    });
+    const port = new FakePort();
+
+    harness.server.start();
+    harness.server.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
+    harness.mocks.connect.mockClear();
+
+    canExposeAccounts = true;
+    harness.emitPermissionsStateChanged();
+
+    await vi.waitFor(() =>
+      expect(harness.mocks.connect).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        namespace: "eip155",
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "event",
+          payload: {
+            event: "accountsChanged",
+            params: [["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"]],
+          },
+        }),
+      ),
+    );
+  });
+
+  it("reconciles active bindings after the selected provider chain becomes authorized again", async () => {
+    const harness = createServerHarness({
+      resolveAccounts: ({ chainRef }) => (chainRef === "eip155:10" ? ["0xbbb"] : []),
+      snapshots: {
+        eip155: makeSnapshot("eip155", true),
+      },
+    });
+    const port = new FakePort();
+
+    harness.server.start();
+    harness.server.handleConnect(port as unknown as Runtime.Port);
+    handshake(port, "session-1", "eip155");
+    await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+
+    expect(harness.mocks.connect).toHaveBeenCalledTimes(1);
+    harness.mocks.connect.mockClear();
+
+    harness.setSnapshot(
+      "eip155",
+      makeSnapshot("eip155", true, {
+        chain: { chainId: "0xa", chainRef: "eip155:10" },
+        meta: {
+          activeChainByNamespace: { eip155: "eip155:10" },
+          supportedChains: ["eip155:1", "eip155:10"],
+        },
+      }),
+    );
+    harness.emitNetworkSelectionChanged();
+
+    await vi.waitFor(() =>
+      expect(harness.mocks.connect).toHaveBeenCalledWith({
+        origin: "https://example.com",
+        namespace: "eip155",
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(port.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "event",
+          payload: { event: "accountsChanged", params: [["0xbbb"]] },
+        }),
+      ),
+    );
+  });
+
   it("keeps the provider session alive while projecting lock state", async () => {
     const harness = createServerHarness({
       snapshots: {

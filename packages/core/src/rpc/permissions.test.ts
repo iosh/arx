@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildEip2255Permissions, buildEip2255PermissionsFromConnectionSnapshot } from "./permissions.js";
+import { buildEip2255Permissions, buildEip2255PermissionsFromAuthorizationSnapshot } from "./permissions.js";
 
 const ORIGIN = "https://dapp.example";
 
@@ -22,7 +22,7 @@ describe("buildEip2255Permissions", () => {
 
   it("adapts connection snapshots into EIP-2255 descriptors", () => {
     expect(
-      buildEip2255PermissionsFromConnectionSnapshot({
+      buildEip2255PermissionsFromAuthorizationSnapshot({
         origin: ORIGIN,
         snapshot: {
           accounts: [{ canonicalAddress: "0xabc" }, { canonicalAddress: "0xabc" }, { canonicalAddress: "0xdef" }],

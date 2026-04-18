@@ -4,8 +4,8 @@ import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
 import {
   ApprovalRequirements,
+  AuthorizationRequirements,
   AuthorizedScopeChecks,
-  ConnectionRequirements,
   defineMethod,
   defineNoParamsMethod,
   type MethodDefinition,
@@ -101,9 +101,9 @@ type AuthorizedEip155ExecutionPlan<Prepared> = {
 
 type Eip155AuthorizedAccountApprovalMethodDefinition<P, Prepared> = Omit<
   MethodDefinition<P>,
-  "connectionRequirement" | "approvalRequirement" | "authorizedScopeCheck" | "handler"
+  "authorizationRequirement" | "approvalRequirement" | "authorizedScopeCheck" | "handler"
 > & {
-  connectionRequirement?: never;
+  authorizationRequirement?: never;
   approvalRequirement?: never;
   authorizedScopeCheck?: never;
   buildAuthorizedExecution: (
@@ -121,7 +121,7 @@ export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
 
   return defineMethod({
     ...methodDefinition,
-    connectionRequirement: ConnectionRequirements.Required,
+    authorizationRequirement: AuthorizationRequirements.Required,
     approvalRequirement: ApprovalRequirements.Required,
     authorizedScopeCheck: AuthorizedScopeChecks.NamespaceSpecific,
     handler: async (context) => {

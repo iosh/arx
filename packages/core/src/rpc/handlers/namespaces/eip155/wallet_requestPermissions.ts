@@ -9,10 +9,10 @@ import {
   type ConnectionGrantRequest,
 } from "../../../../controllers/index.js";
 import { isConnectionGrantKind } from "../../../../permissions/connectionGrantKinds.js";
-import { buildEip2255PermissionsFromConnectionSnapshot } from "../../../permissions.js";
+import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
+import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
 
@@ -76,7 +76,7 @@ const WalletRequestPermissionsParamsSchema = z
 
 export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
   requestKind: RpcRequestKinds.AccountAccess,
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   parseParams: (params, _rpcContext) => {
@@ -120,9 +120,9 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
       });
     }
 
-    return buildEip2255PermissionsFromConnectionSnapshot({
+    return buildEip2255PermissionsFromAuthorizationSnapshot({
       origin,
-      snapshot: services.permissionViews.getConnectionSnapshot(origin, { chainRef }),
+      snapshot: services.permissionViews.getAuthorizationSnapshot(origin, { chainRef }),
     });
   },
 });

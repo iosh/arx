@@ -3,13 +3,13 @@ import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
-import { AuthorizedScopeChecks, ConnectionRequirements } from "../../types.js";
+import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { isDomainError, isRpcError } from "../utils.js";
 import { defineEip155NoParamsApprovalMethod, requireRequestContext } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   requestKind: RpcRequestKinds.AccountAccess,
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedQueue(),
   handler: async ({ origin, controllers, rpcContext, invocation }) => {

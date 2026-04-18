@@ -344,10 +344,10 @@ describe("createBackgroundRuntime provider access", () => {
           : [],
       ).toEqual([address.toLowerCase()]);
 
-      const connection = background.runtime.services.permissionViews.getConnectionSnapshot(ORIGIN, {
+      const connection = background.runtime.services.permissionViews.getAuthorizationSnapshot(ORIGIN, {
         chainRef: chain.chainRef,
       });
-      expect(connection.isConnected).toBe(true);
+      expect(connection.isAuthorized).toBe(true);
       expect(connection.accounts.map((account) => account.displayAddress.toLowerCase())).toContain(
         address.toLowerCase(),
       );

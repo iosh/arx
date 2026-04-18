@@ -110,9 +110,9 @@ export const createBackgroundRpcMiddlewares = (runtime: BackgroundRpcRuntime, en
         namespace: args.namespace,
       });
     },
-    isConnected: (origin, options) => {
+    isAuthorized: (origin, options) => {
       const { chainRef } = options;
-      return runtime.services.permissionViews.getConnectionSnapshot(origin, { chainRef }).isConnected;
+      return runtime.services.permissionViews.getAuthorizationSnapshot(origin, { chainRef }).isAuthorized;
     },
     ...(envHooks.shouldRequestUnlockAttention
       ? { shouldRequestUnlockAttention: envHooks.shouldRequestUnlockAttention }

@@ -1,23 +1,23 @@
-import { buildEip2255PermissionsFromConnectionSnapshot } from "../../../permissions.js";
+import { buildEip2255PermissionsFromAuthorizationSnapshot } from "../../../permissions.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedAllow } from "../../locked.js";
 import {
   ApprovalRequirements,
+  AuthorizationRequirements,
   AuthorizedScopeChecks,
-  ConnectionRequirements,
   defineNoParamsMethod,
 } from "../../types.js";
 
 export const walletGetPermissionsDefinition = defineNoParamsMethod({
   requestKind: RpcRequestKinds.AccountAccess,
-  connectionRequirement: ConnectionRequirements.None,
+  authorizationRequirement: AuthorizationRequirements.None,
   approvalRequirement: ApprovalRequirements.None,
   authorizedScopeCheck: AuthorizedScopeChecks.None,
   locked: lockedAllow(),
   handler: ({ origin, services, invocation }) => {
-    return buildEip2255PermissionsFromConnectionSnapshot({
+    return buildEip2255PermissionsFromAuthorizationSnapshot({
       origin,
-      snapshot: services.permissionViews.getConnectionSnapshot(origin, {
+      snapshot: services.permissionViews.getAuthorizationSnapshot(origin, {
         chainRef: invocation.chainRef,
       }),
     });

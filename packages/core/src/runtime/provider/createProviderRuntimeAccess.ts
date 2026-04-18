@@ -8,7 +8,6 @@ import type {
   RpcInvocationContext,
 } from "../../rpc/index.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
-import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
 import type {
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
@@ -60,7 +59,7 @@ type ProviderRuntimeAccessDeps = {
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
   subscribeNetworkStateChanged: StateChangeSubscription;
-  subscribeNetworkPreferencesChanged: (listener: NetworkPreferencesChangedHandler) => () => void;
+  subscribeNetworkSelectionChanged: StateChangeSubscription;
   subscribeAccountsStateChanged: StateChangeSubscription;
   subscribePermissionsStateChanged: StateChangeSubscription;
 };
@@ -91,7 +90,7 @@ export const createProviderRuntimeAccess = ({
   subscribeSessionUnlocked,
   subscribeSessionLocked,
   subscribeNetworkStateChanged,
-  subscribeNetworkPreferencesChanged,
+  subscribeNetworkSelectionChanged,
   subscribeAccountsStateChanged,
   subscribePermissionsStateChanged,
 }: ProviderRuntimeAccessDeps): ProviderRuntimeAccess => {
@@ -237,7 +236,7 @@ export const createProviderRuntimeAccess = ({
     subscribeSessionUnlocked,
     subscribeSessionLocked,
     subscribeNetworkStateChanged,
-    subscribeNetworkPreferencesChanged,
+    subscribeNetworkSelectionChanged,
     subscribeAccountsStateChanged,
     subscribePermissionsStateChanged,
     executeRpcRequest,

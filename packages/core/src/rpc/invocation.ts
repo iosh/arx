@@ -242,7 +242,7 @@ export const resolveRpcInvocation = (
   assertInvocationContextNamespaceConsistency(method, context);
 
   const namespace = resolveInvocationNamespace(catalog, method, context);
-  const namespaceActiveChainRef = controllers.networkPreferences.getActiveChainRef(namespace);
+  const namespaceActiveChainRef = controllers.networkSelection?.getSelectedChainRef(namespace) ?? null;
   const chainRef = resolveInvocationChainRef({
     method,
     namespace,

@@ -2,7 +2,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { NetworkPreferencesChangedHandler } from "../../services/store/networkPreferences/types.js";
+import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
 
 export type ProviderRuntimeMeta = {
   activeChainByNamespace: Record<string, ChainRef>;
@@ -68,7 +68,7 @@ export type ProviderRuntimeAccess = {
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
   subscribeNetworkStateChanged(listener: () => void): () => void;
-  subscribeNetworkPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
+  subscribeNetworkSelectionChanged: StateChangeSubscription;
   subscribeAccountsStateChanged(listener: () => void): () => void;
   subscribePermissionsStateChanged(listener: () => void): () => void;
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse>;

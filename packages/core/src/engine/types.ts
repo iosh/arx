@@ -1,7 +1,7 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ApprovalSummary } from "../approvals/summary.js";
 import type { ChainRef } from "../chains/ids.js";
-import type { ChainMetadata } from "../chains/metadata.js";
+import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import type { AccountController, MultiNamespaceAccountsState } from "../controllers/account/types.js";
 import type {
@@ -30,6 +30,12 @@ import type {
   PermissionsState,
   PermissionsWriter,
 } from "../controllers/permission/types.js";
+import type {
+  AddSupportedChainOptions,
+  AddSupportedChainResult,
+  SupportedChainEntity,
+  SupportedChainsUpdate,
+} from "../controllers/supportedChains/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
 import type {
   UnlockLockedPayload,
@@ -62,15 +68,17 @@ import type { ChainView, UiNetworksSnapshot } from "../services/runtime/chainVie
 import type { KeyringExportService } from "../services/runtime/keyringExport.js";
 import type { SessionStatus } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
-import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
+import type { CustomChainsPort } from "../services/store/customChains/port.js";
+import type { CustomRpcPort } from "../services/store/customRpc/port.js";
+import type { CustomRpcChangedHandler } from "../services/store/customRpc/types.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
-import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
-import type { NetworkPreferencesChangedHandler } from "../services/store/networkPreferences/types.js";
+import type { NetworkSelectionPort } from "../services/store/networkSelection/port.js";
+import type { NetworkSelectionChangedHandler } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
-import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../storage/records.js";
+import type { NetworkSelectionRecord } from "../storage/records.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
@@ -137,9 +145,10 @@ export type WalletNamespaces = Readonly<{
 /** Storage ports required to boot a wallet. */
 export type ArxWalletStoragePorts = Readonly<{
   accounts: AccountsPort;
-  chainDefinitions: ChainDefinitionsPort;
+  customChains: CustomChainsPort;
+  customRpc: CustomRpcPort;
   keyringMetas: KeyringMetasPort;
-  networkPreferences: NetworkPreferencesPort;
+  networkSelection: NetworkSelectionPort;
   permissions: PermissionsPort;
   settings: SettingsPort;
   transactions: TransactionsPort;
@@ -267,33 +276,36 @@ export type WalletPermissions = Readonly<{
   onOriginChanged: PermissionsEvents["onOriginChanged"];
 }>;
 
-/** Selected namespace, active chains, and RPC preferences. */
+/** Selected namespace, supported chains, and custom RPC overrides. */
 export type WalletNetworks = Readonly<{
-  getPreferences(): Promise<NetworkPreferencesRecord | null>;
-  getPreferencesSnapshot(): NetworkPreferencesRecord | null;
+  getSelection(): Promise<NetworkSelectionRecord | null>;
+  getSelectionSnapshot(): NetworkSelectionRecord | null;
   getSelectedNamespace(): string;
-  getActiveChainByNamespace(): Record<string, ChainRef>;
-  getActiveChainRef(namespace: string): ChainRef | null;
+  getChainRefByNamespace(): Record<string, ChainRef>;
+  getSelectedChainRef(namespace: string): ChainRef | null;
+  getChain(chainRef: ChainRef): SupportedChainEntity | null;
+  listChains(): SupportedChainEntity[];
   getSelectedChainView(): ChainView;
   getActiveChainViewForNamespace(namespace: string): ChainView;
   listKnownChainViews(): ChainView[];
   listAvailableChainViews(): ChainView[];
   buildWalletNetworksSnapshot(): UiNetworksSnapshot;
   getNetworkState(): NetworkState;
+  getRpcEndpoints(chainRef: ChainRef): RpcEndpoint[];
   getActiveEndpoint: NetworkController["getActiveEndpoint"];
-  selectWalletChain(chainRef: ChainRef): Promise<void>;
-  selectWalletNamespace(namespace: string): Promise<void>;
+  addChain(chain: ChainMetadata, options?: AddSupportedChainOptions): Promise<AddSupportedChainResult>;
+  removeChain(chainRef: ChainRef): Promise<{ removed: boolean; previous?: SupportedChainEntity }>;
+  setCustomRpc(chainRef: ChainRef, rpcEndpoints: RpcEndpoint[]): Promise<void>;
+  clearCustomRpc(chainRef: ChainRef): Promise<void>;
+  selectChain(chainRef: ChainRef): Promise<void>;
+  selectNamespace(namespace: string): Promise<void>;
   activateNamespaceChain(params: ActivateNamespaceChainParams): Promise<void>;
-  setRpcPreferences(rpc: Record<ChainRef, NetworkRpcPreference>): Promise<NetworkPreferencesRecord>;
-  clearRpcPreferences(): Promise<NetworkPreferencesRecord>;
-  patchRpcPreference(params: {
-    chainRef: ChainRef;
-    preference: NetworkRpcPreference | null;
-  }): Promise<NetworkPreferencesRecord>;
   setRpcStrategy(chainRef: ChainRef, strategy: RpcStrategyConfig): void;
   reportRpcOutcome(chainRef: ChainRef, outcome: RpcOutcomeReport): void;
   onStateChanged(listener: (state: NetworkState) => void): () => void;
-  onPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
+  onSelectionChanged(listener: NetworkSelectionChangedHandler): () => void;
+  onChainUpdated(listener: (update: SupportedChainsUpdate) => void): () => void;
+  onCustomRpcChanged(listener: CustomRpcChangedHandler): () => void;
 }>;
 
 /** Transaction approvals, execution, and status tracking. */
@@ -354,7 +366,7 @@ export type WalletProvider = Readonly<{
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
   subscribeNetworkStateChanged(listener: () => void): () => void;
-  subscribeNetworkPreferencesChanged(listener: NetworkPreferencesChangedHandler): () => void;
+  subscribeNetworkSelectionChanged(listener: () => void): () => void;
   subscribeAccountsStateChanged(listener: () => void): () => void;
   subscribePermissionsStateChanged(listener: () => void): () => void;
 }>;

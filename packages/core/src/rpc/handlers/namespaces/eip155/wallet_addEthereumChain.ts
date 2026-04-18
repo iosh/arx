@@ -53,7 +53,7 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       });
     }
 
-    const existing = controllers.chainDefinitions.getChain(metadata.chainRef);
+    const existing = controllers.supportedChains?.getChain(metadata.chainRef) ?? null;
     if (existing && existing.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.ChainNotCompatible,

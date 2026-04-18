@@ -122,7 +122,7 @@ export type UiStateChangeSources = {
   transactions: Pick<TransactionController, "onStateChanged">;
   chains: {
     onStateChanged: UiStateChangeSubscription;
-    onPreferencesChanged: UiStateChangeSubscription;
+    onSelectionChanged: UiStateChangeSubscription;
   };
   session: Pick<UiSessionAccess, "onStateChanged">;
   attention: {

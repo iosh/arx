@@ -35,7 +35,7 @@ export const createWalletDappConnections = (deps: {
   subscribeAccountsStateChanged: StateChangeSubscription;
   subscribePermissionsStateChanged: StateChangeSubscription;
   subscribeNetworkStateChanged: StateChangeSubscription;
-  subscribeNetworkPreferencesChanged: StateChangeSubscription;
+  subscribeNetworkSelectionChanged: StateChangeSubscription;
   registerCleanup?: (cleanup: () => void) => void;
 }): WalletDappConnections => {
   const {
@@ -48,7 +48,7 @@ export const createWalletDappConnections = (deps: {
     subscribeAccountsStateChanged,
     subscribePermissionsStateChanged,
     subscribeNetworkStateChanged,
-    subscribeNetworkPreferencesChanged,
+    subscribeNetworkSelectionChanged,
     registerCleanup,
   } = deps;
 
@@ -174,7 +174,7 @@ export const createWalletDappConnections = (deps: {
     subscribeNetworkStateChanged(() => {
       pruneInactiveConnections();
     }),
-    subscribeNetworkPreferencesChanged(() => {
+    subscribeNetworkSelectionChanged(() => {
       pruneInactiveConnections();
     }),
   ];

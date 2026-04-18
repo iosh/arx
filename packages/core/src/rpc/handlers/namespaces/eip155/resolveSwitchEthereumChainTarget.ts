@@ -9,7 +9,7 @@ export type ResolveSwitchEthereumChainTargetParams = {
 };
 
 type SwitchEthereumChainTargetDeps = {
-  chainDefinitions: {
+  supportedChains: {
     getChain(chainRef: ChainRef): { metadata: ChainMetadata } | null;
   };
   network: {
@@ -18,16 +18,16 @@ type SwitchEthereumChainTargetDeps = {
 };
 
 type ResolveSwitchEthereumChainTargetDeps = ResolveSwitchEthereumChainTargetParams & {
-  chainDefinitions: SwitchEthereumChainTargetDeps["chainDefinitions"];
+  supportedChains: SwitchEthereumChainTargetDeps["supportedChains"];
   network: SwitchEthereumChainTargetDeps["network"];
 };
 
 const listAvailableChainMetadata = ({
-  chainDefinitions,
+  supportedChains,
   network,
-}: Pick<ResolveSwitchEthereumChainTargetDeps, "chainDefinitions" | "network">): ChainMetadata[] => {
+}: Pick<ResolveSwitchEthereumChainTargetDeps, "supportedChains" | "network">): ChainMetadata[] => {
   return network.getState().availableChainRefs.map((chainRef) => {
-    const entry = chainDefinitions.getChain(chainRef);
+    const entry = supportedChains.getChain(chainRef);
     if (!entry) {
       throw chainErrors.notFound({ chainRef });
     }
@@ -36,12 +36,12 @@ const listAvailableChainMetadata = ({
 };
 
 export const resolveSwitchEthereumChainTarget = ({
-  chainDefinitions,
+  supportedChains,
   network,
   chainId,
   chainRef,
 }: ResolveSwitchEthereumChainTargetDeps): ChainMetadata => {
-  const availableChains = listAvailableChainMetadata({ chainDefinitions, network });
+  const availableChains = listAvailableChainMetadata({ supportedChains, network });
   const target = availableChains.find((item) => {
     if (chainRef && item.chainRef === (chainRef as ChainRef)) {
       return true;

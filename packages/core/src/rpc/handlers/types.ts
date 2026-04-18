@@ -4,25 +4,25 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../chains/registry.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
-import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
+import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { RequestContext } from "../requestContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
 
 export type HandlerControllers = {
   network: NetworkController;
-  networkPreferences: NetworkPreferencesService;
+  networkSelection?: NetworkSelectionService;
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   transactions: TransactionController;
-  chainDefinitions: ChainDefinitionsController;
+  supportedChains?: SupportedChainsController;
   chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {
     now: () => number;

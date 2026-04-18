@@ -29,7 +29,7 @@ export const createWalletProvider = (deps: {
     subscribeSessionUnlocked: (listener) => runtimeAccess.subscribeSessionUnlocked(listener),
     subscribeSessionLocked: (listener) => runtimeAccess.subscribeSessionLocked(listener),
     subscribeNetworkStateChanged: (listener) => runtimeAccess.subscribeNetworkStateChanged(listener),
-    subscribeNetworkPreferencesChanged: (listener) => runtimeAccess.subscribeNetworkPreferencesChanged(listener),
+    subscribeNetworkSelectionChanged: (listener) => runtimeAccess.subscribeNetworkSelectionChanged(listener),
     subscribeAccountsStateChanged: (listener) => runtimeAccess.subscribeAccountsStateChanged(listener),
     subscribePermissionsStateChanged: (listener) => runtimeAccess.subscribePermissionsStateChanged(listener),
   };

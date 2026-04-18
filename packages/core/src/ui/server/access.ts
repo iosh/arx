@@ -48,7 +48,7 @@ const createUiStateChangedSubscription = ({
       bridge.stateChanged.approvals.onStateChanged(notify),
       bridge.stateChanged.permissions.onStateChanged(notify),
       bridge.stateChanged.transactions.onStateChanged(notify),
-      bridge.stateChanged.chains.onPreferencesChanged(notify),
+      bridge.stateChanged.chains.onSelectionChanged(notify),
       bridge.stateChanged.session.onStateChanged(notify),
       bridge.stateChanged.attention.onStateChanged(notify),
     ];

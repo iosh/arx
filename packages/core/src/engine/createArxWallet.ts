@@ -67,7 +67,8 @@ type WalletRuntimeServices = Readonly<{
   chainViews: RuntimeSessionScope["chainViews"];
   permissionViews: RuntimeSupportScope["permissionViews"];
   accountCodecs: RuntimeBootstrapScope["namespaceBootstrap"]["accountCodecs"];
-  networkPreferences: RuntimeSessionScope["networkPreferences"];
+  networkSelection: RuntimeSessionScope["networkSelection"];
+  customRpc: RuntimeSessionScope["customRpc"];
   namespaceBindings: RuntimeSupportScope["namespaceBindings"];
   namespaceRuntimeSupport: RuntimeSupportScope["namespaceRuntimeSupport"];
   session: RuntimeSessionScope["sessionLayer"]["session"];
@@ -233,7 +234,7 @@ const createWalletUiDeps = (runtime: ArxWalletRuntimeCore, options: WalletCreate
         transactions: runtime.controllers.transactions,
         chains: {
           onStateChanged: (listener) => runtime.controllers.network.onStateChanged(listener),
-          onPreferencesChanged: (listener) => runtime.services.networkPreferences.subscribeChanged(() => listener()),
+          onSelectionChanged: (listener) => runtime.services.networkSelection.subscribeChanged(() => listener()),
         },
         session,
         attention: {
@@ -286,9 +287,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     ...(controllerOptions?.accounts ? { accountOptions: controllerOptions.accounts } : {}),
     ...(controllerOptions?.approvals ? { approvalOptions: controllerOptions.approvals } : {}),
     ...(controllerOptions?.transactions ? { transactionOptions: controllerOptions.transactions } : {}),
-    chainDefinitionsOptions: {
-      ...(controllerOptions?.chainDefinitions ?? {}),
-      port: input.storage.ports.chainDefinitions,
+    supportedChainsOptions: {
+      ...(controllerOptions?.supportedChains ?? {}),
+      port: input.storage.ports.customChains,
     },
   });
 
@@ -297,7 +298,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     bootstrapScope,
     namespaceSession: namespaceStages.session,
     settingsPort: input.storage.ports.settings,
-    networkPreferencesPort: input.storage.ports.networkPreferences,
+    networkSelectionPort: input.storage.ports.networkSelection,
+    customRpcPort: input.storage.ports.customRpc,
     storePorts: {
       accounts: input.storage.ports.accounts,
       keyringMetas: input.storage.ports.keyringMetas,
@@ -317,7 +319,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
             permissions: controllersBase.permissions,
             transactions: controllersBase.transactions,
             chainActivation: activeSessionScope.chainActivation,
-            chainDefinitions: controllersBase.chainDefinitions,
+            supportedChains: controllersBase.supportedChains,
             namespaceBindings: activeRuntimeSupportScope.namespaceBindings,
           };
         },
@@ -349,7 +351,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const controllers: HandlerControllers = {
     ...sessionScope.controllersBase,
-    networkPreferences: sessionScope.networkPreferences,
+    networkSelection: sessionScope.networkSelection,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
       now: bootstrapScope.storageNow,
@@ -398,7 +400,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
     getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
     buildProviderMeta: (namespace) => sessionScope.chainViews.buildProviderMeta(namespace),
-    getActiveChainByNamespace: () => sessionScope.networkPreferences.getActiveChainByNamespace(),
+    getActiveChainByNamespace: () => sessionScope.networkSelection.getChainRefByNamespace(),
     listPermittedAccountsView: (origin, options) =>
       runtimeSupportScope.permissionViews.listPermittedAccounts(origin, options),
     formatAddress: (input) => bootstrapScope.namespaceBootstrap.chainAddressCodecs.formatAddress(input),
@@ -418,7 +420,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
     subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),
-    subscribeNetworkPreferencesChanged: (listener) => sessionScope.networkPreferences.subscribeChanged(listener),
+    subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
     subscribeAccountsStateChanged: (listener) => sessionScope.controllersBase.accounts.onStateChanged(listener),
     subscribePermissionsStateChanged: (listener) => sessionScope.controllersBase.permissions.onStateChanged(listener),
   });
@@ -442,7 +444,9 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     permissions: sessionScope.controllersBase.permissions,
   });
   const networks = createWalletNetworks({
-    networkPreferences: sessionScope.networkPreferences,
+    networkSelection: sessionScope.networkSelection,
+    supportedChains: sessionScope.controllersBase.supportedChains,
+    customRpc: sessionScope.customRpc,
     chainViews: sessionScope.chainViews,
     chainActivation: sessionScope.chainActivation,
     network: sessionScope.controllersBase.network,
@@ -464,8 +468,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     subscribePermissionsStateChanged: (listener) =>
       sessionScope.controllersBase.permissions.onStateChanged(() => listener()),
     subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(() => listener()),
-    subscribeNetworkPreferencesChanged: (listener) =>
-      sessionScope.networkPreferences.subscribeChanged(() => listener()),
+    subscribeNetworkSelectionChanged: (listener) => sessionScope.networkSelection.subscribeChanged(() => listener()),
     registerCleanup: (cleanup) => {
       cleanupTasks.push(cleanup);
     },
@@ -493,7 +496,8 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     chainViews: sessionScope.chainViews,
     permissionViews: runtimeSupportScope.permissionViews,
     accountCodecs: bootstrapScope.namespaceBootstrap.accountCodecs,
-    networkPreferences: sessionScope.networkPreferences,
+    networkSelection: sessionScope.networkSelection,
+    customRpc: sessionScope.customRpc,
     namespaceBindings: runtimeSupportScope.namespaceBindings,
     namespaceRuntimeSupport: runtimeSupportScope.namespaceRuntimeSupport,
     session: sessionScope.sessionLayer.session,

@@ -137,8 +137,16 @@ export const walletSwitchEthereumChainDefinition = defineEip155ApprovalMethod<Wa
       }
     }
 
+    const supportedChains = controllers.supportedChains;
+    if (!supportedChains) {
+      throw arxError({
+        reason: ArxReasons.RpcInternal,
+        message: "Missing supported chains controller",
+      });
+    }
+
     const target = resolveSwitchEthereumChainTarget({
-      chainDefinitions: controllers.chainDefinitions,
+      supportedChains,
       network: controllers.network,
       ...(normalizedChainId ? { chainId: normalizedChainId } : {}),
       ...(normalizedChainRef ? { chainRef: normalizedChainRef } : {}),

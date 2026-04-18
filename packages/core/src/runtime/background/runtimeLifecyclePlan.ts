@@ -49,14 +49,14 @@ export const createBackgroundRuntimeLifecycle = ({
   const coreReadyPlugin: RuntimePlugin = {
     name: "coreReady",
     initialize: async () => {
-      await controllersBase.chainDefinitions.whenReady();
+      await controllersBase.supportedChains.whenReady();
       await controllersBase.accounts.whenReady?.();
 
       if (deferredNetworkInitialState) {
         const deferredChains = deferredNetworkInitialState.availableChainRefs.map((chainRef) => {
-          const metadata = controllersBase.chainDefinitions.getChain(chainRef)?.metadata;
+          const metadata = controllersBase.supportedChains.getChain(chainRef)?.metadata;
           if (!metadata) {
-            throw new Error(`Deferred network state references missing chain definition ${chainRef}`);
+            throw new Error(`Deferred network state references missing supported chain ${chainRef}`);
           }
           return metadata;
         });

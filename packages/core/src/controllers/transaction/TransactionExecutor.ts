@@ -3,14 +3,14 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { requestApproval } from "../../approvals/creation.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountController } from "../../controllers/account/types.js";
-import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ApprovalController } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
+import type { SupportedChainsController } from "../supportedChains/types.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -47,8 +47,8 @@ const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 type Deps = {
   view: StoreTransactionView;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
-  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
-  chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
+  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
+  supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   registry: TransactionAdapterRegistry;
@@ -71,8 +71,8 @@ export class TransactionExecutor
 {
   #view: StoreTransactionView;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
-  #networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
-  #chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
+  #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
+  #supportedChains: Pick<SupportedChainsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #registry: TransactionAdapterRegistry;
@@ -92,8 +92,8 @@ export class TransactionExecutor
   constructor(deps: Deps) {
     this.#view = deps.view;
     this.#accountCodecs = deps.accountCodecs;
-    this.#networkPreferences = deps.networkPreferences;
-    this.#chainDefinitions = deps.chainDefinitions;
+    this.#networkSelection = deps.networkSelection;
+    this.#supportedChains = deps.supportedChains;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
     this.#registry = deps.registry;
@@ -107,7 +107,7 @@ export class TransactionExecutor
     request: TransactionRequest,
     requestContext: RequestContext,
   ): Promise<TransactionApprovalHandoff> {
-    const namespaceActiveChainRef = this.#networkPreferences.getActiveChainRef(request.namespace);
+    const namespaceActiveChainRef = this.#networkSelection.getSelectedChainRef(request.namespace);
     const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
     if (!chainRef) {
       throw new Error("chainRef is required for transactions");
@@ -509,7 +509,7 @@ export class TransactionExecutor
   }
 
   #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {
-    const resolved = this.#chainDefinitions.getChain(meta.chainRef)?.metadata ?? null;
+    const resolved = this.#supportedChains.getChain(meta.chainRef)?.metadata ?? null;
     if (!resolved) return null;
 
     const chainId =

@@ -37,7 +37,7 @@ export const addChainApprovalFlow: ApprovalFlow<typeof ApprovalKinds.AddChain> =
     };
   },
   async approve(record, _decision, deps) {
-    await deps.chainDefinitions.upsertCustomChain(record.request.metadata, { createdByOrigin: record.origin });
+    await deps.supportedChains.addChain(record.request.metadata, { createdByOrigin: record.origin });
     return null;
   },
 };

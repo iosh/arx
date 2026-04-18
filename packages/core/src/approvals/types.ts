@@ -6,8 +6,8 @@ import type {
   ApprovalResult,
   ApprovalTerminalReason,
 } from "../controllers/approval/types.js";
-import type { ChainDefinitionsController } from "../controllers/chainDefinitions/types.js";
 import type { PermissionsWriter } from "../controllers/permission/types.js";
+import type { SupportedChainsController } from "../controllers/supportedChains/types.js";
 import type { TransactionController } from "../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
@@ -19,7 +19,7 @@ export type ApprovalFlowDeps = {
   permissions: Pick<PermissionsWriter, "grantAuthorization">;
   transactions: Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "getMeta">;
   chainActivation: Pick<ChainActivationService, "activateNamespaceChain">;
-  chainDefinitions: Pick<ChainDefinitionsController, "getChain" | "upsertCustomChain">;
+  supportedChains: Pick<SupportedChainsController, "getChain" | "addChain">;
   namespaceBindings: Pick<NamespaceRuntimeBindingsRegistry, "getApproval">;
 };
 

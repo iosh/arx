@@ -8,9 +8,9 @@ import { getChainRefNamespace } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../chains/metadata.js";
-import type { ChainDefinitionsController } from "../../../controllers/chainDefinitions/types.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
-import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
+import type { SupportedChainsController } from "../../../controllers/supportedChains/types.js";
+import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
 import type {
   ApprovalReviewChainViewParams,
   ChainView,
@@ -21,9 +21,9 @@ import type {
 } from "./types.js";
 
 type CreateChainViewsServiceOptions = {
-  chainDefinitions: ChainDefinitionsController;
+  supportedChains: SupportedChainsController;
   network: NetworkController;
-  preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedNamespace">;
+  selection: Pick<NetworkSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 };
 
 const sortChainRefs = (chainRefs: ChainRef[]) => [...chainRefs].sort((a, b) => a.localeCompare(b));
@@ -45,14 +45,14 @@ const toChainView = (metadata: ChainMetadata): ChainView => ({
 const sortChainViews = (views: ChainView[]) => [...views].sort((a, b) => a.chainRef.localeCompare(b.chainRef));
 
 class DefaultChainViewsService implements ChainViewsService {
-  readonly #chainDefinitions: ChainDefinitionsController;
+  readonly #supportedChains: SupportedChainsController;
   readonly #network: NetworkController;
-  readonly #preferences: Pick<NetworkPreferencesService, "getActiveChainRef" | "getSelectedNamespace">;
+  readonly #selection: Pick<NetworkSelectionService, "getSelectedChainRef" | "getSelectedNamespace">;
 
   constructor(options: CreateChainViewsServiceOptions) {
-    this.#chainDefinitions = options.chainDefinitions;
+    this.#supportedChains = options.supportedChains;
     this.#network = options.network;
-    this.#preferences = options.preferences;
+    this.#selection = options.selection;
   }
 
   getSelectedNamespace(): string {
@@ -77,7 +77,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   requireAvailableChainMetadata(chainRef: ChainRef): ChainMetadata {
-    const entry = this.#chainDefinitions.getChain(chainRef);
+    const entry = this.#supportedChains.getChain(chainRef);
     if (!entry) {
       throw chainErrors.notFound({ chainRef });
     }
@@ -113,7 +113,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   listKnownChainViews(): ChainView[] {
-    const views = this.#chainDefinitions.getState().chains.map((entry) => toChainView(entry.metadata));
+    const views = this.#supportedChains.getState().chains.map((entry) => toChainView(entry.metadata));
     return sortChainViews(views);
   }
 
@@ -190,7 +190,7 @@ class DefaultChainViewsService implements ChainViewsService {
 
     const next: Record<string, ChainRef> = {};
     for (const [namespace, chainRefs] of grouped) {
-      const activeChainRef = this.#preferences.getActiveChainRef(namespace);
+      const activeChainRef = this.#selection.getSelectedChainRef(namespace);
       if (activeChainRef && chainRefs.includes(activeChainRef)) {
         next[namespace] = activeChainRef;
         continue;
@@ -206,7 +206,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   #resolveSelectedNamespace(): string {
-    const selectedNamespace = this.#preferences.getSelectedNamespace().trim();
+    const selectedNamespace = this.#selection.getSelectedNamespace().trim();
     if (selectedNamespace.length === 0) {
       throw arxError({
         reason: ArxReasons.ChainNotSupported,
@@ -217,7 +217,7 @@ class DefaultChainViewsService implements ChainViewsService {
   }
 
   #getRequiredChainMetadata(chainRef: ChainRef): ChainMetadata {
-    const metadata = this.#chainDefinitions.getChain(chainRef)?.metadata;
+    const metadata = this.#supportedChains.getChain(chainRef)?.metadata;
     if (!metadata) {
       throw chainErrors.notFound({ chainRef });
     }

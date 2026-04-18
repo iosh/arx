@@ -1,12 +1,12 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
-import type { ChainDefinitionsController } from "../chainDefinitions/types.js";
+import type { SupportedChainsController } from "../supportedChains/types.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -39,8 +39,8 @@ const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUS
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
-  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
-  chainDefinitions: Pick<ChainDefinitionsController, "getChain">;
+  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
+  supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   registry: TransactionAdapterRegistry;
@@ -98,8 +98,8 @@ export class StoreTransactionController implements TransactionController {
     this.#executor = new TransactionExecutor({
       view: this.#view,
       accountCodecs: options.accountCodecs,
-      networkPreferences: options.networkPreferences,
-      chainDefinitions: options.chainDefinitions,
+      networkSelection: options.networkSelection,
+      supportedChains: options.supportedChains,
       accounts: options.accounts,
       approvals: options.approvals,
       registry: options.registry,

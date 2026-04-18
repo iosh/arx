@@ -1,23 +1,20 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { getChainRefNamespace, parseChainRef } from "../../../chains/caip.js";
+import { parseChainRef } from "../../../chains/caip.js";
 import { chainErrors } from "../../../chains/errors.js";
 import type { ChainRef } from "../../../chains/ids.js";
 import type { NetworkController } from "../../../controllers/network/types.js";
-import type { NetworkPreferencesService } from "../../store/networkPreferences/types.js";
+import type { NetworkSelectionService } from "../../store/networkSelection/types.js";
 import type { ActivateNamespaceChainParams, ChainActivationService } from "./types.js";
 
 export type CreateChainActivationServiceOptions = {
   network: Pick<NetworkController, "getState">;
-  preferences: Pick<
-    NetworkPreferencesService,
-    "getActiveChainRef" | "setActiveChainRef" | "setSelectedNamespace" | "update"
-  >;
+  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef" | "selectChain" | "selectNamespace">;
   logger?: (message: string, error?: unknown) => void;
 };
 
 export const createChainActivationService = ({
   network,
-  preferences,
+  networkSelection,
 }: CreateChainActivationServiceOptions): ChainActivationService => {
   const isAvailableChainRef = (chainRef: ChainRef): boolean => {
     return network.getState().availableChainRefs.some((availableChainRef) => availableChainRef === chainRef);
@@ -39,7 +36,7 @@ export const createChainActivationService = ({
       });
     }
 
-    const activeChainRef = preferences.getActiveChainRef(normalizedNamespace);
+    const activeChainRef = networkSelection.getSelectedChainRef(normalizedNamespace);
     if (!activeChainRef) {
       throw arxError({
         reason: ArxReasons.ChainNotSupported,
@@ -62,16 +59,11 @@ export const createChainActivationService = ({
   };
 
   const persistNamespaceChainSelection = async (chainRef: ChainRef) => {
-    return await preferences.setActiveChainRef(chainRef);
+    return await networkSelection.selectChain(chainRef);
   };
 
   const persistWalletChainSelection = async (chainRef: ChainRef) => {
-    const namespace = getChainRefNamespace(chainRef);
-
-    return await preferences.update({
-      selectedNamespace: namespace,
-      activeChainByNamespacePatch: { [namespace]: chainRef },
-    });
+    return await networkSelection.selectChain(chainRef);
   };
 
   const selectWalletChain = async (chainRef: ChainRef): Promise<void> => {
@@ -82,7 +74,7 @@ export const createChainActivationService = ({
   const selectWalletNamespace = async (namespace: string): Promise<void> => {
     const normalizedNamespace = namespace.trim();
     resolveAvailableActiveChainRefForNamespace(normalizedNamespace);
-    await preferences.setSelectedNamespace(normalizedNamespace);
+    await networkSelection.selectNamespace(normalizedNamespace);
   };
 
   const activateNamespaceChain = async ({

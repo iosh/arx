@@ -10,8 +10,8 @@ import {
 import {
   cloneChainDefinitionEntity,
   cloneChainDefinitionsState,
-  normalizeAndValidateMetadata,
   parseEntity,
+  prepareChainMetadataForStorage,
 } from "./state.js";
 import {
   CHAIN_DEFINITIONS_STATE_CHANGED,
@@ -162,26 +162,26 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
     const changedEntries: Array<{ previous: ChainDefinitionEntity | null; next: ChainDefinitionEntity }> = [];
 
     for (const metadata of seed) {
-      const normalized = normalizeAndValidateMetadata(metadata);
-      if (nextBuiltinRefs.has(normalized.chainRef)) {
-        throw new Error(`Duplicate builtin chain definition for ${normalized.chainRef}`);
+      const storedMetadata = prepareChainMetadataForStorage(metadata);
+      if (nextBuiltinRefs.has(storedMetadata.chainRef)) {
+        throw new Error(`Duplicate builtin chain definition for ${storedMetadata.chainRef}`);
       }
 
-      nextBuiltinRefs.add(normalized.chainRef);
-      const previous = this.#chains.get(normalized.chainRef) ?? null;
+      nextBuiltinRefs.add(storedMetadata.chainRef);
+      const previous = this.#chains.get(storedMetadata.chainRef) ?? null;
       if (
         previous &&
         previous.source === "builtin" &&
         previous.schemaVersion === this.#defaultSchemaVersion &&
-        isSameChainMetadata(previous.metadata, normalized)
+        isSameChainMetadata(previous.metadata, storedMetadata)
       ) {
         continue;
       }
 
       const next = parseEntity({
-        chainRef: normalized.chainRef,
-        namespace: normalized.namespace,
-        metadata: normalized,
+        chainRef: storedMetadata.chainRef,
+        namespace: storedMetadata.namespace,
+        metadata: storedMetadata,
         schemaVersion: this.#defaultSchemaVersion,
         updatedAt: this.#now(),
         source: "builtin",
@@ -231,18 +231,18 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
     metadata: ChainMetadata,
     options?: ChainDefinitionsUpsertCustomOptions,
   ): Promise<ChainDefinitionsUpsertCustomResult> {
-    const normalized = normalizeAndValidateMetadata(metadata);
-    const previous = this.#chains.get(normalized.chainRef) ?? null;
+    const storedMetadata = prepareChainMetadataForStorage(metadata);
+    const previous = this.#chains.get(storedMetadata.chainRef) ?? null;
 
     if (previous?.source === "builtin") {
-      if (isSameAddChainComparableMetadata(previous.metadata, normalized)) {
+      if (isSameAddChainComparableMetadata(previous.metadata, storedMetadata)) {
         return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
       }
 
       throw arxError({
         reason: ArxReasons.ChainNotSupported,
         message: "Requested chain conflicts with a builtin chain definition",
-        data: { chainRef: normalized.chainRef },
+        data: { chainRef: storedMetadata.chainRef },
       });
     }
 
@@ -253,15 +253,15 @@ export class InMemoryChainDefinitionsController implements ChainDefinitionsContr
       previous.schemaVersion === schemaVersion &&
       previous.source === "custom" &&
       previous.createdByOrigin === createdByOrigin &&
-      isSameChainMetadata(previous.metadata, normalized)
+      isSameChainMetadata(previous.metadata, storedMetadata)
     ) {
       return { kind: "noop", chain: cloneChainDefinitionEntity(previous) };
     }
 
     const entity = parseEntity({
-      chainRef: normalized.chainRef,
-      namespace: normalized.namespace,
-      metadata: normalized,
+      chainRef: storedMetadata.chainRef,
+      namespace: storedMetadata.namespace,
+      metadata: storedMetadata,
       schemaVersion,
       updatedAt: options?.updatedAt ?? this.#now(),
       source: "custom",

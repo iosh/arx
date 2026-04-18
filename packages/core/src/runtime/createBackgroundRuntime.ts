@@ -14,13 +14,16 @@ import type { KeyringExportService } from "../services/runtime/keyringExport.js"
 import type { createPermissionViewsService } from "../services/runtime/permissionViews/index.js";
 import type { SessionStatusService } from "../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../services/store/accounts/port.js";
+import type { CustomChainsPort } from "../services/store/customChains/port.js";
+import type { CustomRpcPort } from "../services/store/customRpc/port.js";
 import type { KeyringMetasPort } from "../services/store/keyringMetas/port.js";
-import type { NetworkPreferencesPort } from "../services/store/networkPreferences/port.js";
-import type { NetworkPreferencesService } from "../services/store/networkPreferences/types.js";
+import type { NetworkSelectionPort } from "../services/store/networkSelection/port.js";
+import type { NetworkSelectionService } from "../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../services/store/permissions/port.js";
 import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../storage/index.js";
+import type { CustomRpcRecord } from "../storage/records.js";
 import type { UiRuntimeAccess } from "../ui/server/types.js";
 import type { ControllerLayerOptions } from "./background/controllers.js";
 import type { EngineOptions, initEngine } from "./background/engine.js";
@@ -35,7 +38,7 @@ export type { BackgroundSessionServices } from "./background/session.js";
 
 export type BackgroundRuntimeUiAccessOptions = WalletCreateUiOptions;
 
-export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chainDefinitions"> & {
+export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "supportedChains"> & {
   messenger?: {
     violationMode?: ViolationMode;
   };
@@ -44,8 +47,11 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chain
     env: BackgroundRpcEnvHooks;
     assemble?: boolean;
   };
-  networkPreferences: {
-    port: NetworkPreferencesPort;
+  networkSelection: {
+    port: NetworkSelectionPort;
+  };
+  customRpc?: {
+    port: CustomRpcPort;
   };
   storage?: {
     vaultMetaPort?: VaultMetaPort;
@@ -57,11 +63,14 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "chain
     ports: {
       transactions: TransactionsPort;
       accounts: AccountsPort;
+      customChains?: CustomChainsPort;
       keyringMetas: KeyringMetasPort;
       permissions: PermissionsPort;
     };
   };
-  chainDefinitions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
+  supportedChains?: Omit<NonNullable<ControllerLayerOptions["supportedChains"]>, "port"> & {
+    port?: CustomChainsPort;
+  };
   settings: {
     port: SettingsPort;
   };
@@ -81,7 +90,7 @@ export type BackgroundRuntime = {
     chainViews: ReturnType<typeof createChainViewsService>;
     permissionViews: ReturnType<typeof createPermissionViewsService>;
     accountCodecs: AccountCodecRegistry;
-    networkPreferences: NetworkPreferencesService;
+    networkSelection: NetworkSelectionService;
     namespaceBindings: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceBindings"];
     namespaceRuntimeSupport: ReturnType<typeof assembleArxWalletRuntime>["services"]["namespaceRuntimeSupport"];
     session: BackgroundSessionServices;
@@ -110,7 +119,42 @@ export type BackgroundRuntime = {
   wallet: ArxWallet;
 };
 
+const createEphemeralCustomRpcPort = (): CustomRpcPort => {
+  const records = new Map<CustomRpcRecord["chainRef"], CustomRpcRecord>();
+
+  return {
+    async get(chainRef) {
+      return records.get(chainRef) ?? null;
+    },
+    async list() {
+      return Array.from(records.values());
+    },
+    async upsert(record) {
+      records.set(record.chainRef, structuredClone(record));
+    },
+    async remove(chainRef) {
+      records.delete(chainRef);
+    },
+    async clear() {
+      records.clear();
+    },
+  };
+};
+
 export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions): BackgroundRuntime => {
+  const customChainsPort = options.store.ports.customChains ?? options.supportedChains?.port;
+  if (!customChainsPort) {
+    throw new Error("createBackgroundRuntime requires a custom chains port");
+  }
+
+  const supportedChains = {
+    ...(options.supportedChains ?? {}),
+    port: customChainsPort,
+  };
+
+  const networkSelectionPort = options.networkSelection.port;
+  const customRpcPort = options.customRpc?.port ?? createEphemeralCustomRpcPort();
+
   const modules = options.namespaces.manifests.map((manifest) => createWalletNamespaceModuleFromManifest(manifest));
   const runtime = assembleArxWalletRuntime({
     namespaces: {
@@ -119,9 +163,10 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
     storage: {
       ports: {
         accounts: options.store.ports.accounts,
-        chainDefinitions: options.chainDefinitions.port,
+        customChains: customChainsPort,
+        customRpc: customRpcPort,
         keyringMetas: options.store.ports.keyringMetas,
-        networkPreferences: options.networkPreferences.port,
+        networkSelection: networkSelectionPort,
         permissions: options.store.ports.permissions,
         settings: options.settings.port,
         transactions: options.store.ports.transactions,
@@ -142,7 +187,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
         ...(options.accounts ? { accounts: options.accounts } : {}),
         ...(options.approvals ? { approvals: options.approvals } : {}),
         ...(options.transactions ? { transactions: options.transactions } : {}),
-        chainDefinitions: options.chainDefinitions,
+        supportedChains,
       },
       ...(options.engine ? { engine: options.engine } : {}),
       ...(options.rpcClients ? { rpcClients: options.rpcClients } : {}),

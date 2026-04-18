@@ -1,18 +1,19 @@
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { ChainRef } from "../../chains/ids.js";
-import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import { buildNetworkChainConfigs, createNetworkRuntimeInput } from "../../controllers/network/config.js";
 import type { NetworkChainConfig, NetworkController, RpcRoutingState } from "../../controllers/network/types.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
-import type { NetworkPreferencesRecord, NetworkRpcPreference } from "../../storage/records.js";
+import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
+import type { CustomRpcService } from "../../services/store/customRpc/types.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
-import type { RuntimeNetworkPreferencesDefaults } from "./networkDefaults.js";
+import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
 
 export type CreateNetworkBootstrapOptions = {
   network: NetworkController;
-  chainDefinitions: ChainDefinitionsController;
-  preferences: NetworkPreferencesService;
-  preferencesDefaults: RuntimeNetworkPreferencesDefaults;
+  supportedChains: SupportedChainsController;
+  selection: NetworkSelectionService;
+  customRpc: CustomRpcService;
+  selectionDefaults: RuntimeNetworkSelectionDefaults;
   hydrationEnabled: boolean;
   logger: (message: string, error?: unknown) => void;
   getIsHydrating: () => boolean;
@@ -30,63 +31,62 @@ export type NetworkBootstrap = {
 export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): NetworkBootstrap => {
   const {
     network,
-    chainDefinitions,
-    preferences,
-    preferencesDefaults,
+    supportedChains,
+    selection,
+    customRpc,
+    selectionDefaults,
     hydrationEnabled,
     logger,
     getIsHydrating,
     getRegisteredNamespaces,
   } = opts;
 
-  let cachedPreferences: NetworkPreferencesRecord | null = null;
-  let preferencesLoaded = !hydrationEnabled;
+  let selectionLoaded = !hydrationEnabled;
+  let customRpcLoaded = !hydrationEnabled;
   let pendingSync = false;
 
   let listenersAttached = false;
-  let unsubscribeRegistry: (() => void) | null = null;
-
-  const readRegistryChainConfigs = (): NetworkChainConfig[] =>
-    buildNetworkChainConfigs(
-      chainDefinitions
-        .getState()
-        .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
-        .map((entry) => entry.metadata),
-    );
+  let unsubscribeSupportedChains: (() => void) | null = null;
+  let unsubscribeCustomRpc: (() => void) | null = null;
 
   let syncInFlight: Promise<void> | null = null;
 
-  const computeRpcState = (registryChains: NetworkChainConfig[], current: ReturnType<typeof network.getState>) => {
-    const corrections: Record<ChainRef, NetworkRpcPreference> = {};
+  const readSupportedChainConfigs = (): NetworkChainConfig[] =>
+    buildNetworkChainConfigs(
+      supportedChains
+        .getState()
+        .chains.filter((entry) => getRegisteredNamespaces().has(entry.namespace))
+        .map((entry) => ({
+          chainRef: entry.metadata.chainRef,
+          rpcEndpoints: customRpc.getRpcEndpoints(entry.chainRef) ?? entry.metadata.rpcEndpoints,
+        })),
+    );
 
-    const rpc = Object.fromEntries(
-      registryChains.map((chain) => {
+  const computeRpcState = (
+    chainConfigs: NetworkChainConfig[],
+    current: ReturnType<typeof network.getState>,
+  ): Record<ChainRef, RpcRoutingState> => {
+    return Object.fromEntries(
+      chainConfigs.map((chain) => {
         const fromCurrent = current.rpc[chain.chainRef];
         const base = fromCurrent ?? buildDefaultRoutingState(chain);
+        const safeIndex = Math.min(base.activeIndex, Math.max(0, chain.rpcEndpoints.length - 1));
 
-        const pref = cachedPreferences?.rpc?.[chain.chainRef] ?? null;
-        if (!pref) {
-          return [chain.chainRef, base] as const;
-        }
-
-        const safeIndex = Math.min(pref.activeIndex, Math.max(0, chain.rpcEndpoints.length - 1));
-        if (safeIndex !== pref.activeIndex) {
-          corrections[chain.chainRef] = { ...pref, activeIndex: safeIndex };
-        }
-
-        const next: RpcRoutingState = { ...base, activeIndex: safeIndex, strategy: pref.strategy };
-
-        return [chain.chainRef, next] as const;
+        return [
+          chain.chainRef,
+          {
+            ...base,
+            activeIndex: safeIndex,
+          },
+        ] as const;
       }),
     ) as Record<ChainRef, RpcRoutingState>;
-
-    return { rpc, corrections };
   };
 
-  const resolveActiveChainByNamespace = (registryChains: NetworkChainConfig[]): Record<string, ChainRef> => {
+  const resolveChainRefByNamespace = (chainConfigs: NetworkChainConfig[]): Record<string, ChainRef> => {
     const availableByNamespace = new Map<string, ChainRef[]>();
 
-    for (const chain of registryChains) {
+    for (const chain of chainConfigs) {
       const namespace = getChainRefNamespace(chain.chainRef);
       const chainRefs = availableByNamespace.get(namespace);
       if (chainRefs) {
@@ -96,16 +96,17 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       }
     }
 
+    const selectedChainRefByNamespace = selection.getChainRefByNamespace();
     const next: Record<string, ChainRef> = {};
 
     for (const [namespace, chainRefs] of availableByNamespace) {
-      const activeChainRef = cachedPreferences?.activeChainByNamespace?.[namespace] ?? null;
-      if (activeChainRef && chainRefs.includes(activeChainRef)) {
-        next[namespace] = activeChainRef;
+      const selectedChainRef = selectedChainRefByNamespace[namespace] ?? null;
+      if (selectedChainRef && chainRefs.includes(selectedChainRef)) {
+        next[namespace] = selectedChainRef;
         continue;
       }
 
-      const fallbackChainRef = preferencesDefaults.activeChainByNamespace[namespace] ?? null;
+      const fallbackChainRef = selectionDefaults.chainRefByNamespace[namespace] ?? null;
       if (fallbackChainRef && chainRefs.includes(fallbackChainRef)) {
         next[namespace] = fallbackChainRef;
         continue;
@@ -120,126 +121,140 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     return next;
   };
 
-  const selectSelectedNamespace = (
-    registryChains: NetworkChainConfig[],
-    activeChainByNamespace: Record<string, ChainRef>,
+  const selectNamespace = (
+    chainConfigs: NetworkChainConfig[],
+    chainRefByNamespace: Record<string, ChainRef>,
   ): string => {
-    if (registryChains.length === 0) {
-      return cachedPreferences?.selectedNamespace ?? preferencesDefaults.selectedNamespace;
+    if (chainConfigs.length === 0) {
+      return selection.getSelectedNamespace();
     }
 
-    const availableNamespaces = new Set(Object.keys(activeChainByNamespace));
-    const cachedSelectedNamespace = cachedPreferences?.selectedNamespace ?? null;
-    if (cachedSelectedNamespace && availableNamespaces.has(cachedSelectedNamespace)) {
-      return cachedSelectedNamespace;
+    const availableNamespaces = new Set(Object.keys(chainRefByNamespace));
+    const selectedNamespace = selection.getSelectedNamespace();
+    if (availableNamespaces.has(selectedNamespace)) {
+      return selectedNamespace;
     }
 
-    if (availableNamespaces.has(preferencesDefaults.selectedNamespace)) {
-      return preferencesDefaults.selectedNamespace;
+    if (availableNamespaces.has(selectionDefaults.selectedNamespace)) {
+      return selectionDefaults.selectedNamespace;
     }
 
-    const first = registryChains[0];
+    const first = chainConfigs[0];
     if (!first) {
-      throw new Error("Network bootstrap expected chain registry to provide at least one chain");
+      throw new Error("Network bootstrap expected at least one available chain");
     }
+
     return getChainRefNamespace(first.chainRef);
   };
 
-  const pruneRpcPreferences = (available: Set<ChainRef>) => {
-    const base = cachedPreferences?.rpc ?? null;
-    if (!base) return {};
+  const persistSelectionIfNeeded = async (selectedNamespace: string, chainRefByNamespace: Record<string, ChainRef>) => {
+    const currentSelection = selection.getSnapshot();
+    const previousNamespace = currentSelection?.selectedNamespace ?? null;
+    const previousChainRefByNamespace = currentSelection?.chainRefByNamespace ?? {};
+    const shouldPersistNamespace = previousNamespace !== selectedNamespace;
+    const shouldPersistChainRefs =
+      Object.keys(previousChainRefByNamespace).length !== Object.keys(chainRefByNamespace).length ||
+      Object.entries(chainRefByNamespace).some(
+        ([namespace, chainRef]) => previousChainRefByNamespace[namespace] !== chainRef,
+      );
 
-    const patch: Record<ChainRef, NetworkRpcPreference | null> = {};
-    for (const chainRef of Object.keys(base) as ChainRef[]) {
-      if (!available.has(chainRef)) {
-        patch[chainRef] = null;
-      }
-    }
-    return patch;
-  };
-
-  const loadCachedPreferences = async () => {
-    if (!hydrationEnabled) {
-      cachedPreferences = null;
-      preferencesLoaded = true;
+    if (!shouldPersistNamespace && !shouldPersistChainRefs) {
       return;
     }
 
     try {
-      cachedPreferences = await preferences.get();
+      await selection.update({
+        ...(shouldPersistNamespace ? { selectedNamespace } : {}),
+        ...(shouldPersistChainRefs ? { chainRefByNamespace } : {}),
+      });
     } catch (error) {
-      logger("preferences: failed to load", error);
-      cachedPreferences = null;
-    } finally {
-      preferencesLoaded = true;
+      logger("selection: failed to persist corrected selection", error);
     }
   };
 
-  const syncOnceFromRegistry = async () => {
-    const registryChains = readRegistryChainConfigs();
-    if (registryChains.length === 0) {
+  const pruneUnavailableCustomRpc = async (availableChainRefs: Set<ChainRef>) => {
+    let records: Awaited<ReturnType<CustomRpcService["getAll"]>>;
+    try {
+      records = await customRpc.getAll();
+    } catch (error) {
+      logger("customRpc: failed to read overrides for pruning", error);
       return;
     }
 
-    if (!preferencesLoaded) {
-      await loadCachedPreferences();
+    for (const record of records) {
+      if (availableChainRefs.has(record.chainRef)) {
+        continue;
+      }
+
+      try {
+        await customRpc.clear(record.chainRef);
+      } catch (error) {
+        logger(`customRpc: failed to clear unavailable override "${record.chainRef}"`, error);
+      }
+    }
+  };
+
+  const loadPersistedState = async () => {
+    if (!hydrationEnabled) {
+      selectionLoaded = true;
+      customRpcLoaded = true;
+      return;
+    }
+
+    if (!selectionLoaded) {
+      try {
+        await selection.get();
+      } catch (error) {
+        logger("selection: failed to load", error);
+      } finally {
+        selectionLoaded = true;
+      }
+    }
+
+    if (!customRpcLoaded) {
+      try {
+        await customRpc.getAll();
+      } catch (error) {
+        logger("customRpc: failed to load", error);
+      } finally {
+        customRpcLoaded = true;
+      }
+    }
+  };
+
+  const syncOnce = async () => {
+    if (!selectionLoaded || !customRpcLoaded) {
+      await loadPersistedState();
+    }
+
+    const chainConfigs = readSupportedChainConfigs();
+    if (chainConfigs.length === 0) {
+      return;
     }
 
     const current = network.getState();
-    const nextActiveChainByNamespace = resolveActiveChainByNamespace(registryChains);
-    const nextSelectedNamespace = selectSelectedNamespace(registryChains, nextActiveChainByNamespace);
-
-    const available = new Set(registryChains.map((chain) => chain.chainRef));
-    const { rpc, corrections } = computeRpcState(registryChains, current);
-    const prunePatch = pruneRpcPreferences(available);
+    const nextChainRefByNamespace = resolveChainRefByNamespace(chainConfigs);
+    const nextSelectedNamespace = selectNamespace(chainConfigs, nextChainRefByNamespace);
 
     network.replaceState(
       createNetworkRuntimeInput({
         state: {
-          availableChainRefs: registryChains.map((chain) => chain.chainRef),
-          rpc,
+          availableChainRefs: chainConfigs.map((chain) => chain.chainRef),
+          rpc: computeRpcState(chainConfigs, current),
         },
-        chainConfigs: registryChains,
+        chainConfigs,
       }),
     );
 
     if (!getIsHydrating()) {
-      const nextPatch: Record<ChainRef, NetworkRpcPreference | null> = {};
-      Object.assign(nextPatch, prunePatch);
-      for (const [chainRef, pref] of Object.entries(corrections) as Array<[ChainRef, NetworkRpcPreference]>) {
-        nextPatch[chainRef] = pref;
-      }
-
-      const cachedActive = cachedPreferences?.activeChainByNamespace ?? {};
-      const cachedSelectedNamespace = cachedPreferences?.selectedNamespace ?? null;
-      const shouldPersistSelected = cachedSelectedNamespace !== nextSelectedNamespace;
-      const shouldPersistActive =
-        Object.keys(cachedActive).length !== Object.keys(nextActiveChainByNamespace).length ||
-        Object.entries(nextActiveChainByNamespace).some(
-          ([namespace, chainRef]) => cachedActive[namespace] !== chainRef,
-        );
-      const shouldPersistRpc = Object.keys(nextPatch).length > 0;
-
-      if (shouldPersistSelected || shouldPersistActive || shouldPersistRpc) {
-        try {
-          cachedPreferences = await preferences.update({
-            ...(shouldPersistSelected ? { selectedNamespace: nextSelectedNamespace } : {}),
-            ...(shouldPersistActive ? { activeChainByNamespace: nextActiveChainByNamespace } : {}),
-            ...(shouldPersistRpc ? { rpcPatch: nextPatch } : {}),
-          });
-        } catch (error) {
-          logger("preferences: failed to persist corrected network preferences", error);
-        }
-      }
+      await persistSelectionIfNeeded(nextSelectedNamespace, nextChainRefByNamespace);
+      await pruneUnavailableCustomRpc(new Set(chainConfigs.map((chain) => chain.chainRef)));
     }
   };
 
   const requestSync = () => {
     pendingSync = true;
-    if (getIsHydrating()) {
-      return;
-    }
-    if (syncInFlight) {
+    if (getIsHydrating() || syncInFlight) {
       return;
     }
 
@@ -247,10 +262,10 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
       try {
         while (pendingSync && !getIsHydrating()) {
           pendingSync = false;
-          await syncOnceFromRegistry();
+          await syncOnce();
         }
       } catch (error) {
-        logger("network: failed to sync from registry", error);
+        logger("network: failed to sync supported chains", error);
       } finally {
         syncInFlight = null;
       }
@@ -263,7 +278,8 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
     listenersAttached = true;
 
-    unsubscribeRegistry = chainDefinitions.onStateChanged(() => requestSync());
+    unsubscribeSupportedChains = supportedChains.onStateChanged(() => requestSync());
+    unsubscribeCustomRpc = customRpc.subscribeChanged(() => requestSync());
   };
 
   const detachListeners = () => {
@@ -272,18 +288,27 @@ export const createNetworkBootstrap = (opts: CreateNetworkBootstrapOptions): Net
     }
     listenersAttached = false;
 
-    if (unsubscribeRegistry) {
+    if (unsubscribeSupportedChains) {
       try {
-        unsubscribeRegistry();
+        unsubscribeSupportedChains();
       } catch (error) {
-        logger("lifecycle: failed to remove chain registry listener", error);
+        logger("lifecycle: failed to remove supported chains listener", error);
       }
-      unsubscribeRegistry = null;
+      unsubscribeSupportedChains = null;
+    }
+
+    if (unsubscribeCustomRpc) {
+      try {
+        unsubscribeCustomRpc();
+      } catch (error) {
+        logger("lifecycle: failed to remove custom rpc listener", error);
+      }
+      unsubscribeCustomRpc = null;
     }
   };
 
   const loadPreferences = async () => {
-    await loadCachedPreferences();
+    await loadPersistedState();
   };
 
   const flushPendingSync = async () => {

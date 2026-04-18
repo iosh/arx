@@ -20,9 +20,11 @@ import { createKeyringExportService, type KeyringExportService } from "../../ser
 import { createPermissionViewsService } from "../../services/runtime/permissionViews/index.js";
 import { createSessionStatusService, type SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
+import type { CustomRpcService } from "../../services/store/customRpc/types.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import type { NetworkPreferencesPort } from "../../services/store/networkPreferences/port.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { TransactionsPort } from "../../services/store/transactions/port.js";
@@ -71,7 +73,8 @@ export type RuntimeSessionScope = {
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
-  networkPreferences: NetworkPreferencesService;
+  networkSelection: NetworkSelectionService;
+  customRpc: CustomRpcService;
   sessionLayer: SessionLayerResult;
   sessionStatus: SessionStatusService;
   accountSigning: AccountSigningService;
@@ -110,7 +113,7 @@ export const createRuntimeBootstrapScope = ({
   accountOptions,
   approvalOptions,
   transactionOptions,
-  chainDefinitionsOptions,
+  supportedChainsOptions,
 }: {
   rpcRegistry: RpcRegistry;
   namespaceBootstrap: RuntimeBootstrapNamespaceAssembly;
@@ -120,7 +123,7 @@ export const createRuntimeBootstrapScope = ({
   accountOptions?: ControllerLayerOptions["accounts"];
   approvalOptions?: ControllerLayerOptions["approvals"];
   transactionOptions?: ControllerLayerOptions["transactions"];
-  chainDefinitionsOptions: NonNullable<ControllerLayerOptions["chainDefinitions"]>;
+  supportedChainsOptions: NonNullable<ControllerLayerOptions["supportedChains"]>;
 }): RuntimeBootstrapScope => {
   registerRpcModules(rpcRegistry, namespaceBootstrap.rpcModules);
 
@@ -131,9 +134,9 @@ export const createRuntimeBootstrapScope = ({
     onViolation: (info) => storageLogger(`messenger: violation(${info.kind}) "${info.topic}"`, info),
   });
   const registeredNamespaces = new Set(rpcRegistry.getRegisteredNamespaces());
-  const chainDefinitionSeed = chainDefinitionsOptions.seed ?? namespaceBootstrap.chainSeeds;
+  const supportedChainSeed = supportedChainsOptions.seed ?? namespaceBootstrap.chainSeeds;
   const networkPlan = buildRuntimeNetworkPlan({
-    admittedChains: chainDefinitionSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
+    admittedChains: supportedChainSeed.filter((entry) => registeredNamespaces.has(entry.namespace)),
     ...(networkOptions?.initialState ? { requestedInitialState: networkOptions.initialState } : {}),
     ...(networkOptions?.defaultStrategy ? { defaultStrategy: networkOptions.defaultStrategy } : {}),
   });
@@ -146,7 +149,7 @@ export const createRuntimeBootstrapScope = ({
     ...(accountOptions ? { accounts: accountOptions } : {}),
     ...(approvalOptions ? { approvals: { ...approvalOptions, logger: approvalOptions.logger ?? storageLogger } } : {}),
     ...(transactionOptions ? { transactions: transactionOptions } : {}),
-    chainDefinitions: { ...chainDefinitionsOptions, seed: [...chainDefinitionSeed] },
+    supportedChains: { ...supportedChainsOptions, seed: [...supportedChainSeed] },
   };
 
   return {
@@ -168,7 +171,8 @@ export const createRuntimeSessionScope = ({
   bootstrapScope,
   namespaceSession,
   settingsPort,
-  networkPreferencesPort,
+  networkSelectionPort,
+  customRpcPort,
   storePorts,
   engineOptions,
   vaultMetaPort,
@@ -179,7 +183,8 @@ export const createRuntimeSessionScope = ({
   bootstrapScope: RuntimeBootstrapScope;
   namespaceSession: RuntimeSessionNamespaceAssembly;
   settingsPort: SettingsPort;
-  networkPreferencesPort: NetworkPreferencesPort;
+  networkSelectionPort: NetworkSelectionPort;
+  customRpcPort: CustomRpcPort;
   storePorts: {
     transactions: TransactionsPort;
     accounts: AccountsPort;
@@ -191,12 +196,13 @@ export const createRuntimeSessionScope = ({
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
   sessionOptions?: SessionOptions;
 }): RuntimeSessionScope => {
-  const { settingsService, networkPreferences, transactionsService, accountsStore, keyringMetas } =
+  const { settingsService, networkSelection, customRpc, transactionsService, accountsStore, keyringMetas } =
     initRuntimeStoreServices({
       settingsPort,
-      networkPreferencesPort,
+      networkSelectionPort,
+      customRpcPort,
       ports: storePorts,
-      networkDefaults: bootstrapScope.networkPlan.preferencesDefaults,
+      selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
       now: bootstrapScope.storageNow,
     });
 
@@ -207,7 +213,7 @@ export const createRuntimeSessionScope = ({
     settingsService,
     permissionsPort: storePorts.permissions,
     transactionsService,
-    networkPreferences,
+    networkSelection,
     networkPlan: bootstrapScope.networkPlan,
     options: bootstrapScope.controllerOptions,
     ...(createApprovalExecutor ? { createApprovalExecutor } : {}),
@@ -216,20 +222,20 @@ export const createRuntimeSessionScope = ({
   const {
     controllersBase,
     networkController,
-    chainDefinitionsController,
+    supportedChainsController,
     permissionsReady,
     deferredNetworkInitialState,
   } = controllersInit;
 
   const chainViews = createChainViewsService({
-    chainDefinitions: chainDefinitionsController,
+    supportedChains: supportedChainsController,
     network: networkController,
-    preferences: networkPreferences,
+    selection: networkSelection,
   });
 
   const chainActivation = createChainActivationService({
     network: networkController,
-    preferences: networkPreferences,
+    networkSelection,
     logger: bootstrapScope.storageLogger,
   });
 
@@ -278,7 +284,8 @@ export const createRuntimeSessionScope = ({
     chainViews,
     chainActivation,
     attention,
-    networkPreferences,
+    networkSelection,
+    customRpc,
     sessionLayer,
     sessionStatus,
     accountSigning,
@@ -337,9 +344,10 @@ export const createRuntimeSupportScope = ({
 
   const networkBootstrap = createNetworkBootstrap({
     network: sessionScope.controllersBase.network,
-    chainDefinitions: sessionScope.controllersBase.chainDefinitions,
-    preferences: sessionScope.networkPreferences,
-    preferencesDefaults: bootstrapScope.networkPlan.preferencesDefaults,
+    supportedChains: sessionScope.controllersBase.supportedChains,
+    selection: sessionScope.networkSelection,
+    customRpc: sessionScope.customRpc,
+    selectionDefaults: bootstrapScope.networkPlan.selectionDefaults,
     hydrationEnabled: bootstrapScope.hydrationEnabled,
     logger: bootstrapScope.storageLogger,
     getIsHydrating: () => sessionScope.runtimeLifecycle.getIsHydrating(),

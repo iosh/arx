@@ -54,15 +54,15 @@ export const isSameChainDefinitionsState = (previous?: ChainDefinitionsState, ne
   return true;
 };
 
-export const normalizeAndValidateMetadata = (metadata: ChainMetadata) => {
-  const validated = validateChainMetadata(metadata);
-  const normalized = normalizeChainMetadata(validated);
-  const nextFeatures = normalized.features?.filter((feature) => !WALLET_METHOD_FEATURES.has(feature));
+export const prepareChainMetadataForStorage = (metadata: ChainMetadata) => {
+  const validatedMetadata = validateChainMetadata(metadata);
+  const storedMetadata = normalizeChainMetadata(validatedMetadata);
+  const retainedFeatures = storedMetadata.features?.filter((feature) => !WALLET_METHOD_FEATURES.has(feature));
 
   return {
-    ...normalized,
-    ...(nextFeatures && nextFeatures.length > 0 ? { features: nextFeatures } : {}),
-    ...(nextFeatures === undefined ? {} : nextFeatures.length === 0 ? { features: undefined } : {}),
+    ...storedMetadata,
+    ...(retainedFeatures && retainedFeatures.length > 0 ? { features: retainedFeatures } : {}),
+    ...(retainedFeatures === undefined ? {} : retainedFeatures.length === 0 ? { features: undefined } : {}),
   };
 };
 

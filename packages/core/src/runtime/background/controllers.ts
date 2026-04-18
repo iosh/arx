@@ -7,9 +7,6 @@ import type { AccountController, MultiNamespaceAccountsState } from "../../contr
 import { InMemoryApprovalController } from "../../controllers/approval/InMemoryApprovalController.js";
 import { APPROVAL_TOPICS } from "../../controllers/approval/topics.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
-import { InMemoryChainDefinitionsController } from "../../controllers/chainDefinitions/ChainDefinitionsController.js";
-import { CHAIN_DEFINITIONS_TOPICS } from "../../controllers/chainDefinitions/topics.js";
-import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import { buildNetworkRuntimeInput } from "../../controllers/network/config.js";
 import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
 import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
@@ -22,13 +19,16 @@ import type {
 import { PermissionsController } from "../../controllers/permission/PermissionsController.js";
 import { PERMISSION_TOPICS } from "../../controllers/permission/topics.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
+import { InMemorySupportedChainsController } from "../../controllers/supportedChains/SupportedChainsController.js";
+import { SUPPORTED_CHAINS_TOPICS } from "../../controllers/supportedChains/topics.js";
+import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
 import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
 import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
-import type { ChainDefinitionsPort } from "../../services/store/chainDefinitions/port.js";
-import type { NetworkPreferencesService } from "../../services/store/networkPreferences/types.js";
+import type { CustomChainsPort } from "../../services/store/customChains/port.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
@@ -55,12 +55,11 @@ export type ControllerLayerOptions = {
   transactions?: {
     registry?: TransactionAdapterRegistry;
   };
-  chainDefinitions?: {
-    port: ChainDefinitionsPort;
+  supportedChains?: {
+    port: CustomChainsPort;
     seed?: ChainMetadata[];
     now?: () => number;
     logger?: (message: string, error?: unknown) => void;
-    schemaVersion?: number;
   };
 };
 
@@ -70,14 +69,14 @@ export type ControllersBase = {
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
   transactions: TransactionController;
-  chainDefinitions: ChainDefinitionsController;
+  supportedChains: SupportedChainsController;
 };
 
 export type ControllersInitResult = {
   controllersBase: ControllersBase;
   transactionRegistry: TransactionAdapterRegistry;
   networkController: NetworkController;
-  chainDefinitionsController: ChainDefinitionsController;
+  supportedChainsController: SupportedChainsController;
   permissionsController: PermissionsController;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
@@ -90,7 +89,7 @@ export const initControllers = ({
   settingsService,
   permissionsPort,
   transactionsService,
-  networkPreferences,
+  networkSelection,
   networkPlan,
   options,
   createApprovalExecutor,
@@ -101,7 +100,7 @@ export const initControllers = ({
   settingsService: SettingsService;
   permissionsPort: PermissionsPort;
   transactionsService: TransactionsService;
-  networkPreferences: Pick<NetworkPreferencesService, "getActiveChainRef">;
+  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   networkPlan: RuntimeNetworkPlan;
   options: ControllerLayerOptions;
   createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
@@ -110,14 +109,14 @@ export const initControllers = ({
     network: networkOptions,
     approvals: approvalOptions,
     transactions: transactionOptions,
-    chainDefinitions: chainDefinitionsOptions,
+    supportedChains: supportedChainsOptions,
   } = options;
 
-  if (!chainDefinitionsOptions?.port) {
-    throw new Error("createBackgroundRuntime requires chainDefinitions.port");
+  if (!supportedChainsOptions?.port) {
+    throw new Error("createBackgroundRuntime requires supportedChains.port");
   }
 
-  const registrySeed: ChainMetadata[] = (chainDefinitionsOptions.seed ?? []).map((entry) => ({ ...entry }));
+  const supportedChainSeed: ChainMetadata[] = (supportedChainsOptions.seed ?? []).map((entry) => ({ ...entry }));
 
   const networkController = new InMemoryNetworkController({
     messenger: bus.scope({ name: "network", publish: NETWORK_TOPICS }),
@@ -155,12 +154,20 @@ export const initControllers = ({
 
   const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
 
+  const supportedChainsController = new InMemorySupportedChainsController({
+    messenger: bus.scope({ name: "supportedChains", publish: SUPPORTED_CHAINS_TOPICS }),
+    port: supportedChainsOptions.port,
+    seed: supportedChainSeed,
+    ...(supportedChainsOptions.now ? { now: supportedChainsOptions.now } : {}),
+    ...(supportedChainsOptions.logger ? { logger: supportedChainsOptions.logger } : {}),
+  });
+
   const transactionController = new StoreTransactionController({
     messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
     accountCodecs,
-    networkPreferences,
-    chainDefinitions: {
-      getChain: (chainRef) => chainDefinitionsController.getChain(chainRef),
+    networkSelection,
+    supportedChains: {
+      getChain: (chainRef) => supportedChainsController.getChain(chainRef),
     },
     accounts: {
       getActiveAccountForNamespace: (params) => accountController.getActiveAccountForNamespace(params),
@@ -174,24 +181,13 @@ export const initControllers = ({
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
   });
 
-  const chainDefinitionsController = new InMemoryChainDefinitionsController({
-    messenger: bus.scope({ name: "chainDefinitions", publish: CHAIN_DEFINITIONS_TOPICS }),
-    port: chainDefinitionsOptions.port,
-    seed: registrySeed,
-    ...(chainDefinitionsOptions.now ? { now: chainDefinitionsOptions.now } : {}),
-    ...(chainDefinitionsOptions.logger ? { logger: chainDefinitionsOptions.logger } : {}),
-    ...(chainDefinitionsOptions.schemaVersion !== undefined
-      ? { schemaVersion: chainDefinitionsOptions.schemaVersion }
-      : {}),
-  });
-
   const controllersBase: ControllersBase = {
     network: networkController,
     accounts: accountController,
     approvals: approvalController,
     permissions: permissionsController,
     transactions: transactionController,
-    chainDefinitions: chainDefinitionsController,
+    supportedChains: supportedChainsController,
   };
 
   approvalExecutor = createApprovalExecutor?.(controllersBase);
@@ -200,7 +196,7 @@ export const initControllers = ({
     controllersBase,
     transactionRegistry,
     networkController,
-    chainDefinitionsController,
+    supportedChainsController,
     permissionsController,
     permissionsReady,
     deferredNetworkInitialState: networkPlan.deferredState,

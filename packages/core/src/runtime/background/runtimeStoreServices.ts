@@ -1,15 +1,17 @@
 import { createAccountsService } from "../../services/store/accounts/AccountsService.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
+import { createCustomRpcService } from "../../services/store/customRpc/CustomRpcService.js";
+import type { CustomRpcPort } from "../../services/store/customRpc/port.js";
 import { createKeyringMetasService } from "../../services/store/keyringMetas/KeyringMetasService.js";
 import type { KeyringMetasPort } from "../../services/store/keyringMetas/port.js";
-import { createNetworkPreferencesService } from "../../services/store/networkPreferences/NetworkPreferencesService.js";
-import type { NetworkPreferencesPort } from "../../services/store/networkPreferences/port.js";
+import { createNetworkSelectionService } from "../../services/store/networkSelection/NetworkSelectionService.js";
+import type { NetworkSelectionPort } from "../../services/store/networkSelection/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsPort } from "../../services/store/settings/port.js";
 import { createSettingsService } from "../../services/store/settings/SettingsService.js";
 import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import { createTransactionsService } from "../../services/store/transactions/TransactionsService.js";
-import type { RuntimeNetworkPreferencesDefaults } from "./networkDefaults.js";
+import type { RuntimeNetworkSelectionDefaults } from "./networkDefaults.js";
 
 export type RuntimeStorePorts = {
   transactions: TransactionsPort;
@@ -20,7 +22,8 @@ export type RuntimeStorePorts = {
 
 export type RuntimeStoreServices = {
   settingsService: ReturnType<typeof createSettingsService>;
-  networkPreferences: ReturnType<typeof createNetworkPreferencesService>;
+  networkSelection: ReturnType<typeof createNetworkSelectionService>;
+  customRpc: ReturnType<typeof createCustomRpcService>;
   transactionsService: ReturnType<typeof createTransactionsService>;
   accountsStore: ReturnType<typeof createAccountsService>;
   keyringMetas: ReturnType<typeof createKeyringMetasService>;
@@ -28,24 +31,27 @@ export type RuntimeStoreServices = {
 
 export const initRuntimeStoreServices = ({
   settingsPort,
-  networkPreferencesPort,
+  networkSelectionPort,
+  customRpcPort,
   ports,
-  networkDefaults,
+  selectionDefaults,
   now,
 }: {
   settingsPort: SettingsPort;
-  networkPreferencesPort: NetworkPreferencesPort;
+  networkSelectionPort: NetworkSelectionPort;
+  customRpcPort: CustomRpcPort;
   ports: RuntimeStorePorts;
-  networkDefaults: RuntimeNetworkPreferencesDefaults;
+  selectionDefaults: RuntimeNetworkSelectionDefaults;
   now: () => number;
 }): RuntimeStoreServices => {
   const settingsService = createSettingsService({ port: settingsPort, now });
 
-  const networkPreferences = createNetworkPreferencesService({
-    port: networkPreferencesPort,
-    defaults: networkDefaults,
+  const networkSelection = createNetworkSelectionService({
+    port: networkSelectionPort,
+    defaults: selectionDefaults,
     now,
   });
+  const customRpc = createCustomRpcService({ port: customRpcPort, now });
 
   const transactionsService = createTransactionsService({
     port: ports.transactions,
@@ -57,7 +63,8 @@ export const initRuntimeStoreServices = ({
 
   return {
     settingsService,
-    networkPreferences,
+    networkSelection,
+    customRpc,
     transactionsService,
     accountsStore,
     keyringMetas,

@@ -5,16 +5,16 @@ import { cloneNetworkStateInput } from "../../controllers/network/config.js";
 import type { NetworkStateInput, RpcStrategyConfig } from "../../controllers/network/types.js";
 import { buildDefaultRoutingState } from "./constants.js";
 
-export type RuntimeNetworkPreferencesDefaults = {
+export type RuntimeNetworkSelectionDefaults = {
   selectedNamespace: string;
-  activeChainByNamespace: Record<string, ChainRef>;
+  chainRefByNamespace: Record<string, ChainRef>;
 };
 
 export type RuntimeNetworkPlan = {
   admittedChains: ChainMetadata[];
   bootstrapState: NetworkStateInput;
   deferredState: NetworkStateInput | null;
-  preferencesDefaults: RuntimeNetworkPreferencesDefaults;
+  selectionDefaults: RuntimeNetworkSelectionDefaults;
 };
 
 const createBootstrapStateForChain = (
@@ -27,7 +27,7 @@ const createBootstrapStateForChain = (
   },
 });
 
-const createActiveChainDefaults = (
+const createChainRefDefaults = (
   admittedChains: readonly ChainMetadata[],
   selectedUiChainRef: ChainRef,
 ): Record<string, ChainRef> => {
@@ -76,9 +76,9 @@ export const buildRuntimeNetworkPlan = (params: {
     admittedChains,
     bootstrapState,
     deferredState: canResolveRequestedState ? null : requestedState,
-    preferencesDefaults: {
+    selectionDefaults: {
       selectedNamespace: selectedChain.namespace,
-      activeChainByNamespace: createActiveChainDefaults(admittedChains, selectedUiChainRef),
+      chainRefByNamespace: createChainRefDefaults(admittedChains, selectedUiChainRef),
     },
   };
 };

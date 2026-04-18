@@ -37,9 +37,9 @@ describe("buildRuntimeNetworkPlan", () => {
     });
 
     expect(plan.bootstrapState.availableChainRefs).toEqual([BASE_MAINNET.chainRef]);
-    expect(plan.preferencesDefaults).toEqual({
+    expect(plan.selectionDefaults).toEqual({
       selectedNamespace: BASE_MAINNET.namespace,
-      activeChainByNamespace: {
+      chainRefByNamespace: {
         eip155: BASE_MAINNET.chainRef,
         solana: SOLANA_MAINNET.chainRef,
       },
@@ -62,9 +62,9 @@ describe("buildRuntimeNetworkPlan", () => {
 
     expect(plan.bootstrapState).toEqual(requestedInitialState);
     expect(plan.deferredState).toBeNull();
-    expect(plan.preferencesDefaults).toEqual({
+    expect(plan.selectionDefaults).toEqual({
       selectedNamespace: SOLANA_MAINNET.namespace,
-      activeChainByNamespace: {
+      chainRefByNamespace: {
         eip155: BASE_MAINNET.chainRef,
         solana: SOLANA_MAINNET.chainRef,
       },
@@ -86,9 +86,9 @@ describe("buildRuntimeNetworkPlan", () => {
 
     expect(plan.bootstrapState.availableChainRefs).toEqual([BASE_MAINNET.chainRef]);
     expect(plan.deferredState).toEqual(requestedInitialState);
-    expect(plan.preferencesDefaults).toEqual({
+    expect(plan.selectionDefaults).toEqual({
       selectedNamespace: BASE_MAINNET.namespace,
-      activeChainByNamespace: {
+      chainRefByNamespace: {
         eip155: BASE_MAINNET.chainRef,
       },
     });

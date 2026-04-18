@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TransactionRecord } from "./records.js";
-import { NetworkPreferencesRecordSchema, TransactionRecordSchema } from "./records.js";
+import { NetworkSelectionRecordSchema, TransactionRecordSchema } from "./records.js";
 
 const createTransactionRecord = (
   overrides: Partial<TransactionRecord> & {
@@ -34,30 +34,28 @@ const createTransactionRecord = (
   };
 };
 
-describe("NetworkPreferencesRecordSchema", () => {
+describe("NetworkSelectionRecordSchema", () => {
   it("requires selectedNamespace", () => {
     expect(() =>
-      NetworkPreferencesRecordSchema.parse({
-        id: "network-preferences",
-        activeChainByNamespace: {
+      NetworkSelectionRecordSchema.parse({
+        id: "network-selection",
+        chainRefByNamespace: {
           solana: "solana:101",
           eip155: "eip155:1",
         },
-        rpc: {},
         updatedAt: 0,
       }),
     ).toThrow();
   });
 
-  it("accepts records whose selected namespace resolves through activeChainByNamespace", () => {
-    const parsed = NetworkPreferencesRecordSchema.parse({
-      id: "network-preferences",
+  it("accepts records whose selected namespace resolves through chainRefByNamespace", () => {
+    const parsed = NetworkSelectionRecordSchema.parse({
+      id: "network-selection",
       selectedNamespace: "solana",
-      activeChainByNamespace: {
+      chainRefByNamespace: {
         solana: "solana:101",
         eip155: "eip155:1",
       },
-      rpc: {},
       updatedAt: 0,
     });
 
@@ -66,38 +64,35 @@ describe("NetworkPreferencesRecordSchema", () => {
 
   it("rejects records that provide neither selected owner field", () => {
     expect(() =>
-      NetworkPreferencesRecordSchema.parse({
-        id: "network-preferences",
-        activeChainByNamespace: {},
-        rpc: {},
+      NetworkSelectionRecordSchema.parse({
+        id: "network-selection",
+        chainRefByNamespace: {},
         updatedAt: 0,
       }),
     ).toThrow();
   });
 
-  it("rejects records whose selected namespace is missing from activeChainByNamespace", () => {
+  it("rejects records whose selected namespace is missing from chainRefByNamespace", () => {
     expect(() =>
-      NetworkPreferencesRecordSchema.parse({
-        id: "network-preferences",
+      NetworkSelectionRecordSchema.parse({
+        id: "network-selection",
         selectedNamespace: "solana",
-        activeChainByNamespace: {
+        chainRefByNamespace: {
           eip155: "eip155:1",
         },
-        rpc: {},
         updatedAt: 0,
       }),
     ).toThrow(/must include the selected namespace/);
   });
 
-  it("rejects activeChainByNamespace entries whose chainRef namespace drifts", () => {
+  it("rejects chainRefByNamespace entries whose chainRef namespace drifts", () => {
     expect(() =>
-      NetworkPreferencesRecordSchema.parse({
-        id: "network-preferences",
+      NetworkSelectionRecordSchema.parse({
+        id: "network-selection",
         selectedNamespace: "solana",
-        activeChainByNamespace: {
+        chainRefByNamespace: {
           solana: "eip155:1",
         },
-        rpc: {},
         updatedAt: 0,
       }),
     ).toThrow(/must point to the same namespace/);

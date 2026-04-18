@@ -84,7 +84,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
       expect(
         runtime.controllers.accounts.getActiveAccountForNamespace({
           namespace: ALT_CHAIN.namespace,
@@ -123,7 +123,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
@@ -268,7 +268,7 @@ describe("eip155 handlers - core error paths", () => {
       });
 
       expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkPreferences.getActiveChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
@@ -327,7 +327,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(networkChain.displayName).toBe("Base Mainnet");
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://mainnet.base.org");
 
-      const registryEntry = runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.displayName).toBe("Base Mainnet");
     } finally {
       teardownApprovalResponder();
@@ -499,7 +499,7 @@ describe("eip155 handlers - core error paths", () => {
       const networkChain = await waitForChainInNetwork(runtime, ADDED_CHAIN_REF);
       expect(networkChain.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
 
-      const registryEntry = runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF);
+      const registryEntry = runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF);
       expect(registryEntry?.metadata.rpcEndpoints[0]?.url).toBe("https://new-rpc.example");
     } finally {
       teardownApprovalResponder();
@@ -544,7 +544,7 @@ describe("eip155 handlers - core error paths", () => {
     };
 
     const runtime = createRuntime({
-      chainDefinitions: {
+      supportedChains: {
         seed: [mainnet, ALT_CHAIN as ChainMetadata, existing],
       },
     });
@@ -575,7 +575,7 @@ describe("eip155 handlers - core error paths", () => {
       ).resolves.toBeNull();
 
       expect(approvalRequested).toBe(false);
-      expect(runtime.controllers.chainDefinitions.getChain(ADDED_CHAIN_REF)).toMatchObject({
+      expect(runtime.controllers.supportedChains.getChain(ADDED_CHAIN_REF)).toMatchObject({
         source: "builtin",
         metadata: {
           chainRef: existing.chainRef,
@@ -729,7 +729,7 @@ describe("eip155 handlers - core error paths", () => {
         },
       ]);
 
-      await runtime.services.networkPreferences.setActiveChainRef(ALT_CHAIN.chainRef);
+      await runtime.services.networkSelection.selectChain(ALT_CHAIN.chainRef);
 
       await expect(
         execute({

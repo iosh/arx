@@ -4,7 +4,7 @@ import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/acco
 import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
 import { ApprovalKinds, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
-import { MemoryNetworkPreferencesPort } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
+import { MemoryNetworkSelectionPort } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
 import {
   ADD_CHAIN_PARAMS,
@@ -19,12 +19,11 @@ import {
   TEST_MNEMONIC,
 } from "./eip155.test.helpers.js";
 
-const createCrossChainPreferencesPort = () =>
-  new MemoryNetworkPreferencesPort({
-    id: "network-preferences",
+const createCrossChainSelectionPort = () =>
+  new MemoryNetworkSelectionPort({
+    id: "network-selection",
     selectedNamespace: "eip155",
-    activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
-    rpc: {},
+    chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
     updatedAt: 0,
   });
 
@@ -162,9 +161,9 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("presents personal_sign approvals on the normalized selected UI chain", async () => {
+  it("presents personal_sign approvals on the selected chain", async () => {
     const runtime = createRuntime({
-      networkPreferences: { port: createCrossChainPreferencesPort() },
+      networkSelection: { port: createCrossChainSelectionPort() },
     });
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -370,7 +369,7 @@ describe("eip155 handlers - approval metadata", () => {
     }
   });
 
-  it("presents eth_sendTransaction approvals on the normalized selected UI chain", async () => {
+  it("presents eth_sendTransaction approvals on the selected chain", async () => {
     const registry = new TransactionAdapterRegistry();
     registry.register("eip155", {
       prepareTransaction: vi.fn(async () => ({
@@ -383,7 +382,7 @@ describe("eip155 handlers - approval metadata", () => {
       receiptTracking: createReceiptTrackingStub(),
     });
     const runtime = createRuntime({
-      networkPreferences: { port: createCrossChainPreferencesPort() },
+      networkSelection: { port: createCrossChainSelectionPort() },
       transactions: { registry },
     });
     await runtime.lifecycle.initialize();

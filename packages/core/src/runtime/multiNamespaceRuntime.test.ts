@@ -6,12 +6,11 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import type { ChainDefinitionEntity } from "../storage/index.js";
 import {
   MemoryAccountsPort,
-  MemoryChainDefinitionsPort,
+  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
@@ -35,15 +34,6 @@ const SOLANA_CHAIN: ChainMetadata = {
   nativeCurrency: { name: "SOL", symbol: "SOL", decimals: 9 },
   rpcEndpoints: [{ url: "https://rpc.solana", type: "public" }],
 };
-
-const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinitionEntity => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  metadata,
-  schemaVersion: 2,
-  updatedAt: now,
-  source: "builtin",
-});
 
 const createProtocolAdapter = (namespace: string): NamespaceProtocolAdapter => ({
   encodeDappError: () => ({ code: -32603, message: `${namespace}:dapp` }),
@@ -100,9 +90,10 @@ const solanaNamespaceManifest = (() => {
 
 describe("createBackgroundRuntime multi-namespace assembly", () => {
   it("assembles a second namespace without falling back to eip155 runtime defaults", async () => {
+    const customChainsPort = new MemoryCustomChainsPort();
     const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0), toRegistryEntity(SOLANA_CHAIN, 0)]),
+      supportedChains: {
+        port: customChainsPort,
         seed: [MAINNET_CHAIN, SOLANA_CHAIN],
       },
       namespaces: {
@@ -114,9 +105,10 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
           shouldRequestUnlockAttention: () => false,
         },
       },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+      networkSelection: { port: new MemoryNetworkSelectionPort() },
       store: {
         ports: {
+          customChains: customChainsPort,
           permissions: new MemoryPermissionsPort(),
           transactions: new MemoryTransactionsPort(),
           accounts: new MemoryAccountsPort(),
@@ -127,7 +119,7 @@ describe("createBackgroundRuntime multi-namespace assembly", () => {
     });
 
     expect(runtime.rpc.registry.getRegisteredNamespaces()).toEqual(["eip155", "solana"]);
-    expect(runtime.services.networkPreferences.getActiveChainByNamespace()).toEqual({
+    expect(runtime.services.networkSelection.getChainRefByNamespace()).toEqual({
       eip155: MAINNET_CHAIN.chainRef,
       solana: SOLANA_CHAIN.chainRef,
     });

@@ -12,15 +12,14 @@ import {
   createChainMetadata,
   flushAsync,
   MemoryAccountsPort,
-  MemoryChainDefinitionsPort,
+  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
   setupBackground,
   TEST_MNEMONIC,
-  toRegistryEntity,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
@@ -134,9 +133,10 @@ const solanaNamespaceManifest = (() => {
 
 const setupNamespaceAwareProviderRuntime = async () => {
   const mainnetChain = createChainMetadata();
+  const customChainsPort = new MemoryCustomChainsPort();
   const runtime = createBackgroundRuntime({
-    chainDefinitions: {
-      port: new MemoryChainDefinitionsPort([toRegistryEntity(mainnetChain, 0), toRegistryEntity(SOLANA_CHAIN, 0)]),
+    supportedChains: {
+      port: customChainsPort,
       seed: [mainnetChain, SOLANA_CHAIN],
     },
     namespaces: {
@@ -148,9 +148,10 @@ const setupNamespaceAwareProviderRuntime = async () => {
         shouldRequestUnlockAttention: () => false,
       },
     },
-    networkPreferences: { port: new MemoryNetworkPreferencesPort() },
+    networkSelection: { port: new MemoryNetworkSelectionPort() },
     store: {
       ports: {
+        customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
         transactions: new MemoryTransactionsPort(),
         accounts: new MemoryAccountsPort(),

@@ -70,7 +70,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
   const hostLog = extendLogger(runtimeLog, "host");
 
   const applyDebugNamespacesFromEnv = () => {
-    const raw: unknown = import.meta.env.VITE_ARX_DEBUG_NAMESPACES;
+    const raw: unknown = (import.meta as ImportMeta & { env?: Record<string, unknown> }).env?.VITE_ARX_DEBUG_NAMESPACES;
     const namespaces = typeof raw === "string" ? raw.trim() : "";
 
     if (!namespaces) {
@@ -98,9 +98,10 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         storage: {
           ports: {
             accounts: storage.ports.accounts,
-            chainDefinitions: storage.ports.chainDefinitions,
+            customChains: storage.ports.customChains,
+            customRpc: storage.ports.customRpc,
             keyringMetas: storage.ports.keyringMetas,
-            networkPreferences: storage.ports.networkPreferences,
+            networkSelection: storage.ports.networkSelection,
             permissions: storage.ports.permissions,
             settings: storage.ports.settings,
             transactions: storage.ports.transactions,

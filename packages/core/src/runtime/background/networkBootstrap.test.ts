@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { ChainDefinitionsController } from "../../controllers/chainDefinitions/types.js";
 import { buildNetworkRuntimeInput } from "../../controllers/network/config.js";
 import { InMemoryNetworkController } from "../../controllers/network/NetworkController.js";
 import { NETWORK_TOPICS } from "../../controllers/network/topics.js";
+import { InMemorySupportedChainsController } from "../../controllers/supportedChains/SupportedChainsController.js";
+import { SUPPORTED_CHAINS_TOPICS } from "../../controllers/supportedChains/topics.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import { createChainViewsService } from "../../services/runtime/chainViews/index.js";
-import { createNetworkPreferencesService } from "../../services/store/networkPreferences/NetworkPreferencesService.js";
-import type { NetworkPreferencesRecord } from "../../storage/records.js";
-import { MemoryNetworkPreferencesPort, toRegistryEntity } from "../__fixtures__/backgroundTestSetup.js";
+import { createCustomRpcService } from "../../services/store/customRpc/CustomRpcService.js";
+import { createNetworkSelectionService } from "../../services/store/networkSelection/NetworkSelectionService.js";
+import type { NetworkSelectionRecord } from "../../storage/records.js";
+import {
+  MemoryCustomChainsPort,
+  MemoryCustomRpcPort,
+  MemoryNetworkSelectionPort,
+} from "../__fixtures__/backgroundTestSetup.js";
 import { buildDefaultRoutingState } from "./constants.js";
 import { createNetworkBootstrap } from "./networkBootstrap.js";
 
@@ -39,58 +45,6 @@ const SOLANA_CHAIN: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
-type ChainDefinitionSeed = {
-  metadata: ChainMetadata;
-  source?: "builtin" | "custom";
-};
-
-type MutableChainDefinitionsController = ChainDefinitionsController & {
-  setChains(chains: ChainDefinitionSeed[]): void;
-};
-
-const createChainDefinitionsStub = (chains: ChainDefinitionSeed[]): MutableChainDefinitionsController => {
-  let current = [...chains];
-  const listeners = new Set<(state: ReturnType<ChainDefinitionsController["getState"]>) => void>();
-
-  const toState = () => ({
-    chains: current.map(({ metadata, source = "builtin" }) => toRegistryEntity(metadata, 0, source)),
-  });
-
-  const emit = () => {
-    const state = toState();
-    for (const listener of listeners) {
-      listener(state);
-    }
-  };
-
-  return {
-    getState: () => toState(),
-    getChain: (chainRef) => {
-      const entry = current.find(({ metadata }) => metadata.chainRef === chainRef);
-      return entry ? toRegistryEntity(entry.metadata, 0, entry.source ?? "builtin") : null;
-    },
-    getChains: () => toState().chains,
-    reconcileBuiltinChains: async () => {},
-    upsertCustomChain: async () => ({
-      kind: "noop",
-      chain: toRegistryEntity(current[0]?.metadata ?? MAINNET_CHAIN, 0),
-    }),
-    removeCustomChain: async () => ({ removed: false }),
-    onStateChanged: (handler) => {
-      listeners.add(handler);
-      return () => {
-        listeners.delete(handler);
-      };
-    },
-    onChainUpdated: () => () => {},
-    whenReady: async () => {},
-    setChains: (chains) => {
-      current = [...chains];
-      emit();
-    },
-  };
-};
-
 const createNetworkController = (chain: ChainMetadata) => {
   const bus = new Messenger();
   return new InMemoryNetworkController({
@@ -105,16 +59,16 @@ const createNetworkController = (chain: ChainMetadata) => {
   });
 };
 
-const createPreferencesService = (
-  seed: NetworkPreferencesRecord | null,
+const createSelectionService = (
+  seed: NetworkSelectionRecord | null,
   defaults = {
     selectedNamespace: MAINNET_CHAIN.namespace,
-    activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+    chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
   },
   now = () => 1_000,
 ) => {
-  const port = new MemoryNetworkPreferencesPort(seed);
-  const service = createNetworkPreferencesService({
+  const port = new MemoryNetworkSelectionPort(seed);
+  const service = createNetworkSelectionService({
     port,
     defaults,
     now,
@@ -122,32 +76,70 @@ const createPreferencesService = (
   return { port, service };
 };
 
+const createCustomRpc = (seed: ConstructorParameters<typeof MemoryCustomRpcPort>[0] = [], now = () => 1_000) => {
+  const port = new MemoryCustomRpcPort(seed);
+  const service = createCustomRpcService({
+    port,
+    now,
+  });
+  return { port, service };
+};
+
+const toCustomChainRecord = (metadata: ChainMetadata) => ({
+  chainRef: metadata.chainRef,
+  namespace: metadata.namespace,
+  metadata,
+  updatedAt: 0,
+});
+
+const createSupportedChains = async (params: { builtin?: ChainMetadata[]; custom?: ChainMetadata[] }) => {
+  const bus = new Messenger();
+  const controller = new InMemorySupportedChainsController({
+    messenger: bus.scope({ publish: SUPPORTED_CHAINS_TOPICS }),
+    port: new MemoryCustomChainsPort((params.custom ?? []).map(toCustomChainRecord)),
+    seed: params.builtin ?? [],
+    now: () => 0,
+  });
+  await controller.whenReady();
+  return controller;
+};
+
 describe("networkBootstrap", () => {
-  it("mounts only admitted namespace chains and corrects stored preferences", async () => {
+  it("mounts only registered namespace chains, applies custom RPC, and repairs stored selection", async () => {
     const network = createNetworkController(MAINNET_CHAIN);
-    const chainDefinitions = createChainDefinitionsStub([
-      { metadata: MAINNET_CHAIN },
-      { metadata: ALT_CHAIN },
-      { metadata: SOLANA_CHAIN },
-    ]);
-    const { port, service } = createPreferencesService({
-      id: "network-preferences",
-      selectedNamespace: ALT_CHAIN.namespace,
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
-      rpc: {
-        [ALT_CHAIN.chainRef]: { activeIndex: 9, strategy: { id: "sticky" } },
-        [SOLANA_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "round-robin" } },
+    const supportedChains = await createSupportedChains({
+      builtin: [MAINNET_CHAIN, ALT_CHAIN, SOLANA_CHAIN],
+    });
+    const { port: selectionPort, service: selection } = createSelectionService({
+      id: "network-selection",
+      selectedNamespace: SOLANA_CHAIN.namespace,
+      chainRefByNamespace: {
+        eip155: ALT_CHAIN.chainRef,
+        solana: SOLANA_CHAIN.chainRef,
       },
       updatedAt: 10,
     });
+    const { port: customRpcPort, service: customRpc } = createCustomRpc([
+      {
+        chainRef: ALT_CHAIN.chainRef,
+        rpcEndpoints: [{ url: "https://rpc.optimism.custom.example", type: "authenticated" }],
+        updatedAt: 10,
+      },
+      {
+        chainRef: SOLANA_CHAIN.chainRef,
+        rpcEndpoints: [{ url: "https://rpc.solana.custom.example", type: "public" }],
+        updatedAt: 10,
+      },
+    ]);
 
     const bootstrap = createNetworkBootstrap({
       network,
-      chainDefinitions,
-      preferences: service,
-      preferencesDefaults: {
+      supportedChains,
+      selection,
+      customRpc,
+      selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -159,39 +151,38 @@ describe("networkBootstrap", () => {
     bootstrap.requestSync();
     await bootstrap.flushPendingSync();
 
-    expect(network.getState()).toMatchObject({
-      availableChainRefs: [MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef],
-      rpc: {
-        [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
-      },
-    });
-    await expect(port.get()).resolves.toMatchObject({
+    expect(network.getState().availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
+    expect(network.getActiveEndpoint(ALT_CHAIN.chainRef).url).toBe("https://rpc.optimism.custom.example");
+    await expect(selectionPort.get()).resolves.toEqual({
+      id: "network-selection",
       selectedNamespace: "eip155",
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
-      rpc: {
-        [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
-      },
+      chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
+      updatedAt: 1_000,
     });
+    expect(customRpcPort.removed).toContain(SOLANA_CHAIN.chainRef);
   });
 
-  it("repairs the selected UI chain when registry removes the current chain", async () => {
+  it("repairs the selected UI chain when supported chains remove the current chain", async () => {
     const network = createNetworkController(MAINNET_CHAIN);
-    const chainDefinitions = createChainDefinitionsStub([{ metadata: MAINNET_CHAIN }, { metadata: ALT_CHAIN }]);
-    const { service } = createPreferencesService({
-      id: "network-preferences",
+    const supportedChains = await createSupportedChains({
+      custom: [MAINNET_CHAIN, ALT_CHAIN],
+    });
+    const { service: selection } = createSelectionService({
+      id: "network-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
-      activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
-      rpc: {},
+      chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
+    const { service: customRpc } = createCustomRpc();
 
     const bootstrap = createNetworkBootstrap({
       network,
-      chainDefinitions,
-      preferences: service,
-      preferencesDefaults: {
+      supportedChains,
+      selection,
+      customRpc,
+      selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -199,40 +190,47 @@ describe("networkBootstrap", () => {
       getRegisteredNamespaces: () => new Set(["eip155"]),
     });
     const chainViews = createChainViewsService({
-      chainDefinitions,
+      supportedChains,
       network,
-      preferences: service,
+      selection,
     });
 
     await bootstrap.loadPreferences();
-    bootstrap.start();
-    chainDefinitions.setChains([{ metadata: ALT_CHAIN }]);
-
+    bootstrap.requestSync();
     await bootstrap.flushPendingSync();
+    bootstrap.start();
+
+    await supportedChains.removeChain(MAINNET_CHAIN.chainRef);
+    await bootstrap.flushPendingSync();
+
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
     expect(chainViews.getSelectedChainView()).toMatchObject({ chainRef: ALT_CHAIN.chainRef });
-    expect(service.getSelectedNamespace()).toBe("eip155");
+    expect(selection.getSelectedNamespace()).toBe("eip155");
+    expect(selection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
     bootstrap.destroy();
   });
 
   it("repairs the selected namespace chain using the resolved active chain for the same namespace", async () => {
     const network = createNetworkController(MAINNET_CHAIN);
-    const chainDefinitions = createChainDefinitionsStub([{ metadata: ALT_CHAIN }]);
-    const { port, service } = createPreferencesService({
-      id: "network-preferences",
+    const supportedChains = await createSupportedChains({
+      custom: [ALT_CHAIN],
+    });
+    const { port: selectionPort, service: selection } = createSelectionService({
+      id: "network-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
-      rpc: {},
+      chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 10,
     });
+    const { service: customRpc } = createCustomRpc();
 
     const bootstrap = createNetworkBootstrap({
       network,
-      chainDefinitions,
-      preferences: service,
-      preferencesDefaults: {
+      supportedChains,
+      selection,
+      customRpc,
+      selectionDefaults: {
         selectedNamespace: MAINNET_CHAIN.namespace,
-        activeChainByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
+        chainRefByNamespace: { [MAINNET_CHAIN.namespace]: MAINNET_CHAIN.chainRef },
       },
       hydrationEnabled: true,
       logger: () => {},
@@ -245,9 +243,11 @@ describe("networkBootstrap", () => {
     await bootstrap.flushPendingSync();
 
     expect(network.getState().availableChainRefs).toEqual([ALT_CHAIN.chainRef]);
-    await expect(port.get()).resolves.toMatchObject({
+    await expect(selectionPort.get()).resolves.toEqual({
+      id: "network-selection",
       selectedNamespace: "eip155",
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
+      chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
+      updatedAt: 1_000,
     });
   });
 });

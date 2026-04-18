@@ -1,6 +1,5 @@
 import type { WalletProvider } from "@arx/core/engine";
 import type { JsonRpcResponse } from "@arx/core/rpc";
-import type { NetworkPreferencesRecord } from "@arx/core/storage";
 import { CHANNEL } from "@arx/provider/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "webextension-polyfill";
@@ -68,17 +67,6 @@ const makeSnapshot = (
   },
 });
 
-const makeNetworkPreferencesRecord = (overrides?: Partial<NetworkPreferencesRecord>): NetworkPreferencesRecord => ({
-  id: "network-preferences",
-  selectedNamespace: "eip155",
-  activeChainByNamespace: {
-    eip155: "eip155:1",
-  },
-  rpc: {},
-  updatedAt: 0,
-  ...(overrides ?? {}),
-});
-
 const buildBindingKey = (input: { origin: string; namespace: string }) =>
   JSON.stringify([input.origin, input.namespace]);
 
@@ -102,7 +90,7 @@ const createServerHarness = (options?: {
   const sessionUnlockedHandlers = new Set<(payload: ProviderLifecyclePayload) => void>();
   const sessionLockedHandlers = new Set<(payload: ProviderLifecyclePayload) => void>();
   const networkStateHandlers = new Set<() => void>();
-  const networkPreferenceHandlers = new Set<() => void>();
+  const networkSelectionHandlers = new Set<() => void>();
   const accountsStateHandlers = new Set<() => void>();
   const permissionsStateHandlers = new Set<() => void>();
 
@@ -207,13 +195,10 @@ const createServerHarness = (options?: {
       networkStateHandlers.add(listener);
       return () => networkStateHandlers.delete(listener);
     },
-    subscribeNetworkPreferencesChanged: (listener) => {
-      const nextListener = () =>
-        listener({
-          next: makeNetworkPreferencesRecord(),
-        });
-      networkPreferenceHandlers.add(nextListener);
-      return () => networkPreferenceHandlers.delete(nextListener);
+    subscribeNetworkSelectionChanged: (listener) => {
+      const nextListener = () => listener();
+      networkSelectionHandlers.add(nextListener);
+      return () => networkSelectionHandlers.delete(nextListener);
     },
     subscribeAccountsStateChanged: (listener) => {
       accountsStateHandlers.add(listener);
@@ -266,8 +251,8 @@ const createServerHarness = (options?: {
         listener();
       }
     },
-    emitNetworkPreferencesChanged() {
-      for (const listener of networkPreferenceHandlers) {
+    emitNetworkSelectionChanged() {
+      for (const listener of networkSelectionHandlers) {
         listener();
       }
     },

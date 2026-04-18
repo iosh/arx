@@ -5,16 +5,16 @@ import { ApprovalKinds } from "../controllers/approval/types.js";
 import {
   flushAsync,
   MemoryAccountsPort,
-  MemoryChainDefinitionsPort,
+  MemoryCustomChainsPort,
+  MemoryCustomRpcPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
   TEST_ACCOUNT_CODECS,
   TEST_MNEMONIC,
   TEST_RECEIPT_POLL_INTERVAL,
-  toRegistryEntity,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import type { TransactionRecord } from "../storage/records.js";
 import type { TransactionAdapter } from "../transactions/adapters/types.js";
@@ -39,7 +39,8 @@ const PROVIDER_REQUEST_ID = "provider-request";
 
 const createWalletInput = (params?: {
   modules?: readonly WalletNamespaceModule[];
-  networkPreferencesPort?: MemoryNetworkPreferencesPort;
+  networkSelectionPort?: MemoryNetworkSelectionPort;
+  customRpcPort?: MemoryCustomRpcPort;
   accountsPort?: MemoryAccountsPort;
   permissionsPort?: MemoryPermissionsPort;
   settingsPort?: MemorySettingsPort;
@@ -47,7 +48,6 @@ const createWalletInput = (params?: {
   transactionsPort?: MemoryTransactionsPort;
 }): CreateArxWalletInput => {
   const modules = params?.modules ?? [createEip155WalletNamespaceModule()];
-  const chainSeeds = modules.flatMap((module) => module.engine.facts.chainSeeds ?? []);
 
   return {
     namespaces: {
@@ -56,11 +56,10 @@ const createWalletInput = (params?: {
     storage: {
       ports: {
         accounts: params?.accountsPort ?? new MemoryAccountsPort(),
-        chainDefinitions: new MemoryChainDefinitionsPort(
-          chainSeeds.map((chain, index) => toRegistryEntity(chain, index)),
-        ),
+        customChains: new MemoryCustomChainsPort(),
+        customRpc: params?.customRpcPort ?? new MemoryCustomRpcPort(),
         keyringMetas: params?.keyringMetasPort ?? new MemoryKeyringMetasPort(),
-        networkPreferences: params?.networkPreferencesPort ?? new MemoryNetworkPreferencesPort(),
+        networkSelection: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
         permissions: params?.permissionsPort ?? new MemoryPermissionsPort(),
         settings: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
         transactions: params?.transactionsPort ?? new MemoryTransactionsPort(),
@@ -163,21 +162,14 @@ afterEach(() => {
 });
 
 describe("createArxWallet", () => {
-  it("boots an eip155 wallet, exposes 20b/20c wallet surfaces, and corrects invalid persisted preferences", async () => {
-    const networkPreferencesPort = new MemoryNetworkPreferencesPort({
-      id: "network-preferences",
+  it("boots an eip155 wallet and repairs invalid persisted network state", async () => {
+    const networkSelectionPort = new MemoryNetworkSelectionPort({
+      id: "network-selection",
       selectedNamespace: "solana",
-      activeChainByNamespace: { solana: "solana:1" },
-      rpc: {
-        "solana:1": {
-          activeIndex: 0,
-          strategy: { id: "sticky" },
-        },
-      },
+      chainRefByNamespace: { solana: "solana:1" },
       updatedAt: 1,
     });
-
-    const runtime = await createWalletRuntime({ networkPreferencesPort });
+    const runtime = await createWalletRuntime({ networkSelectionPort });
 
     try {
       const { wallet } = runtime;
@@ -208,11 +200,15 @@ describe("createArxWallet", () => {
         networks: { selectedNamespace: "eip155" },
       });
 
-      const correctedPreferences = networkPreferencesPort.saved.at(-1);
-      expect(correctedPreferences).toMatchObject({
+      const correctedSelection = networkSelectionPort.saved.at(-1);
+      expect(correctedSelection).toEqual({
+        id: "network-selection",
         selectedNamespace: "eip155",
+        chainRefByNamespace: {
+          eip155: "eip155:1",
+        },
+        updatedAt: expect.any(Number),
       });
-      expect(correctedPreferences?.activeChainByNamespace.eip155).toBeDefined();
     } finally {
       await runtime.shutdown();
     }

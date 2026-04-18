@@ -525,7 +525,6 @@ const createControllers = () => {
     processTransaction: async () => {},
     onStateChanged: () => () => {},
   };
-  const chainDefinitions = { onStateChanged: () => () => {}, getChain: () => CHAIN };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };
   const chainViews = {
     findAvailableChainView: () => CHAIN,
@@ -558,7 +557,6 @@ const createControllers = () => {
     permissions,
     network,
     transactions,
-    chainDefinitions,
     signers,
     chainViews,
     permissionViews,
@@ -572,7 +570,7 @@ const createUiAccessForTest = (input: {
   platform: ReturnType<typeof createUiPlatform>;
   activationEntries?: Parameters<typeof createUiActivationExtension>[0]["entries"];
   uiOrigin: string;
-  networkPreferences: {
+  networkSelection: {
     subscribeChanged: (
       handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
     ) => () => void;
@@ -716,7 +714,7 @@ const createUiAccessForTest = (input: {
         transactions: input.controllers.transactions as never,
         chains: {
           onStateChanged: input.controllers.network.onStateChanged,
-          onPreferencesChanged: (listener: () => void) => input.networkPreferences.subscribeChanged(() => listener()),
+          onSelectionChanged: (listener: () => void) => input.networkSelection.subscribeChanged(() => listener()),
         },
         session: sessionAccess,
         attention: {
@@ -841,13 +839,13 @@ const buildBridge = (opts?: {
   });
   const persistVaultMeta = vi.fn(async () => {});
   const attentionStateHandlers = new Set<() => void>();
-  const networkPreferencesListeners = new Set<
+  const networkSelectionListeners = new Set<
     (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void
   >();
-  const networkPreferences = {
+  const networkSelection = {
     subscribeChanged: (handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void) => {
-      networkPreferencesListeners.add(handler);
-      return () => networkPreferencesListeners.delete(handler);
+      networkSelectionListeners.add(handler);
+      return () => networkSelectionListeners.delete(handler);
     },
   };
   const uiAccess = createUiAccessForTest({
@@ -860,7 +858,7 @@ const buildBridge = (opts?: {
     platform,
     uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
     installSurfaceActivationExtension: opts?.installSurfaceActivationExtension,
-    networkPreferences,
+    networkSelection,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
       return () => attentionStateHandlers.delete(listener);
@@ -877,8 +875,8 @@ const buildBridge = (opts?: {
     approvals: approvalsController,
     browser: browserApi,
     persistVaultMeta,
-    emitNetworkPreferencesChanged: () => {
-      for (const handler of networkPreferencesListeners) {
+    emitNetworkSelectionChanged: () => {
+      for (const handler of networkSelectionListeners) {
         handler({ next: { activeChainByNamespace: { [CHAIN.namespace]: CHAIN.chainRef } } });
       }
     },
@@ -925,7 +923,7 @@ describe("uiBridge", () => {
   let approvals: ReturnType<typeof buildBridge>["approvals"];
   let port: FakePort;
   let runtimeBrowser: ReturnType<typeof makeBrowser>;
-  let _emitNetworkPreferencesChanged: ReturnType<typeof buildBridge>["emitNetworkPreferencesChanged"];
+  let _emitNetworkSelectionChanged: ReturnType<typeof buildBridge>["emitNetworkSelectionChanged"];
   let persistVaultMeta: ReturnType<typeof buildBridge>["persistVaultMeta"];
 
   beforeEach(() => {
@@ -936,7 +934,7 @@ describe("uiBridge", () => {
     unlock = ctx.unlock;
     approvals = ctx.approvals;
     runtimeBrowser = ctx.browser;
-    _emitNetworkPreferencesChanged = ctx.emitNetworkPreferencesChanged;
+    _emitNetworkSelectionChanged = ctx.emitNetworkSelectionChanged;
     persistVaultMeta = ctx.persistVaultMeta;
 
     port = createPort();
@@ -1182,7 +1180,7 @@ describe("uiBridge", () => {
       keyring,
       platform,
       uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
-      networkPreferences: {
+      networkSelection: {
         subscribeChanged: (
           handler: (payload: { next: { activeChainByNamespace: Record<string, string> } }) => void,
         ) => {

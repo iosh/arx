@@ -3,8 +3,6 @@ import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
-import type { ChainDefinitionsPort } from "../services/store/chainDefinitions/port.js";
-import type { ChainDefinitionEntity } from "../storage/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
@@ -14,9 +12,9 @@ import { createUiWalletSetupAccess } from "../ui/server/walletSetupAccess.js";
 import {
   flushAsync,
   MemoryAccountsPort,
-  MemoryChainDefinitionsPort,
+  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
@@ -51,15 +49,70 @@ const BASE_CHAIN: ChainMetadata = {
 };
 
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
+const DEFAULT_RPC_ENGINE = {
+  env: {
+    isInternalOrigin: () => false,
+    shouldRequestUnlockAttention: () => false,
+  },
+} as const;
 
-const toRegistryEntity = (metadata: ChainMetadata, now: number): ChainDefinitionEntity => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  metadata,
-  schemaVersion: 2,
-  updatedAt: now,
-  source: "builtin",
-});
+const createTestRuntime = (params?: {
+  chainSeed?: ChainMetadata[];
+  customChainsPort?: MemoryCustomChainsPort;
+  networkSelectionPort?: MemoryNetworkSelectionPort;
+  namespaces?: Parameters<typeof createBackgroundRuntime>[0]["namespaces"];
+  rpcEngine?: Parameters<typeof createBackgroundRuntime>[0]["rpcEngine"];
+  settingsPort?: MemorySettingsPort;
+  storePorts?: Partial<Parameters<typeof createBackgroundRuntime>[0]["store"]["ports"]>;
+  supportedChains?: Omit<NonNullable<Parameters<typeof createBackgroundRuntime>[0]["supportedChains"]>, "port">;
+  storage?: Parameters<typeof createBackgroundRuntime>[0]["storage"];
+  session?: Parameters<typeof createBackgroundRuntime>[0]["session"];
+  transactions?: Parameters<typeof createBackgroundRuntime>[0]["transactions"];
+  messenger?: Parameters<typeof createBackgroundRuntime>[0]["messenger"];
+  network?: Parameters<typeof createBackgroundRuntime>[0]["network"];
+  rpcClients?: Parameters<typeof createBackgroundRuntime>[0]["rpcClients"];
+  accounts?: Parameters<typeof createBackgroundRuntime>[0]["accounts"];
+  approvals?: Parameters<typeof createBackgroundRuntime>[0]["approvals"];
+  customRpc?: Parameters<typeof createBackgroundRuntime>[0]["customRpc"];
+  engine?: Parameters<typeof createBackgroundRuntime>[0]["engine"];
+}) => {
+  const customChainsPort = params?.customChainsPort ?? new MemoryCustomChainsPort();
+  return createBackgroundRuntime({
+    supportedChains: {
+      port: customChainsPort,
+      ...(params?.chainSeed ? { seed: params.chainSeed } : {}),
+      ...(params?.supportedChains ?? {}),
+    },
+    namespaces: params?.namespaces ?? { manifests: TEST_NAMESPACE_MANIFESTS },
+    rpcEngine: params?.rpcEngine ?? DEFAULT_RPC_ENGINE,
+    networkSelection: {
+      port: params?.networkSelectionPort ?? new MemoryNetworkSelectionPort(),
+    },
+    settings: {
+      port: params?.settingsPort ?? new MemorySettingsPort({ id: "settings", updatedAt: 0 }),
+    },
+    store: {
+      ports: {
+        customChains: customChainsPort,
+        permissions: new MemoryPermissionsPort(),
+        transactions: new MemoryTransactionsPort(),
+        accounts: new MemoryAccountsPort(),
+        keyringMetas: new MemoryKeyringMetasPort(),
+        ...(params?.storePorts ?? {}),
+      },
+    },
+    ...(params?.storage ? { storage: params.storage } : {}),
+    ...(params?.session ? { session: params.session } : {}),
+    ...(params?.transactions ? { transactions: params.transactions } : {}),
+    ...(params?.messenger ? { messenger: params.messenger } : {}),
+    ...(params?.network ? { network: params.network } : {}),
+    ...(params?.rpcClients ? { rpcClients: params.rpcClients } : {}),
+    ...(params?.accounts ? { accounts: params.accounts } : {}),
+    ...(params?.approvals ? { approvals: params.approvals } : {}),
+    ...(params?.customRpc ? { customRpc: params.customRpc } : {}),
+    ...(params?.engine ? { engine: params.engine } : {}),
+  });
+};
 
 const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   await runtime.services.session.createVault({ password: "test" });
@@ -135,34 +188,15 @@ const createHandlersForRuntime = (
 };
 
 describe("createBackgroundRuntime (no snapshots)", () => {
-  it("derives network preference defaults from the admitted chain seed before hydration", async () => {
-    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort([
-      toRegistryEntity(BASE_CHAIN, 0),
-    ]);
-
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: chainDefinitionsPort, seed: [BASE_CHAIN] },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+  it("derives network selection defaults from the admitted chain seed before hydration", async () => {
+    const customChainsPort = new MemoryCustomChainsPort();
+    const runtime = createTestRuntime({
+      chainSeed: [BASE_CHAIN],
+      customChainsPort,
     });
 
-    expect(runtime.services.networkPreferences.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
-    expect(runtime.services.networkPreferences.getActiveChainByNamespace()).toEqual({
+    expect(runtime.services.networkSelection.getSelectedNamespace()).toBe(BASE_CHAIN.namespace);
+    expect(runtime.services.networkSelection.getChainRefByNamespace()).toEqual({
       [BASE_CHAIN.namespace]: BASE_CHAIN.chainRef,
     });
 
@@ -174,41 +208,21 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
-  it("hydrates network preferences from NetworkPreferencesPort", async () => {
+  it("hydrates network selection from persisted selection state", async () => {
     const now = () => 1_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
-      chainSeed.map((c) => toRegistryEntity(c, 0)),
-    );
-
-    const networkPreferencesPort = new MemoryNetworkPreferencesPort({
-      id: "network-preferences",
+    const customChainsPort = new MemoryCustomChainsPort();
+    const networkSelectionPort = new MemoryNetworkSelectionPort({
+      id: "network-selection",
       selectedNamespace: ALT_CHAIN.namespace,
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
-      rpc: {
-        [ALT_CHAIN.chainRef]: { activeIndex: 0, strategy: { id: "sticky" } },
-      },
+      chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
       updatedAt: now(),
     });
 
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: networkPreferencesPort },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
+    const runtime = createTestRuntime({
+      chainSeed,
+      customChainsPort,
+      networkSelectionPort,
       storage: {
         vaultMetaPort: {
           loadVaultMeta: async () => null,
@@ -217,7 +231,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
         now,
       },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
     await flushAsync();
@@ -225,10 +238,10 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.start();
 
     const networkState = runtime.controllers.network.getState();
-    expect(runtime.services.networkPreferences.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
+    expect(runtime.services.networkSelection.getSelectedNamespace()).toBe(ALT_CHAIN.namespace);
     expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
     expect(networkState.availableChainRefs).toEqual([MAINNET_CHAIN.chainRef, ALT_CHAIN.chainRef]);
-    expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("sticky");
+    expect(networkState.rpc[ALT_CHAIN.chainRef]?.strategy.id).toBe("round-robin");
 
     runtime.lifecycle.shutdown();
   });
@@ -242,25 +255,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     ];
 
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort([toRegistryEntity(ALT_CHAIN, 0)]), seed: [ALT_CHAIN] },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [ALT_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       session: {
         keyringNamespaces: overriddenKeyringNamespaces,
       },
@@ -273,28 +270,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("resolves unlocked session state through ui.session.unlock", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -313,36 +291,18 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   it("persists selectedNamespace-derived UI chain when ui.networks.switchActive succeeds", async () => {
     const now = () => 10_000;
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
-      chainSeed.map((c) => toRegistryEntity(c, 0)),
-    );
-
-    const networkPreferencesPort = new MemoryNetworkPreferencesPort({
-      id: "network-preferences",
+    const customChainsPort = new MemoryCustomChainsPort();
+    const networkSelectionPort = new MemoryNetworkSelectionPort({
+      id: "network-selection",
       selectedNamespace: MAINNET_CHAIN.namespace,
-      activeChainByNamespace: { eip155: MAINNET_CHAIN.chainRef },
-      rpc: {},
+      chainRefByNamespace: { eip155: MAINNET_CHAIN.chainRef },
       updatedAt: 0,
     });
 
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: networkPreferencesPort },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
+    const runtime = createTestRuntime({
+      chainSeed,
+      customChainsPort,
+      networkSelectionPort,
       storage: {
         vaultMetaPort: {
           loadVaultMeta: async () => null,
@@ -351,7 +311,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         },
         now,
       },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     });
 
     await runtime.lifecycle.initialize();
@@ -359,14 +318,14 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const handlers = createHandlersForRuntime(runtime);
 
-    expect(networkPreferencesPort.saved.length).toBe(0);
+    expect(networkSelectionPort.saved.length).toBe(0);
     await handlers["ui.networks.switchActive"]({ chainRef: ALT_CHAIN.chainRef });
     await flushAsync();
 
-    expect(networkPreferencesPort.saved.length).toBeGreaterThan(0);
-    await expect(networkPreferencesPort.get()).resolves.toMatchObject({
+    expect(networkSelectionPort.saved.length).toBeGreaterThan(0);
+    await expect(networkSelectionPort.get()).resolves.toMatchObject({
       selectedNamespace: ALT_CHAIN.namespace,
-      activeChainByNamespace: { eip155: ALT_CHAIN.chainRef },
+      chainRefByNamespace: { eip155: ALT_CHAIN.chainRef },
     });
 
     runtime.lifecycle.shutdown();
@@ -374,29 +333,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
   it("does not change permissions when ui.networks.switchActive succeeds", async () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
-      chainSeed.map((c) => toRegistryEntity(c, 0)),
-    );
-
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed,
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -430,29 +369,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
   it("does not change permissions when switch-chain approval is approved", async () => {
     const chainSeed = [MAINNET_CHAIN, ALT_CHAIN];
-    const chainDefinitionsPort: ChainDefinitionsPort = new MemoryChainDefinitionsPort(
-      chainSeed.map((c) => toRegistryEntity(c, 0)),
-    );
-
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: chainDefinitionsPort, seed: chainSeed },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed,
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();
@@ -514,28 +433,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
   it("resolves ui.balances.getNative via namespace runtime bindings", async () => {
     const getBalance = vi.fn(async () => "0xde0b6b3a7640000");
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       rpcClients: {
         factories: [
           {
@@ -586,27 +486,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("fails closed when sign approvals are unsupported for the namespace", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -660,27 +542,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("tracks rpc client support separately from other runtime support", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -715,27 +579,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("derives selected-chain UI capabilities from receipt-tracked transaction support", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -783,27 +629,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("fails closed when ui.transactions.requestSendTransactionApproval lacks receipt-tracked transaction support", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -868,27 +696,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         }) satisfies TransactionRequest,
     );
 
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -956,28 +766,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("rejects extension handlers that override common UI methods", () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     const overrideResolveExtension = {
@@ -997,28 +788,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("rejects conflicting UI methods across extensions", () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     const firstActivationExtension = {
@@ -1055,27 +827,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         }) satisfies TransactionRequest,
     );
 
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
       namespaces: {
         manifests: [
           {
@@ -1167,28 +921,9 @@ describe("createBackgroundRuntime (no snapshots)", () => {
   });
 
   it("propagates transaction approval creation errors to the UI handler", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: {
-        port: new MemoryChainDefinitionsPort([toRegistryEntity(MAINNET_CHAIN, 0)]),
-        seed: [MAINNET_CHAIN],
-      },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: {
-        env: {
-          isInternalOrigin: () => false,
-          shouldRequestUnlockAttention: () => false,
-        },
-      },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      store: {
-        ports: {
-          permissions: new MemoryPermissionsPort(),
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-        },
-      },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
     });
 
     await runtime.lifecycle.initialize();

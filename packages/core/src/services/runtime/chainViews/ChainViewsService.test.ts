@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChainMetadata } from "../../../chains/metadata.js";
 import { ApprovalKinds } from "../../../controllers/approval/types.js";
-import { CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION, type ChainDefinitionEntity } from "../../../storage/index.js";
 import { createChainViewsService } from "./ChainViewsService.js";
 
 const MAINNET: ChainMetadata = {
@@ -43,15 +42,6 @@ const SOLANA: ChainMetadata = {
   rpcEndpoints: [{ url: "https://rpc.solana.example", type: "public" }],
 };
 
-const toEntity = (metadata: ChainMetadata): ChainDefinitionEntity => ({
-  chainRef: metadata.chainRef,
-  namespace: metadata.namespace,
-  metadata,
-  schemaVersion: CHAIN_DEFINITION_ENTITY_SCHEMA_VERSION,
-  updatedAt: 0,
-  source: "builtin",
-});
-
 const setup = (params?: {
   known?: ChainMetadata[];
   available?: ChainMetadata[];
@@ -63,9 +53,26 @@ const setup = (params?: {
   const selectedNamespace = params?.selectedNamespace ?? MAINNET.namespace;
 
   return createChainViewsService({
-    chainDefinitions: {
-      getState: () => ({ chains: known.map(toEntity) }),
-      getChain: (chainRef: string) => known.map(toEntity).find((entry) => entry.chainRef === chainRef) ?? null,
+    supportedChains: {
+      getState: () => ({
+        chains: known.map((metadata) => ({
+          chainRef: metadata.chainRef,
+          namespace: metadata.namespace,
+          metadata,
+          source: "builtin" as const,
+        })),
+      }),
+      getChain: (chainRef: string) => {
+        const metadata = known.find((entry) => entry.chainRef === chainRef);
+        return metadata
+          ? {
+              chainRef: metadata.chainRef,
+              namespace: metadata.namespace,
+              metadata,
+              source: "builtin" as const,
+            }
+          : null;
+      },
     } as never,
     network: {
       getState: () => ({
@@ -74,9 +81,9 @@ const setup = (params?: {
         rpc: {},
       }),
     } as never,
-    preferences: {
+    selection: {
       getSelectedNamespace: () => selectedNamespace,
-      getActiveChainRef: (namespace: string) => params?.activeByNamespace?.[namespace] ?? null,
+      getSelectedChainRef: (namespace: string) => params?.activeByNamespace?.[namespace] ?? null,
     } as never,
   });
 };
@@ -110,7 +117,7 @@ describe("ChainViewsService", () => {
     expect(service.getActiveChainViewForNamespace("eip155")).toMatchObject({ chainRef: MAINNET.chainRef });
   });
 
-  it("builds provider meta from namespace-specific active preferences", () => {
+  it("builds provider meta from namespace-specific selection", () => {
     const service = setup({
       available: [MAINNET, SOLANA],
       selectedNamespace: SOLANA.namespace,

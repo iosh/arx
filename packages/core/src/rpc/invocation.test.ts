@@ -7,8 +7,8 @@ import { RpcRegistry } from "./RpcRegistry.js";
 const makeControllers = (activeChainByNamespace?: Record<string, string>): HandlerControllers => {
   return {
     network: {} as never,
-    networkPreferences: {
-      getActiveChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
+    networkSelection: {
+      getSelectedChainRef: (namespace: string) => activeChainByNamespace?.[namespace] ?? null,
     },
   } as unknown as HandlerControllers;
 };

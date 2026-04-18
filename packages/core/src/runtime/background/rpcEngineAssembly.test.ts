@@ -6,9 +6,9 @@ import { eip155NamespaceManifest } from "../../namespaces/index.js";
 import { ApprovalRequirements, AuthorizedScopeChecks, ConnectionRequirements } from "../../rpc/handlers/types.js";
 import {
   MemoryAccountsPort,
-  MemoryChainDefinitionsPort,
+  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
@@ -45,23 +45,29 @@ const createPendingRes = (): PendingJsonRpcResponse<Json> => ({
 type PendingResWithUnknownError = Omit<PendingJsonRpcResponse<Json>, "error"> & { error?: unknown };
 const TEST_NAMESPACE_MANIFESTS = [eip155NamespaceManifest] as const;
 
+const createTestRuntime = () => {
+  const customChainsPort = new MemoryCustomChainsPort();
+  return createBackgroundRuntime({
+    supportedChains: { port: customChainsPort },
+    namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
+    rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
+    networkSelection: { port: new MemoryNetworkSelectionPort() },
+    settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
+    store: {
+      ports: {
+        customChains: customChainsPort,
+        transactions: new MemoryTransactionsPort(),
+        accounts: new MemoryAccountsPort(),
+        keyringMetas: new MemoryKeyringMetasPort(),
+        permissions: new MemoryPermissionsPort(),
+      },
+    },
+  });
+};
+
 describe("background rpc engine assembly", () => {
   it("assembles engine only once (symbol idempotency)", () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     const pushSpy = vi.spyOn(runtime.rpc.engine, "push");
 
@@ -81,28 +87,14 @@ describe("background rpc engine assembly", () => {
   });
 
   it("encodes existing res.error (error boundary)", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     const middlewares = createBackgroundRpcMiddlewares(runtime, {
       isInternalOrigin: () => false,
     });
     const errorBoundary = middlewares[0];
     if (!errorBoundary) throw new Error("Expected errorBoundary middleware");
-    const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
+    const chainRef = runtime.services.networkSelection.getSelectedChainRef("eip155") ?? "eip155:1";
 
     const req = {
       method: "eth_chainId",
@@ -129,21 +121,7 @@ describe("background rpc engine assembly", () => {
   });
 
   it("does not consult global active chain when namespace cannot be inferred", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     const getStateSpy = vi.spyOn(runtime.controllers.network, "getState");
 
@@ -177,21 +155,7 @@ describe("background rpc engine assembly", () => {
   });
 
   it("uses provider binding for best-effort namespace encoding when explicit namespace is absent", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     const encodeSpy = vi.spyOn(runtime.surfaceErrors, "encodeDapp");
     const middlewares = createBackgroundRpcMiddlewares(runtime, {
@@ -229,21 +193,7 @@ describe("background rpc engine assembly", () => {
   });
 
   it("respects shouldRequestUnlockAttention hook", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     const attentionSpy = vi.spyOn(runtime.services.attention, "requestAttention");
 
@@ -261,7 +211,7 @@ describe("background rpc engine assembly", () => {
     }
     engine.push((_req, _res, _next, end) => end());
 
-    const chainRef = runtime.services.networkPreferences.getActiveChainRef("eip155") ?? "eip155:1";
+    const chainRef = runtime.services.networkSelection.getSelectedChainRef("eip155") ?? "eip155:1";
     await expect(
       new Promise<void>((resolve, reject) => {
         engine.handle(
@@ -287,21 +237,7 @@ describe("background rpc engine assembly", () => {
   });
 
   it("preserves PermissionNotConnected semantics for connection-required methods", async () => {
-    const runtime = createBackgroundRuntime({
-      chainDefinitions: { port: new MemoryChainDefinitionsPort() },
-      namespaces: { manifests: TEST_NAMESPACE_MANIFESTS },
-      rpcEngine: { env: { isInternalOrigin: () => false }, assemble: false },
-      networkPreferences: { port: new MemoryNetworkPreferencesPort() },
-      settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
-      store: {
-        ports: {
-          transactions: new MemoryTransactionsPort(),
-          accounts: new MemoryAccountsPort(),
-          keyringMetas: new MemoryKeyringMetasPort(),
-          permissions: new MemoryPermissionsPort(),
-        },
-      },
-    });
+    const runtime = createTestRuntime();
 
     runtime.rpc.registry.registerNamespaceDefinitions(
       "eip155",

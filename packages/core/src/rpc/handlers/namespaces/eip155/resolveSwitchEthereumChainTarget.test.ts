@@ -32,7 +32,7 @@ const SOLANA: ChainMetadata = {
 
 const setup = (available: ChainMetadata[]) => {
   return {
-    chainDefinitions: {
+    supportedChains: {
       getChain: (chainRef: string) => {
         const metadata = available.find((chain) => chain.chainRef === chainRef);
         return metadata ? { metadata } : null;

@@ -450,8 +450,8 @@ export const createProviderPortServer = ({
         );
 
         subscriptions.push(
-          activeProvider.subscribeNetworkPreferencesChanged(() => {
-            void enqueueProjection("network_preferences_changed", async () => {
+          activeProvider.subscribeNetworkSelectionChanged(() => {
+            void enqueueProjection("network_selection_changed", async () => {
               await reconcileNamespaces(collectRelevantNamespaces());
             });
           }),

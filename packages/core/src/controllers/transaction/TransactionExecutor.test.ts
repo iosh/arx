@@ -83,10 +83,10 @@ describe("TransactionExecutor", () => {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
       accountCodecs,
-      networkPreferences: {
-        getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      networkSelection: {
+        getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,
-      chainDefinitions: {
+      supportedChains: {
         getChain: () => null,
       } as never,
       accounts: {
@@ -201,10 +201,10 @@ describe("TransactionExecutor", () => {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
       accountCodecs: createAccountCodecRegistry([eip155Codec]),
-      networkPreferences: {
-        getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      networkSelection: {
+        getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,
-      chainDefinitions: {
+      supportedChains: {
         getChain: () => null,
       } as never,
       accounts: {
@@ -308,10 +308,10 @@ describe("TransactionExecutor", () => {
         commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
       } as never,
       accountCodecs: createAccountCodecRegistry([eip155Codec]),
-      networkPreferences: {
-        getActiveChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      networkSelection: {
+        getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
       } as never,
-      chainDefinitions: {
+      supportedChains: {
         getChain: () => null,
       } as never,
       accounts: {
@@ -447,10 +447,10 @@ describe("TransactionExecutor", () => {
         commitRecord,
       } as never,
       accountCodecs,
-      networkPreferences: {
-        getActiveChainRef: () => chainRef,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
       } as never,
-      chainDefinitions: {
+      supportedChains: {
         getChain: () => null,
       } as never,
       accounts: {
@@ -555,10 +555,10 @@ describe("TransactionExecutor", () => {
         commitRecord,
       } as never,
       accountCodecs,
-      networkPreferences: {
-        getActiveChainRef: () => chainRef,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
       } as never,
-      chainDefinitions: {
+      supportedChains: {
         getChain: () => null,
       } as never,
       accounts: {

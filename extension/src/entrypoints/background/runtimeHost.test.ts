@@ -57,7 +57,7 @@ const makeRuntime = () => {
   const onUnlocked = vi.fn(() => vi.fn());
   const onLocked = vi.fn(() => vi.fn());
   const onUnlockStateChanged = vi.fn(() => vi.fn());
-  const subscribeNetworkPreferencesChanged = vi.fn(() => vi.fn());
+  const subscribeNetworkSelectionChanged = vi.fn(() => vi.fn());
   const unsubscribeBus = vi.fn();
   const subscribe = vi.fn(() => unsubscribeBus);
   const providerSnapshot = {
@@ -79,7 +79,7 @@ const makeRuntime = () => {
     subscribeSessionUnlocked: onUnlocked,
     subscribeSessionLocked: onLocked,
     subscribeNetworkStateChanged: onNetworkStateChanged,
-    subscribeNetworkPreferencesChanged: subscribeNetworkPreferencesChanged,
+    subscribeNetworkSelectionChanged,
     subscribeAccountsStateChanged: onAccountsStateChanged,
     subscribePermissionsStateChanged: onPermissionsStateChanged,
     connect: vi.fn(() => ({
@@ -136,9 +136,9 @@ const makeRuntime = () => {
       },
       permissionViews: {},
       accountCodecs: {},
-      networkPreferences: {
-        getActiveChainByNamespace: () => ({ eip155: "eip155:1" }),
-        subscribeChanged: subscribeNetworkPreferencesChanged,
+      networkSelection: {
+        getChainRefByNamespace: () => ({ eip155: "eip155:1" }),
+        subscribeChanged: subscribeNetworkSelectionChanged,
       },
       session: {
         vault: {
@@ -197,7 +197,7 @@ const makeRuntime = () => {
     onUnlocked,
     onLocked,
     onUnlockStateChanged,
-    subscribeNetworkPreferencesChanged,
+    subscribeNetworkSelectionChanged,
   };
 };
 
@@ -227,10 +227,11 @@ describe("runtimeHost", () => {
         keyringMetas: {},
         permissions: {},
         transactions: {},
-        networkPreferences: {},
+        customChains: {},
+        customRpc: {},
+        networkSelection: {},
         vaultMeta: {},
         settings: {},
-        chainDefinitions: {},
       },
     });
   });

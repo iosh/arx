@@ -9,8 +9,9 @@ import { ApprovalKinds, type ApprovalRecord } from "../../../../../controllers/i
 import {
   FakeVault,
   MemoryAccountsPort,
+  MemoryCustomChainsPort,
   MemoryKeyringMetasPort,
-  MemoryNetworkPreferencesPort,
+  MemoryNetworkSelectionPort,
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
@@ -44,25 +45,15 @@ export const TEST_MNEMONIC = "test test test test test test test test test test 
 
 export const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-export const createChainDefinitionsPort = () => ({
-  async get() {
-    return null;
-  },
-  async getAll() {
-    return [];
-  },
-  async put() {},
-  async putMany() {},
-  async delete() {},
-  async clear() {},
-});
+export const createCustomChainsPort = () => new MemoryCustomChainsPort();
 
 export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgroundRuntime>[0]>) => {
-  const { chainDefinitions, session, networkPreferences, rpcEngine, ...rest } = overrides ?? {};
+  const { supportedChains, session, networkSelection, rpcEngine, store, ...rest } = overrides ?? {};
+  const customChainsPort = supportedChains?.port ?? store?.ports.customChains ?? createCustomChainsPort();
   const runtime = createBackgroundRuntime({
-    chainDefinitions: {
-      port: createChainDefinitionsPort(),
-      ...(chainDefinitions ?? {}),
+    supportedChains: {
+      port: customChainsPort,
+      ...(supportedChains ?? {}),
     },
     namespaces: {
       manifests: TEST_NAMESPACE_MANIFESTS,
@@ -75,15 +66,18 @@ export const createRuntime = (overrides?: Partial<Parameters<typeof createBackgr
           shouldRequestUnlockAttention: () => false,
         },
       } as const),
-    networkPreferences: networkPreferences ?? { port: new MemoryNetworkPreferencesPort() },
+    networkSelection: networkSelection ?? { port: new MemoryNetworkSelectionPort() },
     settings: { port: new MemorySettingsPort({ id: "settings", updatedAt: 0 }) },
     store: {
       ports: {
+        customChains: customChainsPort,
         permissions: new MemoryPermissionsPort(),
         transactions: new MemoryTransactionsPort(),
         accounts: new MemoryAccountsPort(),
         keyringMetas: new MemoryKeyringMetasPort(),
+        ...(store?.ports ?? {}),
       },
+      ...(store ? { ...store, ports: { customChains: customChainsPort, ...store.ports } } : {}),
     },
     session: {
       vault: new FakeVault(() => Date.now()),
@@ -103,7 +97,7 @@ type TestAccountsController = TestRuntime["controllers"]["accounts"] & {
 };
 
 export const getChainMetadata = (runtime: TestRuntime, chainRef: ChainRef): ChainMetadata | null => {
-  return runtime.controllers.chainDefinitions.getChain(chainRef)?.metadata ?? null;
+  return runtime.controllers.supportedChains.getChain(chainRef)?.metadata ?? null;
 };
 
 export const getActiveChainMetadata = (runtime: TestRuntime): ChainMetadata => {
@@ -189,7 +183,7 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
   return async (args: Parameters<typeof executeRequest>[0]) => {
     const chainRef =
       args.context?.chainRef ??
-      runtime.services.networkPreferences.getActiveChainRef("eip155") ??
+      runtime.services.networkSelection.getSelectedChainRef("eip155") ??
       runtime.services.chainViews.getSelectedChainView().chainRef;
     const ctx = args.context ?? {};
     const context = {

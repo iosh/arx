@@ -1,10 +1,6 @@
 import "fake-indexeddb/auto";
 
-import {
-  NetworkPreferencesRecordSchema,
-  VAULT_META_SNAPSHOT_VERSION,
-  VaultMetaSnapshotSchema,
-} from "@arx/core/storage";
+import { NetworkSelectionRecordSchema, VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieStorage } from "./createDexieStorage.js";
@@ -30,17 +26,14 @@ afterEach(async () => {
 });
 
 describe("@arx/storage-dexie", () => {
-  it("NetworkPreferencesPort roundtrips", async () => {
+  it("NetworkSelectionPort roundtrips", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
-    const port = storage.ports.networkPreferences;
+    const port = storage.ports.networkSelection;
 
-    const record = NetworkPreferencesRecordSchema.parse({
-      id: "network-preferences",
+    const record = NetworkSelectionRecordSchema.parse({
+      id: "network-selection",
       selectedNamespace: "eip155",
-      activeChainByNamespace: { eip155: "eip155:1" },
-      rpc: {
-        "eip155:1": { activeIndex: 0, strategy: { id: "round-robin" } },
-      },
+      chainRefByNamespace: { eip155: "eip155:1" },
       updatedAt: 1_000,
     });
 

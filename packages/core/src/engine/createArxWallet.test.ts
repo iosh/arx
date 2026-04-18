@@ -35,7 +35,6 @@ const ACCOUNT_KEY = toAccountKeyFromAddress({
 const KEYRING_ID = "11111111-1111-4111-8111-111111111111";
 const PROVIDER_PORT_ID = "provider-port";
 const PROVIDER_SESSION_ID = "11111111-1111-4111-8111-111111111111";
-const PROVIDER_REQUEST_ID = "provider-request";
 
 const createWalletInput = (params?: {
   modules?: readonly WalletNamespaceModule[];
@@ -98,15 +97,14 @@ const createUiPlatform = () => ({
   openNotificationPopup: vi.fn(async () => ({ activationPath: "focus" as const })),
 });
 
-const createProviderRpcContext = (requestId: string = PROVIDER_REQUEST_ID) => ({
+const createProviderRpcContext = () => ({
   chainRef: EIP155_CHAIN_REF,
   providerNamespace: EIP155_NAMESPACE,
-  requestContext: {
+  requestScope: {
     transport: "provider" as const,
+    origin: ORIGIN,
     portId: PROVIDER_PORT_ID,
     sessionId: PROVIDER_SESSION_ID,
-    requestId,
-    origin: ORIGIN,
   },
 });
 
@@ -742,7 +740,7 @@ describe("createArxWallet", () => {
           jsonrpc: "2.0",
           method: "eth_accounts",
           origin: ORIGIN,
-          context: createProviderRpcContext("rpc-accounts-locked"),
+          context: createProviderRpcContext(),
         }),
       ).resolves.toMatchObject({
         id: "rpc-accounts-locked",
@@ -754,7 +752,7 @@ describe("createArxWallet", () => {
         provider.encodeRpcError(arxError({ reason: ArxReasons.PermissionDenied, message: "denied" }), {
           origin: ORIGIN,
           method: "eth_sendTransaction",
-          rpcContext: createProviderRpcContext("rpc-encode"),
+          rpcContext: createProviderRpcContext(),
         }),
       ).toMatchObject({
         code: 4100,

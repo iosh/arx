@@ -95,7 +95,7 @@ const makeRuntime = () => {
     disconnectOrigin: vi.fn(() => 0),
     executeRpcRequest: vi.fn(),
     encodeRpcError: vi.fn(),
-    cancelSessionApprovals: vi.fn(async () => 0),
+    cancelRequestScope: vi.fn(async () => 0),
   };
   const createUiAccess = vi.fn();
   const createProvider = vi.fn(() => provider);

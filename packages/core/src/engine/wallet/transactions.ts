@@ -6,8 +6,8 @@ export const createWalletTransactions = (deps: { transactions: TransactionContro
 
   return {
     getMeta: (id) => transactions.getMeta(id),
-    beginTransactionApproval: (request, requestContext) =>
-      transactions.beginTransactionApproval(request, requestContext),
+    beginTransactionApproval: (request, requestContext, options) =>
+      transactions.beginTransactionApproval(request, requestContext, options),
     waitForTransactionSubmission: (id) => transactions.waitForTransactionSubmission(id),
     approveTransaction: (id) => transactions.approveTransaction(id),
     rejectTransaction: (id, reason) => transactions.rejectTransaction(id, reason),

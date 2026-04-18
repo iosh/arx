@@ -1,11 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { isDomainError, isRpcError } from "../utils.js";
-import { defineEip155NoParamsApprovalMethod, requireRequestContext } from "./shared.js";
+import { defineEip155NoParamsApprovalMethod, requestProviderApproval } from "./shared.js";
 
 export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
   requestKind: RpcRequestKinds.AccountAccess,
@@ -19,20 +18,16 @@ export const ethRequestAccountsDefinition = defineEip155NoParamsApprovalMethod({
       .map((account) => account.displayAddress);
 
     try {
-      return await requestApproval(
-        {
-          approvals: controllers.approvals,
-          now: controllers.clock.now,
+      return await requestProviderApproval({
+        controllers,
+        rpcContext,
+        method: "eth_requestAccounts",
+        kind: ApprovalKinds.RequestAccounts,
+        request: {
+          chainRef,
+          suggestedAccounts: [...suggested],
         },
-        {
-          kind: ApprovalKinds.RequestAccounts,
-          requestContext: requireRequestContext(rpcContext, "eth_requestAccounts"),
-          request: {
-            chainRef,
-            suggestedAccounts: [...suggested],
-          },
-        },
-      ).settled;
+      }).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

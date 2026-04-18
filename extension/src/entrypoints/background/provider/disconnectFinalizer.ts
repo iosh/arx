@@ -20,7 +20,7 @@ type ProviderDisconnectFinalizerDeps = {
   postEnvelope: (port: Runtime.Port, envelope: Envelope) => boolean;
   releaseBinding: (port: Runtime.Port) => { binding: ProviderBinding; bindingBecameInactive: boolean } | null;
   removePortState: (port: Runtime.Port) => void;
-  cancelApprovalsForSession: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
+  cancelRequestScope: (port: Runtime.Port, sessionId: string, logReason: string) => Promise<void>;
   portLog: (message: string, details?: Record<string, unknown>) => void;
 };
 
@@ -36,7 +36,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
     postEnvelope,
     releaseBinding,
     removePortState,
-    cancelApprovalsForSession,
+    cancelRequestScope,
     portLog,
   } = deps;
 
@@ -113,7 +113,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   };
 
   const finalizeSessionRotation = (port: Runtime.Port, sessionId: string) => {
-    void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on session rotation");
+    void cancelRequestScope(port, sessionId, "failed to expire request scope on session rotation");
 
     try {
       rejectPendingWithDisconnectForSession(port, sessionId);
@@ -126,7 +126,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const dropStalePort = (port: Runtime.Port, reason: string, error?: unknown) => {
     const sessionId = getSessionIdForPort(port);
     if (sessionId) {
-      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on stale port");
+      void cancelRequestScope(port, sessionId, "failed to expire request scope on stale port");
     }
 
     cleanupPortState(port);
@@ -139,7 +139,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
   const finalizePortDisconnect = (port: Runtime.Port) => {
     const sessionId = getSessionIdForPort(port);
     if (sessionId) {
-      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on disconnect");
+      void cancelRequestScope(port, sessionId, "failed to expire request scope on disconnect");
     }
 
     try {
@@ -166,7 +166,7 @@ export const createProviderDisconnectFinalizer = (deps: ProviderDisconnectFinali
       const origin = getPortOrigin(port, extensionOrigin);
       const namespace = deriveRpcContextNamespace(rpcContext);
 
-      void cancelApprovalsForSession(port, sessionId, "failed to expire approvals on provider disconnect");
+      void cancelRequestScope(port, sessionId, "failed to expire request scope on provider disconnect");
 
       rejectPendingWithDisconnectForSession(port, sessionId, error);
 

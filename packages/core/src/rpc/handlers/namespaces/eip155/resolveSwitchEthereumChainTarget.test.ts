@@ -45,7 +45,7 @@ const setup = (available: ChainMetadata[]) => {
 };
 
 describe("resolveSwitchEthereumChainTarget", () => {
-  it("resolves mounted eip155 chains by chainId or chainRef", () => {
+  it("resolves mounted eip155 chains by chainId", () => {
     const deps = setup([MAINNET, BASE]);
 
     expect(
@@ -55,15 +55,6 @@ describe("resolveSwitchEthereumChainTarget", () => {
       }),
     ).toMatchObject({
       chainRef: BASE.chainRef,
-    });
-
-    expect(
-      resolveSwitchEthereumChainTarget({
-        ...deps,
-        chainRef: MAINNET.chainRef,
-      }),
-    ).toMatchObject({
-      chainId: MAINNET.chainId,
     });
   });
 
@@ -84,7 +75,7 @@ describe("resolveSwitchEthereumChainTarget", () => {
     try {
       resolveSwitchEthereumChainTarget({
         ...deps,
-        chainRef: SOLANA.chainRef,
+        chainId: SOLANA.chainId,
       });
       throw new Error("Expected namespace mismatch to throw");
     } catch (error) {

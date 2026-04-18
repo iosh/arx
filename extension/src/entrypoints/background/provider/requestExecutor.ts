@@ -1,7 +1,7 @@
 import type { WalletProvider } from "@arx/core/engine";
 import type { JsonRpcParams } from "@arx/core/rpc";
 import type {
-  ProviderRuntimeRequestContext,
+  ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
 } from "@arx/core/runtime";
@@ -43,19 +43,18 @@ export const createProviderRequestExecutor = (deps: ProviderRequestExecutorDeps)
     const rpcContext = buildRpcContext(portContext);
     const portId = getOrCreatePortId(port);
 
-    const requestContext: ProviderRuntimeRequestContext = {
+    const requestScope: ProviderRuntimeRequestScope = {
       transport: "provider" as const,
+      origin,
       portId,
       sessionId: envelope.sessionId,
-      requestId: String(rpcId),
-      origin,
     };
     const context: ProviderRuntimeRpcContext | undefined = rpcContext
       ? {
           ...(rpcContext.providerNamespace !== undefined ? { providerNamespace: rpcContext.providerNamespace } : {}),
-          requestContext,
+          requestScope,
         }
-      : undefined;
+      : { requestScope };
 
     const request: ProviderRuntimeRpcRequest = {
       id: envelope.payload.id,

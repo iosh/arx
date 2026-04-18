@@ -27,6 +27,7 @@ import {
 } from "../runtime/background/runtimeScopes.js";
 import type { SessionOptions } from "../runtime/background/session.js";
 import { createProviderRuntimeAccess } from "../runtime/provider/createProviderRuntimeAccess.js";
+import { createProviderRequests } from "../runtime/provider/providerRequests.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { UiError } from "../ui/protocol/envelopes.js";
@@ -396,6 +397,13 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     createRpcEngineForBackground(engineRuntime, runtimeRpcEnv);
   }
 
+  const providerRequests = createProviderRequests({
+    generateId: input.env?.randomUuid ?? (() => globalThis.crypto.randomUUID()),
+    now: bootstrapScope.storageNow,
+    cancelApproval: async (input) => {
+      await sessionScope.controllersBase.approvals.cancel(input);
+    },
+  });
   const providerAccess = createProviderRuntimeAccess({
     getSessionStatus: () => sessionScope.sessionStatus.getStatus(),
     getActiveChainViewForNamespace: (namespace) => sessionScope.chainViews.getActiveChainViewForNamespace(namespace),
@@ -407,16 +415,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     resolveMethodNamespace,
     handleRpcRequest: (request, callback) => sessionScope.engine.handle(request, callback),
     encodeDappError: (error, context) => surfaceErrorEncoder.encodeDapp(error, context) as JsonRpcError,
-    cancelSessionApprovals: async (input) =>
-      await sessionScope.controllersBase.approvals.cancelByScope({
-        scope: {
-          transport: "provider",
-          origin: input.origin,
-          portId: input.portId,
-          sessionId: input.sessionId,
-        },
-        reason: "session_lost",
-      }),
+    providerRequests,
     subscribeSessionUnlocked: (listener) => sessionScope.sessionLayer.session.unlock.onUnlocked(listener),
     subscribeSessionLocked: (listener) => sessionScope.sessionLayer.session.unlock.onLocked(listener),
     subscribeNetworkStateChanged: (listener) => sessionScope.controllersBase.network.onStateChanged(listener),

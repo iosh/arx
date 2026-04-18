@@ -197,6 +197,24 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
           requestId: "test-request",
           origin: args.origin,
         } as const),
+      providerRequestHandle:
+        ctx.providerRequestHandle ??
+        ({
+          id: (ctx.requestContext?.requestId ?? "test-request") as string,
+          providerNamespace: "eip155",
+          attachBlockingApproval: <T>(
+            createApproval: (reservation: { id: string; createdAt: number }) => T,
+            reservation?: Partial<{ id: string; createdAt: number }>,
+          ) =>
+            createApproval({
+              id: reservation?.id ?? "test-request-approval",
+              createdAt: reservation?.createdAt ?? 0,
+            }),
+          fulfill: () => true,
+          reject: () => true,
+          cancel: async () => true,
+          getTerminalError: () => null,
+        } as const),
     };
     const result = await runtime.surfaceErrors.executeWithEncoding(
       {

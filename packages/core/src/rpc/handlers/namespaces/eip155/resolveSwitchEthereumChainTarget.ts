@@ -4,8 +4,7 @@ import type { ChainRef } from "../../../../chains/ids.js";
 import { type ChainMetadata, cloneChainMetadata } from "../../../../chains/metadata.js";
 
 export type ResolveSwitchEthereumChainTargetParams = {
-  chainId?: string;
-  chainRef?: string;
+  chainId: string;
 };
 
 type SwitchEthereumChainTargetDeps = {
@@ -39,19 +38,12 @@ export const resolveSwitchEthereumChainTarget = ({
   supportedChains,
   network,
   chainId,
-  chainRef,
 }: ResolveSwitchEthereumChainTargetDeps): ChainMetadata => {
   const availableChains = listAvailableChainMetadata({ supportedChains, network });
   const target = availableChains.find((item) => {
-    if (chainRef && item.chainRef === (chainRef as ChainRef)) {
+    const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
+    if (candidateChainId && candidateChainId === chainId) {
       return true;
-    }
-
-    if (chainId) {
-      const candidateChainId = typeof item.chainId === "string" ? item.chainId.toLowerCase() : null;
-      if (candidateChainId && candidateChainId === chainId) {
-        return true;
-      }
     }
 
     return false;
@@ -59,8 +51,7 @@ export const resolveSwitchEthereumChainTarget = ({
 
   if (!target) {
     throw chainErrors.notFound({
-      ...(chainId ? { chainId } : {}),
-      ...(chainRef ? { chainRef } : {}),
+      chainId,
     });
   }
 

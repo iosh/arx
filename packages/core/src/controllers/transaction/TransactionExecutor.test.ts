@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../../accounts/addressing/accountKey.js";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
@@ -73,6 +74,7 @@ describe("TransactionExecutor", () => {
     const queuePrepare = vi.fn();
     let settleApproval: ((value: TransactionMeta) => void) | null = null;
     const createApproval = vi.fn(() => ({
+      id: REQUEST_ID,
       settled: new Promise<TransactionMeta>((resolve) => {
         settleApproval = resolve;
       }),
@@ -161,6 +163,289 @@ describe("TransactionExecutor", () => {
     );
   });
 
+  it("attaches provider-scoped transaction approvals through the provider request handle", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+
+    const createdRecord: TransactionRecord = {
+      id: REQUEST_ID,
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      fromAccountKey: accountKey,
+      status: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+          chainId: "0xa",
+        },
+      },
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const createPending = vi.fn(async () => createdRecord);
+    const queuePrepare = vi.fn();
+    const createApproval = vi.fn(() => ({
+      id: REQUEST_ID,
+      settled: Promise.resolve(toMeta(createdRecord, from)),
+    }));
+    const attachBlockingApproval = vi.fn(
+      <T>(
+        createLinkedApproval: (reservation: { id: string; createdAt: number }) => T,
+        reservation?: Partial<{ id: string; createdAt: number }>,
+      ) =>
+        createLinkedApproval({
+          id: reservation?.id ?? "unexpected-approval-id",
+          createdAt: reservation?.createdAt ?? 0,
+        }),
+    );
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: (record: TransactionRecord) => ({ next: toMeta(record, from) }),
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountKey,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: createApproval,
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare,
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const handoff = await executor.beginTransactionApproval(
+      {
+        namespace: "eip155",
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      REQUEST_CONTEXT,
+      {
+        providerRequestHandle: {
+          id: REQUEST_CONTEXT.requestId,
+          providerNamespace: "eip155",
+          attachBlockingApproval,
+          fulfill: () => true,
+          reject: () => true,
+          cancel: async () => true,
+          getTerminalError: () => null,
+        },
+      },
+    );
+    randomUuidSpy.mockRestore();
+
+    expect(handoff.approvalId).toBe(REQUEST_ID);
+    expect(attachBlockingApproval).toHaveBeenCalledTimes(1);
+    expect(attachBlockingApproval).toHaveBeenCalledWith(expect.any(Function), {
+      id: REQUEST_ID,
+      createdAt: createdRecord.createdAt,
+    });
+    expect(createApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: REQUEST_ID,
+        createdAt: createdRecord.createdAt,
+        origin: REQUEST_CONTEXT.origin,
+      }),
+      expect.objectContaining({
+        origin: REQUEST_CONTEXT.origin,
+        requestId: REQUEST_CONTEXT.requestId,
+      }),
+    );
+  });
+
+  it("fails the pending transaction if provider scope is lost before approval attach completes", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+
+    const createdRecord: TransactionRecord = {
+      id: REQUEST_ID,
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      fromAccountKey: accountKey,
+      status: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+          chainId: "0xa",
+        },
+      },
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const failedRecord: TransactionRecord = {
+      ...createdRecord,
+      status: "failed",
+      updatedAt: 2,
+      error: {
+        name: "ArxError",
+        message: "Transport disconnected.",
+      },
+    };
+
+    const transition = vi.fn(async () => failedRecord);
+    const queuePrepare = vi.fn();
+    const tracking = {
+      stop: vi.fn(),
+      handleTransition: vi.fn(),
+    };
+    const createApproval = vi.fn();
+    const attachFailure = arxError({
+      reason: ArxReasons.TransportDisconnected,
+      message: "Transport disconnected.",
+    });
+    const commitRecord = vi.fn((record: TransactionRecord) => {
+      if (record.status === "failed") {
+        return {
+          previous: toMeta(createdRecord, from),
+          next: {
+            ...toMeta(failedRecord, from),
+            error: failedRecord.error ?? null,
+          },
+        };
+      }
+
+      return { next: toMeta(record, from) };
+    });
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord,
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountKey,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: createApproval,
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        createPending: vi.fn(async () => createdRecord),
+        get: vi.fn(async () => createdRecord),
+        transition,
+      } as never,
+      prepare: {
+        queuePrepare,
+      } as never,
+      tracking: tracking as never,
+      now: () => 1,
+    });
+
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    await expect(
+      executor.beginTransactionApproval(
+        {
+          namespace: "eip155",
+          payload: {
+            from,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        REQUEST_CONTEXT,
+        {
+          providerRequestHandle: {
+            id: REQUEST_CONTEXT.requestId,
+            providerNamespace: "eip155",
+            attachBlockingApproval: () => {
+              throw attachFailure;
+            },
+            fulfill: () => true,
+            reject: () => true,
+            cancel: async () => true,
+            getTerminalError: () => attachFailure,
+          },
+        },
+      ),
+    ).rejects.toBe(attachFailure);
+    randomUuidSpy.mockRestore();
+
+    expect(createApproval).not.toHaveBeenCalled();
+    expect(queuePrepare).not.toHaveBeenCalled();
+    expect(transition).toHaveBeenCalledWith({
+      id: REQUEST_ID,
+      fromStatus: "pending",
+      toStatus: "failed",
+      patch: {
+        error: expect.objectContaining({
+          message: "Transport disconnected.",
+        }),
+        userRejected: false,
+      },
+    });
+    expect(tracking.stop).toHaveBeenCalledWith(REQUEST_ID);
+    expect(tracking.handleTransition).toHaveBeenCalledTimes(1);
+  });
+
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -219,7 +504,7 @@ describe("TransactionExecutor", () => {
         ],
       } as never,
       approvals: {
-        create: () => ({ settled: Promise.resolve(approvalResult) }),
+        create: () => ({ id: REQUEST_ID, settled: Promise.resolve(approvalResult) }),
       } as never,
       registry: {
         get: () => undefined,
@@ -326,7 +611,7 @@ describe("TransactionExecutor", () => {
         ],
       } as never,
       approvals: {
-        create: () => ({ settled: Promise.resolve(approvalResult) }),
+        create: () => ({ id: REQUEST_ID, settled: Promise.resolve(approvalResult) }),
       } as never,
       registry: {
         get: () => ({
@@ -599,5 +884,187 @@ describe("TransactionExecutor", () => {
         userRejected: true,
       },
     });
+  });
+
+  it("keeps retrying rejection until a concurrent status progression reaches a writable state", async () => {
+    const id = "44444444-4444-4444-8444-444444444444";
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+
+    const pendingRecord: TransactionRecord = {
+      id,
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      fromAccountKey: accountKey,
+      status: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          data: "0x",
+        },
+      },
+      prepared: null,
+      hash: null,
+      userRejected: false,
+      warnings: [],
+      issues: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const approvedRecord: TransactionRecord = {
+      ...pendingRecord,
+      status: "approved",
+      updatedAt: 2,
+    };
+    const signedRecord: TransactionRecord = {
+      ...approvedRecord,
+      status: "signed",
+      prepared: {},
+      updatedAt: 3,
+    };
+    const broadcastRecord: TransactionRecord = {
+      ...signedRecord,
+      status: "broadcast",
+      hash: "0x1234",
+      updatedAt: 4,
+    };
+    const failedRecord: TransactionRecord = {
+      ...broadcastRecord,
+      status: "failed",
+      updatedAt: 5,
+      error: {
+        name: "Error",
+        message: "Transport disconnected.",
+      },
+    };
+
+    const tracking = {
+      stop: vi.fn(),
+      handleTransition: vi.fn(),
+    };
+    const transition = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(failedRecord);
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(pendingRecord)
+      .mockResolvedValueOnce(approvedRecord)
+      .mockResolvedValueOnce(signedRecord)
+      .mockResolvedValueOnce(broadcastRecord);
+    const commitRecord = vi.fn((record: TransactionRecord) => {
+      if (record.status === "failed") {
+        return {
+          previous: toMeta(broadcastRecord, from),
+          next: {
+            ...toMeta(failedRecord, from),
+            error: failedRecord.error ?? null,
+          },
+        };
+      }
+
+      return { next: toMeta(record, from) };
+    });
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord,
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [],
+      } as never,
+      approvals: {
+        create: vi.fn(),
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        get,
+        transition,
+      } as never,
+      prepare: {} as never,
+      tracking: tracking as never,
+      now: () => 1,
+    });
+
+    await executor.rejectTransaction(id, new Error("Transport disconnected."));
+
+    expect(transition.mock.calls).toEqual([
+      [
+        {
+          id,
+          fromStatus: "pending",
+          toStatus: "failed",
+          patch: {
+            error: {
+              name: "Error",
+              message: "Transport disconnected.",
+            },
+            userRejected: false,
+          },
+        },
+      ],
+      [
+        {
+          id,
+          fromStatus: "approved",
+          toStatus: "failed",
+          patch: {
+            error: {
+              name: "Error",
+              message: "Transport disconnected.",
+            },
+            userRejected: false,
+          },
+        },
+      ],
+      [
+        {
+          id,
+          fromStatus: "signed",
+          toStatus: "failed",
+          patch: {
+            error: {
+              name: "Error",
+              message: "Transport disconnected.",
+            },
+            userRejected: false,
+          },
+        },
+      ],
+      [
+        {
+          id,
+          fromStatus: "broadcast",
+          toStatus: "failed",
+          patch: {
+            error: {
+              name: "Error",
+              message: "Transport disconnected.",
+            },
+            userRejected: false,
+          },
+        },
+      ],
+    ]);
+    expect(tracking.stop).toHaveBeenCalledWith(id);
+    expect(tracking.handleTransition).toHaveBeenCalledTimes(1);
   });
 });

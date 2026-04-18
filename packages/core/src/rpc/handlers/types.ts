@@ -9,6 +9,7 @@ import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "..
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
 import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
+import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { RequestContext } from "../requestContext.js";
@@ -44,6 +45,7 @@ export type RpcInvocationContext = {
   namespace?: Namespace | null;
   providerNamespace?: Namespace | null;
   requestContext?: RequestContext | null;
+  providerRequestHandle?: ProviderRequestHandle | null;
   meta?: unknown;
 };
 

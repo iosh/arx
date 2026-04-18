@@ -3,6 +3,9 @@ import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controlle
 import type { JsonRpcError, JsonRpcParams, JsonRpcRequest, JsonRpcResponse } from "../../rpc/index.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
+import type { ProviderRequestHandle, ProviderRuntimeRequestScope } from "./providerRequests.js";
+
+export type { ProviderRuntimeRequestScope } from "./providerRequests.js";
 
 export type ProviderRuntimeMeta = {
   activeChainByNamespace: Record<string, ChainRef>;
@@ -36,7 +39,9 @@ export type ProviderRuntimeRequestContext = RequestContext & {
 export type ProviderRuntimeRpcContext = {
   chainRef?: ChainRef | null;
   providerNamespace?: string | null;
+  requestScope?: ProviderRuntimeRequestScope | null;
   requestContext?: ProviderRuntimeRequestContext | null;
+  providerRequestHandle?: ProviderRequestHandle | null;
 };
 
 export type ProviderRuntimeRpcRequest = JsonRpcRequest<JsonRpcParams> & {
@@ -55,12 +60,6 @@ export type ProviderRuntimeAccountsQuery = {
   chainRef: ChainRef;
 };
 
-export type ProviderRuntimeSessionScope = {
-  origin: string;
-  portId: string;
-  sessionId: string;
-};
-
 export type ProviderRuntimeAccess = {
   buildSnapshot(namespace: string): ProviderRuntimeSnapshot;
   buildConnectionState(input: ProviderRuntimeConnectionQuery): Promise<ProviderRuntimeConnectionState>;
@@ -74,5 +73,5 @@ export type ProviderRuntimeAccess = {
   executeRpcRequest(request: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse>;
   encodeRpcError(error: unknown, context: ProviderRuntimeErrorContext): JsonRpcError;
   listPermittedAccounts(input: ProviderRuntimeAccountsQuery): Promise<string[]>;
-  cancelSessionApprovals(input: ProviderRuntimeSessionScope): Promise<number>;
+  cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
 };

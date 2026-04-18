@@ -1,6 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
+import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
+import type { ApprovalKind, ApprovalRequest } from "../../../../controllers/approval/types.js";
 import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
 import {
   ApprovalRequirements,
@@ -23,6 +25,52 @@ export const requireRequestContext = (rpcContext: RpcInvocationContext | undefin
     });
   }
   return requestContext;
+};
+
+export const requireProviderRequestHandle = (rpcContext: RpcInvocationContext | undefined, method: string) => {
+  const providerRequestHandle = rpcContext?.providerRequestHandle;
+  if (!providerRequestHandle) {
+    throw arxError({
+      reason: ArxReasons.RpcInvalidRequest,
+      message: `Missing provider request lifecycle for ${method}.`,
+      data: { method },
+    });
+  }
+  return providerRequestHandle;
+};
+
+export const requestProviderApproval = <K extends ApprovalKind>(args: {
+  controllers: {
+    approvals: {
+      create: Parameters<typeof requestApproval>[0]["approvals"]["create"];
+    };
+    clock: {
+      now: () => number;
+    };
+  };
+  rpcContext: RpcInvocationContext | undefined;
+  method: string;
+  kind: K;
+  request: ApprovalRequest<K>;
+}) => {
+  const requestContext = requireRequestContext(args.rpcContext, args.method);
+  const providerRequestHandle = requireProviderRequestHandle(args.rpcContext, args.method);
+
+  return providerRequestHandle.attachBlockingApproval(({ id, createdAt }) =>
+    requestApproval(
+      {
+        approvals: args.controllers.approvals,
+        now: args.controllers.clock.now,
+      },
+      {
+        kind: args.kind,
+        requestContext,
+        request: args.request,
+        approvalId: id,
+        createdAt,
+      },
+    ),
+  );
 };
 
 type PermittedAccountDeps = {

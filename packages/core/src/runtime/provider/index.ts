@@ -1,5 +1,13 @@
 export { createProviderRuntimeAccess } from "./createProviderRuntimeAccess.js";
 export type {
+  ProviderRequestBeginInput,
+  ProviderRequestCancellationReason,
+  ProviderRequestHandle,
+  ProviderRequestRecord,
+  ProviderRequests,
+} from "./providerRequests.js";
+export { createProviderRequests } from "./providerRequests.js";
+export type {
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
@@ -7,8 +15,8 @@ export type {
   ProviderRuntimeErrorContext,
   ProviderRuntimeMeta,
   ProviderRuntimeRequestContext,
+  ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
-  ProviderRuntimeSessionScope,
   ProviderRuntimeSnapshot,
 } from "./types.js";

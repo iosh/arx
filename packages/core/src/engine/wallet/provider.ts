@@ -25,7 +25,7 @@ export const createWalletProvider = (deps: {
       return dappConnections.buildConnectionProjection(input);
     },
     disconnectOrigin: (origin) => dappConnections.disconnectOrigin(origin),
-    cancelSessionApprovals: (input) => runtimeAccess.cancelSessionApprovals(input),
+    cancelRequestScope: (input) => runtimeAccess.cancelRequestScope(input),
     subscribeSessionUnlocked: (listener) => runtimeAccess.subscribeSessionUnlocked(listener),
     subscribeSessionLocked: (listener) => runtimeAccess.subscribeSessionLocked(listener),
     subscribeNetworkStateChanged: (listener) => runtimeAccess.subscribeNetworkStateChanged(listener),

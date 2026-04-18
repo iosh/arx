@@ -83,7 +83,7 @@ const createServerHarness = (options?: {
   resolveAccounts?: (input: { origin: string; namespace: string; chainRef: string }) => string[];
   executeRpcRequest?: WalletProvider["executeRpcRequest"];
   encodeRpcError?: WalletProvider["encodeRpcError"];
-  cancelSessionApprovals?: WalletProvider["cancelSessionApprovals"];
+  cancelRequestScope?: WalletProvider["cancelRequestScope"];
   snapshots?: Record<string, ProviderBridgeSnapshot>;
   failFirstProviderBootstrap?: boolean;
 }) => {
@@ -172,7 +172,7 @@ const createServerHarness = (options?: {
         };
       }),
   );
-  const cancelSessionApprovals = vi.fn(options?.cancelSessionApprovals ?? (async () => 1));
+  const cancelRequestScope = vi.fn(options?.cancelRequestScope ?? (async () => 1));
 
   const provider: WalletProvider = {
     buildSnapshot,
@@ -182,7 +182,7 @@ const createServerHarness = (options?: {
     connect,
     disconnect,
     disconnectOrigin,
-    cancelSessionApprovals,
+    cancelRequestScope,
     subscribeSessionUnlocked: (listener) => {
       sessionUnlockedHandlers.add(listener as (payload: ProviderLifecyclePayload) => void);
       return () => sessionUnlockedHandlers.delete(listener as (payload: ProviderLifecyclePayload) => void);
@@ -235,7 +235,7 @@ const createServerHarness = (options?: {
       disconnectOrigin,
       executeRpcRequest,
       encodeRpcError,
-      cancelSessionApprovals,
+      cancelRequestScope,
     },
     setSnapshot(namespace: string, snapshot: ProviderBridgeSnapshot) {
       snapshots[namespace] = snapshot;
@@ -446,16 +446,17 @@ describe("providerPortServer", () => {
     const request = harness.mocks.executeRpcRequest.mock.calls[0]?.[0] as {
       context?: {
         providerNamespace?: string;
-        requestContext?: { transport?: string; sessionId?: string; requestId?: string };
+        requestScope?: { transport?: string; sessionId?: string; portId?: string; origin?: string };
       };
     };
 
     expect(request.context).toMatchObject({
       providerNamespace: "eip155",
-      requestContext: {
+      requestScope: {
         transport: "provider",
-        requestId: "rpc-1",
         sessionId: "session-1",
+        portId: expect.any(String),
+        origin: "https://example.com",
       },
     });
     expect(request.context).not.toHaveProperty("chainRef");
@@ -496,7 +497,8 @@ describe("providerPortServer", () => {
     port.triggerDisconnect();
 
     await vi.waitFor(() =>
-      expect(harness.mocks.cancelSessionApprovals).toHaveBeenCalledWith({
+      expect(harness.mocks.cancelRequestScope).toHaveBeenCalledWith({
+        transport: "provider",
         origin: "https://example.com",
         portId: "11111111-1111-4111-8111-111111111111",
         sessionId: "session-1",

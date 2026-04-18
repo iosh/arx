@@ -8,7 +8,7 @@ import type { NetworkSelectionService } from "../../services/store/networkSelect
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { ApprovalController } from "../approval/types.js";
+import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
@@ -16,6 +16,7 @@ import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./st
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
+  BeginTransactionApprovalOptions,
   ResumePendingTransactionsOptions,
   TransactionApprovalChainMetadata,
   TransactionApprovalHandoff,
@@ -106,6 +107,7 @@ export class TransactionExecutor
   async beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
+    options?: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
     const namespaceActiveChainRef = this.#networkSelection.getSelectedChainRef(request.namespace);
     const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
@@ -193,20 +195,50 @@ export class TransactionExecutor
 
     const storedMeta = this.#view.commitRecord(created).next;
 
-    const approvalPromise = requestApproval(
-      {
-        approvals: this.#approvals,
-        now: this.#now,
-      },
-      {
-        kind: ApprovalKinds.SendTransaction,
-        requestContext,
-        // Transaction-backed approvals keep a stable 1:1 link with the transaction record.
-        approvalId: storedMeta.id,
-        createdAt: storedMeta.createdAt,
-        request: this.#createApprovalRequest(storedMeta),
-      },
-    ).settled;
+    const approvalRequest = this.#createApprovalRequest(storedMeta);
+    let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
+    try {
+      approvalHandle = options?.providerRequestHandle
+        ? options.providerRequestHandle.attachBlockingApproval(
+            ({ id, createdAt }) =>
+              requestApproval(
+                {
+                  approvals: this.#approvals,
+                  now: this.#now,
+                },
+                {
+                  kind: ApprovalKinds.SendTransaction,
+                  requestContext,
+                  approvalId: id,
+                  createdAt,
+                  request: approvalRequest,
+                },
+              ),
+            {
+              // Transaction-backed approvals keep a stable 1:1 link with the transaction record.
+              id: storedMeta.id,
+              createdAt: storedMeta.createdAt,
+            },
+          )
+        : requestApproval(
+            {
+              approvals: this.#approvals,
+              now: this.#now,
+            },
+            {
+              kind: ApprovalKinds.SendTransaction,
+              requestContext,
+              approvalId: storedMeta.id,
+              createdAt: storedMeta.createdAt,
+              request: approvalRequest,
+            },
+          );
+    } catch (error) {
+      const rejectionError = error instanceof Error ? error : new Error(String(error));
+      await this.rejectTransaction(storedMeta.id, rejectionError);
+      throw error;
+    }
+    const approvalPromise = approvalHandle.settled;
 
     // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#prepare.queuePrepare(id);
@@ -244,11 +276,14 @@ export class TransactionExecutor
       this.#cancelledByUser.add(id);
     }
 
-    // Best-effort: resolve CAS conflicts by reloading the latest state.
-    // This avoids "UI rejected but tx still proceeds" windows when other workers advance the status concurrently.
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    // Keep retrying until the status settles because transaction status only
+    // moves forward across a finite state machine.
+    while (true) {
       const latestRecord = await this.#service.get(id);
-      if (!latestRecord) return;
+      if (!latestRecord) {
+        this.#cancelledByUser.delete(id);
+        return;
+      }
 
       const latest = this.#view.commitRecord(latestRecord).next;
       if (isTerminalTransactionStatus(latest.status)) {
@@ -273,7 +308,7 @@ export class TransactionExecutor
       });
 
       if (!updated) {
-        // CAS conflict: retry with latest state.
+        // Status advanced concurrently. Reload and try again against the new state.
         continue;
       }
 
@@ -284,9 +319,6 @@ export class TransactionExecutor
       this.#cancelledByUser.delete(id);
       return;
     }
-
-    // If we couldn't persist the rejection due to contention, do not keep a permanent in-memory cancel flag.
-    this.#cancelledByUser.delete(id);
   }
 
   async processTransaction(id: string): Promise<void> {

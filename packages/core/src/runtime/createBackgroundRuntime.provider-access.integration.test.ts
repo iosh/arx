@@ -63,17 +63,15 @@ const buildProviderContext = (input: {
   origin?: string;
   portId?: string;
   sessionId?: string;
-  requestId?: string;
 }) => {
   return {
     providerNamespace: input.namespace,
     chainRef: input.chainRef,
-    requestContext: {
+    requestScope: {
       transport: "provider" as const,
       origin: input.origin ?? ORIGIN,
       portId: input.portId ?? "port-1",
       sessionId: input.sessionId ?? "session-1",
-      requestId: input.requestId ?? "request-1",
     },
   };
 };
@@ -330,7 +328,6 @@ describe("createBackgroundRuntime provider access", () => {
         context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
-          requestId: "rpc-1",
         }),
       });
 
@@ -364,10 +361,12 @@ describe("createBackgroundRuntime provider access", () => {
       const { chain } = await deriveActiveAccount(background.runtime);
 
       let approvalCreatedResolve: (() => void) | null = null;
+      let capturedApprovalRequesterId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
         approvalCreatedResolve = resolve;
       });
-      const unsubscribe = background.runtime.controllers.approvals.onCreated(() => {
+      const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
+        capturedApprovalRequesterId = record.requester.requestId;
         approvalCreatedResolve?.();
       });
 
@@ -379,16 +378,18 @@ describe("createBackgroundRuntime provider access", () => {
         context: buildProviderContext({
           namespace: chain.namespace,
           chainRef: chain.chainRef,
-          requestId: "rpc-2",
         }),
       });
 
       await approvalCreated;
       await flushAsync();
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(1);
+      expect(capturedApprovalRequesterId).toBeTruthy();
+      expect(capturedApprovalRequesterId).not.toBe("rpc-2");
 
       await expect(
-        background.runtime.providerAccess.cancelSessionApprovals({
+        background.runtime.providerAccess.cancelRequestScope({
+          transport: "provider",
           origin: ORIGIN,
           portId: "port-1",
           sessionId: "session-1",
@@ -410,6 +411,93 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
+  it("cancels eth_sendTransaction approvals together with the provider request scope", async () => {
+    const background = await setupBackground();
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain, address } = await deriveActiveAccount(background.runtime);
+
+      await background.runtime.controllers.permissions.grantAuthorization(ORIGIN, {
+        namespace: chain.namespace,
+        chains: [
+          {
+            chainRef: chain.chainRef,
+            accountKeys: [
+              toAccountKeyFromAddress({
+                chainRef: chain.chainRef,
+                address,
+                accountCodecs: background.runtime.services.accountCodecs,
+              }),
+            ],
+          },
+        ],
+      });
+
+      let approvalCreatedResolve: (() => void) | null = null;
+      let capturedApprovalId: string | null = null;
+      const approvalCreated = new Promise<void>((resolve) => {
+        approvalCreatedResolve = resolve;
+      });
+      const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
+        capturedApprovalId = record.id;
+        approvalCreatedResolve?.();
+      });
+
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+        id: "rpc-3",
+        jsonrpc: "2.0",
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: address,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        ],
+        origin: ORIGIN,
+        context: buildProviderContext({
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+        }),
+      });
+
+      await approvalCreated;
+      await flushAsync();
+      expect(capturedApprovalId).toBeTruthy();
+      expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(1);
+
+      await expect(
+        background.runtime.providerAccess.cancelRequestScope({
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "session-1",
+        }),
+      ).resolves.toBe(1);
+
+      await expect(pendingResponse).resolves.toMatchObject({
+        id: "rpc-3",
+        jsonrpc: "2.0",
+        error: {
+          code: 4900,
+        },
+      });
+      expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
+      expect(
+        capturedApprovalId ? background.runtime.controllers.transactions.getMeta(capturedApprovalId) : undefined,
+      ).toMatchObject({
+        id: capturedApprovalId,
+        status: "failed",
+        userRejected: false,
+      });
+
+      unsubscribe();
+    } finally {
+      background.destroy();
+    }
+  });
+
   it("encodes namespace-aware provider errors directly", async () => {
     const runtime = await setupNamespaceAwareProviderRuntime();
 
@@ -421,7 +509,6 @@ describe("createBackgroundRuntime provider access", () => {
           rpcContext: buildProviderContext({
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,
-            requestId: "rpc-sol-encode",
           }),
         }),
       ).toEqual({
@@ -446,7 +533,6 @@ describe("createBackgroundRuntime provider access", () => {
           context: buildProviderContext({
             namespace: "solana",
             chainRef: SOLANA_CHAIN.chainRef,
-            requestId: "rpc-sol-1",
           }),
         }),
       ).resolves.toEqual({

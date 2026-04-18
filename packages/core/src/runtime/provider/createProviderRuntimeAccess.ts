@@ -1,3 +1,4 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainRef } from "../../chains/ids.js";
 import type { UnlockLockedPayload, UnlockUnlockedPayload } from "../../controllers/unlock/types.js";
 import type {
@@ -8,12 +9,15 @@ import type {
   RpcInvocationContext,
 } from "../../rpc/index.js";
 import type { StateChangeSubscription } from "../../services/store/_shared/signal.js";
+import type { ProviderRequestHandle, ProviderRequests } from "./providerRequests.js";
 import type {
   ProviderRuntimeAccess,
   ProviderRuntimeAccountsQuery,
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
+  ProviderRuntimeRequestContext,
+  ProviderRuntimeRequestScope,
   ProviderRuntimeRpcContext,
   ProviderRuntimeRpcRequest,
   ProviderRuntimeSnapshot,
@@ -55,13 +59,19 @@ type ProviderRuntimeAccessDeps = {
       method: string;
     },
   ) => JsonRpcError;
-  cancelSessionApprovals: (input: { origin: string; portId: string; sessionId: string }) => Promise<number>;
+  providerRequests: ProviderRequests;
   subscribeSessionUnlocked: (listener: (payload: UnlockUnlockedPayload) => void) => () => void;
   subscribeSessionLocked: (listener: (payload: UnlockLockedPayload) => void) => () => void;
   subscribeNetworkStateChanged: StateChangeSubscription;
   subscribeNetworkSelectionChanged: StateChangeSubscription;
   subscribeAccountsStateChanged: StateChangeSubscription;
   subscribePermissionsStateChanged: StateChangeSubscription;
+};
+
+type BegunProviderRuntimeRequest = {
+  providerRequestHandle: ProviderRequestHandle;
+  resolvedContext: ProviderRuntimeRpcContext;
+  engineRequest: ProviderRuntimeRequestEnvelope;
 };
 
 const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocationContext | undefined => {
@@ -73,7 +83,16 @@ const toRpcInvocationContext = (context?: ProviderRuntimeRpcContext): RpcInvocat
     ...(context.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
     ...(context.providerNamespace !== undefined ? { providerNamespace: context.providerNamespace } : {}),
     ...(context.requestContext !== undefined ? { requestContext: context.requestContext } : {}),
+    ...(context.providerRequestHandle !== undefined ? { providerRequestHandle: context.providerRequestHandle } : {}),
   };
+};
+
+const rejectProviderRequestHandle = (handle: ProviderRequestHandle | null) => {
+  return handle ? handle.reject() : false;
+};
+
+const getProviderRequestTerminalError = (handle: ProviderRequestHandle | null) => {
+  return handle?.getTerminalError() ?? null;
 };
 
 export const createProviderRuntimeAccess = ({
@@ -86,7 +105,7 @@ export const createProviderRuntimeAccess = ({
   resolveMethodNamespace,
   handleRpcRequest,
   encodeDappError,
-  cancelSessionApprovals,
+  providerRequests,
   subscribeSessionUnlocked,
   subscribeSessionLocked,
   subscribeNetworkStateChanged,
@@ -159,44 +178,124 @@ export const createProviderRuntimeAccess = ({
     context,
     ...request
   }: ProviderRuntimeRpcRequest): Promise<JsonRpcResponse> => {
-    const rpcContext = toRpcInvocationContext(context);
-    const engineRequest: ProviderRuntimeRequestEnvelope = {
-      id: request.id,
-      jsonrpc: request.jsonrpc,
-      method: request.method,
-      origin,
-      ...(request.params !== undefined ? { params: request.params } : {}),
-      ...(rpcContext ? { arx: rpcContext } : {}),
-    };
+    let providerRequestHandle: ProviderRequestHandle | null = null;
+    let errorContext: ProviderRuntimeRpcContext | undefined = context;
 
-    const buildErrorResponse = (error: unknown): JsonRpcResponse => ({
+    const buildErrorResponse = (
+      error: unknown,
+      nextErrorContext: ProviderRuntimeRpcContext | undefined,
+    ): JsonRpcResponse => ({
       id: request.id,
       jsonrpc: request.jsonrpc,
       error: encodeRpcError(error, {
         origin,
         method: request.method,
-        rpcContext: context,
+        rpcContext: nextErrorContext,
       }),
     });
 
-    try {
+    const validateAndBeginRequest = (): BegunProviderRuntimeRequest => {
+      const requestScope = context?.requestScope;
+      if (!requestScope) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidRequest,
+          message: "Missing provider request scope.",
+          data: { origin },
+        });
+      }
+
+      const providerNamespace = resolveMethodNamespace(request.method, toRpcInvocationContext(context));
+      if (!providerNamespace) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidRequest,
+          message: `Missing namespace context for "${request.method}"`,
+          data: { method: request.method, origin },
+        });
+      }
+
+      providerRequestHandle = providerRequests.beginRequest({
+        scope: requestScope,
+        rpcId: request.id,
+        providerNamespace,
+        method: request.method,
+      });
+
+      const requestContext: ProviderRuntimeRequestContext = {
+        transport: requestScope.transport,
+        origin: requestScope.origin,
+        portId: requestScope.portId,
+        sessionId: requestScope.sessionId,
+        requestId: providerRequestHandle.id,
+      };
+
+      const resolvedContext: ProviderRuntimeRpcContext = {
+        ...(context?.chainRef !== undefined ? { chainRef: context.chainRef } : {}),
+        providerNamespace,
+        requestContext,
+        providerRequestHandle,
+      };
+      const rpcContext = toRpcInvocationContext(resolvedContext);
+
+      return {
+        providerRequestHandle,
+        resolvedContext,
+        engineRequest: {
+          id: request.id,
+          jsonrpc: request.jsonrpc,
+          method: request.method,
+          origin,
+          ...(request.params !== undefined ? { params: request.params } : {}),
+          ...(rpcContext ? { arx: rpcContext } : {}),
+        },
+      };
+    };
+
+    const runEngineRequest = async (begun: BegunProviderRuntimeRequest): Promise<JsonRpcResponse> => {
+      const buildTerminalErrorResponse = (fallback: unknown) => {
+        return buildErrorResponse(begun.providerRequestHandle.getTerminalError() ?? fallback, begun.resolvedContext);
+      };
+
       return await new Promise<JsonRpcResponse>((resolve) => {
-        handleRpcRequest(engineRequest, (error, response) => {
+        handleRpcRequest(begun.engineRequest, (error, response) => {
           if (error) {
-            resolve(buildErrorResponse(error));
+            const didReject = begun.providerRequestHandle.reject();
+            resolve(didReject ? buildErrorResponse(error, begun.resolvedContext) : buildTerminalErrorResponse(error));
             return;
           }
 
           if (!response) {
-            resolve(buildErrorResponse(new Error("Missing JSON-RPC response")));
+            const missingResponseError = new Error("Missing JSON-RPC response");
+            const didReject = begun.providerRequestHandle.reject();
+            resolve(
+              didReject
+                ? buildErrorResponse(missingResponseError, begun.resolvedContext)
+                : buildTerminalErrorResponse(missingResponseError),
+            );
             return;
           }
 
-          resolve(response as JsonRpcResponse);
+          if ("error" in response) {
+            const didReject = begun.providerRequestHandle.reject();
+            resolve(didReject ? (response as JsonRpcResponse) : buildTerminalErrorResponse(response.error));
+            return;
+          }
+
+          const didFulfill = begun.providerRequestHandle.fulfill();
+          resolve(didFulfill ? (response as JsonRpcResponse) : buildTerminalErrorResponse(response));
         });
       });
+    };
+
+    try {
+      const begun = validateAndBeginRequest();
+      errorContext = begun.resolvedContext;
+      return await runEngineRequest(begun);
     } catch (error) {
-      return buildErrorResponse(error);
+      const didReject = rejectProviderRequestHandle(providerRequestHandle);
+      if (didReject) {
+        return buildErrorResponse(error, errorContext);
+      }
+      return buildErrorResponse(getProviderRequestTerminalError(providerRequestHandle) ?? error, errorContext);
     }
   };
 
@@ -225,8 +324,8 @@ export const createProviderRuntimeAccess = ({
     };
   };
 
-  const cancelProviderSessionApprovals = async (input: { origin: string; portId: string; sessionId: string }) => {
-    return await cancelSessionApprovals(input);
+  const cancelRequestScope = async (input: ProviderRuntimeRequestScope) => {
+    return await providerRequests.cancelScope(input, "session_lost");
   };
 
   return {
@@ -242,6 +341,6 @@ export const createProviderRuntimeAccess = ({
     executeRpcRequest,
     encodeRpcError,
     listPermittedAccounts,
-    cancelSessionApprovals: cancelProviderSessionApprovals,
+    cancelRequestScope,
   };
 };

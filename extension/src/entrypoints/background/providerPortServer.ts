@@ -192,7 +192,7 @@ export const createProviderPortServer = ({
     return released;
   };
 
-  const cancelApprovalsForSession = async (port: Runtime.Port, sessionId: string, logReason: string) => {
+  const cancelRequestScopeForPort = async (port: Runtime.Port, sessionId: string, logReason: string) => {
     const portId = sessionRegistry.readPortId(port);
     if (!portId) {
       return;
@@ -202,7 +202,12 @@ export const createProviderPortServer = ({
 
     try {
       const activeProvider = await loadProvider();
-      await activeProvider.cancelSessionApprovals({ origin, portId, sessionId });
+      await activeProvider.cancelRequestScope({
+        transport: "provider",
+        origin,
+        portId,
+        sessionId,
+      });
     } catch (error) {
       portLog(logReason, { error, origin, sessionId });
     }
@@ -233,7 +238,7 @@ export const createProviderPortServer = ({
     postEnvelope,
     releaseBinding,
     removePortState: (port) => sessionRegistry.removePortState(port),
-    cancelApprovalsForSession,
+    cancelRequestScope: cancelRequestScopeForPort,
     portLog,
   });
 

@@ -1,6 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
-import { requestApproval } from "../../../../approvals/creation.js";
 import {
   type ChainMetadata,
   createEip155MetadataFromEip3085,
@@ -11,7 +10,7 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { toParamsArray } from "../utils.js";
-import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
+import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
 
 export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<ChainMetadata>({
   requestKind: RpcRequestKinds.ChainManagement,
@@ -80,20 +79,16 @@ export const walletAddEthereumChainDefinition = defineEip155ApprovalMethod<Chain
       return null;
     }
 
-    await requestApproval(
-      {
-        approvals: controllers.approvals,
-        now: controllers.clock.now,
+    await requestProviderApproval({
+      controllers,
+      rpcContext,
+      method: "wallet_addEthereumChain",
+      kind: ApprovalKinds.AddChain,
+      request: {
+        metadata,
+        isUpdate,
       },
-      {
-        kind: ApprovalKinds.AddChain,
-        requestContext: requireRequestContext(rpcContext, "wallet_addEthereumChain"),
-        request: {
-          metadata,
-          isUpdate,
-        },
-      },
-    ).settled;
+    }).settled;
 
     return null;
   },

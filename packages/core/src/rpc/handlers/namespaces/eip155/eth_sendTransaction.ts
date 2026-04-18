@@ -3,7 +3,11 @@ import { isTransactionSubmissionError } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
+import {
+  defineEip155AuthorizedAccountApprovalMethod,
+  requireProviderRequestHandle,
+  requireRequestContext,
+} from "./shared.js";
 import { buildEip155TransactionRequest } from "./transactionRequest.js";
 
 type RpcLikeError = Error & { code: number; data?: unknown };
@@ -41,10 +45,11 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
   executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext }) => {
     prepared.payload.from = from;
     try {
-      const handoff = await controllers.transactions.beginTransactionApproval(
-        prepared,
-        requireRequestContext(rpcContext, "eth_sendTransaction"),
-      );
+      const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
+      const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
+      const handoff = await controllers.transactions.beginTransactionApproval(prepared, requestContext, {
+        providerRequestHandle,
+      });
       await handoff.waitForApprovalDecision();
       const submission = await controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
       return submission.hash;

@@ -1,10 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requestProviderApproval } from "./shared.js";
 import { parseEip155TypedDataParams } from "./signingParams.js";
 
 type EthSignTypedDataV4Params = { address: string; typedData: string };
@@ -28,21 +27,17 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      return await requestApproval(
-        {
-          approvals: controllers.approvals,
-          now: controllers.clock.now,
+      return await requestProviderApproval({
+        controllers,
+        rpcContext,
+        method: "eth_signTypedData_v4",
+        kind: ApprovalKinds.SignTypedData,
+        request: {
+          chainRef,
+          from,
+          typedData,
         },
-        {
-          kind: ApprovalKinds.SignTypedData,
-          requestContext: requireRequestContext(rpcContext, "eth_signTypedData_v4"),
-          request: {
-            chainRef,
-            from,
-            typedData,
-          },
-        },
-      ).settled;
+      }).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

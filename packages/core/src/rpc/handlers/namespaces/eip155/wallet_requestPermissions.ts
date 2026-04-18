@@ -1,6 +1,5 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import { ZodError, z } from "zod";
-import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import {
   ApprovalKinds,
@@ -14,7 +13,7 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { AuthorizationRequirements, AuthorizedScopeChecks } from "../../types.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155ApprovalMethod, requireRequestContext } from "./shared.js";
+import { defineEip155ApprovalMethod, requestProviderApproval } from "./shared.js";
 
 const toConnectionGrantRequests = (
   grantKinds: readonly ConnectionGrantKind[],
@@ -99,17 +98,13 @@ export const walletRequestPermissionsDefinition = defineEip155ApprovalMethod({
 
     const requestedGrants = toConnectionGrantRequests(params, chainRef);
     try {
-      await requestApproval(
-        {
-          approvals: controllers.approvals,
-          now: controllers.clock.now,
-        },
-        {
-          kind: ApprovalKinds.RequestPermissions,
-          requestContext: requireRequestContext(rpcContext, "wallet_requestPermissions"),
-          request: { chainRef, requestedGrants },
-        },
-      ).settled;
+      await requestProviderApproval({
+        controllers,
+        rpcContext,
+        method: "wallet_requestPermissions",
+        kind: ApprovalKinds.RequestPermissions,
+        request: { chainRef, requestedGrants },
+      }).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error) || isArxError(error)) throw error;
       throw arxError({

@@ -101,15 +101,12 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("switches chains when only chainRef is provided", async () => {
+  it("rejects chainRef-only payloads", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
-
-    const teardownApprovalResponder = setupSwitchChainApprovalResponder(runtime);
 
     try {
       await expect(
@@ -120,23 +117,20 @@ describe("eip155 handlers - core error paths", () => {
             params: [{ chainRef: ALT_CHAIN.chainRef }] as JsonRpcParams,
           },
         }),
-      ).resolves.toBeNull();
-
-      expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(runtime.services.networkSelection.getSelectedChainRef("eip155")).toBe(ALT_CHAIN.chainRef);
+      ).rejects.toMatchObject({
+        code: -32602,
+      });
     } finally {
-      teardownApprovalResponder();
       runtime.lifecycle.shutdown();
     }
   });
 
-  it("rejects when chainId and chainRef do not match", async () => {
+  it("rejects payloads that include internal chainRef fields", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    await waitForChainInNetwork(runtime, ALT_CHAIN.chainRef);
 
     try {
       await expect(
@@ -188,7 +182,7 @@ describe("eip155 handlers - core error paths", () => {
     }
   });
 
-  it("rejects non-eip155 namespaces", async () => {
+  it("rejects chainRef-shaped payloads from other namespaces", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
@@ -205,7 +199,7 @@ describe("eip155 handlers - core error paths", () => {
           },
         }),
       ).rejects.toMatchObject({
-        code: 4902,
+        code: -32602,
       });
     } finally {
       runtime.lifecycle.shutdown();

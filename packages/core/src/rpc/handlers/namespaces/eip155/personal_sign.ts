@@ -1,10 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { requestApproval } from "../../../../approvals/creation.js";
 import { ApprovalKinds } from "../../../../controllers/index.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
-import { defineEip155AuthorizedAccountApprovalMethod, requireRequestContext } from "./shared.js";
+import { defineEip155AuthorizedAccountApprovalMethod, requestProviderApproval } from "./shared.js";
 import { parseEip155PersonalSignParams } from "./signingParams.js";
 
 type PersonalSignParams = { address: string; message: string };
@@ -57,21 +56,17 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
-      return await requestApproval(
-        {
-          approvals: controllers.approvals,
-          now: controllers.clock.now,
+      return await requestProviderApproval({
+        controllers,
+        rpcContext,
+        method: "personal_sign",
+        kind: ApprovalKinds.SignMessage,
+        request: {
+          chainRef,
+          from,
+          message,
         },
-        {
-          kind: ApprovalKinds.SignMessage,
-          requestContext: requireRequestContext(rpcContext, "personal_sign"),
-          request: {
-            chainRef,
-            from,
-            message,
-          },
-        },
-      ).settled;
+      }).settled;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) throw error;
       throw arxError({

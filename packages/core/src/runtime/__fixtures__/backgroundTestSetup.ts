@@ -773,10 +773,35 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
     const chain = requireActiveChainMetadata(runtime);
     const namespace = overrides?.namespace ?? chain.namespace;
     const chainRef = overrides?.chainRef ?? chain.chainRef;
+    const requestContext = overrides?.requestContext;
+
     return {
       namespace,
       chainRef,
-      ...(overrides?.requestContext !== undefined ? { requestContext: overrides.requestContext } : {}),
+      ...(requestContext !== undefined ? { requestContext } : {}),
+      ...(requestContext?.transport === "provider" && overrides?.providerRequestHandle === undefined
+        ? {
+            providerRequestHandle: {
+              id: requestContext.requestId,
+              providerNamespace: namespace,
+              attachBlockingApproval: <T>(
+                createApproval: (reservation: { id: string; createdAt: number }) => T,
+                reservation?: Partial<{ id: string; createdAt: number }>,
+              ) =>
+                createApproval({
+                  id: reservation?.id ?? `${requestContext.requestId}-approval`,
+                  createdAt: reservation?.createdAt ?? 0,
+                }),
+              fulfill: () => true,
+              reject: () => true,
+              cancel: async () => true,
+              getTerminalError: () => null,
+            },
+          }
+        : {}),
+      ...(overrides?.providerRequestHandle !== undefined
+        ? { providerRequestHandle: overrides.providerRequestHandle }
+        : {}),
       ...(overrides?.meta ? { meta: overrides.meta } : {}),
     };
   };

@@ -2,6 +2,7 @@ import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
 import type {
   TransactionError,
   TransactionIssue,
@@ -75,6 +76,10 @@ export type TransactionApprovalHandoff = {
   waitForApprovalDecision(): Promise<TransactionMeta>;
 };
 
+export type BeginTransactionApprovalOptions = {
+  providerRequestHandle?: ProviderRequestHandle | null;
+};
+
 export type TransactionSubmissionResolution = {
   hash: string;
   meta: TransactionMeta;
@@ -107,6 +112,7 @@ export type TransactionController = {
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
+    options?: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff>;
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;

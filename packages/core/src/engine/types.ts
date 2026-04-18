@@ -58,8 +58,8 @@ import type {
   ProviderRuntimeConnectionQuery,
   ProviderRuntimeConnectionState,
   ProviderRuntimeErrorContext,
+  ProviderRuntimeRequestScope,
   ProviderRuntimeRpcRequest,
-  ProviderRuntimeSessionScope,
   ProviderRuntimeSnapshot,
 } from "../runtime/provider/types.js";
 import type { AttentionService } from "../services/runtime/attention/types.js";
@@ -362,7 +362,7 @@ export type WalletProvider = Readonly<{
   connect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
   disconnect(input: { origin: string; namespace: string }): WalletProviderConnectionProjection;
   disconnectOrigin(origin: string): number;
-  cancelSessionApprovals(input: ProviderRuntimeSessionScope): Promise<number>;
+  cancelRequestScope(input: ProviderRuntimeRequestScope): Promise<number>;
   subscribeSessionUnlocked(listener: (payload: UnlockUnlockedPayload) => void): () => void;
   subscribeSessionLocked(listener: (payload: UnlockLockedPayload) => void): () => void;
   subscribeNetworkStateChanged(listener: () => void): () => void;

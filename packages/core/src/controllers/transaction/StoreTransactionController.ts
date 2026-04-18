@@ -13,6 +13,7 @@ import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
+  BeginTransactionApprovalOptions,
   ResumePendingTransactionsOptions,
   TransactionApprovalHandoff,
   TransactionController,
@@ -117,8 +118,9 @@ export class StoreTransactionController implements TransactionController {
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
+    options?: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
-    return this.#executor.beginTransactionApproval(request, requestContext);
+    return this.#executor.beginTransactionApproval(request, requestContext, options);
   }
 
   async waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {

@@ -13,7 +13,7 @@ import type {
 
 export const cloneState = (state: ApprovalState): ApprovalState => ({
   pending: state.pending.map((item) => ({
-    id: item.id,
+    approvalId: item.approvalId,
     kind: item.kind,
     origin: item.origin,
     namespace: item.namespace,
@@ -32,7 +32,7 @@ export const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
     if (!other || !current) return false;
 
     const matches =
-      current.id === other.id &&
+      current.approvalId === other.approvalId &&
       current.kind === other.kind &&
       current.origin === other.origin &&
       current.namespace === other.namespace &&
@@ -46,7 +46,7 @@ export const isSameState = (prev?: ApprovalState, next?: ApprovalState) => {
 };
 
 export const cloneRecord = <K extends ApprovalKind>(record: ApprovalRecord<K>): ApprovalRecord<K> => ({
-  id: record.id,
+  approvalId: record.approvalId,
   kind: record.kind,
   origin: record.origin,
   namespace: record.namespace,
@@ -61,7 +61,7 @@ export const cloneCreatedEvent = (event: ApprovalCreatedEvent): ApprovalCreatedE
 });
 
 export const cloneFinishEvent = <T>(event: ApprovalFinishedEvent<T>): ApprovalFinishedEvent<T> => ({
-  id: event.id,
+  approvalId: event.approvalId,
   status: event.status,
   terminalReason: event.terminalReason,
   ...(event.kind !== undefined ? { kind: event.kind } : {}),

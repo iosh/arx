@@ -1,6 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import { createApprovalSummaryBase } from "../presentation.js";
 import {
   getApprovalSelectableAccounts,
   parseAccountSelectionDecision,
@@ -11,24 +10,6 @@ import type { ApprovalFlow } from "../types.js";
 export const requestAccountsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestAccounts> = {
   kind: ApprovalKinds.RequestAccounts,
   parseDecision: (input) => parseAccountSelectionDecision(ApprovalKinds.RequestAccounts, input),
-  present(record, deps) {
-    const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
-      request: record.request,
-    });
-
-    return {
-      ...createApprovalSummaryBase(record, deps, { request: record.request }),
-      type: "requestAccounts",
-      payload: {
-        selectableAccounts: selectableAccounts.map((account) => ({
-          accountKey: account.accountKey,
-          canonicalAddress: account.canonicalAddress,
-          displayAddress: account.displayAddress,
-        })),
-        recommendedAccountKey,
-      },
-    };
-  },
   async approve(record, decision, deps) {
     const { namespace, chainRef, selectableAccounts } = getApprovalSelectableAccounts(record, deps, {
       request: record.request,

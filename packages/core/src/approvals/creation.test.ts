@@ -40,7 +40,7 @@ const createApprovals = () => {
       });
 
       return {
-        id: request.id,
+        approvalId: request.approvalId,
         settled: new Promise<Awaited<ApprovalHandle<K>["settled"]>>(() => {}),
       };
     },
@@ -66,11 +66,11 @@ describe("requestApproval", () => {
       },
     );
 
-    expect(handle.id).toMatch(UUID_PATTERN);
+    expect(handle.approvalId).toMatch(UUID_PATTERN);
     expect(approvals.calls).toHaveLength(1);
     expect(approvals.calls[0]).toEqual({
       request: expect.objectContaining({
-        id: handle.id,
+        approvalId: handle.approvalId,
         kind: ApprovalKinds.RequestAccounts,
         origin: REQUEST_CONTEXT.origin,
         namespace: "eip155",
@@ -105,6 +105,7 @@ describe("requestApproval", () => {
         approvalId: "22222222-2222-4222-8222-222222222222",
         createdAt: 456,
         request: {
+          transactionId: "33333333-3333-4333-8333-333333333333",
           chainRef: "eip155:10",
           origin: REQUEST_CONTEXT.origin,
           chain: null,
@@ -123,11 +124,11 @@ describe("requestApproval", () => {
       },
     );
 
-    expect(handle.id).toBe("22222222-2222-4222-8222-222222222222");
+    expect(handle.approvalId).toBe("22222222-2222-4222-8222-222222222222");
     expect(approvals.calls).toHaveLength(1);
     expect(approvals.calls[0]).toEqual({
       request: expect.objectContaining({
-        id: "22222222-2222-4222-8222-222222222222",
+        approvalId: "22222222-2222-4222-8222-222222222222",
         createdAt: 456,
         namespace: "eip155",
         chainRef: "eip155:10",
@@ -155,6 +156,7 @@ describe("requestApproval", () => {
           kind: ApprovalKinds.SendTransaction,
           requestContext: REQUEST_CONTEXT,
           request: {
+            transactionId: "33333333-3333-4333-8333-333333333333",
             chainRef: "eip155:1",
             origin: "https://other.example",
             chain: null,

@@ -24,7 +24,7 @@ const requester = {
 
 const createRequest = (overrides?: Partial<ApprovalCreateParams<typeof ApprovalKinds.RequestAccounts>>) => {
   return {
-    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    approvalId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     kind: ApprovalKinds.RequestAccounts,
     origin: ORIGIN,
     namespace: "eip155",
@@ -69,7 +69,7 @@ describe("InMemoryApprovalController", () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
     const request = {
-      id: "a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0",
+      approvalId: "a0a0a0a0-a0a0-4a0a-8a0a-a0a0a0a0a0a0",
       kind: ApprovalKinds.RequestPermissions,
       origin: ORIGIN,
       namespace: "eip155",
@@ -98,18 +98,18 @@ describe("InMemoryApprovalController", () => {
       getExecutor: () => executor,
     });
 
-    const request = createRequest({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
+    const request = createRequest({ approvalId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
     const handle = controller.create(request, requester);
 
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(true);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);
 
-    const resolved = await controller.resolve({ id: request.id, action: "approve" });
+    const resolved = await controller.resolve({ approvalId: request.approvalId, action: "approve" });
 
     await expect(handle.settled).resolves.toEqual(value);
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
     expect(executor.approve).toHaveBeenCalledTimes(1);
     expect(resolved).toEqual({
-      id: request.id,
+      approvalId: request.approvalId,
       status: "approved",
       terminalReason: "user_approve",
       value,
@@ -125,9 +125,9 @@ describe("InMemoryApprovalController", () => {
       getExecutor: () => executor,
     });
 
-    const request = createRequest({ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
+    const request = createRequest({ approvalId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" });
     const unsubscribe = controller.onCreated(({ record }) => {
-      void controller.resolve({ id: record.id, action: "approve" });
+      void controller.resolve({ approvalId: record.approvalId, action: "approve" });
     });
 
     try {
@@ -142,10 +142,10 @@ describe("InMemoryApprovalController", () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
-    const request = createRequest({ id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" });
+    const request = createRequest({ approvalId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" });
     const handle = controller.create(request, requester);
 
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(true);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);
 
     const count = await controller.cancelByScope({
       scope: {
@@ -157,7 +157,7 @@ describe("InMemoryApprovalController", () => {
       reason: "session_lost",
     });
     expect(count).toBe(1);
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
 
     await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.TransportDisconnected });
   });
@@ -166,14 +166,16 @@ describe("InMemoryApprovalController", () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
-    const request = createRequest({ id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
+    const request = createRequest({ approvalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
     const handle = controller.create(request, requester);
 
     const custom = new Error("custom rejection");
     (custom as Error & { code?: number }).code = 4001;
 
-    await expect(controller.resolve({ id: request.id, action: "reject", error: custom })).resolves.toEqual({
-      id: request.id,
+    await expect(
+      controller.resolve({ approvalId: request.approvalId, action: "reject", error: custom }),
+    ).resolves.toEqual({
+      approvalId: request.approvalId,
       status: "rejected",
       terminalReason: "user_reject",
     });
@@ -184,11 +186,15 @@ describe("InMemoryApprovalController", () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
 
-    controller.create(createRequest({ id: "approval-b", createdAt: 2_000 }), requester);
-    controller.create(createRequest({ id: "approval-a", createdAt: 2_000 }), requester);
-    controller.create(createRequest({ id: "approval-c", createdAt: 1_000 }), requester);
+    controller.create(createRequest({ approvalId: "approval-b", createdAt: 2_000 }), requester);
+    controller.create(createRequest({ approvalId: "approval-a", createdAt: 2_000 }), requester);
+    controller.create(createRequest({ approvalId: "approval-c", createdAt: 1_000 }), requester);
 
-    expect(controller.getState().pending.map((item) => item.id)).toEqual(["approval-c", "approval-a", "approval-b"]);
+    expect(controller.getState().pending.map((item) => item.approvalId)).toEqual([
+      "approval-c",
+      "approval-a",
+      "approval-b",
+    ]);
   });
 
   it("publishes onCreated and onFinished with explicit lifecycle semantics", async () => {
@@ -206,19 +212,25 @@ describe("InMemoryApprovalController", () => {
     const unsubscribeFinished = controller.onFinished((event) => finishedEvents.push(event));
 
     try {
-      const approvedRequest = createRequest({ id: "f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0" });
-      await controller.resolve({ id: controller.create(approvedRequest, requester).id, action: "approve" });
+      const approvedRequest = createRequest({ approvalId: "f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0" });
+      await controller.resolve({
+        approvalId: controller.create(approvedRequest, requester).approvalId,
+        action: "approve",
+      });
 
-      const cancelledRequest = createRequest({ id: "abababab-abab-4aba-8aba-abababababab" });
+      const cancelledRequest = createRequest({ approvalId: "abababab-abab-4aba-8aba-abababababab" });
       const cancelledHandle = controller.create(cancelledRequest, requester);
-      await controller.cancel({ id: cancelledRequest.id, reason: "locked" });
+      await controller.cancel({ approvalId: cancelledRequest.approvalId, reason: "locked" });
       await expect(cancelledHandle.settled).rejects.toMatchObject({ reason: ArxReasons.SessionLocked });
 
-      expect(createdEvents.map((event) => event.record.id)).toEqual([approvedRequest.id, cancelledRequest.id]);
+      expect(createdEvents.map((event) => event.record.approvalId)).toEqual([
+        approvedRequest.approvalId,
+        cancelledRequest.approvalId,
+      ]);
       expect(finishedEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            id: approvedRequest.id,
+            approvalId: approvedRequest.approvalId,
             status: "approved",
             terminalReason: "user_approve",
             kind: approvedRequest.kind,
@@ -228,7 +240,7 @@ describe("InMemoryApprovalController", () => {
             value,
           }),
           expect.objectContaining({
-            id: cancelledRequest.id,
+            approvalId: cancelledRequest.approvalId,
             status: "cancelled",
             terminalReason: "locked",
             kind: cancelledRequest.kind,
@@ -253,14 +265,14 @@ describe("InMemoryApprovalController", () => {
       ttlMs: 1_000,
     });
 
-    const request = createRequest({ id: "ffffffff-ffff-4fff-8fff-ffffffffffff" });
+    const request = createRequest({ approvalId: "ffffffff-ffff-4fff-8fff-ffffffffffff" });
     const handle = controller.create(request, requester);
 
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(true);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(true);
 
     vi.advanceTimersByTime(1_000);
 
     await expect(handle.settled).rejects.toMatchObject({ reason: ArxReasons.ApprovalTimeout });
-    expect(controller.getState().pending.some((item) => item.id === request.id)).toBe(false);
+    expect(controller.getState().pending.some((item) => item.approvalId === request.approvalId)).toBe(false);
   });
 });

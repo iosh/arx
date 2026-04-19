@@ -1,4 +1,3 @@
-import { createApprovalFlowRegistry } from "../../approvals/index.js";
 import type { UiMethodName } from "../protocol/index.js";
 import { createUiCommonHandlers } from "./handlers/index.js";
 import { buildUiSnapshot } from "./snapshot.js";
@@ -34,20 +33,15 @@ const buildUiContext = (deps: Pick<UiRuntimeServerDeps, "access">) => {
 };
 
 export const createUiServerRuntime = (deps: UiServerRuntimeDeps): UiServerRuntime => {
-  const approvalFlows = createApprovalFlowRegistry();
-
   const buildSnapshot = () =>
     buildUiSnapshot({
       accounts: deps.access.accounts,
-      approvals: deps.access.approvals,
       chains: deps.access.chains,
       permissions: deps.access.permissions,
       session: deps.access.session,
       keyrings: deps.access.keyrings,
       attention: deps.access.attention,
       namespaceBindings: deps.access.namespaceBindings,
-      transactions: deps.access.transactions,
-      approvalFlows,
     });
 
   const handlerDeps = {

@@ -1,14 +1,16 @@
 import type { ApprovalController, ApprovalResolveInput } from "../../../controllers/approval/types.js";
 import type { UiMethodResult } from "../../protocol/index.js";
-import type { UiHandlers } from "../types.js";
-
-type UiResolveApprovalResult = UiMethodResult<"ui.approvals.resolve">;
+import type { UiApprovalsAccess, UiHandlers } from "../types.js";
 
 export const createApprovalsHandlers = ({
   approvals,
 }: {
-  approvals: Pick<ApprovalController, "resolve">;
-}): Pick<UiHandlers, "ui.approvals.resolve"> => ({
-  "ui.approvals.resolve": async (input) =>
-    (await approvals.resolve(input as ApprovalResolveInput)) as UiResolveApprovalResult,
+  approvals: UiApprovalsAccess;
+}): Pick<UiHandlers, "ui.approvals.listPending" | "ui.approvals.getDetail" | "ui.approvals.resolve"> => ({
+  "ui.approvals.listPending": async () => approvals.read.listPendingEntries(),
+  "ui.approvals.getDetail": async ({ approvalId }) => approvals.read.getDetail(approvalId),
+  "ui.approvals.resolve": async (input) => {
+    await approvals.write.resolve(input as ApprovalResolveInput);
+    return null;
+  },
 });

@@ -7,15 +7,7 @@ import { sendTransactionApprovalFlow } from "./flows/sendTransaction.js";
 import { signMessageApprovalFlow } from "./flows/signMessage.js";
 import { signTypedDataApprovalFlow } from "./flows/signTypedData.js";
 import { switchChainApprovalFlow } from "./flows/switchChain.js";
-import { toUnsupportedApprovalSummary } from "./presentation.js";
-import { ApprovalSummarySchema } from "./summary.js";
-import type {
-  ApprovalExecutor,
-  ApprovalFlow,
-  ApprovalFlowDeps,
-  ApprovalFlowPresenterDeps,
-  ApprovalFlowRegistry,
-} from "./types.js";
+import type { ApprovalExecutor, ApprovalFlow, ApprovalFlowDeps, ApprovalFlowRegistry } from "./types.js";
 
 const APPROVAL_FLOWS = [
   requestAccountsApprovalFlow,
@@ -29,14 +21,14 @@ const APPROVAL_FLOWS = [
 
 const getRequiredFlow = <K extends ApprovalKind>(
   registry: ApprovalFlowRegistry,
-  record: Pick<ApprovalRecord<K>, "id" | "kind">,
+  record: Pick<ApprovalRecord<K>, "approvalId" | "kind">,
 ) => {
   const flow = registry.get(record.kind);
   if (!flow) {
     throw arxError({
       reason: ArxReasons.RpcUnsupportedMethod,
       message: `Unsupported approval kind: ${record.kind}`,
-      data: { id: record.id, kind: record.kind },
+      data: { approvalId: record.approvalId, kind: record.kind },
     });
   }
 
@@ -49,18 +41,6 @@ export const createApprovalFlowRegistry = (options?: { flows?: readonly Approval
 
   return {
     get: (kind) => byKind.get(kind) as ApprovalFlow<typeof kind> | undefined,
-    present: (record: ApprovalRecord, deps: ApprovalFlowPresenterDeps) => {
-      const flow = byKind.get(record.kind);
-      if (!flow) {
-        return toUnsupportedApprovalSummary(record);
-      }
-
-      try {
-        return ApprovalSummarySchema.parse(flow.present(record as never, deps));
-      } catch {
-        return toUnsupportedApprovalSummary(record);
-      }
-    },
   };
 };
 

@@ -436,11 +436,14 @@ describe("createBackgroundRuntime provider access", () => {
 
       let approvalCreatedResolve: (() => void) | null = null;
       let capturedApprovalId: string | null = null;
+      let capturedTransactionId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
         approvalCreatedResolve = resolve;
       });
       const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
-        capturedApprovalId = record.id;
+        capturedApprovalId = record.approvalId;
+        capturedTransactionId =
+          record.kind === "sendTransaction" && "transactionId" in record.request ? record.request.transactionId : null;
         approvalCreatedResolve?.();
       });
 
@@ -485,9 +488,9 @@ describe("createBackgroundRuntime provider access", () => {
       });
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
       expect(
-        capturedApprovalId ? background.runtime.controllers.transactions.getMeta(capturedApprovalId) : undefined,
+        capturedTransactionId ? background.runtime.controllers.transactions.getMeta(capturedTransactionId) : undefined,
       ).toMatchObject({
-        id: capturedApprovalId,
+        id: capturedTransactionId,
         status: "failed",
         userRejected: false,
       });

@@ -11,7 +11,13 @@ export type {
   UiResponseEnvelope,
 } from "./protocol/envelopes.js";
 export { parseUiEnvelope, UI_CHANNEL } from "./protocol/envelopes.js";
-export { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED, uiEvents } from "./protocol/events.js";
+export {
+  UI_EVENT_APPROVAL_DETAIL_CHANGED,
+  UI_EVENT_APPROVALS_CHANGED,
+  UI_EVENT_ENTRY_CHANGED,
+  UI_EVENT_SNAPSHOT_CHANGED,
+  uiEvents,
+} from "./protocol/events.js";
 export {
   isUiEventName,
   isUiMethodName,
@@ -28,7 +34,8 @@ export {
 export { uiMethods } from "./protocol/methods.js";
 export type {
   AccountsSnapshot,
-  ApprovalSummary,
+  ApprovalDetail,
+  ApprovalListEntry,
   ChainSnapshot,
   NetworkListSnapshot,
   SessionSnapshot,
@@ -40,7 +47,8 @@ export type {
 } from "./protocol/schemas.js";
 export {
   AccountsSnapshotSchema,
-  ApprovalSummarySchema,
+  ApprovalDetailSchema,
+  ApprovalListEntrySchema,
   ChainSnapshotSchema,
   NetworkListSchema,
   SessionSnapshotSchema,

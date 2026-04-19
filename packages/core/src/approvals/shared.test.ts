@@ -5,7 +5,7 @@ import { deriveApprovalReviewContext, parseAccountSelectionDecision, parseNoDeci
 describe("deriveApprovalReviewContext", () => {
   it("uses the approval record chain context by default", () => {
     const context = deriveApprovalReviewContext({
-      id: "approval-1",
+      approvalId: "approval-1",
       kind: ApprovalKinds.RequestPermissions,
       namespace: "eip155",
       chainRef: "eip155:10",
@@ -18,7 +18,7 @@ describe("deriveApprovalReviewContext", () => {
     expect(() =>
       deriveApprovalReviewContext(
         {
-          id: "approval-2",
+          approvalId: "approval-2",
           kind: ApprovalKinds.SignMessage,
           namespace: "eip155",
           chainRef: "eip155:1",

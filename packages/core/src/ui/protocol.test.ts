@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parseUiEnvelope } from "./protocol/envelopes.js";
-import { UI_EVENT_ENTRY_CHANGED, UI_EVENT_SNAPSHOT_CHANGED } from "./protocol/events.js";
+import {
+  UI_EVENT_APPROVAL_DETAIL_CHANGED,
+  UI_EVENT_APPROVALS_CHANGED,
+  UI_EVENT_ENTRY_CHANGED,
+  UI_EVENT_SNAPSHOT_CHANGED,
+} from "./protocol/events.js";
 import {
   isUiEventName,
   isUiMethodName,
@@ -59,7 +64,6 @@ const SNAPSHOT_FIXTURE = {
     autoLockDurationMs: 900_000,
     nextAutoLockAt: null,
   },
-  approvals: [],
   attention: {
     queue: [],
     count: 0,
@@ -100,19 +104,19 @@ describe("ui protocol registry", () => {
 
     expect(
       parseUiMethodParams("ui.approvals.resolve", {
-        id: "approval-1",
+        approvalId: "approval-1",
         action: "approve",
         decision: {
           accountKeys: ["eip155:0000000000000000000000000000000000000000"],
         },
       }),
     ).toMatchObject({
-      id: "approval-1",
+      approvalId: "approval-1",
       action: "approve",
     });
     expect(() =>
       parseUiMethodParams("ui.approvals.resolve", {
-        id: "approval-1",
+        approvalId: "approval-1",
         action: "approve",
         decision: {
           accountKeys: [
@@ -122,6 +126,10 @@ describe("ui protocol registry", () => {
         },
       }),
     ).toThrow();
+
+    expect(parseUiMethodParams("ui.approvals.getDetail", { approvalId: "approval-1" })).toEqual({
+      approvalId: "approval-1",
+    });
   });
 
   it("validates method results (strict)", () => {
@@ -134,18 +142,8 @@ describe("ui protocol registry", () => {
     });
     expect(okOnboardingMnemonic.words).toHaveLength(12);
 
-    const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", {
-      id: "approval-1",
-      status: "approved",
-      terminalReason: "user_approve",
-      value: null,
-    });
-    expect(okApprovalResolve).toEqual({
-      id: "approval-1",
-      status: "approved",
-      terminalReason: "user_approve",
-      value: null,
-    });
+    const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", null);
+    expect(okApprovalResolve).toBeNull();
   });
 
   it("validates event payloads (strict)", () => {
@@ -164,6 +162,11 @@ describe("ui protocol registry", () => {
       },
     });
     expect(entryPayload.context.approvalId).toBe("approval-1");
+
+    expect(parseUiEventPayload(UI_EVENT_APPROVALS_CHANGED, { reason: "changed" })).toEqual({ reason: "changed" });
+    expect(parseUiEventPayload(UI_EVENT_APPROVAL_DETAIL_CHANGED, { approvalId: "approval-1" })).toEqual({
+      approvalId: "approval-1",
+    });
   });
 });
 

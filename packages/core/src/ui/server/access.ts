@@ -1,7 +1,11 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { WalletUi, WalletUiDispatchInput } from "../../engine/types.js";
 import { createLogger, extendLogger } from "../../utils/logger.js";
-import { UI_EVENT_SNAPSHOT_CHANGED } from "../protocol/events.js";
+import {
+  UI_EVENT_APPROVAL_DETAIL_CHANGED,
+  UI_EVENT_APPROVALS_CHANGED,
+  UI_EVENT_SNAPSHOT_CHANGED,
+} from "../protocol/events.js";
 import type { UiMethodName } from "../protocol/index.js";
 import { parseUiMethodParams, parseUiMethodResult } from "../protocol/index.js";
 import { createUiDispatcher } from "./dispatcher.js";
@@ -30,11 +34,11 @@ const requireUiHandler = <M extends UiMethodName>(
   return handler as UiHandlerFn<M>;
 };
 
-const createUiSurfaceIdentity = (uiOrigin: string): UiSurfaceIdentity => ({
+const createUiSurfaceIdentity = (uiOrigin: string, createId: () => string): UiSurfaceIdentity => ({
   transport: "ui" as const,
   portId: UI_SURFACE_PORT_ID,
   origin: uiOrigin,
-  surfaceId: crypto.randomUUID(),
+  surfaceId: createId(),
 });
 
 const createUiStateChangedSubscription = ({
@@ -45,9 +49,7 @@ const createUiStateChangedSubscription = ({
     const unsubs = [
       bridge.stateChanged.accounts.onStateChanged(notify),
       bridge.stateChanged.chains.onStateChanged(notify),
-      bridge.stateChanged.approvals.onStateChanged(notify),
       bridge.stateChanged.permissions.onStateChanged(notify),
-      bridge.stateChanged.transactions.onStateChanged(notify),
       bridge.stateChanged.chains.onSelectionChanged(notify),
       bridge.stateChanged.session.onStateChanged(notify),
       bridge.stateChanged.attention.onStateChanged(notify),
@@ -65,8 +67,75 @@ const createUiStateChangedSubscription = ({
   };
 };
 
+const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): UiRuntimeAccess["subscribeUiEvents"] => {
+  return (listener) => {
+    const emit = (event: ReturnType<UiRuntimeAccess["buildSnapshotEvent"]>) => {
+      try {
+        listener(event);
+      } catch (error) {
+        accessLog("ui event listener threw", error);
+      }
+    };
+
+    const getContext = () => {
+      const chain = server.access.chains.getSelectedChainView();
+      return {
+        namespace: chain.namespace,
+        chainRef: chain.chainRef,
+      };
+    };
+
+    const emitApprovalsChanged = () => {
+      emit({
+        type: "ui:event",
+        event: UI_EVENT_APPROVALS_CHANGED,
+        payload: { reason: "changed" },
+        context: getContext(),
+      });
+    };
+
+    const emitApprovalDetailChanged = (approvalId: string) => {
+      emit({
+        type: "ui:event",
+        event: UI_EVENT_APPROVAL_DETAIL_CHANGED,
+        payload: { approvalId },
+        context: getContext(),
+      });
+    };
+
+    const unsubs = [
+      server.access.approvalEvents.onCreated(() => emitApprovalsChanged()),
+      server.access.approvalEvents.onFinished(({ approvalId }) => {
+        emitApprovalsChanged();
+        emitApprovalDetailChanged(approvalId);
+      }),
+      server.access.transactionEvents.onStateChanged((change) => {
+        const affectedApprovalIds = new Set<string>();
+        for (const transactionId of change.transactionIds) {
+          for (const approvalId of server.access.approvals.read.listAffectedApprovalIds({ transactionId })) {
+            affectedApprovalIds.add(approvalId);
+          }
+        }
+        for (const approvalId of affectedApprovalIds) {
+          emitApprovalDetailChanged(approvalId);
+        }
+      }),
+    ];
+
+    return () => {
+      for (const unsubscribe of unsubs) {
+        try {
+          unsubscribe();
+        } catch (error) {
+          accessLog("failed to remove ui event subscription", error);
+        }
+      }
+    };
+  };
+};
+
 const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) => {
-  const surface = createUiSurfaceIdentity(server.uiOrigin);
+  const surface = createUiSurfaceIdentity(server.uiOrigin, server.createId ?? (() => globalThis.crypto.randomUUID()));
   const uiRuntime = createUiServerRuntime({
     access: server.access,
     platform: server.platform,
@@ -74,6 +143,7 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
     ...(server.extensions ? { extensions: server.extensions } : {}),
   });
   const subscribeStateChanged = createUiStateChangedSubscription({ server, bridge });
+  const subscribeUiEvents = createUiEventSubscription({ server, bridge });
 
   const dispatch = (async <M extends UiMethodName>(input: WalletUiDispatchInput<M>) => {
     const handler = requireUiHandler(uiRuntime.handlers, input.method);
@@ -85,22 +155,24 @@ const createUiRuntimeCore = ({ server, bridge }: CreateUiRuntimeAccessOptions) =
   return {
     uiRuntime,
     subscribeStateChanged,
+    subscribeUiEvents,
     dispatch,
   };
 };
 
 export const createUiContract = ({ server, bridge }: CreateUiRuntimeAccessOptions): WalletUi => {
-  const { uiRuntime, subscribeStateChanged, dispatch } = createUiRuntimeCore({ server, bridge });
+  const { uiRuntime, subscribeStateChanged, subscribeUiEvents, dispatch } = createUiRuntimeCore({ server, bridge });
 
   return {
     buildSnapshot: () => uiRuntime.buildSnapshot(),
     dispatch,
     subscribeStateChanged,
+    subscribeUiEvents,
   };
 };
 
 export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessOptions): UiRuntimeAccess => {
-  const { uiRuntime, subscribeStateChanged } = createUiRuntimeCore({ server, bridge });
+  const { uiRuntime, subscribeStateChanged, subscribeUiEvents } = createUiRuntimeCore({ server, bridge });
 
   const dispatcher = createUiDispatcher({
     handlers: uiRuntime.handlers,
@@ -136,5 +208,6 @@ export const createUiRuntimeAccess = ({ server, bridge }: CreateUiRuntimeAccessO
     dispatchRequest,
     getRequestBroadcastPolicy: (raw) => getUiRequestBroadcastPolicy(raw),
     subscribeStateChanged,
+    subscribeUiEvents,
   };
 };

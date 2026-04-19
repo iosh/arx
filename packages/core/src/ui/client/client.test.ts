@@ -52,7 +52,6 @@ const SNAPSHOT_FIXTURE = {
     autoLockDurationMs: 900_000,
     nextAutoLockAt: null,
   },
-  approvals: [],
   attention: {
     queue: [],
     count: 0,
@@ -135,22 +134,22 @@ describe("ui client runtime", () => {
     });
 
     try {
-      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
+      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
 
       const msg = await transport.nextSent();
       expect(msg).toMatchObject({
         type: "ui:request",
         id: "id1",
         method: "ui.approvals.resolve",
-        params: { id: "a", action: "reject" },
+        params: { approvalId: "a", action: "reject" },
       });
 
       transport.emit({
         type: "ui:response",
         id: "id1",
-        result: { id: "a", status: "rejected", terminalReason: "user_reject" },
+        result: null,
       });
-      await expect(p).resolves.toEqual({ id: "a", status: "rejected", terminalReason: "user_reject" });
+      await expect(p).resolves.toBeNull();
     } finally {
       client.destroy();
     }
@@ -161,7 +160,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
+      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
 
       await transport.nextSent();
 
@@ -188,7 +187,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const p = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
+      const p = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
 
       await transport.nextSent();
 
@@ -208,7 +207,7 @@ describe("ui client runtime", () => {
     try {
       const pendingRequest = client.call(
         "ui.approvals.resolve",
-        { id: "a", action: "reject" },
+        { approvalId: "a", action: "reject" },
         { signal: controller.signal },
       );
 
@@ -270,7 +269,7 @@ describe("ui client runtime", () => {
     const client = createUiClient({ transport, createRequestId: () => "id1", requestTimeoutMs: 1_000 });
 
     try {
-      const pendingRequest = client.call("ui.approvals.resolve", { id: "a", action: "reject" });
+      const pendingRequest = client.call("ui.approvals.resolve", { approvalId: "a", action: "reject" });
 
       await transport.nextSent();
       transport.disconnectNow(new Error("port disconnected"));

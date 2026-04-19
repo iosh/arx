@@ -1,5 +1,4 @@
 import type { AccountCodec } from "../accounts/addressing/codec.js";
-import type { ApprovalSummary } from "../approvals/summary.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata, RpcEndpoint } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
@@ -79,6 +78,7 @@ import type { SettingsPort } from "../services/store/settings/port.js";
 import type { TransactionsPort } from "../services/store/transactions/port.js";
 import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot } from "../storage/index.js";
 import type { NetworkSelectionRecord } from "../storage/records.js";
+import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
@@ -250,8 +250,6 @@ export type WalletApprovals = Readonly<{
   getState(): ApprovalState;
   get(id: string): ApprovalRecord | undefined;
   listPending(): ApprovalRecord[];
-  getSummary(id: string): ApprovalSummary | undefined;
-  listPendingSummaries(): ApprovalSummary[];
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
   cancel: ApprovalController["cancel"];
@@ -395,6 +393,7 @@ export type WalletUi = Readonly<{
   buildSnapshot(): UiSnapshot;
   dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
   subscribeStateChanged(listener: () => void): () => void;
+  subscribeUiEvents(listener: (event: UiEventEnvelope) => void): () => void;
 }>;
 
 /**

@@ -1,5 +1,3 @@
-import { createApprovalFlowRegistry } from "../../approvals/index.js";
-import type { TransactionController } from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { BackgroundSessionServices } from "../../runtime/background/session.js";
 import type { KeyringService } from "../../runtime/keyring/KeyringService.js";
@@ -9,6 +7,7 @@ import type { PermissionViewsService } from "../../services/runtime/permissionVi
 import type { SessionStatusService } from "../../services/runtime/sessionStatus.js";
 import { createUiSessionAccess } from "../../ui/server/sessionAccess.js";
 import { buildUiSnapshot } from "../../ui/server/snapshot.js";
+import type { UiApprovalsAccess } from "../../ui/server/types.js";
 import type { WalletAccounts, WalletApprovals, WalletDappConnections, WalletSnapshots } from "../types.js";
 import { buildProviderSnapshot, type ProviderProjectionDeps } from "./providerProjection.js";
 
@@ -26,8 +25,7 @@ export const createWalletSnapshots = (deps: {
     WalletAccounts,
     "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "getKeyrings" | "setActiveAccount"
   >;
-  approvals: Pick<WalletApprovals, "getState" | "get" | "resolve">;
-  transactions: Pick<TransactionController, "getMeta">;
+  approvals: UiApprovalsAccess;
   namespaceBindings: Pick<
     NamespaceRuntimeBindingsRegistry,
     "getUi" | "hasTransaction" | "hasTransactionReceiptTracking"
@@ -44,13 +42,10 @@ export const createWalletSnapshots = (deps: {
     permissionViews,
     accounts,
     approvals,
-    transactions,
     namespaceBindings,
     dappConnections,
     providerProjection,
   } = deps;
-
-  const approvalFlows = createApprovalFlowRegistry();
   const uiSessionAccess = createUiSessionAccess({
     session,
     sessionStatus,
@@ -66,7 +61,6 @@ export const createWalletSnapshots = (deps: {
     buildUiSnapshot: () =>
       buildUiSnapshot({
         accounts,
-        approvals,
         chains: chainViews,
         permissions: permissionViews,
         session: uiSessionAccess,
@@ -75,8 +69,6 @@ export const createWalletSnapshots = (deps: {
           getSnapshot: () => attention.getSnapshot(),
         },
         namespaceBindings,
-        transactions,
-        approvalFlows,
       }),
   };
 };

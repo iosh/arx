@@ -28,7 +28,7 @@ export type ApprovalScope = Pick<RequestContext, "transport" | "origin" | "portI
 export type ApprovalRequester = ApprovalScope & Pick<RequestContext, "requestId">;
 
 export type ApprovalQueueItem = {
-  id: string;
+  approvalId: string;
   kind: ApprovalKind;
   origin: string;
   namespace: ChainNamespace;
@@ -88,7 +88,7 @@ export type ApprovalDecision<K extends ApprovalKind = ApprovalKind> = ApprovalDe
 export type ApprovalResult<K extends ApprovalKind = ApprovalKind> = ApprovalResultByKind[K];
 
 export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
-  id: string;
+  approvalId: string;
   kind: K;
   origin: string;
   namespace: ChainNamespace;
@@ -102,7 +102,7 @@ export type ApprovalRecord<K extends ApprovalKind = ApprovalKind> = ApprovalCrea
 };
 
 export type ApprovalHandle<K extends ApprovalKind = ApprovalKind> = {
-  id: string;
+  approvalId: string;
   settled: Promise<ApprovalResult<K>>;
 };
 
@@ -111,7 +111,7 @@ export type ApprovalCreatedEvent = {
 };
 
 export type ApprovalFinishedEvent<T = unknown> = {
-  id: string;
+  approvalId: string;
   status: ApprovalFinalStatus;
   terminalReason: ApprovalTerminalReason;
 
@@ -130,12 +130,12 @@ export type ApprovalState = {
 
 export type ApprovalResolveInput =
   | {
-      id: string;
+      approvalId: string;
       action: "approve";
       decision?: unknown;
     }
   | {
-      id: string;
+      approvalId: string;
       action: "reject";
       reason?: string;
       error?: Error;
@@ -143,13 +143,13 @@ export type ApprovalResolveInput =
 
 export type ApprovalResolveResult<T = unknown> =
   | {
-      id: string;
+      approvalId: string;
       status: "approved";
       terminalReason: "user_approve";
       value: T;
     }
   | {
-      id: string;
+      approvalId: string;
       status: "rejected";
       terminalReason: "user_reject";
     };
@@ -162,17 +162,17 @@ export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
 
 export type ApprovalController = {
   getState(): ApprovalState;
-  get(id: string): ApprovalRecord | undefined;
+  get(approvalId: string): ApprovalRecord | undefined;
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void;
   onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
 
-  has(id: string): boolean;
+  has(approvalId: string): boolean;
 
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 
-  cancel(input: { id: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
+  cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void>;
 
   cancelByScope(input: { scope: ApprovalScope; reason: ApprovalTerminalReason }): Promise<number>;
 };

@@ -1,12 +1,14 @@
 import { z } from "zod";
-import {
-  type ApprovalSelectableAccount,
-  ApprovalSelectableAccountSchema,
-  type ApprovalSummary,
-  ApprovalSummarySchema,
-} from "../../approvals/summary.js";
 import { ChainRefSchema } from "../../chains/ids.js";
 import { AccountKeySchema } from "../../storage/records.js";
+import {
+  type ApprovalDetail,
+  ApprovalDetailSchema,
+  type ApprovalListEntry,
+  ApprovalListEntrySchema,
+  type ApprovalSelectableAccount,
+  ApprovalSelectableAccountSchema,
+} from "./models/approvals.js";
 
 export const ChainSnapshotSchema = z.object({
   chainRef: ChainRefSchema,
@@ -114,7 +116,6 @@ export const UiSnapshotSchema = z.object({
   networks: NetworkListSchema,
   accounts: AccountsSnapshotSchema,
   session: SessionSnapshotSchema,
-  approvals: z.array(ApprovalSummarySchema),
   attention: z.object({
     queue: z.array(AttentionRequestSchema),
     count: z.number().int().nonnegative(),
@@ -137,5 +138,5 @@ export type NetworkListSnapshot = z.infer<typeof NetworkListSchema>;
 export type UiKeyringMeta = z.infer<typeof UiKeyringMetaSchema>;
 export type UiAccountMeta = z.infer<typeof UiAccountMetaSchema>;
 export type UiPermissionsSnapshot = z.infer<typeof UiPermissionsSnapshotSchema>;
-export type { ApprovalSelectableAccount, ApprovalSummary };
-export { ApprovalSelectableAccountSchema, ApprovalSummarySchema };
+export type { ApprovalDetail, ApprovalListEntry, ApprovalSelectableAccount };
+export { ApprovalDetailSchema, ApprovalListEntrySchema, ApprovalSelectableAccountSchema };

@@ -171,7 +171,7 @@ describe("ChainViewsService", () => {
     expect(
       service.getApprovalReviewChainView({
         record: {
-          id: "approval-1",
+          approvalId: "approval-1",
           kind: ApprovalKinds.RequestAccounts,
           namespace: "eip155",
           chainRef: MAINNET.chainRef,
@@ -182,7 +182,7 @@ describe("ChainViewsService", () => {
     expect(() =>
       service.getApprovalReviewChainView({
         record: {
-          id: "approval-2",
+          approvalId: "approval-2",
           kind: ApprovalKinds.SignMessage,
           namespace: "eip155",
           chainRef: MAINNET.chainRef,

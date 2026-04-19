@@ -1,21 +1,16 @@
-import { toUnsupportedApprovalSummary } from "../../approvals/presentation.js";
-import type { ApprovalFlowRegistry } from "../../approvals/types.js";
 import { type UiSnapshot, UiSnapshotSchema } from "../protocol/schemas.js";
 import type {
   UiAccountsAccess,
-  UiApprovalsAccess,
   UiAttentionAccess,
   UiChainsAccess,
   UiKeyringsAccess,
   UiNamespaceBindingsAccess,
   UiPermissionsAccess,
   UiSessionAccess,
-  UiTransactionsAccess,
 } from "./types.js";
 
 export const buildUiSnapshot = (deps: {
   accounts: UiAccountsAccess;
-  approvals: UiApprovalsAccess;
   chains: Pick<
     UiChainsAccess,
     "buildWalletNetworksSnapshot" | "findAvailableChainView" | "getApprovalReviewChainView" | "getSelectedChainView"
@@ -25,21 +20,8 @@ export const buildUiSnapshot = (deps: {
   keyrings: Pick<UiKeyringsAccess, "getKeyrings">;
   attention: Pick<UiAttentionAccess, "getSnapshot">;
   namespaceBindings: UiNamespaceBindingsAccess;
-  transactions: Pick<UiTransactionsAccess, "getMeta">;
-  approvalFlows: Pick<ApprovalFlowRegistry, "present">;
 }): UiSnapshot => {
-  const {
-    accounts,
-    approvals,
-    chains,
-    permissions,
-    session,
-    keyrings,
-    attention,
-    namespaceBindings,
-    transactions,
-    approvalFlows,
-  } = deps;
+  const { accounts, chains, permissions, session, keyrings, attention, namespaceBindings } = deps;
 
   const chain = chains.getSelectedChainView();
   const networks = chains.buildWalletNetworksSnapshot();
@@ -61,20 +43,6 @@ export const buildUiSnapshot = (deps: {
 
   const accountsState = accounts.getState();
   const totalCount = Object.values(accountsState.namespaces).reduce((sum, ns) => sum + ns.accountKeys.length, 0);
-
-  const approvalState = approvals.getState();
-  const approvalSummaries = approvalState.pending.map((item) => {
-    const record = approvals.get(item.id);
-    if (!record) {
-      return toUnsupportedApprovalSummary(item);
-    }
-
-    return approvalFlows.present(record, {
-      accounts,
-      chainViews: chains,
-      transactions,
-    });
-  });
 
   const pendingHdKeyrings = keyrings
     .getKeyrings()
@@ -122,7 +90,6 @@ export const buildUiSnapshot = (deps: {
       autoLockDurationMs: sessionStatus.autoLockDurationMs,
       nextAutoLockAt: sessionStatus.nextAutoLockAt,
     },
-    approvals: approvalSummaries,
     attention: attention.getSnapshot(),
     permissions: permissions.buildUiPermissionsSnapshot(),
     backup: {

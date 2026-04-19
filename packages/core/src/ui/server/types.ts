@@ -10,6 +10,7 @@ import type { ChainViewsService } from "../../services/runtime/chainViews/types.
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
 import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
+import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
 import type { UiSnapshot } from "../protocol/schemas.js";
 import type { UiKeyringsAccess } from "./keyringsAccess.js";
 import type { UiSessionAccess, UiStateChangeSubscription } from "./sessionAccess.js";
@@ -60,11 +61,31 @@ export type UiAccountsAccess = Pick<
   "getState" | "listOwnedForNamespace" | "getActiveAccountForNamespace" | "setActiveAccount"
 >;
 
-export type UiApprovalsAccess = Pick<ApprovalController, "getState" | "get" | "resolve">;
+export type UiApprovalsReadModelAccess = {
+  listPendingEntries(): ApprovalListEntry[];
+  getDetail(id: string): ApprovalDetail | null;
+  listAffectedApprovalIds(change: { approvalId: string } | { transactionId: string }): string[];
+};
+
+export type UiApprovalsWriteAccess = Pick<ApprovalController, "resolve">;
+
+export type UiApprovalsAccess = {
+  read: UiApprovalsReadModelAccess;
+  write: UiApprovalsWriteAccess;
+};
+
+export type UiApprovalEventsAccess = {
+  onCreated: ApprovalController["onCreated"];
+  onFinished: ApprovalController["onFinished"];
+};
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
 export type UiTransactionsAccess = Pick<TransactionController, "beginTransactionApproval" | "getMeta">;
+
+export type UiTransactionEventsAccess = {
+  onStateChanged: TransactionController["onStateChanged"];
+};
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<
@@ -95,8 +116,10 @@ export type UiEncodeError = (
 export type UiServerAccess = {
   accounts: UiAccountsAccess;
   approvals: UiApprovalsAccess;
+  approvalEvents: UiApprovalEventsAccess;
   permissions: UiPermissionsAccess;
   transactions: UiTransactionsAccess;
+  transactionEvents: UiTransactionEventsAccess;
   chains: UiChainsAccess;
   accountCodecs: UiAccountCodecsAccess;
   session: UiSessionAccess;
@@ -115,11 +138,9 @@ export type UiSurfaceIdentity = {
 
 export type UiStateChangeSources = {
   accounts: Pick<AccountController, "onStateChanged">;
-  approvals: Pick<ApprovalController, "onStateChanged">;
   permissions: {
     onStateChanged: PermissionsEvents["onStateChanged"];
   };
-  transactions: Pick<TransactionController, "onStateChanged">;
   chains: {
     onStateChanged: UiStateChangeSubscription;
     onSelectionChanged: UiStateChangeSubscription;
@@ -140,6 +161,7 @@ export type UiRuntimeServerDeps = {
   access: UiServerAccess;
   platform: UiPlatformAdapter;
   uiOrigin: string;
+  createId?: () => string;
   extensions?: readonly UiServerExtension[];
 };
 
@@ -186,4 +208,5 @@ export type UiRuntimeAccess = {
     fenceSnapshotBroadcast: boolean;
   };
   subscribeStateChanged: UiStateChangeSubscription;
+  subscribeUiEvents: (listener: (event: UiEventEnvelope) => void) => () => void;
 };

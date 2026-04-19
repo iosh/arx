@@ -4,6 +4,7 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
+import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
 import { createUiServerRuntime } from "../ui/server/runtime.js";
 import { createUiSessionAccess } from "../ui/server/sessionAccess.js";
@@ -128,17 +129,34 @@ const createHandlersForRuntime = (
     sessionStatus: runtime.services.sessionStatus,
     keyring: runtime.services.keyring,
   });
+  const approvalReadService = createApprovalReadService({
+    approvals: runtime.controllers.approvals,
+    accounts: runtime.controllers.accounts,
+    chainViews: runtime.services.chainViews,
+    transactions: runtime.controllers.transactions,
+  });
 
   return createUiServerRuntime({
     access: {
       accounts: runtime.controllers.accounts,
-      approvals: runtime.controllers.approvals,
+      approvals: {
+        read: {
+          listPendingEntries: () => approvalReadService.listPending(),
+          getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
+          listAffectedApprovalIds: (change) => approvalReadService.listAffectedApprovalIds(change),
+        },
+        write: {
+          resolve: runtime.controllers.approvals.resolve.bind(runtime.controllers.approvals),
+        },
+      },
+      approvalEvents: runtime.controllers.approvals,
       permissions: {
         buildUiPermissionsSnapshot: runtime.services.permissionViews.buildUiPermissionsSnapshot.bind(
           runtime.services.permissionViews,
         ),
       },
       transactions: runtime.controllers.transactions,
+      transactionEvents: runtime.controllers.transactions,
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
           runtime.services.chainViews,
@@ -397,7 +415,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const approvalPromise = runtime.controllers.approvals.create(
       {
-        id: "switch-chain-approval",
+        approvalId: "switch-chain-approval",
         kind: ApprovalKinds.SwitchChain,
         origin: "https://dapp.example",
         namespace: "eip155",
@@ -418,13 +436,8 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const before = structuredClone(runtime.controllers.permissions.getState());
     await expect(
-      handlers["ui.approvals.resolve"]({ id: "switch-chain-approval", action: "approve" }),
-    ).resolves.toMatchObject({
-      id: "switch-chain-approval",
-      status: "approved",
-      terminalReason: "user_approve",
-      value: null,
-    });
+      handlers["ui.approvals.resolve"]({ approvalId: "switch-chain-approval", action: "approve" }),
+    ).resolves.toBeNull();
     await expect(approvalPromise).resolves.toBeNull();
     expect(runtime.controllers.permissions.getState()).toEqual(before);
 
@@ -507,7 +520,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const approvalPromise = runtime.controllers.approvals.create(
       {
-        id: "sign-message-approval",
+        approvalId: "sign-message-approval",
         kind: ApprovalKinds.SignMessage,
         origin: "https://dapp.example",
         namespace: "eip155",
@@ -529,7 +542,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     ).settled;
 
     await expect(
-      runtime.controllers.approvals.resolve({ id: "sign-message-approval", action: "approve" }),
+      runtime.controllers.approvals.resolve({ approvalId: "sign-message-approval", action: "approve" }),
     ).rejects.toMatchObject({
       reason: "ChainNotCompatible",
     });
@@ -775,7 +788,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       id: "test.overrideResolve",
       createHandlers: () => ({
         "ui.approvals.resolve": (async () => ({
-          id: "approval-id",
+          approvalId: "approval-id",
           status: "rejected" as const,
           terminalReason: "user_reject" as const,
         })) as never,

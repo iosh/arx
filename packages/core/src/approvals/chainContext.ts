@@ -3,7 +3,7 @@ import { parseChainRef } from "../chains/caip.js";
 import type { ChainRef } from "../chains/ids.js";
 
 export type ApprovalChainContextRecord = {
-  id: string;
+  approvalId: string;
   kind: string;
   namespace: string;
   chainRef: ChainRef;
@@ -36,7 +36,12 @@ export const deriveApprovalReviewContext = (
     throw arxError({
       reason: ArxReasons.RpcInvalidParams,
       message: "Approval record has mismatched namespace and chainRef.",
-      data: { id: record.id, kind: record.kind, namespace: record.namespace, chainRef: resolvedChainRef },
+      data: {
+        approvalId: record.approvalId,
+        kind: record.kind,
+        namespace: record.namespace,
+        chainRef: resolvedChainRef,
+      },
     });
   }
 

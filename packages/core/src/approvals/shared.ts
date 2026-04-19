@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ZodError } from "zod";
+import type { AccountController } from "../controllers/account/types.js";
 import type {
   ApprovalAccountSelectionDecision,
   ApprovalDecision,
@@ -7,8 +8,7 @@ import type {
   ApprovalRecord,
 } from "../controllers/approval/types.js";
 import { deriveApprovalReviewContext as deriveApprovalReviewContextBase } from "./chainContext.js";
-import { ApprovalAccountSelectionDecisionSchema } from "./resolve.js";
-import type { ApprovalFlowPresenterDeps } from "./types.js";
+import { ApprovalAccountSelectionDecisionSchema } from "./decision.js";
 
 type DeriveApprovalReviewContextOptions = {
   request?: { chainRef?: ApprovalRecord["chainRef"] | undefined };
@@ -40,15 +40,17 @@ export const parseAccountSelectionDecision = <K extends ApprovalKind>(kind: K, i
 };
 
 export const deriveApprovalReviewContext = (
-  record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
+  record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
   options?: DeriveApprovalReviewContextOptions,
 ) => {
   return deriveApprovalReviewContextBase(record, options);
 };
 
 export const getApprovalSelectableAccounts = (
-  record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
-  deps: Pick<ApprovalFlowPresenterDeps, "accounts">,
+  record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
+  deps: {
+    accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  },
   options?: DeriveApprovalReviewContextOptions,
 ) => {
   const { reviewChainRef, namespace } = deriveApprovalReviewContext(record, options);
@@ -103,7 +105,7 @@ export const resolveApprovalSelectedAccounts = (args: {
 };
 
 export const deriveApprovalChainContext = (
-  record: Pick<ApprovalRecord, "id" | "kind" | "namespace" | "chainRef">,
+  record: Pick<ApprovalRecord, "approvalId" | "kind" | "namespace" | "chainRef">,
   options?: DeriveApprovalReviewContextOptions,
 ) => {
   const context = deriveApprovalReviewContext(record, options);

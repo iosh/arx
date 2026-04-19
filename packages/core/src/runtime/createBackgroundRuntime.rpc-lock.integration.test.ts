@@ -97,7 +97,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
     let approvalId: string | null = null;
     const approvalRequested = new Promise<void>((resolve) => {
       const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
-        approvalId = record.id;
+        approvalId = record.approvalId;
         unsubscribe();
         resolve();
       });
@@ -150,7 +150,7 @@ describe("createBackgroundRuntime (locked RPC integration)", () => {
       expect(accounts.map((value) => value.toLowerCase())).toContain(address.toLowerCase());
 
       if (!approvalId) throw new Error("Expected approvalId to be set");
-      await runtime.controllers.approvals.resolve({ id: approvalId, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId, action: "approve" });
       await expect(pending).resolves.toMatch(/^0x[0-9a-f]+$/i);
 
       expect(approval).toHaveBeenCalledTimes(1);

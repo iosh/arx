@@ -703,7 +703,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const enableAutoApproval = () => {
     const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
       try {
-        await runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
+        await runtime.controllers.approvals.resolve({ approvalId: record.approvalId, action: "approve" });
       } catch {
         // Ignore errors if approval was already resolved
       }
@@ -785,11 +785,11 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
               id: requestContext.requestId,
               providerNamespace: namespace,
               attachBlockingApproval: <T>(
-                createApproval: (reservation: { id: string; createdAt: number }) => T,
-                reservation?: Partial<{ id: string; createdAt: number }>,
+                createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+                reservation?: Partial<{ approvalId: string; createdAt: number }>,
               ) =>
                 createApproval({
-                  id: reservation?.id ?? `${requestContext.requestId}-approval`,
+                  approvalId: reservation?.approvalId ?? `${requestContext.requestId}-approval`,
                   createdAt: reservation?.createdAt ?? 0,
                 }),
               fulfill: () => true,

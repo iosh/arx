@@ -72,6 +72,8 @@ export const uiCommonActions = (client: UiClient) => {
     },
 
     approvals: {
+      listPending: call("ui.approvals.listPending"),
+      getDetail: call("ui.approvals.getDetail"),
       resolve: call("ui.approvals.resolve"),
     },
 

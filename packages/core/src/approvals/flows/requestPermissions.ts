@@ -1,7 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
 import { ConnectionGrantKinds, type ConnectionGrantRequest } from "../../controllers/permission/types.js";
-import { createApprovalSummaryBase } from "../presentation.js";
 import {
   deriveApprovalReviewContext,
   getApprovalSelectableAccounts,
@@ -13,30 +12,6 @@ import type { ApprovalFlow } from "../types.js";
 export const requestPermissionsApprovalFlow: ApprovalFlow<typeof ApprovalKinds.RequestPermissions> = {
   kind: ApprovalKinds.RequestPermissions,
   parseDecision: (input) => parseAccountSelectionDecision(ApprovalKinds.RequestPermissions, input),
-  present(record, deps) {
-    const { selectableAccounts, recommendedAccountKey } = getApprovalSelectableAccounts(record, deps, {
-      request: record.request,
-    });
-
-    return {
-      ...createApprovalSummaryBase(record, deps, { request: record.request }),
-      type: "requestPermissions",
-      payload: {
-        selectableAccounts: selectableAccounts.map((account) => ({
-          accountKey: account.accountKey,
-          canonicalAddress: account.canonicalAddress,
-          displayAddress: account.displayAddress,
-        })),
-        recommendedAccountKey,
-        requestedGrants: record.request.requestedGrants.flatMap((item) =>
-          item.chainRefs.map((chainRef) => ({
-            grantKind: item.grantKind,
-            chainRef,
-          })),
-        ),
-      },
-    };
-  },
   async approve(record, decision, deps) {
     const grantedGrants = record.request.requestedGrants.map((descriptor) => ({
       grantKind: descriptor.grantKind,

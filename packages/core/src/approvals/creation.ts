@@ -77,7 +77,7 @@ export const requestApproval = <K extends ApprovalKind>(
 
   return deps.approvals.create(
     {
-      id: input.approvalId ?? globalThis.crypto.randomUUID(),
+      approvalId: input.approvalId ?? globalThis.crypto.randomUUID(),
       kind: input.kind,
       origin: requester.origin,
       namespace: context.namespace,

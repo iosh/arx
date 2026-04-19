@@ -280,7 +280,7 @@ describe("createArxWallet", () => {
       const approvalId = "approval-sign-message";
       const handle = wallet.approvals.create(
         {
-          id: approvalId,
+          approvalId,
           kind: ApprovalKinds.SignMessage,
           origin: ORIGIN,
           namespace: EIP155_NAMESPACE,
@@ -304,25 +304,14 @@ describe("createArxWallet", () => {
       expect(wallet.approvals.getState()).toEqual({
         pending: [
           expect.objectContaining({
-            id: approvalId,
+            approvalId,
             kind: ApprovalKinds.SignMessage,
           }),
         ],
       });
-      expect(wallet.approvals.listPendingSummaries()).toEqual([
-        expect.objectContaining({
-          id: approvalId,
-          type: "signMessage",
-          payload: expect.objectContaining({
-            from: address,
-            message: "0x68656c6c6f",
-          }),
-        }),
-      ]);
-
       await wallet.session.unlock({ password: PASSWORD });
-      await expect(wallet.approvals.resolve({ id: approvalId, action: "approve" })).resolves.toMatchObject({
-        id: approvalId,
+      await expect(wallet.approvals.resolve({ approvalId, action: "approve" })).resolves.toMatchObject({
+        approvalId,
         status: "approved",
         terminalReason: "user_approve",
         value: expect.stringMatching(/^0x[0-9a-f]+$/i),

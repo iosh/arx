@@ -37,15 +37,15 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@tanstack/router-cli": "^1.136.6",
-    "@tanstack/router-plugin": "^1.136.5",
+    "@tanstack/router-cli": "^1.166.30",
+    "@tanstack/router-plugin": "^1.167.18",
     "@types/jsdom": "27.0.0",
     "@types/react": "19.1.12",
     "@types/react-dom": "19.1.9",
     "@types/webextension-polyfill": "catalog:",
-    "@wxt-dev/module-react": "1.1.5",
+    "@wxt-dev/module-react": "1.2.2",
     "jsdom": "27.2.0",
     "typescript": "catalog:",
-    "wxt": "0.20.11"
+    "wxt": "0.20.20"
   }
 }

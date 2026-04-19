@@ -12,6 +12,7 @@ import type {
   TransactionWarning,
 } from "../../transactions/types.js";
 import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
+import type { SendTransactionApprovalReview } from "./review/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
@@ -36,6 +37,7 @@ export type TransactionStatusChange = {
 
 export type TransactionStateChange = {
   revision: number;
+  transactionIds: string[];
 };
 
 export type TransactionMeta = {
@@ -58,6 +60,7 @@ export type TransactionMeta = {
 };
 
 export type TransactionApprovalRequestPayload = {
+  transactionId: string;
   chainRef: ChainRef;
   origin: string;
   chain?: TransactionApprovalChainMetadata | null;
@@ -109,6 +112,7 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
+  getApprovalReview(input: TransactionApprovalRequestPayload): SendTransactionApprovalReview;
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,

@@ -7,6 +7,7 @@ import type { TransactionAdapterRegistry } from "../../transactions/adapters/reg
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
+import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -66,9 +67,11 @@ export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #view: StoreTransactionView;
   #executor: TransactionExecutor;
+  #registry: TransactionAdapterRegistry;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
+    this.#registry = options.registry;
 
     const now = options.now ?? Date.now;
     const stateLimit = options.stateLimit ?? 200;
@@ -113,6 +116,21 @@ export class StoreTransactionController implements TransactionController {
 
   getMeta(id: string): TransactionMeta | undefined {
     return this.#view.getMeta(id);
+  }
+
+  getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
+    const transaction = this.#view.getMeta(input.transactionId);
+    const adapter = this.#registry.get(input.request.namespace);
+    const namespaceReview =
+      adapter?.buildApprovalReview?.({
+        transaction,
+        request: input,
+      }) ?? null;
+
+    return buildSendTransactionApprovalReview({
+      transaction,
+      namespaceReview,
+    });
   }
 
   beginTransactionApproval(

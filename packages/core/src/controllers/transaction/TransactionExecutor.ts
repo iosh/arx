@@ -1,8 +1,8 @@
-import { ArxReasons, isArxError } from "@arx/errors";
+import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { requestApproval } from "../../approvals/creation.js";
 import { parseChainRef } from "../../chains/caip.js";
-import type { AccountController } from "../../controllers/account/types.js";
+import type { AccountController, OwnedAccountView } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
@@ -23,7 +23,6 @@ import type {
   TransactionApprovalRequestPayload,
   TransactionController,
   TransactionError,
-  TransactionIssue,
   TransactionMeta,
   TransactionRequest,
   TransactionStatus,
@@ -40,7 +39,6 @@ import {
   createReceiptTrackingUnsupportedError,
   createTransactionSubmissionUnavailableError,
   isUserRejectedError,
-  missingAdapterIssue,
 } from "./utils.js";
 
 const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
@@ -132,12 +130,14 @@ export class TransactionExecutor
     }
 
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
-    // Avoid RPC/slow work before the approval is enqueued.
     const adapter = this.#registry.get(derived.namespace);
     if (adapter && !adapter.receiptTracking) {
       throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef });
     }
-    const derivedRequestCandidate = adapter?.deriveRequestForChain?.(request, chainRef) ?? {
+    if (!adapter) {
+      throw createMissingAdapterError(derived.namespace);
+    }
+    const derivedRequestCandidate = adapter.deriveRequestForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
     };
@@ -156,30 +156,13 @@ export class TransactionExecutor
       ...derivedRequestCandidate,
       chainRef,
     };
-    const collectedWarnings: TransactionWarning[] = [];
-    const collectedIssues: TransactionIssue[] = adapter ? [] : [missingAdapterIssue(derived.namespace)];
-
-    const ownedAccounts = this.#accounts.listOwnedForNamespace({ namespace: derived.namespace, chainRef });
-    if (ownedAccounts.length === 0) {
-      collectedIssues.push({
-        kind: "issue",
-        code: "transaction.request.no_accounts",
-        message: "No accounts are available to sign this transaction.",
-        severity: "high",
-        data: { chainRef },
-      });
-    } else {
-      const ownedKeys = new Set(ownedAccounts.map((account) => account.accountKey));
-      if (!ownedKeys.has(fromAccountKey)) {
-        collectedIssues.push({
-          kind: "issue",
-          code: "transaction.request.from_not_owned",
-          message: "Requested from address is not available in this wallet.",
-          severity: "high",
-          data: { from: fromAddress, chainRef },
-        });
-      }
-    }
+    this.#requireOwnedFromAccount({
+      namespace: derived.namespace,
+      chainRef,
+      fromAddress,
+      fromAccountKey,
+    });
+    adapter.validateRequest?.(derivedRequest);
 
     const created = await this.#service.createPending({
       id,
@@ -189,18 +172,19 @@ export class TransactionExecutor
       origin: requestContext.origin,
       fromAccountKey: fromAccountKey,
       request: cloneRequest(derivedRequest),
-      warnings: cloneWarnings(collectedWarnings),
-      issues: cloneIssues(collectedIssues),
+      warnings: [],
+      issues: [],
     });
 
     const storedMeta = this.#view.commitRecord(created).next;
 
     const approvalRequest = this.#createApprovalRequest(storedMeta);
+    const approvalId = crypto.randomUUID();
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
       approvalHandle = options?.providerRequestHandle
         ? options.providerRequestHandle.attachBlockingApproval(
-            ({ id, createdAt }) =>
+            ({ approvalId, createdAt }) =>
               requestApproval(
                 {
                   approvals: this.#approvals,
@@ -209,14 +193,14 @@ export class TransactionExecutor
                 {
                   kind: ApprovalKinds.SendTransaction,
                   requestContext,
-                  approvalId: id,
+                  approvalId,
                   createdAt,
                   request: approvalRequest,
                 },
               ),
             {
               // Transaction-backed approvals keep a stable 1:1 link with the transaction record.
-              id: storedMeta.id,
+              approvalId,
               createdAt: storedMeta.createdAt,
             },
           )
@@ -228,7 +212,7 @@ export class TransactionExecutor
             {
               kind: ApprovalKinds.SendTransaction,
               requestContext,
-              approvalId: storedMeta.id,
+              approvalId,
               createdAt: storedMeta.createdAt,
               request: approvalRequest,
             },
@@ -245,10 +229,40 @@ export class TransactionExecutor
 
     return {
       transactionId: storedMeta.id,
-      approvalId: storedMeta.id,
+      approvalId: approvalHandle.approvalId,
       pendingMeta: storedMeta,
       waitForApprovalDecision: () => approvalPromise,
     };
+  }
+
+  #requireOwnedFromAccount(params: {
+    namespace: string;
+    chainRef: string;
+    fromAddress: string;
+    fromAccountKey: string;
+  }): OwnedAccountView {
+    const { namespace, chainRef, fromAddress, fromAccountKey } = params;
+    const ownedAccount = this.#accounts.listOwnedForNamespace({ namespace, chainRef }).find((account) => {
+      return account.accountKey === fromAccountKey;
+    });
+    if (ownedAccount) {
+      return ownedAccount;
+    }
+
+    const activeAccount = this.#accounts.getActiveAccountForNamespace({ namespace, chainRef });
+    if (!activeAccount) {
+      throw arxError({
+        reason: ArxReasons.PermissionDenied,
+        message: "No accounts are available to sign this transaction.",
+        data: { chainRef, namespace },
+      });
+    }
+
+    throw arxError({
+      reason: ArxReasons.PermissionDenied,
+      message: "Requested from address is not available in this wallet.",
+      data: { from: fromAddress, chainRef },
+    });
   }
 
   async approveTransaction(id: string): Promise<TransactionMeta | null> {
@@ -530,6 +544,7 @@ export class TransactionExecutor
 
   #createApprovalRequest(meta: TransactionMeta): TransactionApprovalRequestPayload {
     return {
+      transactionId: meta.id,
       chainRef: meta.chainRef,
       origin: meta.origin,
       chain: this.#buildChainMetadata(meta),

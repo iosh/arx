@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { TransactionStatusChange } from "../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
 import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
@@ -7,6 +8,7 @@ import {
   createChainMetadata,
   flushAsync,
   setupBackground,
+  TEST_MNEMONIC,
   TEST_RECEIPT_MAX_DELAY,
   TEST_RECEIPT_POLL_INTERVAL,
 } from "./__fixtures__/backgroundTestSetup.js";
@@ -18,6 +20,23 @@ const makeRequestContext = (origin: string) => ({
   requestId: crypto.randomUUID(),
   origin,
 });
+
+const createOwnedAddress = async (context: Awaited<ReturnType<typeof setupBackground>>, chainRef: string) => {
+  await context.runtime.services.session.createVault({ password: "test" });
+  await context.runtime.services.session.unlock.unlock({ password: "test" });
+  const { keyringId } = await context.runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+  const account = await context.runtime.services.keyring.deriveAccount(keyringId);
+  await context.runtime.controllers.accounts.setActiveAccount({
+    namespace: "eip155",
+    chainRef,
+    accountKey: toAccountKeyFromAddress({
+      chainRef,
+      address: account.address,
+      accountCodecs: context.runtime.services.accountCodecs,
+    }),
+  });
+  return account.address;
+};
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -78,6 +97,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
     const unsubscribeStatus = context.runtime.bus.subscribe(TRANSACTION_STATUS_CHANGED, (payload) => {
@@ -89,7 +109,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            from: fromAddress,
             to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             value: "0x0",
             data: "0x",
@@ -187,6 +207,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     const statusEvents: TransactionStatusChange[] = [];
@@ -195,11 +216,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
 
     try {
-      const fromAddresses = [
-        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "0xcccccccccccccccccccccccccccccccccccccccc",
-      ];
+      const fromAddresses = [fromAddress, fromAddress, fromAddress];
       const toAddresses = [
         "0xdddddddddddddddddddddddddddddddddddddddd",
         "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
@@ -297,6 +314,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
@@ -305,7 +323,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            from: fromAddress,
             to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             value: "0x0",
             data: "0x",
@@ -380,6 +398,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
@@ -388,7 +407,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            from: fromAddress,
             to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             value: "0x0",
             data: "0x",
@@ -520,6 +539,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
@@ -528,7 +548,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            from: fromAddress,
             to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             value: "0x0",
             data: "0x",
@@ -600,6 +620,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       transactions: { registry },
       persistDebounceMs: 0,
     });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
@@ -608,7 +629,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
           payload: {
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            from: fromAddress,
             to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             value: "0x0",
             data: "0x",

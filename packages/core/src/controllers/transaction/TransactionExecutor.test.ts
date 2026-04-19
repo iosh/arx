@@ -7,6 +7,7 @@ import { TransactionExecutor } from "./TransactionExecutor.js";
 import type { TransactionMeta } from "./types.js";
 
 const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
+const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
 const REQUEST_CONTEXT = {
   transport: "provider" as const,
   origin: "https://dapp.example",
@@ -39,7 +40,7 @@ const toMeta = (record: TransactionRecord, from: string): TransactionMeta => ({
 });
 
 describe("TransactionExecutor", () => {
-  it("begins a transaction approval with aligned transaction and approval ids", async () => {
+  it("begins a transaction approval with a linked but distinct approval id", async () => {
     const chainRef = "eip155:10";
     const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
@@ -74,7 +75,7 @@ describe("TransactionExecutor", () => {
     const queuePrepare = vi.fn();
     let settleApproval: ((value: TransactionMeta) => void) | null = null;
     const createApproval = vi.fn(() => ({
-      id: REQUEST_ID,
+      approvalId: APPROVAL_ID,
       settled: new Promise<TransactionMeta>((resolve) => {
         settleApproval = resolve;
       }),
@@ -106,7 +107,10 @@ describe("TransactionExecutor", () => {
         create: createApproval,
       } as never,
       registry: {
-        get: () => undefined,
+        get: () => ({
+          validateRequest: () => undefined,
+          receiptTracking: createReceiptTrackingStub(),
+        }),
       } as never,
       service: {
         createPending,
@@ -118,7 +122,10 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
     const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
@@ -135,26 +142,26 @@ describe("TransactionExecutor", () => {
 
     expect(handoff).toMatchObject({
       transactionId: REQUEST_ID,
-      approvalId: REQUEST_ID,
+      approvalId: APPROVAL_ID,
       pendingMeta: { id: REQUEST_ID, status: "pending", chainRef, namespace: "eip155" },
     });
     expect(createPending).toHaveBeenCalledTimes(1);
     expect(createPending).toHaveBeenCalledWith(
       expect.objectContaining({
-        issues: [
-          expect.objectContaining({
-            code: "transaction.adapter_missing",
-          }),
-        ],
+        issues: [],
+        warnings: [],
       }),
     );
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(settleApproval).toBeTypeOf("function");
     expect(createApproval).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: REQUEST_ID,
+        approvalId: APPROVAL_ID,
         createdAt: createdRecord.createdAt,
         origin: REQUEST_CONTEXT.origin,
+        request: expect.objectContaining({
+          transactionId: REQUEST_ID,
+        }),
       }),
       expect.objectContaining({
         origin: REQUEST_CONTEXT.origin,
@@ -197,16 +204,16 @@ describe("TransactionExecutor", () => {
     const createPending = vi.fn(async () => createdRecord);
     const queuePrepare = vi.fn();
     const createApproval = vi.fn(() => ({
-      id: REQUEST_ID,
+      approvalId: APPROVAL_ID,
       settled: Promise.resolve(toMeta(createdRecord, from)),
     }));
     const attachBlockingApproval = vi.fn(
       <T>(
-        createLinkedApproval: (reservation: { id: string; createdAt: number }) => T,
-        reservation?: Partial<{ id: string; createdAt: number }>,
+        createLinkedApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+        reservation?: Partial<{ approvalId: string; createdAt: number }>,
       ) =>
         createLinkedApproval({
-          id: reservation?.id ?? "unexpected-approval-id",
+          approvalId: reservation?.approvalId ?? "unexpected-approval-id",
           createdAt: reservation?.createdAt ?? 0,
         }),
     );
@@ -237,7 +244,10 @@ describe("TransactionExecutor", () => {
         create: createApproval,
       } as never,
       registry: {
-        get: () => undefined,
+        get: () => ({
+          validateRequest: () => undefined,
+          receiptTracking: createReceiptTrackingStub(),
+        }),
       } as never,
       service: {
         createPending,
@@ -249,7 +259,10 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
     const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
@@ -275,17 +288,20 @@ describe("TransactionExecutor", () => {
     );
     randomUuidSpy.mockRestore();
 
-    expect(handoff.approvalId).toBe(REQUEST_ID);
+    expect(handoff.approvalId).toBe(APPROVAL_ID);
     expect(attachBlockingApproval).toHaveBeenCalledTimes(1);
     expect(attachBlockingApproval).toHaveBeenCalledWith(expect.any(Function), {
-      id: REQUEST_ID,
+      approvalId: APPROVAL_ID,
       createdAt: createdRecord.createdAt,
     });
     expect(createApproval).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: REQUEST_ID,
+        approvalId: APPROVAL_ID,
         createdAt: createdRecord.createdAt,
         origin: REQUEST_CONTEXT.origin,
+        request: expect.objectContaining({
+          transactionId: REQUEST_ID,
+        }),
       }),
       expect.objectContaining({
         origin: REQUEST_CONTEXT.origin,
@@ -385,7 +401,10 @@ describe("TransactionExecutor", () => {
         create: createApproval,
       } as never,
       registry: {
-        get: () => undefined,
+        get: () => ({
+          validateRequest: () => undefined,
+          receiptTracking: createReceiptTrackingStub(),
+        }),
       } as never,
       service: {
         createPending: vi.fn(async () => createdRecord),
@@ -399,7 +418,10 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
     await expect(
       executor.beginTransactionApproval(
         {
@@ -507,7 +529,10 @@ describe("TransactionExecutor", () => {
         create: () => ({ id: REQUEST_ID, settled: Promise.resolve(approvalResult) }),
       } as never,
       registry: {
-        get: () => undefined,
+        get: () => ({
+          validateRequest: () => undefined,
+          receiptTracking: createReceiptTrackingStub(),
+        }),
       } as never,
       service: {
         createPending,
@@ -519,7 +544,10 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
     const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
@@ -611,7 +639,7 @@ describe("TransactionExecutor", () => {
         ],
       } as never,
       approvals: {
-        create: () => ({ id: REQUEST_ID, settled: Promise.resolve(approvalResult) }),
+        create: () => ({ id: APPROVAL_ID, settled: Promise.resolve(approvalResult) }),
       } as never,
       registry: {
         get: () => ({
@@ -629,7 +657,10 @@ describe("TransactionExecutor", () => {
       now: () => 1,
     });
 
-    const randomUuidSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(REQUEST_ID);
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
     const handoff = await executor.beginTransactionApproval(
       {
         namespace: "eip155",
@@ -669,6 +700,148 @@ describe("TransactionExecutor", () => {
         },
       }),
     );
+  });
+
+  it("rejects before creating approval when no adapter is registered", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+    const createPending = vi.fn();
+    const createApproval = vi.fn();
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: vi.fn(),
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountKey,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: createApproval,
+      } as never,
+      registry: {
+        get: () => undefined,
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare: vi.fn(),
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    await expect(
+      executor.beginTransactionApproval(
+        {
+          namespace: "eip155",
+          payload: {
+            from,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        REQUEST_CONTEXT,
+      ),
+    ).rejects.toMatchObject({
+      name: "TransactionAdapterMissingError",
+    });
+
+    expect(createPending).not.toHaveBeenCalled();
+    expect(createApproval).not.toHaveBeenCalled();
+  });
+
+  it("rejects before creating approval when request validation finds invalid fee fields", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+    const createPending = vi.fn();
+    const createApproval = vi.fn();
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: vi.fn(),
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountKey,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: createApproval,
+      } as never,
+      registry: {
+        get: () => ({
+          validateRequest: () => {
+            throw arxError({
+              reason: ArxReasons.RpcInvalidParams,
+              message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
+              data: { code: "transaction.prepare.fee_conflict" },
+            });
+          },
+          receiptTracking: createReceiptTrackingStub(),
+        }),
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare: vi.fn(),
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    await expect(
+      executor.beginTransactionApproval(
+        {
+          namespace: "eip155",
+          payload: {
+            from,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        REQUEST_CONTEXT,
+      ),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
+    });
+
+    expect(createPending).not.toHaveBeenCalled();
+    expect(createApproval).not.toHaveBeenCalled();
   });
 
   it("fails with a stable adapter-missing error when execution reaches a namespace without a transaction adapter", async () => {

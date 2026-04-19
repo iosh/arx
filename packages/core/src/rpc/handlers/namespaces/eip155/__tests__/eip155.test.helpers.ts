@@ -290,9 +290,9 @@ export const setupApprovalResponder = (
         await responder(record);
       } catch (error) {
         console.error("[setupApprovalResponder] Responder error:", error);
-        if (runtime.controllers.approvals.has(record.id)) {
+        if (runtime.controllers.approvals.has(record.approvalId)) {
           await runtime.controllers.approvals.cancel({
-            id: record.id,
+            approvalId: record.approvalId,
             reason: "internal_error",
             error: new Error("setupApprovalResponder: responder did not resolve/reject approval"),
           });
@@ -310,7 +310,7 @@ export const setupSwitchChainApprovalResponder = (runtime: ReturnType<typeof cre
       return false;
     }
 
-    await runtime.controllers.approvals.resolve({ id: record.id, action: "approve" });
+    await runtime.controllers.approvals.resolve({ approvalId: record.approvalId, action: "approve" });
     return true;
   });
 };

@@ -56,7 +56,7 @@ export const requestProviderApproval = <K extends ApprovalKind>(args: {
   const requestContext = requireRequestContext(args.rpcContext, args.method);
   const providerRequestHandle = requireProviderRequestHandle(args.rpcContext, args.method);
 
-  return providerRequestHandle.attachBlockingApproval(({ id, createdAt }) =>
+  return providerRequestHandle.attachBlockingApproval(({ approvalId, createdAt }) =>
     requestApproval(
       {
         approvals: args.controllers.approvals,
@@ -66,7 +66,7 @@ export const requestProviderApproval = <K extends ApprovalKind>(args: {
         kind: args.kind,
         requestContext,
         request: args.request,
-        approvalId: id,
+        approvalId,
         createdAt,
       },
     ),

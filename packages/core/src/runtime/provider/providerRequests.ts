@@ -27,7 +27,7 @@ type ProviderRequestTerminalState =
   | { status: "cancelled"; reason: ProviderRequestCancellationReason };
 
 export type BlockingApprovalReservation = {
-  id: string;
+  approvalId: string;
   createdAt: number;
 };
 
@@ -57,7 +57,7 @@ export type ProviderRequests = {
 type CreateProviderRequestsDeps = {
   generateId: () => string;
   now: () => number;
-  cancelApproval: (input: { id: string; reason: ApprovalTerminalReason }) => Promise<void>;
+  cancelApproval: (input: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
 };
 
 const cloneRecord = (record: ProviderRequestRecord): ProviderRequestRecord => ({
@@ -78,7 +78,7 @@ const reserveBlockingApproval = (
   input: Partial<BlockingApprovalReservation> | undefined,
   deps: Pick<CreateProviderRequestsDeps, "generateId" | "now">,
 ): BlockingApprovalReservation => ({
-  id: input?.id ?? deps.generateId(),
+  approvalId: input?.approvalId ?? deps.generateId(),
   createdAt: input?.createdAt ?? deps.now(),
 });
 
@@ -195,19 +195,19 @@ export const createProviderRequests = ({
         const reservation = reserveBlockingApproval(reservationInput, { generateId, now });
         currentRecord = {
           ...liveRecord,
-          blockingApprovalId: reservation.id,
+          blockingApprovalId: reservation.approvalId,
         };
         records.set(id, currentRecord);
 
         try {
           const approvalHandle = createApproval(reservation);
-          if (approvalHandle.id !== reservation.id) {
+          if (approvalHandle.approvalId !== reservation.approvalId) {
             throw new Error(`Provider request "${id}" created a mismatched blocking approval handle.`);
           }
           return approvalHandle;
         } catch (error) {
           const currentLiveRecord = records.get(id);
-          if (currentLiveRecord?.blockingApprovalId === reservation.id) {
+          if (currentLiveRecord?.blockingApprovalId === reservation.approvalId) {
             const rollbackRecord = cloneRecord(currentLiveRecord);
             delete rollbackRecord.blockingApprovalId;
             currentRecord = rollbackRecord;
@@ -226,7 +226,7 @@ export const createProviderRequests = ({
 
         if (currentRecord.blockingApprovalId) {
           await cancelApproval({
-            id: currentRecord.blockingApprovalId,
+            approvalId: currentRecord.blockingApprovalId,
             reason,
           });
         }

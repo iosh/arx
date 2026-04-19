@@ -32,8 +32,8 @@ describe("createProviderRequests", () => {
       method: "eth_requestAccounts",
     });
 
-    targetHandle.attachBlockingApproval(({ id }) => ({
-      id,
+    targetHandle.attachBlockingApproval(({ approvalId }) => ({
+      approvalId,
       settled: new Promise<never>(() => {}),
     }));
 
@@ -41,7 +41,7 @@ describe("createProviderRequests", () => {
 
     expect(cancelApproval).toHaveBeenCalledTimes(1);
     expect(cancelApproval).toHaveBeenCalledWith({
-      id: "approval-1",
+      approvalId: "approval-1",
       reason: "session_lost",
     });
     expect(providerRequests.has("request-1")).toBe(false);
@@ -92,25 +92,25 @@ describe("createProviderRequests", () => {
     });
 
     let cancelPromise: Promise<boolean> | null = null;
-    const approvalHandle = handle.attachBlockingApproval(({ id, createdAt }) => {
+    const approvalHandle = handle.attachBlockingApproval(({ approvalId, createdAt }) => {
       expect(createdAt).toBe(300);
       expect(providerRequests.get("request-3")).toMatchObject({
         id: "request-3",
-        blockingApprovalId: id,
+        blockingApprovalId: approvalId,
       });
       cancelPromise = handle.cancel("session_lost");
 
       return {
-        id,
+        approvalId,
         settled: new Promise<never>(() => {}),
       };
     });
 
-    expect(approvalHandle.id).toBe("approval-3");
+    expect(approvalHandle.approvalId).toBe("approval-3");
     await expect(cancelPromise).resolves.toBe(true);
     expect(cancelApproval).toHaveBeenCalledTimes(1);
     expect(cancelApproval).toHaveBeenCalledWith({
-      id: "approval-3",
+      approvalId: "approval-3",
       reason: "session_lost",
     });
     expect(providerRequests.has("request-3")).toBe(false);

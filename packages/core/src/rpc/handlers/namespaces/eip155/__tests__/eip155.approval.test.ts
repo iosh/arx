@@ -1,11 +1,11 @@
 import type { JsonRpcParams } from "@metamask/utils";
 import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../../../../../accounts/addressing/accountKey.js";
-import { createApprovalFlowRegistry } from "../../../../../approvals/index.js";
 import { ApprovalKinds, type TransactionMeta } from "../../../../../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../../../../../controllers/transaction/topics.js";
 import { MemoryNetworkSelectionPort } from "../../../../../runtime/__fixtures__/backgroundTestSetup.js";
 import { TransactionAdapterRegistry } from "../../../../../transactions/adapters/registry.js";
+import { createApprovalReadService } from "../../../../../ui/server/approvals/readService.js";
 import {
   ADD_CHAIN_PARAMS,
   ADDED_CHAIN_REF,
@@ -31,13 +31,20 @@ const createReceiptTrackingStub = () => ({
   fetchReceipt: vi.fn(async () => null),
 });
 
+const getApprovalDetail = (runtime: ReturnType<typeof createRuntime>, approvalId: string) =>
+  createApprovalReadService({
+    approvals: runtime.controllers.approvals,
+    accounts: runtime.controllers.accounts,
+    chainViews: runtime.services.chainViews,
+    transactions: runtime.controllers.transactions,
+  }).getDetail(approvalId);
+
 describe("eip155 handlers - approval metadata", () => {
   it("presents requestPermissions approvals as chain-scoped access requests", async () => {
     const runtime = createRuntime();
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const activeChain = getActiveChainMetadata(runtime);
     await runtime.services.session.createVault({ password: "test" });
@@ -69,20 +76,18 @@ describe("eip155 handlers - approval metadata", () => {
       }
 
       capturedTask = task;
-      const summary = approvalRegistry.present(task, {
-        accounts: runtime.controllers.accounts,
-        chainViews: runtime.services.chainViews,
-        transactions: runtime.controllers.transactions,
-      });
-
-      expect(summary).toEqual({
-        id: task.id,
-        type: "requestPermissions",
+      expect(getApprovalDetail(runtime, task.approvalId)).toEqual({
+        approvalId: task.approvalId,
+        kind: ApprovalKinds.RequestPermissions,
         origin: ORIGIN,
         namespace: activeChain.namespace,
         chainRef: activeChain.chainRef,
         createdAt: task.createdAt,
-        payload: {
+        actions: {
+          canApprove: true,
+          canReject: true,
+        },
+        request: {
           selectableAccounts: selectableAccounts.map((account) => ({
             accountKey: account.accountKey,
             canonicalAddress: account.canonicalAddress,
@@ -91,9 +96,14 @@ describe("eip155 handlers - approval metadata", () => {
           recommendedAccountKey: selectableAccount.accountKey,
           requestedGrants: [{ grantKind: "eth_accounts", chainRef: activeChain.chainRef }],
         },
+        review: null,
       });
 
-      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+      void runtime.controllers.approvals.resolve({
+        approvalId: task.approvalId,
+        action: "reject",
+        error: rejectionError,
+      });
       return true;
     });
 
@@ -140,7 +150,7 @@ describe("eip155 handlers - approval metadata", () => {
     const unsubscribe = runtime.controllers.approvals.onCreated(({ record }) => {
       capturedTask = record;
       void runtime.controllers.approvals.resolve({
-        id: record.id,
+        approvalId: record.approvalId,
         action: "approve",
         decision: { accountKeys: [accountKey] },
       });
@@ -168,7 +178,6 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
     const selectedChain = runtime.services.chainViews.getSelectedChainView();
     const providerChain = runtime.services.chainViews.getActiveChainViewForNamespace("eip155");
@@ -187,23 +196,27 @@ describe("eip155 handlers - approval metadata", () => {
     );
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.RequestAccounts) {
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+        await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         return true;
       }
       if (task.kind === ApprovalKinds.SignMessage) {
         capturedTask = task;
-        const summary = approvalRegistry.present(task, {
-          accounts: runtime.controllers.accounts,
-          chainViews: runtime.services.chainViews,
-          transactions: runtime.controllers.transactions,
-        });
-        expect(summary).toMatchObject({
-          type: "signMessage",
+        expect(getApprovalDetail(runtime, task.approvalId)).toMatchObject({
+          approvalId: task.approvalId,
+          kind: ApprovalKinds.SignMessage,
           namespace: "eip155",
           chainRef: ALT_CHAIN.chainRef,
+          request: {
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            message: "0xdeadbeef",
+          },
+          review: null,
         });
-        expect(summary.chainRef).toBe(selectedChain.chainRef);
-        void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+        void runtime.controllers.approvals.resolve({
+          approvalId: task.approvalId,
+          action: "reject",
+          error: rejectionError,
+        });
         return true;
       }
       return false;
@@ -252,7 +265,11 @@ describe("eip155 handlers - approval metadata", () => {
         return false;
       }
       capturedTask = task;
-      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+      void runtime.controllers.approvals.resolve({
+        approvalId: task.approvalId,
+        action: "reject",
+        error: rejectionError,
+      });
       return true;
     });
 
@@ -298,7 +315,7 @@ describe("eip155 handlers - approval metadata", () => {
         return false;
       }
       capturedTask = task;
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
       return true;
     });
 
@@ -324,7 +341,6 @@ describe("eip155 handlers - approval metadata", () => {
     runtime.lifecycle.start();
 
     const execute = createExecutor(runtime);
-    const registry = createApprovalFlowRegistry();
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
@@ -334,23 +350,23 @@ describe("eip155 handlers - approval metadata", () => {
 
       capturedTask = task;
 
-      const summary = registry.present(task, {
-        accounts: runtime.controllers.accounts,
-        chainViews: runtime.services.chainViews,
-        transactions: runtime.controllers.transactions,
-      });
-
-      expect(summary).toMatchObject({
-        type: "addChain",
+      expect(getApprovalDetail(runtime, task.approvalId)).toMatchObject({
+        approvalId: task.approvalId,
+        kind: ApprovalKinds.AddChain,
         namespace: "eip155",
         chainRef: ADDED_CHAIN_REF,
-        payload: {
+        request: {
           chainRef: ADDED_CHAIN_REF,
+          chainId: ADD_CHAIN_PARAMS.chainId,
           displayName: ADD_CHAIN_PARAMS.chainName,
+          rpcUrls: ADD_CHAIN_PARAMS.rpcUrls,
+          blockExplorerUrl: ADD_CHAIN_PARAMS.blockExplorerUrls[0],
+          isUpdate: false,
         },
+        review: null,
       });
 
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
       return true;
     });
 
@@ -388,14 +404,25 @@ describe("eip155 handlers - approval metadata", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
 
-    const approvalRegistry = createApprovalFlowRegistry();
     const execute = createExecutor(runtime);
-    const selectedChain = runtime.services.chainViews.getSelectedChainView();
-    expect(selectedChain.chainRef).toBe(ALT_CHAIN.chainRef);
+    expect(runtime.services.chainViews.getSelectedChainView().chainRef).toBe(ALT_CHAIN.chainRef);
+    await runtime.services.session.createVault({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+    const account = await runtime.services.keyring.deriveAccount(keyringId);
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: ALT_CHAIN.namespace,
+      chainRef: ALT_CHAIN.chainRef,
+      accountKey: toAccountKeyFromAddress({
+        chainRef: ALT_CHAIN.chainRef,
+        address: account.address,
+        accountCodecs: runtime.services.accountCodecs,
+      }),
+    });
     await connectOrigin({
       runtime,
       chainRefs: [ALT_CHAIN.chainRef],
-      addresses: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      addresses: [account.address],
     });
 
     let capturedTask: ReturnType<typeof runtime.controllers.approvals.get> | undefined;
@@ -405,18 +432,25 @@ describe("eip155 handlers - approval metadata", () => {
         return false;
       }
       capturedTask = task;
-      const summary = approvalRegistry.present(task, {
-        accounts: runtime.controllers.accounts,
-        chainViews: runtime.services.chainViews,
-        transactions: runtime.controllers.transactions,
-      });
-      expect(summary).toMatchObject({
-        type: "sendTransaction",
+      expect(getApprovalDetail(runtime, task.approvalId)).toMatchObject({
+        approvalId: task.approvalId,
+        kind: ApprovalKinds.SendTransaction,
         namespace: "eip155",
         chainRef: ALT_CHAIN.chainRef,
+        request: {
+          transactionId: task.request.transactionId,
+          chainRef: ALT_CHAIN.chainRef,
+          origin: ORIGIN,
+        },
+        review: {
+          namespaceReview: null,
+        },
       });
-      expect(summary.chainRef).toBe(selectedChain.chainRef);
-      void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+      void runtime.controllers.approvals.resolve({
+        approvalId: task.approvalId,
+        action: "reject",
+        error: rejectionError,
+      });
       return true;
     });
 
@@ -428,7 +462,7 @@ describe("eip155 handlers - approval metadata", () => {
             method: "eth_sendTransaction",
             params: [
               {
-                from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                from: account.address,
                 to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 value: "0x0",
                 data: "0x",
@@ -441,6 +475,7 @@ describe("eip155 handlers - approval metadata", () => {
 
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
+      expect(capturedTask?.request.transactionId).toEqual(expect.any(String));
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
@@ -500,7 +535,7 @@ describe("eip155 handlers - approval metadata", () => {
       }
 
       capturedTask = task;
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
       return true;
     });
 
@@ -522,8 +557,8 @@ describe("eip155 handlers - approval metadata", () => {
         }),
       ).rejects.toMatchObject({ code: 4001 });
 
-      expect(capturedTask?.id).toEqual(expect.any(String));
-      const failedMeta = runtime.controllers.transactions.getMeta(capturedTask?.id ?? "");
+      expect(capturedTask?.approvalId).toEqual(expect.any(String));
+      const failedMeta = runtime.controllers.transactions.getMeta(capturedTask?.request.transactionId ?? "");
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.userRejected).toBe(true);
       expect(failedMeta?.error?.code).toBe(4001);
@@ -574,7 +609,7 @@ describe("eip155 handlers - approval metadata", () => {
     const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record: task }) => {
       try {
         if (task.kind === ApprovalKinds.SendTransaction) {
-          await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+          await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         }
       } catch {
         // Ignore errors if approval was already resolved
@@ -660,7 +695,7 @@ describe("eip155 handlers - approval metadata", () => {
       if (task.kind !== ApprovalKinds.SignMessage) {
         return false;
       }
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
       return true;
     });
     try {
@@ -729,7 +764,7 @@ describe("eip155 handlers - approval metadata", () => {
       if (task.kind !== ApprovalKinds.SignTypedData) {
         return false;
       }
-      await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+      await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
       return true;
     });
     try {

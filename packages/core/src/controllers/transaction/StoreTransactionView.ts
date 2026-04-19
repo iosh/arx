@@ -40,6 +40,7 @@ export class StoreTransactionView {
 
   #stateRevision = 0;
   #statePublishScheduled = false;
+  #pendingStateChangeIds: Set<string> = new Set();
 
   #syncWanted = false;
   #syncInFlight: Promise<void> | null = null;
@@ -172,7 +173,7 @@ export class StoreTransactionView {
       this.#fromDecodeLogged.delete(oldest);
     }
 
-    this.#scheduleStateChanged();
+    this.#scheduleStateChanged(meta.id);
   }
 
   #touch(id: string): TransactionMeta | undefined {
@@ -183,14 +184,17 @@ export class StoreTransactionView {
     return existing;
   }
 
-  #scheduleStateChanged() {
+  #scheduleStateChanged(id: string) {
+    this.#pendingStateChangeIds.add(id);
     if (this.#statePublishScheduled) return;
     this.#statePublishScheduled = true;
 
     queueMicrotask(() => {
       this.#statePublishScheduled = false;
       this.#stateRevision += 1;
-      const payload: TransactionStateChange = { revision: this.#stateRevision };
+      const transactionIds = [...this.#pendingStateChangeIds];
+      this.#pendingStateChangeIds.clear();
+      const payload: TransactionStateChange = { revision: this.#stateRevision, transactionIds };
       this.#messenger.publish(TRANSACTION_STATE_CHANGED, payload);
     });
   }

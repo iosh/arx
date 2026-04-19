@@ -300,7 +300,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+        await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         return true;
       }
       return false;
@@ -370,7 +370,11 @@ describe("eip155 handlers - core error paths", () => {
     const rejectionError = Object.assign(new Error("user denied"), { code: 4001 });
     const teardownApprovalResponder = setupApprovalResponder(runtime, (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        void runtime.controllers.approvals.resolve({ id: task.id, action: "reject", error: rejectionError });
+        void runtime.controllers.approvals.resolve({
+          approvalId: task.approvalId,
+          action: "reject",
+          error: rejectionError,
+        });
         return true;
       }
       return false;
@@ -457,7 +461,7 @@ describe("eip155 handlers - core error paths", () => {
 
     const teardownApprovalResponder = setupApprovalResponder(runtime, async (task) => {
       if (task.kind === ApprovalKinds.AddChain) {
-        await runtime.controllers.approvals.resolve({ id: task.id, action: "approve" });
+        await runtime.controllers.approvals.resolve({ approvalId: task.approvalId, action: "approve" });
         return true;
       }
       return false;
@@ -773,7 +777,7 @@ describe("eip155 handlers - core error paths", () => {
       expect(payload.chainRef).toBe(chain.chainRef);
       expect(payload.requestedGrants).toEqual([{ grantKind: "eth_accounts", chainRefs: [chain.chainRef] }]);
       await runtime.controllers.approvals.resolve({
-        id: task.id,
+        approvalId: task.approvalId,
         action: "approve",
         decision: { accountKeys: [accountKey] },
       });
@@ -838,7 +842,7 @@ describe("eip155 handlers - core error paths", () => {
       if (task.kind !== ApprovalKinds.RequestPermissions) return false;
       void runtime.controllers.approvals
         .resolve({
-          id: task.id,
+          approvalId: task.approvalId,
           action: "approve",
           decision: { accountKeys: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
         })
@@ -903,7 +907,7 @@ describe("eip155 handlers - core error paths", () => {
     const teardown = setupApprovalResponder(runtime, async (task) => {
       if (task.kind !== ApprovalKinds.RequestAccounts) return false;
       await runtime.controllers.approvals.resolve({
-        id: task.id,
+        approvalId: task.approvalId,
         action: "approve",
         decision: { accountKeys: [secondAccountId] },
       });
@@ -943,7 +947,7 @@ describe("eip155 handlers - core error paths", () => {
       if (task.kind !== ApprovalKinds.RequestAccounts) return false;
       void runtime.controllers.approvals
         .resolve({
-          id: task.id,
+          approvalId: task.approvalId,
           action: "approve",
           decision: { accountKeys: ["eip155:ffffffffffffffffffffffffffffffffffffffff"] },
         })

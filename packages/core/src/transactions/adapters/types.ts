@@ -1,5 +1,8 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
+import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/approval/types.js";
+import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
+import type { TransactionMeta } from "../../controllers/transaction/types.js";
 import type {
   TransactionIssue,
   TransactionPrepared,
@@ -44,12 +47,18 @@ export type ReplacementResolution = {
 
 export type TransactionRequestDeriver = (request: TransactionRequest, chainRef: ChainRef) => TransactionRequest;
 
+export type TransactionApprovalReviewContext = {
+  transaction: TransactionMeta | undefined;
+  request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
+};
+
 export type TransactionReceiptTrackingAdapter = {
   fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
   detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
 export type TransactionSubmissionAdapter = {
+  validateRequest?(request: TransactionRequest): void;
   prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
   signTransaction(
     context: TransactionSignContext,
@@ -60,5 +69,6 @@ export type TransactionSubmissionAdapter = {
 
 export type TransactionAdapter = {
   deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
+  buildApprovalReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
   receiptTracking?: TransactionReceiptTrackingAdapter;
 } & TransactionSubmissionAdapter;

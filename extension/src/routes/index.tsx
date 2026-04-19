@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useNativeBalanceQuery } from "@/ui/hooks/useNativeBalanceQuery";
+import { useUiApprovalsList } from "@/ui/hooks/useUiApprovals";
 import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
 import { redirectToSetupIfNoAccounts } from "@/ui/lib/routeGuards";
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const router = useRouter();
   const { snapshot, markBackedUp, exportMnemonic } = useUiSnapshot();
+  const { approvals } = useUiApprovalsList();
   const [markingId, setMarkingId] = useState<string | null>(null);
 
   const handleMarkBackedUp = async (keyringId: string) => {
@@ -49,6 +51,7 @@ function HomePage() {
   return (
     <HomeScreen
       snapshot={snapshot}
+      approvals={approvals ?? []}
       nativeBalanceWei={nativeBalance.balanceWei}
       nativeBalanceLoading={nativeBalance.isInitialLoading}
       nativeBalanceError={nativeBalance.error ? "Failed to load balance" : null}

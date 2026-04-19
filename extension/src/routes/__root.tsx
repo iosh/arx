@@ -91,7 +91,7 @@ function RootInner() {
 
   return (
     <YStack backgroundColor="$bg" flex={1} height="100%" minHeight={0}>
-      <ApprovalsOrchestrator snapshot={snapshot} isLoading={isLoading} />
+      <ApprovalsOrchestrator />
       <SessionGate snapshot={snapshot} isLoading={isLoading} unlock={unlock}>
         <Outlet />
       </SessionGate>

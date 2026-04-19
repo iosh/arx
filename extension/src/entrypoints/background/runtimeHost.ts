@@ -47,7 +47,7 @@ export type BackgroundUiEntryAccess = {
   subscribeApprovalFinished: (listener: ApprovalFinishedListener) => () => void;
   subscribeApprovalStateChanged: (listener: ApprovalStateChangedListener) => () => void;
   subscribeSessionLocked: (listener: ApprovalSessionLockedListener) => () => void;
-  cancelApproval: (params: { id: string; reason: ApprovalTerminalReason }) => Promise<void>;
+  cancelApproval: (params: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
   cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
   getPendingApprovalCount: () => number;
   hasInitializedVault: () => boolean;
@@ -222,7 +222,9 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
       cancelApproval: (params) => active.runtime.controllers.approvals.cancel(params),
       cancelPendingApprovals: async (reason) => {
         const pending = active.runtime.controllers.approvals.getState().pending;
-        await Promise.all(pending.map((item) => active.runtime.controllers.approvals.cancel({ id: item.id, reason })));
+        await Promise.all(
+          pending.map((item) => active.runtime.controllers.approvals.cancel({ approvalId: item.approvalId, reason })),
+        );
       },
       getPendingApprovalCount: () => active.runtime.controllers.approvals.getState().pending.length,
       hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),

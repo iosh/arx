@@ -1,7 +1,7 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { Card, Paragraph } from "tamagui";
 
-type RequestAccountsApproval = Extract<ApprovalSummary, { type: "requestAccounts" }>;
+type RequestAccountsApproval = Extract<ApprovalDetail, { kind: "requestAccounts" }>;
 
 export function RequestAccountsPayload({ approval }: { approval: RequestAccountsApproval }) {
   return (

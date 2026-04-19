@@ -1,4 +1,4 @@
-import type { UiSnapshot } from "@arx/core/ui";
+import type { ApprovalListEntry, UiSnapshot } from "@arx/core/ui";
 import {
   Activity,
   ArrowDownLeft,
@@ -28,6 +28,7 @@ import { getErrorMessage } from "../lib/errorUtils";
 
 type HomeScreenProps = {
   snapshot: UiSnapshot;
+  approvals: ApprovalListEntry[];
   nativeBalanceWei: string | null;
   nativeBalanceLoading: boolean;
   nativeBalanceError: string | null;
@@ -79,6 +80,7 @@ type HomeTab = (typeof HOME_TABS)[number]["value"];
 
 export const HomeScreen = ({
   snapshot,
+  approvals,
   nativeBalanceWei,
   nativeBalanceLoading,
   nativeBalanceError,
@@ -93,7 +95,7 @@ export const HomeScreen = ({
 }: HomeScreenProps) => {
   const theme = useTheme();
   const { chain, accounts } = snapshot;
-  const approvalsCount = snapshot.approvals.length;
+  const approvalsCount = approvals.length;
   const { backup } = snapshot;
 
   const [activeTab, setActiveTab] = useState<HomeTab>("tokens");

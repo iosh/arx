@@ -1,14 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { getErrorMessage } from "@/ui/lib/errorUtils";
-import { requestSendApprovalAndNavigate, type SendApprovalInput } from "./sendApprovalFlow";
+import { uiClient } from "@/ui/lib/uiBridgeClient";
+
+export type SendApprovalInput = Parameters<typeof uiClient.transactions.requestSendTransactionApproval>[0];
 
 /**
  * Owns the send page's submission state and approval handoff behavior.
  */
 export function useSendApprovalAction() {
-  const queryClient = useQueryClient();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -20,16 +20,11 @@ export function useSendApprovalAction() {
     setErrorMessage(null);
 
     try {
-      await requestSendApprovalAndNavigate({
-        queryClient,
-        input,
-        navigateToApprovalRoute: async (approvalId) => {
-          await router.navigate({
-            to: "/approve/send-transaction/$id",
-            params: { id: approvalId },
-            replace: true,
-          });
-        },
+      const { approvalId } = await uiClient.transactions.requestSendTransactionApproval(input);
+      await router.navigate({
+        to: "/approve/$approvalId",
+        params: { approvalId },
+        replace: true,
       });
       return true;
     } catch (error) {

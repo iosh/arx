@@ -1,4 +1,4 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import type { ReactNode } from "react";
 import { Card, Paragraph, ScrollView, XStack, YStack } from "tamagui";
 import { Button, Screen } from "@/ui/components";
@@ -6,7 +6,7 @@ import { ApprovalPayload } from "./ApprovalPayload";
 import { getApprovalTypeLabel } from "./labels";
 
 export type ApprovalDetailScreenProps = {
-  approval: ApprovalSummary;
+  approval: ApprovalDetail;
   onApprove?: () => void;
   onReject: () => void;
   onBack: () => void;
@@ -63,7 +63,7 @@ export function ApprovalDetailScreen({
 
       <Card padded bordered gap="$2">
         <Paragraph fontSize="$6" fontWeight="600">
-          {getApprovalTypeLabel(approval.type)}
+          {getApprovalTypeLabel(approval.kind)}
         </Paragraph>
         <Paragraph color="$mutedText" fontSize="$2">
           {approval.origin}

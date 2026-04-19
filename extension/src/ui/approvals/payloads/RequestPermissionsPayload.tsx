@@ -1,7 +1,7 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { Card, Paragraph, YStack } from "tamagui";
 
-type RequestPermissionsApproval = Extract<ApprovalSummary, { type: "requestPermissions" }>;
+type RequestPermissionsApproval = Extract<ApprovalDetail, { kind: "requestPermissions" }>;
 
 const GRANT_KIND_LABELS: Record<string, string> = {
   eth_accounts: "View accounts",
@@ -17,7 +17,7 @@ export function RequestPermissionsPayload({ approval }: { approval: RequestPermi
         This site wants connection access on the following chains. Choose the account to expose for this connection.
       </Paragraph>
       <YStack gap="$2" marginTop="$2">
-        {approval.payload.requestedGrants.map((request, index) => (
+        {approval.request.requestedGrants.map((request, index) => (
           <Card key={`${request.grantKind}-${request.chainRef}-${index}`} padded bordered>
             <Paragraph fontWeight="600">{getGrantKindLabel(request.grantKind)}</Paragraph>
             <Paragraph color="$color10" fontSize="$2">

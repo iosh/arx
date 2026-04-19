@@ -1,30 +1,18 @@
-import type { ApprovalSummary, UiSnapshot } from "@arx/core/ui";
+import type { ApprovalListEntry } from "@arx/core/ui";
 import { describe, expect, it } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
 import { getApprovalAttentionAction, getCurrentApprovalRouteId } from "./orchestration";
 
-function createApproval(overrides?: Partial<ApprovalSummary>): ApprovalSummary {
+function createApproval(overrides?: Partial<ApprovalListEntry>): ApprovalListEntry {
   return {
-    id: "approval-1",
+    approvalId: "approval-1",
+    kind: "signMessage",
     origin: "https://example.test",
     namespace: "eip155",
     chainRef: "eip155:1",
     createdAt: 1_000,
-    type: "signMessage",
-    payload: {
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      message: "hello",
-    },
     ...overrides,
-  } as ApprovalSummary;
-}
-
-function createSnapshot(approvals: ApprovalSummary[], isUnlocked = true): UiSnapshot {
-  return {
-    approvals,
-    session: { isUnlocked },
-    vault: { initialized: true },
-  } as UiSnapshot;
+  };
 }
 
 const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => ({
@@ -41,7 +29,7 @@ const createEntry = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata => (
 
 describe("getCurrentApprovalRouteId", () => {
   it("extracts the approval id from approval detail routes", () => {
-    expect(getCurrentApprovalRouteId("/approve/sign-message/approval-1")).toBe("approval-1");
+    expect(getCurrentApprovalRouteId("/approve/approval-1")).toBe("approval-1");
     expect(getCurrentApprovalRouteId("/approvals")).toBeNull();
   });
 });
@@ -50,10 +38,10 @@ describe("getApprovalAttentionAction", () => {
   it("closes the popup once an unlocked approval queue drains", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([]),
+        approvals: [],
         isLoading: false,
         entry: createEntry({ reason: "unlock_required" }),
-        pathname: "/approve/sign-message/approval-1",
+        pathname: "/approve/approval-1",
         requestedApprovalId: null,
         hadApprovalsSinceUnlock: true,
       }),
@@ -66,7 +54,7 @@ describe("getApprovalAttentionAction", () => {
   it("waits for a specifically requested approval before auto-routing", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([]),
+        approvals: [],
         isLoading: false,
         entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
@@ -82,7 +70,7 @@ describe("getApprovalAttentionAction", () => {
   it("keeps the holding route while waiting for the first approval to materialize", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([]),
+        approvals: [],
         isLoading: false,
         entry: createEntry({ reason: "approval_created" }),
         pathname: "/approvals",
@@ -98,10 +86,10 @@ describe("getApprovalAttentionAction", () => {
   it("keeps the current route when the user is already on a live approval", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([createApproval()]),
+        approvals: [createApproval()],
         isLoading: false,
         entry: createEntry({ reason: "approval_created" }),
-        pathname: "/approve/sign-message/approval-1",
+        pathname: "/approve/approval-1",
         requestedApprovalId: null,
         hadApprovalsSinceUnlock: false,
       }),
@@ -114,10 +102,10 @@ describe("getApprovalAttentionAction", () => {
   it("prefers the requested approval route when that id is now pending", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([
-          createApproval({ id: "approval-1" }),
-          createApproval({ id: "approval-2", type: "switchChain", payload: { chainRef: "eip155:10" } }),
-        ]),
+        approvals: [
+          createApproval({ approvalId: "approval-1" }),
+          createApproval({ approvalId: "approval-2", kind: "switchChain", chainRef: "eip155:10" }),
+        ],
         isLoading: false,
         entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
@@ -125,7 +113,7 @@ describe("getApprovalAttentionAction", () => {
         hadApprovalsSinceUnlock: false,
       }),
     ).toEqual({
-      action: { type: "navigate", to: "/approve/switch-chain/approval-2" },
+      action: { type: "navigate", to: "/approve/approval-2" },
       nextHadApprovalsSinceUnlock: true,
     });
   });
@@ -133,10 +121,10 @@ describe("getApprovalAttentionAction", () => {
   it("falls back to the head approval route when no requested id matches", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([
-          createApproval({ id: "approval-1", type: "switchChain", payload: { chainRef: "eip155:1" } }),
-          createApproval({ id: "approval-2" }),
-        ]),
+        approvals: [
+          createApproval({ approvalId: "approval-1", kind: "switchChain", chainRef: "eip155:1" }),
+          createApproval({ approvalId: "approval-2" }),
+        ],
         isLoading: false,
         entry: createEntry({ reason: "approval_created" }),
         pathname: "/",
@@ -144,7 +132,7 @@ describe("getApprovalAttentionAction", () => {
         hadApprovalsSinceUnlock: false,
       }),
     ).toEqual({
-      action: { type: "navigate", to: "/approve/switch-chain/approval-1" },
+      action: { type: "navigate", to: "/approve/approval-1" },
       nextHadApprovalsSinceUnlock: true,
     });
   });
@@ -152,7 +140,7 @@ describe("getApprovalAttentionAction", () => {
   it("closes idle notifications without an active launch context", () => {
     expect(
       getApprovalAttentionAction({
-        snapshot: createSnapshot([]),
+        approvals: [],
         isLoading: false,
         entry: createEntry({ reason: "idle" }),
         pathname: "/approvals",

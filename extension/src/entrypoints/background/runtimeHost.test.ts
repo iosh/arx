@@ -114,7 +114,7 @@ const makeRuntime = () => {
         onFinished,
         onStateChanged: onApprovalsStateChanged,
         cancel: cancelApproval,
-        getState: () => ({ pending: [{ id: "approval-1" }] }),
+        getState: () => ({ pending: [{ approvalId: "approval-1" }] }),
       },
       permissions: {
         onStateChanged: onPermissionsStateChanged,
@@ -244,6 +244,7 @@ describe("runtimeHost", () => {
       dispatchRequest: vi.fn(),
       getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
+      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 
@@ -366,6 +367,7 @@ describe("runtimeHost", () => {
       dispatchRequest: vi.fn(),
       getRequestBroadcastPolicy: vi.fn(),
       subscribeStateChanged: vi.fn(() => vi.fn()),
+      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     runtimeHarness.createUiAccess.mockReturnValue(uiAccess);
 

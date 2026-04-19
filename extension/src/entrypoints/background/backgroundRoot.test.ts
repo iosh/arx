@@ -80,6 +80,20 @@ const createDeferred = <T>() => {
   return { promise, resolve, reject };
 };
 
+const createUiAccess = () => ({
+  buildSnapshotEvent: vi.fn(),
+  dispatchRequest: vi.fn(),
+  getRequestBroadcastPolicy: vi.fn(),
+  subscribeStateChanged: vi.fn(() => vi.fn()),
+  subscribeUiEvents: vi.fn(() => vi.fn()),
+});
+
+const createUiEntryAccess = () => ({
+  subscribeApprovalCreated: vi.fn(() => vi.fn()),
+  subscribeApprovalFinished: vi.fn(() => vi.fn()),
+  subscribeApprovalStateChanged: vi.fn(() => vi.fn()),
+});
+
 describe("backgroundRoot", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -141,15 +155,10 @@ describe("backgroundRoot", () => {
         return Promise.resolve();
       }),
       getOrInitProvider: vi.fn(),
-      getOrInitUiEntryAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(async () => createUiEntryAccess()),
       getOrInitUiAccess: vi.fn(async () => {
         events.push("uiAccess");
-        return {
-          buildSnapshotEvent: vi.fn(),
-          dispatchRequest: vi.fn(),
-          getRequestBroadcastPolicy: vi.fn(),
-          subscribeStateChanged: vi.fn(() => vi.fn()),
-        };
+        return createUiAccess();
       }),
       shutdown: vi.fn(async () => {}),
     });
@@ -175,16 +184,11 @@ describe("backgroundRoot", () => {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn().mockRejectedValueOnce(new Error("boot failed")).mockResolvedValueOnce(undefined),
       getOrInitProvider: vi.fn(),
-      getOrInitUiEntryAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(async () => createUiEntryAccess()),
       getOrInitUiAccess: vi
         .fn()
         .mockRejectedValueOnce(new Error("ui access failed"))
-        .mockResolvedValueOnce({
-          buildSnapshotEvent: vi.fn(),
-          dispatchRequest: vi.fn(),
-          getRequestBroadcastPolicy: vi.fn(),
-          subscribeStateChanged: vi.fn(() => vi.fn()),
-        }),
+        .mockResolvedValueOnce(createUiAccess()),
       shutdown: vi.fn(async () => {}),
     };
     createBackgroundRuntimeHostMock.mockReturnValue(runtimeHost);
@@ -211,13 +215,14 @@ describe("backgroundRoot", () => {
       dispatchRequest: ReturnType<typeof vi.fn>;
       getRequestBroadcastPolicy: ReturnType<typeof vi.fn>;
       subscribeStateChanged: ReturnType<typeof vi.fn>;
+      subscribeUiEvents: ReturnType<typeof vi.fn>;
     }>();
 
     const runtimeHost = {
       applyDebugNamespacesFromEnv: vi.fn(),
       initializeRuntime: vi.fn(() => runtimeBoot.promise),
       getOrInitProvider: vi.fn(),
-      getOrInitUiEntryAccess: vi.fn(),
+      getOrInitUiEntryAccess: vi.fn(async () => createUiEntryAccess()),
       getOrInitUiAccess: vi.fn(() => uiAccessBoot.promise),
       shutdown: vi.fn(async () => {
         runtimeBoot.reject(new Error("runtime interrupted"));

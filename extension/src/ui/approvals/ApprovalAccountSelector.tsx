@@ -1,8 +1,8 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { Paragraph, XStack, YStack } from "tamagui";
 import { AddressDisplay, Button, Card } from "@/ui/components";
 
-type AccountSelectionApproval = Extract<ApprovalSummary, { type: "requestAccounts" | "requestPermissions" }>;
+type AccountSelectionApproval = Extract<ApprovalDetail, { kind: "requestAccounts" | "requestPermissions" }>;
 
 export function ApprovalAccountSelector({
   approval,
@@ -13,8 +13,8 @@ export function ApprovalAccountSelector({
   selectedAccountKey: string | null;
   onSelect: (accountKey: string) => void;
 }) {
-  const selectableAccounts = approval.payload.selectableAccounts;
-  const recommendedAccountKey = approval.payload.recommendedAccountKey;
+  const selectableAccounts = approval.request.selectableAccounts;
+  const recommendedAccountKey = approval.request.recommendedAccountKey;
 
   return (
     <Card padded bordered gap="$2">

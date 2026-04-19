@@ -1,102 +1,59 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { LoadingScreen } from "@/ui/components";
 import { ROUTES } from "@/ui/lib/routes";
 import { ApprovalAccountSelector } from "./ApprovalAccountSelector";
 import { ApprovalDetailScreen } from "./ApprovalDetailScreen";
 import { useApprovalResolveAction } from "./useApprovalResolveAction";
-import { useApprovalRouteEntry } from "./useApprovalRouteEntry";
 
-type SimpleApprovalType = Exclude<ApprovalSummary["type"], "requestAccounts" | "requestPermissions" | "unsupported">;
-type AccountSelectionApproval = Extract<ApprovalSummary, { type: "requestAccounts" | "requestPermissions" }>;
+type SimpleApprovalKind = Exclude<ApprovalDetail["kind"], "requestAccounts" | "requestPermissions">;
+type SimpleApproval = Extract<ApprovalDetail, { kind: SimpleApprovalKind }>;
+type AccountSelectionApproval = Extract<ApprovalDetail, { kind: "requestAccounts" | "requestPermissions" }>;
 
 function getPreferredAccountKey(approval: AccountSelectionApproval, currentSelection: string | null): string | null {
-  const selectableAccountKeys = new Set(approval.payload.selectableAccounts.map((account) => account.accountKey));
+  const selectableAccountKeys = new Set(approval.request.selectableAccounts.map((account) => account.accountKey));
   if (currentSelection && selectableAccountKeys.has(currentSelection)) {
     return currentSelection;
   }
 
-  return approval.payload.recommendedAccountKey ?? approval.payload.selectableAccounts[0]?.accountKey ?? null;
+  return approval.request.recommendedAccountKey ?? approval.request.selectableAccounts[0]?.accountKey ?? null;
 }
 
-export function SimpleApprovalRoutePage<T extends SimpleApprovalType>(params: {
+export function SimpleApprovalRoutePage(params: {
   approvalId: string;
-  expectedType: T;
+  approval: SimpleApproval;
   rejectReason?: string;
 }) {
   const router = useRouter();
-  const { approvalId, expectedType, rejectReason = "User rejected" } = params;
-  const entry = useApprovalRouteEntry({ approvalId, expectedType });
+  const { approvalId, approval, rejectReason = "User rejected" } = params;
   const { pendingAction, errorMessage, submitResolution } = useApprovalResolveAction();
-
-  if (entry.status !== "ready") {
-    return <LoadingScreen />;
-  }
-
-  const approval = entry.approval;
 
   return (
     <ApprovalDetailScreen
       approval={approval}
-      onApprove={() => void submitResolution({ id: approvalId, action: "approve" })}
-      onReject={() => void submitResolution({ id: approvalId, action: "reject", reason: rejectReason })}
+      onApprove={() => void submitResolution({ approvalId, action: "approve" })}
+      onReject={() => void submitResolution({ approvalId, action: "reject", reason: rejectReason })}
       onBack={() => void router.navigate({ to: ROUTES.APPROVALS })}
       pending={pendingAction}
       errorMessage={errorMessage}
+      approveDisabled={!approval.actions.canApprove}
     />
   );
 }
 
-export function RejectOnlyApprovalRoutePage(params: {
+export function AccountSelectionApprovalRoutePage(params: {
   approvalId: string;
-  expectedType: "unsupported";
-  rejectReason: string;
-}) {
-  const router = useRouter();
-  const entry = useApprovalRouteEntry({
-    approvalId: params.approvalId,
-    expectedType: params.expectedType,
-  });
-  const { pendingAction, errorMessage, submitResolution } = useApprovalResolveAction();
-
-  if (entry.status !== "ready") {
-    return <LoadingScreen />;
-  }
-
-  const approval = entry.approval;
-
-  return (
-    <ApprovalDetailScreen
-      approval={approval}
-      onReject={() => void submitResolution({ id: params.approvalId, action: "reject", reason: params.rejectReason })}
-      onBack={() => void router.navigate({ to: ROUTES.APPROVALS })}
-      pending={pendingAction}
-      errorMessage={errorMessage}
-    />
-  );
-}
-
-export function AccountSelectionApprovalRoutePage<T extends AccountSelectionApproval["type"]>(params: {
-  approvalId: string;
-  expectedType: T;
+  approval: AccountSelectionApproval;
   rejectReason?: string;
 }) {
   const router = useRouter();
-  const { approvalId, expectedType, rejectReason = "User rejected" } = params;
-  const entry = useApprovalRouteEntry({ approvalId, expectedType });
+  const { approvalId, approval, rejectReason = "User rejected" } = params;
   const { pendingAction, errorMessage, submitResolution, showError, clearError } = useApprovalResolveAction();
   const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
-  const approval = entry.status === "ready" ? entry.approval : null;
 
   useEffect(() => {
-    if (!approval) return;
     setSelectedAccountKey((current) => getPreferredAccountKey(approval, current));
   }, [approval]);
-
-  if (!approval) {
-    return <LoadingScreen />;
-  }
 
   return (
     <ApprovalDetailScreen
@@ -108,16 +65,16 @@ export function AccountSelectionApprovalRoutePage<T extends AccountSelectionAppr
         }
 
         void submitResolution({
-          id: approvalId,
+          approvalId,
           action: "approve",
           decision: { accountKeys: [selectedAccountKey] },
         });
       }}
-      onReject={() => void submitResolution({ id: approvalId, action: "reject", reason: rejectReason })}
+      onReject={() => void submitResolution({ approvalId, action: "reject", reason: rejectReason })}
       onBack={() => void router.navigate({ to: ROUTES.APPROVALS })}
       pending={pendingAction}
       errorMessage={errorMessage}
-      approveDisabled={!selectedAccountKey}
+      approveDisabled={!selectedAccountKey || !approval.actions.canApprove}
     >
       <ApprovalAccountSelector
         approval={approval}

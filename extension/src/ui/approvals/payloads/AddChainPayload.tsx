@@ -1,16 +1,16 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { Card, Paragraph, YStack } from "tamagui";
 
-type AddChainApproval = Extract<ApprovalSummary, { type: "addChain" }>;
+type AddChainApproval = Extract<ApprovalDetail, { kind: "addChain" }>;
 
 export function AddChainPayload({ approval }: { approval: AddChainApproval }) {
-  const { payload } = approval;
+  const { request } = approval;
 
   return (
     <Card padded bordered gap="$2">
-      <Paragraph fontWeight="600">{payload.isUpdate ? "Update Network" : "Add Network"}</Paragraph>
+      <Paragraph fontWeight="600">{request.isUpdate ? "Update Network" : "Add Network"}</Paragraph>
       <Paragraph color="$color10" fontSize="$2">
-        {payload.isUpdate
+        {request.isUpdate
           ? "This site wants to update an existing network configuration."
           : "This site wants to add a new network to your wallet."}
       </Paragraph>
@@ -18,40 +18,40 @@ export function AddChainPayload({ approval }: { approval: AddChainApproval }) {
       <YStack gap="$1" marginTop="$2">
         <Paragraph fontSize="$2">Network Name:</Paragraph>
         <Paragraph fontFamily="$mono" fontSize="$2">
-          {payload.displayName}
+          {request.displayName}
         </Paragraph>
       </YStack>
 
       <YStack gap="$1">
         <Paragraph fontSize="$2">Chain ID:</Paragraph>
         <Paragraph fontFamily="$mono" fontSize="$2">
-          {payload.chainId}
+          {request.chainId}
         </Paragraph>
       </YStack>
 
-      {payload.nativeCurrency && (
+      {request.nativeCurrency && (
         <YStack gap="$1">
           <Paragraph fontSize="$2">Currency:</Paragraph>
           <Paragraph fontFamily="$mono" fontSize="$2">
-            {payload.nativeCurrency.symbol} ({payload.nativeCurrency.name})
+            {request.nativeCurrency.symbol} ({request.nativeCurrency.name})
           </Paragraph>
         </YStack>
       )}
 
       <YStack gap="$1">
-        <Paragraph fontSize="$2">RPC URL{payload.rpcUrls.length > 1 ? "s" : ""}:</Paragraph>
-        {payload.rpcUrls.map((url) => (
+        <Paragraph fontSize="$2">RPC URL{request.rpcUrls.length > 1 ? "s" : ""}:</Paragraph>
+        {request.rpcUrls.map((url) => (
           <Paragraph key={url} fontFamily="$mono" fontSize="$2" numberOfLines={1}>
             {url}
           </Paragraph>
         ))}
       </YStack>
 
-      {payload.blockExplorerUrl && (
+      {request.blockExplorerUrl && (
         <YStack gap="$1">
           <Paragraph fontSize="$2">Block Explorer:</Paragraph>
           <Paragraph fontFamily="$mono" fontSize="$2" numberOfLines={1}>
-            {payload.blockExplorerUrl}
+            {request.blockExplorerUrl}
           </Paragraph>
         </YStack>
       )}

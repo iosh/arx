@@ -1,9 +1,8 @@
-import type { ApprovalSummary } from "@arx/core/ui";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Card, Paragraph, YStack } from "tamagui";
 import { getApprovalRoutePath, getApprovalTypeLabel } from "@/ui/approvals";
 import { Button, ListItem, LoadingScreen, Screen } from "@/ui/components";
-import { useUiSnapshot } from "@/ui/hooks/useUiSnapshot";
+import { useUiApprovalsList } from "@/ui/hooks/useUiApprovals";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
 
@@ -14,9 +13,9 @@ export const Route = createFileRoute("/approvals")({
 
 function ApprovalsPage() {
   const router = useRouter();
-  const { snapshot, isLoading } = useUiSnapshot();
+  const { approvals, isLoading } = useUiApprovalsList();
 
-  if (isLoading || !snapshot) {
+  if (isLoading || !approvals) {
     return <LoadingScreen />;
   }
 
@@ -35,21 +34,21 @@ function ApprovalsPage() {
           Pending Approvals
         </Paragraph>
         <Paragraph color="$color10" fontSize="$2">
-          {snapshot.approvals.length} pending
+          {approvals.length} pending
         </Paragraph>
       </Card>
 
-      {snapshot.approvals.length === 0 ? (
+      {approvals.length === 0 ? (
         <Card padded bordered>
           <Paragraph color="$color10">No pending approvals</Paragraph>
         </Card>
       ) : (
         <YStack gap="$2">
-          {snapshot.approvals.map((approval) => (
+          {approvals.map((approval) => (
             <ApprovalListItem
-              key={approval.id}
+              key={approval.approvalId}
               approval={approval}
-              onSelect={() => router.navigate({ to: getApprovalRoutePath(approval) })}
+              onSelect={() => router.navigate({ to: getApprovalRoutePath(approval.approvalId) })}
             />
           ))}
         </YStack>
@@ -58,8 +57,14 @@ function ApprovalsPage() {
   );
 }
 
-function ApprovalListItem({ approval, onSelect }: { approval: ApprovalSummary; onSelect: () => void }) {
-  const typeLabel = getApprovalTypeLabel(approval.type);
+function ApprovalListItem({
+  approval,
+  onSelect,
+}: {
+  approval: import("@arx/core/ui").ApprovalListEntry;
+  onSelect: () => void;
+}) {
+  const typeLabel = getApprovalTypeLabel(approval.kind);
 
   return (
     <ListItem

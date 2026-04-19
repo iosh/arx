@@ -7,8 +7,6 @@ export { getApprovalTypeLabel } from "./labels";
 export { getApprovalAttentionAction, getCurrentApprovalRouteId } from "./orchestration";
 export {
   AccountSelectionApprovalRoutePage,
-  RejectOnlyApprovalRoutePage,
   SimpleApprovalRoutePage,
 } from "./RoutePages";
-export { getApprovalRouteEntry } from "./routeEntry";
 export { getApprovalRoutePath } from "./routes";

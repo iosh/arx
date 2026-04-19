@@ -33,6 +33,9 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
   const unsubscribeStateChanged = uiAccess.subscribeStateChanged(() => {
     snapshotBroadcaster.requestBroadcast();
   });
+  const unsubscribeUiEvents = uiAccess.subscribeUiEvents((event) => {
+    portHub.broadcast(event);
+  });
 
   const dispatchPortMessage = async (port: Parameters<typeof portHub.attach>[0], raw: unknown) => {
     const broadcastPolicy = uiAccess.getRequestBroadcastPolicy(raw);
@@ -80,6 +83,11 @@ export const createUiBridge = ({ uiAccess }: BridgeDeps) => {
       unsubscribeStateChanged();
     } catch (error) {
       bridgeLog("failed to remove ui access listener", error);
+    }
+    try {
+      unsubscribeUiEvents();
+    } catch (error) {
+      bridgeLog("failed to remove ui event listener", error);
     }
 
     portHub.teardown();

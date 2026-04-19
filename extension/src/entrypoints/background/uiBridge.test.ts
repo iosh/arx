@@ -16,6 +16,7 @@ import { createKeyringExportService, createSessionStatusService } from "@arx/cor
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
 import {
   UI_CHANNEL,
+  UI_EVENT_APPROVALS_CHANGED,
   UI_EVENT_ENTRY_CHANGED,
   UI_EVENT_SNAPSHOT_CHANGED,
   type UiMethodName,
@@ -453,6 +454,8 @@ const createApprovalsController = () => {
 
   let tasks: StubTask[] = [];
   const listeners = new Set<(state: unknown) => void>();
+  const createdListeners = new Set<(event: { record: StubTask }) => void>();
+  const finishedListeners = new Set<(event: { id: string; status: string }) => void>();
 
   const getState = () => ({
     pending: tasks.map((task) => ({
@@ -477,8 +480,35 @@ const createApprovalsController = () => {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
+    onCreated: (fn: (event: { record: StubTask }) => void) => {
+      createdListeners.add(fn);
+      return () => createdListeners.delete(fn);
+    },
+    onFinished: (fn: (event: { id: string; status: string }) => void) => {
+      finishedListeners.add(fn);
+      return () => finishedListeners.delete(fn);
+    },
     setPendingTasks: (next: StubTask[]) => {
+      const previousIds = new Set(tasks.map((task) => task.id));
+      const nextIds = new Set(next.map((task) => task.id));
       tasks = next.map((task) => ({ ...task }));
+
+      for (const task of tasks) {
+        if (!previousIds.has(task.id)) {
+          for (const fn of createdListeners) {
+            fn({ record: task });
+          }
+        }
+      }
+
+      for (const previousId of previousIds) {
+        if (!nextIds.has(previousId)) {
+          for (const fn of finishedListeners) {
+            fn({ id: previousId, status: "cancelled" });
+          }
+        }
+      }
+
       emit();
     },
   };
@@ -486,16 +516,7 @@ const createApprovalsController = () => {
 
 const createControllers = () => {
   const accounts = createAccountsController();
-  const approvals = {
-    getState: () => ({ pending: [] as unknown[] }),
-    get: (_id: string) => {
-      void _id;
-      return null;
-    },
-    onStateChanged: (fn: () => void) => {
-      return () => void fn;
-    },
-  };
+  const approvals = createApprovalsController();
   const permissionListeners = new Set<(state: unknown) => void>();
   const permissions = {
     getState: () => ({ origins: {} }),
@@ -639,13 +660,20 @@ const createUiAccessForTest = (input: {
       access: {
         accounts: input.controllers.accounts,
         approvals: {
-          ...input.controllers.approvals,
-          resolve: vi.fn(async () => ({
-            id: "approval-id",
-            status: "rejected" as const,
-            terminalReason: "user_reject" as const,
-          })),
+          read: {
+            listPendingEntries: vi.fn(() => []),
+            getDetail: vi.fn(() => null),
+            listAffectedApprovalIds: vi.fn(() => []),
+          },
+          write: {
+            resolve: vi.fn(async () => ({
+              approvalId: "approval-id",
+              status: "rejected" as const,
+              terminalReason: "user_reject" as const,
+            })),
+          },
         },
+        approvalEvents: input.controllers.approvals as never,
         permissions: {
           buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)
             .buildUiPermissionsSnapshot as never,
@@ -668,6 +696,7 @@ const createUiAccessForTest = (input: {
               ? input.controllers.transactions.getMeta
               : vi.fn(() => undefined),
         } as never,
+        transactionEvents: input.controllers.transactions as never,
         chains: {
           ...(input.chainViewsOverride ?? controllerViews.chainViews),
           selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
@@ -707,11 +736,9 @@ const createUiAccessForTest = (input: {
       persistVaultMeta: input.persistVaultMeta ?? input.session.persistVaultMeta ?? vi.fn(async () => {}),
       stateChanged: {
         accounts: input.controllers.accounts,
-        approvals: input.controllers.approvals,
         permissions: {
           onStateChanged: input.controllers.permissions.onStateChanged,
         },
-        transactions: input.controllers.transactions as never,
         chains: {
           onStateChanged: input.controllers.network.onStateChanged,
           onSelectionChanged: (listener: () => void) => input.networkSelection.subscribeChanged(() => listener()),
@@ -1052,6 +1079,7 @@ describe("uiBridge", () => {
         stateChangedListeners.add(listener);
         return () => stateChangedListeners.delete(listener);
       }),
+      subscribeUiEvents: vi.fn(() => vi.fn()),
     };
     const bridge = createUiBridge({ uiAccess });
     const queryPort = createPort();
@@ -1105,7 +1133,7 @@ describe("uiBridge", () => {
     expect(queryResponseIndex).toBeGreaterThan(querySnapshotIndex);
   });
 
-  it("drops a stale port without affecting snapshot broadcasts to other attached ports", () => {
+  it("drops a stale port without affecting approval broadcasts to other attached ports", () => {
     const stalePort = createPort();
     const healthyPort = createPort();
 
@@ -1131,7 +1159,7 @@ describe("uiBridge", () => {
     expect(healthyPort.messages).toContainEqual(
       expect.objectContaining({
         type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
+        event: UI_EVENT_APPROVALS_CHANGED,
       }),
     );
     expect(stalePort.messages).toEqual([]);
@@ -1142,7 +1170,7 @@ describe("uiBridge", () => {
     expect(healthyPort.messages).toContainEqual(
       expect.objectContaining({
         type: "ui:event",
-        event: UI_EVENT_SNAPSHOT_CHANGED,
+        event: UI_EVENT_APPROVALS_CHANGED,
       }),
     );
     expect(stalePort.messages).toEqual([]);
@@ -1350,7 +1378,8 @@ describe("uiBridge", () => {
     spy.mockRestore();
   });
 
-  it("emits snapshotChanged when approvals queue changes", async () => {
+  it("does not include approvals in snapshotChanged payloads", async () => {
+    port.messages = [];
     const id = crypto.randomUUID();
     approvals.setPendingTasks([
       {
@@ -1364,10 +1393,13 @@ describe("uiBridge", () => {
       },
     ]);
 
-    const snapshot = latestSnapshotFromMessages(port.messages);
-    expect(snapshot.approvals).toHaveLength(1);
-    expect(snapshot.approvals[0].id).toBe(id);
-    expect(snapshot.approvals[0].type).toBe("requestAccounts");
+    const approvalEvent = port.messages.find(
+      (message) => isRecord(message) && message.type === "ui:event" && message.event === UI_EVENT_APPROVALS_CHANGED,
+    );
+    expect(approvalEvent).toBeDefined();
+    expect(port.messages.some((message) => isRecord(message) && message.event === UI_EVENT_SNAPSHOT_CHANGED)).toBe(
+      false,
+    );
   });
 
   it("session.unlock triggers snapshotChanged with unlocked state", async () => {

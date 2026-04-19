@@ -7,10 +7,13 @@ import { createUiEntryCoordinator } from "./uiEntryCoordinator";
 
 type ApprovalRecordLike = Pick<
   ApprovalRecord,
-  "id" | "kind" | "origin" | "namespace" | "chainRef" | "request" | "createdAt" | "requester"
+  "approvalId" | "kind" | "origin" | "namespace" | "chainRef" | "request" | "createdAt" | "requester"
 >;
 
-type ApprovalQueueItemLike = Pick<ApprovalQueueItem, "id" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt">;
+type ApprovalQueueItemLike = Pick<
+  ApprovalQueueItem,
+  "approvalId" | "kind" | "origin" | "namespace" | "chainRef" | "createdAt"
+>;
 type NotificationOpenResult = Awaited<ReturnType<UiEntryPlatform["openNotificationPopup"]>>;
 type OnboardingOpenResult = Awaited<ReturnType<UiEntryPlatform["openOnboardingTab"]>>;
 
@@ -41,11 +44,11 @@ class FakeBus {
 class FakeApprovalsController {
   #pending: ApprovalQueueItemLike[] = [];
   #createdHandlers = new Set<(event: { record: ApprovalRecordLike }) => void>();
-  #finishedHandlers = new Set<(event: { id: string }) => void>();
+  #finishedHandlers = new Set<(event: { approvalId: string }) => void>();
   #stateHandlers = new Set<() => void>();
 
-  cancel = vi.fn(async ({ id }: { id: string; reason: string }) => {
-    const nextPending = this.#pending.filter((item) => item.id !== id);
+  cancel = vi.fn(async ({ approvalId }: { approvalId: string; reason: string }) => {
+    const nextPending = this.#pending.filter((item) => item.approvalId !== approvalId);
     if (nextPending.length === this.#pending.length) {
       return;
     }
@@ -53,7 +56,7 @@ class FakeApprovalsController {
     this.#pending = nextPending;
     this.#emitState();
     for (const handler of this.#finishedHandlers) {
-      handler({ id });
+      handler({ approvalId });
     }
   });
 
@@ -66,7 +69,7 @@ class FakeApprovalsController {
     return () => this.#createdHandlers.delete(handler);
   }
 
-  onFinished(handler: (event: { id: string }) => void) {
+  onFinished(handler: (event: { approvalId: string }) => void) {
     this.#finishedHandlers.add(handler);
     return () => this.#finishedHandlers.delete(handler);
   }
@@ -80,7 +83,7 @@ class FakeApprovalsController {
     this.#pending = [
       ...this.#pending,
       {
-        id: record.id,
+        approvalId: record.approvalId,
         kind: record.kind,
         origin: record.origin,
         namespace: record.namespace,
@@ -117,7 +120,7 @@ class FakeUnlock {
 }
 
 const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLike => ({
-  id: overrides?.id ?? "approval-1",
+  approvalId: overrides?.approvalId ?? "approval-1",
   kind: overrides?.kind ?? ApprovalKinds.RequestAccounts,
   origin: overrides?.origin ?? "https://dapp.example",
   namespace: overrides?.namespace ?? "eip155",
@@ -200,13 +203,13 @@ const buildHarness = (
           bus.subscribe(ATTENTION_REQUESTED, handler),
         subscribeApprovalCreated: (handler: (event: { record: ApprovalRecordLike }) => void) =>
           approvals.onCreated(handler),
-        subscribeApprovalFinished: (handler: (event: { id: string }) => void) => approvals.onFinished(handler),
+        subscribeApprovalFinished: (handler: (event: { approvalId: string }) => void) => approvals.onFinished(handler),
         subscribeApprovalStateChanged: (handler: () => void) => approvals.onStateChanged(handler),
         subscribeSessionLocked: (handler: () => void) => unlock.onLocked(handler),
         cancelApproval: approvals.cancel,
         cancelPendingApprovals: async (reason: string) => {
-          const pendingIds = approvals.getState().pending.map((item) => item.id);
-          await Promise.all(pendingIds.map((id) => approvals.cancel({ id, reason })));
+          const pendingIds = approvals.getState().pending.map((item) => item.approvalId);
+          await Promise.all(pendingIds.map((approvalId) => approvals.cancel({ approvalId, reason })));
         },
         getPendingApprovalCount: () => approvals.getState().pending.length,
         hasInitializedVault: () => true,
@@ -245,10 +248,10 @@ describe("uiEntryCoordinator", () => {
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
-    harness.approvals.add(createRecord({ id: "approval-1" }));
+    harness.approvals.add(createRecord({ approvalId: "approval-1" }));
     harness.approvals.add(
       createRecord({
-        id: "approval-2",
+        approvalId: "approval-2",
         requester: {
           transport: "provider",
           origin: "https://dapp.example",
@@ -264,11 +267,14 @@ describe("uiEntryCoordinator", () => {
     harness.closeWindow(11);
 
     await vi.waitFor(() =>
-      expect(harness.approvals.cancel).toHaveBeenCalledWith({ id: "approval-1", reason: "window_closed" }),
+      expect(harness.approvals.cancel).toHaveBeenCalledWith({ approvalId: "approval-1", reason: "window_closed" }),
     );
 
-    expect(harness.approvals.cancel).not.toHaveBeenCalledWith({ id: "approval-2", reason: "window_closed" });
-    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["approval-2"]);
+    expect(harness.approvals.cancel).not.toHaveBeenCalledWith({
+      approvalId: "approval-2",
+      reason: "window_closed",
+    });
+    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual(["approval-2"]);
 
     coordinator.destroy();
   });
@@ -284,10 +290,10 @@ describe("uiEntryCoordinator", () => {
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
-    harness.approvals.add(createRecord({ id: "provider-approval" }));
+    harness.approvals.add(createRecord({ approvalId: "provider-approval" }));
     harness.approvals.add(
       createRecord({
-        id: "ui-approval",
+        approvalId: "ui-approval",
         requester: {
           transport: "ui",
           origin: "chrome-extension://wallet",
@@ -303,10 +309,13 @@ describe("uiEntryCoordinator", () => {
     harness.closeWindow(31);
 
     await vi.waitFor(() =>
-      expect(harness.approvals.cancel).toHaveBeenCalledWith({ id: "provider-approval", reason: "window_closed" }),
+      expect(harness.approvals.cancel).toHaveBeenCalledWith({
+        approvalId: "provider-approval",
+        reason: "window_closed",
+      }),
     );
 
-    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["ui-approval"]);
+    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual(["ui-approval"]);
 
     coordinator.destroy();
   });
@@ -322,10 +331,10 @@ describe("uiEntryCoordinator", () => {
     coordinator.start();
     await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
 
-    harness.approvals.add(createRecord({ id: "provider-approval" }));
+    harness.approvals.add(createRecord({ approvalId: "provider-approval" }));
     harness.approvals.add(
       createRecord({
-        id: "ui-approval",
+        approvalId: "ui-approval",
         requester: {
           transport: "ui",
           origin: "chrome-extension://wallet",
@@ -340,15 +349,21 @@ describe("uiEntryCoordinator", () => {
 
     harness.unlock.lock();
     expect(harness.approvals.cancel).not.toHaveBeenCalled();
-    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["provider-approval", "ui-approval"]);
+    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual([
+      "provider-approval",
+      "ui-approval",
+    ]);
 
     harness.closeWindow(41);
 
     await vi.waitFor(() =>
-      expect(harness.approvals.cancel).toHaveBeenCalledWith({ id: "provider-approval", reason: "window_closed" }),
+      expect(harness.approvals.cancel).toHaveBeenCalledWith({
+        approvalId: "provider-approval",
+        reason: "window_closed",
+      }),
     );
 
-    expect(harness.approvals.getState().pending.map((item) => item.id)).toEqual(["ui-approval"]);
+    expect(harness.approvals.getState().pending.map((item) => item.approvalId)).toEqual(["ui-approval"]);
 
     coordinator.destroy();
   });

@@ -1,5 +1,4 @@
-import type { ApprovalSummary } from "@arx/core/ui";
-import { Card, Paragraph } from "tamagui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { AddChainPayload } from "./payloads/AddChainPayload";
 import { RequestAccountsPayload } from "./payloads/RequestAccountsPayload";
 import { RequestPermissionsPayload } from "./payloads/RequestPermissionsPayload";
@@ -12,8 +11,8 @@ const assertNever = (value: never): never => {
   throw new Error(`Unhandled approval type: ${JSON.stringify(value)}`);
 };
 
-export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
-  switch (approval.type) {
+export function ApprovalPayload({ approval }: { approval: ApprovalDetail }) {
+  switch (approval.kind) {
     case "requestAccounts":
       return <RequestAccountsPayload approval={approval} />;
     case "signMessage":
@@ -28,15 +27,6 @@ export function ApprovalPayload({ approval }: { approval: ApprovalSummary }) {
       return <SwitchChainPayload approval={approval} />;
     case "addChain":
       return <AddChainPayload approval={approval} />;
-    case "unsupported":
-      return (
-        <Card padded bordered>
-          <Paragraph color="$color10">Unsupported approval type</Paragraph>
-          <Paragraph color="$color10" fontSize="$2">
-            {approval.payload.rawType}
-          </Paragraph>
-        </Card>
-      );
   }
 
   return assertNever(approval);

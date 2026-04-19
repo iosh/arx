@@ -123,7 +123,7 @@ export const createUiEntryCoordinator = ({
     await Promise.all(
       approvalIds.map(async (approvalId) => {
         try {
-          await uiEntryAccess.cancelApproval({ id: approvalId, reason });
+          await uiEntryAccess.cancelApproval({ approvalId, reason });
         } catch (error) {
           entryLog("failed to cancel approval", { approvalId, reason, error });
         }
@@ -229,7 +229,7 @@ export const createUiEntryCoordinator = ({
         environment: "notification",
         reason: "approval_created",
         context: {
-          approvalId: record.id,
+          approvalId: record.approvalId,
           origin: record.origin,
           method,
           chainRef: record.chainRef,
@@ -252,7 +252,7 @@ export const createUiEntryCoordinator = ({
         }
 
         ensureWindowTracked(uiEntryAccess, result.windowId);
-        approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.id });
+        approvalWindowTracker.assign({ windowId: result.windowId, approvalId: record.approvalId });
       })
       .catch((error) => {
         entryLog("failed to open notification window", {
@@ -301,8 +301,8 @@ export const createUiEntryCoordinator = ({
           }),
         );
         subscriptions.push(
-          uiEntryAccess.subscribeApprovalFinished(({ id }) => {
-            approvalWindowTracker.deleteApproval(id);
+          uiEntryAccess.subscribeApprovalFinished(({ approvalId }) => {
+            approvalWindowTracker.deleteApproval(approvalId);
           }),
         );
         subscriptions.push(

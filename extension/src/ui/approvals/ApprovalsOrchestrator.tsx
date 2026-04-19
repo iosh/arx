@@ -1,25 +1,20 @@
-import type { UiSnapshot } from "@arx/core/ui";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
+import { useUiApprovalsList } from "@/ui/hooks/useUiApprovals";
 import { useUiEntryMetadata } from "@/ui/hooks/useUiEntryMetadata";
 import { getApprovalAttentionAction } from "./orchestration";
 
-export function ApprovalsOrchestrator({
-  snapshot,
-  isLoading,
-}: {
-  snapshot: UiSnapshot | undefined;
-  isLoading: boolean;
-}) {
+export function ApprovalsOrchestrator() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const entry = useUiEntryMetadata();
+  const { approvals, isLoading } = useUiApprovalsList();
   const requestedApprovalId = entry.context.approvalId;
   const hadApprovalsSinceUnlockRef = useRef(false);
 
   useEffect(() => {
     const plan = getApprovalAttentionAction({
-      snapshot,
+      approvals,
       isLoading,
       entry,
       pathname,
@@ -43,7 +38,7 @@ export function ApprovalsOrchestrator({
         router.navigate({ to: plan.action.to, replace: true });
       }
     }
-  }, [entry, isLoading, pathname, requestedApprovalId, router, snapshot]);
+  }, [approvals, entry, isLoading, pathname, requestedApprovalId, router]);
 
   return null;
 }

@@ -1,11 +1,11 @@
-import type { ApprovalSummary } from "@arx/core/ui";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { Card, Paragraph, YStack } from "tamagui";
 
-type SwitchChainApproval = Extract<ApprovalSummary, { type: "switchChain" }>;
+type SwitchChainApproval = Extract<ApprovalDetail, { kind: "switchChain" }>;
 
 export function SwitchChainPayload({ approval }: { approval: SwitchChainApproval }) {
-  const { payload } = approval;
-  const title = payload.displayName ?? payload.chainRef;
+  const { request } = approval;
+  const title = request.displayName ?? request.chainRef;
 
   return (
     <Card padded bordered gap="$2">
@@ -21,11 +21,11 @@ export function SwitchChainPayload({ approval }: { approval: SwitchChainApproval
         </Paragraph>
       </YStack>
 
-      {payload.chainId ? (
+      {request.chainId ? (
         <YStack gap="$1">
           <Paragraph fontSize="$2">Chain ID:</Paragraph>
           <Paragraph fontFamily="$mono" fontSize="$2">
-            {payload.chainId}
+            {request.chainId}
           </Paragraph>
         </YStack>
       ) : null}

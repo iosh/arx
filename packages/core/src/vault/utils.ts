@@ -28,9 +28,6 @@ export const randomBytes = (size: number): Uint8Array => {
 };
 
 export const toBase64 = (bytes: Uint8Array): string => {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
-  }
   if (typeof globalThis.btoa === "function") {
     const CHUNK_SIZE = 0x2000;
     const parts: string[] = [];
@@ -44,9 +41,6 @@ export const toBase64 = (bytes: Uint8Array): string => {
 };
 
 export const fromBase64 = (value: string): Uint8Array => {
-  if (typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(value, "base64"));
-  }
   if (typeof globalThis.atob === "function") {
     const binary = globalThis.atob(value);
     const output = new Uint8Array(binary.length);

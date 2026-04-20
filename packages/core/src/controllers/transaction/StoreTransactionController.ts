@@ -8,7 +8,9 @@ import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.j
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
+import { TransactionReviewSessions } from "./review/session.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
+import { isTerminalTransactionStatus } from "./status.js";
 import { TransactionExecutor } from "./TransactionExecutor.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
@@ -44,7 +46,7 @@ export type StoreTransactionControllerOptions = {
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "create">;
+  approvals: Pick<ApprovalController, "create" | "onFinished">;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
   now?: () => number;
@@ -68,10 +70,12 @@ export class StoreTransactionController implements TransactionController {
   #view: StoreTransactionView;
   #executor: TransactionExecutor;
   #registry: TransactionAdapterRegistry;
+  #reviewSessions: TransactionReviewSessions;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
     this.#registry = options.registry;
+    this.#reviewSessions = new TransactionReviewSessions();
 
     const now = options.now ?? Date.now;
     const stateLimit = options.stateLimit ?? 200;
@@ -96,6 +100,7 @@ export class StoreTransactionController implements TransactionController {
       view: this.#view,
       registry: options.registry,
       service: options.service,
+      reviewSessions: this.#reviewSessions,
       logger,
     });
 
@@ -109,8 +114,32 @@ export class StoreTransactionController implements TransactionController {
       registry: options.registry,
       service: options.service,
       prepare,
+      reviewSessions: this.#reviewSessions,
       tracking,
       now,
+    });
+
+    options.approvals.onFinished((event) => {
+      const changed = this.#reviewSessions.invalidateFromApproval(event, now());
+      if (changed) {
+        this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
+          revision: changed.revision,
+          transactionIds: [changed.transactionId],
+        });
+      }
+    });
+
+    this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED, ({ id, meta }) => {
+      if (!isTerminalTransactionStatus(meta.status)) {
+        return;
+      }
+
+      if (this.#reviewSessions.delete(id)) {
+        this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
+          revision: meta.updatedAt,
+          transactionIds: [id],
+        });
+      }
     });
   }
 
@@ -118,17 +147,29 @@ export class StoreTransactionController implements TransactionController {
     return this.#view.getMeta(id);
   }
 
+  getReviewSession(transactionId: string) {
+    return this.#reviewSessions.get(transactionId);
+  }
+
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
     const transaction = this.#view.getMeta(input.transactionId);
-    const adapter = this.#registry.get(input.request.namespace);
+    const session = this.#reviewSessions.get(input.transactionId);
+    const request =
+      input.request ??
+      (transaction ? this.#executor.buildApprovalRequestPayload(transaction, input.transactionId) : null);
+    const namespace = transaction?.request.namespace ?? request?.request.namespace;
+    const adapter = namespace ? this.#registry.get(namespace) : undefined;
     const namespaceReview =
-      adapter?.buildApprovalReview?.({
-        transaction,
-        request: input,
-      }) ?? null;
+      adapter && request
+        ? (adapter.buildApprovalReview?.({
+            transaction,
+            request,
+          }) ?? null)
+        : null;
 
     return buildSendTransactionApprovalReview({
       transaction,
+      session,
       namespaceReview,
     });
   }
@@ -139,6 +180,18 @@ export class StoreTransactionController implements TransactionController {
     options?: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
     return this.#executor.beginTransactionApproval(request, requestContext, options);
+  }
+
+  retryPrepare(transactionId: string): Promise<void> {
+    return this.#executor.retryPrepare(transactionId);
+  }
+
+  applyDraftEdit(input: {
+    transactionId: string;
+    changes: Record<string, unknown>[];
+    mode?: string | undefined;
+  }): Promise<void> {
+    return this.#executor.applyDraftEdit(input);
   }
 
   async waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {

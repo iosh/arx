@@ -2,7 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
-import type { ApprovalKind, ApprovalRequest } from "../../../../controllers/approval/types.js";
+import type { ApprovalKinds, ApprovalRequest } from "../../../../controllers/approval/types.js";
 import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
 import {
   ApprovalRequirements,
@@ -39,7 +39,12 @@ export const requireProviderRequestHandle = (rpcContext: RpcInvocationContext | 
   return providerRequestHandle;
 };
 
-export const requestProviderApproval = <K extends ApprovalKind>(args: {
+type ProviderApprovalKind = Exclude<
+  (typeof ApprovalKinds)[keyof typeof ApprovalKinds],
+  typeof ApprovalKinds.SendTransaction
+>;
+
+export const requestProviderApproval = <K extends ProviderApprovalKind>(args: {
   controllers: {
     approvals: {
       create: Parameters<typeof requestApproval>[0]["approvals"]["create"];
@@ -66,6 +71,7 @@ export const requestProviderApproval = <K extends ApprovalKind>(args: {
         kind: args.kind,
         requestContext,
         request: args.request,
+        subject: undefined,
         approvalId,
         createdAt,
       },

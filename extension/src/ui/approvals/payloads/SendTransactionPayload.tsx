@@ -46,9 +46,9 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
           ))}
         </YStack>
       )}
-      {approval.review.blockingIssue ? (
+      {approval.review.approvalBlocker ? (
         <Paragraph color="$red10" fontSize="$2">
-          ✕ {approval.review.blockingIssue.message}
+          ✕ {approval.review.approvalBlocker.message}
         </Paragraph>
       ) : null}
     </Card>

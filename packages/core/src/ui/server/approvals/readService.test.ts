@@ -70,7 +70,7 @@ const SEND_TRANSACTION_REVIEW_READY = {
     error: null,
   },
   warnings: [],
-  blockingIssue: null,
+  approvalBlocker: null,
   namespaceReview: {
     namespace: "eip155" as const,
     summary: {
@@ -94,7 +94,7 @@ const SEND_TRANSACTION_REVIEW_BLOCKED = {
     error: null,
   },
   warnings: [],
-  blockingIssue: {
+  approvalBlocker: {
     code: "transaction.blocked",
     message: "Blocked",
   },
@@ -131,13 +131,23 @@ const createReadService = (
   return createApprovalReadService({
     approvals: {
       get: (approvalId) => byId.get(approvalId),
+      getSubject: (approvalId) => {
+        const record = byId.get(approvalId);
+        return record?.subject;
+      },
+      listPendingIdsBySubject: (subject) =>
+        records
+          .filter(
+            (record) => record.subject?.kind === subject.kind && record.subject.transactionId === subject.transactionId,
+          )
+          .map((record) => record.approvalId),
       getState: () => ({ pending }),
     },
     accounts: ACCOUNTS,
     chainViews: CHAIN_VIEWS,
     transactions: {
       getMeta: () => undefined,
-      getApprovalReview: (request) => reviews?.[request.transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
+      getApprovalReview: ({ transactionId }) => reviews?.[transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
     },
   });
 };
@@ -332,9 +342,12 @@ describe("createApprovalReadService", () => {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
+        subject: {
+          kind: "transaction",
+          transactionId: "tx-ready",
+        },
         createdAt: 7,
         request: {
-          transactionId: "tx-ready",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
           chain: null,
@@ -359,9 +372,12 @@ describe("createApprovalReadService", () => {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
+        subject: {
+          kind: "transaction",
+          transactionId: "tx-blocked",
+        },
         createdAt: 8,
         request: {
-          transactionId: "tx-blocked",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
           chain: null,
@@ -391,6 +407,11 @@ describe("createApprovalReadService", () => {
         canApprove: true,
         canReject: true,
       },
+      request: {
+        transactionId: "tx-ready",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+      },
       review: SEND_TRANSACTION_REVIEW_READY,
     });
     expect(readService.getDetail("approval-send-blocked")).toMatchObject({
@@ -398,6 +419,11 @@ describe("createApprovalReadService", () => {
       actions: {
         canApprove: false,
         canReject: true,
+      },
+      request: {
+        transactionId: "tx-blocked",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
       },
       review: SEND_TRANSACTION_REVIEW_BLOCKED,
     });
@@ -411,9 +437,12 @@ describe("createApprovalReadService", () => {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
+        subject: {
+          kind: "transaction",
+          transactionId: "tx-1",
+        },
         createdAt: 9,
         request: {
-          transactionId: "tx-1",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
           chain: null,
@@ -432,9 +461,12 @@ describe("createApprovalReadService", () => {
         origin: "https://dapp.example",
         namespace: "eip155",
         chainRef: "eip155:1",
+        subject: {
+          kind: "transaction",
+          transactionId: "tx-2",
+        },
         createdAt: 10,
         request: {
-          transactionId: "tx-2",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
           chain: null,

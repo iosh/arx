@@ -257,6 +257,54 @@ describe("InMemoryApprovalController", () => {
     }
   });
 
+  it("indexes pending approvals by subject", () => {
+    const messenger = new Messenger();
+    const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });
+
+    controller.create(
+      {
+        approvalId: "subject-linked-approval",
+        kind: ApprovalKinds.SendTransaction,
+        origin: ORIGIN,
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        createdAt: 1_000,
+        subject: {
+          kind: "transaction",
+          transactionId: "tx-1",
+        },
+        request: {
+          chainRef: "eip155:1",
+          origin: ORIGIN,
+          chain: null,
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          request: {
+            namespace: "eip155",
+            chainRef: "eip155:1",
+            payload: {
+              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            },
+          },
+          warnings: [],
+          issues: [],
+        },
+      },
+      requester,
+    );
+
+    expect(controller.getSubject("subject-linked-approval")).toEqual({
+      kind: "transaction",
+      transactionId: "tx-1",
+    });
+    expect(
+      controller.listPendingIdsBySubject({
+        kind: "transaction",
+        transactionId: "tx-1",
+      }),
+    ).toEqual(["subject-linked-approval"]);
+  });
+
   it("expires approvals after ttlMs to avoid hanging requests", async () => {
     vi.useFakeTimers();
     const messenger = new Messenger();

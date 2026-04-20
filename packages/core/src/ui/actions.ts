@@ -79,6 +79,8 @@ export const uiCommonActions = (client: UiClient) => {
 
     transactions: {
       requestSendTransactionApproval: call("ui.transactions.requestSendTransactionApproval"),
+      retryPrepare: call("ui.transactions.retryPrepare"),
+      applyDraftEdit: call("ui.transactions.applyDraftEdit"),
     },
 
     keyrings: {

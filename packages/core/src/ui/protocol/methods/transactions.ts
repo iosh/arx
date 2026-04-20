@@ -15,4 +15,22 @@ export const transactionsMethods = {
     }),
     { broadcastSnapshot: true },
   ),
+  "ui.transactions.retryPrepare": defineMethod(
+    "command",
+    z.strictObject({
+      transactionId: z.string().min(1),
+    }),
+    z.null(),
+    { broadcastSnapshot: false },
+  ),
+  "ui.transactions.applyDraftEdit": defineMethod(
+    "command",
+    z.strictObject({
+      transactionId: z.string().min(1),
+      changes: z.array(z.record(z.string(), z.unknown())),
+      mode: z.string().min(1).optional(),
+    }),
+    z.null(),
+    { broadcastSnapshot: false },
+  ),
 } as const;

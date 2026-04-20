@@ -302,7 +302,7 @@ export const TransactionRecordSchema = z
     prepared: TransactionPreparedSchema.nullable().optional(),
     hash: z.string().nullable(),
     receipt: TransactionReceiptSchema.optional(),
-    error: TransactionErrorSchema.optional(),
+    error: TransactionErrorSchema.nullable().optional(),
     userRejected: z.boolean(),
     warnings: z.array(TransactionWarningSchema),
     issues: z.array(TransactionIssueSchema),

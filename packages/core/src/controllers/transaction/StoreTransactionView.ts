@@ -161,6 +161,12 @@ export class StoreTransactionView {
     this.ingestRecords(recent);
   }
 
+  notifyStateChanged(transactionIds: string[]): void {
+    for (const id of transactionIds) {
+      this.#scheduleStateChanged(id);
+    }
+  }
+
   #upsert(meta: TransactionMeta) {
     // Maintain a bounded LRU cache for synchronous reads (e.g. getMeta()).
     this.#records.delete(meta.id);

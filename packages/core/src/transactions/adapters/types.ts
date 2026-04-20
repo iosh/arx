@@ -3,6 +3,7 @@ import type { AccountAddress } from "../../controllers/account/types.js";
 import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
 import type { TransactionMeta } from "../../controllers/transaction/types.js";
+import type { TransactionRecord } from "../../storage/records.js";
 import type {
   TransactionIssue,
   TransactionPrepared,
@@ -54,6 +55,13 @@ export type TransactionApprovalReviewContext = {
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
 };
 
+export type TransactionDraftEditContext = {
+  transaction: TransactionMeta;
+  request: TransactionRecord["request"];
+  changes: Record<string, unknown>[];
+  mode?: string | undefined;
+};
+
 export type TransactionReceiptTrackingAdapter = {
   fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
   detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
@@ -72,5 +80,6 @@ export type TransactionSubmissionAdapter = {
 export type TransactionAdapter = {
   deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
   buildApprovalReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
+  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRecord["request"];
   receiptTracking?: TransactionReceiptTrackingAdapter;
 } & TransactionSubmissionAdapter;

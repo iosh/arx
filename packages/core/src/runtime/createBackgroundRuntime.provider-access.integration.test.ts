@@ -442,8 +442,7 @@ describe("createBackgroundRuntime provider access", () => {
       });
       const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
         capturedApprovalId = record.approvalId;
-        capturedTransactionId =
-          record.kind === "sendTransaction" && "transactionId" in record.request ? record.request.transactionId : null;
+        capturedTransactionId = record.kind === "sendTransaction" ? record.subject.transactionId : null;
         approvalCreatedResolve?.();
       });
 

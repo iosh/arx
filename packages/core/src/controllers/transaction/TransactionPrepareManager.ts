@@ -1,5 +1,6 @@
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { TransactionReviewSessions } from "./review/session.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isPrepareEligibleTransactionStatus } from "./status.js";
 import type { TransactionIssue, TransactionMeta, TransactionWarning } from "./types.js";
@@ -20,6 +21,7 @@ type Options = {
   view: StoreTransactionView;
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
+  reviewSessions: TransactionReviewSessions;
   logger?: (message: string, data?: unknown) => void;
   prepareTimeoutMs?: number;
   backgroundConcurrency?: number;
@@ -29,6 +31,7 @@ export class TransactionPrepareManager {
   #view: StoreTransactionView;
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
+  #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
   #timeoutMs: number;
 
@@ -42,6 +45,7 @@ export class TransactionPrepareManager {
     this.#view = options.view;
     this.#registry = options.registry;
     this.#service = options.service;
+    this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
     this.#timeoutMs = options.prepareTimeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
     this.#prepareConcurrencyLimit = Math.max(
@@ -121,9 +125,12 @@ export class TransactionPrepareManager {
       return meta;
     }
 
+    const session = this.#reviewSessions.begin(id, Date.now());
+    this.#view.notifyStateChanged([id]);
+
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter) {
-      return await this.#patchAndCommit(
+      const next = await this.#patchAndCommit(
         id,
         {
           prepared: null,
@@ -132,6 +139,13 @@ export class TransactionPrepareManager {
         },
         meta,
       );
+      this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
+        reason: "transaction.adapter_missing",
+        message: `No transaction adapter registered for namespace ${meta.namespace}`,
+        data: { namespace: meta.namespace },
+      });
+      this.#view.notifyStateChanged([id]);
+      return next;
     }
 
     try {
@@ -142,7 +156,7 @@ export class TransactionPrepareManager {
       const nextWarnings: TransactionWarning[] = mergeWarnings(meta.warnings, result.warnings);
       const nextIssues: TransactionIssue[] = mergeIssues(meta.issues, result.issues);
 
-      return await this.#patchAndCommit(
+      const next = await this.#patchAndCommit(
         id,
         {
           prepared: result.prepared,
@@ -151,9 +165,23 @@ export class TransactionPrepareManager {
         },
         meta,
       );
+      const persisted = await this.#service.get(id);
+      if (!persisted || persisted.updatedAt !== next.updatedAt) {
+        return next;
+      }
+      if (result.prepared) {
+        this.#reviewSessions.markReady(id, session.revision, next.updatedAt);
+      } else {
+        this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
+          reason: "transaction.prepare_missing_result",
+          message: "Transaction preparation did not produce prepared parameters.",
+        });
+      }
+      this.#view.notifyStateChanged([id]);
+      return next;
     } catch (error) {
       const issue = issueFromPrepareError(error);
-      return await this.#patchAndCommit(
+      const next = await this.#patchAndCommit(
         id,
         {
           prepared: null,
@@ -162,6 +190,17 @@ export class TransactionPrepareManager {
         },
         meta,
       );
+      const persisted = await this.#service.get(id);
+      if (!persisted || persisted.updatedAt !== next.updatedAt) {
+        return next;
+      }
+      this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
+        reason: issue.code,
+        message: issue.message,
+        ...(issue.data !== undefined ? { data: issue.data } : {}),
+      });
+      this.#view.notifyStateChanged([id]);
+      return next;
     }
   }
 

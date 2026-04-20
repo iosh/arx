@@ -1,17 +1,25 @@
 import { deriveApprovalReviewContext } from "../../../approvals/chainContext.js";
 import { getApprovalSelectableAccounts } from "../../../approvals/shared.js";
-import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../controllers/approval/types.js";
-import type {
-  TransactionApprovalRequestPayload,
-  TransactionController,
-} from "../../../controllers/transaction/types.js";
+import {
+  ApprovalKinds,
+  type ApprovalQueueItem,
+  type ApprovalRecord,
+  type ApprovalSubject,
+} from "../../../controllers/approval/types.js";
+import type { TransactionController } from "../../../controllers/transaction/types.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
-import type { ApprovalDetail, ApprovalListEntry } from "../../protocol/models/approvals.js";
+import type {
+  ApprovalDetail,
+  ApprovalListEntry,
+  ApprovalSendTransactionDetail,
+} from "../../protocol/models/approvals.js";
 
 type ApprovalReadServiceDeps = {
   approvals: {
     get(approvalId: string): ApprovalRecord | undefined;
+    getSubject(approvalId: string): ApprovalSubject | undefined;
+    listPendingIdsBySubject(subject: ApprovalSubject): string[];
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
@@ -230,21 +238,28 @@ const buildStaticDetail = (
 const buildSendTransactionDetail = (
   record: ApprovalRecord<typeof ApprovalKinds.SendTransaction>,
   deps: ApprovalReadServiceDeps,
-): ApprovalDetail => {
-  const review = deps.transactions.getApprovalReview(record.request);
-  const request = record.request as TransactionApprovalRequestPayload;
+): ApprovalSendTransactionDetail => {
+  const subject = deps.approvals.getSubject(record.approvalId);
+  if (subject?.kind !== "transaction") {
+    throw new Error(`Send-transaction approval ${record.approvalId} is missing a transaction subject.`);
+  }
+
+  const review = deps.transactions.getApprovalReview({
+    transactionId: subject.transactionId,
+    request: record.request,
+  });
 
   return {
     ...toDetailMeta(record),
     kind: ApprovalKinds.SendTransaction,
     actions: {
-      canApprove: review.reviewState.status === "ready" && review.blockingIssue === null,
+      canApprove: review.reviewState.status === "ready" && review.approvalBlocker === null,
       canReject: true,
     },
     request: {
-      transactionId: request.transactionId,
-      chainRef: request.chainRef,
-      origin: request.origin,
+      transactionId: subject.transactionId,
+      chainRef: record.request.chainRef,
+      origin: record.request.origin,
     },
     review,
   };
@@ -287,17 +302,10 @@ export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
       return [change.approvalId];
     }
 
-    return deps.approvals
-      .getState()
-      .pending.filter((item) => {
-        const record = deps.approvals.get(item.approvalId);
-        return (
-          record &&
-          isApprovalRecord(record, ApprovalKinds.SendTransaction) &&
-          record.request.transactionId === change.transactionId
-        );
-      })
-      .map((item) => item.approvalId);
+    return deps.approvals.listPendingIdsBySubject({
+      kind: "transaction",
+      transactionId: change.transactionId,
+    });
   };
 
   return {

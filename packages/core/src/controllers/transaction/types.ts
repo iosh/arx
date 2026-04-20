@@ -3,6 +3,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
+import type { TransactionRecord } from "../../storage/records.js";
 import type {
   TransactionError,
   TransactionIssue,
@@ -12,7 +13,7 @@ import type {
   TransactionWarning,
 } from "../../transactions/types.js";
 import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
-import type { SendTransactionApprovalReview } from "./review/types.js";
+import type { SendTransactionApprovalReview, TransactionReviewSession } from "./review/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 
@@ -46,7 +47,7 @@ export type TransactionMeta = {
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest;
+  request: TransactionRecord["request"];
   prepared: TransactionPrepared | null;
   status: TransactionStatus;
   hash: string | null;
@@ -60,7 +61,6 @@ export type TransactionMeta = {
 };
 
 export type TransactionApprovalRequestPayload = {
-  transactionId: string;
   chainRef: ChainRef;
   origin: string;
   chain?: TransactionApprovalChainMetadata | null;
@@ -112,12 +112,22 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
-  getApprovalReview(input: TransactionApprovalRequestPayload): SendTransactionApprovalReview;
+  getApprovalReview(input: {
+    transactionId: string;
+    request?: TransactionApprovalRequestPayload | undefined;
+  }): SendTransactionApprovalReview;
+  getReviewSession(transactionId: string): TransactionReviewSession | undefined;
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
     options?: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff>;
+  retryPrepare(transactionId: string): Promise<void>;
+  applyDraftEdit(input: {
+    transactionId: string;
+    changes: Record<string, unknown>[];
+    mode?: string | undefined;
+  }): Promise<void>;
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;

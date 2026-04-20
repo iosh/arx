@@ -24,11 +24,11 @@ const deepClone = <T>(value: T): T => {
   }
 };
 
-export const cloneRequest = (request: TransactionRequest): TransactionRequest => {
+export const cloneRequest = <TRequest extends TransactionRequest>(request: TRequest): TRequest => {
   return {
     ...request,
     payload: deepClone(request.payload),
-  };
+  } as TRequest;
 };
 
 export const cloneWarnings = (list: TransactionWarning[]): TransactionWarning[] =>

@@ -40,7 +40,7 @@ export const NamespaceTransactionReviewSchema = z.discriminatedUnion("namespace"
 export const SendTransactionApprovalReviewSchema = z.strictObject({
   reviewState: TransactionReviewStateSchema,
   warnings: z.array(TransactionReviewMessageSchema),
-  blockingIssue: TransactionReviewMessageSchema.nullable(),
+  approvalBlocker: TransactionReviewMessageSchema.nullable(),
   namespaceReview: NamespaceTransactionReviewSchema.nullable(),
 });
 
@@ -49,3 +49,14 @@ export type TransactionReviewError = z.infer<typeof TransactionReviewErrorSchema
 export type TransactionReviewState = z.infer<typeof TransactionReviewStateSchema>;
 export type NamespaceTransactionReview = z.infer<typeof NamespaceTransactionReviewSchema>;
 export type SendTransactionApprovalReview = z.infer<typeof SendTransactionApprovalReviewSchema>;
+
+export type TransactionReviewRuntimeStatus = TransactionReviewState["status"] | "invalidated";
+
+export type TransactionReviewSession = {
+  transactionId: string;
+  revision: number;
+  status: TransactionReviewRuntimeStatus;
+  updatedAt: number;
+  error: TransactionReviewError | null;
+  invalidatedBy?: string | undefined;
+};

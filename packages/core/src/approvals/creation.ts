@@ -2,10 +2,12 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { parseChainRef } from "../chains/caip.js";
 import {
   type ApprovalController,
+  type ApprovalCreateParams,
   type ApprovalHandle,
   type ApprovalKind,
   ApprovalKinds,
   type ApprovalRequest,
+  type ApprovalSubjectFor,
 } from "../controllers/approval/types.js";
 import { toApprovalRequester } from "../controllers/approval/utils.js";
 import type { RequestContext } from "../rpc/requestContext.js";
@@ -21,7 +23,11 @@ export type ApprovalCreationInput<K extends ApprovalKind = ApprovalKind> = {
   requestContext: RequestContext;
   approvalId?: string;
   createdAt?: number;
-};
+} & (ApprovalSubjectFor<K> extends undefined
+  ? { subject?: undefined }
+  : {
+      subject: ApprovalSubjectFor<K>;
+    });
 
 const deriveApprovalRecordContext = <K extends ApprovalKind>(input: ApprovalCreationInput<K>) => {
   // Creator owns record-level context derivation so call sites only provide kind-specific payload.
@@ -66,6 +72,12 @@ const assertApprovalRequestConsistency = <K extends ApprovalKind>(input: Approva
   });
 };
 
+const hasApprovalSubject = <K extends ApprovalKind>(
+  input: ApprovalCreationInput<K>,
+): input is ApprovalCreationInput<K> & { subject: NonNullable<ApprovalSubjectFor<K>> } => {
+  return "subject" in input && input.subject !== undefined;
+};
+
 export const requestApproval = <K extends ApprovalKind>(
   deps: ApprovalCreationDeps,
   input: ApprovalCreationInput<K>,
@@ -75,16 +87,20 @@ export const requestApproval = <K extends ApprovalKind>(
   const requester = toApprovalRequester(input.requestContext);
   const context = deriveApprovalRecordContext(input);
 
-  return deps.approvals.create(
-    {
-      approvalId: input.approvalId ?? globalThis.crypto.randomUUID(),
-      kind: input.kind,
-      origin: requester.origin,
-      namespace: context.namespace,
-      chainRef: context.chainRef,
-      request: input.request,
-      createdAt: input.createdAt ?? deps.now(),
-    },
-    requester,
-  );
+  const createParams: ApprovalCreateParams<K> = {
+    approvalId: input.approvalId ?? globalThis.crypto.randomUUID(),
+    kind: input.kind,
+    origin: requester.origin,
+    namespace: context.namespace,
+    chainRef: context.chainRef,
+    request: input.request,
+    ...(input.subject ? { subject: input.subject } : {}),
+    createdAt: input.createdAt ?? deps.now(),
+  };
+
+  if (input.kind === ApprovalKinds.SendTransaction && !hasApprovalSubject(input)) {
+    throw new Error("Send-transaction approvals require a transaction subject.");
+  }
+
+  return deps.approvals.create(createParams, requester);
 };

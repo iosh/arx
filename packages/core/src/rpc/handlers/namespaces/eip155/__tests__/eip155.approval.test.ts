@@ -438,7 +438,7 @@ describe("eip155 handlers - approval metadata", () => {
         namespace: "eip155",
         chainRef: ALT_CHAIN.chainRef,
         request: {
-          transactionId: task.request.transactionId,
+          transactionId: task.subject?.transactionId,
           chainRef: ALT_CHAIN.chainRef,
           origin: ORIGIN,
         },
@@ -475,7 +475,7 @@ describe("eip155 handlers - approval metadata", () => {
 
       expect(capturedTask?.namespace).toBe("eip155");
       expect(capturedTask?.chainRef).toBe(ALT_CHAIN.chainRef);
-      expect(capturedTask?.request.transactionId).toEqual(expect.any(String));
+      expect(capturedTask?.subject?.transactionId).toEqual(expect.any(String));
     } finally {
       teardownApprovalResponder();
       runtime.lifecycle.shutdown();
@@ -558,7 +558,7 @@ describe("eip155 handlers - approval metadata", () => {
       ).rejects.toMatchObject({ code: 4001 });
 
       expect(capturedTask?.approvalId).toEqual(expect.any(String));
-      const failedMeta = runtime.controllers.transactions.getMeta(capturedTask?.request.transactionId ?? "");
+      const failedMeta = runtime.controllers.transactions.getMeta(capturedTask?.subject?.transactionId ?? "");
       expect(failedMeta?.status).toBe("failed");
       expect(failedMeta?.userRejected).toBe(true);
       expect(failedMeta?.error?.code).toBe(4001);

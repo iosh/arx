@@ -81,7 +81,10 @@ export type UiApprovalEventsAccess = {
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
-export type UiTransactionsAccess = Pick<TransactionController, "beginTransactionApproval" | "getMeta">;
+export type UiTransactionsAccess = Pick<
+  TransactionController,
+  "beginTransactionApproval" | "getMeta" | "retryPrepare" | "applyDraftEdit"
+>;
 
 export type UiTransactionEventsAccess = {
   onStateChanged: TransactionController["onStateChanged"];

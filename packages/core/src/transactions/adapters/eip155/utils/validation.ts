@@ -1,6 +1,24 @@
 import * as Hex from "ox/Hex";
 import type { Eip155PreparedTransactionResult } from "../types.js";
 
+export type HexQuantityIssueSink = {
+  push: (entry: { code: string; message: string; data?: Record<string, unknown> }) => void;
+};
+
+const toHexQuantityIssueSink = (
+  issues: Eip155PreparedTransactionResult["issues"] | HexQuantityIssueSink,
+): HexQuantityIssueSink => {
+  if (Array.isArray(issues)) {
+    return {
+      push: (entry) => {
+        pushIssue(issues, entry.code, entry.message, entry.data);
+      },
+    };
+  }
+
+  return issues;
+};
+
 export const readErrorMessage = (value: unknown): string => {
   if (value instanceof Error && typeof value.message === "string") {
     return value.message;
@@ -43,10 +61,11 @@ export const pushWarning = (
 };
 
 export const parseHexQuantity = (
-  issues: Eip155PreparedTransactionResult["issues"],
+  issues: Eip155PreparedTransactionResult["issues"] | HexQuantityIssueSink,
   value: string | undefined,
   label: string,
 ): Hex.Hex | null => {
+  const sink = toHexQuantityIssueSink(issues);
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
   try {
@@ -54,10 +73,15 @@ export const parseHexQuantity = (
     Hex.toBigInt(trimmed as Hex.Hex); // ensure all digits are valid
     return trimmed as Hex.Hex;
   } catch (error) {
-    pushIssue(issues, "transaction.prepare.invalid_hex", `${label} must be a 0x-prefixed hex quantity.`, {
-      value,
-      error: readErrorMessage(error),
-    });
+    const issue = {
+      code: "transaction.prepare.invalid_hex",
+      message: `${label} must be a 0x-prefixed hex quantity.`,
+      data: {
+        value,
+        error: readErrorMessage(error),
+      },
+    };
+    sink.push(issue);
     return null;
   }
 };

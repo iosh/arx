@@ -2,6 +2,7 @@ import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { Eip155TransactionRequest } from "../../types.js";
 import type { TransactionAdapter } from "../types.js";
+import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
 import { createEip155PrepareTransaction } from "./prepareTransaction.js";
@@ -36,6 +37,7 @@ export const createEip155TransactionAdapter = (deps: AdapterDeps): TransactionAd
     prepareTransaction,
     signTransaction: (context, prepared) => deps.signer.signTransaction(context, prepared),
     buildApprovalReview: ({ transaction, request }) => buildEip155ApprovalReview({ transaction, request }),
+    applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
     async broadcastTransaction(context, signed) {
       const broadcast = await deps.broadcaster.broadcast(context, signed);
       return { hash: broadcast.hash };

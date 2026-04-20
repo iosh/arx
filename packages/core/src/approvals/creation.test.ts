@@ -104,8 +104,11 @@ describe("requestApproval", () => {
         requestContext: REQUEST_CONTEXT,
         approvalId: "22222222-2222-4222-8222-222222222222",
         createdAt: 456,
-        request: {
+        subject: {
+          kind: "transaction",
           transactionId: "33333333-3333-4333-8333-333333333333",
+        },
+        request: {
           chainRef: "eip155:10",
           origin: REQUEST_CONTEXT.origin,
           chain: null,
@@ -132,6 +135,10 @@ describe("requestApproval", () => {
         createdAt: 456,
         namespace: "eip155",
         chainRef: "eip155:10",
+        subject: {
+          kind: "transaction",
+          transactionId: "33333333-3333-4333-8333-333333333333",
+        },
       }),
       requester: {
         transport: REQUEST_CONTEXT.transport,
@@ -155,8 +162,11 @@ describe("requestApproval", () => {
         {
           kind: ApprovalKinds.SendTransaction,
           requestContext: REQUEST_CONTEXT,
-          request: {
+          subject: {
+            kind: "transaction",
             transactionId: "33333333-3333-4333-8333-333333333333",
+          },
+          request: {
             chainRef: "eip155:1",
             origin: "https://other.example",
             chain: null,

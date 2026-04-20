@@ -87,6 +87,23 @@ export type ApprovalDecision<K extends ApprovalKind = ApprovalKind> = ApprovalDe
 
 export type ApprovalResult<K extends ApprovalKind = ApprovalKind> = ApprovalResultByKind[K];
 
+export type ApprovalSubject = {
+  kind: "transaction";
+  transactionId: string;
+};
+
+type ApprovalSubjectByKind = {
+  [ApprovalKinds.RequestAccounts]: undefined;
+  [ApprovalKinds.RequestPermissions]: undefined;
+  [ApprovalKinds.SignMessage]: undefined;
+  [ApprovalKinds.SignTypedData]: undefined;
+  [ApprovalKinds.SendTransaction]: ApprovalSubject;
+  [ApprovalKinds.SwitchChain]: undefined;
+  [ApprovalKinds.AddChain]: undefined;
+};
+
+export type ApprovalSubjectFor<K extends ApprovalKind> = ApprovalSubjectByKind[K];
+
 export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   approvalId: string;
   kind: K;
@@ -95,6 +112,7 @@ export type ApprovalCreateParams<K extends ApprovalKind = ApprovalKind> = {
   chainRef: ChainRef;
   request: ApprovalRequest<K>;
   createdAt: number;
+  subject?: ApprovalSubject | undefined;
 };
 
 export type ApprovalRecord<K extends ApprovalKind = ApprovalKind> = ApprovalCreateParams<K> & {
@@ -119,6 +137,7 @@ export type ApprovalFinishedEvent<T = unknown> = {
   origin?: string | undefined;
   namespace?: ChainNamespace | undefined;
   chainRef?: ChainRef | undefined;
+  subject?: ApprovalSubject | undefined;
 
   value?: T | undefined;
   error?: { name: string; message: string } | undefined;
@@ -163,12 +182,14 @@ export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
 export type ApprovalController = {
   getState(): ApprovalState;
   get(approvalId: string): ApprovalRecord | undefined;
+  getSubject(approvalId: string): ApprovalSubject | undefined;
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void;
   onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;
 
   has(approvalId: string): boolean;
+  listPendingIdsBySubject(subject: ApprovalSubject): string[];
 
   resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult>;
 

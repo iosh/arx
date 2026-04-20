@@ -175,6 +175,7 @@ export const initControllers = ({
     },
     approvals: {
       create: (request, requester) => approvalController.create(request, requester),
+      onFinished: (handler) => approvalController.onFinished(handler),
     },
     registry: transactionRegistry,
     service: transactionsService,

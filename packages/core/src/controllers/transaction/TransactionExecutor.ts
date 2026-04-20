@@ -12,6 +12,7 @@ import type { TransactionValidationContext } from "../../transactions/adapters/t
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
+import type { TransactionReviewSessions } from "./review/session.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -54,6 +55,7 @@ type Deps = {
   registry: TransactionAdapterRegistry;
   service: TransactionsService;
   prepare: TransactionPrepareManager;
+  reviewSessions: TransactionReviewSessions;
   tracking: TransactionReceiptTracking;
   now: () => number;
 };
@@ -78,6 +80,7 @@ export class TransactionExecutor
   #registry: TransactionAdapterRegistry;
   #service: TransactionsService;
   #prepare: TransactionPrepareManager;
+  #reviewSessions: TransactionReviewSessions;
   #tracking: TransactionReceiptTracking;
   #now: () => number;
   #lastTimestamp = 0;
@@ -99,6 +102,7 @@ export class TransactionExecutor
     this.#registry = deps.registry;
     this.#service = deps.service;
     this.#prepare = deps.prepare;
+    this.#reviewSessions = deps.reviewSessions;
     this.#tracking = deps.tracking;
     this.#now = deps.now;
   }
@@ -186,7 +190,7 @@ export class TransactionExecutor
 
     const storedMeta = this.#view.commitRecord(created).next;
 
-    const approvalRequest = this.#createApprovalRequest(storedMeta);
+    const approvalRequest = this.buildApprovalRequestPayload(storedMeta, storedMeta.id);
     const approvalId = crypto.randomUUID();
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
@@ -204,6 +208,10 @@ export class TransactionExecutor
                   approvalId,
                   createdAt,
                   request: approvalRequest,
+                  subject: {
+                    kind: "transaction",
+                    transactionId: storedMeta.id,
+                  },
                 },
               ),
             {
@@ -223,6 +231,10 @@ export class TransactionExecutor
               approvalId,
               createdAt: storedMeta.createdAt,
               request: approvalRequest,
+              subject: {
+                kind: "transaction",
+                transactionId: storedMeta.id,
+              },
             },
           );
     } catch (error) {
@@ -479,6 +491,51 @@ export class TransactionExecutor
     this.#releasedRetainedExecutionIds.add(id);
   }
 
+  async retryPrepare(transactionId: string): Promise<void> {
+    const meta = this.#view.peek(transactionId) ?? (await this.#view.getOrLoad(transactionId));
+    if (!meta || isTerminalTransactionStatus(meta.status)) {
+      return;
+    }
+
+    this.#prepare.queuePrepare(transactionId);
+  }
+
+  async applyDraftEdit(input: {
+    transactionId: string;
+    changes: Record<string, unknown>[];
+    mode?: string | undefined;
+  }): Promise<void> {
+    const meta = this.#view.peek(input.transactionId) ?? (await this.#view.getOrLoad(input.transactionId));
+    if (!meta || isTerminalTransactionStatus(meta.status)) {
+      return;
+    }
+
+    const adapter = this.#registry.get(meta.namespace);
+    if (!adapter?.applyDraftEdit) {
+      throw new Error(`Transaction draft edits are not supported for namespace "${meta.namespace}".`);
+    }
+
+    const nextRequest = adapter.applyDraftEdit({
+      transaction: meta,
+      request: cloneRequest(meta.request),
+      changes: input.changes,
+      ...(input.mode ? { mode: input.mode } : {}),
+    });
+
+    await this.#service.patch({
+      id: meta.id,
+      patch: {
+        request: cloneRequest(nextRequest),
+        prepared: null,
+        issues: [],
+        warnings: [],
+        error: null,
+      },
+    });
+
+    await this.retryPrepare(meta.id);
+  }
+
   #enqueue(id: string) {
     if (this.#processing.has(id) || this.#queued.has(id)) return;
     this.#queued.add(id);
@@ -550,9 +607,12 @@ export class TransactionExecutor
     return null;
   }
 
-  #createApprovalRequest(meta: TransactionMeta): TransactionApprovalRequestPayload {
+  buildApprovalRequestPayload(meta: TransactionMeta | null, transactionId: string): TransactionApprovalRequestPayload {
+    if (!meta) {
+      throw new Error(`Transaction ${transactionId} not found`);
+    }
+
     return {
-      transactionId: meta.id,
       chainRef: meta.chainRef,
       origin: meta.origin,
       chain: this.#buildChainMetadata(meta),

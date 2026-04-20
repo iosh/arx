@@ -40,7 +40,9 @@ export type TransitionTransactionParams = {
 
 export type PatchTransactionParams = {
   id: TransactionRecord["id"];
-  patch: Partial<Pick<TransactionRecord, "prepared" | "warnings" | "issues" | "error">>;
+  patch: Partial<Pick<TransactionRecord, "request" | "prepared" | "warnings" | "issues">> & {
+    error?: TransactionRecord["error"] | null | undefined;
+  };
 };
 
 export type ListTransactionsCursor = {

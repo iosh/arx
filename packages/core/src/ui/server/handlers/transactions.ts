@@ -26,7 +26,10 @@ export const createTransactionsHandlers = (deps: {
   session: UiSessionAccess;
   namespaceBindings: UiNamespaceBindingsAccess;
   surface: UiSurfaceIdentity;
-}): Pick<UiHandlers, "ui.transactions.requestSendTransactionApproval"> => {
+}): Pick<
+  UiHandlers,
+  "ui.transactions.requestSendTransactionApproval" | "ui.transactions.retryPrepare" | "ui.transactions.applyDraftEdit"
+> => {
   return {
     "ui.transactions.requestSendTransactionApproval": async ({ to, valueEther, chainRef }) => {
       assertUnlocked(deps.session);
@@ -69,6 +72,20 @@ export const createTransactionsHandlers = (deps: {
       const handoff = await deps.transactions.beginTransactionApproval(request, requestContext);
 
       return { approvalId: handoff.approvalId };
+    },
+    "ui.transactions.retryPrepare": async ({ transactionId }) => {
+      assertUnlocked(deps.session);
+      await deps.transactions.retryPrepare(transactionId);
+      return null;
+    },
+    "ui.transactions.applyDraftEdit": async ({ transactionId, changes, mode }) => {
+      assertUnlocked(deps.session);
+      await deps.transactions.applyDraftEdit({
+        transactionId,
+        changes,
+        ...(mode ? { mode } : {}),
+      });
+      return null;
     },
   };
 };

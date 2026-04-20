@@ -52,6 +52,7 @@ export const cloneRecord = <K extends ApprovalKind>(record: ApprovalRecord<K>): 
   namespace: record.namespace,
   chainRef: record.chainRef,
   request: record.request,
+  ...(record.subject ? { subject: structuredClone(record.subject) } : {}),
   createdAt: record.createdAt,
   requester: { ...record.requester },
 });
@@ -68,6 +69,7 @@ export const cloneFinishEvent = <T>(event: ApprovalFinishedEvent<T>): ApprovalFi
   ...(event.origin !== undefined ? { origin: event.origin } : {}),
   ...(event.namespace !== undefined ? { namespace: event.namespace } : {}),
   ...(event.chainRef !== undefined ? { chainRef: event.chainRef } : {}),
+  ...(event.subject ? { subject: structuredClone(event.subject) } : {}),
   ...(event.value !== undefined ? { value: event.value } : {}),
   ...(event.error ? { error: { ...event.error } } : {}),
 });

@@ -123,6 +123,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare,
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -164,8 +165,12 @@ describe("TransactionExecutor", () => {
         approvalId: APPROVAL_ID,
         createdAt: createdRecord.createdAt,
         origin: REQUEST_CONTEXT.origin,
-        request: expect.objectContaining({
+        subject: {
+          kind: "transaction",
           transactionId: REQUEST_ID,
+        },
+        request: expect.objectContaining({
+          chainRef,
         }),
       }),
       expect.objectContaining({
@@ -265,6 +270,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare,
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -309,8 +315,12 @@ describe("TransactionExecutor", () => {
         approvalId: APPROVAL_ID,
         createdAt: createdRecord.createdAt,
         origin: REQUEST_CONTEXT.origin,
-        request: expect.objectContaining({
+        subject: {
+          kind: "transaction",
           transactionId: REQUEST_ID,
+        },
+        request: expect.objectContaining({
+          chainRef,
         }),
       }),
       expect.objectContaining({
@@ -429,6 +439,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare,
       } as never,
+      reviewSessions: {} as never,
       tracking: tracking as never,
       now: () => 1,
     });
@@ -560,6 +571,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare,
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -678,6 +690,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare,
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -773,6 +786,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare: vi.fn(),
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -848,6 +862,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare: vi.fn(),
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -925,6 +940,7 @@ describe("TransactionExecutor", () => {
       prepare: {
         queuePrepare: vi.fn(),
       } as never,
+      reviewSessions: {} as never,
       tracking: {} as never,
       now: () => 1,
     });
@@ -1049,6 +1065,7 @@ describe("TransactionExecutor", () => {
         transition,
       } as never,
       prepare: {} as never,
+      reviewSessions: {} as never,
       tracking: {
         stop: vi.fn(),
         handleTransition: vi.fn(),
@@ -1157,6 +1174,7 @@ describe("TransactionExecutor", () => {
         transition,
       } as never,
       prepare: {} as never,
+      reviewSessions: {} as never,
       tracking: {
         stop: vi.fn(),
         handleTransition: vi.fn(),
@@ -1296,6 +1314,7 @@ describe("TransactionExecutor", () => {
         transition,
       } as never,
       prepare: {} as never,
+      reviewSessions: {} as never,
       tracking: tracking as never,
       now: () => 1,
     });

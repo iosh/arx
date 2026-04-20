@@ -30,6 +30,8 @@ export type TransactionPrepareContext = {
   request: TransactionRequest;
 };
 
+export type TransactionValidationContext = TransactionPrepareContext;
+
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
 export type TransactionTrackingContext = TransactionPrepareContext & {
@@ -58,7 +60,7 @@ export type TransactionReceiptTrackingAdapter = {
 };
 
 export type TransactionSubmissionAdapter = {
-  validateRequest?(request: TransactionRequest): void;
+  validateRequest?(context: TransactionValidationContext): void;
   prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
   signTransaction(
     context: TransactionSignContext,

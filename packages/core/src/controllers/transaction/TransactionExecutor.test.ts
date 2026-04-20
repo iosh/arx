@@ -93,7 +93,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -230,7 +235,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -387,7 +397,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -515,7 +530,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -628,7 +648,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -721,7 +746,12 @@ describe("TransactionExecutor", () => {
         getChain: () => null,
       } as never,
       accounts: {
-        getActiveAccountForNamespace: () => null,
+        getActiveAccountForNamespace: () => ({
+          accountKey,
+          namespace: "eip155",
+          canonicalAddress: from,
+          displayAddress: from,
+        }),
         listOwnedForNamespace: () => [
           {
             accountKey,
@@ -840,6 +870,99 @@ describe("TransactionExecutor", () => {
       message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
     });
 
+    expect(createPending).not.toHaveBeenCalled();
+    expect(createApproval).not.toHaveBeenCalled();
+  });
+
+  it("passes owner validation context into request validation before creating approval", async () => {
+    const chainRef = "eip155:10";
+    const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const accountKey = toAccountKeyFromAddress({ chainRef, address: from, accountCodecs });
+    const createPending = vi.fn();
+    const createApproval = vi.fn();
+    const validateRequest = vi.fn(() => {
+      throw arxError({
+        reason: ArxReasons.RpcInvalidParams,
+        message: "chainId does not match active chain.",
+        data: { code: "transaction.prepare.chain_id_mismatch" },
+      });
+    });
+
+    const executor = new TransactionExecutor({
+      view: {
+        commitRecord: vi.fn(),
+      } as never,
+      accountCodecs,
+      networkSelection: {
+        getSelectedChainRef: () => chainRef,
+      } as never,
+      supportedChains: {
+        getChain: () => null,
+      } as never,
+      accounts: {
+        getActiveAccountForNamespace: () => null,
+        listOwnedForNamespace: () => [
+          {
+            accountKey,
+            namespace: "eip155",
+            canonicalAddress: from,
+            displayAddress: from,
+          },
+        ],
+      } as never,
+      approvals: {
+        create: createApproval,
+      } as never,
+      registry: {
+        get: () => ({
+          validateRequest,
+          receiptTracking: createReceiptTrackingStub(),
+        }),
+      } as never,
+      service: {
+        createPending,
+      } as never,
+      prepare: {
+        queuePrepare: vi.fn(),
+      } as never,
+      tracking: {} as never,
+      now: () => 1,
+    });
+
+    await expect(
+      executor.beginTransactionApproval(
+        {
+          namespace: "eip155",
+          payload: {
+            from,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            chainId: "0x1",
+          },
+        },
+        REQUEST_CONTEXT,
+      ),
+    ).rejects.toMatchObject({
+      reason: ArxReasons.RpcInvalidParams,
+      message: "chainId does not match active chain.",
+    });
+
+    expect(validateRequest).toHaveBeenCalledWith({
+      namespace: "eip155",
+      chainRef,
+      origin: REQUEST_CONTEXT.origin,
+      from,
+      request: {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+          chainId: "0x1",
+        },
+      },
+    });
     expect(createPending).not.toHaveBeenCalled();
     expect(createApproval).not.toHaveBeenCalled();
   });

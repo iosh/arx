@@ -102,7 +102,7 @@ describe("prepareTransaction - validation", () => {
   });
 
   describe("chainId validation", () => {
-    it("flags chainId mismatch and from mismatch in issues", async () => {
+    it("does not report chainId mismatch in prepare issues", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
@@ -120,15 +120,9 @@ describe("prepareTransaction - validation", () => {
       ctx.request.payload.chainId = "0x2";
 
       const result = await prepareTransaction(ctx);
-      expect(result.issues.map((item) => item.code)).toEqual(
-        expect.arrayContaining(["transaction.prepare.from_mismatch", "transaction.prepare.chain_id_mismatch"]),
-      );
-
-      const chainIssue = result.issues.find((item) => item.code === "transaction.prepare.chain_id_mismatch");
-      expect(chainIssue?.data).toMatchObject({
-        payloadChainId: "0x2",
-        expectedChainId: TEST_CHAINS.MAINNET_CHAIN_ID,
-      });
+      expect(result.issues.map((item) => item.code)).toContain("transaction.prepare.from_mismatch");
+      expect(result.issues.map((item) => item.code)).not.toContain("transaction.prepare.chain_id_mismatch");
+      expect(result.prepared.chainId).toBe(TEST_CHAINS.MAINNET_CHAIN_ID);
     });
 
     it("warns when chainId is missing", async () => {

@@ -8,6 +8,7 @@ import type { NetworkSelectionService } from "../../services/store/networkSelect
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { TransactionValidationContext } from "../../transactions/adapters/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
@@ -156,13 +157,20 @@ export class TransactionExecutor
       ...derivedRequestCandidate,
       chainRef,
     };
-    this.#requireOwnedFromAccount({
+    const ownedAccount = this.#requireOwnedFromAccount({
       namespace: derived.namespace,
       chainRef,
       fromAddress,
       fromAccountKey,
     });
-    adapter.validateRequest?.(derivedRequest);
+    const validationContext: TransactionValidationContext = {
+      namespace: derived.namespace,
+      chainRef,
+      origin: requestContext.origin,
+      from: ownedAccount.canonicalAddress,
+      request: cloneRequest(derivedRequest),
+    };
+    adapter.validateRequest?.(validationContext);
 
     const created = await this.#service.createPending({
       id,

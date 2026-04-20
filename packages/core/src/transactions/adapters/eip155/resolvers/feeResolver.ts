@@ -22,30 +22,6 @@ export const deriveFees = async (
   const payloadMaxFee = params.payloadFees.maxFeePerGas ?? null;
   const payloadPriorityFee = params.payloadFees.maxPriorityFeePerGas ?? null;
 
-  if (payloadGasPrice && (payloadMaxFee || payloadPriorityFee)) {
-    pushIssue(
-      issues,
-      "transaction.prepare.fee_conflict",
-      "Cannot mix legacy gasPrice with EIP-1559 fields.",
-      {
-        gasPrice: payloadGasPrice,
-        maxFeePerGas: payloadMaxFee,
-        maxPriorityFeePerGas: payloadPriorityFee,
-      },
-      { severity: "high" },
-    );
-  }
-
-  if ((payloadMaxFee && !payloadPriorityFee) || (!payloadMaxFee && payloadPriorityFee)) {
-    pushIssue(
-      issues,
-      "transaction.prepare.fee_pair_incomplete",
-      "EIP-1559 requires both maxFeePerGas and maxPriorityFeePerGas.",
-      { maxFeePerGas: payloadMaxFee, maxPriorityFeePerGas: payloadPriorityFee },
-      { severity: "high" },
-    );
-  }
-
   if (params.validateOnly) {
     return { prepared: preparedPatch };
   }

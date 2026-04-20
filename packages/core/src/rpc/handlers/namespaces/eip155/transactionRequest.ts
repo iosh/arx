@@ -47,6 +47,7 @@ export const buildEip155TransactionRequest = (
   }
 
   const hexKeys: (keyof Omit<Eip155TransactionPayload, "from" | "to">)[] = [
+    "chainId",
     "value",
     "data",
     "gas",

@@ -1137,4 +1137,62 @@ describe("eip155 handlers - core error paths", () => {
       runtime.lifecycle.shutdown();
     }
   });
+
+  it("rejects eth_sendTransaction before approval creation when explicit chainId mismatches the active chain", async () => {
+    const runtime = createRuntime();
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    const chain = getActiveChainMetadata(runtime);
+    await runtime.services.session.createVault({ password: "test" });
+    await runtime.services.session.unlock.unlock({ password: "test" });
+    const { keyringId } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+    const account = await runtime.services.keyring.deriveAccount(keyringId);
+    await runtime.controllers.accounts.setActiveAccount({
+      namespace: chain.namespace,
+      chainRef: chain.chainRef,
+      accountKey: toAccountKeyFromAddress({
+        chainRef: chain.chainRef,
+        address: account.address,
+        accountCodecs: runtime.services.accountCodecs,
+      }),
+    });
+    await connectOrigin({
+      runtime,
+      chainRefs: [chain.chainRef],
+      addresses: [account.address],
+    });
+
+    const execute = createExecutor(runtime);
+    const txSpy = vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval");
+    const approvalCreated = vi.fn();
+    const unsubscribeApproval = runtime.controllers.approvals.onCreated(approvalCreated);
+
+    try {
+      await expect(
+        execute({
+          origin: ORIGIN,
+          request: {
+            method: "eth_sendTransaction",
+            params: [
+              {
+                from: account.address,
+                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                value: "0x0",
+                data: "0x",
+                chainId: "0x2",
+              },
+            ] as JsonRpcParams,
+          },
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+
+      expect(txSpy).toHaveBeenCalledTimes(1);
+      expect(approvalCreated).not.toHaveBeenCalled();
+      expect(runtime.controllers.approvals.getState().pending).toHaveLength(0);
+    } finally {
+      unsubscribeApproval();
+      runtime.lifecycle.shutdown();
+    }
+  });
 });

@@ -1,8 +1,10 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
-import type { Eip155TransactionPayload, TransactionRequest } from "../../types.js";
+import type { Eip155TransactionPayload } from "../../types.js";
+import type { TransactionValidationContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import type { Eip155PreparedTransactionResult } from "./types.js";
+import { deriveExpectedChainId } from "./utils/chainHelpers.js";
 import { parseHexData, parseHexQuantity } from "./utils/validation.js";
 
 const MIN_NETWORK_GAS_LIMIT = 21_000n;
@@ -26,7 +28,8 @@ const findBlockingIssue = (issues: Eip155PreparedTransactionResult["issues"]) =>
 export const createEip155RequestValidator = (deps: Deps) => {
   const resolveAddresses = createAddressResolver({ chains: deps.chains });
 
-  return (request: TransactionRequest): void => {
+  return (context: TransactionValidationContext): void => {
+    const { request } = context;
     if (request.namespace !== "eip155") {
       throwInvalidRequest(`EIP-155 request validator cannot validate namespace "${request.namespace}"`, {
         namespace: request.namespace,
@@ -34,13 +37,6 @@ export const createEip155RequestValidator = (deps: Deps) => {
     }
 
     const issues: Eip155PreparedTransactionResult["issues"] = [];
-    const context = {
-      namespace: request.namespace,
-      chainRef: request.chainRef ?? "eip155:0",
-      origin: "validation",
-      from: null,
-      request,
-    };
     const payload = request.payload as Eip155TransactionPayload;
 
     resolveAddresses(
@@ -83,6 +79,18 @@ export const createEip155RequestValidator = (deps: Deps) => {
       throwInvalidRequest(fieldIssue.message, {
         code: fieldIssue.code,
         ...(fieldIssue.data !== undefined ? { details: fieldIssue.data } : {}),
+      });
+    }
+
+    const expectedChainId = deriveExpectedChainId(context.chainRef);
+    const payloadChainId = parseHexQuantity(issues, payload.chainId, "chainId");
+    if (payloadChainId && expectedChainId && payloadChainId !== expectedChainId) {
+      throwInvalidRequest("chainId does not match active chain.", {
+        code: "transaction.prepare.chain_id_mismatch",
+        details: {
+          payloadChainId,
+          expectedChainId,
+        },
       });
     }
 

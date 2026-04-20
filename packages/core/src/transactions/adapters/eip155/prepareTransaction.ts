@@ -16,12 +16,7 @@ import { pushIssue, readErrorMessage } from "./utils/validation.js";
 const hasFatalIssues = (issues: Eip155PreparedTransactionResult["issues"]): boolean => {
   // Fatal issues indicate the request is malformed or internally inconsistent.
   // Continuing with RPC-based enrichment would add noise and increase latency.
-  const fatal = new Set([
-    "transaction.prepare.invalid_hex",
-    "transaction.prepare.invalid_data",
-    "transaction.prepare.fee_conflict",
-    "transaction.prepare.fee_pair_incomplete",
-  ]);
+  const fatal = new Set(["transaction.prepare.invalid_hex", "transaction.prepare.invalid_data"]);
 
   return issues.some((issue) => fatal.has(issue.code));
 };

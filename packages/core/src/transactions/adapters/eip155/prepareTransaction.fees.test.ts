@@ -109,7 +109,7 @@ describe("prepareTransaction - fees", () => {
       expect(prepared.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
     });
 
-    it("detects incomplete EIP-1559 fee pair", async () => {
+    it("does not surface incomplete EIP-1559 fee pair as a prepare issue", async () => {
       const prepareTransaction = createTestPrepareTransaction({
         rpcClientFactory: vi.fn(() => createEip155RpcMock().client),
       });
@@ -120,12 +120,12 @@ describe("prepareTransaction - fees", () => {
 
       const prepared = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.fee_pair_incomplete");
+      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_pair_incomplete");
     });
   });
 
   describe("fee conflicts", () => {
-    it("detects fee conflict when mixing gasPrice with EIP-1559 fields", async () => {
+    it("does not surface fee conflict when mixing gasPrice with EIP-1559 fields", async () => {
       const rpc = createEip155RpcMock();
 
       const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
@@ -136,10 +136,10 @@ describe("prepareTransaction - fees", () => {
 
       const prepared = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.fee_conflict");
+      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_conflict");
     });
 
-    it("records a fee conflict issue when fee fields conflict", async () => {
+    it("does not record a fee conflict issue when fee fields conflict", async () => {
       const rpc = createEip155RpcMock();
       rpc.getTransactionCount.mockResolvedValue("0x1");
       rpc.estimateGas.mockResolvedValue("0x5208");
@@ -153,7 +153,7 @@ describe("prepareTransaction - fees", () => {
 
       const prepared = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.fee_conflict");
+      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_conflict");
     });
   });
 

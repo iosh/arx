@@ -11,13 +11,19 @@ describe("eip155 validateRequest", () => {
   it("accepts requests without nonce or gas/fee fields", () => {
     expect(
       validateRequest({
-        namespace: "eip155",
         chainRef: "eip155:1",
-        payload: {
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-          value: "0x0",
-          data: "0x",
+        namespace: "eip155",
+        origin: "https://dapp.example",
+        from: "0x1111111111111111111111111111111111111111",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {
+            from: "0x1111111111111111111111111111111111111111",
+            to: "0x2222222222222222222222222222222222222222",
+            value: "0x0",
+            data: "0x",
+          },
         },
       }),
     ).toBeUndefined();
@@ -26,15 +32,21 @@ describe("eip155 validateRequest", () => {
   it("rejects mixed legacy and eip1559 fee fields", () => {
     try {
       validateRequest({
-        namespace: "eip155",
         chainRef: "eip155:1",
-        payload: {
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-          value: "0x0",
-          data: "0x",
-          gasPrice: "0x1",
-          maxFeePerGas: "0x2",
+        namespace: "eip155",
+        origin: "https://dapp.example",
+        from: "0x1111111111111111111111111111111111111111",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {
+            from: "0x1111111111111111111111111111111111111111",
+            to: "0x2222222222222222222222222222222222222222",
+            value: "0x0",
+            data: "0x",
+            gasPrice: "0x1",
+            maxFeePerGas: "0x2",
+          },
         },
       });
       expect.unreachable("expected request validation to throw");
@@ -49,14 +61,20 @@ describe("eip155 validateRequest", () => {
   it("rejects gas below the minimum network floor", () => {
     try {
       validateRequest({
-        namespace: "eip155",
         chainRef: "eip155:1",
-        payload: {
-          from: "0x1111111111111111111111111111111111111111",
-          to: "0x2222222222222222222222222222222222222222",
-          value: "0x0",
-          data: "0x",
-          gas: "0x5207",
+        namespace: "eip155",
+        origin: "https://dapp.example",
+        from: "0x1111111111111111111111111111111111111111",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {
+            from: "0x1111111111111111111111111111111111111111",
+            to: "0x2222222222222222222222222222222222222222",
+            value: "0x0",
+            data: "0x",
+            gas: "0x5207",
+          },
         },
       });
       expect.unreachable("expected request validation to throw");
@@ -66,5 +84,52 @@ describe("eip155 validateRequest", () => {
         data: expect.objectContaining({ code: "transaction.validation.gas_too_low" }),
       });
     }
+  });
+
+  it("rejects explicit chainId mismatch before approval creation", () => {
+    try {
+      validateRequest({
+        chainRef: "eip155:1",
+        namespace: "eip155",
+        origin: "https://dapp.example",
+        from: "0x1111111111111111111111111111111111111111",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {
+            from: "0x1111111111111111111111111111111111111111",
+            to: "0x2222222222222222222222222222222222222222",
+            value: "0x0",
+            data: "0x",
+            chainId: "0x2",
+          },
+        },
+      });
+      expect.unreachable("expected request validation to throw");
+    } catch (error) {
+      expect(error).toMatchObject({
+        reason: ArxReasons.RpcInvalidParams,
+        data: expect.objectContaining({ code: "transaction.prepare.chain_id_mismatch" }),
+      });
+    }
+  });
+
+  it("accepts ui-initiated requests when owner resolved the from account", () => {
+    expect(
+      validateRequest({
+        chainRef: "eip155:1",
+        namespace: "eip155",
+        origin: "chrome-extension://arx",
+        from: "0x1111111111111111111111111111111111111111",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {
+            to: "0x2222222222222222222222222222222222222222",
+            value: "0x0",
+          },
+        },
+      }),
+    ).toBeUndefined();
   });
 });

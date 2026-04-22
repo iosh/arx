@@ -89,22 +89,31 @@ export class DexieTransactionsPort implements TransactionsPort {
     return out;
   }
 
-  async findByChainRefAndHash(params: { chainRef: ChainRef; hash: string }): Promise<TransactionRecord | null> {
+  async findByChainRefAndLocator(params: {
+    chainRef: ChainRef;
+    locator: TransactionRecord["locator"];
+  }): Promise<TransactionRecord | null> {
     await this.ctx.ready;
 
-    // Requires db.ts to include [chainRef+hash]
-    const row = await this.table.where("[chainRef+hash]").equals([params.chainRef, params.hash]).first();
+    const row = await this.table
+      .where("[chainRef+locator.format+locator.value]")
+      .equals([params.chainRef, params.locator.format, params.locator.value])
+      .first();
     const id = row && typeof (row as { id?: unknown }).id === "string" ? row.id : undefined;
     const parsed = await this.parseRow(row, id);
 
     if (!parsed) return null;
-    if (parsed.chainRef !== params.chainRef || parsed.hash !== params.hash) return null;
+    if (parsed.chainRef !== params.chainRef) return null;
+    if (parsed.locator.format !== params.locator.format || parsed.locator.value !== params.locator.value) {
+      return null;
+    }
     return parsed;
   }
 
   async create(record: TransactionRecord): Promise<void> {
     await this.ctx.ready;
-    await this.table.add(TransactionRecordSchema.parse(record));
+    const checked = TransactionRecordSchema.parse(record);
+    await this.table.add(checked);
   }
 
   async updateIfStatus(params: {
@@ -121,7 +130,8 @@ export class DexieTransactionsPort implements TransactionsPort {
 
       if (current.status !== params.expectedStatus) return false;
 
-      await this.table.put(TransactionRecordSchema.parse(params.next));
+      const checked = TransactionRecordSchema.parse(params.next);
+      await this.table.put(checked);
       return true;
     });
   }

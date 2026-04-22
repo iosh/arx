@@ -36,6 +36,19 @@ export const Eip155TransactionRequestSchema = z.strictObject({
 export const TransactionPayloadSchema = z.record(z.string(), z.unknown());
 export const TransactionPreparedSchema = z.record(z.string(), z.unknown());
 export const TransactionReceiptSchema = z.record(z.string(), z.unknown());
+export const TransactionSubmittedSchema = z.record(z.string(), z.unknown());
+export const TransactionSubmissionLocatorSchema = z.strictObject({
+  format: nonEmptyStringSchema,
+  value: nonEmptyStringSchema,
+});
+export const TransactionReplacementRelationSchema = z
+  .strictObject({
+    transactionId: z.uuid().optional(),
+    locator: TransactionSubmissionLocatorSchema.optional(),
+  })
+  .refine((value) => value.transactionId !== undefined || value.locator !== undefined, {
+    error: "replacement relation requires transactionId or locator",
+  });
 
 // Persist only the shared transaction envelope here.
 // Namespace-specific payload validation belongs at RPC/UI/adapter boundaries.

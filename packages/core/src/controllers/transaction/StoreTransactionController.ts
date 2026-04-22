@@ -7,6 +7,7 @@ import type { TransactionAdapterRegistry } from "../../transactions/adapters/reg
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
+import { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { TransactionReviewSessions } from "./review/session.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
@@ -17,7 +18,6 @@ import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   BeginTransactionApprovalOptions,
-  ResumePendingTransactionsOptions,
   TransactionApprovalHandoff,
   TransactionController,
   TransactionError,
@@ -33,10 +33,12 @@ import { TransactionSubmissionError } from "./types.js";
 const SUBMITTED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["broadcast", "confirmed"]);
 const FAILED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["failed", "replaced"]);
 
-type SubmittedTransactionMeta = TransactionMeta & { hash: string };
+type SubmittedTransactionMeta = TransactionMeta & {
+  locator: NonNullable<TransactionMeta["locator"]>;
+};
 
 const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransactionMeta =>
-  SUBMITTED_TRANSACTION_STATUSES.has(meta.status) && typeof meta.hash === "string";
+  SUBMITTED_TRANSACTION_STATUSES.has(meta.status) && meta.locator !== null;
 
 const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUSES.has(meta.status);
 
@@ -67,6 +69,7 @@ export type StoreTransactionControllerOptions = {
  */
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
+  #runtime: RuntimeTransactionStore;
   #view: StoreTransactionView;
   #executor: TransactionExecutor;
   #registry: TransactionAdapterRegistry;
@@ -80,6 +83,11 @@ export class StoreTransactionController implements TransactionController {
     const now = options.now ?? Date.now;
     const stateLimit = options.stateLimit ?? 200;
     const logger = options.logger ?? (() => {});
+
+    this.#runtime = new RuntimeTransactionStore({
+      messenger: options.messenger,
+      accountCodecs: options.accountCodecs,
+    });
 
     this.#view = new StoreTransactionView({
       messenger: options.messenger,
@@ -97,14 +105,14 @@ export class StoreTransactionController implements TransactionController {
     });
 
     const prepare = new TransactionPrepareManager({
-      view: this.#view,
+      runtime: this.#runtime,
       registry: options.registry,
-      service: options.service,
       reviewSessions: this.#reviewSessions,
       logger,
     });
 
     this.#executor = new TransactionExecutor({
+      runtime: this.#runtime,
       view: this.#view,
       accountCodecs: options.accountCodecs,
       networkSelection: options.networkSelection,
@@ -123,7 +131,7 @@ export class StoreTransactionController implements TransactionController {
       const changed = this.#reviewSessions.invalidateFromApproval(event, now());
       if (changed) {
         this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
-          revision: changed.revision,
+          revision: changed.updatedAt,
           transactionIds: [changed.transactionId],
         });
       }
@@ -144,7 +152,7 @@ export class StoreTransactionController implements TransactionController {
   }
 
   getMeta(id: string): TransactionMeta | undefined {
-    return this.#view.getMeta(id);
+    return this.#runtime.get(id) ?? this.#view.getMeta(id);
   }
 
   getReviewSession(transactionId: string) {
@@ -152,12 +160,12 @@ export class StoreTransactionController implements TransactionController {
   }
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
-    const transaction = this.#view.getMeta(input.transactionId);
+    const transaction = this.#runtime.get(input.transactionId) ?? this.#view.getMeta(input.transactionId);
     const session = this.#reviewSessions.get(input.transactionId);
     const request =
       input.request ??
       (transaction ? this.#executor.buildApprovalRequestPayload(transaction, input.transactionId) : null);
-    const namespace = transaction?.request.namespace ?? request?.request.namespace;
+    const namespace = transaction?.namespace ?? request?.request.namespace;
     const adapter = namespace ? this.#registry.get(namespace) : undefined;
     const namespaceReview =
       adapter && request
@@ -201,8 +209,8 @@ export class StoreTransactionController implements TransactionController {
     }
 
     if (isSubmittedTransaction(initial)) {
-      const { hash } = initial;
-      return { hash, meta: initial };
+      const { locator } = initial;
+      return { locator, meta: initial };
     }
     if (isFailedTransaction(initial)) {
       throw new TransactionSubmissionError(initial);
@@ -216,8 +224,8 @@ export class StoreTransactionController implements TransactionController {
 
         if (isSubmittedTransaction(meta)) {
           unsubscribe();
-          const { hash } = meta;
-          resolve({ hash, meta });
+          const { locator } = meta;
+          resolve({ locator, meta });
           return;
         }
 
@@ -238,12 +246,11 @@ export class StoreTransactionController implements TransactionController {
   }
 
   processTransaction(id: string): Promise<void> {
-    this.#executor.markRetainedExecutionResumed(id);
     return this.#executor.processTransaction(id);
   }
 
-  resumePending(params?: ResumePendingTransactionsOptions): Promise<void> {
-    return this.#executor.resumePending(params);
+  resumePending(): Promise<void> {
+    return this.#executor.resumePending();
   }
 
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void {

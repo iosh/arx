@@ -1,27 +1,26 @@
 import type { ChainRef } from "../../../chains/ids.js";
 import type { TransactionRecord, TransactionStatus } from "../../../storage/records.js";
-import type { TransactionRequest } from "../../../transactions/types.js";
 import type { Unsubscribe } from "../_shared/signal.js";
 
 export type TransactionsChangedPayload =
-  | { kind: "createPending"; id: TransactionRecord["id"] }
-  | { kind: "patch"; id: TransactionRecord["id"] }
+  | { kind: "createSubmitted"; id: TransactionRecord["id"] }
   | { kind: "transition"; id: TransactionRecord["id"]; fromStatus: TransactionStatus; toStatus: TransactionStatus }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
-export type CreatePendingTransactionParams = {
+export type CreateSubmittedTransactionParams = {
   /**
    * Optional caller-provided id to keep controller-level ids stable.
    * Must be a UUID when provided.
    */
   id?: TransactionRecord["id"];
-  namespace: TransactionRecord["namespace"];
   chainRef: ChainRef;
   origin: TransactionRecord["origin"];
   fromAccountKey: TransactionRecord["fromAccountKey"];
-  request: TransactionRequest;
-  warnings?: TransactionRecord["warnings"];
-  issues?: TransactionRecord["issues"];
+  submitted: TransactionRecord["submitted"];
+  locator: TransactionRecord["locator"];
+  status: TransactionRecord["status"];
+  receipt?: TransactionRecord["receipt"] | undefined;
+  replacedById?: TransactionRecord["replacedById"] | undefined;
   /**
    * Optional caller-provided createdAt for deterministic timestamps in tests.
    * When provided, updatedAt is initialized to the same value.
@@ -33,16 +32,7 @@ export type TransitionTransactionParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<
-    Pick<TransactionRecord, "hash" | "receipt" | "error" | "userRejected" | "warnings" | "issues" | "prepared">
-  >;
-};
-
-export type PatchTransactionParams = {
-  id: TransactionRecord["id"];
-  patch: Partial<Pick<TransactionRecord, "request" | "prepared" | "warnings" | "issues">> & {
-    error?: TransactionRecord["error"] | null | undefined;
-  };
+  patch?: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedById">>;
 };
 
 export type ListTransactionsCursor = {
@@ -63,21 +53,9 @@ export type TransactionsService = {
   get(id: TransactionRecord["id"]): Promise<TransactionRecord | null>;
   list(params?: ListTransactionsParams): Promise<TransactionRecord[]>;
 
-  createPending(params: CreatePendingTransactionParams): Promise<TransactionRecord>;
+  createSubmitted(params: CreateSubmittedTransactionParams): Promise<TransactionRecord>;
 
   transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
 
-  /**
-   * Patch a transaction record without changing status.
-   * Intended for background enrichment (prepared params, warnings/issues).
-   */
-  patch(params: PatchTransactionParams): Promise<TransactionRecord | null>;
-
   remove(id: TransactionRecord["id"]): Promise<void>;
-
-  /**
-   * Best-effort cleanup for pending items that can't be recovered after restart.
-   * Returns the number of records transitioned to `failed`.
-   */
-  failAllPending(params?: { reason?: string }): Promise<number>;
 };

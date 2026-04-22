@@ -6,12 +6,12 @@ import type { AccountController, OwnedAccountView } from "../../controllers/acco
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
-import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { TransactionValidationContext } from "../../transactions/adapters/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
+import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "./review/session.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
@@ -19,7 +19,6 @@ import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type {
   BeginTransactionApprovalOptions,
-  ResumePendingTransactionsOptions,
   TransactionApprovalChainMetadata,
   TransactionApprovalHandoff,
   TransactionApprovalRequestPayload,
@@ -27,15 +26,10 @@ import type {
   TransactionError,
   TransactionMeta,
   TransactionRequest,
-  TransactionStatus,
-  TransactionWarning,
 } from "./types.js";
 import {
   buildPrepareContext,
   buildSignContext,
-  cloneIssues,
-  cloneRequest,
-  cloneWarnings,
   coerceTransactionError,
   createMissingAdapterError,
   createReceiptTrackingUnsupportedError,
@@ -46,6 +40,7 @@ import {
 const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 
 type Deps = {
+  runtime: RuntimeTransactionStore;
   view: StoreTransactionView;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
@@ -60,10 +55,6 @@ type Deps = {
   now: () => number;
 };
 
-/**
- * Execution + approvals orchestrator.
- * Owns the in-memory queue for processing approved transactions.
- */
 export class TransactionExecutor
   implements
     Pick<
@@ -71,6 +62,7 @@ export class TransactionExecutor
       "beginTransactionApproval" | "approveTransaction" | "rejectTransaction" | "processTransaction" | "resumePending"
     >
 {
+  #runtime: RuntimeTransactionStore;
   #view: StoreTransactionView;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
@@ -86,13 +78,13 @@ export class TransactionExecutor
   #lastTimestamp = 0;
 
   #queue: string[] = [];
-  #queued: Set<string> = new Set();
-  #processing: Set<string> = new Set();
+  #queued = new Set<string>();
+  #processing = new Set<string>();
   #scheduled = false;
-  #cancelledByUser: Set<string> = new Set();
-  #releasedRetainedExecutionIds: Set<string> = new Set();
+  #cancelledByUser = new Set<string>();
 
   constructor(deps: Deps) {
+    this.#runtime = deps.runtime;
     this.#view = deps.view;
     this.#accountCodecs = deps.accountCodecs;
     this.#networkSelection = deps.networkSelection;
@@ -142,6 +134,7 @@ export class TransactionExecutor
     if (!adapter) {
       throw createMissingAdapterError(derived.namespace);
     }
+
     const derivedRequestCandidate = adapter.deriveRequestForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
@@ -172,86 +165,319 @@ export class TransactionExecutor
       chainRef,
       origin: requestContext.origin,
       from: ownedAccount.canonicalAddress,
-      request: cloneRequest(derivedRequest),
+      request: structuredClone(derivedRequest),
     };
     adapter.validateRequest?.(validationContext);
 
-    const created = await this.#service.createPending({
+    const runtimeMeta = this.#runtime.create({
       id,
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef,
       origin: requestContext.origin,
-      fromAccountKey: fromAccountKey,
-      request: cloneRequest(derivedRequest),
-      warnings: [],
-      issues: [],
+      fromAccountKey,
+      request: structuredClone(derivedRequest),
+      status: "pending",
+      updatedAt: timestamp,
     });
 
-    const storedMeta = this.#view.commitRecord(created).next;
-
-    const approvalRequest = this.buildApprovalRequestPayload(storedMeta, storedMeta.id);
+    const approvalRequest = this.buildApprovalRequestPayload(runtimeMeta, runtimeMeta.id);
     const approvalId = crypto.randomUUID();
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
       approvalHandle = options?.providerRequestHandle
         ? options.providerRequestHandle.attachBlockingApproval(
-            ({ approvalId, createdAt }) =>
+            ({ approvalId: reservedApprovalId, createdAt }) =>
               requestApproval(
-                {
-                  approvals: this.#approvals,
-                  now: this.#now,
-                },
+                { approvals: this.#approvals, now: this.#now },
                 {
                   kind: ApprovalKinds.SendTransaction,
                   requestContext,
-                  approvalId,
+                  approvalId: reservedApprovalId,
                   createdAt,
                   request: approvalRequest,
                   subject: {
                     kind: "transaction",
-                    transactionId: storedMeta.id,
+                    transactionId: runtimeMeta.id,
                   },
                 },
               ),
             {
-              // Transaction-backed approvals keep a stable 1:1 link with the transaction record.
               approvalId,
-              createdAt: storedMeta.createdAt,
+              createdAt: runtimeMeta.createdAt,
             },
           )
         : requestApproval(
-            {
-              approvals: this.#approvals,
-              now: this.#now,
-            },
+            { approvals: this.#approvals, now: this.#now },
             {
               kind: ApprovalKinds.SendTransaction,
               requestContext,
               approvalId,
-              createdAt: storedMeta.createdAt,
+              createdAt: runtimeMeta.createdAt,
               request: approvalRequest,
               subject: {
                 kind: "transaction",
-                transactionId: storedMeta.id,
+                transactionId: runtimeMeta.id,
               },
             },
           );
     } catch (error) {
       const rejectionError = error instanceof Error ? error : new Error(String(error));
-      await this.rejectTransaction(storedMeta.id, rejectionError);
+      await this.rejectTransaction(runtimeMeta.id, rejectionError);
       throw error;
     }
-    const approvalPromise = approvalHandle.settled;
 
-    // Prepare in background to improve confirmation UX and reduce execution latency.
     this.#prepare.queuePrepare(id);
 
     return {
-      transactionId: storedMeta.id,
+      transactionId: runtimeMeta.id,
       approvalId: approvalHandle.approvalId,
-      pendingMeta: storedMeta,
-      waitForApprovalDecision: () => approvalPromise,
+      pendingMeta: runtimeMeta,
+      waitForApprovalDecision: async () => {
+        await approvalHandle.settled;
+        const next = this.#runtime.get(id) ?? this.#view.getMeta(id) ?? (await this.#view.getOrLoad(id));
+        if (!next) {
+          throw new Error(`Transaction ${id} is no longer active`);
+        }
+        return next;
+      },
+    };
+  }
+
+  async approveTransaction(id: string): Promise<TransactionMeta | null> {
+    const existing = this.#runtime.get(id) ?? null;
+    if (!existing || existing.status !== "pending") {
+      return null;
+    }
+
+    const updated = this.#runtime.transition(id, "approved", this.#nextTimestamp());
+    if (!updated) {
+      return null;
+    }
+
+    this.#enqueue(id);
+    return updated;
+  }
+
+  async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
+    const error = coerceTransactionError(reason) ?? null;
+    const wantsUserRejected = isUserRejectedError(reason, error ?? undefined);
+    if (wantsUserRejected) {
+      this.#cancelledByUser.add(id);
+    }
+
+    const runtime = this.#runtime.get(id);
+    if (runtime && !isTerminalTransactionStatus(runtime.status)) {
+      this.#queued.delete(id);
+      if (runtime.status === "broadcast") {
+        this.#cancelledByUser.delete(id);
+        return;
+      }
+      this.#runtime.transition(id, "failed", this.#nextTimestamp(), {
+        error,
+        userRejected: wantsUserRejected,
+      });
+      this.#cancelledByUser.delete(id);
+      return;
+    }
+
+    const latestRecord = await this.#service.get(id);
+    if (!latestRecord) {
+      this.#cancelledByUser.delete(id);
+      return;
+    }
+
+    const latest = this.#view.commitRecord(latestRecord).next;
+    if (
+      latest.status !== "broadcast" &&
+      latest.status !== "confirmed" &&
+      latest.status !== "failed" &&
+      latest.status !== "replaced"
+    ) {
+      this.#cancelledByUser.delete(id);
+      return;
+    }
+    if (latest.status === "broadcast" && wantsUserRejected) {
+      this.#cancelledByUser.delete(id);
+      return;
+    }
+    if (isTerminalTransactionStatus(latest.status)) {
+      this.#cancelledByUser.delete(id);
+      return;
+    }
+
+    const updated = await this.#service.transition({
+      id,
+      fromStatus: latest.status,
+      toStatus: "failed",
+    });
+    if (updated) {
+      const { previous, next } = this.#view.commitRecord(updated);
+      this.#tracking.stop(id);
+      this.#tracking.handleTransition(previous, next);
+    }
+    this.#cancelledByUser.delete(id);
+  }
+
+  async processTransaction(id: string): Promise<void> {
+    if (this.#isCancelled(id)) {
+      return;
+    }
+
+    let meta = this.#runtime.get(id);
+    if (!meta || !isExecutableTransactionStatus(meta.status)) {
+      return;
+    }
+
+    const adapter = this.#registry.get(meta.namespace);
+    if (!adapter) {
+      await this.rejectTransaction(id, createMissingAdapterError(meta.namespace));
+      return;
+    }
+    if (!adapter.receiptTracking) {
+      await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
+      return;
+    }
+
+    try {
+      let prepared = meta.prepared;
+      if (!prepared) {
+        const next = await this.#prepare.ensurePrepared(id, {
+          timeoutMs: DEFAULT_PREPARE_TIMEOUT_MS,
+          source: "execution",
+        });
+        if (!next?.prepared) {
+          await this.rejectTransaction(id, new Error("Transaction preparation did not produce prepared parameters"));
+          return;
+        }
+        prepared = next.prepared;
+        meta = next;
+      }
+
+      const signed = await adapter.signTransaction(buildSignContext(meta), prepared);
+      const signedMeta = this.#runtime.transition(id, "signed", this.#nextTimestamp());
+      if (!signedMeta) {
+        return;
+      }
+
+      if (this.#isCancelled(id)) {
+        return;
+      }
+
+      const broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
+      const broadcastMeta = this.#runtime.transition(id, "broadcast", this.#nextTimestamp(), {
+        submitted: structuredClone(broadcast.submitted),
+        locator: structuredClone(broadcast.locator),
+      });
+      if (!broadcastMeta) {
+        return;
+      }
+
+      let durable;
+      try {
+        durable = await this.#service.createSubmitted({
+          id: broadcastMeta.id,
+          createdAt: broadcastMeta.createdAt,
+          chainRef: broadcastMeta.chainRef,
+          origin: broadcastMeta.origin,
+          fromAccountKey: this.#accountCodecs.toAccountKeyFromAddress({
+            chainRef: broadcastMeta.chainRef,
+            address: this.#requireFromAddress(broadcastMeta),
+          }),
+          status: "broadcast",
+          submitted: structuredClone(broadcast.submitted),
+          locator: structuredClone(broadcast.locator),
+        });
+      } catch (error) {
+        const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
+        this.#runtime.transition(id, "failed", this.#nextTimestamp(), {
+          error:
+            coerceTransactionError(persistenceFailure) ?? {
+              name: "TransactionPersistenceError",
+              message: "Transaction was broadcast but could not be persisted locally.",
+            },
+        });
+        return;
+      }
+
+      this.#runtime.markDurablySubmitted(id);
+
+      const { previous, next } = this.#view.commitRecord(durable);
+      this.#tracking.handleTransition(previous, next);
+    } catch (err) {
+      if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
+        return;
+      }
+      await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
+    }
+  }
+
+  async resumePending(): Promise<void> {
+    this.#view.requestSync();
+    const broadcast = await this.#listAllByStatus("broadcast");
+    for (const record of broadcast) {
+      const meta = this.#view.commitRecord(record).next;
+      this.#tracking.resumeBroadcast(meta);
+    }
+  }
+
+  async retryPrepare(transactionId: string): Promise<void> {
+    const meta = this.#runtime.get(transactionId);
+    if (!meta || isTerminalTransactionStatus(meta.status)) {
+      return;
+    }
+
+    this.#prepare.queuePrepare(transactionId);
+  }
+
+  async applyDraftEdit(input: {
+    transactionId: string;
+    changes: Record<string, unknown>[];
+    mode?: string | undefined;
+  }): Promise<void> {
+    const meta = this.#runtime.get(input.transactionId);
+    if (!meta || isTerminalTransactionStatus(meta.status)) {
+      return;
+    }
+
+    const adapter = this.#registry.get(meta.namespace);
+    if (!adapter?.applyDraftEdit) {
+      throw new Error(`Transaction draft edits are not supported for namespace "${meta.namespace}".`);
+    }
+
+    const request = this.#requireRuntimeRequest(meta);
+    const nextRequest = adapter.applyDraftEdit({
+      transaction: meta,
+      request: structuredClone({
+        ...request,
+        chainRef: request.chainRef ?? meta.chainRef,
+      }),
+      changes: input.changes,
+      ...(input.mode ? { mode: input.mode } : {}),
+    });
+
+    this.#runtime.patch(meta.id, {
+      request: structuredClone(nextRequest),
+      prepared: null,
+      error: null,
+      updatedAt: this.#nextTimestamp(),
+    });
+
+    await this.retryPrepare(meta.id);
+  }
+
+  buildApprovalRequestPayload(meta: TransactionMeta | null, transactionId: string): TransactionApprovalRequestPayload {
+    if (!meta) {
+      throw new Error(`Transaction ${transactionId} not found`);
+    }
+
+    const request = this.#requireRuntimeRequest(meta);
+    return {
+      chainRef: meta.chainRef,
+      origin: meta.origin,
+      chain: this.#buildChainMetadata(meta),
+      from: meta.from,
+      request: structuredClone(request),
     };
   }
 
@@ -285,257 +511,6 @@ export class TransactionExecutor
     });
   }
 
-  async approveTransaction(id: string): Promise<TransactionMeta | null> {
-    const existing = this.#view.peek(id) ?? (await this.#view.getOrLoad(id)) ?? null;
-    if (!existing) return null;
-    if (existing.status !== "pending") return null;
-
-    const updated = await this.#service.transition({
-      id,
-      fromStatus: "pending",
-      toStatus: "approved",
-    });
-    if (!updated) return null;
-
-    const { next } = this.#view.commitRecord(updated);
-    this.#enqueue(next.id);
-    return next;
-  }
-
-  async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
-    const error = coerceTransactionError(reason);
-    const wantsUserRejected = isUserRejectedError(reason, error);
-    if (wantsUserRejected) {
-      // In-memory cancellation hint so in-flight processing can bail before broadcast.
-      this.#cancelledByUser.add(id);
-    }
-
-    // Keep retrying until the status settles because transaction status only
-    // moves forward across a finite state machine.
-    while (true) {
-      const latestRecord = await this.#service.get(id);
-      if (!latestRecord) {
-        this.#cancelledByUser.delete(id);
-        return;
-      }
-
-      const latest = this.#view.commitRecord(latestRecord).next;
-      if (isTerminalTransactionStatus(latest.status)) {
-        this.#cancelledByUser.delete(id);
-        return;
-      }
-
-      // User rejection is only meaningful before the tx is broadcast.
-      // If it has already reached broadcast, we cannot "un-send" it.
-      if (wantsUserRejected && latest.status === "broadcast") {
-        this.#cancelledByUser.delete(id);
-        return;
-      }
-
-      const userRejected = wantsUserRejected && latest.status !== "broadcast";
-
-      const updated = await this.#service.transition({
-        id,
-        fromStatus: latest.status,
-        toStatus: "failed",
-        patch: { error, userRejected },
-      });
-
-      if (!updated) {
-        // Status advanced concurrently. Reload and try again against the new state.
-        continue;
-      }
-
-      this.#queued.delete(id);
-      const { previous, next } = this.#view.commitRecord(updated);
-      this.#tracking.stop(id);
-      this.#tracking.handleTransition(previous, next);
-      this.#cancelledByUser.delete(id);
-      return;
-    }
-  }
-
-  async processTransaction(id: string): Promise<void> {
-    if (this.#isCancelled(id)) {
-      // Best-effort cancellation. State transition is handled by rejectTransaction().
-      return;
-    }
-
-    let meta = await this.#view.getOrLoad(id);
-    if (!meta) return;
-    if (!isExecutableTransactionStatus(meta.status)) return;
-
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter) {
-      await this.rejectTransaction(id, createMissingAdapterError(meta.namespace));
-      return;
-    }
-    if (!adapter.receiptTracking) {
-      await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
-      return;
-    }
-
-    try {
-      let prepared = meta.prepared;
-      if (!prepared) {
-        const next = await this.#prepare.ensurePrepared(id, {
-          timeoutMs: DEFAULT_PREPARE_TIMEOUT_MS,
-          source: "execution",
-        });
-        if (!next?.prepared) {
-          await this.rejectTransaction(id, new Error("Transaction preparation did not produce prepared parameters"));
-          return;
-        }
-        prepared = next.prepared;
-        meta = next;
-      }
-
-      const signed = await adapter.signTransaction(buildSignContext(meta), prepared);
-
-      let signedMeta: TransactionMeta = meta;
-      if (meta.status === "approved") {
-        const afterSign = await this.#service.transition({
-          id,
-          fromStatus: "approved",
-          toStatus: "signed",
-          patch: { hash: signed.hash ?? null },
-        });
-
-        if (!afterSign) {
-          const latest = await this.#service.get(id);
-          if (!latest) return;
-          signedMeta = this.#view.commitRecord(latest).next;
-          if (signedMeta.status !== "signed") return;
-        } else {
-          signedMeta = this.#view.commitRecord(afterSign).next;
-        }
-      }
-
-      if (!(await this.#ensureStillSigned(id))) {
-        return;
-      }
-
-      const broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed);
-
-      const afterBroadcast = await this.#service.transition({
-        id,
-        fromStatus: "signed",
-        toStatus: "broadcast",
-        patch: { hash: broadcast.hash },
-      });
-
-      if (!afterBroadcast) {
-        const latest = await this.#service.get(id);
-        if (!latest) return;
-        const { previous, next } = this.#view.commitRecord(latest);
-        this.#tracking.handleTransition(previous, next);
-        return;
-      }
-
-      const { previous, next } = this.#view.commitRecord(afterBroadcast);
-      this.#tracking.handleTransition(previous, next);
-    } catch (err) {
-      if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
-        return;
-      }
-      await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
-    }
-  }
-
-  #isCancelled(id: string): boolean {
-    return this.#cancelledByUser.has(id);
-  }
-
-  async #ensureStillSigned(id: string): Promise<boolean> {
-    if (this.#isCancelled(id)) return false;
-
-    // Cancellation guard: if the tx was rejected/failed concurrently, do not broadcast.
-    const record = await this.#service.get(id);
-    if (!record) return false;
-
-    const { previous, next } = this.#view.commitRecord(record);
-    this.#tracking.handleTransition(previous, next);
-    if (next.status !== "signed") return false;
-
-    return !this.#isCancelled(id);
-  }
-
-  async resumePending(params?: ResumePendingTransactionsOptions): Promise<void> {
-    const includeSigning = params?.includeSigning ?? true;
-    const skippedExecutionIds = new Set(params?.skipExecutionIds ?? []);
-
-    // Warm cache first (best-effort).
-    this.#view.requestSync();
-
-    const approved = includeSigning ? await this.#listAllByStatus("approved") : [];
-    const signed = includeSigning ? await this.#listAllByStatus("signed") : [];
-    const broadcast = await this.#listAllByStatus("broadcast");
-
-    if (includeSigning) {
-      for (const record of [...approved, ...signed]) {
-        if (skippedExecutionIds.has(record.id) && !this.#releasedRetainedExecutionIds.has(record.id)) {
-          continue;
-        }
-        const meta = this.#view.commitRecord(record).next;
-        this.#enqueue(meta.id);
-      }
-    }
-
-    for (const record of broadcast) {
-      const meta = this.#view.commitRecord(record).next;
-      this.#tracking.resumeBroadcast(meta);
-    }
-  }
-
-  markRetainedExecutionResumed(id: string) {
-    this.#releasedRetainedExecutionIds.add(id);
-  }
-
-  async retryPrepare(transactionId: string): Promise<void> {
-    const meta = this.#view.peek(transactionId) ?? (await this.#view.getOrLoad(transactionId));
-    if (!meta || isTerminalTransactionStatus(meta.status)) {
-      return;
-    }
-
-    this.#prepare.queuePrepare(transactionId);
-  }
-
-  async applyDraftEdit(input: {
-    transactionId: string;
-    changes: Record<string, unknown>[];
-    mode?: string | undefined;
-  }): Promise<void> {
-    const meta = this.#view.peek(input.transactionId) ?? (await this.#view.getOrLoad(input.transactionId));
-    if (!meta || isTerminalTransactionStatus(meta.status)) {
-      return;
-    }
-
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter?.applyDraftEdit) {
-      throw new Error(`Transaction draft edits are not supported for namespace "${meta.namespace}".`);
-    }
-
-    const nextRequest = adapter.applyDraftEdit({
-      transaction: meta,
-      request: cloneRequest(meta.request),
-      changes: input.changes,
-      ...(input.mode ? { mode: input.mode } : {}),
-    });
-
-    await this.#service.patch({
-      id: meta.id,
-      patch: {
-        request: cloneRequest(nextRequest),
-        prepared: null,
-        issues: [],
-        warnings: [],
-        error: null,
-      },
-    });
-
-    await this.retryPrepare(meta.id);
-  }
-
   #enqueue(id: string) {
     if (this.#processing.has(id) || this.#queued.has(id)) return;
     this.#queued.add(id);
@@ -556,28 +531,27 @@ export class TransactionExecutor
     const next = this.#queue.shift();
     if (!next) return;
     this.#queued.delete(next);
-    if (this.#processing.has(next)) return this.#scheduleProcess();
+    if (this.#processing.has(next)) {
+      this.#scheduleProcess();
+      return;
+    }
     this.#processing.add(next);
     try {
       await this.processTransaction(next);
     } finally {
       this.#processing.delete(next);
-      if (this.#queue.length > 0) this.#scheduleProcess();
+      if (this.#queue.length > 0) {
+        this.#scheduleProcess();
+      }
     }
   }
 
-  #nextTimestamp(): number {
-    const value = this.#now();
-    if (value <= this.#lastTimestamp) {
-      this.#lastTimestamp += 1;
-      return this.#lastTimestamp;
-    }
-    this.#lastTimestamp = value;
-    return value;
+  #isCancelled(id: string): boolean {
+    return this.#cancelledByUser.has(id);
   }
 
-  async #listAllByStatus(status: TransactionStatus) {
-    const out: TransactionRecord[] = [];
+  async #listAllByStatus(status: "broadcast" | "confirmed" | "failed" | "replaced") {
+    const out = [];
     let cursor: ListTransactionsCursor | undefined;
 
     while (true) {
@@ -596,7 +570,21 @@ export class TransactionExecutor
     return out;
   }
 
-  #findFromAddress(request: TransactionRequest): string | null {
+  #nextTimestamp(): number {
+    const value = this.#now();
+    if (value <= this.#lastTimestamp) {
+      this.#lastTimestamp += 1;
+      return this.#lastTimestamp;
+    }
+    this.#lastTimestamp = value;
+    return value;
+  }
+
+  #findFromAddress(request: TransactionRequest | null | undefined): string | null {
+    if (!request) {
+      return null;
+    }
+
     const payload = request.payload;
     if (payload && typeof payload === "object") {
       const candidate = (payload as { from?: unknown }).from;
@@ -607,20 +595,21 @@ export class TransactionExecutor
     return null;
   }
 
-  buildApprovalRequestPayload(meta: TransactionMeta | null, transactionId: string): TransactionApprovalRequestPayload {
-    if (!meta) {
-      throw new Error(`Transaction ${transactionId} not found`);
+  #requireRuntimeRequest(meta: TransactionMeta): TransactionRequest {
+    if (meta.request) {
+      return meta.request;
     }
 
-    return {
-      chainRef: meta.chainRef,
-      origin: meta.origin,
-      chain: this.#buildChainMetadata(meta),
-      from: meta.from,
-      request: cloneRequest(meta.request),
-      warnings: cloneWarnings(meta.warnings),
-      issues: cloneIssues(meta.issues),
-    };
+    throw new Error(`Transaction ${meta.id} no longer has an editable runtime request.`);
+  }
+
+  #requireFromAddress(meta: TransactionMeta): string {
+    const fromAddress = meta.from ?? this.#findFromAddress(meta.request);
+    if (fromAddress) {
+      return fromAddress;
+    }
+
+    throw new Error(`Transaction ${meta.id} is missing a from address.`);
   }
 
   #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {

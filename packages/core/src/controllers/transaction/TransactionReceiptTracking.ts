@@ -56,7 +56,7 @@ export class TransactionReceiptTracking {
    * Called after state transitions. Starts/stops receipt polling as needed.
    */
   handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
-    if (next.status === "broadcast" && typeof next.hash === "string") {
+    if (next.status === "broadcast" && next.submitted && next.locator) {
       const adapter = this.#registry.get(next.namespace);
       if (!adapter?.receiptTracking) {
         void this.#handleTrackingUnsupported(
@@ -67,10 +67,13 @@ export class TransactionReceiptTracking {
       }
 
       const context = buildTrackingContext(next);
+      if (!context) {
+        return;
+      }
       if (this.#tracker.isTracking(next.id)) {
-        this.#tracker.resume(next.id, context, next.hash);
+        this.#tracker.resume(next.id, context);
       } else {
-        this.#tracker.start(next.id, context, next.hash);
+        this.#tracker.start(next.id, context);
       }
       return;
     }
@@ -89,7 +92,7 @@ export class TransactionReceiptTracking {
    * Used on cold start recovery to resume polling from persisted broadcast txs.
    */
   resumeBroadcast(meta: TransactionMeta) {
-    if (meta.status !== "broadcast" || typeof meta.hash !== "string") return;
+    if (meta.status !== "broadcast" || !meta.submitted || !meta.locator) return;
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter?.receiptTracking) {
       void this.#handleTrackingUnsupported(
@@ -98,7 +101,9 @@ export class TransactionReceiptTracking {
       ).catch(() => {});
       return;
     }
-    this.#tracker.resume(meta.id, buildTrackingContext(meta), meta.hash);
+    const context = buildTrackingContext(meta);
+    if (!context) return;
+    this.#tracker.resume(meta.id, context);
   }
 
   async #applyReceiptResolution(id: string, resolution: ReceiptResolution): Promise<void> {
@@ -110,7 +115,7 @@ export class TransactionReceiptTracking {
         id,
         fromStatus: "broadcast",
         toStatus: "confirmed",
-        patch: { receipt: resolution.receipt, error: undefined, userRejected: false },
+        patch: { receipt: resolution.receipt },
       });
       return;
     }
@@ -119,15 +124,7 @@ export class TransactionReceiptTracking {
       id,
       fromStatus: "broadcast",
       toStatus: "failed",
-      patch: {
-        receipt: resolution.receipt,
-        error: {
-          name: "TransactionExecutionFailed",
-          message: "Transaction execution failed.",
-          data: resolution.receipt,
-        },
-        userRejected: false,
-      },
+      patch: { receipt: resolution.receipt },
     });
   }
 
@@ -140,12 +137,7 @@ export class TransactionReceiptTracking {
       fromStatus: "broadcast",
       toStatus: "replaced",
       patch: {
-        error: {
-          name: "TransactionReplacedError",
-          message: "Transaction was replaced by another transaction with the same nonce.",
-          data: { replacementHash: resolution.hash },
-        },
-        userRejected: false,
+        ...(resolution.replacementTransactionId !== undefined ? { replacedById: resolution.replacementTransactionId } : {}),
       },
     });
   }
@@ -158,13 +150,7 @@ export class TransactionReceiptTracking {
       id,
       fromStatus: "broadcast",
       toStatus: "failed",
-      patch: {
-        error: {
-          name: "TransactionReceiptTimeoutError",
-          message: "Timed out waiting for transaction receipt.",
-        },
-        userRejected: false,
-      },
+      patch: {},
     });
   }
 
@@ -176,25 +162,14 @@ export class TransactionReceiptTracking {
       id,
       fromStatus: "broadcast",
       toStatus: "failed",
-      patch: {
-        error: {
-          name: "ReceiptTrackingUnsupportedError",
-          message: "Receipt tracking is not supported for this transaction.",
-          data: {
-            namespace: meta.namespace,
-            chainRef: meta.chainRef,
-            cause: error instanceof Error ? { name: error.name, message: error.message } : String(error),
-          },
-        },
-        userRejected: false,
-      },
+      patch: {},
     });
   }
 
   async #transitionAndCommit(params: {
     id: string;
-    fromStatus: TransactionMeta["status"];
-    toStatus: TransactionMeta["status"];
+    fromStatus: "broadcast" | "confirmed" | "failed" | "replaced";
+    toStatus: "broadcast" | "confirmed" | "failed" | "replaced";
     patch: NonNullable<Parameters<TransactionsService["transition"]>[0]["patch"]>;
   }) {
     const updated = await this.#service.transition({

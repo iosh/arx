@@ -4,12 +4,10 @@ import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
-  TransactionErrorSchema,
-  TransactionIssueSchema,
-  TransactionPreparedSchema,
   TransactionReceiptSchema,
-  TransactionRequestSchema,
-  TransactionWarningSchema,
+  TransactionReplacementRelationSchema,
+  TransactionSubmissionLocatorSchema,
+  TransactionSubmittedSchema,
 } from "./schemas.js";
 import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
 
@@ -275,90 +273,30 @@ export const PermissionRecordSchema = z
   .superRefine(validatePermissionRecord);
 export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 
-export const TransactionStatusSchema = z.enum([
-  "pending",
-  "approved",
-  "signed",
-  "broadcast",
-  "confirmed",
-  "failed",
-  "replaced",
-]);
+export const TransactionStatusSchema = z.enum(["broadcast", "confirmed", "failed", "replaced"]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
-
-const PersistedTransactionRequestSchema = TransactionRequestSchema.extend({
-  chainRef: chainRefSchema,
-});
 
 export const TransactionRecordSchema = z
   .strictObject({
     id: z.uuid(),
-    namespace: z.string().min(1),
     chainRef: chainRefSchema,
     origin: originStringSchema,
     fromAccountKey: AccountKeySchema,
     status: TransactionStatusSchema,
-    request: PersistedTransactionRequestSchema,
-    prepared: TransactionPreparedSchema.nullable().optional(),
-    hash: z.string().nullable(),
+    submitted: TransactionSubmittedSchema,
+    locator: TransactionSubmissionLocatorSchema,
     receipt: TransactionReceiptSchema.optional(),
-    error: TransactionErrorSchema.nullable().optional(),
-    userRejected: z.boolean(),
-    warnings: z.array(TransactionWarningSchema),
-    issues: z.array(TransactionIssueSchema),
+    replacedById: z.uuid().nullable().optional(),
     createdAt: epochMillisecondsSchema,
     updatedAt: epochMillisecondsSchema,
   })
   .superRefine((value, ctx) => {
-    if (getChainRefNamespace(value.chainRef) !== value.namespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: `chainRef must belong to namespace "${value.namespace}"`,
-        path: ["chainRef"],
-      });
-    }
-
     const accountNamespace = value.fromAccountKey.split(":", 1)[0];
-    if (accountNamespace !== value.namespace) {
+    if (accountNamespace !== getChainRefNamespace(value.chainRef)) {
       ctx.addIssue({
         code: "custom",
-        message: `fromAccountKey must belong to namespace "${value.namespace}"`,
+        message: "fromAccountKey must belong to the same namespace as chainRef",
         path: ["fromAccountKey"],
-      });
-    }
-
-    if (value.request.namespace !== value.namespace) {
-      ctx.addIssue({
-        code: "custom",
-        message: `request.namespace must equal record namespace "${value.namespace}"`,
-        path: ["request", "namespace"],
-      });
-    }
-
-    if (value.request.chainRef !== value.chainRef) {
-      ctx.addIssue({
-        code: "custom",
-        message: `request.chainRef must equal record chainRef "${value.chainRef}"`,
-        path: ["request", "chainRef"],
-      });
-    }
-
-    if (
-      (value.status === "broadcast" || value.status === "confirmed" || value.status === "replaced") &&
-      value.hash === null
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: `hash is required when status is "${value.status}"`,
-        path: ["hash"],
-      });
-    }
-
-    if (value.userRejected && value.status !== "failed") {
-      ctx.addIssue({
-        code: "custom",
-        message: 'userRejected can only be true when status is "failed"',
-        path: ["userRejected"],
       });
     }
   });

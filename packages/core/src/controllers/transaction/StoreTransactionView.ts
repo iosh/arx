@@ -1,17 +1,9 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { getChainRefNamespace } from "../../chains/caip.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
-import type {
-  TransactionIssue,
-  TransactionMeta,
-  TransactionPrepared,
-  TransactionReceipt,
-  TransactionStateChange,
-  TransactionStatusChange,
-  TransactionWarning,
-} from "./types.js";
-import { cloneMeta, cloneRequest } from "./utils.js";
+import type { TransactionMeta, TransactionReceipt, TransactionStateChange, TransactionStatusChange } from "./types.js";
 
 type Options = {
   messenger: TransactionMessenger;
@@ -73,7 +65,7 @@ export class StoreTransactionView {
 
   getMeta(id: string): TransactionMeta | undefined {
     const existing = this.#touch(id);
-    return existing ? cloneMeta(existing) : undefined;
+    return existing ? structuredClone(existing) : undefined;
   }
 
   /**
@@ -86,7 +78,7 @@ export class StoreTransactionView {
 
   async getOrLoad(id: string): Promise<TransactionMeta | null> {
     const cached = this.peek(id);
-    if (cached) return cloneMeta(cached);
+    if (cached) return structuredClone(cached);
 
     const record = await this.#service.get(id);
     if (!record) return null;
@@ -94,7 +86,7 @@ export class StoreTransactionView {
     const meta = this.#toTransactionMeta(record);
     // Loading a specific id is an authoritative read (do emit status events if changed).
     this.commitMeta(meta);
-    return cloneMeta(meta);
+    return structuredClone(meta);
   }
 
   /**
@@ -115,12 +107,12 @@ export class StoreTransactionView {
         id: next.id,
         previousStatus: previous.status,
         nextStatus: next.status,
-        meta: cloneMeta(next),
+        meta: structuredClone(next),
       };
       this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
     }
 
-    return previous ? cloneMeta(previous) : undefined;
+    return previous ? structuredClone(previous) : undefined;
   }
 
   /**
@@ -170,7 +162,7 @@ export class StoreTransactionView {
   #upsert(meta: TransactionMeta) {
     // Maintain a bounded LRU cache for synchronous reads (e.g. getMeta()).
     this.#records.delete(meta.id);
-    this.#records.set(meta.id, cloneMeta(meta));
+    this.#records.set(meta.id, structuredClone(meta));
 
     while (this.#records.size > this.#stateLimit) {
       const oldest = this.#records.keys().next().value as string | undefined;
@@ -222,42 +214,22 @@ export class StoreTransactionView {
     }
   }
 
-  #mapWarnings(list: TransactionRecord["warnings"]): TransactionWarning[] {
-    return list.map((item) => ({
-      kind: "warning" as const,
-      code: item.code,
-      message: item.message,
-      ...(item.severity !== undefined ? { severity: item.severity } : {}),
-      ...(item.data !== undefined ? { data: item.data } : {}),
-    }));
-  }
-
-  #mapIssues(list: TransactionRecord["issues"]): TransactionIssue[] {
-    return list.map((item) => ({
-      kind: "issue" as const,
-      code: item.code,
-      message: item.message,
-      ...(item.severity !== undefined ? { severity: item.severity } : {}),
-      ...(item.data !== undefined ? { data: item.data } : {}),
-    }));
-  }
-
   #toTransactionMeta(record: TransactionRecord): TransactionMeta {
     return {
       id: record.id,
-      namespace: record.namespace,
+      namespace: getChainRefNamespace(record.chainRef),
       chainRef: record.chainRef,
       origin: record.origin,
       from: this.#safeFromAccountKeyToAddress(record),
-      request: cloneRequest(record.request),
-      prepared: (record.prepared ?? null) as TransactionPrepared | null,
+      request: null,
+      prepared: null,
       status: record.status,
-      hash: record.hash,
-      receipt: (record.receipt ?? null) as TransactionReceipt | null,
-      error: record.error ?? null,
-      userRejected: record.userRejected,
-      warnings: this.#mapWarnings(record.warnings),
-      issues: this.#mapIssues(record.issues),
+      submitted: structuredClone(record.submitted),
+      locator: structuredClone(record.locator),
+      receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
+      replacedById: record.replacedById ?? null,
+      error: null,
+      userRejected: false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };

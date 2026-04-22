@@ -3,19 +3,19 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
-import type { TransactionRecord } from "../../storage/records.js";
 import type {
   TransactionError,
-  TransactionIssue,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
-  TransactionWarning,
+  TransactionSubmissionLocator,
+  TransactionSubmitted,
 } from "../../transactions/types.js";
 import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
 import type { SendTransactionApprovalReview, TransactionReviewSession } from "./review/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
+export type DurableTransactionStatus = Exclude<TransactionStatus, "pending" | "approved" | "signed">;
 
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
@@ -47,15 +47,15 @@ export type TransactionMeta = {
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRecord["request"];
+  request: TransactionRequest | null;
   prepared: TransactionPrepared | null;
   status: TransactionStatus;
-  hash: string | null;
+  submitted: TransactionSubmitted | null;
+  locator: TransactionSubmissionLocator | null;
   receipt: TransactionReceipt | null;
+  replacedById: string | null;
   error: TransactionError | null;
   userRejected: boolean;
-  warnings: TransactionWarning[];
-  issues: TransactionIssue[];
   createdAt: number;
   updatedAt: number;
 };
@@ -66,8 +66,6 @@ export type TransactionApprovalRequestPayload = {
   chain?: TransactionApprovalChainMetadata | null;
   from: AccountAddress | null;
   request: TransactionRequest;
-  warnings: TransactionWarning[];
-  issues: TransactionIssue[];
 };
 
 export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKinds.SendTransaction>;
@@ -84,17 +82,8 @@ export type BeginTransactionApprovalOptions = {
 };
 
 export type TransactionSubmissionResolution = {
-  hash: string;
+  locator: TransactionSubmissionLocator;
   meta: TransactionMeta;
-};
-
-export type ResumePendingTransactionsOptions = {
-  includeSigning?: boolean;
-  /**
-   * Cold-start retained transactions that should remain visible but must not
-   * resume signing/broadcast automatically.
-   */
-  skipExecutionIds?: readonly string[];
 };
 
 export class TransactionSubmissionError extends Error {
@@ -132,22 +121,21 @@ export type TransactionController = {
   approveTransaction(id: string): Promise<TransactionMeta | null>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;
-  resumePending(params?: ResumePendingTransactionsOptions): Promise<void>;
+  resumePending(): Promise<void>;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };
 
 export type {
+  Eip155SubmittedTransaction,
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
   Eip155TransactionRequest,
-  TransactionDiagnostic,
-  TransactionDiagnosticSeverity,
   TransactionError,
-  TransactionIssue,
   TransactionPayload,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
-  TransactionWarning,
+  TransactionSubmissionLocator,
+  TransactionSubmitted,
 } from "../../transactions/types.js";

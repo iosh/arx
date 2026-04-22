@@ -1,26 +1,17 @@
-import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "./review/session.js";
-import type { StoreTransactionView } from "./StoreTransactionView.js";
+import type { TransactionReviewMessage } from "./review/types.js";
 import { isPrepareEligibleTransactionStatus } from "./status.js";
-import type { TransactionIssue, TransactionMeta, TransactionWarning } from "./types.js";
-import {
-  buildPrepareContext,
-  cloneIssues,
-  cloneWarnings,
-  issueFromPrepareError,
-  mergeIssues,
-  mergeWarnings,
-  missingAdapterIssue,
-} from "./utils.js";
+import type { TransactionMeta } from "./types.js";
+import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 type Options = {
-  view: StoreTransactionView;
+  runtime: RuntimeTransactionStore;
   registry: TransactionAdapterRegistry;
-  service: TransactionsService;
   reviewSessions: TransactionReviewSessions;
   logger?: (message: string, data?: unknown) => void;
   prepareTimeoutMs?: number;
@@ -28,9 +19,8 @@ type Options = {
 };
 
 export class TransactionPrepareManager {
-  #view: StoreTransactionView;
+  #runtime: RuntimeTransactionStore;
   #registry: TransactionAdapterRegistry;
-  #service: TransactionsService;
   #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
   #timeoutMs: number;
@@ -42,9 +32,8 @@ export class TransactionPrepareManager {
   #prepareConcurrencyWaiters: Array<() => void> = [];
 
   constructor(options: Options) {
-    this.#view = options.view;
+    this.#runtime = options.runtime;
     this.#registry = options.registry;
-    this.#service = options.service;
     this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
     this.#timeoutMs = options.prepareTimeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
@@ -54,27 +43,61 @@ export class TransactionPrepareManager {
     );
   }
 
-  async #commitLatest(id: string, fallback: TransactionMeta): Promise<TransactionMeta> {
-    const latest = await this.#service.get(id);
-    if (!latest) return fallback;
-    return this.#view.commitRecord(latest).next;
+  #patchAndCommit(
+    id: string,
+    patch: Parameters<RuntimeTransactionStore["patch"]>[1],
+    fallback: TransactionMeta,
+  ): TransactionMeta {
+    return this.#runtime.patch(id, patch) ?? fallback;
   }
 
-  async #patchAndCommit(
-    id: string,
-    patch: Parameters<TransactionsService["patch"]>[0]["patch"],
-    fallback: TransactionMeta,
-  ): Promise<TransactionMeta> {
-    const patched = await this.#service.patch({ id, patch });
-    if (!patched) {
-      return await this.#commitLatest(id, fallback);
-    }
-    return this.#view.commitRecord(patched).next;
+  #toReviewMessage(input: { code: string; message: string; data?: unknown }): TransactionReviewMessage {
+    return {
+      code: input.code,
+      message: input.message,
+      ...(input.data && typeof input.data === "object" ? { details: input.data as Record<string, unknown> } : {}),
+    };
+  }
+
+  #classifyPreparedDiagnostics(result: {
+    warnings: Array<{ code: string; message: string; data?: unknown }>;
+    issues: Array<{ code: string; message: string; data?: unknown }>;
+  }) {
+    const prepareFailureCodes = new Set([
+      "transaction.prepare.rpc_unavailable",
+      "transaction.prepare.gas_estimation_failed",
+      "transaction.prepare.fee_estimation_failed",
+      "transaction.prepare.nonce_failed",
+      "transaction.adapter_missing",
+      "transaction.prepare_timeout",
+      "transaction.prepare_missing_result",
+      "transaction.prepare_failed",
+    ]);
+    const approveBlockerCodes = new Set(["transaction.prepare.gas_zero", "transaction.prepare.insufficient_funds"]);
+
+    const prepareFailure =
+      result.issues.flatMap((issue) =>
+        prepareFailureCodes.has(issue.code) ? [this.#toReviewMessage(issue)] : [],
+      )[0] ?? null;
+    const approvalBlocker =
+      result.issues.flatMap((issue) =>
+        approveBlockerCodes.has(issue.code) ? [this.#toReviewMessage(issue)] : [],
+      )[0] ?? null;
+    const reviewNotices = [
+      ...result.warnings.map((warning) => this.#toReviewMessage(warning)),
+      ...result.issues.flatMap((issue) =>
+        prepareFailureCodes.has(issue.code) || approveBlockerCodes.has(issue.code)
+          ? []
+          : [this.#toReviewMessage(issue)],
+      ),
+    ];
+
+    return { prepareFailure, approvalBlocker, reviewNotices };
   }
 
   queuePrepare(id: string) {
     void this.ensurePrepared(id, { source: "background" }).catch((error) => {
-      // Best-effort background preparation; failures are surfaced via issues on the transaction record.
+      // Best-effort background preparation; failures are surfaced via review session diagnostics.
       this.#logger("transactions: prepare failed", {
         id,
         error: error instanceof Error ? error.message : String(error),
@@ -89,7 +112,7 @@ export class TransactionPrepareManager {
     const existing = this.#prepareInFlight.get(id);
     if (existing) {
       await existing;
-      return await this.#view.getOrLoad(id);
+      return this.#runtime.get(id) ?? null;
     }
 
     const run = this.#prepareAndPersistInternal(id, opts);
@@ -109,12 +132,8 @@ export class TransactionPrepareManager {
   ): Promise<TransactionMeta | null> {
     const timeoutMs = opts?.timeoutMs ?? this.#timeoutMs;
 
-    let meta = this.#view.getMeta(id);
-    if (!meta) {
-      const record = await this.#service.get(id);
-      if (!record) return null;
-      meta = this.#view.commitRecord(record).next;
-    }
+    const meta = this.#runtime.get(id);
+    if (!meta) return null;
 
     if (meta.prepared) {
       return meta;
@@ -126,25 +145,31 @@ export class TransactionPrepareManager {
     }
 
     const session = this.#reviewSessions.begin(id, Date.now());
-    this.#view.notifyStateChanged([id]);
+    this.#runtime.patch(id, { updatedAt: meta.updatedAt });
 
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter) {
-      const next = await this.#patchAndCommit(
+      const next = this.#patchAndCommit(
         id,
         {
           prepared: null,
-          warnings: cloneWarnings(meta.warnings),
-          issues: cloneIssues(mergeIssues(meta.issues, [missingAdapterIssue(meta.namespace)])),
         },
         meta,
       );
-      this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
+      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
+        prepareFailure: {
+          code: "transaction.adapter_missing",
+          message: `No transaction adapter registered for namespace ${meta.namespace}`,
+          details: { namespace: meta.namespace },
+        },
+        approvalBlocker: null,
+        reviewNotices: [],
+      });
+      this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
         reason: "transaction.adapter_missing",
         message: `No transaction adapter registered for namespace ${meta.namespace}`,
         data: { namespace: meta.namespace },
       });
-      this.#view.notifyStateChanged([id]);
       return next;
     }
 
@@ -152,54 +177,54 @@ export class TransactionPrepareManager {
       const context = buildPrepareContext(meta);
       const runPrepare = async () => await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
+      const diagnostics = this.#classifyPreparedDiagnostics(result);
 
-      const nextWarnings: TransactionWarning[] = mergeWarnings(meta.warnings, result.warnings);
-      const nextIssues: TransactionIssue[] = mergeIssues(meta.issues, result.issues);
-
-      const next = await this.#patchAndCommit(
+      const next = this.#patchAndCommit(
         id,
         {
           prepared: result.prepared,
-          warnings: cloneWarnings(nextWarnings),
-          issues: cloneIssues(nextIssues),
         },
         meta,
       );
-      const persisted = await this.#service.get(id);
-      if (!persisted || persisted.updatedAt !== next.updatedAt) {
-        return next;
-      }
+      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, diagnostics);
       if (result.prepared) {
-        this.#reviewSessions.markReady(id, session.revision, next.updatedAt);
+        this.#reviewSessions.markReady(id, session.sessionToken, next.updatedAt);
       } else {
-        this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
+        this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
           reason: "transaction.prepare_missing_result",
           message: "Transaction preparation did not produce prepared parameters.",
         });
       }
-      this.#view.notifyStateChanged([id]);
       return next;
     } catch (error) {
-      const issue = issueFromPrepareError(error);
-      const next = await this.#patchAndCommit(
+      const next = this.#patchAndCommit(
         id,
         {
           prepared: null,
-          warnings: cloneWarnings(meta.warnings),
-          issues: cloneIssues(mergeIssues(meta.issues, [issue])),
         },
         meta,
       );
-      const persisted = await this.#service.get(id);
-      if (!persisted || persisted.updatedAt !== next.updatedAt) {
-        return next;
-      }
-      this.#reviewSessions.markFailed(id, session.revision, next.updatedAt, {
-        reason: issue.code,
-        message: issue.message,
-        ...(issue.data !== undefined ? { data: issue.data } : {}),
+      const message =
+        error instanceof Error
+          ? {
+              code: "transaction.prepare_failed",
+              message: error.message,
+              ...(error.name ? { details: { name: error.name } } : {}),
+            }
+          : {
+              code: "transaction.prepare_failed",
+              message: String(error),
+            };
+      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
+        prepareFailure: message,
+        approvalBlocker: null,
+        reviewNotices: [],
       });
-      this.#view.notifyStateChanged([id]);
+      this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
+        reason: message.code,
+        message: message.message,
+        ...(message.details !== undefined ? { data: message.details } : {}),
+      });
       return next;
     }
   }

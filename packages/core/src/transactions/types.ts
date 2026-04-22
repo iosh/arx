@@ -28,9 +28,20 @@ export type TransactionError = {
 };
 
 export type TransactionReceipt = Record<string, unknown>;
+export type TransactionSubmitted = Record<string, unknown>;
 
 export type TransactionPrepared = Record<string, unknown>;
 export type TransactionPayload = Record<string, unknown>;
+
+export type TransactionSubmissionLocator = {
+  format: string;
+  value: string;
+};
+
+export type Eip155TransactionAccessListEntry = {
+  address: AccountAddress;
+  storageKeys: Hex[];
+};
 
 export type Eip155TransactionPayload = {
   chainId?: Hex;
@@ -46,6 +57,22 @@ export type Eip155TransactionPayload = {
 };
 export type Eip155TransactionPayloadWithFrom = Eip155TransactionPayload & { from: AccountAddress };
 export type Eip155TransactionRequest = TransactionRequest<"eip155", Eip155TransactionPayload>;
+
+export type Eip155SubmittedTransaction = {
+  hash: Hex;
+  chainId: Hex;
+  from: AccountAddress;
+  to?: AccountAddress | null;
+  value?: Hex;
+  data?: Hex;
+  gas?: Hex;
+  nonce: Hex;
+  type?: Hex | null;
+  gasPrice?: Hex | null;
+  maxFeePerGas?: Hex | null;
+  maxPriorityFeePerGas?: Hex | null;
+  accessList?: Eip155TransactionAccessListEntry[];
+};
 
 export type TransactionRequest<
   TNamespace extends string = string,

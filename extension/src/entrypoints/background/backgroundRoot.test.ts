@@ -128,6 +128,25 @@ describe("backgroundRoot", () => {
           namespace: null,
         },
       })),
+      getEntryBootstrap: vi.fn(async ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+        entry: {
+          environment,
+          reason:
+            environment === "onboarding"
+              ? "onboarding_required"
+              : environment === "notification"
+                ? "idle"
+                : "manual_open",
+          context: {
+            approvalId: null,
+            origin: null,
+            method: null,
+            chainRef: null,
+            namespace: null,
+          },
+        },
+        requestedApproval: null,
+      })),
       openOnboardingTab: vi.fn(async () => ({ activationPath: "create" as const })),
       destroy: vi.fn(),
       start: vi.fn(),

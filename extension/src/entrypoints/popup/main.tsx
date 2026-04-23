@@ -10,7 +10,7 @@ import { routeTree } from "@/routeTree.gen";
 import { ErrorState, Screen } from "@/ui/components";
 import { needsOnboarding } from "@/ui/lib/rootBeforeLoad";
 import { uiClient } from "@/ui/lib/uiBridgeClient";
-import { loadUiEntryLaunchContext, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
+import { loadUiEntryBootstrap, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { adjustWindowInnerSize } from "@/ui/lib/windowSizing";
 
 // Create QueryClient instance (shared across entire app)
@@ -73,7 +73,7 @@ const boot = async () => {
   startUiEntryLaunchContextSync();
 
   try {
-    await loadUiEntryLaunchContext();
+    await loadUiEntryBootstrap(queryClient);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     renderStartupError(message);

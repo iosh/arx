@@ -653,6 +653,25 @@ const createUiAccessForTest = (input: {
         namespace: null,
       },
     }),
+    getEntryBootstrap: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+      entry: {
+        environment,
+        reason:
+          environment === "onboarding"
+            ? "onboarding_required"
+            : environment === "notification"
+              ? "idle"
+              : "manual_open",
+        context: {
+          approvalId: null,
+          origin: null,
+          method: null,
+          chainRef: null,
+          namespace: null,
+        },
+      },
+      requestedApproval: null,
+    }),
   };
 
   return createUiRuntimeAccess({

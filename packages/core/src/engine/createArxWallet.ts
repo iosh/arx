@@ -31,6 +31,7 @@ import { createProviderRequests } from "../runtime/provider/providerRequests.js"
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
 import type { UiError } from "../ui/protocol/envelopes.js";
+import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
@@ -132,6 +133,7 @@ type ArxWalletRuntime = Readonly<{
   provider: WalletProvider;
   providerAccess: ProviderRuntimeAccess;
   createUiAccess(options: WalletCreateUiOptions): UiRuntimeAccess;
+  getApprovalDetail(approvalId: string): ApprovalDetail | null;
   surfaceErrors: SurfaceErrorEncoder;
 }>;
 
@@ -613,6 +615,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     provider,
     providerAccess,
     createUiAccess,
+    getApprovalDetail: (approvalId) => approvalReadService.getDetail(approvalId),
     surfaceErrors: surfaceErrorEncoder,
   };
 

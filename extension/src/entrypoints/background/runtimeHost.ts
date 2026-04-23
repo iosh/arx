@@ -1,5 +1,5 @@
 import type { ApprovalTerminalReason } from "@arx/core/controllers/approval";
-import { createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
+import { type ApprovalDetail, createArxWalletRuntime, type WalletProvider } from "@arx/core/engine";
 import { createLogger, disableDebugNamespaces, enableDebugNamespaces, extendLogger } from "@arx/core/logger";
 import type { UiPlatformAdapter, UiRuntimeAccess } from "@arx/core/runtime";
 import { ATTENTION_REQUESTED, type AttentionRequest } from "@arx/core/services";
@@ -50,6 +50,7 @@ export type BackgroundUiEntryAccess = {
   cancelApproval: (params: { approvalId: string; reason: ApprovalTerminalReason }) => Promise<void>;
   cancelPendingApprovals: (reason: ApprovalTerminalReason) => Promise<void>;
   getPendingApprovalCount: () => number;
+  getApprovalDetail: (approvalId: string) => ApprovalDetail | null;
   hasInitializedVault: () => boolean;
 };
 
@@ -227,6 +228,7 @@ export const createBackgroundRuntimeHost = (deps: { extensionOrigin: string }): 
         );
       },
       getPendingApprovalCount: () => active.runtime.controllers.approvals.getState().pending.length,
+      getApprovalDetail: (approvalId) => active.runtime.getApprovalDetail(approvalId),
       hasInitializedVault: () => active.runtime.services.sessionStatus.hasInitializedVault(),
     };
   };

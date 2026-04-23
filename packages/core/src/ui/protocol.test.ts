@@ -130,6 +130,9 @@ describe("ui protocol registry", () => {
     expect(parseUiMethodParams("ui.approvals.getDetail", { approvalId: "approval-1" })).toEqual({
       approvalId: "approval-1",
     });
+    expect(parseUiMethodParams("ui.entry.getBootstrap", { environment: "notification" })).toEqual({
+      environment: "notification",
+    });
   });
 
   it("validates method results (strict)", () => {
@@ -144,6 +147,41 @@ describe("ui protocol registry", () => {
 
     const okApprovalResolve = parseUiMethodResult("ui.approvals.resolve", null);
     expect(okApprovalResolve).toBeNull();
+
+    const okEntryBootstrap = parseUiMethodResult("ui.entry.getBootstrap", {
+      entry: {
+        environment: "notification",
+        reason: "approval_created",
+        context: {
+          approvalId: "approval-1",
+          origin: "https://dapp.example",
+          method: "eth_requestAccounts",
+          chainRef: "eip155:1",
+          namespace: "eip155",
+        },
+      },
+      requestedApproval: {
+        approvalId: "approval-1",
+        initialDetail: {
+          approvalId: "approval-1",
+          kind: "requestAccounts",
+          origin: "https://dapp.example",
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          createdAt: 1,
+          actions: {
+            canApprove: true,
+            canReject: true,
+          },
+          request: {
+            selectableAccounts: [],
+            recommendedAccountKey: null,
+          },
+          review: null,
+        },
+      },
+    });
+    expect(okEntryBootstrap.requestedApproval?.approvalId).toBe("approval-1");
   });
 
   it("validates event payloads (strict)", () => {

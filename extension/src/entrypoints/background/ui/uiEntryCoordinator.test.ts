@@ -1,5 +1,6 @@
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "@arx/core/controllers/approval";
 import { ATTENTION_REQUESTED } from "@arx/core/services";
+import type { ApprovalDetail } from "@arx/core/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryPlatform } from "../platform/uiPlatform";
 import type { BackgroundRuntimeHost } from "../runtimeHost";
@@ -136,6 +137,24 @@ const createRecord = (overrides?: Partial<ApprovalRecordLike>): ApprovalRecordLi
   },
 });
 
+const createApprovalDetail = (approvalId: string): ApprovalDetail => ({
+  approvalId,
+  kind: "requestAccounts",
+  origin: "https://dapp.example",
+  namespace: "eip155",
+  chainRef: "eip155:1",
+  createdAt: 1,
+  actions: {
+    canApprove: true,
+    canReject: true,
+  },
+  request: {
+    selectableAccounts: [],
+    recommendedAccountKey: null,
+  },
+  review: null,
+});
+
 const buildHarness = (
   windowIds: number[],
   options?: {
@@ -159,6 +178,7 @@ const buildHarness = (
   let onboardingOpenCallIndex = 0;
   let shouldFailFirstUiEntryAccess = options?.failFirstUiEntryAccess ?? false;
   const onEntryChanged = vi.fn();
+  const approvalDetails = new Map<string, ApprovalDetail>();
 
   const platform: UiEntryPlatform = {
     openOnboardingTab: vi.fn(async () => {
@@ -212,6 +232,7 @@ const buildHarness = (
           await Promise.all(pendingIds.map((approvalId) => approvals.cancel({ approvalId, reason })));
         },
         getPendingApprovalCount: () => approvals.getState().pending.length,
+        getApprovalDetail: (approvalId: string) => approvalDetails.get(approvalId) ?? null,
         hasInitializedVault: () => true,
       };
     }) as unknown as BackgroundRuntimeHost["getOrInitUiEntryAccess"],
@@ -226,6 +247,9 @@ const buildHarness = (
     platform,
     runtimeHost,
     unlock,
+    setApprovalDetail(detail: ApprovalDetail) {
+      approvalDetails.set(detail.approvalId, detail);
+    },
     closeWindow(windowId: number) {
       trackedWindowClosers.get(windowId)?.();
     },
@@ -446,6 +470,41 @@ describe("uiEntryCoordinator", () => {
       },
     });
     expect(harness.onEntryChanged).not.toHaveBeenCalled();
+  });
+
+  it("builds bootstrap with an initial approval detail for approval-created entries", async () => {
+    const harness = buildHarness([71]);
+    const coordinator = createUiEntryCoordinator({
+      runtimeHost: harness.runtimeHost,
+      platform: harness.platform,
+      onEntryChanged: harness.onEntryChanged,
+    });
+
+    coordinator.start();
+    await vi.waitFor(() => expect(harness.runtimeHost.getOrInitUiEntryAccess).toHaveBeenCalledTimes(1));
+
+    harness.setApprovalDetail(createApprovalDetail("approval-1"));
+    harness.approvals.add(createRecord({ approvalId: "approval-1" }));
+
+    const bootstrap = await coordinator.getEntryBootstrap({ environment: "notification" });
+
+    expect(bootstrap).toEqual({
+      entry: {
+        environment: "notification",
+        reason: "approval_created",
+        context: {
+          approvalId: "approval-1",
+          origin: "https://dapp.example",
+          method: "wallet_requestAccounts",
+          chainRef: "eip155:1",
+          namespace: "eip155",
+        },
+      },
+      requestedApproval: {
+        approvalId: "approval-1",
+        initialDetail: createApprovalDetail("approval-1"),
+      },
+    });
   });
 
   it("reuses an existing onboarding tab without reloading it", async () => {

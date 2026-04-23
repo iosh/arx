@@ -1,6 +1,7 @@
-import { UI_EVENT_ENTRY_CHANGED, type UiSnapshot } from "@arx/core/ui";
+import { UI_EVENT_ENTRY_CHANGED, type UiMethodResult, type UiSnapshot } from "@arx/core/ui";
 import type { QueryClient } from "@tanstack/react-query";
 import { getUiEnvironment, hydrateUiEntryMetadata, type UiEntryMetadata } from "@/lib/uiEntryMetadata";
+import { writeCachedUiApprovalDetail } from "./uiApprovalQueries";
 import { uiClient } from "./uiBridgeClient";
 import { refreshUiSnapshotIntoCache } from "./uiSnapshotQuery";
 
@@ -8,6 +9,24 @@ export const loadUiEntryLaunchContext = async (): Promise<UiEntryMetadata> => {
   const environment = getUiEnvironment();
   const metadata = await uiClient.entry.getLaunchContext({ environment });
   return hydrateUiEntryMetadata(metadata);
+};
+
+export const loadUiEntryBootstrap = async (
+  queryClient: QueryClient,
+): Promise<UiMethodResult<"ui.entry.getBootstrap">> => {
+  const environment = getUiEnvironment();
+  const bootstrap = await uiClient.entry.getBootstrap({ environment });
+
+  hydrateUiEntryMetadata(bootstrap.entry);
+
+  if (bootstrap.requestedApproval) {
+    writeCachedUiApprovalDetail(queryClient, {
+      approvalId: bootstrap.requestedApproval.approvalId,
+      detail: bootstrap.requestedApproval.initialDetail,
+    });
+  }
+
+  return bootstrap;
 };
 
 export const startUiEntryLaunchContextSync = (): (() => void) => {

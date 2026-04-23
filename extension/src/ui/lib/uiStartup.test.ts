@@ -1,14 +1,16 @@
-import { UI_EVENT_ENTRY_CHANGED, type UiClientConnectionStatus } from "@arx/core/ui";
+import { type ApprovalDetail, UI_EVENT_ENTRY_CHANGED, type UiClientConnectionStatus } from "@arx/core/ui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UiEntryMetadata } from "@/lib/uiEntryMetadata";
-import { startUiEntryLaunchContextSync } from "./uiStartup";
+import { loadUiEntryBootstrap, startUiEntryLaunchContextSync } from "./uiStartup";
 
 const mocks = vi.hoisted(() => ({
   hydrateUiEntryMetadata: vi.fn(),
+  getBootstrap: vi.fn(),
   getLaunchContext: vi.fn(),
   getUiEnvironment: vi.fn(),
   on: vi.fn(),
   onConnectionStatus: vi.fn(),
+  writeCachedUiApprovalDetail: vi.fn(),
   entryChangedListener: null as ((payload: UiEntryMetadata) => void) | null,
   connectionStatusListener: null as ((status: UiClientConnectionStatus) => void) | null,
   stopEntryChanged: vi.fn(),
@@ -20,11 +22,16 @@ vi.mock("@/lib/uiEntryMetadata", () => ({
   hydrateUiEntryMetadata: mocks.hydrateUiEntryMetadata,
 }));
 
+vi.mock("./uiApprovalQueries", () => ({
+  writeCachedUiApprovalDetail: mocks.writeCachedUiApprovalDetail,
+}));
+
 vi.mock("./uiBridgeClient", () => ({
   uiClient: {
     on: mocks.on,
     onConnectionStatus: mocks.onConnectionStatus,
     entry: {
+      getBootstrap: mocks.getBootstrap,
       getLaunchContext: mocks.getLaunchContext,
     },
   },
@@ -42,6 +49,26 @@ const createMetadata = (overrides?: Partial<UiEntryMetadata>): UiEntryMetadata =
   },
 });
 
+type RequestAccountsApprovalDetail = Extract<ApprovalDetail, { kind: "requestAccounts" }>;
+
+const createApprovalDetail = (overrides?: Partial<RequestAccountsApprovalDetail>): RequestAccountsApprovalDetail => ({
+  approvalId: overrides?.approvalId ?? "approval-1",
+  kind: "requestAccounts",
+  origin: overrides?.origin ?? "https://dapp.example",
+  namespace: overrides?.namespace ?? "eip155",
+  chainRef: overrides?.chainRef ?? "eip155:1",
+  createdAt: overrides?.createdAt ?? 1,
+  actions: overrides?.actions ?? {
+    canApprove: true,
+    canReject: true,
+  },
+  request: overrides?.request ?? {
+    selectableAccounts: [],
+    recommendedAccountKey: null,
+  },
+  review: null,
+});
+
 describe("uiStartup", () => {
   beforeEach(() => {
     mocks.entryChangedListener = null;
@@ -50,12 +77,14 @@ describe("uiStartup", () => {
     mocks.hydrateUiEntryMetadata.mockReset();
     mocks.hydrateUiEntryMetadata.mockImplementation((metadata: UiEntryMetadata) => metadata);
 
+    mocks.getBootstrap.mockReset();
     mocks.getLaunchContext.mockReset();
     mocks.getUiEnvironment.mockReset();
     mocks.getUiEnvironment.mockReturnValue("notification");
 
     mocks.stopEntryChanged.mockReset();
     mocks.stopConnectionStatus.mockReset();
+    mocks.writeCachedUiApprovalDetail.mockReset();
 
     mocks.on.mockReset();
     mocks.on.mockImplementation((_event: string, listener: (payload: UiEntryMetadata) => void) => {
@@ -106,5 +135,34 @@ describe("uiStartup", () => {
 
     expect(mocks.stopConnectionStatus).toHaveBeenCalledTimes(1);
     expect(mocks.stopEntryChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("hydrates entry metadata and seeds approval detail from bootstrap", async () => {
+    const metadata = createMetadata();
+    const detail = createApprovalDetail();
+    const queryClient = {} as never;
+    mocks.getBootstrap.mockResolvedValue({
+      entry: metadata,
+      requestedApproval: {
+        approvalId: "approval-1",
+        initialDetail: detail,
+      },
+    });
+
+    const result = await loadUiEntryBootstrap(queryClient);
+
+    expect(mocks.getBootstrap).toHaveBeenCalledWith({ environment: "notification" });
+    expect(mocks.hydrateUiEntryMetadata).toHaveBeenCalledWith(metadata);
+    expect(mocks.writeCachedUiApprovalDetail).toHaveBeenCalledWith(queryClient, {
+      approvalId: "approval-1",
+      detail,
+    });
+    expect(result).toEqual({
+      entry: metadata,
+      requestedApproval: {
+        approvalId: "approval-1",
+        initialDetail: detail,
+      },
+    });
   });
 });

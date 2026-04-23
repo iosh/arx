@@ -20,3 +20,11 @@ export const loadUiApprovalDetailIntoCache = async (
 ): Promise<ApprovalDetail | null> => {
   return await queryClient.fetchQuery(createUiApprovalDetailQueryOptions(approvalId));
 };
+
+export const writeCachedUiApprovalDetail = (
+  queryClient: QueryClient,
+  params: { approvalId: string; detail: ApprovalDetail },
+): ApprovalDetail => {
+  queryClient.setQueryData(uiApprovalDetailQueryKey(params.approvalId), params.detail);
+  return params.detail;
+};

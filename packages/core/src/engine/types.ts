@@ -80,6 +80,7 @@ import type { AccountRecord, KeyringMetaRecord, VaultMetaPort, VaultMetaSnapshot
 import type { NetworkSelectionRecord } from "../storage/records.js";
 import type { UiEventEnvelope } from "../ui/protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../ui/protocol/index.js";
+import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import type { UiSnapshot } from "../ui/protocol/schemas.js";
 import type { UiPlatformAdapter, UiServerExtension } from "../ui/server/types.js";
 import type { CreateVaultParams, VaultEnvelope } from "../vault/types.js";
@@ -394,6 +395,11 @@ export type WalletUi = Readonly<{
   dispatch<M extends UiMethodName>(input: WalletUiDispatchInput<M>): Promise<UiMethodResult<M>>;
   subscribeStateChanged(listener: () => void): () => void;
   subscribeUiEvents(listener: (event: UiEventEnvelope) => void): () => void;
+}>;
+
+/** Runtime-owned approval detail read model for shell bootstrap. */
+export type WalletApprovalDetails = Readonly<{
+  getDetail(approvalId: string): ApprovalDetail | null;
 }>;
 
 /**

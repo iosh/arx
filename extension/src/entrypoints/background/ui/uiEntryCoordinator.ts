@@ -23,11 +23,13 @@ type UiEntryCoordinatorDeps = {
 type UiApprovalRecord = ApprovalCreatedEvent["record"];
 type UiEntryLaunchContextParams = UiMethodParams<"ui.entry.getLaunchContext">;
 type UiEntryLaunchContext = UiMethodResult<"ui.entry.getLaunchContext">;
+type UiEntryBootstrap = UiMethodResult<"ui.entry.getBootstrap">;
 
 export type UiEntryCoordinator = {
   start(): void;
   destroy(): void;
   getEntryLaunchContext(params: UiEntryLaunchContextParams): UiEntryLaunchContext;
+  getEntryBootstrap(params: UiEntryLaunchContextParams): Promise<UiEntryBootstrap>;
   openOnboardingTab(reason: string): Promise<OnboardingOpenResult>;
 };
 
@@ -94,6 +96,36 @@ export const createUiEntryCoordinator = ({
 
   const getEntryLaunchContext = ({ environment }: UiEntryLaunchContextParams): UiEntryLaunchContext => {
     return entryByEnvironment.get(environment) ?? createDefaultEntryLaunchContext(environment);
+  };
+
+  const getEntryBootstrap = async ({ environment }: UiEntryLaunchContextParams): Promise<UiEntryBootstrap> => {
+    const entry = getEntryLaunchContext({ environment });
+    const approvalId = entry.reason === "approval_created" ? entry.context.approvalId : null;
+
+    if (!approvalId) {
+      return {
+        entry,
+        requestedApproval: null,
+      };
+    }
+
+    const uiEntryAccess = await runtimeHost.getOrInitUiEntryAccess();
+    const initialDetail = uiEntryAccess.getApprovalDetail(approvalId);
+
+    if (!initialDetail) {
+      return {
+        entry,
+        requestedApproval: null,
+      };
+    }
+
+    return {
+      entry,
+      requestedApproval: {
+        approvalId,
+        initialDetail,
+      },
+    };
   };
 
   const clearWindowTracking = () => {
@@ -336,6 +368,7 @@ export const createUiEntryCoordinator = ({
     start,
     destroy,
     getEntryLaunchContext,
+    getEntryBootstrap,
     openOnboardingTab,
   };
 };

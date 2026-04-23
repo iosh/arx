@@ -1,4 +1,5 @@
 export { createUiContract, createUiRuntimeAccess } from "./access.js";
+export { createApprovalReadService } from "./approvals/readService.js";
 export type {
   UiConfirmNewMnemonicParams,
   UiImportMnemonicParams,

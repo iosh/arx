@@ -19,6 +19,7 @@ export const uiActions = (client: UiClient) => {
 
     entry: {
       getLaunchContext: call("ui.entry.getLaunchContext"),
+      getBootstrap: call("ui.entry.getBootstrap"),
     },
 
     onboarding: {

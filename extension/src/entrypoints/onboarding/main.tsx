@@ -8,7 +8,7 @@ import "../popup/style.css";
 import "./style.css";
 
 import { ErrorState, Screen } from "@/ui/components";
-import { loadUiEntryLaunchContext, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
+import { loadUiEntryBootstrap, preloadUiSnapshot, startUiEntryLaunchContextSync } from "@/ui/lib/uiStartup";
 import { routeTree } from "../../routeTree.gen";
 
 const queryClient = new QueryClient();
@@ -66,7 +66,7 @@ const boot = async () => {
   startUiEntryLaunchContextSync();
 
   try {
-    await loadUiEntryLaunchContext();
+    await loadUiEntryBootstrap(queryClient);
     await preloadUiSnapshot(queryClient);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

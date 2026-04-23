@@ -1,3 +1,4 @@
+export type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 export { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
 export { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 export { createNamespaceManifestFromWalletNamespaceModule } from "./modules/manifestInterop.js";
@@ -12,6 +13,7 @@ export type {
   NamespaceEngineFactories,
   NamespaceEngineFacts,
   WalletAccounts,
+  WalletApprovalDetails,
   WalletApprovals,
   WalletAttention,
   WalletBackupStatus,

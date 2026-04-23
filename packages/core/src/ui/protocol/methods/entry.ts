@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
+import { ApprovalDetailSchema } from "../models/approvals.js";
 import { defineMethod } from "./types.js";
 
 const UiEnvironmentSchema = z.enum(["popup", "notification", "onboarding"]);
@@ -30,6 +31,17 @@ export const UiEntryLaunchContextSchema = z.strictObject({
   context: UiEntryContextSchema,
 });
 
+export const UiEntryBootstrapSchema = z.strictObject({
+  entry: UiEntryLaunchContextSchema,
+  requestedApproval: z
+    .strictObject({
+      approvalId: z.string().min(1),
+      initialDetail: ApprovalDetailSchema,
+    })
+    .nullable(),
+});
+
 export const entryMethods = {
   "ui.entry.getLaunchContext": defineMethod("query", UiEntryLaunchContextParamsSchema, UiEntryLaunchContextSchema),
+  "ui.entry.getBootstrap": defineMethod("query", UiEntryLaunchContextParamsSchema, UiEntryBootstrapSchema),
 } as const;

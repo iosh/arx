@@ -99,6 +99,7 @@ const makeRuntime = () => {
   };
   const createUiAccess = vi.fn();
   const createProvider = vi.fn(() => provider);
+  const getApprovalDetail = vi.fn(() => null);
 
   const runtime = {
     bus: { subscribe },
@@ -176,6 +177,7 @@ const makeRuntime = () => {
       createProvider,
     },
     createUiAccess,
+    getApprovalDetail,
     shutdown,
   };
 
@@ -260,6 +262,10 @@ describe("runtimeHost", () => {
       getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
         createEntryBootstrap(environment),
       ),
+      getEntryBootstrap: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+        entry: createEntryBootstrap(environment),
+        requestedApproval: null,
+      })),
     };
 
     await runtimeHost.initializeRuntime();
@@ -383,6 +389,10 @@ describe("runtimeHost", () => {
       getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
         createEntryBootstrap(environment),
       ),
+      getEntryBootstrap: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+        entry: createEntryBootstrap(environment),
+        requestedApproval: null,
+      })),
     };
 
     await runtimeHost.getOrInitUiAccess({
@@ -418,6 +428,10 @@ describe("runtimeHost", () => {
           getEntryLaunchContext: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) =>
             createEntryBootstrap(environment),
           ),
+          getEntryBootstrap: vi.fn(({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
+            entry: createEntryBootstrap(environment),
+            requestedApproval: null,
+          })),
         },
         uiOrigin: "chrome-extension://test",
       }),

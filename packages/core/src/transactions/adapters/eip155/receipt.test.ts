@@ -9,7 +9,16 @@ import { createEip155ReceiptService } from "./receipt.js";
 
 const BASE_CONTEXT: TransactionTrackingContext = {
   ...createReceiptContext(),
-  prepared: null,
+  submitted: {
+    hash: TEST_TX_HASH,
+    chainId: "0x1",
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    nonce: "0x3",
+  },
+  locator: {
+    format: "eip155.tx_hash",
+    value: TEST_TX_HASH,
+  },
 };
 
 describe("createEip155ReceiptService", () => {
@@ -25,7 +34,7 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    await expect(service.fetchReceipt(BASE_CONTEXT, TEST_TX_HASH)).rejects.toMatchObject({
+    await expect(service.fetchReceipt(BASE_CONTEXT)).rejects.toMatchObject({
       reason: ArxReasons.RpcInternal,
       message: expect.stringContaining("mismatched"),
     });
@@ -42,7 +51,7 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const result = await service.fetchReceipt(BASE_CONTEXT, TEST_TX_HASH);
+    const result = await service.fetchReceipt(BASE_CONTEXT);
     expect(result?.status).toBe("success");
     expect(result?.receipt).toMatchObject({ blockNumber: "0x123" });
   });
@@ -62,14 +71,13 @@ describe("createEip155ReceiptService", () => {
         ...BASE_CONTEXT.request,
         payload: BASE_CONTEXT.request.payload,
       },
-      prepared: null,
     };
 
     const result = await service.detectReplacement(context);
-    expect(result).toEqual({ status: "replaced", hash: null });
+    expect(result).toEqual({ status: "replaced" });
   });
 
-  it("detects replacement when nonce is only available in prepared params", async () => {
+  it("detects replacement when nonce is available in submitted payload", async () => {
     const client = createEip155RpcClient({
       getTransactionCount: vi.fn(async (): Promise<`0x${string}`> => "0x5"),
     });
@@ -78,20 +86,15 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const { nonce: _nonce, ...payloadWithoutNonce } = BASE_CONTEXT.request.payload as {
-      nonce?: `0x${string}`;
-    } & Record<string, unknown>;
-
     const context: TransactionTrackingContext = {
       ...BASE_CONTEXT,
       request: {
         ...BASE_CONTEXT.request,
-        payload: payloadWithoutNonce,
+        payload: BASE_CONTEXT.request.payload,
       },
-      prepared: { nonce: "0x3" },
     };
 
     const result = await service.detectReplacement(context);
-    expect(result).toEqual({ status: "replaced", hash: null });
+    expect(result).toEqual({ status: "replaced" });
   });
 });

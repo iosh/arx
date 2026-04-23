@@ -1,11 +1,12 @@
 import type { TransactionsService } from "../../services/store/transactions/types.js";
+import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
 import type { ReceiptResolution, ReplacementResolution } from "../../transactions/adapters/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
 import type { TransactionMeta } from "./types.js";
-import { buildTrackingContext } from "./utils.js";
+import { buildTrackingContext, encodeReplacementKey } from "./utils.js";
 
 type Options = {
   view: StoreTransactionView;
@@ -111,12 +112,15 @@ export class TransactionReceiptTracking {
     if (!meta) return;
 
     if (resolution.status === "success") {
-      await this.#transitionAndCommit({
+      const committed = await this.#transitionAndCommit({
         id,
         fromStatus: "broadcast",
         toStatus: "confirmed",
         patch: { receipt: resolution.receipt },
       });
+      if (committed) {
+        await this.#linkConfirmedReplacement(committed.next);
+      }
       return;
     }
 
@@ -132,14 +136,108 @@ export class TransactionReceiptTracking {
     const meta = await this.#loadBroadcastMeta(id);
     if (!meta) return;
 
+    const adapter = this.#registry.get(meta.namespace);
+    const trackingContext = buildTrackingContext(meta);
+    let replacedId = resolution.replacedId;
+    if (replacedId === undefined && adapter?.deriveReplacementKey && trackingContext) {
+      const key = adapter.deriveReplacementKey(trackingContext);
+      if (key) {
+        const replacementKey = encodeReplacementKey(key);
+        const replacement = await this.#findConfirmedReplacementCandidate({
+          replacedId: meta.id,
+          replacementKey,
+        });
+        if (replacement) {
+          replacedId = replacement.id;
+        }
+      }
+    }
+
     await this.#transitionAndCommit({
       id,
       fromStatus: "broadcast",
       toStatus: "replaced",
       patch: {
-        ...(resolution.replacementTransactionId !== undefined ? { replacedById: resolution.replacementTransactionId } : {}),
+        ...(replacedId !== undefined ? { replacedId } : {}),
       },
     });
+  }
+
+  async #linkConfirmedReplacement(confirmed: TransactionMeta): Promise<void> {
+    const replacementKey = this.#deriveReplacementKey(confirmed);
+    if (!replacementKey) return;
+
+    for (const candidate of await this.#listAllByStatus("broadcast")) {
+      if (candidate.id === confirmed.id) continue;
+      if (this.#deriveReplacementKeyFromRecord(candidate) !== replacementKey) continue;
+
+      await this.#transitionAndCommit({
+        id: candidate.id,
+        fromStatus: "broadcast",
+        toStatus: "replaced",
+        patch: { replacedId: confirmed.id },
+      });
+    }
+
+    for (const candidate of await this.#listAllByStatus("replaced")) {
+      if (candidate.id === confirmed.id || candidate.replacedId) continue;
+      if (this.#deriveReplacementKeyFromRecord(candidate) !== replacementKey) continue;
+
+      const patched = await this.#service.patchIfStatus({
+        id: candidate.id,
+        expectedStatus: "replaced",
+        patch: { replacedId: confirmed.id },
+      });
+      if (patched) {
+        this.#view.commitRecord(patched);
+      }
+    }
+  }
+
+  async #findConfirmedReplacementCandidate(params: { replacedId: string; replacementKey: string }) {
+    const records = await this.#listAllByStatus("confirmed");
+    for (const record of records) {
+      if (record.id === params.replacedId) continue;
+      if (this.#deriveReplacementKeyFromRecord(record) === params.replacementKey) {
+        return record;
+      }
+    }
+
+    return null;
+  }
+
+  async #listAllByStatus(status: "broadcast" | "confirmed" | "failed" | "replaced") {
+    const out = [];
+    let cursor: { createdAt: number; id: string } | undefined;
+
+    while (true) {
+      const page = await this.#service.list({
+        status,
+        limit: 200,
+        ...(cursor !== undefined ? { before: cursor } : {}),
+      });
+      if (page.length === 0) break;
+      out.push(...page);
+
+      const tail = page.at(-1);
+      cursor = tail ? { createdAt: tail.createdAt, id: tail.id } : undefined;
+      if (cursor === undefined) break;
+    }
+
+    return out;
+  }
+
+  #deriveReplacementKeyFromRecord(record: TransactionRecord): string | null {
+    const meta = this.#view.peek(record.id) ?? this.#view.commitRecord(record).next;
+    return this.#deriveReplacementKey(meta);
+  }
+
+  #deriveReplacementKey(meta: TransactionMeta): string | null {
+    const adapter = this.#registry.get(meta.namespace);
+    const trackingContext = buildTrackingContext(meta);
+    if (!adapter?.deriveReplacementKey || !trackingContext) return null;
+    const key = adapter.deriveReplacementKey(trackingContext);
+    return key ? encodeReplacementKey(key) : null;
   }
 
   async #handleTrackerTimeout(id: string): Promise<void> {
@@ -171,16 +269,18 @@ export class TransactionReceiptTracking {
     fromStatus: "broadcast" | "confirmed" | "failed" | "replaced";
     toStatus: "broadcast" | "confirmed" | "failed" | "replaced";
     patch: NonNullable<Parameters<TransactionsService["transition"]>[0]["patch"]>;
-  }) {
+  }): Promise<{ previous?: TransactionMeta; next: TransactionMeta } | null> {
     const updated = await this.#service.transition({
       id: params.id,
       fromStatus: params.fromStatus,
       toStatus: params.toStatus,
       patch: params.patch,
     });
-    if (!updated) return;
-    const { previous, next } = this.#view.commitRecord(updated);
+    if (!updated) return null;
+    const committed = this.#view.commitRecord(updated);
+    const { previous, next } = committed;
     this.handleTransition(previous, next);
+    return committed;
   }
 
   async #loadBroadcastMeta(id: string): Promise<TransactionMeta | null> {

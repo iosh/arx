@@ -18,10 +18,18 @@ const BASE_CONTEXT: TransactionTrackingContext = {
       data: "0x",
     },
   },
-  prepared: null,
+  submitted: {
+    hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    chainId: "0x1",
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    nonce: "0x1",
+  },
+  locator: {
+    format: "eip155.tx_hash",
+    value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  },
 };
 
-const HASH = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 type TimeoutHandler = Parameters<typeof globalThis.setTimeout>[0];
 describe("ReceiptTracker", () => {
   beforeEach(() => {
@@ -58,7 +66,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     await vi.runOnlyPendingTimersAsync();
 
     expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(1);
@@ -68,7 +76,6 @@ describe("ReceiptTracker", () => {
   it("invokes onReplacement when adapter detects replacement", async () => {
     const replacementResolution: ReplacementResolution = {
       status: "replaced",
-      hash: "0xdeadbeef",
     };
 
     const adapter = {
@@ -90,7 +97,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     await vi.runOnlyPendingTimersAsync();
 
     expect(adapter.receiptTracking.fetchReceipt).toHaveBeenCalledTimes(1);
@@ -118,7 +125,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 2 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
 
@@ -156,7 +163,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 100, maxDelayMs: 500, maxAttempts: 4 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
 
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
@@ -187,7 +194,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 100, maxDelayMs: 1000, maxAttempts: 5 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     expect(tracker.isTracking("tx-1")).toBe(true);
 
     tracker.stop("tx-1");
@@ -230,12 +237,12 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 100, maxDelayMs: 500, maxAttempts: 5 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
 
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
 
-    tracker.resume("tx-1", BASE_CONTEXT, HASH);
+    tracker.resume("tx-1", BASE_CONTEXT);
 
     await vi.advanceTimersByTimeAsync(100);
     expect(delays.slice(-2)).toEqual([100, 200]);
@@ -255,7 +262,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 1, maxDelayMs: 1 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     await vi.runOnlyPendingTimersAsync();
 
     expect(onUnsupported).toHaveBeenCalledWith("tx-1", expect.any(Error));
@@ -294,7 +301,7 @@ describe("ReceiptTracker", () => {
       { initialDelayMs: 1, maxDelayMs: 1, maxAttempts: 3 },
     );
 
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     await vi.runOnlyPendingTimersAsync();
     await vi.runOnlyPendingTimersAsync();
 
@@ -323,9 +330,9 @@ describe("ReceiptTracker", () => {
     );
 
     expect(tracker.pending()).toBe(0);
-    tracker.start("tx-1", BASE_CONTEXT, HASH);
+    tracker.start("tx-1", BASE_CONTEXT);
     expect(tracker.pending()).toBe(1);
-    tracker.start("tx-2", BASE_CONTEXT, HASH);
+    tracker.start("tx-2", BASE_CONTEXT);
     expect(tracker.pending()).toBe(2);
     tracker.stop("tx-1");
     expect(tracker.pending()).toBe(1);

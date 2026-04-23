@@ -5,6 +5,12 @@ import type { Unsubscribe } from "../_shared/signal.js";
 export type TransactionsChangedPayload =
   | { kind: "createSubmitted"; id: TransactionRecord["id"] }
   | { kind: "transition"; id: TransactionRecord["id"]; fromStatus: TransactionStatus; toStatus: TransactionStatus }
+  | {
+      kind: "patch";
+      id: TransactionRecord["id"];
+      status: TransactionStatus;
+      keys: Array<keyof Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
+    }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
 export type CreateSubmittedTransactionParams = {
@@ -20,7 +26,7 @@ export type CreateSubmittedTransactionParams = {
   locator: TransactionRecord["locator"];
   status: TransactionRecord["status"];
   receipt?: TransactionRecord["receipt"] | undefined;
-  replacedById?: TransactionRecord["replacedById"] | undefined;
+  replacedId?: TransactionRecord["replacedId"] | undefined;
   /**
    * Optional caller-provided createdAt for deterministic timestamps in tests.
    * When provided, updatedAt is initialized to the same value.
@@ -32,7 +38,7 @@ export type TransitionTransactionParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedById">>;
+  patch?: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
 };
 
 export type ListTransactionsCursor = {
@@ -47,6 +53,12 @@ export type ListTransactionsParams = {
   before?: ListTransactionsCursor;
 };
 
+export type PatchTransactionParams = {
+  id: TransactionRecord["id"];
+  expectedStatus: TransactionStatus;
+  patch: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
+};
+
 export type TransactionsService = {
   subscribeChanged(handler: (payload: TransactionsChangedPayload) => void): Unsubscribe;
 
@@ -56,6 +68,8 @@ export type TransactionsService = {
   createSubmitted(params: CreateSubmittedTransactionParams): Promise<TransactionRecord>;
 
   transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
+
+  patchIfStatus(params: PatchTransactionParams): Promise<TransactionRecord | null>;
 
   remove(id: TransactionRecord["id"]): Promise<void>;
 };

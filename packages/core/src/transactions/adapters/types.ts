@@ -3,12 +3,13 @@ import type { AccountAddress } from "../../controllers/account/types.js";
 import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
 import type { TransactionMeta } from "../../controllers/transaction/types.js";
-import type { TransactionRecord } from "../../storage/records.js";
 import type {
   TransactionIssue,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
+  TransactionSubmissionLocator,
+  TransactionSubmitted,
   TransactionWarning,
 } from "../types.js";
 
@@ -20,7 +21,6 @@ export type PreparedTransactionResult<TPrepared = Record<string, unknown>> = {
 
 export type SignedTransactionPayload = {
   raw: string;
-  hash: string | null;
 };
 
 export type TransactionPrepareContext = {
@@ -35,8 +35,15 @@ export type TransactionValidationContext = TransactionPrepareContext;
 
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
-export type TransactionTrackingContext = TransactionPrepareContext & {
-  prepared: TransactionPrepared | null;
+export type TransactionTrackingContext = Omit<TransactionPrepareContext, "request"> & {
+  request: TransactionRequest | null;
+  submitted: TransactionSubmitted;
+  locator: TransactionSubmissionLocator;
+};
+
+export type TransactionReplacementKey = {
+  scope: string;
+  value: string;
 };
 
 export type ReceiptResolution =
@@ -44,7 +51,7 @@ export type ReceiptResolution =
   | { status: "failed"; receipt: TransactionReceipt };
 
 export type ReplacementResolution = {
-  hash: string | null;
+  replacedId?: string | null;
   status: "replaced";
 };
 
@@ -57,13 +64,13 @@ export type TransactionApprovalReviewContext = {
 
 export type TransactionDraftEditContext = {
   transaction: TransactionMeta;
-  request: TransactionRecord["request"];
+  request: TransactionRequest;
   changes: Record<string, unknown>[];
   mode?: string | undefined;
 };
 
 export type TransactionReceiptTrackingAdapter = {
-  fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
+  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
   detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
@@ -74,12 +81,21 @@ export type TransactionSubmissionAdapter = {
     context: TransactionSignContext,
     prepared: PreparedTransactionResult["prepared"],
   ): Promise<SignedTransactionPayload>;
-  broadcastTransaction(context: TransactionPrepareContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
+  broadcastTransaction(
+    context: TransactionPrepareContext,
+    signed: SignedTransactionPayload,
+    prepared: PreparedTransactionResult["prepared"],
+  ): Promise<{
+    submitted: TransactionSubmitted;
+    locator: TransactionSubmissionLocator;
+  }>;
 };
+export type { TransactionSubmissionLocator, TransactionSubmitted } from "../types.js";
 
 export type TransactionAdapter = {
   deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
   buildApprovalReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
-  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRecord["request"];
+  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
+  deriveReplacementKey?(context: TransactionTrackingContext): TransactionReplacementKey | null;
   receiptTracking?: TransactionReceiptTrackingAdapter;
 } & TransactionSubmissionAdapter;

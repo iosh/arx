@@ -21,6 +21,18 @@ const makeRequestContext = (origin: string) => ({
   origin,
 });
 
+const buildEip155Submitted = (params: {
+  txHash: `0x${string}`;
+  from: string;
+  chainId?: `0x${string}`;
+  prepared?: Record<string, unknown>;
+}) => ({
+  hash: params.txHash,
+  chainId: params.chainId ?? "0x1",
+  from: params.from,
+  ...(typeof params.prepared?.nonce === "string" ? { nonce: params.prepared.nonce as `0x${string}` } : {}),
+});
+
 const createOwnedAddress = async (context: Awaited<ReturnType<typeof setupBackground>>, chainRef: string) => {
   await context.runtime.services.session.createVault({ password: "test" });
   await context.runtime.services.session.unlock.unlock({ password: "test" });
@@ -66,11 +78,18 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const suffix = signedCount.toString(16).padStart(64, "0");
       return {
         raw: "0x1111",
-        hash: `0x${suffix}`,
       };
     });
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
       status: "success",
@@ -130,7 +149,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const broadcastMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(broadcastMeta?.status).toBe("broadcast");
-      expect(submission.hash).toBe(broadcastMeta?.hash);
+      expect(submission.locator).toEqual(broadcastMeta?.locator);
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
 
@@ -179,11 +198,18 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const suffix = signedCount.toString(16).padStart(64, "0");
       return {
         raw: "0x1111",
-        hash: `0x${suffix}`,
       };
     });
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      locator: {
+        format: "eip155.tx_hash",
+        value: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
+      },
+      submitted: buildEip155Submitted({
+        txHash: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
     }));
     const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
 
@@ -277,7 +303,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       chainId: "0x1",
       displayName: "Ethereum Mainnet",
     });
-    const replacementHash = "0x2222222222222222222222222222222222222222222222222222222222222222";
+    const replacementTxHash = "0x2222222222222222222222222222222222222222222222222222222222222222";
 
     const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
       prepared: {},
@@ -286,15 +312,21 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }));
     const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
       raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
     const detectReplacement = vi.fn<NonNullable<TransactionReceiptTrackingAdapter["detectReplacement"]>>(async () => ({
       status: "replaced",
-      hash: replacementHash,
     }));
 
     const adapter: TransactionAdapter = {
@@ -345,14 +377,153 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const replacedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(replacedMeta?.status).toBe("replaced");
-      // Best practice: keep the original broadcast hash as the transaction identity.
-      expect(replacedMeta?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
-      expect(replacedMeta?.error?.name).toBe("TransactionReplacedError");
-      expect(replacedMeta?.error?.data).toMatchObject({ replacementHash });
+      expect(replacedMeta?.locator).toEqual({
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      });
 
       const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("replaced");
-      expect(stored?.hash).toBe("0x1111111111111111111111111111111111111111111111111111111111111111");
+      expect(stored?.locator).toEqual({
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      });
+    } finally {
+      unsubscribeAutoApproval();
+      context.destroy();
+    }
+  });
+
+  it("links a replaced broadcast transaction to the confirmed local replacement", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    const hashes = [
+      "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    ] as const;
+
+    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+      prepared: {
+        chainId: "0x1",
+        nonce: "0x7",
+      },
+      warnings: [],
+      issues: [],
+    }));
+    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+      raw: "0x1111",
+    }));
+    let broadcastIndex = 0;
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => {
+      const txHash = hashes[broadcastIndex] ?? hashes[hashes.length - 1];
+      broadcastIndex += 1;
+      return {
+        submitted: buildEip155Submitted({
+          txHash,
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+      };
+    });
+    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async (trackingContext) => {
+      const submitted = trackingContext.submitted as { hash?: unknown };
+      if (submitted.hash === hashes[1]) {
+        return { status: "success", receipt: { status: "0x1", transactionHash: hashes[1] } };
+      }
+      return null;
+    });
+    const detectReplacement = vi.fn<NonNullable<TransactionReceiptTrackingAdapter["detectReplacement"]>>(
+      async () => null,
+    );
+
+    const adapter: TransactionAdapter = {
+      prepareTransaction,
+      signTransaction,
+      broadcastTransaction,
+      deriveReplacementKey: (trackingContext) => {
+        const submitted = trackingContext.submitted as { from?: unknown; nonce?: unknown };
+        if (typeof submitted.from !== "string" || typeof submitted.nonce !== "string") return null;
+        return {
+          scope: "eip155.nonce",
+          value: `${trackingContext.chainRef}:${submitted.from.toLowerCase()}:${submitted.nonce.toLowerCase()}`,
+        };
+      },
+      receiptTracking: {
+        fetchReceipt,
+        detectReplacement,
+      },
+    };
+    const registry = new TransactionAdapterRegistry();
+    registry.register(chain.namespace, adapter);
+
+    const context = await setupBackground({
+      chainSeed: [chain],
+      transactions: { registry },
+      persistDebounceMs: 0,
+    });
+    const fromAddress = await createOwnedAddress(context, chain.chainRef);
+
+    const unsubscribeAutoApproval = context.enableAutoApproval();
+    try {
+      const first = await context.runtime.controllers.transactions.beginTransactionApproval(
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: fromAddress,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        makeRequestContext("https://dapp.example"),
+      );
+      await first.waitForApprovalDecision();
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+
+      const second = await context.runtime.controllers.transactions.beginTransactionApproval(
+        {
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          payload: {
+            from: fromAddress,
+            to: "0xcccccccccccccccccccccccccccccccccccccccc",
+            value: "0x0",
+            data: "0x",
+            nonce: "0x7",
+          },
+        },
+        makeRequestContext("https://dapp.example"),
+      );
+      await second.waitForApprovalDecision();
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(2));
+
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
+      await flushAsync();
+
+      await vi.waitFor(() => {
+        const replacement = context.runtime.controllers.transactions.getMeta(second.transactionId);
+        expect(replacement?.status).toBe("confirmed");
+      });
+
+      const replaced = context.runtime.controllers.transactions.getMeta(first.transactionId);
+      expect(replaced).toMatchObject({
+        status: "replaced",
+        replacedId: second.transactionId,
+      });
+
+      const stored = await context.transactionsPort.get(first.transactionId);
+      expect(stored).toMatchObject({
+        status: "replaced",
+        replacedId: second.transactionId,
+      });
     } finally {
       unsubscribeAutoApproval();
       context.destroy();
@@ -374,10 +545,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }));
     const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
       raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const fetchReceipt = vi
       .fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>()
@@ -455,10 +633,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }));
     const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
       raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
 
     // No `receiptTracking` capability.
@@ -518,10 +703,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }));
     const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
       raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
 
@@ -570,11 +762,9 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(failedMeta?.status).toBe("failed");
-      expect(failedMeta?.error?.name).toBe("TransactionReceiptTimeoutError");
 
       const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("failed");
-      expect(stored?.error?.name).toBe("TransactionReceiptTimeoutError");
     } finally {
       unsubscribeAutoApproval();
       context.destroy();
@@ -596,10 +786,17 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }));
     const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
       raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
       status: "failed",
@@ -650,12 +847,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const failedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
       expect(failedMeta?.status).toBe("failed");
-      expect(failedMeta?.error?.name).toBe("TransactionExecutionFailed");
       expect(failedMeta?.receipt).toMatchObject(failedReceipt);
 
       const stored = await context.transactionsPort.get(handoff.transactionId);
       expect(stored?.status).toBe("failed");
-      expect(stored?.error?.name).toBe("TransactionExecutionFailed");
+      expect(stored?.receipt).toMatchObject(failedReceipt);
     } finally {
       unsubscribeAutoApproval();
       context.destroy();

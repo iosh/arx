@@ -1,98 +1,11 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type {
   TransactionPrepareContext,
+  TransactionReplacementKey,
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/adapters/types.js";
-import type {
-  TransactionError,
-  TransactionIssue,
-  TransactionMeta,
-  TransactionRequest,
-  TransactionWarning,
-} from "./types.js";
-
-const deepClone = <T>(value: T): T => {
-  // Most transaction payloads are JSON-like. Prefer structuredClone when available.
-  if (value === null || typeof value !== "object") return value;
-  try {
-    return structuredClone(value);
-  } catch {
-    // Fallback: shallow clone for plain objects/arrays.
-    if (Array.isArray(value)) return [...(value as unknown as unknown[])] as T;
-    return { ...(value as Record<string, unknown>) } as T;
-  }
-};
-
-export const cloneRequest = <TRequest extends TransactionRequest>(request: TRequest): TRequest => {
-  return {
-    ...request,
-    payload: deepClone(request.payload),
-  } as TRequest;
-};
-
-export const cloneWarnings = (list: TransactionWarning[]): TransactionWarning[] =>
-  list.map((warning) => ({
-    ...warning,
-    ...(warning.data !== undefined ? { data: deepClone(warning.data) } : {}),
-  }));
-
-export const cloneIssues = (list: TransactionIssue[]): TransactionIssue[] =>
-  list.map((issue) => ({
-    ...issue,
-    ...(issue.data !== undefined ? { data: deepClone(issue.data) } : {}),
-  }));
-
-export const cloneMeta = (meta: TransactionMeta): TransactionMeta => ({
-  ...meta,
-  request: cloneRequest(meta.request),
-  prepared: meta.prepared ? deepClone(meta.prepared) : null,
-  receipt: meta.receipt ? deepClone(meta.receipt) : null,
-  error: meta.error
-    ? {
-        ...meta.error,
-        ...(meta.error.data !== undefined ? { data: deepClone(meta.error.data) } : {}),
-      }
-    : null,
-  warnings: cloneWarnings(meta.warnings),
-  issues: cloneIssues(meta.issues),
-});
-
-export const mergeWarnings = (base: TransactionWarning[], next: TransactionWarning[]): TransactionWarning[] => {
-  const out: TransactionWarning[] = [];
-  const seen = new Set<string>();
-
-  for (const item of [...base, ...next]) {
-    const key = `${item.code}:${item.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
-  }
-
-  return out;
-};
-
-export const mergeIssues = (base: TransactionIssue[], next: TransactionIssue[]): TransactionIssue[] => {
-  const out: TransactionIssue[] = [];
-  const seen = new Set<string>();
-
-  for (const item of [...base, ...next]) {
-    const key = `${item.code}:${item.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
-  }
-
-  return out;
-};
-
-export const missingAdapterIssue = (namespace: string): TransactionIssue => ({
-  kind: "issue",
-  code: "transaction.adapter_missing",
-  message: `No transaction adapter registered for namespace ${namespace}`,
-  severity: "high",
-  data: { namespace },
-});
+import type { TransactionError, TransactionMeta } from "./types.js";
 
 export const createMissingAdapterError = (namespace: string): Error => {
   const error = new Error(`No transaction adapter registered for namespace ${namespace}`);
@@ -118,24 +31,6 @@ export const createTransactionSubmissionUnavailableError = (params: { namespace:
     },
     cause,
   });
-};
-
-export const issueFromPrepareError = (error: unknown): TransactionIssue => {
-  if (error instanceof Error) {
-    return {
-      kind: "issue",
-      code: "transaction.prepare_failed",
-      message: error.message,
-      severity: "high",
-      data: { name: error.name },
-    };
-  }
-  return {
-    kind: "issue",
-    code: "transaction.prepare_failed",
-    message: String(error),
-    severity: "high",
-  };
 };
 
 export const coerceTransactionError = (reason?: Error | TransactionError | undefined): TransactionError | undefined => {
@@ -170,13 +65,28 @@ export const buildPrepareContext = (meta: TransactionMeta): TransactionPrepareCo
   chainRef: meta.chainRef,
   origin: meta.origin,
   from: meta.from,
-  request: cloneRequest(meta.request),
+  request: structuredClone(meta.request ?? { namespace: meta.namespace, chainRef: meta.chainRef, payload: {} }),
 });
 
-export const buildTrackingContext = (meta: TransactionMeta): TransactionTrackingContext => ({
-  ...buildPrepareContext(meta),
-  prepared: meta.prepared ? deepClone(meta.prepared) : null,
-});
+export const buildTrackingContext = (meta: TransactionMeta): TransactionTrackingContext | null => {
+  if (!meta.submitted || !meta.locator) {
+    return null;
+  }
+
+  return {
+    namespace: meta.namespace,
+    chainRef: meta.chainRef,
+    origin: meta.origin,
+    from: meta.from,
+    request: structuredClone(meta.request),
+    submitted: structuredClone(meta.submitted),
+    locator: structuredClone(meta.locator),
+  };
+};
+
+export const encodeReplacementKey = (key: TransactionReplacementKey): string => {
+  return `${key.scope}:${key.value}`;
+};
 
 export const buildSignContext = (meta: TransactionMeta): TransactionSignContext => {
   const ctx = buildPrepareContext(meta);

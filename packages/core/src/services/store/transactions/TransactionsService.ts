@@ -4,8 +4,7 @@ import { createSignal } from "../_shared/signal.js";
 import type { TransactionsPort } from "./port.js";
 import { assertTransactionStatusTransition } from "./stateMachine.js";
 import type {
-  CreatePendingTransactionParams,
-  ListTransactionsCursor,
+  CreateSubmittedTransactionParams,
   ListTransactionsParams,
   PatchTransactionParams,
   TransactionsChangedPayload,
@@ -18,27 +17,12 @@ export type CreateTransactionsServiceOptions = {
   now?: () => number;
 };
 
-const requiresHash = (status: TransactionRecord["status"]) => {
-  return status === "broadcast" || status === "confirmed" || status === "replaced";
-};
-
 const createDuplicateTransactionIdError = (id: TransactionRecord["id"]) => {
   return new Error(`Duplicate transaction id "${id}"`);
 };
 
 const compareTransactionsNewestFirst = (left: TransactionRecord, right: TransactionRecord) => {
   return right.createdAt - left.createdAt || right.id.localeCompare(left.id);
-};
-
-const describeAbandonedTransaction = (reason: string) => {
-  switch (reason) {
-    case "session_lost":
-      return "Transaction was abandoned due to session loss.";
-    case "session_restart":
-      return "Transaction was abandoned due to session restart.";
-    default:
-      return "Transaction was abandoned.";
-  }
 };
 
 export const createTransactionsService = ({
@@ -70,67 +54,40 @@ export const createTransactionsService = ({
     return parsed;
   };
 
-  const createPending = async (params: CreatePendingTransactionParams) => {
+  const createSubmitted = async (params: CreateSubmittedTransactionParams) => {
     const ts = params.createdAt ?? now();
-    const request = {
-      ...params.request,
-      chainRef: params.chainRef,
-    };
 
-    const record: TransactionRecord = TransactionRecordSchema.parse({
+    const recordInput = compactUndefined({
       id: params.id ?? crypto.randomUUID(),
-      namespace: params.namespace,
       chainRef: params.chainRef,
       origin: params.origin,
       fromAccountKey: params.fromAccountKey,
-      status: "pending",
-      request,
-      prepared: null,
-      hash: null,
-      userRejected: false,
-      warnings: params.warnings ?? [],
-      issues: params.issues ?? [],
+      status: params.status,
+      submitted: structuredClone(params.submitted),
+      locator: structuredClone(params.locator),
+      receipt: params.receipt !== undefined ? structuredClone(params.receipt) : undefined,
+      replacedId: params.replacedId,
       createdAt: ts,
       updatedAt: ts,
     });
+    const record: TransactionRecord = TransactionRecordSchema.parse(recordInput);
 
     const existing = await port.get(record.id);
     if (existing) {
       throw createDuplicateTransactionIdError(record.id);
     }
 
-    await port.create(record);
-    changed.emit({ kind: "createPending", id: record.id });
-    return record;
-  };
-
-  const patch = async (params: PatchTransactionParams) => {
-    const existing = await port.get(params.id);
-    if (!existing) return null;
-
-    const currentParsed = TransactionRecordSchema.safeParse(existing);
-    if (!currentParsed.success) return null;
-    const current = currentParsed.data;
-    const patchFields = params.patch === undefined ? undefined : compactUndefined(params.patch);
-
-    const nextCandidate: TransactionRecord = {
-      ...current,
-      ...(patchFields ?? {}),
-      updatedAt: now(),
-    };
-
-    const checked = TransactionRecordSchema.parse(nextCandidate);
-
-    const updated = await port.updateIfStatus({
-      id: checked.id,
-      expectedStatus: current.status,
-      next: checked,
+    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
+      chainRef: record.chainRef,
+      locator: record.locator,
     });
+    if (duplicateLocatorRecord) {
+      throw new Error(`Duplicate transaction locator for chainRef ${record.chainRef}`);
+    }
 
-    if (!updated) return null;
-
-    changed.emit({ kind: "patch", id: checked.id });
-    return checked;
+    await port.create(record);
+    changed.emit({ kind: "createSubmitted", id: record.id });
+    return record;
   };
 
   const transition = async (params: TransitionTransactionParams) => {
@@ -158,19 +115,13 @@ export const createTransactionsService = ({
       updatedAt: now(),
     };
 
-    if (requiresHash(nextCandidate.status) && nextCandidate.hash === null) {
-      throw new Error(`Transaction hash is required when status is ${nextCandidate.status}`);
-    }
+    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
+      chainRef: nextCandidate.chainRef,
+      locator: nextCandidate.locator,
+    });
 
-    if (nextCandidate.hash !== null) {
-      const dupe = await port.findByChainRefAndHash({
-        chainRef: nextCandidate.chainRef,
-        hash: nextCandidate.hash,
-      });
-
-      if (dupe && dupe.id !== nextCandidate.id) {
-        throw new Error(`Duplicate transaction hash for chainRef ${nextCandidate.chainRef}`);
-      }
+    if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
+      throw new Error(`Duplicate transaction locator for chainRef ${nextCandidate.chainRef}`);
     }
 
     const checked = TransactionRecordSchema.parse(nextCandidate);
@@ -192,49 +143,59 @@ export const createTransactionsService = ({
     return checked;
   };
 
+  const patchIfStatus = async (params: PatchTransactionParams) => {
+    const existing = await port.get(params.id);
+    if (!existing) return null;
+
+    const currentParsed = TransactionRecordSchema.safeParse(existing);
+    if (!currentParsed.success) return null;
+    const current = currentParsed.data;
+
+    if (current.status !== params.expectedStatus) {
+      return null;
+    }
+
+    const patch = compactUndefined(params.patch);
+    const keys = Object.keys(patch) as Array<keyof typeof patch>;
+    if (keys.length === 0) {
+      return current;
+    }
+
+    const nextCandidate: TransactionRecord = {
+      ...current,
+      ...patch,
+      updatedAt: now(),
+    };
+
+    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
+      chainRef: nextCandidate.chainRef,
+      locator: nextCandidate.locator,
+    });
+
+    if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
+      throw new Error(`Duplicate transaction locator for chainRef ${nextCandidate.chainRef}`);
+    }
+
+    const checked = TransactionRecordSchema.parse(nextCandidate);
+    const updated = await port.updateIfStatus({
+      id: checked.id,
+      expectedStatus: params.expectedStatus,
+      next: checked,
+    });
+    if (!updated) return null;
+
+    changed.emit({
+      kind: "patch",
+      id: checked.id,
+      status: checked.status,
+      keys: keys as Array<keyof Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>,
+    });
+    return checked;
+  };
+
   const remove = async (id: TransactionRecord["id"]) => {
     await port.remove(id);
     changed.emit({ kind: "remove", id });
-  };
-
-  const failAllPending = async (params?: { reason?: string }) => {
-    const reason = params?.reason ?? "session_restart";
-    const message = describeAbandonedTransaction(reason);
-    let cursor: ListTransactionsCursor | undefined;
-    let transitioned = 0;
-
-    while (true) {
-      const page = await list({
-        status: "pending",
-        limit: 200,
-        ...(cursor !== undefined ? { before: cursor } : {}),
-      });
-
-      if (page.length === 0) break;
-
-      for (const record of page) {
-        const next = await transition({
-          id: record.id,
-          fromStatus: "pending",
-          toStatus: "failed",
-          patch: {
-            userRejected: false,
-            error: {
-              name: "TransactionAbandonedError",
-              message,
-              data: { reason },
-            },
-          },
-        });
-        if (next) transitioned += 1;
-      }
-
-      const tail = page.at(-1);
-      cursor = tail ? { createdAt: tail.createdAt, id: tail.id } : undefined;
-      if (cursor === undefined) break;
-    }
-
-    return transitioned;
   };
 
   return {
@@ -242,10 +203,9 @@ export const createTransactionsService = ({
 
     get,
     list,
-    createPending,
+    createSubmitted,
     transition,
-    patch,
+    patchIfStatus,
     remove,
-    failAllPending,
   };
 };

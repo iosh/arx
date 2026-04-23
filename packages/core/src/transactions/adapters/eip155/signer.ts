@@ -238,8 +238,7 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
         signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
       });
       const raw = TransactionEnvelopeEip1559.serialize(signed);
-      const hash = TransactionEnvelopeEip1559.hash(signed);
-      return { raw, hash };
+      return { raw };
     }
 
     const txSignPayload = TransactionEnvelopeLegacy.getSignPayload(envelope.value);
@@ -251,8 +250,7 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
       signature: { r: signature.r, s: signature.s, yParity: signature.yParity },
     });
     const raw = TransactionEnvelopeLegacy.serialize(signed);
-    const hash = TransactionEnvelopeLegacy.hash(signed);
-    return { raw, hash };
+    return { raw };
   };
 
   const signPersonalMessage: Eip155Signer["signPersonalMessage"] = async ({ accountKey, message }) => {

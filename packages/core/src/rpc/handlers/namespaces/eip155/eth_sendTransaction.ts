@@ -52,7 +52,20 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       });
       await handoff.waitForApprovalDecision();
       const submission = await controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
-      return submission.hash;
+      const submitted = submission.meta.submitted as { hash?: unknown } | null;
+      const hash = typeof submitted?.hash === "string" ? submitted.hash : null;
+      if (!hash) {
+        throw arxError({
+          reason: ArxReasons.RpcInternal,
+          message: "EIP-155 transaction submission did not return a transaction hash.",
+          data: {
+            id: handoff.transactionId,
+            submitted: submission.meta.submitted,
+            locator: submission.locator,
+          },
+        });
+      }
+      return hash;
     } catch (error) {
       if (isDomainError(error) || isRpcError(error)) {
         throw error;

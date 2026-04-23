@@ -1,9 +1,6 @@
 import type { TransactionStatus } from "../../../storage/records.js";
 
 const ALLOWED: Record<TransactionStatus, ReadonlySet<TransactionStatus>> = {
-  pending: new Set(["approved", "failed"]),
-  approved: new Set(["signed", "failed"]),
-  signed: new Set(["broadcast", "failed"]),
   broadcast: new Set(["confirmed", "failed", "replaced"]),
   confirmed: new Set([]),
   failed: new Set([]),

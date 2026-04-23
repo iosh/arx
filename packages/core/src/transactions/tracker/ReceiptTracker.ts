@@ -32,7 +32,6 @@ type TrackerOptions = {
 type TaskState = {
   id: string;
   context: TransactionTrackingContext;
-  hash: string;
   attempts: number;
   delay: number;
   handle: ReturnType<typeof setTimeout> | null;
@@ -44,8 +43,8 @@ const DEFAULT_MAX_DELAY_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 20;
 
 export type ReceiptTracker = {
-  start(id: string, context: TransactionTrackingContext, hash: string): void;
-  resume(id: string, context: TransactionTrackingContext, hash: string): void;
+  start(id: string, context: TransactionTrackingContext): void;
+  resume(id: string, context: TransactionTrackingContext): void;
   stop(id: string): void;
   isTracking(id: string): boolean;
   pending(): number;
@@ -96,7 +95,7 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
 
       let receiptResult: ReceiptResolution | null = null;
       try {
-        receiptResult = await receiptTracking.fetchReceipt(state.context, state.hash);
+        receiptResult = await receiptTracking.fetchReceipt(state.context);
       } catch (error) {
         await handleTransientError(error);
       }
@@ -150,12 +149,11 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
     }
   };
 
-  const start = (id: string, context: TransactionTrackingContext, hash: string) => {
+  const start = (id: string, context: TransactionTrackingContext) => {
     if (tasks.has(id)) return;
     const state: TaskState = {
       id,
       context,
-      hash,
       attempts: 0,
       delay: initialDelay,
       handle: null,
@@ -169,9 +167,9 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
    * Restarts tracking from the initial delay (used after cold starts).
    * Attempts and backoff delay are reset, so the polling loop begins anew.
    */
-  const resume = (id: string, context: TransactionTrackingContext, hash: string) => {
+  const resume = (id: string, context: TransactionTrackingContext) => {
     stop(id);
-    start(id, context, hash);
+    start(id, context);
   };
 
   return {

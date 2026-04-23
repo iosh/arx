@@ -1,9 +1,8 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155TransactionPayload } from "../../types.js";
+import type { Eip155SubmittedTransaction } from "../../types.js";
 import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../types.js";
-import type { Eip155PreparedTransaction } from "./types.js";
 
 type ReceiptDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
@@ -64,14 +63,17 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   return "failed";
 };
 
-const readTrackingNonce = (context: TransactionTrackingContext): string | null => {
-  const payload = context.request.payload as Eip155TransactionPayload;
-  if (typeof payload.nonce === "string") {
-    return payload.nonce;
+const readSubmitted = (context: TransactionTrackingContext): Eip155SubmittedTransaction | null => {
+  const submitted = context.submitted as Partial<Eip155SubmittedTransaction>;
+  if (
+    typeof submitted.hash !== "string" ||
+    typeof submitted.chainId !== "string" ||
+    typeof submitted.from !== "string" ||
+    typeof submitted.nonce !== "string"
+  ) {
+    return null;
   }
-
-  const prepared = context.prepared as Partial<Eip155PreparedTransaction> | null;
-  return typeof prepared?.nonce === "string" ? prepared.nonce : null;
+  return submitted as Eip155SubmittedTransaction;
 };
 
 const toBigInt = (value: string): bigint | null => {
@@ -86,7 +88,7 @@ const toBigInt = (value: string): bigint | null => {
 };
 
 export type Eip155ReceiptService = {
-  fetchReceipt(context: TransactionTrackingContext, hash: string): Promise<ReceiptResolution | null>;
+  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
   detectReplacement(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
@@ -105,7 +107,12 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
   };
 
   return {
-    async fetchReceipt(context, hash) {
+    async fetchReceipt(context) {
+      const submitted = readSubmitted(context);
+      const hash = submitted?.hash ?? (context.locator.format === "eip155.tx_hash" ? context.locator.value : null);
+      if (!hash) {
+        return null;
+      }
       const client = getClient(context.chainRef);
       const rawReceipt = (await client.getTransactionReceipt(hash)) as RawReceipt | null;
       if (!rawReceipt) {
@@ -129,7 +136,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       const from = context.from;
       if (!from) return null;
 
-      const originalNonceHex = readTrackingNonce(context);
+      const originalNonceHex = readSubmitted(context)?.nonce ?? null;
       if (!originalNonceHex) return null;
 
       const client = getClient(context.chainRef);
@@ -148,7 +155,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
         return null;
       }
 
-      return { status: "replaced", hash: null };
+      return { status: "replaced" };
     },
   };
 };

@@ -286,7 +286,7 @@ export const TransactionRecordSchema = z
     submitted: TransactionSubmittedSchema,
     locator: TransactionSubmissionLocatorSchema,
     receipt: TransactionReceiptSchema.optional(),
-    replacedById: z.uuid().nullable().optional(),
+    replacedId: z.uuid().nullable().optional(),
     createdAt: epochMillisecondsSchema,
     updatedAt: epochMillisecondsSchema,
   })

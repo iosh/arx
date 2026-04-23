@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { TransactionRecordSchema } from "@arx/core/storage";
+import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/storage";
 import { Dexie } from "dexie";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDexieStorage } from "../createDexieStorage.js";
@@ -10,6 +10,25 @@ const DB_NAME = "arx-transactions-port-test";
 
 const originalWarn = console.warn.bind(console);
 let warnSpy: ReturnType<typeof vi.spyOn>;
+
+const createRecord = (overrides: Partial<TransactionRecord> & { id: string }) =>
+  TransactionRecordSchema.parse({
+    id: overrides.id,
+    chainRef: "eip155:1",
+    origin: "https://dapp.example",
+    fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    status: "broadcast",
+    submitted: {
+      hash: "0x1111",
+      chainId: "0x1",
+      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      nonce: "0x7",
+    },
+    locator: { format: "eip155.tx_hash", value: "0x1111" },
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  });
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
@@ -30,20 +49,15 @@ describe("DexieTransactionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
-    const record = TransactionRecordSchema.parse({
+    const record = createRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "pending",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: 1000,
-      updatedAt: 1000,
+      locator: { format: "eip155.tx_hash", value: "0x1111" },
+      submitted: {
+        hash: "0x1111",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
     });
 
     await port.create(record);
@@ -56,50 +70,44 @@ describe("DexieTransactionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
-    const r1 = TransactionRecordSchema.parse({
+    const r1 = createRecord({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "pending",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
+      locator: { format: "eip155.tx_hash", value: "0x2222" },
+      submitted: {
+        hash: "0x2222",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
       createdAt: 1000,
       updatedAt: 1000,
     });
 
-    const r2 = TransactionRecordSchema.parse({
+    const r2 = createRecord({
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "approved",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
+      status: "confirmed",
+      locator: { format: "eip155.tx_hash", value: "0x3333" },
+      submitted: {
+        hash: "0x3333",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x8",
+      },
       createdAt: 2000,
       updatedAt: 2000,
     });
 
-    const r3 = TransactionRecordSchema.parse({
+    const r3 = createRecord({
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      namespace: "eip155",
       chainRef: "eip155:10",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "approved",
-      request: { namespace: "eip155", chainRef: "eip155:10", payload: { chainId: "0xa" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
+      status: "confirmed",
+      locator: { format: "eip155.tx_hash", value: "0x4444" },
+      submitted: {
+        hash: "0x4444",
+        chainId: "0xa",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x9",
+      },
       createdAt: 3000,
       updatedAt: 3000,
     });
@@ -111,7 +119,7 @@ describe("DexieTransactionsPort", () => {
     const byChain = await port.list({ chainRef: "eip155:1" });
     expect(byChain.map((r) => r.id)).toEqual([r2.id, r1.id]);
 
-    const byStatus = await port.list({ status: "approved" });
+    const byStatus = await port.list({ status: "confirmed" });
     expect(byStatus.map((r) => r.id)).toEqual([r3.id, r2.id]);
 
     const before = await port.list({
@@ -125,26 +133,23 @@ describe("DexieTransactionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
-    const r1 = TransactionRecordSchema.parse({
+    const r1 = createRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "pending",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: 3_000,
-      updatedAt: 3_000,
+      locator: { format: "eip155.tx_hash", value: "0x5555" },
+      submitted: {
+        hash: "0x5555",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
+      createdAt: 3000,
+      updatedAt: 3000,
     });
-    const r2 = TransactionRecordSchema.parse({
+    const r2 = createRecord({
       ...r1,
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     });
-    const r3 = TransactionRecordSchema.parse({
+    const r3 = createRecord({
       ...r1,
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     });
@@ -153,45 +158,48 @@ describe("DexieTransactionsPort", () => {
     await port.create(r2);
     await port.create(r3);
 
-    const firstPage = await port.list({ status: "pending", limit: 2 });
+    const firstPage = await port.list({ status: "broadcast", limit: 2 });
     expect(firstPage.map((record) => record.id)).toEqual([r3.id, r2.id]);
     const cursor = firstPage[1];
     expect(cursor).toBeDefined();
 
     const secondPage = await port.list({
-      status: "pending",
+      status: "broadcast",
       limit: 2,
       before: { createdAt: cursor.createdAt, id: cursor.id },
     });
     expect(secondPage.map((record) => record.id)).toEqual([r1.id]);
   });
 
-  it("findByChainRefAndHash() finds the record by (chainRef, hash)", async () => {
+  it("findByChainRefAndLocator() finds the record by (chainRef, locator)", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
-    const r = TransactionRecordSchema.parse({
+    const record = createRecord({
       id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: "txid-1",
-      userRejected: false,
-      warnings: [],
-      issues: [],
+      locator: { format: "eip155.tx_hash", value: "txid-1" },
+      submitted: {
+        hash: "txid-1",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
       createdAt: 1000,
       updatedAt: 2000,
     });
 
-    await port.create(r);
+    await port.create(record);
 
-    const found = await port.findByChainRefAndHash({ chainRef: "eip155:1", hash: "txid-1" });
-    expect(found?.id).toBe(r.id);
+    const found = await port.findByChainRefAndLocator({
+      chainRef: "eip155:1",
+      locator: { format: "eip155.tx_hash", value: "txid-1" },
+    });
+    expect(found?.id).toBe(record.id);
 
-    const miss = await port.findByChainRefAndHash({ chainRef: "eip155:10", hash: "txid-1" });
+    const miss = await port.findByChainRefAndLocator({
+      chainRef: "eip155:10",
+      locator: { format: "eip155.tx_hash", value: "txid-1" },
+    });
     expect(miss).toBeNull();
   });
 
@@ -199,40 +207,35 @@ describe("DexieTransactionsPort", () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
-    const r = TransactionRecordSchema.parse({
+    const record = createRecord({
       id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "pending",
-      request: { namespace: "eip155", chainRef: "eip155:1", payload: { chainId: "0x1" } },
-      hash: null,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: 1000,
-      updatedAt: 1000,
+      locator: { format: "eip155.tx_hash", value: "0x6666" },
+      submitted: {
+        hash: "0x6666",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
     });
 
-    await port.create(r);
+    await port.create(record);
 
     const wrong = await port.updateIfStatus({
-      id: r.id,
-      expectedStatus: "approved",
-      next: TransactionRecordSchema.parse({ ...r, status: "approved", updatedAt: 2000 }),
+      id: record.id,
+      expectedStatus: "confirmed",
+      next: TransactionRecordSchema.parse({ ...record, status: "confirmed", updatedAt: 2000 }),
     });
     expect(wrong).toBe(false);
 
     const ok = await port.updateIfStatus({
-      id: r.id,
-      expectedStatus: "pending",
-      next: TransactionRecordSchema.parse({ ...r, status: "approved", updatedAt: 2000 }),
+      id: record.id,
+      expectedStatus: "broadcast",
+      next: TransactionRecordSchema.parse({ ...record, status: "confirmed", updatedAt: 2000 }),
     });
     expect(ok).toBe(true);
 
-    const loaded = await port.get(r.id);
-    expect(loaded?.status).toBe("approved");
+    const loaded = await port.get(record.id);
+    expect(loaded?.status).toBe("confirmed");
     expect(loaded?.updatedAt).toBe(2000);
   });
 

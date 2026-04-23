@@ -2,37 +2,23 @@ import { describe, expect, it } from "vitest";
 import type { TransactionRecord } from "./records.js";
 import { NetworkSelectionRecordSchema, TransactionRecordSchema } from "./records.js";
 
-const createTransactionRecord = (
-  overrides: Partial<TransactionRecord> & {
-    request?: Partial<TransactionRecord["request"]>;
-  } = {},
-) => {
-  const { request: requestOverrides, ...restOverrides } = overrides;
-  const request = {
-    namespace: "eip155",
-    chainRef: "eip155:1",
-    payload: { chainId: "0x1" },
-    ...requestOverrides,
-  };
-
-  return {
-    id: "11111111-1111-4111-8111-111111111111",
-    namespace: "eip155",
-    chainRef: "eip155:1",
-    origin: "https://dapp.example",
-    fromAccountKey: "eip155:aa",
-    status: "pending",
-    prepared: null,
-    hash: null,
-    userRejected: false,
-    warnings: [],
-    issues: [],
-    createdAt: 0,
-    updatedAt: 0,
-    ...restOverrides,
-    request,
-  };
-};
+const createTransactionRecord = (overrides: Partial<TransactionRecord> = {}) => ({
+  id: "11111111-1111-4111-8111-111111111111",
+  chainRef: "eip155:1",
+  origin: "https://dapp.example",
+  fromAccountKey: "eip155:aa",
+  status: "broadcast" as const,
+  submitted: {
+    hash: "0x1111",
+    chainId: "0x1",
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    nonce: "0x7",
+  },
+  locator: { format: "eip155.tx_hash" as const, value: "0x1111" },
+  createdAt: 0,
+  updatedAt: 0,
+  ...overrides,
+});
 
 describe("NetworkSelectionRecordSchema", () => {
   it("requires selectedNamespace", () => {
@@ -100,44 +86,34 @@ describe("NetworkSelectionRecordSchema", () => {
 });
 
 describe("TransactionRecordSchema", () => {
-  it("rejects records whose chain, account, and request namespaces drift", () => {
+  it("rejects records whose chain and account namespaces drift", () => {
     expect(() =>
       TransactionRecordSchema.parse(
         createTransactionRecord({
-          namespace: "eip155",
           chainRef: "cosmos:cosmoshub-4",
-          fromAccountKey: "cosmos:aa",
-          request: {
-            namespace: "eip155",
-            chainRef: "eip155:1",
-          },
+          fromAccountKey: "eip155:aa",
         }),
       ),
     ).toThrow(/namespace/i);
   });
 
-  it("requires persisted request chainRef and terminal state guards", () => {
+  it("requires durable submitted and locator payloads", () => {
     expect(() =>
       TransactionRecordSchema.parse(
         createTransactionRecord({
           id: "22222222-2222-4222-8222-222222222222",
-          request: {
-            chainRef: undefined,
-          },
+          submitted: undefined,
         }),
       ),
-    ).toThrow();
+    ).toThrow(/submitted/i);
 
     expect(() =>
       TransactionRecordSchema.parse(
         createTransactionRecord({
           id: "33333333-3333-4333-8333-333333333333",
-          status: "broadcast",
-          prepared: {},
-          hash: null,
-          userRejected: true,
+          locator: null as never,
         }),
       ),
-    ).toThrow(/hash|userRejected/i);
+    ).toThrow(/locator/i);
   });
 });

@@ -140,8 +140,9 @@ describe("eip155 signer (vectors)", () => {
     expect(signed.raw.toLowerCase()).toBe(
       "0x02f8720180843b9aca00843b9aca008252089470997970c51812dc3a010c7d01b50e0d17dc79c8880de0b6b3a764000080c080a0182c8cbe9c63b8447c2f953085570b33023f5eef5f11ea48cb919909b619095ea040c65acd60b3c054ac73d5314a4befdc7a64bae3c7819e3079c6237ef5951f2e",
     );
-    expect(signed.hash?.toLowerCase()).toBe("0xb97fef798c937bdfdd97763637a3c846a0e2054db0d31d792d6f1327c386a41e");
-    expect(Hash.keccak256(signed.raw as `0x${string}`).toLowerCase()).toBe(signed.hash?.toLowerCase());
+    expect(Hash.keccak256(signed.raw as `0x${string}`).toLowerCase()).toBe(
+      "0xb97fef798c937bdfdd97763637a3c846a0e2054db0d31d792d6f1327c386a41e",
+    );
   });
 
   it("signTransaction vector (legacy)", async () => {
@@ -189,7 +190,8 @@ describe("eip155 signer (vectors)", () => {
     expect(signed.raw.toLowerCase()).toBe(
       "0xf86380843b9aca008252089470997970c51812dc3a010c7d01b50e0d17dc79c87b8026a01d486b7b5b2147302c828c070b2027d1475eb4e7024a54722dcf2dacb5433c76a03b612ded9618360d7036737707d61e53103b32472df1de405feb7dcbf5f85f9a",
     );
-    expect(signed.hash?.toLowerCase()).toBe("0x29f871475978dfb2d00e07c7a634fcc5cbe748ed2189f163af691305b04d9f5d");
-    expect(Hash.keccak256(signed.raw as `0x${string}`).toLowerCase()).toBe(signed.hash?.toLowerCase());
+    expect(Hash.keccak256(signed.raw as `0x${string}`).toLowerCase()).toBe(
+      "0x29f871475978dfb2d00e07c7a634fcc5cbe748ed2189f163af691305b04d9f5d",
+    );
   });
 });

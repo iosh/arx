@@ -22,7 +22,10 @@ export {
   TransactionPayloadSchema,
   TransactionPreparedSchema,
   TransactionReceiptSchema,
+  TransactionReplacementRelationSchema,
   TransactionRequestSchema,
+  TransactionSubmissionLocatorSchema,
+  TransactionSubmittedSchema,
   TransactionWarningSchema,
 } from "./schemas/transactions.js";
 export type { VaultMetaSnapshot } from "./schemas/vaultMeta.js";

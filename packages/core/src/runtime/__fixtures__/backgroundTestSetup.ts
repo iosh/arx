@@ -166,10 +166,14 @@ export class MemoryTransactionsPort implements TransactionsPort {
     return all.slice(0, limit).map((r) => clone(r));
   }
 
-  async findByChainRefAndHash(params: { chainRef: string; hash: string }): Promise<TransactionRecord | null> {
+  async findByChainRefAndLocator(params: {
+    chainRef: string;
+    locator: TransactionRecord["locator"];
+  }): Promise<TransactionRecord | null> {
     for (const record of this.#records.values()) {
       if (record.chainRef !== params.chainRef) continue;
-      if (record.hash !== params.hash) continue;
+      if (record.locator.format !== params.locator.format) continue;
+      if (record.locator.value !== params.locator.value) continue;
       return clone(record);
     }
     return null;
@@ -503,7 +507,12 @@ export class FakeVault implements VaultService {
     this.#counter += 1;
     return {
       version: 1,
-      kdf: { name: "pbkdf2", hash: "sha256", salt: "salt-base64", iterations: 1 },
+      kdf: {
+        name: "pbkdf2",
+        hash: "sha256",
+        salt: "salt-base64",
+        iterations: 1,
+      },
       cipher: { name: "aes-gcm", iv: "iv-base64", data: `data-${this.#counter}` },
     };
   }

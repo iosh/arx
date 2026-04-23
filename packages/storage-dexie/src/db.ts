@@ -11,7 +11,7 @@ import type {
 import { Dexie, type Table } from "dexie";
 import type { VaultMetaEntity } from "./types.js";
 
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 1;
 
 type CustomChainRow = CustomChainRecord;
 type CustomRpcRow = CustomRpcRecord;
@@ -40,7 +40,7 @@ export class ArxStorageDatabase extends Dexie {
       accounts: "&accountKey, namespace, keyringId",
       permissions: "[origin+namespace], origin",
       transactions:
-        "&id, status, chainRef, hash, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [chainRef+hash]",
+        "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [chainRef+locator.format+locator.value]",
 
       vaultMeta: "&id",
 

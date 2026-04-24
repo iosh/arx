@@ -126,29 +126,20 @@ const createTransactionRecord = (
   overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status">,
 ): TransactionRecord => ({
   id: overrides.id,
-  namespace: EIP155_NAMESPACE,
   chainRef: EIP155_CHAIN_REF,
   origin: ORIGIN,
   fromAccountKey: ACCOUNT_KEY,
   status: overrides.status,
-  request: {
-    namespace: EIP155_NAMESPACE,
-    chainRef: EIP155_CHAIN_REF,
-    payload: {
-      chainId: "0x1",
-      from: ACCOUNT_ADDRESS,
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      value: "0x0",
-      data: "0x",
-    },
+  submitted: {
+    hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    chainId: "0x1",
+    from: ACCOUNT_ADDRESS,
+    nonce: "0x7",
   },
-  prepared: null,
-  hash: null,
-  receipt: undefined,
-  error: undefined,
-  userRejected: false,
-  warnings: [],
-  issues: [],
+  locator: {
+    format: "eip155.tx_hash",
+    value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+  },
   createdAt: 1_000,
   updatedAt: 1_000,
   ...overrides,
@@ -530,7 +521,7 @@ describe("createArxWallet", () => {
     }
   });
 
-  it("exposes transactions and keeps cold-start approved records from auto-resuming on unlock", async () => {
+  it("does not persist pre-broadcast transactions across restart", async () => {
     const prepareTransaction = vi.fn(async () => ({ prepared: { ready: true }, warnings: [], issues: [] }));
     const signTransaction = vi.fn(async () => ({
       raw: "0x1111",
@@ -539,15 +530,12 @@ describe("createArxWallet", () => {
     const broadcastTransaction = vi.fn(async (_ctx, signed) => ({
       hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
+    const transactionsPort = new MemoryTransactionsPort();
 
     const runtime = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
-      transactionsPort: new MemoryTransactionsPort([
-        createTransactionRecord({
-          id: "33333333-3333-4333-8333-333333333333",
-          status: "approved",
-        }),
-      ]),
+      permissionsPort: createSeededPermissionsPort(),
+      transactionsPort,
       modules: [
         createWalletModuleWithTransactionAdapter({
           prepareTransaction,
@@ -560,50 +548,44 @@ describe("createArxWallet", () => {
       ],
     });
 
+    let transactionId: string | null = null;
     try {
       const { wallet } = runtime;
-
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
-      await flushAsync();
 
-      expect(prepareTransaction).toHaveBeenCalledTimes(0);
-      expect(signTransaction).toHaveBeenCalledTimes(0);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-      expect(wallet.transactions.getMeta("33333333-3333-4333-8333-333333333333")?.status).toBe("approved");
+      const handoff = await wallet.transactions.beginTransactionApproval(
+        {
+          namespace: EIP155_NAMESPACE,
+          chainRef: EIP155_CHAIN_REF,
+          payload: {
+            from: ACCOUNT_ADDRESS,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+            data: "0x",
+          },
+        },
+        {
+          transport: "provider",
+          origin: ORIGIN,
+          portId: PROVIDER_PORT_ID,
+          sessionId: PROVIDER_SESSION_ID,
+          requestId: "request-1",
+        },
+      );
+      transactionId = handoff.transactionId;
+      void handoff.waitForApprovalDecision().catch(() => null);
 
-      await wallet.transactions.processTransaction("33333333-3333-4333-8333-333333333333");
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(1);
-      expect(signTransaction).toHaveBeenCalledTimes(1);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-      expect(wallet.transactions.getMeta("33333333-3333-4333-8333-333333333333")?.status).toBe("broadcast");
+      expect(wallet.transactions.getMeta(handoff.transactionId)?.status).toBe("pending");
+      expect(await transactionsPort.list()).toEqual([]);
     } finally {
       await runtime.shutdown();
     }
-  });
 
-  it("releases a retained cold-start transaction after an explicit retry", async () => {
-    const prepareTransaction = vi.fn(async () => ({ prepared: { ready: true }, warnings: [], issues: [] }));
-    const signTransaction = vi
-      .fn()
-      .mockRejectedValueOnce(arxError({ reason: ArxReasons.SessionLocked, message: "locked" }))
-      .mockResolvedValue({
-        raw: "0x1111",
-        hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      });
-    const broadcastTransaction = vi.fn(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
-
-    const runtime = await createWalletRuntime({
+    const reopened = await createWalletRuntime({
       accountsPort: createSeededAccountsPort(),
-      transactionsPort: new MemoryTransactionsPort([
-        createTransactionRecord({
-          id: "55555555-5555-4555-8555-555555555555",
-          status: "approved",
-        }),
-      ]),
+      permissionsPort: createSeededPermissionsPort(),
+      transactionsPort,
       modules: [
         createWalletModuleWithTransactionAdapter({
           prepareTransaction,
@@ -617,30 +599,14 @@ describe("createArxWallet", () => {
     });
 
     try {
-      const { wallet } = runtime;
-
-      await wallet.session.createVault({ password: PASSWORD });
-      await wallet.session.unlock({ password: PASSWORD });
-      await flushAsync();
-
+      expect(transactionId).not.toBeNull();
+      expect(reopened.wallet.transactions.getMeta(transactionId!)).toBeUndefined();
+      expect(await transactionsPort.list()).toEqual([]);
+      expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(0);
-
-      await wallet.transactions.processTransaction("55555555-5555-4555-8555-555555555555");
-
-      expect(signTransaction).toHaveBeenCalledTimes(1);
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-      expect(wallet.transactions.getMeta("55555555-5555-4555-8555-555555555555")?.status).toBe("approved");
-
-      wallet.session.lock("manual");
-      await wallet.session.unlock({ password: PASSWORD });
-      await vi.waitFor(() => {
-        expect(signTransaction).toHaveBeenCalledTimes(2);
-      });
-
-      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
-      expect(wallet.transactions.getMeta("55555555-5555-4555-8555-555555555555")?.status).toBe("broadcast");
     } finally {
-      await runtime.shutdown();
+      await reopened.shutdown();
     }
   });
 
@@ -660,15 +626,33 @@ describe("createArxWallet", () => {
         createTransactionRecord({
           id: "44444444-4444-4444-8444-444444444444",
           status: "broadcast",
-          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          locator: {
+            format: "eip155.tx_hash",
+            value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+          submitted: {
+            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            chainId: "0x1",
+            from: ACCOUNT_ADDRESS,
+            nonce: "0x7",
+          },
         }),
       ]),
       modules: [
         createWalletModuleWithTransactionAdapter({
           prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
-          signTransaction: vi.fn(async () => ({ raw: "0x", hash: null })),
+          signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
           broadcastTransaction: vi.fn(async () => ({
-            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            submitted: {
+              hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              chainId: "0x1",
+              from: ACCOUNT_ADDRESS,
+              nonce: "0x7",
+            },
+            locator: {
+              format: "eip155.tx_hash",
+              value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
           })),
           receiptTracking: {
             fetchReceipt,

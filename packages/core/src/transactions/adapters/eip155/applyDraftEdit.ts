@@ -1,4 +1,4 @@
-import type { TransactionRecord } from "../../../storage/records.js";
+import type { TransactionRequest } from "../../types.js";
 import type { TransactionDraftEditContext } from "../types.js";
 import { type HexQuantityIssueSink, parseHexQuantity } from "./utils/validation.js";
 
@@ -19,7 +19,7 @@ const readFieldChange = (change: Record<string, unknown>) => {
   };
 };
 
-export const applyEip155TransactionDraftEdit = (context: TransactionDraftEditContext): TransactionRecord["request"] => {
+export const applyEip155TransactionDraftEdit = (context: TransactionDraftEditContext): TransactionRequest => {
   if (context.request.namespace !== "eip155") {
     throw new Error(`EIP-155 draft editor cannot edit namespace "${context.request.namespace}".`);
   }

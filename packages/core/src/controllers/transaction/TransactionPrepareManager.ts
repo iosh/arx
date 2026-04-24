@@ -25,7 +25,7 @@ export class TransactionPrepareManager {
   #logger: (message: string, data?: unknown) => void;
   #timeoutMs: number;
 
-  #prepareInFlight: Map<string, Promise<void>> = new Map();
+  #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
 
   #prepareConcurrencyLimit: number;
   #prepareConcurrencyInUse = 0;
@@ -41,14 +41,6 @@ export class TransactionPrepareManager {
       1,
       options.backgroundConcurrency ?? DEFAULT_BACKGROUND_PREPARE_CONCURRENCY,
     );
-  }
-
-  #patchAndCommit(
-    id: string,
-    patch: Parameters<RuntimeTransactionStore["patch"]>[1],
-    fallback: TransactionMeta,
-  ): TransactionMeta {
-    return this.#runtime.patch(id, patch) ?? fallback;
   }
 
   #toReviewMessage(input: { code: string; message: string; data?: unknown }): TransactionReviewMessage {
@@ -109,21 +101,42 @@ export class TransactionPrepareManager {
     id: string,
     opts?: { timeoutMs?: number; source?: "background" | "execution" },
   ): Promise<TransactionMeta | null> {
-    const existing = this.#prepareInFlight.get(id);
-    if (existing) {
-      await existing;
-      return this.#runtime.get(id) ?? null;
+    while (true) {
+      const existing = this.#prepareInFlight.get(id);
+      let settledDraftRevision: number;
+      if (existing) {
+        settledDraftRevision = existing.draftRevision;
+        await existing.promise;
+      } else {
+        const initial = this.#runtime.peek(id);
+        if (!initial) return null;
+        if (initial.prepared || !isPrepareEligibleTransactionStatus(initial.status)) {
+          return this.#runtime.get(id) ?? null;
+        }
+        settledDraftRevision = initial.draftRevision;
+
+        const run = this.#prepareAndPersistInternal(id, opts);
+        const tracked = run
+          .then(() => undefined)
+          .finally(() => {
+            this.#prepareInFlight.delete(id);
+          });
+
+        this.#prepareInFlight.set(id, {
+          draftRevision: initial.draftRevision,
+          promise: tracked,
+        });
+        await tracked;
+      }
+
+      const latest = this.#runtime.peek(id);
+      if (!latest || latest.prepared || !isPrepareEligibleTransactionStatus(latest.status)) {
+        return latest ? (this.#runtime.get(id) ?? null) : null;
+      }
+      if (latest.draftRevision === settledDraftRevision) {
+        return this.#runtime.get(id) ?? null;
+      }
     }
-
-    const run = this.#prepareAndPersistInternal(id, opts);
-    const tracked = run
-      .then(() => undefined)
-      .finally(() => {
-        this.#prepareInFlight.delete(id);
-      });
-
-    this.#prepareInFlight.set(id, tracked);
-    return run;
   }
 
   async #prepareAndPersistInternal(
@@ -132,15 +145,19 @@ export class TransactionPrepareManager {
   ): Promise<TransactionMeta | null> {
     const timeoutMs = opts?.timeoutMs ?? this.#timeoutMs;
 
+    const state = this.#runtime.peek(id);
+    if (!state) return null;
+
+    const expectedDraftRevision = state.draftRevision;
     const meta = this.#runtime.get(id);
     if (!meta) return null;
 
-    if (meta.prepared) {
+    if (state.prepared) {
       return meta;
     }
 
     // No need to prepare once a tx is no longer eligible for enrichment.
-    if (!isPrepareEligibleTransactionStatus(meta.status)) {
+    if (!isPrepareEligibleTransactionStatus(state.status)) {
       return meta;
     }
 
@@ -149,13 +166,8 @@ export class TransactionPrepareManager {
 
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter) {
-      const next = this.#patchAndCommit(
-        id,
-        {
-          prepared: null,
-        },
-        meta,
-      );
+      const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
+      if (!next) return this.#runtime.get(id) ?? null;
       this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
         prepareFailure: {
           code: "transaction.adapter_missing",
@@ -179,13 +191,8 @@ export class TransactionPrepareManager {
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
       const diagnostics = this.#classifyPreparedDiagnostics(result);
 
-      const next = this.#patchAndCommit(
-        id,
-        {
-          prepared: result.prepared,
-        },
-        meta,
-      );
+      const next = this.#runtime.commitPrepared(id, expectedDraftRevision, result.prepared);
+      if (!next) return this.#runtime.get(id) ?? null;
       this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, diagnostics);
       if (result.prepared) {
         this.#reviewSessions.markReady(id, session.sessionToken, next.updatedAt);
@@ -197,13 +204,8 @@ export class TransactionPrepareManager {
       }
       return next;
     } catch (error) {
-      const next = this.#patchAndCommit(
-        id,
-        {
-          prepared: null,
-        },
-        meta,
-      );
+      const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
+      if (!next) return this.#runtime.get(id) ?? null;
       const message =
         error instanceof Error
           ? {

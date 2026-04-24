@@ -1,5 +1,5 @@
 import type { ApprovalFinishedEvent } from "../../approval/types.js";
-import type { TransactionReviewError, TransactionReviewSession } from "./types.js";
+import type { TransactionReviewError, TransactionReviewMessage, TransactionReviewSession } from "./types.js";
 
 const toReviewError = (event: ApprovalFinishedEvent<unknown>): TransactionReviewError => ({
   reason: `approval.${event.terminalReason}`,
@@ -20,21 +20,23 @@ export class TransactionReviewSessions {
   }
 
   begin(transactionId: string, updatedAt: number): TransactionReviewSession {
-    const current = this.#sessions.get(transactionId);
     const next: TransactionReviewSession = {
       transactionId,
-      revision: (current?.revision ?? 0) + 1,
+      sessionToken: crypto.randomUUID(),
       status: "preparing",
       updatedAt,
       error: null,
+      prepareFailure: null,
+      approvalBlocker: null,
+      reviewNotices: [],
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
   }
 
-  markReady(transactionId: string, revision: number, updatedAt: number): TransactionReviewSession | null {
+  markReady(transactionId: string, sessionToken: string, updatedAt: number): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
-    if (!current || current.revision !== revision || current.status === "invalidated") {
+    if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
       return null;
     }
 
@@ -43,6 +45,9 @@ export class TransactionReviewSessions {
       status: "ready",
       updatedAt,
       error: null,
+      prepareFailure: current.prepareFailure,
+      approvalBlocker: current.approvalBlocker,
+      reviewNotices: structuredClone(current.reviewNotices),
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
@@ -50,12 +55,12 @@ export class TransactionReviewSessions {
 
   markFailed(
     transactionId: string,
-    revision: number,
+    sessionToken: string,
     updatedAt: number,
     error: TransactionReviewError | null,
   ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
-    if (!current || current.revision !== revision || current.status === "invalidated") {
+    if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
       return null;
     }
 
@@ -64,6 +69,9 @@ export class TransactionReviewSessions {
       status: "failed",
       updatedAt,
       error,
+      prepareFailure: current.prepareFailure,
+      approvalBlocker: current.approvalBlocker,
+      reviewNotices: structuredClone(current.reviewNotices),
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
@@ -84,9 +92,38 @@ export class TransactionReviewSessions {
       status: "invalidated",
       updatedAt,
       error: toReviewError(event),
+      prepareFailure: current.prepareFailure,
+      approvalBlocker: current.approvalBlocker,
+      reviewNotices: structuredClone(current.reviewNotices),
       invalidatedBy: event.terminalReason,
     };
     this.#sessions.set(event.subject.transactionId, next);
+    return structuredClone(next);
+  }
+
+  setPreparedDiagnostics(
+    transactionId: string,
+    sessionToken: string,
+    updatedAt: number,
+    diagnostics: {
+      prepareFailure: TransactionReviewMessage | null;
+      approvalBlocker: TransactionReviewMessage | null;
+      reviewNotices: TransactionReviewMessage[];
+    },
+  ): TransactionReviewSession | null {
+    const current = this.#sessions.get(transactionId);
+    if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
+      return null;
+    }
+
+    const next: TransactionReviewSession = {
+      ...current,
+      updatedAt,
+      prepareFailure: diagnostics.prepareFailure,
+      approvalBlocker: diagnostics.approvalBlocker,
+      reviewNotices: structuredClone(diagnostics.reviewNotices),
+    };
+    this.#sessions.set(transactionId, next);
     return structuredClone(next);
   }
 }

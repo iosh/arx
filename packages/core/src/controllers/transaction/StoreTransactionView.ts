@@ -227,7 +227,7 @@ export class StoreTransactionView {
       submitted: structuredClone(record.submitted),
       locator: structuredClone(record.locator),
       receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
-      replacedById: record.replacedById ?? null,
+      replacedId: record.replacedId ?? null,
       error: null,
       userRejected: false,
       createdAt: record.createdAt,

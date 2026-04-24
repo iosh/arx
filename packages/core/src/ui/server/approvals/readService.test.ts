@@ -65,12 +65,11 @@ const ACCOUNTS = {
 const SEND_TRANSACTION_REVIEW_READY = {
   reviewState: {
     status: "ready" as const,
-    revision: 3,
     updatedAt: 3,
-    error: null,
   },
-  warnings: [],
+  prepareFailure: null,
   approvalBlocker: null,
+  reviewNotices: [],
   namespaceReview: {
     namespace: "eip155" as const,
     summary: {
@@ -89,15 +88,14 @@ const SEND_TRANSACTION_REVIEW_READY = {
 const SEND_TRANSACTION_REVIEW_BLOCKED = {
   reviewState: {
     status: "ready" as const,
-    revision: 4,
     updatedAt: 4,
-    error: null,
   },
-  warnings: [],
+  prepareFailure: null,
   approvalBlocker: {
     code: "transaction.blocked",
     message: "Blocked",
   },
+  reviewNotices: [],
   namespaceReview: null,
 };
 
@@ -362,8 +360,6 @@ describe("createApprovalReadService", () => {
               data: "0x",
             },
           },
-          warnings: [],
-          issues: [],
         },
       }),
       createRecord({
@@ -390,8 +386,6 @@ describe("createApprovalReadService", () => {
               to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             },
           },
-          warnings: [],
-          issues: [],
         },
       }),
     ];
@@ -451,8 +445,6 @@ describe("createApprovalReadService", () => {
             namespace: "eip155",
             payload: {},
           },
-          warnings: [],
-          issues: [],
         },
       }),
       createRecord({
@@ -475,8 +467,6 @@ describe("createApprovalReadService", () => {
             namespace: "eip155",
             payload: {},
           },
-          warnings: [],
-          issues: [],
         },
       }),
       createRecord({

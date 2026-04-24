@@ -53,7 +53,7 @@ export type TransactionMeta = {
   submitted: TransactionSubmitted | null;
   locator: TransactionSubmissionLocator | null;
   receipt: TransactionReceipt | null;
-  replacedById: string | null;
+  replacedId: string | null;
   error: TransactionError | null;
   userRejected: boolean;
   createdAt: number;

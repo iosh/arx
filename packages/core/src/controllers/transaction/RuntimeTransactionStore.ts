@@ -1,8 +1,10 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import { isPrepareEligibleTransactionStatus } from "./status.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   DurableTransactionStatus,
   TransactionMeta,
+  TransactionRequest,
   TransactionStateChange,
   TransactionStatus,
   TransactionStatusChange,
@@ -20,30 +22,26 @@ export type RuntimeTransactionState = {
   submitted: TransactionMeta["submitted"];
   locator: TransactionMeta["locator"];
   receipt: TransactionMeta["receipt"];
-  replacedById: TransactionMeta["replacedById"];
+  replacedId: TransactionMeta["replacedId"];
   error: TransactionMeta["error"];
   userRejected: boolean;
+  draftRevision: number;
   createdAt: number;
   updatedAt: number;
 };
 
 type RuntimeTransactionInit = Omit<
   RuntimeTransactionState,
-  | "prepared"
-  | "submitted"
-  | "locator"
-  | "receipt"
-  | "replacedById"
-  | "error"
-  | "userRejected"
+  "prepared" | "submitted" | "locator" | "receipt" | "replacedId" | "error" | "userRejected" | "draftRevision"
 > & {
   prepared?: TransactionMeta["prepared"] | undefined;
   submitted?: TransactionMeta["submitted"] | undefined;
   locator?: TransactionMeta["locator"] | undefined;
   receipt?: TransactionMeta["receipt"] | undefined;
-  replacedById?: TransactionMeta["replacedById"] | undefined;
+  replacedId?: TransactionMeta["replacedId"] | undefined;
   error?: TransactionMeta["error"] | undefined;
   userRejected?: boolean | undefined;
+  draftRevision?: number | undefined;
 };
 
 type Options = {
@@ -56,7 +54,17 @@ const isDurableStatus = (status: TransactionStatus): status is DurableTransactio
 };
 
 type RuntimeTransactionPatch = Partial<
-  Omit<RuntimeTransactionState, "id" | "namespace" | "chainRef" | "origin" | "fromAccountKey" | "createdAt">
+  Omit<
+    RuntimeTransactionState,
+    "id" | "namespace" | "chainRef" | "origin" | "fromAccountKey" | "draftRevision" | "createdAt"
+  >
+>;
+
+type RuntimeTransactionTransitionPatch = Partial<
+  Pick<
+    RuntimeTransactionState,
+    "prepared" | "submitted" | "locator" | "receipt" | "replacedId" | "error" | "userRejected"
+  >
 >;
 
 const buildRuntimeTransactionState = (
@@ -68,9 +76,10 @@ const buildRuntimeTransactionState = (
   submitted: structuredClone(input.submitted ?? null),
   locator: structuredClone(input.locator ?? null),
   receipt: structuredClone(input.receipt ?? null),
-  replacedById: input.replacedById ?? null,
+  replacedId: input.replacedId ?? null,
   error: structuredClone(input.error ?? null),
   userRejected: input.userRejected ?? false,
+  draftRevision: input.draftRevision ?? 0,
 });
 
 const applyRuntimeTransactionPatch = (
@@ -99,8 +108,8 @@ const applyRuntimeTransactionPatch = (
   if (patch.receipt !== undefined) {
     next.receipt = structuredClone(patch.receipt);
   }
-  if (patch.replacedById !== undefined) {
-    next.replacedById = patch.replacedById;
+  if (patch.replacedId !== undefined) {
+    next.replacedId = patch.replacedId;
   }
   if (patch.error !== undefined) {
     next.error = structuredClone(patch.error);
@@ -150,27 +159,76 @@ export class RuntimeTransactionStore {
     return this.#toMeta(next);
   }
 
-  transition(
-    id: string,
-    status: TransactionStatus,
-    updatedAt: number,
-    patch?: Partial<
-      Pick<
-        RuntimeTransactionState,
-        | "prepared"
-        | "submitted"
-        | "locator"
-        | "receipt"
-        | "replacedById"
-        | "error"
-        | "userRejected"
-      >
-    >,
-  ): TransactionMeta | null {
-    return this.patch(id, {
-      status,
+  replaceDraftRequest(input: {
+    id: string;
+    fromStatus: "pending";
+    request: TransactionRequest;
+    updatedAt: number;
+  }): TransactionMeta | null {
+    const current = this.#records.get(input.id);
+    if (!current || current.status !== input.fromStatus) return null;
+
+    const next = applyRuntimeTransactionPatch(current, {
+      request: input.request,
+      prepared: null,
+      error: null,
+      updatedAt: input.updatedAt,
+    });
+    next.draftRevision = current.draftRevision + 1;
+
+    this.#records.set(input.id, next);
+    this.#scheduleStateChanged(input.id);
+    return this.#toMeta(next);
+  }
+
+  resetSignedToApproved(id: string, updatedAt: number): TransactionMeta | null {
+    const current = this.#records.get(id);
+    if (!current) return null;
+
+    return this.transition({
+      id,
+      fromStatus: "signed",
+      toStatus: "approved",
       updatedAt,
-      ...(patch ?? {}),
+    });
+  }
+
+  commitPrepared(
+    id: string,
+    expectedDraftRevision: number,
+    prepared: TransactionMeta["prepared"],
+  ): TransactionMeta | null {
+    const current = this.#records.get(id);
+    if (
+      !current ||
+      current.draftRevision !== expectedDraftRevision ||
+      !isPrepareEligibleTransactionStatus(current.status)
+    ) {
+      return null;
+    }
+
+    return this.patch(id, { prepared });
+  }
+
+  transition(input: {
+    id: string;
+    fromStatus: TransactionStatus | readonly TransactionStatus[];
+    toStatus: TransactionStatus;
+    updatedAt: number;
+    patch?: RuntimeTransactionTransitionPatch | undefined;
+  }): TransactionMeta | null {
+    const current = this.#records.get(input.id);
+    if (!current) return null;
+
+    const expected = Array.isArray(input.fromStatus) ? input.fromStatus : [input.fromStatus];
+    if (!expected.includes(current.status)) {
+      return null;
+    }
+
+    return this.patch(input.id, {
+      status: input.toStatus,
+      updatedAt: input.updatedAt,
+      ...(input.patch ?? {}),
     });
   }
 
@@ -184,7 +242,7 @@ export class RuntimeTransactionStore {
 
   listExecutableIds(): string[] {
     return Array.from(this.#records.values())
-      .filter((record) => record.status === "approved" || record.status === "signed")
+      .filter((record) => record.status === "approved")
       .map((record) => record.id);
   }
 
@@ -219,7 +277,7 @@ export class RuntimeTransactionStore {
       submitted: state.submitted,
       locator: state.locator,
       receipt: state.receipt,
-      replacedById: state.replacedById,
+      replacedId: state.replacedId,
       error: state.error,
       userRejected: state.userRejected,
       createdAt: state.createdAt,

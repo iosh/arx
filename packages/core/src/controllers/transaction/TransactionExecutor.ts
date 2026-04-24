@@ -82,6 +82,7 @@ export class TransactionExecutor
   #processing = new Set<string>();
   #scheduled = false;
   #cancelledByUser = new Set<string>();
+  #broadcasting = new Set<string>();
 
   constructor(deps: Deps) {
     this.#runtime = deps.runtime;
@@ -250,7 +251,12 @@ export class TransactionExecutor
       return null;
     }
 
-    const updated = this.#runtime.transition(id, "approved", this.#nextTimestamp());
+    const updated = this.#runtime.transition({
+      id,
+      fromStatus: "pending",
+      toStatus: "approved",
+      updatedAt: this.#nextTimestamp(),
+    });
     if (!updated) {
       return null;
     }
@@ -269,13 +275,19 @@ export class TransactionExecutor
     const runtime = this.#runtime.get(id);
     if (runtime && !isTerminalTransactionStatus(runtime.status)) {
       this.#queued.delete(id);
-      if (runtime.status === "broadcast") {
+      if (runtime.status === "broadcast" || this.#broadcasting.has(id)) {
         this.#cancelledByUser.delete(id);
         return;
       }
-      this.#runtime.transition(id, "failed", this.#nextTimestamp(), {
-        error,
-        userRejected: wantsUserRejected,
+      this.#runtime.transition({
+        id,
+        fromStatus: ["pending", "approved", "signed"],
+        toStatus: "failed",
+        updatedAt: this.#nextTimestamp(),
+        patch: {
+          error,
+          userRejected: wantsUserRejected,
+        },
       });
       this.#cancelledByUser.delete(id);
       return;
@@ -355,7 +367,12 @@ export class TransactionExecutor
       }
 
       const signed = await adapter.signTransaction(buildSignContext(meta), prepared);
-      const signedMeta = this.#runtime.transition(id, "signed", this.#nextTimestamp());
+      const signedMeta = this.#runtime.transition({
+        id,
+        fromStatus: meta.status,
+        toStatus: "signed",
+        updatedAt: this.#nextTimestamp(),
+      });
       if (!signedMeta) {
         return;
       }
@@ -364,10 +381,22 @@ export class TransactionExecutor
         return;
       }
 
-      const broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
-      const broadcastMeta = this.#runtime.transition(id, "broadcast", this.#nextTimestamp(), {
-        submitted: structuredClone(broadcast.submitted),
-        locator: structuredClone(broadcast.locator),
+      this.#broadcasting.add(id);
+      let broadcast;
+      try {
+        broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
+      } finally {
+        this.#broadcasting.delete(id);
+      }
+      const broadcastMeta = this.#runtime.transition({
+        id,
+        fromStatus: "signed",
+        toStatus: "broadcast",
+        updatedAt: this.#nextTimestamp(),
+        patch: {
+          submitted: structuredClone(broadcast.submitted),
+          locator: structuredClone(broadcast.locator),
+        },
       });
       if (!broadcastMeta) {
         return;
@@ -390,12 +419,17 @@ export class TransactionExecutor
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
-        this.#runtime.transition(id, "failed", this.#nextTimestamp(), {
-          error:
-            coerceTransactionError(persistenceFailure) ?? {
+        this.#runtime.transition({
+          id,
+          fromStatus: "broadcast",
+          toStatus: "failed",
+          updatedAt: this.#nextTimestamp(),
+          patch: {
+            error: coerceTransactionError(persistenceFailure) ?? {
               name: "TransactionPersistenceError",
               message: "Transaction was broadcast but could not be persisted locally.",
             },
+          },
         });
         return;
       }
@@ -406,6 +440,7 @@ export class TransactionExecutor
       this.#tracking.handleTransition(previous, next);
     } catch (err) {
       if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
+        this.#runtime.resetSignedToApproved(id, this.#nextTimestamp());
         return;
       }
       await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
@@ -414,6 +449,10 @@ export class TransactionExecutor
 
   async resumePending(): Promise<void> {
     this.#view.requestSync();
+    for (const runtimeId of this.#runtime.listExecutableIds()) {
+      this.#enqueue(runtimeId);
+    }
+
     const broadcast = await this.#listAllByStatus("broadcast");
     for (const record of broadcast) {
       const meta = this.#view.commitRecord(record).next;
@@ -439,6 +478,9 @@ export class TransactionExecutor
     if (!meta || isTerminalTransactionStatus(meta.status)) {
       return;
     }
+    if (meta.status !== "pending") {
+      throw new Error("Transaction draft can only be edited before approval.");
+    }
 
     const adapter = this.#registry.get(meta.namespace);
     if (!adapter?.applyDraftEdit) {
@@ -456,12 +498,15 @@ export class TransactionExecutor
       ...(input.mode ? { mode: input.mode } : {}),
     });
 
-    this.#runtime.patch(meta.id, {
+    const edited = this.#runtime.replaceDraftRequest({
+      id: meta.id,
+      fromStatus: "pending",
       request: structuredClone(nextRequest),
-      prepared: null,
-      error: null,
       updatedAt: this.#nextTimestamp(),
     });
+    if (!edited) {
+      throw new Error("Transaction draft can only be edited before approval.");
+    }
 
     await this.retryPrepare(meta.id);
   }

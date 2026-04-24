@@ -32,9 +32,18 @@ describe("createBackgroundRuntime (recovery integration)", () => {
 
     const adapter: TransactionAdapter = {
       prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
-      signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x", hash: null })),
+      signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
       broadcastTransaction: vi.fn(async () => ({
-        hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        submitted: {
+          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
       })),
       receiptTracking: { fetchReceipt },
     };
@@ -45,29 +54,20 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const txId = "11111111-1111-4111-8111-111111111111";
     const seed: TransactionRecord = {
       id: txId,
-      namespace: "eip155",
       chainRef: chain.chainRef,
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       status: "broadcast",
-      request: {
-        namespace: "eip155",
-        chainRef: chain.chainRef,
-        payload: {
-          chainId: "0x1",
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
-        },
+      submitted: {
+        hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
       },
-      prepared: null,
-      hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      receipt: undefined,
-      error: undefined,
-      userRejected: false,
-      warnings: [],
-      issues: [],
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
       createdAt: 1_000,
       updatedAt: 1_000,
     };
@@ -91,96 +91,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       const meta = context.runtime.controllers.transactions.getMeta(txId);
       expect(meta?.status).toBe("confirmed");
       expect(meta?.receipt).toMatchObject({ status: "0x1" });
-    } finally {
-      context.destroy();
-    }
-  });
-
-  it("does not sign approved transactions during initialization", async () => {
-    const chain = createChainMetadata({
-      chainRef: "eip155:1",
-      chainId: "0x1",
-      displayName: "Ethereum Mainnet",
-    });
-
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
-      prepared: {},
-      warnings: [],
-      issues: [],
-    }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async (_ctx, _prepared) => ({
-      raw: "0x1111",
-      hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
-
-    const adapter: TransactionAdapter = {
-      prepareTransaction,
-      signTransaction,
-      broadcastTransaction,
-      receiptTracking: { fetchReceipt },
-    };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
-
-    const txId = "22222222-2222-4222-8222-222222222222";
-    const seed: TransactionRecord = {
-      id: txId,
-      namespace: "eip155",
-      chainRef: chain.chainRef,
-      origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "approved",
-      request: {
-        namespace: "eip155",
-        chainRef: chain.chainRef,
-        payload: {
-          chainId: "0x1",
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x0",
-          data: "0x",
-        },
-      },
-      hash: null,
-      receipt: undefined,
-      error: undefined,
-      userRejected: false,
-      warnings: [],
-      issues: [],
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    };
-
-    const context = await setupBackground({
-      chainSeed: [chain],
-      transactionsSeed: [seed],
-      transactions: { registry },
-      persistDebounceMs: 0,
-    });
-
-    try {
-      await flushAsync();
-
-      expect(prepareTransaction).toHaveBeenCalledTimes(0);
-      expect(signTransaction).toHaveBeenCalledTimes(0);
-      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
-
-      const before = context.runtime.controllers.transactions.getMeta(txId);
-      expect(before?.status).toBe("approved");
-
-      await context.runtime.controllers.transactions.resumePending({ includeSigning: true });
-      await flushAsync();
-
-      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
-      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
-      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
-
-      const after = context.runtime.controllers.transactions.getMeta(txId);
-      expect(after?.status).toBe("broadcast");
     } finally {
       context.destroy();
     }

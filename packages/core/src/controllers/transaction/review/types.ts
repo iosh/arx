@@ -14,9 +14,7 @@ export const TransactionReviewErrorSchema = z.strictObject({
 
 export const TransactionReviewStateSchema = z.strictObject({
   status: z.enum(["preparing", "ready", "failed"]),
-  revision: z.number().int().nonnegative(),
   updatedAt: z.number().int(),
-  error: TransactionReviewErrorSchema.nullable(),
 });
 
 export const Eip155TransactionReviewSchema = z.strictObject({
@@ -39,8 +37,9 @@ export const NamespaceTransactionReviewSchema = z.discriminatedUnion("namespace"
 
 export const SendTransactionApprovalReviewSchema = z.strictObject({
   reviewState: TransactionReviewStateSchema,
-  warnings: z.array(TransactionReviewMessageSchema),
+  prepareFailure: TransactionReviewMessageSchema.nullable(),
   approvalBlocker: TransactionReviewMessageSchema.nullable(),
+  reviewNotices: z.array(TransactionReviewMessageSchema),
   namespaceReview: NamespaceTransactionReviewSchema.nullable(),
 });
 
@@ -54,9 +53,12 @@ export type TransactionReviewRuntimeStatus = TransactionReviewState["status"] | 
 
 export type TransactionReviewSession = {
   transactionId: string;
-  revision: number;
+  sessionToken: string;
   status: TransactionReviewRuntimeStatus;
   updatedAt: number;
   error: TransactionReviewError | null;
+  prepareFailure: TransactionReviewMessage | null;
+  approvalBlocker: TransactionReviewMessage | null;
+  reviewNotices: TransactionReviewMessage[];
   invalidatedBy?: string | undefined;
 };

@@ -8,8 +8,8 @@ const getApprovalPayload = (args: {
   transaction: TransactionMeta | undefined;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
 }): Eip155TransactionPayload => {
-  const transactionPayload = args.transaction?.request.payload;
-  if (args.transaction?.request.namespace === "eip155") {
+  const transactionPayload = args.transaction?.request?.payload;
+  if (args.transaction?.request?.namespace === "eip155") {
     return transactionPayload as Eip155TransactionPayload;
   }
 
@@ -26,15 +26,15 @@ export const buildEip155ApprovalReview = (args: {
 }): NamespaceTransactionReview => {
   const requestPayload = getApprovalPayload(args);
   const prepared = args.transaction?.prepared as Partial<Eip155PreparedTransaction> | null;
-  const sourceTransaction = args.transaction?.request.namespace === "eip155" ? args.transaction : null;
-  const sourcePayload: Eip155TransactionPayload = sourceTransaction
-    ? (sourceTransaction.request.payload as Eip155TransactionPayload)
+  const sourceRequest = args.transaction?.request?.namespace === "eip155" ? args.transaction.request : null;
+  const sourcePayload: Eip155TransactionPayload = sourceRequest
+    ? (sourceRequest.payload as Eip155TransactionPayload)
     : requestPayload;
 
   return {
     namespace: "eip155",
     summary: {
-      from: sourceTransaction?.from ?? args.request.from ?? "",
+      from: args.transaction?.from ?? args.request.from ?? "",
       to: typeof sourcePayload.to === "string" ? sourcePayload.to : null,
       value: sourcePayload.value,
       data: sourcePayload.data,

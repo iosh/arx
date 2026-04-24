@@ -32,14 +32,14 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
           Preparing review…
         </Paragraph>
       ) : null}
-      {approval.review.reviewState.status === "failed" && approval.review.reviewState.error ? (
+      {approval.review.reviewState.status === "failed" && approval.review.prepareFailure ? (
         <Paragraph color="$red10" fontSize="$2">
-          {approval.review.reviewState.error.message}
+          {approval.review.prepareFailure.message}
         </Paragraph>
       ) : null}
-      {approval.review.warnings.length > 0 && (
+      {approval.review.reviewNotices.length > 0 && (
         <YStack marginTop="$2" gap="$1">
-          {approval.review.warnings.map((w) => (
+          {approval.review.reviewNotices.map((w) => (
             <Paragraph key={`${w.code}:${w.message}`} color="$orange10" fontSize="$2">
               ⚠ {w.message}
             </Paragraph>

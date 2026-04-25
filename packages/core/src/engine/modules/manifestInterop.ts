@@ -31,8 +31,8 @@ const buildNamespaceEngineFactories = (manifest: NamespaceManifest): NamespaceEn
   if (manifest.runtime?.createUiBindings) {
     factories.createUiBindings = manifest.runtime.createUiBindings;
   }
-  if (manifest.runtime?.createTransactionAdapter) {
-    factories.createTransactionAdapter = manifest.runtime.createTransactionAdapter;
+  if (manifest.runtime?.createTransaction) {
+    factories.createTransaction = manifest.runtime.createTransaction;
   }
 
   return Object.keys(factories).length > 0 ? (factories as NamespaceEngineFactories) : undefined;
@@ -58,8 +58,8 @@ const buildNamespaceRuntimeManifest = (params: {
   if (module.engine.factories?.createUiBindings) {
     runtime.createUiBindings = module.engine.factories.createUiBindings;
   }
-  if (module.engine.factories?.createTransactionAdapter) {
-    runtime.createTransactionAdapter = module.engine.factories.createTransactionAdapter;
+  if (module.engine.factories?.createTransaction) {
+    runtime.createTransaction = module.engine.factories.createTransaction;
   }
 
   return Object.keys(runtime).length > 0 ? runtime : undefined;

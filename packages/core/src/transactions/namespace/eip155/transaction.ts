@@ -1,7 +1,7 @@
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
 import type { Eip155SubmittedTransaction, Eip155TransactionRequest } from "../../types.js";
-import type { TransactionAdapter } from "../types.js";
+import type { NamespaceTransaction } from "../types.js";
 import { applyEip155TransactionDraftEdit } from "./applyDraftEdit.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
 import type { Eip155Broadcaster } from "./broadcaster.js";
@@ -55,7 +55,7 @@ const deriveEip155ReplacementKey = (params: { chainRef: string; submitted: Eip15
   };
 };
 
-export const createEip155TransactionAdapter = (deps: AdapterDeps): TransactionAdapter => {
+export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction => {
   const validateRequest = createEip155RequestValidator({ chains: deps.chains });
   const prepareTransaction = createEip155PrepareTransaction({
     rpcClientFactory: deps.rpcClientFactory,
@@ -66,7 +66,7 @@ export const createEip155TransactionAdapter = (deps: AdapterDeps): TransactionAd
   return {
     deriveRequestForChain(request, chainRef) {
       if (request.namespace !== "eip155") {
-        throw new Error(`EIP-155 adapter cannot derive request for namespace "${request.namespace}"`);
+        throw new Error(`EIP-155 transaction cannot derive request for namespace "${request.namespace}"`);
       }
       return deriveEip155TransactionRequestForChain(request as Eip155TransactionRequest, chainRef);
     },

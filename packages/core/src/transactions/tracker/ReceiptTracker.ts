@@ -1,19 +1,19 @@
 import type {
+  NamespaceTransaction,
   ReceiptResolution,
   ReplacementResolution,
-  TransactionAdapter,
   TransactionTrackingContext,
-} from "../adapters/types.js";
+} from "../namespace/types.js";
 
-type TrackerAdapter = Pick<TransactionAdapter, "receiptTracking">;
+type TrackerTransaction = Pick<NamespaceTransaction, "receiptTracking">;
 
 type TrackerDeps = {
-  getAdapter(namespace: string): TrackerAdapter | undefined;
+  getTransaction(namespace: string): TrackerTransaction | undefined;
   onReceipt(id: string, resolution: ReceiptResolution): void | Promise<void>;
   onReplacement(id: string, resolution: ReplacementResolution): void | Promise<void>;
   onTimeout(id: string): void | Promise<void>;
   /**
-   * Receipt tracking is unsupported (adapter missing or does not implement receipt tracking).
+   * Receipt tracking is unsupported (namespace transaction missing or does not implement receipt tracking).
    * This is treated as a terminal outcome for the tracking task.
    */
   onUnsupported(id: string, error: unknown): void | Promise<void>;
@@ -85,11 +85,14 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
     };
 
     try {
-      const adapter = deps.getAdapter(state.context.namespace);
-      const receiptTracking = adapter?.receiptTracking;
+      const namespaceTransaction = deps.getTransaction(state.context.namespace);
+      const receiptTracking = namespaceTransaction?.receiptTracking;
       if (!receiptTracking) {
         stop(state.id);
-        await deps.onUnsupported(state.id, new Error(`Adapter ${state.context.namespace} cannot fetch receipts.`));
+        await deps.onUnsupported(
+          state.id,
+          new Error(`Namespace transaction ${state.context.namespace} cannot fetch receipts.`),
+        );
         return;
       }
 

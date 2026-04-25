@@ -65,7 +65,7 @@ const createExecutor = (params?: {
   chainRef?: string;
   from?: string;
   runtime?: RuntimeTransactionStore;
-  registry?: {
+  namespaces?: {
     get: () => unknown;
   };
   approvals?: {
@@ -185,7 +185,7 @@ const createExecutor = (params?: {
           settled: Promise.resolve(undefined),
         })),
     } as never,
-    registry: (params?.registry ??
+    namespaces: (params?.namespaces ??
       ({
         get: () => ({
           validateRequest: () => undefined,
@@ -470,7 +470,7 @@ describe("TransactionExecutor", () => {
     expect(result).toMatchObject({ chainRef, namespace: "eip155" });
   });
 
-  it("delegates chain-specific request derivation to the namespace adapter before runtime persistence", async () => {
+  it("delegates chain-specific request derivation to the namespace transaction before runtime persistence", async () => {
     const deriveRequestForChain = vi.fn((request: TransactionMeta["request"], resolvedChainRef: string) => ({
       ...request,
       chainRef: resolvedChainRef,
@@ -480,7 +480,7 @@ describe("TransactionExecutor", () => {
       },
     }));
     const { executor, runtime, chainRef } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           deriveRequestForChain,
           receiptTracking: createReceiptTrackingStub(),
@@ -529,10 +529,10 @@ describe("TransactionExecutor", () => {
     });
   });
 
-  it("rejects before creating approval when no adapter is registered", async () => {
+  it("rejects before creating approval when no namespace transaction is registered", async () => {
     const createApproval = vi.fn();
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => undefined,
       },
       approvals: {
@@ -554,7 +554,7 @@ describe("TransactionExecutor", () => {
         REQUEST_CONTEXT,
       ),
     ).rejects.toMatchObject({
-      name: "TransactionAdapterMissingError",
+      name: "NamespaceTransactionMissingError",
     });
 
     expect(runtime.get(REQUEST_ID)).toBeUndefined();
@@ -564,7 +564,7 @@ describe("TransactionExecutor", () => {
   it("rejects before creating approval when request validation finds invalid fee fields", async () => {
     const createApproval = vi.fn();
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           validateRequest: () => {
             throw arxError({
@@ -612,7 +612,7 @@ describe("TransactionExecutor", () => {
       });
     });
     const { executor, chainRef } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           validateRequest,
           receiptTracking: createReceiptTrackingStub(),
@@ -656,9 +656,9 @@ describe("TransactionExecutor", () => {
     });
   });
 
-  it("fails with a stable adapter-missing error when execution reaches a namespace without a transaction adapter", async () => {
+  it("fails with a stable namespace-transaction-missing error when execution reaches a namespace without a namespace transaction", async () => {
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => undefined,
       },
     });
@@ -695,8 +695,8 @@ describe("TransactionExecutor", () => {
       id: REQUEST_ID,
       status: "failed",
       error: {
-        name: "TransactionAdapterMissingError",
-        message: "No transaction adapter registered for namespace eip155",
+        name: "NamespaceTransactionMissingError",
+        message: "No namespace transaction registered for namespace eip155",
       },
     });
   });
@@ -859,7 +859,7 @@ describe("TransactionExecutor", () => {
     );
     const handleTransition = vi.fn();
     const { executor, runtime, commitRecord } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           receiptTracking: createReceiptTrackingStub(),
           signTransaction,
@@ -956,7 +956,7 @@ describe("TransactionExecutor", () => {
 
     const prepare = new TransactionPrepareManager({
       runtime,
-      registry: {
+      namespaces: {
         get: () =>
           ({
             prepareTransaction,
@@ -968,7 +968,7 @@ describe("TransactionExecutor", () => {
 
     const { executor } = createExecutor({
       runtime,
-      registry: {
+      namespaces: {
         get: () => ({
           prepareTransaction,
           applyDraftEdit: ({ request }: { request: TransactionMeta["request"] }) => ({
@@ -1045,7 +1045,7 @@ describe("TransactionExecutor", () => {
 
   it("rejects draft edits after approval begins", async () => {
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           applyDraftEdit: ({ request }: { request: TransactionMeta["request"] }) => request,
           receiptTracking: createReceiptTrackingStub(),
@@ -1106,7 +1106,7 @@ describe("TransactionExecutor", () => {
     }));
 
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           receiptTracking: createReceiptTrackingStub(),
           signTransaction,
@@ -1194,7 +1194,7 @@ describe("TransactionExecutor", () => {
     );
 
     const { executor, runtime, commitRecord } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           receiptTracking: createReceiptTrackingStub(),
           signTransaction,
@@ -1360,7 +1360,7 @@ describe("TransactionExecutor", () => {
     });
     const broadcastTransaction = vi.fn();
     const { executor, runtime } = createExecutor({
-      registry: {
+      namespaces: {
         get: () => ({
           receiptTracking: createReceiptTrackingStub(),
           signTransaction: vi.fn(async () => {

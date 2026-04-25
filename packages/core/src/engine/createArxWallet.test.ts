@@ -17,7 +17,7 @@ import {
   TEST_RECEIPT_POLL_INTERVAL,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import type { TransactionRecord } from "../storage/records.js";
-import type { TransactionAdapter } from "../transactions/adapters/types.js";
+import type { NamespaceTransaction } from "../transactions/namespace/types.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
 import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 import type { CreateArxWalletInput, WalletNamespaceModule } from "./types.js";
@@ -108,7 +108,7 @@ const createProviderRpcContext = () => ({
   },
 });
 
-const createWalletModuleWithTransactionAdapter = (adapter: TransactionAdapter): WalletNamespaceModule => {
+const createWalletModuleWithNamespaceTransaction = (adapter: NamespaceTransaction): WalletNamespaceModule => {
   const module = createEip155WalletNamespaceModule();
   return {
     ...module,
@@ -116,7 +116,7 @@ const createWalletModuleWithTransactionAdapter = (adapter: TransactionAdapter): 
       ...module.engine,
       factories: {
         ...module.engine.factories,
-        createTransactionAdapter: () => adapter,
+        createTransaction: () => adapter,
       },
     },
   };
@@ -537,7 +537,7 @@ describe("createArxWallet", () => {
       permissionsPort: createSeededPermissionsPort(),
       transactionsPort,
       modules: [
-        createWalletModuleWithTransactionAdapter({
+        createWalletModuleWithNamespaceTransaction({
           prepareTransaction,
           signTransaction,
           broadcastTransaction,
@@ -587,7 +587,7 @@ describe("createArxWallet", () => {
       permissionsPort: createSeededPermissionsPort(),
       transactionsPort,
       modules: [
-        createWalletModuleWithTransactionAdapter({
+        createWalletModuleWithNamespaceTransaction({
           prepareTransaction,
           signTransaction,
           broadcastTransaction,
@@ -639,7 +639,7 @@ describe("createArxWallet", () => {
         }),
       ]),
       modules: [
-        createWalletModuleWithTransactionAdapter({
+        createWalletModuleWithNamespaceTransaction({
           prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
           signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
           broadcastTransaction: vi.fn(async () => ({

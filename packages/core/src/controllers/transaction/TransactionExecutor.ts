@@ -6,8 +6,8 @@ import type { AccountController, OwnedAccountView } from "../../controllers/acco
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
-import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { TransactionValidationContext } from "../../transactions/adapters/types.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
@@ -31,7 +31,7 @@ import {
   buildPrepareContext,
   buildSignContext,
   coerceTransactionError,
-  createMissingAdapterError,
+  createMissingNamespaceTransactionError,
   createReceiptTrackingUnsupportedError,
   createTransactionSubmissionUnavailableError,
   isUserRejectedError,
@@ -47,7 +47,7 @@ type Deps = {
   supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
-  registry: TransactionAdapterRegistry;
+  namespaces: NamespaceTransactions;
   service: TransactionsService;
   prepare: TransactionPrepareManager;
   reviewSessions: TransactionReviewSessions;
@@ -69,7 +69,7 @@ export class TransactionExecutor
   #supportedChains: Pick<SupportedChainsController, "getChain">;
   #accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
-  #registry: TransactionAdapterRegistry;
+  #namespaces: NamespaceTransactions;
   #service: TransactionsService;
   #prepare: TransactionPrepareManager;
   #reviewSessions: TransactionReviewSessions;
@@ -92,7 +92,7 @@ export class TransactionExecutor
     this.#supportedChains = deps.supportedChains;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
-    this.#registry = deps.registry;
+    this.#namespaces = deps.namespaces;
     this.#service = deps.service;
     this.#prepare = deps.prepare;
     this.#reviewSessions = deps.reviewSessions;
@@ -128,26 +128,26 @@ export class TransactionExecutor
     }
 
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
-    const adapter = this.#registry.get(derived.namespace);
-    if (adapter && !adapter.receiptTracking) {
+    const namespaceTransaction = this.#namespaces.get(derived.namespace);
+    if (namespaceTransaction && !namespaceTransaction.receiptTracking) {
       throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef });
     }
-    if (!adapter) {
-      throw createMissingAdapterError(derived.namespace);
+    if (!namespaceTransaction) {
+      throw createMissingNamespaceTransactionError(derived.namespace);
     }
 
-    const derivedRequestCandidate = adapter.deriveRequestForChain?.(request, chainRef) ?? {
+    const derivedRequestCandidate = namespaceTransaction.deriveRequestForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
     };
     if (derivedRequestCandidate.namespace !== derived.namespace) {
       throw new Error(
-        `Transaction adapter derived request namespace mismatch: expected=${derived.namespace} actual=${derivedRequestCandidate.namespace}`,
+        `Namespace transaction derived request namespace mismatch: expected=${derived.namespace} actual=${derivedRequestCandidate.namespace}`,
       );
     }
     if (derivedRequestCandidate.chainRef !== undefined && derivedRequestCandidate.chainRef !== chainRef) {
       throw new Error(
-        `Transaction adapter derived request chainRef mismatch: expected=${chainRef} actual=${derivedRequestCandidate.chainRef}`,
+        `Namespace transaction derived request chainRef mismatch: expected=${chainRef} actual=${derivedRequestCandidate.chainRef}`,
       );
     }
 
@@ -168,7 +168,7 @@ export class TransactionExecutor
       from: ownedAccount.canonicalAddress,
       request: structuredClone(derivedRequest),
     };
-    adapter.validateRequest?.(validationContext);
+    namespaceTransaction.validateRequest?.(validationContext);
 
     const runtimeMeta = this.#runtime.create({
       id,
@@ -341,12 +341,12 @@ export class TransactionExecutor
       return;
     }
 
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter) {
-      await this.rejectTransaction(id, createMissingAdapterError(meta.namespace));
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+    if (!namespaceTransaction) {
+      await this.rejectTransaction(id, createMissingNamespaceTransactionError(meta.namespace));
       return;
     }
-    if (!adapter.receiptTracking) {
+    if (!namespaceTransaction.receiptTracking) {
       await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
       return;
     }
@@ -366,7 +366,7 @@ export class TransactionExecutor
         meta = next;
       }
 
-      const signed = await adapter.signTransaction(buildSignContext(meta), prepared);
+      const signed = await namespaceTransaction.signTransaction(buildSignContext(meta), prepared);
       const signedMeta = this.#runtime.transition({
         id,
         fromStatus: meta.status,
@@ -384,7 +384,7 @@ export class TransactionExecutor
       this.#broadcasting.add(id);
       let broadcast;
       try {
-        broadcast = await adapter.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
+        broadcast = await namespaceTransaction.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
       } finally {
         this.#broadcasting.delete(id);
       }
@@ -482,13 +482,13 @@ export class TransactionExecutor
       throw new Error("Transaction draft can only be edited before approval.");
     }
 
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter?.applyDraftEdit) {
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+    if (!namespaceTransaction?.applyDraftEdit) {
       throw new Error(`Transaction draft edits are not supported for namespace "${meta.namespace}".`);
     }
 
     const request = this.#requireRuntimeRequest(meta);
-    const nextRequest = adapter.applyDraftEdit({
+    const nextRequest = namespaceTransaction.applyDraftEdit({
       transaction: meta,
       request: structuredClone({
         ...request,

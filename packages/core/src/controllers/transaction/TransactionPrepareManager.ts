@@ -1,4 +1,4 @@
-import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "./review/session.js";
 import type { TransactionReviewMessage } from "./review/types.js";
@@ -11,7 +11,7 @@ const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 type Options = {
   runtime: RuntimeTransactionStore;
-  registry: TransactionAdapterRegistry;
+  namespaces: NamespaceTransactions;
   reviewSessions: TransactionReviewSessions;
   logger?: (message: string, data?: unknown) => void;
   prepareTimeoutMs?: number;
@@ -20,7 +20,7 @@ type Options = {
 
 export class TransactionPrepareManager {
   #runtime: RuntimeTransactionStore;
-  #registry: TransactionAdapterRegistry;
+  #namespaces: NamespaceTransactions;
   #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
   #timeoutMs: number;
@@ -33,7 +33,7 @@ export class TransactionPrepareManager {
 
   constructor(options: Options) {
     this.#runtime = options.runtime;
-    this.#registry = options.registry;
+    this.#namespaces = options.namespaces;
     this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
     this.#timeoutMs = options.prepareTimeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
@@ -164,14 +164,14 @@ export class TransactionPrepareManager {
     const session = this.#reviewSessions.begin(id, Date.now());
     this.#runtime.patch(id, { updatedAt: meta.updatedAt });
 
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter) {
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+    if (!namespaceTransaction) {
       const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#runtime.get(id) ?? null;
       this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
         prepareFailure: {
           code: "transaction.adapter_missing",
-          message: `No transaction adapter registered for namespace ${meta.namespace}`,
+          message: `No namespace transaction registered for namespace ${meta.namespace}`,
           details: { namespace: meta.namespace },
         },
         approvalBlocker: null,
@@ -179,7 +179,7 @@ export class TransactionPrepareManager {
       });
       this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
         reason: "transaction.adapter_missing",
-        message: `No transaction adapter registered for namespace ${meta.namespace}`,
+        message: `No namespace transaction registered for namespace ${meta.namespace}`,
         data: { namespace: meta.namespace },
       });
       return next;
@@ -187,7 +187,8 @@ export class TransactionPrepareManager {
 
     try {
       const context = buildPrepareContext(meta);
-      const runPrepare = async () => await this.#withTimeout(adapter.prepareTransaction(context), timeoutMs);
+      const runPrepare = async () =>
+        await this.#withTimeout(namespaceTransaction.prepareTransaction(context), timeoutMs);
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
       const diagnostics = this.#classifyPreparedDiagnostics(result);
 

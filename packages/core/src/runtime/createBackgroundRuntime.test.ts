@@ -601,7 +601,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             ...eip155NamespaceManifest,
             runtime: {
               ...eip155NamespaceManifest.runtime,
-              createTransactionAdapter: () => ({
+              createTransaction: () => ({
                 prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
                 signTransaction: async () => ({ raw: "0x1111", hash: null }),
                 broadcastTransaction: async () => ({
@@ -662,7 +662,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
                   },
                 }),
               }),
-              createTransactionAdapter: () => ({
+              createTransaction: () => ({
                 prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
                 signTransaction: async () => ({ raw: "0x1111", hash: null }),
                 broadcastTransaction: async () => ({

@@ -32,7 +32,7 @@ import type { NetworkSelectionService } from "../../services/store/networkSelect
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
-import { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { DEFAULT_STRATEGY } from "./constants.js";
 import type { RuntimeNetworkPlan } from "./networkDefaults.js";
 
@@ -53,7 +53,7 @@ export type ControllerLayerOptions = {
     logger?: (message: string, error?: unknown) => void;
   };
   transactions?: {
-    registry?: TransactionAdapterRegistry;
+    namespaces?: NamespaceTransactions;
   };
   supportedChains?: {
     port: CustomChainsPort;
@@ -74,7 +74,7 @@ export type ControllersBase = {
 
 export type ControllersInitResult = {
   controllersBase: ControllersBase;
-  transactionRegistry: TransactionAdapterRegistry;
+  namespaceTransactions: NamespaceTransactions;
   networkController: NetworkController;
   supportedChainsController: SupportedChainsController;
   permissionsController: PermissionsController;
@@ -152,7 +152,7 @@ export const initControllers = ({
   });
   const permissionsReady = permissionsController.waitForHydration();
 
-  const transactionRegistry = transactionOptions?.registry ?? new TransactionAdapterRegistry();
+  const namespaceTransactions = transactionOptions?.namespaces ?? new NamespaceTransactions();
 
   const supportedChainsController = new InMemorySupportedChainsController({
     messenger: bus.scope({ name: "supportedChains", publish: SUPPORTED_CHAINS_TOPICS }),
@@ -177,7 +177,7 @@ export const initControllers = ({
       create: (request, requester) => approvalController.create(request, requester),
       onFinished: (handler) => approvalController.onFinished(handler),
     },
-    registry: transactionRegistry,
+    namespaces: namespaceTransactions,
     service: transactionsService,
     ...(networkOptions?.now ? { now: networkOptions.now } : {}),
   });
@@ -195,7 +195,7 @@ export const initControllers = ({
 
   return {
     controllersBase,
-    transactionRegistry,
+    namespaceTransactions,
     networkController,
     supportedChainsController,
     permissionsController,

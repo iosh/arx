@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../storage/records.js";
-import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { TransactionAdapter, TransactionReceiptTrackingAdapter } from "../transactions/adapters/types.js";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import type { NamespaceTransaction, NamespaceTransactionReceiptTracking } from "../transactions/namespace/types.js";
 import {
   createChainMetadata,
   flushAsync,
@@ -25,12 +25,12 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => ({
       status: "success",
       receipt: { status: "0x1", blockNumber: "0x10" },
     }));
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
       signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
       broadcastTransaction: vi.fn(async () => ({
@@ -48,8 +48,8 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       receiptTracking: { fetchReceipt },
     };
 
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const txId = "11111111-1111-4111-8111-111111111111";
     const seed: TransactionRecord = {
@@ -75,7 +75,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const context = await setupBackground({
       chainSeed: [chain],
       transactionsSeed: [seed],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
 

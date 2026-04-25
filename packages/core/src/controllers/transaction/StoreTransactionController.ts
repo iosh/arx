@@ -3,7 +3,7 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
-import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
@@ -49,7 +49,7 @@ export type StoreTransactionControllerOptions = {
   supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create" | "onFinished">;
-  registry: TransactionAdapterRegistry;
+  namespaces: NamespaceTransactions;
   service: TransactionsService;
   now?: () => number;
   tracker?: ReceiptTracker;
@@ -72,12 +72,12 @@ export class StoreTransactionController implements TransactionController {
   #runtime: RuntimeTransactionStore;
   #view: StoreTransactionView;
   #executor: TransactionExecutor;
-  #registry: TransactionAdapterRegistry;
+  #namespaces: NamespaceTransactions;
   #reviewSessions: TransactionReviewSessions;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
-    this.#registry = options.registry;
+    this.#namespaces = options.namespaces;
     this.#reviewSessions = new TransactionReviewSessions();
 
     const now = options.now ?? Date.now;
@@ -99,14 +99,14 @@ export class StoreTransactionController implements TransactionController {
 
     const tracking = new TransactionReceiptTracking({
       view: this.#view,
-      registry: options.registry,
+      namespaces: options.namespaces,
       service: options.service,
       ...(options.tracker ? { tracker: options.tracker } : {}),
     });
 
     const prepare = new TransactionPrepareManager({
       runtime: this.#runtime,
-      registry: options.registry,
+      namespaces: options.namespaces,
       reviewSessions: this.#reviewSessions,
       logger,
     });
@@ -119,7 +119,7 @@ export class StoreTransactionController implements TransactionController {
       supportedChains: options.supportedChains,
       accounts: options.accounts,
       approvals: options.approvals,
-      registry: options.registry,
+      namespaces: options.namespaces,
       service: options.service,
       prepare,
       reviewSessions: this.#reviewSessions,
@@ -166,10 +166,10 @@ export class StoreTransactionController implements TransactionController {
       input.request ??
       (transaction ? this.#executor.buildApprovalRequestPayload(transaction, input.transactionId) : null);
     const namespace = transaction?.namespace ?? request?.request.namespace;
-    const adapter = namespace ? this.#registry.get(namespace) : undefined;
+    const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
     const namespaceReview =
-      adapter && request
-        ? (adapter.buildApprovalReview?.({
+      namespaceTransaction && request
+        ? (namespaceTransaction.buildApprovalReview?.({
             transaction,
             request,
           }) ?? null)

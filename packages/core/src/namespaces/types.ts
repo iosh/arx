@@ -7,7 +7,7 @@ import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type { RpcClientFactory, RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
-import type { TransactionAdapter } from "../transactions/adapters/types.js";
+import type { NamespaceTransaction } from "../transactions/namespace/types.js";
 import type { TransactionRequest } from "../transactions/types.js";
 
 export type NamespaceCoreManifest = {
@@ -67,11 +67,11 @@ export type NamespaceRuntimeManifest = {
     rpcClients: Pick<RpcClientRegistry, "getClient">;
     chains: ChainAddressCodecRegistry;
   }) => NamespaceUiBindings;
-  createTransactionAdapter?: (params: {
+  createTransaction?: (params: {
     rpcClients: Pick<RpcClientRegistry, "getClient">;
     chains: ChainAddressCodecRegistry;
     signer: unknown;
-  }) => TransactionAdapter;
+  }) => NamespaceTransaction;
 };
 
 export type NamespaceRuntimeSupportSpec = Readonly<

@@ -1,4 +1,4 @@
-// Test addresses used across EIP-155 adapter tests
+// Test addresses used across EIP-155 transaction tests
 export const TEST_ADDRESSES = {
   FROM_A: "0x1111111111111111111111111111111111111111" as const,
   TO_B: "0x2222222222222222222222222222222222222222" as const,

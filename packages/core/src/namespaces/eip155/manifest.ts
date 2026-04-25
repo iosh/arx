@@ -6,9 +6,9 @@ import { EvmHdKeyring, EvmPrivateKeyKeyring } from "../../keyring/index.js";
 import { EIP155_NAMESPACE } from "../../rpc/handlers/namespaces/eip155/constants.js";
 import type { Eip155RpcCapabilities, Eip155RpcClient } from "../../rpc/namespaceClients/eip155.js";
 import { eip155Module } from "../../rpc/namespaces/eip155/module.js";
-import { createEip155TransactionAdapter } from "../../transactions/adapters/eip155/adapter.js";
-import { createEip155Broadcaster } from "../../transactions/adapters/eip155/broadcaster.js";
-import { createEip155Signer, type Eip155Signer } from "../../transactions/adapters/eip155/signer.js";
+import { createEip155Broadcaster } from "../../transactions/namespace/eip155/broadcaster.js";
+import { createEip155Signer, type Eip155Signer } from "../../transactions/namespace/eip155/signer.js";
+import { createEip155Transaction } from "../../transactions/namespace/eip155/transaction.js";
 import type { NamespaceManifest } from "../types.js";
 import { defineNamespaceManifest } from "../validation.js";
 
@@ -80,13 +80,13 @@ export const eip155NamespaceManifest = defineNamespaceManifest({
         },
       }),
     }),
-    createTransactionAdapter: ({ rpcClients, chains, signer }) => {
+    createTransaction: ({ rpcClients, chains, signer }) => {
       const typedSigner = signer as Pick<Eip155Signer, "signTransaction">;
       const rpcClientFactory = (chainRef: string) =>
         rpcClients.getClient<Eip155RpcCapabilities>(EIP155_NAMESPACE, chainRef) as Eip155RpcClient;
       const broadcaster = createEip155Broadcaster({ rpcClientFactory });
 
-      return createEip155TransactionAdapter({
+      return createEip155Transaction({
         rpcClientFactory,
         signer: typedSigner,
         broadcaster,

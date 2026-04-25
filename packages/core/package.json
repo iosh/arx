@@ -24,6 +24,7 @@
     "./permissions": "./src/permissions/index.ts",
     "./rpc": "./src/rpc/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./transactions": "./src/transactions/index.ts",
     "./ui": "./src/ui/index.ts",
     "./ui/server": "./src/ui/server/index.ts",
     "./keyring": "./src/keyring/index.ts",

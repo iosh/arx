@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../adapters/types.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../namespace/types.js";
 import { createReceiptTracker } from "./ReceiptTracker.js";
 
 const BASE_CONTEXT: TransactionTrackingContext = {
@@ -41,7 +41,7 @@ describe("ReceiptTracker", () => {
     vi.resetAllMocks();
   });
 
-  it("invokes onReceipt when adapter returns a receipt", async () => {
+  it("invokes onReceipt when namespace transaction returns a receipt", async () => {
     const receiptResolution: ReceiptResolution = {
       status: "success",
       receipt: { status: "0x1" },
@@ -57,7 +57,7 @@ describe("ReceiptTracker", () => {
     const onReceipt = vi.fn();
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt,
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
@@ -73,7 +73,7 @@ describe("ReceiptTracker", () => {
     expect(onReceipt).toHaveBeenCalledWith("tx-1", receiptResolution);
   });
 
-  it("invokes onReplacement when adapter detects replacement", async () => {
+  it("invokes onReplacement when namespace transaction detects replacement", async () => {
     const replacementResolution: ReplacementResolution = {
       status: "replaced",
     };
@@ -88,7 +88,7 @@ describe("ReceiptTracker", () => {
     const onReplacement = vi.fn();
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt: vi.fn(),
         onReplacement,
         onTimeout: vi.fn(),
@@ -116,7 +116,7 @@ describe("ReceiptTracker", () => {
     const onTimeout = vi.fn();
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout,
@@ -154,7 +154,7 @@ describe("ReceiptTracker", () => {
 
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
@@ -185,7 +185,7 @@ describe("ReceiptTracker", () => {
     const onReceipt = vi.fn();
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt,
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
@@ -228,7 +228,7 @@ describe("ReceiptTracker", () => {
 
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
@@ -249,11 +249,11 @@ describe("ReceiptTracker", () => {
     setTimeoutSpy.mockRestore();
   });
 
-  it("calls onUnsupported when adapter is missing", async () => {
+  it("calls onUnsupported when namespace transaction is missing", async () => {
     const onUnsupported = vi.fn();
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => undefined,
+        getTransaction: () => undefined,
         onReceipt: vi.fn(),
         onReplacement: vi.fn(),
         onTimeout: vi.fn(),
@@ -291,7 +291,7 @@ describe("ReceiptTracker", () => {
 
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => adapter,
+        getTransaction: () => adapter,
         onReceipt,
         onReplacement: vi.fn(),
         onTimeout,
@@ -315,7 +315,7 @@ describe("ReceiptTracker", () => {
   it("returns the number of active tracking tasks via pending()", () => {
     const tracker = createReceiptTracker(
       {
-        getAdapter: () => ({
+        getTransaction: () => ({
           receiptTracking: {
             fetchReceipt: vi.fn(async () => null),
             detectReplacement: vi.fn(async () => null),

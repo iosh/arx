@@ -111,8 +111,8 @@ export type NamespaceEngineFactories = Readonly<{
   createApprovalBindings?: NonNullable<NamespaceRuntimeManifest["createApprovalBindings"]>;
   /** UI bindings factory. */
   createUiBindings?: NonNullable<NamespaceRuntimeManifest["createUiBindings"]>;
-  /** Transaction adapter factory. */
-  createTransactionAdapter?: NonNullable<NamespaceRuntimeManifest["createTransactionAdapter"]>;
+  /** Namespace transaction factory. */
+  createTransaction?: NonNullable<NamespaceRuntimeManifest["createTransaction"]>;
 }>;
 
 // Engine-facing namespace definition split into static facts and executable factories.

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { TransactionStatusChange } from "../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
-import { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
-import type { TransactionAdapter, TransactionReceiptTrackingAdapter } from "../transactions/adapters/types.js";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import type { NamespaceTransaction, NamespaceTransactionReceiptTracking } from "../transactions/namespace/types.js";
 import {
   createChainMetadata,
   flushAsync,
@@ -67,43 +67,45 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
     const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
     let signedCount = 0;
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => {
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => {
       signedCount += 1;
       const suffix = signedCount.toString(16).padStart(64, "0");
       return {
         raw: "0x1111",
       };
     });
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
+    );
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => ({
       status: "success",
       receipt: confirmedReceipt,
     }));
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
       receiptTracking: { fetchReceipt },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     let clock = 1_000;
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
@@ -113,7 +115,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -187,40 +189,42 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
     let signedCount = 0;
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => {
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => {
       signedCount += 1;
       const suffix = signedCount.toString(16).padStart(64, "0");
       return {
         raw: "0x1111",
       };
     });
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      locator: {
-        format: "eip155.tx_hash",
-        value: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
-      },
-      submitted: buildEip155Submitted({
-        txHash: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        locator: {
+          format: "eip155.tx_hash",
+          value: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
+        },
+        submitted: buildEip155Submitted({
+          txHash: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
       }),
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
+    );
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => null);
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
       receiptTracking: { fetchReceipt },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     let clock = 1_000;
     const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
@@ -230,7 +234,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -305,31 +309,35 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
     const replacementTxHash = "0x2222222222222222222222222222222222222222222222222222222222222222";
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
-    const detectReplacement = vi.fn<NonNullable<TransactionReceiptTrackingAdapter["detectReplacement"]>>(async () => ({
-      status: "replaced",
-    }));
+    );
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => null);
+    const detectReplacement = vi.fn<NonNullable<NamespaceTransactionReceiptTracking["detectReplacement"]>>(
+      async () => ({
+        status: "replaced",
+      }),
+    );
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
@@ -338,12 +346,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         detectReplacement,
       },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -405,7 +413,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       "0x2222222222222222222222222222222222222222222222222222222222222222",
     ] as const;
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {
         chainId: "0x1",
         nonce: "0x7",
@@ -413,11 +421,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
     let broadcastIndex = 0;
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => {
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(async (ctx, _signed, prepared) => {
       const txHash = hashes[broadcastIndex] ?? hashes[hashes.length - 1];
       broadcastIndex += 1;
       return {
@@ -432,18 +440,18 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         },
       };
     });
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async (trackingContext) => {
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async (trackingContext) => {
       const submitted = trackingContext.submitted as { hash?: unknown };
       if (submitted.hash === hashes[1]) {
         return { status: "success", receipt: { status: "0x1", transactionHash: hashes[1] } };
       }
       return null;
     });
-    const detectReplacement = vi.fn<NonNullable<TransactionReceiptTrackingAdapter["detectReplacement"]>>(
+    const detectReplacement = vi.fn<NonNullable<NamespaceTransactionReceiptTracking["detectReplacement"]>>(
       async () => null,
     );
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
@@ -460,12 +468,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         detectReplacement,
       },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -538,42 +546,44 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
     const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
+    );
     const fetchReceipt = vi
-      .fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>()
+      .fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>()
       .mockRejectedValueOnce(new Error("RPC temporary failure"))
       .mockResolvedValueOnce({ status: "success", receipt: confirmedReceipt });
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
       receiptTracking: { fetchReceipt },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -626,38 +636,40 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
+    );
 
     // No `receiptTracking` capability.
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
 
@@ -696,39 +708,41 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => null);
+    );
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => null);
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
       receiptTracking: { fetchReceipt },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);
@@ -779,42 +793,44 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
     const failedReceipt = { status: "0x0", blockNumber: "0x20" };
 
-    const prepareTransaction = vi.fn<TransactionAdapter["prepareTransaction"]>(async () => ({
+    const prepareTransaction = vi.fn<NamespaceTransaction["prepareTransaction"]>(async () => ({
       prepared: {},
       warnings: [],
       issues: [],
     }));
-    const signTransaction = vi.fn<TransactionAdapter["signTransaction"]>(async () => ({
+    const signTransaction = vi.fn<NamespaceTransaction["signTransaction"]>(async () => ({
       raw: "0x1111",
     }));
-    const broadcastTransaction = vi.fn<TransactionAdapter["broadcastTransaction"]>(async (ctx, _signed, prepared) => ({
-      submitted: buildEip155Submitted({
-        txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
+    const broadcastTransaction = vi.fn<NamespaceTransaction["broadcastTransaction"]>(
+      async (ctx, _signed, prepared) => ({
+        submitted: buildEip155Submitted({
+          txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
-    }));
-    const fetchReceipt = vi.fn<TransactionReceiptTrackingAdapter["fetchReceipt"]>(async () => ({
+    );
+    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => ({
       status: "failed",
       receipt: failedReceipt,
     }));
 
-    const adapter: TransactionAdapter = {
+    const adapter: NamespaceTransaction = {
       prepareTransaction,
       signTransaction,
       broadcastTransaction,
       receiptTracking: { fetchReceipt },
     };
-    const registry = new TransactionAdapterRegistry();
-    registry.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(chain.namespace, adapter);
 
     const context = await setupBackground({
       chainSeed: [chain],
-      transactions: { registry },
+      transactions: { namespaces: namespaceTransactions },
       persistDebounceMs: 0,
     });
     const fromAddress = await createOwnedAddress(context, chain.chainRef);

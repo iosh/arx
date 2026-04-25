@@ -69,12 +69,12 @@ export type TransactionDraftEditContext = {
   mode?: string | undefined;
 };
 
-export type TransactionReceiptTrackingAdapter = {
+export type NamespaceTransactionReceiptTracking = {
   fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
   detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
 };
 
-export type TransactionSubmissionAdapter = {
+export type NamespaceTransactionSubmission = {
   validateRequest?(context: TransactionValidationContext): void;
   prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
   signTransaction(
@@ -92,10 +92,10 @@ export type TransactionSubmissionAdapter = {
 };
 export type { TransactionSubmissionLocator, TransactionSubmitted } from "../types.js";
 
-export type TransactionAdapter = {
+export type NamespaceTransaction = {
   deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
   buildApprovalReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
   applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
   deriveReplacementKey?(context: TransactionTrackingContext): TransactionReplacementKey | null;
-  receiptTracking?: TransactionReceiptTrackingAdapter;
-} & TransactionSubmissionAdapter;
+  receiptTracking?: NamespaceTransactionReceiptTracking;
+} & NamespaceTransactionSubmission;

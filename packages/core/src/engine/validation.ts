@@ -16,9 +16,9 @@ export const assertValidWalletNamespaceModule = (module: WalletNamespaceModule):
     );
   }
 
-  if (factories?.createTransactionAdapter && !factories.createSigner) {
+  if (factories?.createTransaction && !factories.createSigner) {
     throw new Error(
-      `Wallet namespace module "${module.namespace}" factories.createTransactionAdapter requires factories.createSigner`,
+      `Wallet namespace module "${module.namespace}" factories.createTransaction requires factories.createSigner`,
     );
   }
 

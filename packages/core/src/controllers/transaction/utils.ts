@@ -4,12 +4,12 @@ import type {
   TransactionReplacementKey,
   TransactionSignContext,
   TransactionTrackingContext,
-} from "../../transactions/adapters/types.js";
+} from "../../transactions/namespace/types.js";
 import type { TransactionError, TransactionMeta } from "./types.js";
 
-export const createMissingAdapterError = (namespace: string): Error => {
-  const error = new Error(`No transaction adapter registered for namespace ${namespace}`);
-  error.name = "TransactionAdapterMissingError";
+export const createMissingNamespaceTransactionError = (namespace: string): Error => {
+  const error = new Error(`No namespace transaction registered for namespace ${namespace}`);
+  error.name = "NamespaceTransactionMissingError";
   return error;
 };
 

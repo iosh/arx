@@ -69,7 +69,7 @@ export type RuntimeSessionScope = {
   controllersBase: ControllersBase;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: ReturnType<typeof initControllers>["deferredNetworkInitialState"];
-  transactionRegistry: ReturnType<typeof initControllers>["transactionRegistry"];
+  namespaceTransactions: ReturnType<typeof initControllers>["namespaceTransactions"];
   chainViews: ReturnType<typeof createChainViewsService>;
   chainActivation: ReturnType<typeof createChainActivationService>;
   attention: ReturnType<typeof createAttentionService>;
@@ -280,7 +280,7 @@ export const createRuntimeSessionScope = ({
     controllersBase,
     permissionsReady,
     deferredNetworkInitialState,
-    transactionRegistry: controllersInit.transactionRegistry,
+    namespaceTransactions: controllersInit.namespaceTransactions,
     chainViews,
     chainActivation,
     attention,
@@ -323,7 +323,7 @@ export const createRuntimeSupportScope = ({
 
   const materializedRuntimeSupport = materializeNamespaceRuntimeSupport({
     runtimeSupport: namespaceRuntimeSupport,
-    transactionRegistry: sessionScope.transactionRegistry,
+    namespaceTransactions: sessionScope.namespaceTransactions,
     rpcClients: rpcClientRegistry,
     chains: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     accountSigning: sessionScope.accountSigning,

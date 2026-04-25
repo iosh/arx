@@ -1,7 +1,7 @@
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
-import type { TransactionAdapterRegistry } from "../../transactions/adapters/registry.js";
-import type { ReceiptResolution, ReplacementResolution } from "../../transactions/adapters/types.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { ReceiptResolution, ReplacementResolution } from "../../transactions/namespace/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
@@ -10,24 +10,24 @@ import { buildTrackingContext, encodeReplacementKey } from "./utils.js";
 
 type Options = {
   view: StoreTransactionView;
-  registry: TransactionAdapterRegistry;
+  namespaces: NamespaceTransactions;
   service: TransactionsService;
   tracker?: ReceiptTracker;
 };
 
 export class TransactionReceiptTracking {
   #view: StoreTransactionView;
-  #registry: TransactionAdapterRegistry;
+  #namespaces: NamespaceTransactions;
   #service: TransactionsService;
   #tracker: ReceiptTracker;
 
-  constructor({ view, registry, service, tracker }: Options) {
+  constructor({ view, namespaces, service, tracker }: Options) {
     this.#view = view;
-    this.#registry = registry;
+    this.#namespaces = namespaces;
     this.#service = service;
 
     const trackerDeps = {
-      getAdapter: (namespace: string) => this.#registry.get(namespace),
+      getTransaction: (namespace: string) => this.#namespaces.get(namespace),
       onReceipt: async (id: string, resolution: ReceiptResolution) => {
         await this.#applyReceiptResolution(id, resolution);
       },
@@ -58,11 +58,11 @@ export class TransactionReceiptTracking {
    */
   handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
     if (next.status === "broadcast" && next.submitted && next.locator) {
-      const adapter = this.#registry.get(next.namespace);
-      if (!adapter?.receiptTracking) {
+      const namespaceTransaction = this.#namespaces.get(next.namespace);
+      if (!namespaceTransaction?.receiptTracking) {
         void this.#handleTrackingUnsupported(
           next.id,
-          new Error(`Adapter ${next.namespace} cannot fetch receipts.`),
+          new Error(`Namespace transaction ${next.namespace} cannot fetch receipts.`),
         ).catch(() => {});
         return;
       }
@@ -94,11 +94,11 @@ export class TransactionReceiptTracking {
    */
   resumeBroadcast(meta: TransactionMeta) {
     if (meta.status !== "broadcast" || !meta.submitted || !meta.locator) return;
-    const adapter = this.#registry.get(meta.namespace);
-    if (!adapter?.receiptTracking) {
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+    if (!namespaceTransaction?.receiptTracking) {
       void this.#handleTrackingUnsupported(
         meta.id,
-        new Error(`Adapter ${meta.namespace} cannot fetch receipts.`),
+        new Error(`Namespace transaction ${meta.namespace} cannot fetch receipts.`),
       ).catch(() => {});
       return;
     }
@@ -136,11 +136,11 @@ export class TransactionReceiptTracking {
     const meta = await this.#loadBroadcastMeta(id);
     if (!meta) return;
 
-    const adapter = this.#registry.get(meta.namespace);
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
     const trackingContext = buildTrackingContext(meta);
     let replacedId = resolution.replacedId;
-    if (replacedId === undefined && adapter?.deriveReplacementKey && trackingContext) {
-      const key = adapter.deriveReplacementKey(trackingContext);
+    if (replacedId === undefined && namespaceTransaction?.deriveReplacementKey && trackingContext) {
+      const key = namespaceTransaction.deriveReplacementKey(trackingContext);
       if (key) {
         const replacementKey = encodeReplacementKey(key);
         const replacement = await this.#findConfirmedReplacementCandidate({
@@ -233,10 +233,10 @@ export class TransactionReceiptTracking {
   }
 
   #deriveReplacementKey(meta: TransactionMeta): string | null {
-    const adapter = this.#registry.get(meta.namespace);
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
     const trackingContext = buildTrackingContext(meta);
-    if (!adapter?.deriveReplacementKey || !trackingContext) return null;
-    const key = adapter.deriveReplacementKey(trackingContext);
+    if (!namespaceTransaction?.deriveReplacementKey || !trackingContext) return null;
+    const key = namespaceTransaction.deriveReplacementKey(trackingContext);
     return key ? encodeReplacementKey(key) : null;
   }
 

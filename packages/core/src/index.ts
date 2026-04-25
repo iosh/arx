@@ -54,5 +54,6 @@ export {
   VaultKeyringPayloadSchema,
   VaultMetaSnapshotSchema,
 } from "./storage/index.js";
+export * from "./transactions/index.js";
 export * from "./utils/logger.js";
 export * from "./vault/index.js";

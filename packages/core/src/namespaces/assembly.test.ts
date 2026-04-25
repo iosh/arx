@@ -28,7 +28,7 @@ describe("namespace stage assembly", () => {
       createSigner: eip155NamespaceManifest.runtime?.createSigner,
       createApprovalBindings: eip155NamespaceManifest.runtime?.createApprovalBindings,
       createUiBindings: eip155NamespaceManifest.runtime?.createUiBindings,
-      createTransactionAdapter: eip155NamespaceManifest.runtime?.createTransactionAdapter,
+      createTransaction: eip155NamespaceManifest.runtime?.createTransaction,
     });
   });
 
@@ -44,7 +44,7 @@ describe("namespace stage assembly", () => {
       runtime: {
         ...eip155NamespaceManifest.runtime,
         createSigner: undefined,
-        createTransactionAdapter: undefined,
+        createTransaction: undefined,
       },
     };
 
@@ -53,7 +53,7 @@ describe("namespace stage assembly", () => {
     );
   });
 
-  it("rejects transaction adapters without a signer factory", () => {
+  it("rejects namespace transactions without a signer factory", () => {
     const manifest: NamespaceManifest = {
       ...eip155NamespaceManifest,
       runtime: {
@@ -64,7 +64,7 @@ describe("namespace stage assembly", () => {
     };
 
     expect(() => assembleRuntimeNamespaceStages([manifest])).toThrow(
-      /runtime\.createTransactionAdapter requires runtime\.createSigner/,
+      /runtime\.createTransaction requires runtime\.createSigner/,
     );
   });
 });

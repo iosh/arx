@@ -7,7 +7,7 @@ import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
-import type { TransactionAdapterRegistry } from "../transactions/adapters/registry.js";
+import type { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceApprovalBindings,
   NamespaceManifest,
@@ -53,9 +53,9 @@ const assertValidRuntimeSupportDependencies = (manifest: NamespaceManifest): voi
     );
   }
 
-  if (runtime.createTransactionAdapter && !runtime.createSigner) {
+  if (runtime.createTransaction && !runtime.createSigner) {
     throw new Error(
-      `Namespace manifest "${manifest.namespace}" runtime.createTransactionAdapter requires runtime.createSigner`,
+      `Namespace manifest "${manifest.namespace}" runtime.createTransaction requires runtime.createSigner`,
     );
   }
 };
@@ -119,9 +119,7 @@ const createRuntimeSupportSpecsFromValidatedManifests = (
       ? { createApprovalBindings: manifest.runtime.createApprovalBindings }
       : {}),
     ...(manifest.runtime?.createUiBindings ? { createUiBindings: manifest.runtime.createUiBindings } : {}),
-    ...(manifest.runtime?.createTransactionAdapter
-      ? { createTransactionAdapter: manifest.runtime.createTransactionAdapter }
-      : {}),
+    ...(manifest.runtime?.createTransaction ? { createTransaction: manifest.runtime.createTransaction } : {}),
   }));
 };
 
@@ -243,7 +241,7 @@ const createNamespaceSignerRegistry = (signerByNamespace: ReadonlyMap<string, un
 
 export const materializeNamespaceRuntimeSupport = (params: {
   runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  transactionRegistry: TransactionAdapterRegistry;
+  namespaceTransactions: NamespaceTransactions;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   chains: ChainAddressCodecRegistry;
   accountSigning: AccountSigningService;
@@ -253,7 +251,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
   bindings: NamespaceRuntimeBindingsRegistry;
   runtimeSupport: NamespaceRuntimeSupportIndex;
 } => {
-  const { runtimeSupport, transactionRegistry, rpcClients, chains, accountSigning, rpcClientNamespaces } = params;
+  const { runtimeSupport, namespaceTransactions, rpcClients, chains, accountSigning, rpcClientNamespaces } = params;
 
   const signerByNamespace = new Map<string, unknown>();
   const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();
@@ -289,31 +287,31 @@ export const materializeNamespaceRuntimeSupport = (params: {
   }
 
   for (const spec of runtimeSupport.namespaces) {
-    const createTransactionAdapter = spec.createTransactionAdapter;
-    if (!createTransactionAdapter || transactionRegistry.get(spec.namespace)) {
+    const createTransaction = spec.createTransaction;
+    if (!createTransaction || namespaceTransactions.get(spec.namespace)) {
       continue;
     }
 
     const signer = signerByNamespace.get(spec.namespace);
     if (!signer) {
-      throw new Error(`Transaction adapter for namespace "${spec.namespace}" requires a signer binding`);
+      throw new Error(`Namespace transaction for namespace "${spec.namespace}" requires a signer binding`);
     }
 
-    const adapter = createTransactionAdapter({
+    const transaction = createTransaction({
       rpcClients,
       chains,
       signer,
     });
-    transactionRegistry.register(spec.namespace, adapter);
+    namespaceTransactions.register(spec.namespace, transaction);
   }
 
-  const transactionNamespaces = new Set(transactionRegistry.listNamespaces());
+  const transactionNamespaces = new Set(namespaceTransactions.listNamespaces());
   const receiptTrackingNamespaces = new Set<string>();
   for (const spec of runtimeSupport.namespaces) {
     const approvalBindings = approvalByNamespace.get(spec.namespace);
     const uiBindings = uiByNamespace.get(spec.namespace);
-    const transactionAdapter = transactionRegistry.get(spec.namespace);
-    const receiptTracking = transactionAdapter?.receiptTracking;
+    const namespaceTransaction = namespaceTransactions.get(spec.namespace);
+    const receiptTracking = namespaceTransaction?.receiptTracking;
     if (receiptTracking) {
       receiptTrackingNamespaces.add(spec.namespace);
     }

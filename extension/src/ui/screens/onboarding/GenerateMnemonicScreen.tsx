@@ -66,7 +66,7 @@ export function GenerateMnemonicScreen({
             <XStack flexWrap="wrap" gap="$3" justifyContent="center">
               {words.map((word, index) => (
                 <XStack
-                  key={`${index}-${word}`}
+                  key={`${word}`}
                   backgroundColor="$bg"
                   borderWidth={1}
                   borderColor="$border"

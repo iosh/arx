@@ -5,7 +5,6 @@ import type { NamespaceTransactionReview } from "../../controllers/transaction/r
 import type { TransactionMeta } from "../../controllers/transaction/types.js";
 import type {
   TransactionIssue,
-  TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
   TransactionSubmissionLocator,
@@ -69,19 +68,23 @@ export type TransactionDraftEditContext = {
   mode?: string | undefined;
 };
 
-export type NamespaceTransactionReceiptTracking = {
-  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
-  detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
+export type NamespaceTransactionRequest = {
+  deriveForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
+  validate?(context: TransactionValidationContext): void;
 };
 
-export type NamespaceTransactionSubmission = {
-  validateRequest?(context: TransactionValidationContext): void;
-  prepareTransaction(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
-  signTransaction(
+export type NamespaceTransactionProposal = {
+  prepare(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
+  buildReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
+  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
+};
+
+export type NamespaceTransactionExecution = {
+  sign(
     context: TransactionSignContext,
     prepared: PreparedTransactionResult["prepared"],
   ): Promise<SignedTransactionPayload>;
-  broadcastTransaction(
+  broadcast(
     context: TransactionPrepareContext,
     signed: SignedTransactionPayload,
     prepared: PreparedTransactionResult["prepared"],
@@ -90,12 +93,17 @@ export type NamespaceTransactionSubmission = {
     locator: TransactionSubmissionLocator;
   }>;
 };
-export type { TransactionSubmissionLocator, TransactionSubmitted } from "../types.js";
+
+export type NamespaceTransactionTracking = {
+  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
+  detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
+  deriveReplacementKey?(context: TransactionTrackingContext): TransactionReplacementKey | null;
+};
 
 export type NamespaceTransaction = {
-  deriveRequestForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
-  buildApprovalReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
-  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
-  deriveReplacementKey?(context: TransactionTrackingContext): TransactionReplacementKey | null;
-  receiptTracking?: NamespaceTransactionReceiptTracking;
-} & NamespaceTransactionSubmission;
+  request?: NamespaceTransactionRequest;
+  proposal?: NamespaceTransactionProposal;
+  execution?: NamespaceTransactionExecution;
+  tracking?: NamespaceTransactionTracking;
+};
+export type { TransactionSubmissionLocator, TransactionSubmitted } from "../types.js";

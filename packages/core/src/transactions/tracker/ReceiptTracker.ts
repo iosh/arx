@@ -1,11 +1,13 @@
+import { requireNamespaceTransactionOperation } from "../namespace/operations.js";
 import type {
   NamespaceTransaction,
+  NamespaceTransactionTracking,
   ReceiptResolution,
   ReplacementResolution,
   TransactionTrackingContext,
 } from "../namespace/types.js";
 
-type TrackerTransaction = Pick<NamespaceTransaction, "receiptTracking">;
+type TrackerTransaction = Pick<NamespaceTransaction, "tracking">;
 
 type TrackerDeps = {
   getTransaction(namespace: string): TrackerTransaction | undefined;
@@ -86,8 +88,8 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
 
     try {
       const namespaceTransaction = deps.getTransaction(state.context.namespace);
-      const receiptTracking = namespaceTransaction?.receiptTracking;
-      if (!receiptTracking) {
+      const tracking: NamespaceTransactionTracking | undefined = namespaceTransaction?.tracking;
+      if (!tracking) {
         stop(state.id);
         await deps.onUnsupported(
           state.id,
@@ -96,9 +98,22 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
         return;
       }
 
+      let fetchReceipt: NamespaceTransactionTracking["fetchReceipt"];
+      try {
+        fetchReceipt = requireNamespaceTransactionOperation({
+          namespace: state.context.namespace,
+          operation: "tracking.fetchReceipt",
+          value: tracking.fetchReceipt,
+        });
+      } catch (error) {
+        stop(state.id);
+        await deps.onUnsupported(state.id, error);
+        return;
+      }
+
       let receiptResult: ReceiptResolution | null = null;
       try {
-        receiptResult = await receiptTracking.fetchReceipt(state.context);
+        receiptResult = await fetchReceipt(state.context);
       } catch (error) {
         await handleTransientError(error);
       }
@@ -109,10 +124,10 @@ export const createReceiptTracker = (deps: TrackerDeps, options?: TrackerOptions
         return;
       }
 
-      if (receiptTracking.detectReplacement) {
+      if (tracking.detectReplacement) {
         let replacement: ReplacementResolution | null = null;
         try {
-          replacement = await receiptTracking.detectReplacement(state.context);
+          replacement = await tracking.detectReplacement(state.context);
         } catch (error) {
           await handleTransientError(error);
         }

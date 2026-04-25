@@ -59,7 +59,7 @@ export class TransactionReceiptTracking {
   handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
     if (next.status === "broadcast" && next.submitted && next.locator) {
       const namespaceTransaction = this.#namespaces.get(next.namespace);
-      if (!namespaceTransaction?.receiptTracking) {
+      if (!namespaceTransaction?.tracking) {
         void this.#handleTrackingUnsupported(
           next.id,
           new Error(`Namespace transaction ${next.namespace} cannot fetch receipts.`),
@@ -95,7 +95,7 @@ export class TransactionReceiptTracking {
   resumeBroadcast(meta: TransactionMeta) {
     if (meta.status !== "broadcast" || !meta.submitted || !meta.locator) return;
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
-    if (!namespaceTransaction?.receiptTracking) {
+    if (!namespaceTransaction?.tracking) {
       void this.#handleTrackingUnsupported(
         meta.id,
         new Error(`Namespace transaction ${meta.namespace} cannot fetch receipts.`),
@@ -139,8 +139,8 @@ export class TransactionReceiptTracking {
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     const trackingContext = buildTrackingContext(meta);
     let replacedId = resolution.replacedId;
-    if (replacedId === undefined && namespaceTransaction?.deriveReplacementKey && trackingContext) {
-      const key = namespaceTransaction.deriveReplacementKey(trackingContext);
+    if (replacedId === undefined && namespaceTransaction?.tracking?.deriveReplacementKey && trackingContext) {
+      const key = namespaceTransaction.tracking.deriveReplacementKey(trackingContext);
       if (key) {
         const replacementKey = encodeReplacementKey(key);
         const replacement = await this.#findConfirmedReplacementCandidate({
@@ -235,8 +235,8 @@ export class TransactionReceiptTracking {
   #deriveReplacementKey(meta: TransactionMeta): string | null {
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     const trackingContext = buildTrackingContext(meta);
-    if (!namespaceTransaction?.deriveReplacementKey || !trackingContext) return null;
-    const key = namespaceTransaction.deriveReplacementKey(trackingContext);
+    if (!namespaceTransaction?.tracking?.deriveReplacementKey || !trackingContext) return null;
+    const key = namespaceTransaction.tracking.deriveReplacementKey(trackingContext);
     return key ? encodeReplacementKey(key) : null;
   }
 
@@ -252,7 +252,7 @@ export class TransactionReceiptTracking {
     });
   }
 
-  async #handleTrackingUnsupported(id: string, error: unknown): Promise<void> {
+  async #handleTrackingUnsupported(id: string, _error: unknown): Promise<void> {
     const meta = await this.#loadBroadcastMeta(id);
     if (!meta) return;
 

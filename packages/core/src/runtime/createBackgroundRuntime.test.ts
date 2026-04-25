@@ -3,6 +3,7 @@ import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
+import type { NamespaceTransaction } from "../transactions/index.js";
 import type { TransactionRequest } from "../transactions/types.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
@@ -56,6 +57,26 @@ const DEFAULT_RPC_ENGINE = {
     shouldRequestUnlockAttention: () => false,
   },
 } as const;
+
+const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
+  proposal: {
+    prepare: async () => ({ prepared: {}, warnings: [], issues: [] }),
+  },
+  execution: {
+    sign: async () => ({ raw: "0x1111" }),
+    broadcast: async (context) => ({
+      submitted: {
+        hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        chainId: "0x1",
+        from: context.from,
+      },
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
+    }),
+  },
+});
 
 const createTestRuntime = (params?: {
   chainSeed?: ChainMetadata[];
@@ -601,13 +622,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
             ...eip155NamespaceManifest,
             runtime: {
               ...eip155NamespaceManifest.runtime,
-              createTransaction: () => ({
-                prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
-                signTransaction: async () => ({ raw: "0x1111", hash: null }),
-                broadcastTransaction: async () => ({
-                  hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-                }),
-              }),
+              createTransaction: createNamespaceTransactionWithoutTracking,
               createUiBindings: () => ({
                 getNativeBalance: async () => 0n,
                 createSendTransactionRequest: () => ({
@@ -662,13 +677,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
                   },
                 }),
               }),
-              createTransaction: () => ({
-                prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
-                signTransaction: async () => ({ raw: "0x1111", hash: null }),
-                broadcastTransaction: async () => ({
-                  hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
-                }),
-              }),
+              createTransaction: createNamespaceTransactionWithoutTracking,
             },
           },
         ],

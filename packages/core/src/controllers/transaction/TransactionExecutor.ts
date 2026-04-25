@@ -7,6 +7,7 @@ import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
@@ -129,14 +130,14 @@ export class TransactionExecutor
 
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({ chainRef, address: fromAddress });
     const namespaceTransaction = this.#namespaces.get(derived.namespace);
-    if (namespaceTransaction && !namespaceTransaction.receiptTracking) {
+    if (namespaceTransaction && !namespaceTransaction.tracking) {
       throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef });
     }
     if (!namespaceTransaction) {
       throw createMissingNamespaceTransactionError(derived.namespace);
     }
 
-    const derivedRequestCandidate = namespaceTransaction.deriveRequestForChain?.(request, chainRef) ?? {
+    const derivedRequestCandidate = namespaceTransaction.request?.deriveForChain?.(request, chainRef) ?? {
       ...request,
       chainRef,
     };
@@ -168,7 +169,7 @@ export class TransactionExecutor
       from: ownedAccount.canonicalAddress,
       request: structuredClone(derivedRequest),
     };
-    namespaceTransaction.validateRequest?.(validationContext);
+    namespaceTransaction.request?.validate?.(validationContext);
 
     const runtimeMeta = this.#runtime.create({
       id,
@@ -346,7 +347,7 @@ export class TransactionExecutor
       await this.rejectTransaction(id, createMissingNamespaceTransactionError(meta.namespace));
       return;
     }
-    if (!namespaceTransaction.receiptTracking) {
+    if (!namespaceTransaction.tracking) {
       await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
       return;
     }
@@ -366,7 +367,12 @@ export class TransactionExecutor
         meta = next;
       }
 
-      const signed = await namespaceTransaction.signTransaction(buildSignContext(meta), prepared);
+      const sign = requireNamespaceTransactionOperation({
+        namespace: meta.namespace,
+        operation: "execution.sign",
+        value: namespaceTransaction.execution?.sign,
+      });
+      const signed = await sign(buildSignContext(meta), prepared);
       const signedMeta = this.#runtime.transition({
         id,
         fromStatus: meta.status,
@@ -382,9 +388,14 @@ export class TransactionExecutor
       }
 
       this.#broadcasting.add(id);
-      let broadcast;
+      const broadcastTransaction = requireNamespaceTransactionOperation({
+        namespace: signedMeta.namespace,
+        operation: "execution.broadcast",
+        value: namespaceTransaction.execution?.broadcast,
+      });
+      let broadcast: Awaited<ReturnType<typeof broadcastTransaction>>;
       try {
-        broadcast = await namespaceTransaction.broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
+        broadcast = await broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
       } finally {
         this.#broadcasting.delete(id);
       }
@@ -402,7 +413,7 @@ export class TransactionExecutor
         return;
       }
 
-      let durable;
+      let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
         durable = await this.#service.createSubmitted({
           id: broadcastMeta.id,
@@ -483,12 +494,12 @@ export class TransactionExecutor
     }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
-    if (!namespaceTransaction?.applyDraftEdit) {
+    if (!namespaceTransaction?.proposal?.applyDraftEdit) {
       throw new Error(`Transaction draft edits are not supported for namespace "${meta.namespace}".`);
     }
 
     const request = this.#requireRuntimeRequest(meta);
-    const nextRequest = namespaceTransaction.applyDraftEdit({
+    const nextRequest = namespaceTransaction.proposal.applyDraftEdit({
       transaction: meta,
       request: structuredClone({
         ...request,

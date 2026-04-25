@@ -1,4 +1,5 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "./review/session.js";
 import type { TransactionReviewMessage } from "./review/types.js";
@@ -187,8 +188,12 @@ export class TransactionPrepareManager {
 
     try {
       const context = buildPrepareContext(meta);
-      const runPrepare = async () =>
-        await this.#withTimeout(namespaceTransaction.prepareTransaction(context), timeoutMs);
+      const prepare = requireNamespaceTransactionOperation({
+        namespace: meta.namespace,
+        operation: "proposal.prepare",
+        value: namespaceTransaction.proposal?.prepare,
+      });
+      const runPrepare = async () => await this.#withTimeout(prepare(context), timeoutMs);
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
       const diagnostics = this.#classifyPreparedDiagnostics(result);
 

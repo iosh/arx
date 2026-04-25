@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../storage/records.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
-import type { NamespaceTransaction, NamespaceTransactionReceiptTracking } from "../transactions/namespace/types.js";
+import type { NamespaceTransaction, NamespaceTransactionTracking } from "../transactions/namespace/types.js";
 import {
   createChainMetadata,
   flushAsync,
@@ -25,27 +25,31 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       displayName: "Ethereum Mainnet",
     });
 
-    const fetchReceipt = vi.fn<NamespaceTransactionReceiptTracking["fetchReceipt"]>(async () => ({
+    const fetchReceipt = vi.fn<NamespaceTransactionTracking["fetchReceipt"]>(async () => ({
       status: "success",
       receipt: { status: "0x1", blockNumber: "0x10" },
     }));
 
     const adapter: NamespaceTransaction = {
-      prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
-      signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
-      broadcastTransaction: vi.fn(async () => ({
-        submitted: {
-          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          chainId: "0x1",
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          nonce: "0x7",
-        },
-        locator: {
-          format: "eip155.tx_hash",
-          value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        },
-      })),
-      receiptTracking: { fetchReceipt },
+      proposal: {
+        prepare: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
+      },
+      execution: {
+        sign: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
+        broadcast: vi.fn(async () => ({
+          submitted: {
+            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            chainId: "0x1",
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            nonce: "0x7",
+          },
+          locator: {
+            format: "eip155.tx_hash",
+            value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          },
+        })),
+      },
+      tracking: { fetchReceipt },
     };
 
     const namespaceTransactions = new NamespaceTransactions();

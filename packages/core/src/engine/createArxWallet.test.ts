@@ -17,7 +17,12 @@ import {
   TEST_RECEIPT_POLL_INTERVAL,
 } from "../runtime/__fixtures__/backgroundTestSetup.js";
 import type { TransactionRecord } from "../storage/records.js";
-import type { NamespaceTransaction } from "../transactions/namespace/types.js";
+import type {
+  NamespaceTransaction,
+  NamespaceTransactionExecution,
+  NamespaceTransactionProposal,
+  NamespaceTransactionTracking,
+} from "../transactions/namespace/types.js";
 import { createArxWallet, createArxWalletRuntime } from "./createArxWallet.js";
 import { createEip155WalletNamespaceModule } from "./modules/eip155.js";
 import type { CreateArxWalletInput, WalletNamespaceModule } from "./types.js";
@@ -108,15 +113,30 @@ const createProviderRpcContext = () => ({
   },
 });
 
-const createWalletModuleWithNamespaceTransaction = (adapter: NamespaceTransaction): WalletNamespaceModule => {
+const createWalletModuleWithNamespaceTransaction = (adapter: {
+  prepareTransaction: NamespaceTransactionProposal["prepare"];
+  signTransaction: NamespaceTransactionExecution["sign"];
+  broadcastTransaction: NamespaceTransactionExecution["broadcast"];
+  tracking?: NamespaceTransactionTracking;
+}): WalletNamespaceModule => {
   const module = createEip155WalletNamespaceModule();
+  const transaction: NamespaceTransaction = {
+    proposal: {
+      prepare: adapter.prepareTransaction,
+    },
+    execution: {
+      sign: adapter.signTransaction,
+      broadcast: adapter.broadcastTransaction,
+    },
+    ...(adapter.tracking ? { tracking: adapter.tracking } : {}),
+  };
   return {
     ...module,
     engine: {
       ...module.engine,
       factories: {
         ...module.engine.factories,
-        createTransaction: () => adapter,
+        createTransaction: () => transaction,
       },
     },
   };
@@ -527,8 +547,17 @@ describe("createArxWallet", () => {
       raw: "0x1111",
       hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
     }));
-    const broadcastTransaction = vi.fn(async (_ctx, signed) => ({
-      hash: signed.hash ?? "0x1111111111111111111111111111111111111111111111111111111111111111",
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => ({
+      submitted: {
+        hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        chainId: "0x1",
+        from: ctx.from,
+        ...(typeof prepared.nonce === "string" ? { nonce: prepared.nonce } : {}),
+      },
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      },
     }));
     const transactionsPort = new MemoryTransactionsPort();
 
@@ -541,7 +570,7 @@ describe("createArxWallet", () => {
           prepareTransaction,
           signTransaction,
           broadcastTransaction,
-          receiptTracking: {
+          tracking: {
             fetchReceipt: vi.fn(async () => null),
           },
         }),
@@ -591,7 +620,7 @@ describe("createArxWallet", () => {
           prepareTransaction,
           signTransaction,
           broadcastTransaction,
-          receiptTracking: {
+          tracking: {
             fetchReceipt: vi.fn(async () => null),
           },
         }),
@@ -600,7 +629,10 @@ describe("createArxWallet", () => {
 
     try {
       expect(transactionId).not.toBeNull();
-      expect(reopened.wallet.transactions.getMeta(transactionId!)).toBeUndefined();
+      if (transactionId === null) {
+        throw new Error("Expected transaction id to be set before restart.");
+      }
+      expect(reopened.wallet.transactions.getMeta(transactionId)).toBeUndefined();
       expect(await transactionsPort.list()).toEqual([]);
       expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(0);
@@ -654,7 +686,7 @@ describe("createArxWallet", () => {
               value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             },
           })),
-          receiptTracking: {
+          tracking: {
             fetchReceipt,
           },
         }),

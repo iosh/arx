@@ -169,7 +169,7 @@ export class StoreTransactionController implements TransactionController {
     const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
     const namespaceReview =
       namespaceTransaction && request
-        ? (namespaceTransaction.buildApprovalReview?.({
+        ? (namespaceTransaction.proposal?.buildReview?.({
             transaction,
             request,
           }) ?? null)

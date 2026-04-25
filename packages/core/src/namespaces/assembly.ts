@@ -311,8 +311,8 @@ export const materializeNamespaceRuntimeSupport = (params: {
     const approvalBindings = approvalByNamespace.get(spec.namespace);
     const uiBindings = uiByNamespace.get(spec.namespace);
     const namespaceTransaction = namespaceTransactions.get(spec.namespace);
-    const receiptTracking = namespaceTransaction?.receiptTracking;
-    if (receiptTracking) {
+    const tracking = namespaceTransaction?.tracking;
+    if (tracking) {
       receiptTrackingNamespaces.add(spec.namespace);
     }
 
@@ -323,8 +323,8 @@ export const materializeNamespaceRuntimeSupport = (params: {
       hasApprovalBindings: Boolean(approvalBindings?.signMessage || approvalBindings?.signTypedData),
       hasUiBindings: Boolean(uiBindings?.getNativeBalance || uiBindings?.createSendTransactionRequest),
       hasTransaction: transactionNamespaces.has(spec.namespace),
-      hasTransactionReceiptTracking: Boolean(receiptTracking),
-      hasTransactionReplacementTracking: Boolean(receiptTracking?.detectReplacement),
+      hasTransactionReceiptTracking: Boolean(tracking),
+      hasTransactionReplacementTracking: Boolean(tracking?.detectReplacement),
     });
   }
 

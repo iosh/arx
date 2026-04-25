@@ -64,47 +64,53 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
   const receiptService = createEip155ReceiptService({ rpcClientFactory: deps.rpcClientFactory });
 
   return {
-    deriveRequestForChain(request, chainRef) {
-      if (request.namespace !== "eip155") {
-        throw new Error(`EIP-155 transaction cannot derive request for namespace "${request.namespace}"`);
-      }
-      return deriveEip155TransactionRequestForChain(request as Eip155TransactionRequest, chainRef);
+    request: {
+      deriveForChain(request, chainRef) {
+        if (request.namespace !== "eip155") {
+          throw new Error(`EIP-155 transaction cannot derive request for namespace "${request.namespace}"`);
+        }
+        return deriveEip155TransactionRequestForChain(request as Eip155TransactionRequest, chainRef);
+      },
+      validate: validateRequest,
     },
-    validateRequest,
-    prepareTransaction,
-    signTransaction: (context, prepared) => deps.signer.signTransaction(context, prepared),
-    buildApprovalReview: ({ transaction, request }) => buildEip155ApprovalReview({ transaction, request }),
-    applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
-    deriveReplacementKey(context) {
-      const submitted = context.submitted as Partial<Eip155SubmittedTransaction>;
-      if (typeof submitted.from !== "string" || typeof submitted.nonce !== "string") {
-        return null;
-      }
-      return deriveEip155ReplacementKey({
-        chainRef: context.chainRef,
-        submitted: submitted as Eip155SubmittedTransaction,
-      });
+    proposal: {
+      prepare: prepareTransaction,
+      buildReview: ({ transaction, request }) => buildEip155ApprovalReview({ transaction, request }),
+      applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
     },
-    async broadcastTransaction(context, signed, prepared) {
-      const broadcast = await deps.broadcaster.broadcast(context, signed);
-      const preparedTransaction = prepared as Eip155PreparedTransaction;
-      const txHash = broadcast.hash as `0x${string}`;
-      const submitted = buildEip155SubmittedTransaction({
-        hash: txHash,
-        prepared: preparedTransaction,
-        fallbackFrom: context.from,
-      });
-      return {
-        submitted,
-        locator: {
-          format: "eip155.tx_hash",
-          value: txHash,
-        },
-      };
+    execution: {
+      sign: (context, prepared) => deps.signer.signTransaction(context, prepared),
+      async broadcast(context, signed, prepared) {
+        const broadcast = await deps.broadcaster.broadcast(context, signed);
+        const preparedTransaction = prepared as Eip155PreparedTransaction;
+        const txHash = broadcast.hash as `0x${string}`;
+        const submitted = buildEip155SubmittedTransaction({
+          hash: txHash,
+          prepared: preparedTransaction,
+          fallbackFrom: context.from,
+        });
+        return {
+          submitted,
+          locator: {
+            format: "eip155.tx_hash",
+            value: txHash,
+          },
+        };
+      },
     },
-    receiptTracking: {
+    tracking: {
       fetchReceipt: (context) => receiptService.fetchReceipt(context),
       detectReplacement: (context) => receiptService.detectReplacement(context),
+      deriveReplacementKey(context) {
+        const submitted = context.submitted as Partial<Eip155SubmittedTransaction>;
+        if (typeof submitted.from !== "string" || typeof submitted.nonce !== "string") {
+          return null;
+        }
+        return deriveEip155ReplacementKey({
+          chainRef: context.chainRef,
+          submitted: submitted as Eip155SubmittedTransaction,
+        });
+      },
     },
   };
 };

@@ -17,8 +17,8 @@ export function RequestPermissionsPayload({ approval }: { approval: RequestPermi
         This site wants connection access on the following chains. Choose the account to expose for this connection.
       </Paragraph>
       <YStack gap="$2" marginTop="$2">
-        {approval.request.requestedGrants.map((request, index) => (
-          <Card key={`${request.grantKind}-${request.chainRef}-${index}`} padded bordered>
+        {approval.request.requestedGrants.map((request) => (
+          <Card key={`${request.grantKind}-${request.chainRef}`} padded bordered>
             <Paragraph fontWeight="600">{getGrantKindLabel(request.grantKind)}</Paragraph>
             <Paragraph color="$color10" fontSize="$2">
               Chain: {request.chainRef}

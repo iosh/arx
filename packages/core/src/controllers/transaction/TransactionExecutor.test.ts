@@ -26,6 +26,43 @@ const createReceiptTrackingStub = () => ({
   fetchReceipt: vi.fn(async () => null),
 });
 
+const createNamespaceTransactionStub = (
+  overrides?: Partial<{
+    deriveForChain: (...args: unknown[]) => unknown;
+    validate: (...args: unknown[]) => unknown;
+    prepare: (...args: unknown[]) => unknown;
+    applyDraftEdit: (...args: unknown[]) => unknown;
+    sign: (...args: unknown[]) => unknown;
+    broadcast: (...args: unknown[]) => unknown;
+    tracking: unknown;
+  }>,
+) => ({
+  request: {
+    ...(overrides?.deriveForChain ? { deriveForChain: overrides.deriveForChain } : {}),
+    ...(overrides?.validate ? { validate: overrides.validate } : {}),
+  },
+  proposal: {
+    prepare:
+      overrides?.prepare ??
+      vi.fn(async () => ({
+        prepared: {},
+        warnings: [],
+        issues: [],
+      })),
+    ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit } : {}),
+  },
+  execution: {
+    sign: overrides?.sign ?? vi.fn(async () => ({ raw: "0x" })),
+    broadcast:
+      overrides?.broadcast ??
+      vi.fn(async () => ({
+        submitted: DEFAULT_SUBMITTED,
+        locator: DEFAULT_LOCATOR,
+      })),
+  },
+  ...(overrides?.tracking !== undefined ? { tracking: overrides.tracking } : { tracking: createReceiptTrackingStub() }),
+});
+
 const DEFAULT_LOCATOR = { format: "eip155.tx_hash" as const, value: "0xdeadbeef" };
 const DEFAULT_SUBMITTED = {
   hash: DEFAULT_LOCATOR.value,
@@ -187,10 +224,10 @@ const createExecutor = (params?: {
     } as never,
     namespaces: (params?.namespaces ??
       ({
-        get: () => ({
-          validateRequest: () => undefined,
-          receiptTracking: createReceiptTrackingStub(),
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            validate: () => undefined,
+          }),
       } as const)) as never,
     service: {
       get: params?.service?.get ?? vi.fn(async () => null),
@@ -481,10 +518,10 @@ describe("TransactionExecutor", () => {
     }));
     const { executor, runtime, chainRef } = createExecutor({
       namespaces: {
-        get: () => ({
-          deriveRequestForChain,
-          receiptTracking: createReceiptTrackingStub(),
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            deriveForChain: deriveRequestForChain as never,
+          }),
       },
     });
 
@@ -565,16 +602,16 @@ describe("TransactionExecutor", () => {
     const createApproval = vi.fn();
     const { executor, runtime } = createExecutor({
       namespaces: {
-        get: () => ({
-          validateRequest: () => {
-            throw arxError({
-              reason: ArxReasons.RpcInvalidParams,
-              message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
-              data: { code: "transaction.prepare.fee_conflict" },
-            });
-          },
-          receiptTracking: createReceiptTrackingStub(),
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            validate: () => {
+              throw arxError({
+                reason: ArxReasons.RpcInvalidParams,
+                message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
+                data: { code: "transaction.prepare.fee_conflict" },
+              });
+            },
+          }),
       },
       approvals: {
         create: createApproval,
@@ -613,10 +650,10 @@ describe("TransactionExecutor", () => {
     });
     const { executor, chainRef } = createExecutor({
       namespaces: {
-        get: () => ({
-          validateRequest,
-          receiptTracking: createReceiptTrackingStub(),
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            validate: validateRequest as never,
+          }),
       },
     });
 
@@ -860,11 +897,11 @@ describe("TransactionExecutor", () => {
     const handleTransition = vi.fn();
     const { executor, runtime, commitRecord } = createExecutor({
       namespaces: {
-        get: () => ({
-          receiptTracking: createReceiptTrackingStub(),
-          signTransaction,
-          broadcastTransaction,
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            sign: signTransaction as never,
+            broadcast: broadcastTransaction as never,
+          }),
       },
       service: {
         createSubmitted,
@@ -958,9 +995,8 @@ describe("TransactionExecutor", () => {
       runtime,
       namespaces: {
         get: () =>
-          ({
-            prepareTransaction,
-            receiptTracking: createReceiptTrackingStub(),
+          createNamespaceTransactionStub({
+            prepare: prepareTransaction as never,
           }) as never,
       } as never,
       reviewSessions,
@@ -969,17 +1005,17 @@ describe("TransactionExecutor", () => {
     const { executor } = createExecutor({
       runtime,
       namespaces: {
-        get: () => ({
-          prepareTransaction,
-          applyDraftEdit: ({ request }: { request: TransactionMeta["request"] }) => ({
-            ...request!,
-            payload: {
-              ...(request!.payload as Record<string, unknown>),
-              to: "0xcccccccccccccccccccccccccccccccccccccccc",
-            },
+        get: () =>
+          createNamespaceTransactionStub({
+            prepare: prepareTransaction as never,
+            applyDraftEdit: (({ request }: { request: NonNullable<TransactionMeta["request"]> }) => ({
+              ...request,
+              payload: {
+                ...(request.payload as Record<string, unknown>),
+                to: "0xcccccccccccccccccccccccccccccccccccccccc",
+              },
+            })) as never,
           }),
-          receiptTracking: createReceiptTrackingStub(),
-        }),
       },
       prepare: {
         queuePrepare: prepare.queuePrepare.bind(prepare),
@@ -1046,10 +1082,10 @@ describe("TransactionExecutor", () => {
   it("rejects draft edits after approval begins", async () => {
     const { executor, runtime } = createExecutor({
       namespaces: {
-        get: () => ({
-          applyDraftEdit: ({ request }: { request: TransactionMeta["request"] }) => request,
-          receiptTracking: createReceiptTrackingStub(),
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            applyDraftEdit: (({ request }: { request: TransactionMeta["request"] }) => request) as never,
+          }),
       },
     });
 
@@ -1107,11 +1143,11 @@ describe("TransactionExecutor", () => {
 
     const { executor, runtime } = createExecutor({
       namespaces: {
-        get: () => ({
-          receiptTracking: createReceiptTrackingStub(),
-          signTransaction,
-          broadcastTransaction,
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            sign: signTransaction as never,
+            broadcast: broadcastTransaction as never,
+          }),
       },
     });
 
@@ -1195,11 +1231,11 @@ describe("TransactionExecutor", () => {
 
     const { executor, runtime, commitRecord } = createExecutor({
       namespaces: {
-        get: () => ({
-          receiptTracking: createReceiptTrackingStub(),
-          signTransaction,
-          broadcastTransaction,
-        }),
+        get: () =>
+          createNamespaceTransactionStub({
+            sign: signTransaction as never,
+            broadcast: broadcastTransaction as never,
+          }),
       },
       service: {
         createSubmitted,
@@ -1361,13 +1397,13 @@ describe("TransactionExecutor", () => {
     const broadcastTransaction = vi.fn();
     const { executor, runtime } = createExecutor({
       namespaces: {
-        get: () => ({
-          receiptTracking: createReceiptTrackingStub(),
-          signTransaction: vi.fn(async () => {
-            throw lockError;
+        get: () =>
+          createNamespaceTransactionStub({
+            sign: vi.fn(async () => {
+              throw lockError;
+            }) as never,
+            broadcast: broadcastTransaction as never,
           }),
-          broadcastTransaction,
-        }),
       },
     });
 

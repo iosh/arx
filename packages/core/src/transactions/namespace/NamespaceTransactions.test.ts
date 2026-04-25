@@ -3,12 +3,16 @@ import { NamespaceTransactions } from "./NamespaceTransactions.js";
 import type { NamespaceTransaction } from "./types.js";
 
 const dummy = (): NamespaceTransaction => ({
-  prepareTransaction: async () => ({ prepared: {}, warnings: [], issues: [] }),
-  signTransaction: async (_ctx, _prepared) => ({ raw: "0x" }),
-  broadcastTransaction: async () => ({
-    submitted: { hash: "0xhash" },
-    locator: { format: "test.tx_hash", value: "0xhash" },
-  }),
+  proposal: {
+    prepare: async () => ({ prepared: {}, warnings: [], issues: [] }),
+  },
+  execution: {
+    sign: async (_ctx, _prepared) => ({ raw: "0x" }),
+    broadcast: async () => ({
+      submitted: { hash: "0xhash" },
+      locator: { format: "test.tx_hash", value: "0xhash" },
+    }),
+  },
 });
 
 describe("NamespaceTransactions", () => {

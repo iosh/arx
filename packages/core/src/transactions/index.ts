@@ -8,8 +8,10 @@ export { createEip155Transaction } from "./namespace/eip155/transaction.js";
 export { NamespaceTransactions } from "./namespace/NamespaceTransactions.js";
 export type {
   NamespaceTransaction,
-  NamespaceTransactionReceiptTracking,
-  NamespaceTransactionSubmission,
+  NamespaceTransactionExecution,
+  NamespaceTransactionProposal,
+  NamespaceTransactionRequest,
+  NamespaceTransactionTracking,
   PreparedTransactionResult,
   ReceiptResolution,
   ReplacementResolution,

@@ -1,14 +1,17 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
-import type { Eip155PreparedTransaction, Eip155PreparedTransactionResult } from "../types.js";
-import { parseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
+import type { Eip155PreparedTransaction, Eip155PrepareStepResult } from "../types.js";
+import {
+  Eip155FieldParseError,
+  parseHexQuantityToBigInt,
+  parseOptionalHexQuantity,
+  readErrorMessage,
+} from "../utils/validation.js";
 
 const toBigIntOrNull = (value: string | undefined): bigint | null => {
   if (!value) return null;
   try {
-    const trimmed = value.trim().toLowerCase();
-    Hex.assert(trimmed as Hex.Hex, { strict: false });
-    return Hex.toBigInt(trimmed as Hex.Hex);
+    return parseHexQuantityToBigInt(value, "value");
   } catch {
     return null;
   }
@@ -17,33 +20,37 @@ const toBigIntOrNull = (value: string | undefined): bigint | null => {
 type BalanceResolverParams = {
   rpc: Eip155RpcCapabilities | null;
   prepared: Pick<Eip155PreparedTransaction, "from" | "gas" | "value" | "gasPrice" | "maxFeePerGas">;
-  issues: Eip155PreparedTransactionResult["issues"];
-  warnings: Eip155PreparedTransactionResult["warnings"];
   additionalFeeWei?: bigint;
 };
 
 export const checkBalanceForMaxCost = async ({
   rpc,
   prepared,
-  issues,
-  warnings,
   additionalFeeWei = 0n,
-}: BalanceResolverParams): Promise<void> => {
-  if (!rpc) return;
-  if (!prepared.from) return;
+}: BalanceResolverParams): Promise<Eip155PrepareStepResult<Partial<Eip155PreparedTransaction>>> => {
+  if (!rpc) return { status: "ok", patch: {} };
+  if (!prepared.from) return { status: "ok", patch: {} };
 
-  const gasHex = prepared.gas ? parseHexQuantity(issues, prepared.gas, "gas") : null;
-  if (!gasHex) return;
-
-  const gasLimit = toBigIntOrNull(gasHex);
-  if (gasLimit === null) return;
+  let gasLimit: bigint | null = null;
+  let gasHex = prepared.gas ?? null;
+  if (prepared.gas) {
+    try {
+      gasHex = parseOptionalHexQuantity(prepared.gas, "gas");
+      gasLimit = gasHex ? Hex.toBigInt(gasHex) : null;
+    } catch (error) {
+      if (error instanceof Eip155FieldParseError) {
+        return { status: "failed", error: error.toProposalError(), patch: {} };
+      }
+      throw error;
+    }
+  }
+  if (gasLimit === null || !gasHex) return { status: "ok", patch: {} };
 
   const valueWei = toBigIntOrNull(prepared.value) ?? 0n;
 
-  // Use the maximum possible fee-per-gas for the balance coverage check.
   const feePerGasHex = prepared.maxFeePerGas ?? prepared.gasPrice ?? null;
   const feePerGas = feePerGasHex ? toBigIntOrNull(feePerGasHex) : null;
-  if (feePerGas === null) return;
+  if (feePerGas === null) return { status: "ok", patch: {} };
 
   const requiredWei = valueWei + gasLimit * feePerGas + additionalFeeWei;
 
@@ -51,56 +58,63 @@ export const checkBalanceForMaxCost = async ({
   try {
     balanceHex = await rpc.getBalance(prepared.from as string, { blockTag: "latest" });
   } catch (error) {
-    pushWarning(
-      warnings,
-      "transaction.prepare.balance_unavailable",
-      "Failed to fetch account balance.",
-      { method: "eth_getBalance", blockTag: "latest", error: readErrorMessage(error) },
-      { severity: "medium" },
-    );
-    return;
+    return {
+      status: "failed",
+      error: {
+        reason: "transaction.prepare.balance_unavailable",
+        message: "Failed to fetch account balance.",
+        data: { method: "eth_getBalance", blockTag: "latest", error: readErrorMessage(error) },
+      },
+      patch: {},
+    };
   }
 
   if (!balanceHex) {
-    pushWarning(
-      warnings,
-      "transaction.prepare.balance_unavailable",
-      "Failed to fetch account balance.",
-      { method: "eth_getBalance", blockTag: "latest" },
-      { severity: "medium" },
-    );
-    return;
+    return {
+      status: "failed",
+      error: {
+        reason: "transaction.prepare.balance_unavailable",
+        message: "Failed to fetch account balance.",
+        data: { method: "eth_getBalance", blockTag: "latest" },
+      },
+      patch: {},
+    };
   }
 
   const balanceWei = toBigIntOrNull(balanceHex);
   if (balanceWei === null) {
-    pushWarning(
-      warnings,
-      "transaction.prepare.balance_unavailable",
-      "Failed to parse account balance from RPC.",
-      { method: "eth_getBalance", blockTag: "latest", balance: balanceHex },
-      { severity: "medium" },
-    );
-    return;
+    return {
+      status: "failed",
+      error: {
+        reason: "transaction.prepare.balance_unavailable",
+        message: "Failed to parse account balance from RPC.",
+        data: { method: "eth_getBalance", blockTag: "latest", balance: balanceHex },
+      },
+      patch: {},
+    };
   }
 
   if (balanceWei < requiredWei) {
     const deficitWei = requiredWei - balanceWei;
-    pushIssue(
-      issues,
-      "transaction.prepare.insufficient_funds",
-      "Insufficient funds for transaction.",
-      {
-        balance: balanceHex,
-        required: Hex.fromNumber(requiredWei),
-        deficit: Hex.fromNumber(deficitWei),
-        value: prepared.value ?? "0x0",
-        gasLimit: gasHex,
-        feePerGas: feePerGasHex,
-        additionalFee: additionalFeeWei > 0n ? Hex.fromNumber(additionalFeeWei) : "0x0",
-        balanceBlockTag: "latest",
+    return {
+      status: "blocked",
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+        message: "Insufficient funds for transaction.",
+        data: {
+          balance: balanceHex,
+          required: Hex.fromNumber(requiredWei),
+          deficit: Hex.fromNumber(deficitWei),
+          value: prepared.value ?? "0x0",
+          gasLimit: gasHex,
+          feePerGas: feePerGasHex,
+          additionalFee: additionalFeeWei > 0n ? Hex.fromNumber(additionalFeeWei) : "0x0",
+          balanceBlockTag: "latest",
+        },
       },
-      { severity: "high" },
-    );
+      patch: {},
+    };
   }
+
+  return { status: "ok", patch: {} };
 };

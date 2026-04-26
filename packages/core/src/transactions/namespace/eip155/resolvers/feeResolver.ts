@@ -1,55 +1,55 @@
 import type { Eip155FeeOracle } from "../feeOracle.js";
-import type { Eip155PreparedTransaction, Eip155PreparedTransactionResult, FeeResolutionResult } from "../types.js";
-import { parseHexQuantity, pushIssue, readErrorMessage } from "../utils/validation.js";
+import type { Eip155PreparedTransaction, Eip155PrepareStepResult, FeeResolutionResult } from "../types.js";
+import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 
 type FeeResolverParams = {
   feeOracle: Eip155FeeOracle | null;
   payloadFees: Partial<Pick<Eip155PreparedTransaction, "gasPrice" | "maxFeePerGas" | "maxPriorityFeePerGas">>;
-  /**
-   * Only validate payload fee fields (no RPC lookups, no suggested fee patching).
-   * Useful for early short-circuiting on malformed requests.
-   */
-  validateOnly?: boolean;
 };
 
 export const deriveFees = async (
   params: FeeResolverParams,
-  issues: Eip155PreparedTransactionResult["issues"],
-): Promise<FeeResolutionResult> => {
+): Promise<Eip155PrepareStepResult<FeeResolutionResult["prepared"]>> => {
   const preparedPatch: FeeResolutionResult["prepared"] = {};
-
   const payloadGasPrice = params.payloadFees.gasPrice ?? null;
   const payloadMaxFee = params.payloadFees.maxFeePerGas ?? null;
   const payloadPriorityFee = params.payloadFees.maxPriorityFeePerGas ?? null;
-
-  if (params.validateOnly) {
-    return { prepared: preparedPatch };
-  }
 
   const hasPayloadFeeFields = Boolean(payloadGasPrice || payloadMaxFee || payloadPriorityFee);
   if (!hasPayloadFeeFields && params.feeOracle) {
     try {
       const suggestion = await params.feeOracle.suggestFees();
       if (suggestion.mode === "eip1559") {
-        const fetchedMaxFee = parseHexQuantity(issues, suggestion.maxFeePerGas, "maxFeePerGas");
-        const fetchedPriorityFee = parseHexQuantity(issues, suggestion.maxPriorityFeePerGas, "maxPriorityFeePerGas");
+        const fetchedMaxFee = parseOptionalHexQuantity(suggestion.maxFeePerGas, "maxFeePerGas");
+        const fetchedPriorityFee = parseOptionalHexQuantity(suggestion.maxPriorityFeePerGas, "maxPriorityFeePerGas");
         if (fetchedMaxFee && fetchedPriorityFee) {
           preparedPatch.maxFeePerGas = fetchedMaxFee;
           preparedPatch.maxPriorityFeePerGas = fetchedPriorityFee;
         }
       } else {
-        const fetchedGasPrice = parseHexQuantity(issues, suggestion.gasPrice, "gasPrice");
+        const fetchedGasPrice = parseOptionalHexQuantity(suggestion.gasPrice, "gasPrice");
         if (fetchedGasPrice) {
           preparedPatch.gasPrice = fetchedGasPrice;
         }
       }
     } catch (error) {
-      pushIssue(issues, "transaction.prepare.fee_estimation_failed", "Failed to fetch fee data.", {
-        method: "feeOracle.suggestFees",
-        error: readErrorMessage(error),
-      });
+      if (error instanceof Eip155FieldParseError) {
+        return { status: "failed", error: error.toProposalError(), patch: preparedPatch };
+      }
+      return {
+        status: "failed",
+        error: {
+          reason: "transaction.prepare.fee_estimation_failed",
+          message: "Failed to fetch fee data.",
+          data: {
+            method: "feeOracle.suggestFees",
+            error: readErrorMessage(error),
+          },
+        },
+        patch: preparedPatch,
+      };
     }
   }
 
-  return { prepared: preparedPatch };
+  return { status: "ok", patch: preparedPatch };
 };

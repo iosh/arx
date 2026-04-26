@@ -27,9 +27,9 @@ export const createEip155RpcMock = (): {
   sendRawTransaction: ReturnType<typeof vi.fn>;
 } => {
   const request = vi.fn();
-  const estimateGas = vi.fn();
-  const getBalance = vi.fn();
-  const getTransactionCount = vi.fn();
+  const estimateGas = vi.fn(async () => "0x5208");
+  const getBalance = vi.fn(async () => "0xffffffffffffffff");
+  const getTransactionCount = vi.fn(async () => "0x0");
   const getGasPrice = vi.fn();
   const getMaxPriorityFeePerGas = vi.fn();
   const getFeeHistory = vi.fn();
@@ -80,8 +80,8 @@ export const createEip155RpcMock = (): {
 export const createEip155RpcClient = (overrides: Partial<Eip155RpcClient> = {}): Eip155RpcClient => {
   return {
     request: vi.fn(async () => null),
-    estimateGas: vi.fn(async () => "0x0"),
-    getBalance: vi.fn(async () => "0x0"),
+    estimateGas: vi.fn(async () => "0x5208"),
+    getBalance: vi.fn(async () => "0xffffffffffffffff"),
     getTransactionCount: vi.fn(async () => "0x0"),
     getGasPrice: vi.fn(async () => "0x0"),
     getMaxPriorityFeePerGas: vi.fn(async () => "0x0"),

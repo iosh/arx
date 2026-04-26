@@ -1,10 +1,5 @@
 import { z } from "zod";
-
-export const TransactionReviewMessageSchema = z.strictObject({
-  code: z.string().min(1),
-  message: z.string().min(1),
-  details: z.record(z.string(), z.unknown()).optional(),
-});
+import type { TransactionPrepared } from "../../../transactions/types.js";
 
 export const TransactionReviewErrorSchema = z.strictObject({
   reason: z.string().min(1),
@@ -12,9 +7,11 @@ export const TransactionReviewErrorSchema = z.strictObject({
   data: z.unknown().optional(),
 });
 
-export const TransactionReviewStateSchema = z.strictObject({
-  status: z.enum(["preparing", "ready", "failed"]),
-  updatedAt: z.number().int(),
+// User-resolvable review stop: visible review, but approval is not allowed.
+export const TransactionReviewBlockerSchema = z.strictObject({
+  reason: z.string().min(1),
+  message: z.string().min(1),
+  data: z.unknown().optional(),
 });
 
 export const Eip155TransactionReviewSchema = z.strictObject({
@@ -35,30 +32,44 @@ export const Eip155TransactionReviewSchema = z.strictObject({
 
 export const NamespaceTransactionReviewSchema = z.discriminatedUnion("namespace", [Eip155TransactionReviewSchema]);
 
+export const TransactionReviewPrepareSchema = z.discriminatedUnion("state", [
+  z.strictObject({
+    state: z.literal("preparing"),
+  }),
+  z.strictObject({
+    state: z.literal("ready"),
+  }),
+  z.strictObject({
+    state: z.literal("blocked"),
+    blocker: TransactionReviewBlockerSchema,
+  }),
+  z.strictObject({
+    state: z.literal("failed"),
+    error: TransactionReviewErrorSchema,
+  }),
+]);
+
 export const SendTransactionApprovalReviewSchema = z.strictObject({
-  reviewState: TransactionReviewStateSchema,
-  prepareFailure: TransactionReviewMessageSchema.nullable(),
-  approvalBlocker: TransactionReviewMessageSchema.nullable(),
-  reviewNotices: z.array(TransactionReviewMessageSchema),
+  updatedAt: z.number().int(),
   namespaceReview: NamespaceTransactionReviewSchema.nullable(),
+  prepare: TransactionReviewPrepareSchema,
 });
 
-export type TransactionReviewMessage = z.infer<typeof TransactionReviewMessageSchema>;
+export type TransactionReviewBlocker = z.infer<typeof TransactionReviewBlockerSchema>;
 export type TransactionReviewError = z.infer<typeof TransactionReviewErrorSchema>;
-export type TransactionReviewState = z.infer<typeof TransactionReviewStateSchema>;
 export type NamespaceTransactionReview = z.infer<typeof NamespaceTransactionReviewSchema>;
+export type TransactionReviewPrepare = z.infer<typeof TransactionReviewPrepareSchema>;
 export type SendTransactionApprovalReview = z.infer<typeof SendTransactionApprovalReviewSchema>;
 
-export type TransactionReviewRuntimeStatus = TransactionReviewState["status"] | "invalidated";
+export type TransactionReviewRuntimeStatus = TransactionReviewPrepare["state"] | "invalidated";
 
 export type TransactionReviewSession = {
   transactionId: string;
   sessionToken: string;
   status: TransactionReviewRuntimeStatus;
   updatedAt: number;
+  reviewPreparedSnapshot: TransactionPrepared | null;
   error: TransactionReviewError | null;
-  prepareFailure: TransactionReviewMessage | null;
-  approvalBlocker: TransactionReviewMessage | null;
-  reviewNotices: TransactionReviewMessage[];
+  blocker: TransactionReviewBlocker | null;
   invalidatedBy?: string | undefined;
 };

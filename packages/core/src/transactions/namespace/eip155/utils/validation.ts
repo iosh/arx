@@ -1,23 +1,33 @@
 import * as Hex from "ox/Hex";
-import type { Eip155PreparedTransactionResult } from "../types.js";
+import type { TransactionProposalError } from "../../types.js";
 
-export type HexQuantityIssueSink = {
-  push: (entry: { code: string; message: string; data?: Record<string, unknown> }) => void;
-};
+export class Eip155FieldParseError extends Error {
+  readonly field: string;
+  readonly reason: string;
+  readonly value: string;
+  readonly parseMessage: string;
 
-const toHexQuantityIssueSink = (
-  issues: Eip155PreparedTransactionResult["issues"] | HexQuantityIssueSink,
-): HexQuantityIssueSink => {
-  if (Array.isArray(issues)) {
+  constructor(args: { field: string; reason: string; message: string; value: string; parseMessage: string }) {
+    super(args.message);
+    this.name = "Eip155FieldParseError";
+    this.field = args.field;
+    this.reason = args.reason;
+    this.value = args.value;
+    this.parseMessage = args.parseMessage;
+  }
+
+  toProposalError(): TransactionProposalError {
     return {
-      push: (entry) => {
-        pushIssue(issues, entry.code, entry.message, entry.data);
+      reason: this.reason,
+      message: this.message,
+      data: {
+        field: this.field,
+        value: this.value,
+        error: this.parseMessage,
       },
     };
   }
-
-  return issues;
-};
+}
 
 export const readErrorMessage = (value: unknown): string => {
   if (value instanceof Error && typeof value.message === "string") {
@@ -26,70 +36,25 @@ export const readErrorMessage = (value: unknown): string => {
   return String(value);
 };
 
-export const pushIssue = (
-  issues: Eip155PreparedTransactionResult["issues"],
-  code: string,
-  message: string,
-  data?: Record<string, unknown>,
-  opts?: { severity?: "low" | "medium" | "high" },
-) => {
-  const entry: Eip155PreparedTransactionResult["issues"][number] = {
-    kind: "issue",
-    code,
-    message,
-    ...(opts?.severity ? { severity: opts.severity } : {}),
-  };
-  if (data) entry.data = data;
-  issues.push(entry);
-};
-
-export const pushWarning = (
-  warnings: Eip155PreparedTransactionResult["warnings"],
-  code: string,
-  message: string,
-  data?: Record<string, unknown>,
-  opts?: { severity?: "low" | "medium" | "high" },
-) => {
-  const entry: Eip155PreparedTransactionResult["warnings"][number] = {
-    kind: "warning",
-    code,
-    message,
-    ...(opts?.severity ? { severity: opts.severity } : {}),
-  };
-  if (data) entry.data = data;
-  warnings.push(entry);
-};
-
-export const parseHexQuantity = (
-  issues: Eip155PreparedTransactionResult["issues"] | HexQuantityIssueSink,
-  value: string | undefined,
-  label: string,
-): Hex.Hex | null => {
-  const sink = toHexQuantityIssueSink(issues);
+export const parseOptionalHexQuantity = (value: string | undefined, field: string): Hex.Hex | null => {
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
   try {
     Hex.assert(trimmed as Hex.Hex, { strict: false });
-    Hex.toBigInt(trimmed as Hex.Hex); // ensure all digits are valid
+    Hex.toBigInt(trimmed as Hex.Hex);
     return trimmed as Hex.Hex;
   } catch (error) {
-    const issue = {
-      code: "transaction.prepare.invalid_hex",
-      message: `${label} must be a 0x-prefixed hex quantity.`,
-      data: {
-        value,
-        error: readErrorMessage(error),
-      },
-    };
-    sink.push(issue);
-    return null;
+    throw new Eip155FieldParseError({
+      field,
+      reason: "transaction.prepare.invalid_hex",
+      message: `Transaction ${field} must be a 0x-prefixed hex quantity.`,
+      value,
+      parseMessage: readErrorMessage(error),
+    });
   }
 };
 
-export const parseHexData = (
-  issues: Eip155PreparedTransactionResult["issues"],
-  value: string | undefined,
-): Hex.Hex | null => {
+export const parseOptionalHexData = (value: string | undefined): Hex.Hex | null => {
   if (!value) return null;
   const trimmed = value.trim().toLowerCase();
   try {
@@ -97,13 +62,19 @@ export const parseHexData = (
     if ((trimmed.length - 2) % 2 !== 0) {
       throw new Error("hex data must have even length.");
     }
-    Hex.toBytes(trimmed as Hex.Hex); // validate character set
+    Hex.toBytes(trimmed as Hex.Hex);
     return trimmed as Hex.Hex;
   } catch (error) {
-    pushIssue(issues, "transaction.prepare.invalid_data", "data must be 0x-prefixed even-length hex.", {
+    throw new Eip155FieldParseError({
+      field: "data",
+      reason: "transaction.prepare.invalid_data",
+      message: "Transaction data must be 0x-prefixed even-length hex.",
       value,
-      error: readErrorMessage(error),
+      parseMessage: readErrorMessage(error),
     });
-    return null;
   }
+};
+
+export const parseHexQuantityToBigInt = (value: string, field: string): bigint => {
+  return Hex.toBigInt(parseOptionalHexQuantity(value, field) as Hex.Hex);
 };

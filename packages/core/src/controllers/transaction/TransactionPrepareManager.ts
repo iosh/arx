@@ -2,7 +2,6 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "./review/session.js";
-import type { TransactionReviewMessage } from "./review/types.js";
 import { isPrepareEligibleTransactionStatus } from "./status.js";
 import type { TransactionMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
@@ -17,6 +16,7 @@ type Options = {
   logger?: (message: string, data?: unknown) => void;
   prepareTimeoutMs?: number;
   backgroundConcurrency?: number;
+  onReviewSessionChanged?: (transactionId: string, updatedAt: number) => void;
 };
 
 export class TransactionPrepareManager {
@@ -24,6 +24,7 @@ export class TransactionPrepareManager {
   #namespaces: NamespaceTransactions;
   #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
+  #onReviewSessionChanged: (transactionId: string, updatedAt: number) => void;
   #timeoutMs: number;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
@@ -37,6 +38,7 @@ export class TransactionPrepareManager {
     this.#namespaces = options.namespaces;
     this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
+    this.#onReviewSessionChanged = options.onReviewSessionChanged ?? (() => {});
     this.#timeoutMs = options.prepareTimeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
     this.#prepareConcurrencyLimit = Math.max(
       1,
@@ -44,53 +46,9 @@ export class TransactionPrepareManager {
     );
   }
 
-  #toReviewMessage(input: { code: string; message: string; data?: unknown }): TransactionReviewMessage {
-    return {
-      code: input.code,
-      message: input.message,
-      ...(input.data && typeof input.data === "object" ? { details: input.data as Record<string, unknown> } : {}),
-    };
-  }
-
-  #classifyPreparedDiagnostics(result: {
-    warnings: Array<{ code: string; message: string; data?: unknown }>;
-    issues: Array<{ code: string; message: string; data?: unknown }>;
-  }) {
-    const prepareFailureCodes = new Set([
-      "transaction.prepare.rpc_unavailable",
-      "transaction.prepare.gas_estimation_failed",
-      "transaction.prepare.fee_estimation_failed",
-      "transaction.prepare.nonce_failed",
-      "transaction.adapter_missing",
-      "transaction.prepare_timeout",
-      "transaction.prepare_missing_result",
-      "transaction.prepare_failed",
-    ]);
-    const approveBlockerCodes = new Set(["transaction.prepare.gas_zero", "transaction.prepare.insufficient_funds"]);
-
-    const prepareFailure =
-      result.issues.flatMap((issue) =>
-        prepareFailureCodes.has(issue.code) ? [this.#toReviewMessage(issue)] : [],
-      )[0] ?? null;
-    const approvalBlocker =
-      result.issues.flatMap((issue) =>
-        approveBlockerCodes.has(issue.code) ? [this.#toReviewMessage(issue)] : [],
-      )[0] ?? null;
-    const reviewNotices = [
-      ...result.warnings.map((warning) => this.#toReviewMessage(warning)),
-      ...result.issues.flatMap((issue) =>
-        prepareFailureCodes.has(issue.code) || approveBlockerCodes.has(issue.code)
-          ? []
-          : [this.#toReviewMessage(issue)],
-      ),
-    ];
-
-    return { prepareFailure, approvalBlocker, reviewNotices };
-  }
-
   queuePrepare(id: string) {
     void this.ensurePrepared(id, { source: "background" }).catch((error) => {
-      // Best-effort background preparation; failures are surfaced via review session diagnostics.
+      // Best-effort background preparation; failures are surfaced via review state.
       this.#logger("transactions: prepare failed", {
         id,
         error: error instanceof Error ? error.message : String(error),
@@ -169,20 +127,12 @@ export class TransactionPrepareManager {
     if (!namespaceTransaction) {
       const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#runtime.get(id) ?? null;
-      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
-        prepareFailure: {
-          code: "transaction.adapter_missing",
-          message: `No namespace transaction registered for namespace ${meta.namespace}`,
-          details: { namespace: meta.namespace },
-        },
-        approvalBlocker: null,
-        reviewNotices: [],
-      });
-      this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
+      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
         reason: "transaction.adapter_missing",
         message: `No namespace transaction registered for namespace ${meta.namespace}`,
         data: { namespace: meta.namespace },
       });
+      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
       return next;
     }
 
@@ -195,44 +145,58 @@ export class TransactionPrepareManager {
       });
       const runPrepare = async () => await this.#withTimeout(prepare(context), timeoutMs);
       const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
-      const diagnostics = this.#classifyPreparedDiagnostics(result);
 
-      const next = this.#runtime.commitPrepared(id, expectedDraftRevision, result.prepared);
+      const reviewPreparedSnapshot = result.prepared ?? null;
+      const executionPrepared = result.status === "ready" ? result.prepared : null;
+      const next = this.#runtime.commitPrepared(id, expectedDraftRevision, executionPrepared);
       if (!next) return this.#runtime.get(id) ?? null;
-      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, diagnostics);
-      if (result.prepared) {
-        this.#reviewSessions.markReady(id, session.sessionToken, next.updatedAt);
-      } else {
-        this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
-          reason: "transaction.prepare_missing_result",
-          message: "Transaction preparation did not produce prepared parameters.",
-        });
+
+      if (result.status === "ready") {
+        const changed = this.#reviewSessions.markReady(id, session.sessionToken, next.updatedAt, result.prepared);
+        if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+        return next;
       }
+
+      if (result.status === "blocked") {
+        const changed = this.#reviewSessions.markBlocked(
+          id,
+          session.sessionToken,
+          next.updatedAt,
+          result.blocker,
+          reviewPreparedSnapshot,
+        );
+        if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+        return next;
+      }
+
+      const changed = this.#reviewSessions.markFailed(
+        id,
+        session.sessionToken,
+        next.updatedAt,
+        result.error,
+        reviewPreparedSnapshot,
+      );
+      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
       return next;
     } catch (error) {
       const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#runtime.get(id) ?? null;
-      const message =
+      const reviewError =
         error instanceof Error
           ? {
-              code: "transaction.prepare_failed",
+              reason:
+                error.name === "TransactionPrepareTimeoutError"
+                  ? "transaction.prepare_timeout"
+                  : "transaction.prepare_failed",
               message: error.message,
-              ...(error.name ? { details: { name: error.name } } : {}),
+              ...(error.name ? { data: { name: error.name } } : {}),
             }
           : {
-              code: "transaction.prepare_failed",
+              reason: "transaction.prepare_failed",
               message: String(error),
             };
-      this.#reviewSessions.setPreparedDiagnostics(id, session.sessionToken, next.updatedAt, {
-        prepareFailure: message,
-        approvalBlocker: null,
-        reviewNotices: [],
-      });
-      this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
-        reason: message.code,
-        message: message.message,
-        ...(message.details !== undefined ? { data: message.details } : {}),
-      });
+      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, reviewError);
+      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
       return next;
     }
   }

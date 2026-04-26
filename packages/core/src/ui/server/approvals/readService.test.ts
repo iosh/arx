@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../controllers/approval/types.js";
+import type { SendTransactionApprovalReview } from "../../../controllers/transaction/review/types.js";
 import { createApprovalReadService } from "./readService.js";
 
 const CHAIN_VIEWS = {
@@ -63,13 +64,7 @@ const ACCOUNTS = {
 } as const;
 
 const SEND_TRANSACTION_REVIEW_READY = {
-  reviewState: {
-    status: "ready" as const,
-    updatedAt: 3,
-  },
-  prepareFailure: null,
-  approvalBlocker: null,
-  reviewNotices: [],
+  updatedAt: 3,
   namespaceReview: {
     namespace: "eip155" as const,
     summary: {
@@ -83,21 +78,20 @@ const SEND_TRANSACTION_REVIEW_READY = {
       gasPrice: "0x3b9aca00",
     },
   },
-};
+  prepare: { state: "ready" },
+} satisfies SendTransactionApprovalReview;
 
 const SEND_TRANSACTION_REVIEW_BLOCKED = {
-  reviewState: {
-    status: "ready" as const,
-    updatedAt: 4,
-  },
-  prepareFailure: null,
-  approvalBlocker: {
-    code: "transaction.blocked",
-    message: "Blocked",
-  },
-  reviewNotices: [],
+  updatedAt: 4,
   namespaceReview: null,
-};
+  prepare: {
+    state: "blocked",
+    blocker: {
+      reason: "transaction.blocked",
+      message: "Blocked",
+    },
+  },
+} satisfies SendTransactionApprovalReview;
 
 const createRecord = <K extends ApprovalRecord["kind"]>(
   record: Omit<ApprovalRecord<K>, "requester"> & { request: ApprovalRecord<K>["request"] },
@@ -112,10 +106,7 @@ const createRecord = <K extends ApprovalRecord["kind"]>(
   ...record,
 });
 
-const createReadService = (
-  records: ApprovalRecord[],
-  reviews?: Record<string, typeof SEND_TRANSACTION_REVIEW_READY>,
-) => {
+const createReadService = (records: ApprovalRecord[], reviews?: Record<string, SendTransactionApprovalReview>) => {
   const byId = new Map(records.map((record) => [record.approvalId, record] as const));
   const pending: ApprovalQueueItem[] = records.map((record) => ({
     approvalId: record.approvalId,
@@ -332,7 +323,7 @@ describe("createApprovalReadService", () => {
     });
   });
 
-  it("projects sendTransaction detail and gates canApprove from review state", () => {
+  it("projects sendTransaction detail and gates canApprove from prepare state", () => {
     const records = [
       createRecord({
         approvalId: "approval-send-ready",

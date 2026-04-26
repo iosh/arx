@@ -60,7 +60,7 @@ const DEFAULT_RPC_ENGINE = {
 
 const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
   proposal: {
-    prepare: async () => ({ prepared: {}, warnings: [], issues: [] }),
+    prepare: async () => ({ status: "ready", prepared: {} }),
   },
   execution: {
     sign: async () => ({ raw: "0x1111" }),

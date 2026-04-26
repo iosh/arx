@@ -1,6 +1,7 @@
+import { ArxReasons, arxError } from "@arx/errors";
 import type { TransactionRequest } from "../../types.js";
 import type { TransactionDraftEditContext } from "../types.js";
-import { type HexQuantityIssueSink, parseHexQuantity } from "./utils/validation.js";
+import { Eip155FieldParseError, parseOptionalHexQuantity } from "./utils/validation.js";
 
 const EDITABLE_FIELDS = new Set(["gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce"]);
 
@@ -25,15 +26,6 @@ export const applyEip155TransactionDraftEdit = (context: TransactionDraftEditCon
   }
 
   const payload = isPlainObject(context.request.payload) ? { ...context.request.payload } : {};
-  const issues: Array<{ code: string; message: string }> = [];
-  const issueSink: HexQuantityIssueSink = {
-    push: (entry) => {
-      issues.push({
-        code: entry.code,
-        message: entry.message,
-      });
-    },
-  };
 
   for (const change of context.changes) {
     const { field, value } = readFieldChange(change);
@@ -42,9 +34,25 @@ export const applyEip155TransactionDraftEdit = (context: TransactionDraftEditCon
       continue;
     }
 
-    const parsed = parseHexQuantity(issueSink, value, field);
-    if (!parsed) {
-      throw new Error(issues[0]?.message ?? `Invalid ${field} value.`);
+    let parsed: string | null;
+    try {
+      parsed = parseOptionalHexQuantity(value, field);
+    } catch (error) {
+      if (error instanceof Eip155FieldParseError) {
+        throw arxError({
+          reason: ArxReasons.RpcInvalidParams,
+          message: error.message,
+          data: {
+            code: error.reason,
+            details: {
+              field: error.field,
+              value: error.value,
+              error: error.parseMessage,
+            },
+          },
+        });
+      }
+      throw error;
     }
     payload[field] = parsed;
   }

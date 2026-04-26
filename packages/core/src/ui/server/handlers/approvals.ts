@@ -1,5 +1,4 @@
-import type { ApprovalController, ApprovalResolveInput } from "../../../controllers/approval/types.js";
-import type { UiMethodResult } from "../../protocol/index.js";
+import type { ApprovalResolveInput } from "../../../controllers/approval/types.js";
 import type { UiApprovalsAccess, UiHandlers } from "../types.js";
 
 export const createApprovalsHandlers = ({

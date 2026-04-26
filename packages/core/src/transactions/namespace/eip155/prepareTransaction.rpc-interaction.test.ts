@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES, TEST_VALUES } from "./__fixtures__/constants.js";
 import { createPrepareContext } from "./__fixtures__/contexts.js";
-import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
+import {
+  createTestPrepareTransaction,
+  requirePartialPrepared,
+  requireReadyPrepared,
+} from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - RPC interaction", () => {
   describe("RPC data fetching", () => {
-    it("adds insufficient_funds issue when balance is lower than max cost", async () => {
+    it("returns blocked when balance is lower than max cost", async () => {
       const rpc = createEip155RpcMock();
       rpc.getBalance.mockResolvedValue("0x0");
 
@@ -21,13 +25,14 @@ describe("prepareTransaction - RPC interaction", () => {
       ctx.request.payload.gasPrice = "0x1";
       ctx.request.payload.value = "0x0";
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
       expect(rpc.getBalance).toHaveBeenCalledWith(
         TEST_ADDRESSES.FROM_A,
         expect.objectContaining({ blockTag: "latest" }),
       );
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.insufficient_funds");
+      expect(result.status).toBe("blocked");
+      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.insufficient_funds");
     });
 
     it("fills nonce, gas, and EIP-1559 fees from RPC responses", async () => {
@@ -49,12 +54,13 @@ describe("prepareTransaction - RPC interaction", () => {
       });
 
       const ctx = createPrepareContext();
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(prepared.prepared.nonce).toBe("0xa");
-      expect(prepared.prepared.gas).toBe("0x5208");
-      expect(prepared.prepared.maxFeePerGas).toBe("0x59682f00");
-      expect(prepared.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
+      expect(prepared.nonce).toBe("0xa");
+      expect(prepared.gas).toBe("0x5208");
+      expect(prepared.maxFeePerGas).toBe("0x59682f00");
+      expect(prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
     });
 
     it("fetches nonce from RPC when it is missing", async () => {
@@ -79,13 +85,14 @@ describe("prepareTransaction - RPC interaction", () => {
       Reflect.deleteProperty(ctx.request.payload, "nonce");
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
       expect(rpc.getTransactionCount).toHaveBeenCalledWith(
         TEST_ADDRESSES.FROM_A,
         expect.objectContaining({ blockTag: "pending" }),
       );
-      expect(prepared.prepared.nonce).toBe("0xb");
+      expect(prepared.nonce).toBe("0xb");
     });
 
     it("skips nonce/gas RPC calls when values already provided", async () => {
@@ -116,20 +123,17 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext({ from: null });
       Reflect.deleteProperty(ctx.request.payload, "from");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.from_missing");
+      expect(result.status).toBe("blocked");
+      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.from_missing");
       expect(rpc.getTransactionCount).not.toHaveBeenCalled();
-      expect(rpc.estimateGas).toHaveBeenCalledWith({
-        to: TEST_ADDRESSES.TO_B,
-        value: TEST_VALUES.ONE_ETH,
-        data: TEST_VALUES.EMPTY_DATA,
-      });
+      expect(rpc.estimateGas).not.toHaveBeenCalled();
     });
   });
 
   describe("RPC error handling", () => {
-    it("records issues when RPC estimation fails", async () => {
+    it("returns failed when RPC nonce fetch fails first", async () => {
       const rpc = createEip155RpcMock();
       const feeOracle = { suggestFees: vi.fn() };
       rpc.getTransactionCount.mockRejectedValue(new Error("nonce error"));
@@ -143,15 +147,10 @@ describe("prepareTransaction - RPC interaction", () => {
       });
 
       const ctx = createPrepareContext();
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toEqual(
-        expect.arrayContaining([
-          "transaction.prepare.nonce_failed",
-          "transaction.prepare.gas_estimation_failed",
-          "transaction.prepare.fee_estimation_failed",
-        ]),
-      );
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.nonce_failed");
     });
 
     it("attaches rpc error metadata when nonce fetch fails", async () => {
@@ -170,11 +169,11 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
-      const prepared = await prepareTransaction(ctx);
-      const nonceIssue = prepared.issues.find((item) => item.code === "transaction.prepare.nonce_failed");
+      const result = await prepareTransaction(ctx);
 
-      expect(nonceIssue).toBeTruthy();
-      expect(nonceIssue?.data).toMatchObject({
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.nonce_failed");
+      expect(result.status === "failed" ? result.error.data : null).toMatchObject({
         method: "eth_getTransactionCount",
         error: "RPC nonce failure",
       });
@@ -196,10 +195,11 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const prepared = await prepareTransaction(ctx);
-      const gasIssue = prepared.issues.find((item) => item.code === "transaction.prepare.gas_estimation_failed");
+      const result = await prepareTransaction(ctx);
 
-      expect(gasIssue?.data).toMatchObject({
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.gas_estimation_failed");
+      expect(result.status === "failed" ? result.error.data : null).toMatchObject({
         method: "eth_estimateGas",
         error: "boom",
       });
@@ -213,9 +213,10 @@ describe("prepareTransaction - RPC interaction", () => {
       });
 
       const ctx = createPrepareContext();
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.rpc_unavailable");
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.rpc_unavailable");
     });
 
     it("reports invalid hex when RPC nonce response is malformed", async () => {
@@ -229,10 +230,12 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "nonce");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requirePartialPrepared(result);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.invalid_hex");
-      expect(prepared.prepared.nonce).toBeUndefined();
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
+      expect(prepared.nonce).toBeUndefined();
     });
 
     it("reports invalid hex when RPC gas response is malformed", async () => {
@@ -246,10 +249,12 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requirePartialPrepared(result);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.invalid_hex");
-      expect(prepared.prepared.gas).toBeUndefined();
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
+      expect(prepared.gas).toBeUndefined();
     });
 
     it("records invalid_hex when RPC fee data is malformed", async () => {
@@ -270,10 +275,10 @@ describe("prepareTransaction - RPC interaction", () => {
         feeOracleFactory: vi.fn((_rpc) => feeOracle),
       });
 
-      const prepared = await prepareTransaction(createPrepareContext());
+      const result = await prepareTransaction(createPrepareContext());
 
-      const issueCodes = prepared.issues.map((item) => item.code);
-      expect(issueCodes).toContain("transaction.prepare.invalid_hex");
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.invalid_hex");
     });
   });
 
@@ -306,28 +311,12 @@ describe("prepareTransaction - RPC interaction", () => {
       const ctx = createPrepareContext();
       Reflect.deleteProperty(ctx.request.payload, "gas");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requirePartialPrepared(result);
 
-      expect(prepared.issues.map((item) => item.code)).toContain("transaction.prepare.gas_zero");
-      expect(prepared.prepared.gas).toBe("0x0");
-    });
-
-    it("warns when gas estimate is suspiciously high", async () => {
-      const rpc = createEip155RpcMock();
-      rpc.getTransactionCount.mockResolvedValue("0x1");
-      rpc.estimateGas.mockResolvedValue("0x5f5e100");
-
-      const prepareTransaction = createTestPrepareTransaction({ rpcClientFactory: vi.fn(() => rpc.client) });
-
-      const ctx = createPrepareContext();
-      Reflect.deleteProperty(ctx.request.payload, "gas");
-
-      const prepared = await prepareTransaction(ctx);
-
-      expect(prepared.warnings.map((item) => item.code)).toContain("transaction.prepare.gas_suspicious");
-      expect(prepared.prepared.gas).toBe("0x5f5e100");
-      const warning = prepared.warnings.find((item) => item.code === "transaction.prepare.gas_suspicious");
-      expect(warning?.data).toEqual({ estimate: "0x5f5e100" });
+      expect(result.status).toBe("blocked");
+      expect(result.status === "blocked" ? result.blocker.reason : null).toBe("transaction.prepare.gas_zero");
+      expect(prepared.gas).toBe("0x0");
     });
   });
 });

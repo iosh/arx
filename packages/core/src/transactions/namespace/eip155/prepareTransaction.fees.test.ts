@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPrepareContext } from "./__fixtures__/contexts.js";
-import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
+import { createTestPrepareTransaction, requireReadyPrepared } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - fees", () => {
@@ -19,9 +19,10 @@ describe("prepareTransaction - fees", () => {
       const ctx = createPrepareContext();
       ctx.request.payload.gasPrice = "0x3b9aca00";
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(prepared.prepared.gasPrice).toBe("0x3b9aca00");
+      expect(prepared.gasPrice).toBe("0x3b9aca00");
       expect(feeOracle.suggestFees).not.toHaveBeenCalled();
     });
 
@@ -63,9 +64,10 @@ describe("prepareTransaction - fees", () => {
       Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(prepared.prepared.gasPrice).toBe("0x3b9aca00");
+      expect(prepared.gasPrice).toBe("0x3b9aca00");
     });
   });
 
@@ -103,10 +105,11 @@ describe("prepareTransaction - fees", () => {
       ctx.request.payload.maxFeePerGas = "0x59682F00";
       ctx.request.payload.maxPriorityFeePerGas = "0x3B9ACA00";
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(prepared.prepared.maxFeePerGas).toBe("0x59682f00");
-      expect(prepared.prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
+      expect(prepared.maxFeePerGas).toBe("0x59682f00");
+      expect(prepared.maxPriorityFeePerGas).toBe("0x3b9aca00");
     });
 
     it("does not surface incomplete EIP-1559 fee pair as a prepare issue", async () => {
@@ -118,9 +121,9 @@ describe("prepareTransaction - fees", () => {
       ctx.request.payload.maxFeePerGas = "0x59682f00";
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_pair_incomplete");
+      expect(result.status).toBe("ready");
     });
   });
 
@@ -134,9 +137,9 @@ describe("prepareTransaction - fees", () => {
       ctx.request.payload.gasPrice = "0x3b9aca00";
       ctx.request.payload.maxFeePerGas = "0x59682f00";
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_conflict");
+      expect(result.status).toBe("ready");
     });
 
     it("does not record a fee conflict issue when fee fields conflict", async () => {
@@ -151,9 +154,9 @@ describe("prepareTransaction - fees", () => {
       ctx.request.payload.maxFeePerGas = "0x59682f00";
       ctx.request.payload.maxPriorityFeePerGas = "0x3b9aca00";
 
-      const prepared = await prepareTransaction(ctx);
+      const result = await prepareTransaction(ctx);
 
-      expect(prepared.issues.map((item) => item.code)).not.toContain("transaction.prepare.fee_conflict");
+      expect(result.status).toBe("ready");
     });
   });
 
@@ -175,10 +178,11 @@ describe("prepareTransaction - fees", () => {
       Reflect.deleteProperty(ctx.request.payload, "maxFeePerGas");
       Reflect.deleteProperty(ctx.request.payload, "maxPriorityFeePerGas");
 
-      const prepared = await prepareTransaction(ctx);
-      const issue = prepared.issues.find((item) => item.code === "transaction.prepare.fee_estimation_failed");
+      const result = await prepareTransaction(ctx);
 
-      expect(issue?.data).toMatchObject({
+      expect(result.status).toBe("failed");
+      expect(result.status === "failed" ? result.error.reason : null).toBe("transaction.prepare.fee_estimation_failed");
+      expect(result.status === "failed" ? result.error.data : null).toMatchObject({
         method: "feeOracle.suggestFees",
         error: "fee rpc down",
       });

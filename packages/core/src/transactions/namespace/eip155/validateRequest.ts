@@ -3,9 +3,8 @@ import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155TransactionPayload } from "../../types.js";
 import type { TransactionValidationContext } from "../types.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
-import type { Eip155PreparedTransactionResult } from "./types.js";
 import { deriveExpectedChainId } from "./utils/chainHelpers.js";
-import { parseHexData, parseHexQuantity } from "./utils/validation.js";
+import { Eip155FieldParseError, parseOptionalHexData, parseOptionalHexQuantity } from "./utils/validation.js";
 
 const MIN_NETWORK_GAS_LIMIT = 21_000n;
 
@@ -21,8 +20,29 @@ const throwInvalidRequest = (message: string, data?: Record<string, unknown>): n
   });
 };
 
-const findBlockingIssue = (issues: Eip155PreparedTransactionResult["issues"]) => {
-  return issues.find((issue) => issue.kind === "issue") ?? null;
+const runRequestParser = <T>(parse: () => T): T => {
+  try {
+    return parse();
+  } catch (error) {
+    if (error instanceof Eip155FieldParseError) {
+      throwInvalidRequest(error.message, {
+        code: error.reason,
+        details: {
+          field: error.field,
+          value: error.value,
+          error: error.parseMessage,
+        },
+      });
+    }
+    throw error;
+  }
+};
+
+const parseRequestHexQuantity = (value: string | undefined, field: string) =>
+  runRequestParser(() => parseOptionalHexQuantity(value, field));
+
+const parseRequestHexData = (value: string | undefined) => {
+  return runRequestParser(() => parseOptionalHexData(value));
 };
 
 export const createEip155RequestValidator = (deps: Deps) => {
@@ -36,56 +56,42 @@ export const createEip155RequestValidator = (deps: Deps) => {
       });
     }
 
-    const issues: Eip155PreparedTransactionResult["issues"] = [];
     const payload = request.payload as Eip155TransactionPayload;
 
-    resolveAddresses(
-      context,
-      {
-        from:
-          payload && typeof payload === "object" && "from" in payload && typeof payload.from === "string"
-            ? payload.from
-            : null,
-        to:
-          payload &&
-          typeof payload === "object" &&
-          "to" in payload &&
-          (typeof payload.to === "string" || payload.to === null)
-            ? payload.to
-            : undefined,
-      },
-      issues,
-    );
+    const addressResult = resolveAddresses(context, {
+      from:
+        payload && typeof payload === "object" && "from" in payload && typeof payload.from === "string"
+          ? payload.from
+          : null,
+      to:
+        payload &&
+        typeof payload === "object" &&
+        "to" in payload &&
+        (typeof payload.to === "string" || payload.to === null)
+          ? payload.to
+          : undefined,
+    });
 
-    const addressIssue = findBlockingIssue(issues);
-    if (addressIssue) {
-      throwInvalidRequest(addressIssue.message, {
-        code: addressIssue.code,
-        ...(addressIssue.data !== undefined ? { details: addressIssue.data } : {}),
+    if (addressResult.status !== "ok") {
+      const issue = addressResult.status === "blocked" ? addressResult.blocker : addressResult.error;
+      throwInvalidRequest(issue.message, {
+        code: issue.reason,
+        ...(issue.data !== undefined ? { details: issue.data } : {}),
       });
     }
 
-    parseHexQuantity(issues, payload.chainId, "chainId");
-    parseHexQuantity(issues, payload.value, "value");
-    parseHexData(issues, payload.data);
-    const gas = parseHexQuantity(issues, payload.gas, "gas");
-    const payloadGasPrice = parseHexQuantity(issues, payload.gasPrice, "gasPrice");
-    const payloadMaxFee = parseHexQuantity(issues, payload.maxFeePerGas, "maxFeePerGas");
-    const payloadPriorityFee = parseHexQuantity(issues, payload.maxPriorityFeePerGas, "maxPriorityFeePerGas");
-    parseHexQuantity(issues, payload.nonce, "nonce");
-
-    const fieldIssue = findBlockingIssue(issues);
-    if (fieldIssue) {
-      throwInvalidRequest(fieldIssue.message, {
-        code: fieldIssue.code,
-        ...(fieldIssue.data !== undefined ? { details: fieldIssue.data } : {}),
-      });
-    }
+    const payloadChainId = parseRequestHexQuantity(payload.chainId, "chainId");
+    parseRequestHexQuantity(payload.value, "value");
+    parseRequestHexData(payload.data);
+    const gas = parseRequestHexQuantity(payload.gas, "gas");
+    const payloadGasPrice = parseRequestHexQuantity(payload.gasPrice, "gasPrice");
+    const payloadMaxFee = parseRequestHexQuantity(payload.maxFeePerGas, "maxFeePerGas");
+    const payloadPriorityFee = parseRequestHexQuantity(payload.maxPriorityFeePerGas, "maxPriorityFeePerGas");
+    parseRequestHexQuantity(payload.nonce, "nonce");
 
     const expectedChainId = deriveExpectedChainId(context.chainRef);
-    const payloadChainId = parseHexQuantity(issues, payload.chainId, "chainId");
     if (payloadChainId && expectedChainId && payloadChainId !== expectedChainId) {
-      throwInvalidRequest("chainId does not match active chain.", {
+      throwInvalidRequest("Transaction chainId does not match the active chain.", {
         code: "transaction.prepare.chain_id_mismatch",
         details: {
           payloadChainId,

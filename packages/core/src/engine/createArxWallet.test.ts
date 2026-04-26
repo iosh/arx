@@ -542,7 +542,7 @@ describe("createArxWallet", () => {
   });
 
   it("does not persist pre-broadcast transactions across restart", async () => {
-    const prepareTransaction = vi.fn(async () => ({ prepared: { ready: true }, warnings: [], issues: [] }));
+    const prepareTransaction = vi.fn(async () => ({ status: "ready", prepared: { ready: true } }));
     const signTransaction = vi.fn(async () => ({
       raw: "0x1111",
       hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -672,7 +672,7 @@ describe("createArxWallet", () => {
       ]),
       modules: [
         createWalletModuleWithNamespaceTransaction({
-          prepareTransaction: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
           signTransaction: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
           broadcastTransaction: vi.fn(async () => ({
             submitted: {

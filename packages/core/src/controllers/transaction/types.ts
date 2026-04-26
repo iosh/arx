@@ -77,6 +77,23 @@ export type TransactionApprovalHandoff = {
   waitForApprovalDecision(): Promise<TransactionMeta>;
 };
 
+export type TransactionApproveFailureReason =
+  | "not_found"
+  | "not_pending"
+  | "prepare_not_ready"
+  | "prepare_blocked"
+  | "prepare_failed";
+
+export type TransactionApproveResult =
+  | { status: "approved"; transaction: TransactionMeta }
+  | {
+      status: "failed";
+      reason: TransactionApproveFailureReason;
+      transaction?: TransactionMeta | undefined;
+      message: string;
+      data?: unknown;
+    };
+
 export type BeginTransactionApprovalOptions = {
   providerRequestHandle?: ProviderRequestHandle | null;
 };
@@ -118,7 +135,7 @@ export type TransactionController = {
     mode?: string | undefined;
   }): Promise<void>;
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
-  approveTransaction(id: string): Promise<TransactionMeta | null>;
+  approveTransaction(id: string): Promise<TransactionApproveResult>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
   processTransaction(id: string): Promise<void>;
   resumePending(): Promise<void>;

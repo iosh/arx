@@ -1,20 +1,18 @@
 import * as Hex from "ox/Hex";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import type { TransactionPrepareContext } from "../../types.js";
-import type { AddressResolutionResult, Eip155PreparedTransactionResult } from "../types.js";
-import { pushIssue, readErrorMessage } from "../utils/validation.js";
+import type { AddressResolutionResult, Eip155PrepareStepResult } from "../types.js";
+import { readErrorMessage } from "../utils/validation.js";
 
 type AddressResolverDeps = {
   chains: ChainAddressCodecRegistry;
 };
 
-// Create factory function instead of direct export
 export const createAddressResolver = (deps: AddressResolverDeps) => {
   return (
     context: TransactionPrepareContext,
     payload: { from?: string | null; to?: string | null | undefined },
-    issues: Eip155PreparedTransactionResult["issues"],
-  ): AddressResolutionResult => {
+  ): Eip155PrepareStepResult<AddressResolutionResult["prepared"]> => {
     const prepared: AddressResolutionResult["prepared"] = {};
 
     const requestFrom = payload.from ?? null;
@@ -22,7 +20,14 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
     const resolvedFrom = requestFrom ?? contextFrom;
 
     if (!resolvedFrom) {
-      pushIssue(issues, "transaction.prepare.from_missing", "Transaction requires a from address.");
+      return {
+        status: "blocked",
+        blocker: {
+          reason: "transaction.prepare.from_missing",
+          message: "Transaction requires a from address.",
+        },
+        patch: prepared,
+      };
     } else {
       try {
         const normalized = deps.chains.toCanonicalAddress({ chainRef: context.chainRef, value: resolvedFrom });
@@ -39,17 +44,33 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
             value: contextFrom,
           }).canonical;
           if (requestCanonical !== contextCanonical) {
-            pushIssue(issues, "transaction.prepare.from_mismatch", "Payload from does not match active account.", {
-              payloadFrom: requestFrom,
-              activeFrom: contextFrom,
-            });
+            return {
+              status: "blocked",
+              blocker: {
+                reason: "transaction.prepare.from_mismatch",
+                message: "Transaction from address does not match the selected account.",
+                data: {
+                  payloadFrom: requestFrom,
+                  activeFrom: contextFrom,
+                },
+              },
+              patch: prepared,
+            };
           }
         }
       } catch (error) {
-        pushIssue(issues, "transaction.prepare.from_invalid", "Invalid from address.", {
-          address: resolvedFrom,
-          error: readErrorMessage(error),
-        });
+        return {
+          status: "blocked",
+          blocker: {
+            reason: "transaction.prepare.from_invalid",
+            message: "Transaction from address is invalid for the active chain.",
+            data: {
+              address: resolvedFrom,
+              error: readErrorMessage(error),
+            },
+          },
+          patch: prepared,
+        };
       }
     }
 
@@ -62,14 +83,22 @@ export const createAddressResolver = (deps: AddressResolverDeps) => {
           Hex.assert(normalized.canonical as Hex.Hex, { strict: false });
           prepared.to = normalized.canonical as Hex.Hex;
         } catch (error) {
-          pushIssue(issues, "transaction.prepare.to_invalid", "Invalid to address.", {
-            address: payload.to,
-            error: readErrorMessage(error),
-          });
+          return {
+            status: "blocked",
+            blocker: {
+              reason: "transaction.prepare.to_invalid",
+              message: "Transaction recipient address is invalid for the active chain.",
+              data: {
+                address: payload.to,
+                error: readErrorMessage(error),
+              },
+            },
+            patch: prepared,
+          };
         }
       }
     }
 
-    return { prepared };
+    return { status: "ok", patch: prepared };
   };
 };

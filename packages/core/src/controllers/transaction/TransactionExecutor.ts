@@ -23,6 +23,7 @@ import type {
   TransactionApprovalChainMetadata,
   TransactionApprovalHandoff,
   TransactionApprovalRequestPayload,
+  TransactionApproveResult,
   TransactionController,
   TransactionError,
   TransactionMeta,
@@ -246,10 +247,68 @@ export class TransactionExecutor
     };
   }
 
-  async approveTransaction(id: string): Promise<TransactionMeta | null> {
+  async approveTransaction(id: string): Promise<TransactionApproveResult> {
     const existing = this.#runtime.get(id) ?? null;
-    if (!existing || existing.status !== "pending") {
-      return null;
+    if (!existing) {
+      return {
+        status: "failed",
+        reason: "not_found",
+        message: "Transaction not found.",
+        data: { transactionId: id },
+      };
+    }
+    if (existing.status !== "pending") {
+      return {
+        status: "failed",
+        reason: "not_pending",
+        transaction: existing,
+        message: "Transaction is no longer pending approval.",
+        data: { transactionId: id, status: existing.status },
+      };
+    }
+
+    const review = this.#reviewSessions.get(id);
+    if (review?.status === "blocked") {
+      return {
+        status: "failed",
+        reason: "prepare_blocked",
+        transaction: existing,
+        message: review.blocker?.message ?? "Transaction is blocked.",
+        data: {
+          transactionId: id,
+          ...(review.blocker ? { blocker: review.blocker } : {}),
+        },
+      };
+    }
+    if (review?.status === "failed") {
+      return {
+        status: "failed",
+        reason: "prepare_failed",
+        transaction: existing,
+        message: review.error?.message ?? "Transaction preparation failed.",
+        data: {
+          transactionId: id,
+          ...(review.error ? { error: review.error } : {}),
+        },
+      };
+    }
+    if (review && review.status !== "ready") {
+      return {
+        status: "failed",
+        reason: "prepare_not_ready",
+        transaction: existing,
+        message: "Transaction preparation is not ready yet.",
+        data: { transactionId: id, prepareState: review.status },
+      };
+    }
+    if (!existing.prepared) {
+      return {
+        status: "failed",
+        reason: "prepare_not_ready",
+        transaction: existing,
+        message: "Transaction preparation is not ready yet.",
+        data: { transactionId: id },
+      };
     }
 
     const updated = this.#runtime.transition({
@@ -259,11 +318,17 @@ export class TransactionExecutor
       updatedAt: this.#nextTimestamp(),
     });
     if (!updated) {
-      return null;
+      return {
+        status: "failed",
+        reason: "not_pending",
+        transaction: this.#runtime.get(id),
+        message: "Transaction is no longer pending approval.",
+        data: { transactionId: id },
+      };
     }
 
     this.#enqueue(id);
-    return updated;
+    return { status: "approved", transaction: updated };
   }
 
   async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {

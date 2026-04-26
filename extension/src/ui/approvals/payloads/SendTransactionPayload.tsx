@@ -5,6 +5,7 @@ type SendTransactionApproval = Extract<ApprovalDetail, { kind: "sendTransaction"
 
 export function SendTransactionPayload({ approval }: { approval: SendTransactionApproval }) {
   const review = approval.review.namespaceReview;
+  const prepare = approval.review.prepare;
   const summary = review?.namespace === "eip155" ? review.summary : null;
   const execution = review?.namespace === "eip155" ? review.execution : null;
 
@@ -27,28 +28,19 @@ export function SendTransactionPayload({ approval }: { approval: SendTransaction
           </YStack>
         )}
       </YStack>
-      {approval.review.reviewState.status === "preparing" ? (
+      {prepare.state === "preparing" ? (
         <Paragraph color="$color10" fontSize="$2">
-          Preparing review…
+          Checking gas and balance...
         </Paragraph>
       ) : null}
-      {approval.review.reviewState.status === "failed" && approval.review.prepareFailure ? (
+      {prepare.state === "failed" ? (
         <Paragraph color="$red10" fontSize="$2">
-          {approval.review.prepareFailure.message}
+          {prepare.error.message}
         </Paragraph>
       ) : null}
-      {approval.review.reviewNotices.length > 0 && (
-        <YStack marginTop="$2" gap="$1">
-          {approval.review.reviewNotices.map((w) => (
-            <Paragraph key={`${w.code}:${w.message}`} color="$orange10" fontSize="$2">
-              ⚠ {w.message}
-            </Paragraph>
-          ))}
-        </YStack>
-      )}
-      {approval.review.approvalBlocker ? (
+      {prepare.state === "blocked" ? (
         <Paragraph color="$red10" fontSize="$2">
-          ✕ {approval.review.approvalBlocker.message}
+          {prepare.blocker.message}
         </Paragraph>
       ) : null}
     </Card>

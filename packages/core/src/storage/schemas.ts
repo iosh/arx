@@ -16,9 +16,7 @@ export {
 export {
   Eip155TransactionPayloadSchema,
   Eip155TransactionRequestSchema,
-  TransactionDiagnosticSchema,
   TransactionErrorSchema,
-  TransactionIssueSchema,
   TransactionPayloadSchema,
   TransactionPreparedSchema,
   TransactionReceiptSchema,
@@ -26,7 +24,6 @@ export {
   TransactionRequestSchema,
   TransactionSubmissionLocatorSchema,
   TransactionSubmittedSchema,
-  TransactionWarningSchema,
 } from "./schemas/transactions.js";
 export type { VaultMetaSnapshot } from "./schemas/vaultMeta.js";
 export { VAULT_META_SNAPSHOT_VERSION, VaultMetaSnapshotSchema } from "./schemas/vaultMeta.js";

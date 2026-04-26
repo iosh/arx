@@ -89,9 +89,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -153,7 +152,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
       );
       const approvedMeta = await handoff.waitForApprovalDecision();
-      expect(approvedMeta.status).toBe("approved");
+      expect(["approved", "signed", "broadcast"]).toContain(approvedMeta.status);
       const submission = await context.runtime.controllers.transactions.waitForTransactionSubmission(
         handoff.transactionId,
       );
@@ -204,9 +203,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     let signedCount = 0;
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => {
@@ -319,9 +317,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       displayName: "Ethereum Mainnet",
     });
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -419,12 +416,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     ] as const;
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {
         chainId: "0x1",
         nonce: "0x7",
       },
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -554,9 +550,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const confirmedReceipt = { status: "0x1", blockNumber: "0x10" };
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -642,9 +637,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -712,9 +706,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",
@@ -795,9 +788,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const failedReceipt = { status: "0x0", blockNumber: "0x20" };
 
     const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => ({
+      status: "ready",
       prepared: {},
-      warnings: [],
-      issues: [],
     }));
     const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({
       raw: "0x1111",

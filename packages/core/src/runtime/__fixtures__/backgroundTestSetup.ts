@@ -6,6 +6,7 @@ import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
+import { TRANSACTION_STATE_CHANGED } from "../../controllers/transaction/topics.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
@@ -710,14 +711,42 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
 
   // Helper function to enable auto-approval for testing
   const enableAutoApproval = () => {
-    const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
+    const pending = new Set<string>();
+
+    const tryApprove = async (approvalId: string) => {
+      const subject = runtime.controllers.approvals.getSubject(approvalId);
+      if (subject?.kind !== "transaction") {
+        pending.delete(approvalId);
+        return;
+      }
+      const review = runtime.controllers.transactions.getApprovalReview({ transactionId: subject.transactionId });
+      if (review.prepare.state !== "ready") {
+        return;
+      }
+
       try {
-        await runtime.controllers.approvals.resolve({ approvalId: record.approvalId, action: "approve" });
+        await runtime.controllers.approvals.resolve({ approvalId, action: "approve" });
+        pending.delete(approvalId);
       } catch {
-        // Ignore errors if approval was already resolved
+        // Keep pending until the transaction review becomes ready or the approval disappears.
+      }
+    };
+
+    const unsubscribeState = runtime.bus.subscribe(TRANSACTION_STATE_CHANGED, () => {
+      for (const approvalId of pending) {
+        void tryApprove(approvalId);
       }
     });
-    return unsubscribe;
+
+    const unsubscribe = runtime.controllers.approvals.onCreated(async ({ record }) => {
+      pending.add(record.approvalId);
+      await tryApprove(record.approvalId);
+    });
+    return () => {
+      unsubscribe();
+      unsubscribeState();
+      pending.clear();
+    };
   };
 
   return {

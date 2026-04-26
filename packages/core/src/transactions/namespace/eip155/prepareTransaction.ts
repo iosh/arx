@@ -9,17 +9,14 @@ import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
 import { deriveFees } from "./resolvers/feeResolver.js";
 import { deriveFields } from "./resolvers/fieldResolver.js";
 import { deriveGas } from "./resolvers/gasResolver.js";
-import type { Eip155CallParams, Eip155PreparedTransaction, Eip155PreparedTransactionResult } from "./types.js";
+import type {
+  Eip155CallParams,
+  Eip155PreparedTransaction,
+  Eip155PrepareResult,
+  Eip155PrepareStepResult,
+} from "./types.js";
 import { pickDefined } from "./utils/helpers.js";
-import { pushIssue, readErrorMessage } from "./utils/validation.js";
-
-const hasFatalIssues = (issues: Eip155PreparedTransactionResult["issues"]): boolean => {
-  // Fatal issues indicate the request is malformed or internally inconsistent.
-  // Continuing with RPC-based enrichment would add noise and increase latency.
-  const fatal = new Set(["transaction.prepare.invalid_hex", "transaction.prepare.invalid_data"]);
-
-  return issues.some((issue) => fatal.has(issue.code));
-};
+import { readErrorMessage } from "./utils/validation.js";
 
 type PrepareTransactionDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
@@ -27,12 +24,27 @@ type PrepareTransactionDeps = {
   feeOracleFactory?: (rpc: Eip155RpcClient) => Eip155FeeOracle;
 };
 
+const applyPrepareStep = <TPatch>(
+  prepared: Eip155PreparedTransaction,
+  step: Eip155PrepareStepResult<TPatch>,
+  pickPrepared: (patch: TPatch) => Partial<Eip155PreparedTransaction>,
+): Eip155PrepareResult | null => {
+  Object.assign(prepared, pickPrepared(step.patch));
+  if (step.status === "blocked") {
+    return { status: "blocked", blocker: step.blocker, prepared };
+  }
+  if (step.status === "failed") {
+    return { status: "failed", error: step.error, prepared };
+  }
+  return null;
+};
+
 export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => {
   const chains = deps.chains;
   const deriveAddresses = createAddressResolver({ chains });
   const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 
-  return async (ctx: TransactionPrepareContext): Promise<Eip155PreparedTransactionResult> => {
+  return async (ctx: TransactionPrepareContext): Promise<Eip155PrepareResult> => {
     if (ctx.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
@@ -41,76 +53,67 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
     }
 
     const payload = ctx.request.payload as Eip155TransactionPayload;
-    const warnings: Eip155PreparedTransactionResult["warnings"] = [];
-    const issues: Eip155PreparedTransactionResult["issues"] = [];
     const prepared: Eip155PreparedTransaction = {};
 
-    const addresses = deriveAddresses(
-      ctx,
-      { from: payload.from ?? null, to: "to" in payload ? (payload.to ?? null) : undefined },
-      issues,
-    );
-    Object.assign(prepared, addresses.prepared);
+    const addresses = deriveAddresses(ctx, {
+      from: payload.from ?? null,
+      to: "to" in payload ? (payload.to ?? null) : undefined,
+    });
+    const addressResult = applyPrepareStep(prepared, addresses, (patch) => patch);
+    if (addressResult) return addressResult;
 
-    const fields = deriveFields(ctx, payload, issues, warnings);
-    Object.assign(prepared, fields.prepared);
+    const fields = deriveFields(ctx, payload);
+    const fieldResult = applyPrepareStep(prepared, fields, (patch) => patch.prepared);
+    if (fieldResult) return fieldResult;
+    const fieldPatch = fields.patch;
 
-    // Validate fee fields early so malformed requests short-circuit before any RPC work.
-    const payloadFeeInputs = pickDefined(fields.payloadValues, [
+    const payloadFeeInputs = pickDefined(fieldPatch.payloadValues, [
       "gasPrice",
       "maxFeePerGas",
       "maxPriorityFeePerGas",
     ] as const);
-    await deriveFees({ feeOracle: null, payloadFees: payloadFeeInputs, validateOnly: true }, issues);
-
-    if (hasFatalIssues(issues)) {
-      return { prepared, warnings, issues };
-    }
 
     let rpc: Eip155RpcClient | null = null;
     try {
       rpc = deps.rpcClientFactory(ctx.chainRef);
     } catch (error) {
-      pushIssue(
-        issues,
-        "transaction.prepare.rpc_unavailable",
-        "Failed to create RPC client.",
-        { error: readErrorMessage(error) },
-        { severity: "high" },
-      );
-    }
-
-    if (!rpc) {
-      return { prepared, warnings, issues };
+      return {
+        status: "failed",
+        error: {
+          reason: "transaction.prepare.rpc_unavailable",
+          message: "Failed to create RPC client.",
+          data: { error: readErrorMessage(error) },
+        },
+        prepared,
+      };
     }
 
     const feeOracle = feeOracleFactory(rpc);
 
-    // Assemble callParams for gas estimation (exclude null values)
     const callParams: Eip155CallParams = {};
     if (prepared.from) callParams.from = prepared.from;
     if (prepared.to !== undefined && prepared.to !== null) callParams.to = prepared.to;
     if (prepared.value) callParams.value = prepared.value;
     if (prepared.data) callParams.data = prepared.data;
 
-    const gasResolution = await deriveGas(
-      {
-        rpc,
-        callParams,
-        gasProvided: fields.payloadValues.gas ?? null,
-        nonceProvided: fields.payloadValues.nonce ?? null,
-      },
-      issues,
-      warnings,
-    );
-    Object.assign(prepared, gasResolution.prepared);
+    const gasResolution = await deriveGas({
+      rpc,
+      callParams,
+      gasProvided: fieldPatch.payloadValues.gas ?? null,
+      nonceProvided: fieldPatch.payloadValues.nonce ?? null,
+    });
+    const gasResult = applyPrepareStep(prepared, gasResolution, (patch) => patch);
+    if (gasResult) return gasResult;
 
-    const feeResolution = await deriveFees({ feeOracle, payloadFees: payloadFeeInputs }, issues);
-    Object.assign(prepared, feeResolution.prepared);
+    const feeResolution = await deriveFees({ feeOracle, payloadFees: payloadFeeInputs });
+    const feeResult = applyPrepareStep(prepared, feeResolution, (patch) => patch);
+    if (feeResult) return feeResult;
 
-    await checkBalanceForMaxCost({ rpc, prepared, issues, warnings });
+    const balanceResolution = await checkBalanceForMaxCost({ rpc, prepared });
+    const balanceResult = applyPrepareStep(prepared, balanceResolution, (patch) => patch);
+    if (balanceResult) return balanceResult;
 
-    return { prepared, warnings, issues };
+    return { status: "ready", prepared };
   };
 };
 

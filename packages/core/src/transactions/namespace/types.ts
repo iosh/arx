@@ -4,19 +4,31 @@ import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/app
 import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
 import type { TransactionMeta } from "../../controllers/transaction/types.js";
 import type {
-  TransactionIssue,
+  TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
   TransactionSubmissionLocator,
   TransactionSubmitted,
-  TransactionWarning,
 } from "../types.js";
 
-export type PreparedTransactionResult<TPrepared = Record<string, unknown>> = {
-  prepared: TPrepared;
-  warnings: TransactionWarning[];
-  issues: TransactionIssue[];
+// User-resolvable proposal stop: review can be shown, but approval is not allowed.
+export type TransactionProposalBlocker = {
+  reason: string;
+  message: string;
+  data?: unknown;
 };
+
+// Prepare/review infrastructure failure: retry or reject instead of approve.
+export type TransactionProposalError = {
+  reason: string;
+  message: string;
+  data?: unknown;
+};
+
+export type TransactionPrepareResult<TPrepared = TransactionPrepared> =
+  | { status: "ready"; prepared: TPrepared }
+  | { status: "blocked"; blocker: TransactionProposalBlocker; prepared?: TPrepared | null }
+  | { status: "failed"; error: TransactionProposalError; prepared?: TPrepared | null };
 
 export type SignedTransactionPayload = {
   raw: string;
@@ -59,6 +71,7 @@ export type TransactionRequestDeriver = (request: TransactionRequest, chainRef: 
 export type TransactionApprovalReviewContext = {
   transaction: TransactionMeta | undefined;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
+  reviewPreparedSnapshot?: TransactionPrepared | null;
 };
 
 export type TransactionDraftEditContext = {
@@ -74,20 +87,17 @@ export type NamespaceTransactionRequest = {
 };
 
 export type NamespaceTransactionProposal = {
-  prepare(context: TransactionPrepareContext): Promise<PreparedTransactionResult>;
+  prepare(context: TransactionPrepareContext): Promise<TransactionPrepareResult>;
   buildReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
   applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
 };
 
 export type NamespaceTransactionExecution = {
-  sign(
-    context: TransactionSignContext,
-    prepared: PreparedTransactionResult["prepared"],
-  ): Promise<SignedTransactionPayload>;
+  sign(context: TransactionSignContext, prepared: TransactionPrepared): Promise<SignedTransactionPayload>;
   broadcast(
     context: TransactionPrepareContext,
     signed: SignedTransactionPayload,
-    prepared: PreparedTransactionResult["prepared"],
+    prepared: TransactionPrepared,
   ): Promise<{
     submitted: TransactionSubmitted;
     locator: TransactionSubmissionLocator;

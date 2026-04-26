@@ -113,8 +113,9 @@ describe("RuntimeTransactionStore", () => {
       createdAt: 1,
       updatedAt: 1,
     });
-
-    created.request!.payload.gas = "0x9999";
+    if (created.request) {
+      created.request.payload.gas = "0x9999";
+    }
     if (created.prepared) {
       (created.prepared as { fee: { maxFeePerGas: string } }).fee.maxFeePerGas = "0x9";
     }

@@ -2,24 +2,6 @@ import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../chains/ids.js";
 import type { AccountAddress } from "../controllers/account/types.js";
 
-export type TransactionDiagnosticSeverity = "low" | "medium" | "high";
-
-export type TransactionDiagnostic = {
-  kind: "warning" | "issue";
-  code: string;
-  message: string;
-  /**
-   * Optional severity hint for UI treatment and decision-making.
-   * - "warning" diagnostics may still be treated as blocking by the UI.
-   * - "issue" diagnostics are blocking candidates by default.
-   */
-  severity?: TransactionDiagnosticSeverity;
-  data?: unknown;
-};
-
-export type TransactionWarning = TransactionDiagnostic & { kind: "warning" };
-export type TransactionIssue = TransactionDiagnostic & { kind: "issue" };
-
 export type TransactionError = {
   name: string;
   message: string;

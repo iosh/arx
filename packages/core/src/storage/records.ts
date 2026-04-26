@@ -5,7 +5,6 @@ import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
   RpcStrategySchema,
   TransactionReceiptSchema,
-  TransactionReplacementRelationSchema,
   TransactionSubmissionLocatorSchema,
   TransactionSubmittedSchema,
 } from "./schemas.js";

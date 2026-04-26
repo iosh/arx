@@ -1,5 +1,5 @@
 import type { Hex } from "ox/Hex";
-import type { PreparedTransactionResult } from "../types.js";
+import type { TransactionPrepareResult, TransactionProposalBlocker, TransactionProposalError } from "../types.js";
 
 export type Eip155FeeMode = "legacy" | "eip1559" | "unknown";
 export type Eip155CallParams = {
@@ -22,7 +22,12 @@ export type Eip155PreparedTransaction = {
   maxPriorityFeePerGas?: Hex;
 };
 
-export type Eip155PreparedTransactionResult = PreparedTransactionResult<Eip155PreparedTransaction>;
+export type Eip155PrepareResult = TransactionPrepareResult<Eip155PreparedTransaction>;
+
+export type Eip155PrepareStepResult<TPatch> =
+  | { status: "ok"; patch: TPatch }
+  | { status: "blocked"; blocker: TransactionProposalBlocker; patch: TPatch }
+  | { status: "failed"; error: TransactionProposalError; patch: TPatch };
 
 // Resolver result types for testing and internal use
 export type AddressResolutionResult = {

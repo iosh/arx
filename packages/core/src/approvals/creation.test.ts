@@ -121,8 +121,6 @@ describe("requestApproval", () => {
               value: "0x0",
             },
           },
-          warnings: [],
-          issues: [],
         },
       },
     );
@@ -176,8 +174,6 @@ describe("requestApproval", () => {
               chainRef: "eip155:1",
               payload: {},
             },
-            warnings: [],
-            issues: [],
           },
         },
       ),

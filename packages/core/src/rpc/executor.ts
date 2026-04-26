@@ -126,7 +126,7 @@ export const createRpcMethodExecutor = ({
 
   const assertPassthroughAllowed = (namespace: Namespace, method: string): void => {
     const passthrough = registry.getPassthroughPolicy(namespace);
-    if (!passthrough || !passthrough.allowedMethods.has(method)) {
+    if (!passthrough?.allowedMethods.has(method)) {
       throw arxError({
         reason: ArxReasons.RpcUnsupportedMethod,
         message: `Method "${method}" is not supported`,

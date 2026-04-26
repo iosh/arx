@@ -253,7 +253,7 @@ const buildSendTransactionDetail = (
     ...toDetailMeta(record),
     kind: ApprovalKinds.SendTransaction,
     actions: {
-      canApprove: review.reviewState.status === "ready" && review.approvalBlocker === null,
+      canApprove: review.prepare.state === "ready",
       canReject: true,
     },
     request: {

@@ -4,7 +4,7 @@ import type { NamespaceTransaction } from "./types.js";
 
 const dummy = (): NamespaceTransaction => ({
   proposal: {
-    prepare: async () => ({ prepared: {}, warnings: [], issues: [] }),
+    prepare: async () => ({ status: "ready", prepared: {} }),
   },
   execution: {
     sign: async (_ctx, _prepared) => ({ raw: "0x" }),

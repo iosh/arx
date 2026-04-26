@@ -1,7 +1,7 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
-import type { Eip155CallParams, Eip155PreparedTransactionResult, GasResolutionResult } from "../types.js";
-import { parseHexQuantity, pushIssue, pushWarning, readErrorMessage } from "../utils/validation.js";
+import type { Eip155CallParams, Eip155PrepareStepResult, GasResolutionResult } from "../types.js";
+import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 
 type GasResolverParams = {
   rpc: Eip155RpcCapabilities | null;
@@ -12,23 +12,32 @@ type GasResolverParams = {
 
 export const deriveGas = async (
   params: GasResolverParams,
-  issues: Eip155PreparedTransactionResult["issues"],
-  warnings: Eip155PreparedTransactionResult["warnings"],
-): Promise<GasResolutionResult> => {
+): Promise<Eip155PrepareStepResult<GasResolutionResult["prepared"]>> => {
   const prepared: GasResolutionResult["prepared"] = {};
 
   if (!params.nonceProvided && params.rpc && params.callParams.from) {
     try {
       const fetchedNonce = await params.rpc.getTransactionCount(params.callParams.from, { blockTag: "pending" });
-      const nonceHex = parseHexQuantity(issues, fetchedNonce, "nonce");
+      const nonceHex = parseOptionalHexQuantity(fetchedNonce, "nonce");
       if (nonceHex) {
         prepared.nonce = nonceHex;
       }
     } catch (error) {
-      pushIssue(issues, "transaction.prepare.nonce_failed", "Failed to fetch nonce from RPC.", {
-        method: "eth_getTransactionCount",
-        error: readErrorMessage(error),
-      });
+      if (error instanceof Eip155FieldParseError) {
+        return { status: "failed", error: error.toProposalError(), patch: prepared };
+      }
+      return {
+        status: "failed",
+        error: {
+          reason: "transaction.prepare.nonce_failed",
+          message: "Failed to fetch nonce from RPC.",
+          data: {
+            method: "eth_getTransactionCount",
+            error: readErrorMessage(error),
+          },
+        },
+        patch: prepared,
+      };
     }
   }
 
@@ -41,27 +50,40 @@ export const deriveGas = async (
       if (params.callParams.data) estimateArgs.data = params.callParams.data;
 
       const estimatedGas = await params.rpc.estimateGas(estimateArgs);
-      const gasHex = parseHexQuantity(issues, estimatedGas, "gas");
+      const gasHex = parseOptionalHexQuantity(estimatedGas, "gas");
       if (gasHex) {
-        const gasValue = Hex.toBigInt(gasHex);
-        if (gasValue === BigInt(0)) {
-          pushIssue(issues, "transaction.prepare.gas_zero", "RPC returned gas=0x0, please confirm manually.", {
-            estimate: estimatedGas,
-          });
-        } else if (gasValue > BigInt(50_000_000)) {
-          pushWarning(warnings, "transaction.prepare.gas_suspicious", "Estimated gas looks unusually high.", {
-            estimate: estimatedGas,
-          });
-        }
         prepared.gas = gasHex;
+        const gasValue = Hex.toBigInt(gasHex);
+        if (gasValue === 0n) {
+          return {
+            status: "blocked",
+            blocker: {
+              reason: "transaction.prepare.gas_zero",
+              message: "RPC returned gas=0x0, please confirm manually.",
+              data: { estimate: estimatedGas },
+            },
+            patch: prepared,
+          };
+        }
       }
     } catch (error) {
-      pushIssue(issues, "transaction.prepare.gas_estimation_failed", "Failed to estimate gas.", {
-        method: "eth_estimateGas",
-        error: readErrorMessage(error),
-      });
+      if (error instanceof Eip155FieldParseError) {
+        return { status: "failed", error: error.toProposalError(), patch: prepared };
+      }
+      return {
+        status: "failed",
+        error: {
+          reason: "transaction.prepare.gas_estimation_failed",
+          message: "Failed to estimate gas.",
+          data: {
+            method: "eth_estimateGas",
+            error: readErrorMessage(error),
+          },
+        },
+        patch: prepared,
+      };
     }
   }
 
-  return { prepared };
+  return { status: "ok", patch: prepared };
 };

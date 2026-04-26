@@ -32,7 +32,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
 
     const adapter: NamespaceTransaction = {
       proposal: {
-        prepare: vi.fn(async () => ({ prepared: {}, warnings: [], issues: [] })),
+        prepare: vi.fn(async () => ({ status: "ready", prepared: {} })),
       },
       execution: {
         sign: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),

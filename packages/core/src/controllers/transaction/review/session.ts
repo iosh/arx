@@ -1,11 +1,17 @@
+import type { TransactionPrepared } from "../../../transactions/types.js";
 import type { ApprovalFinishedEvent } from "../../approval/types.js";
-import type { TransactionReviewError, TransactionReviewMessage, TransactionReviewSession } from "./types.js";
+import type { TransactionReviewBlocker, TransactionReviewError, TransactionReviewSession } from "./types.js";
 
 const toReviewError = (event: ApprovalFinishedEvent<unknown>): TransactionReviewError => ({
   reason: `approval.${event.terminalReason}`,
   message: event.error?.message ?? "Approval is no longer active.",
   ...(event.error ? { data: event.error } : {}),
 });
+
+const cloneReviewPreparedSnapshot = (
+  reviewPreparedSnapshot?: TransactionPrepared | null,
+): TransactionPrepared | null =>
+  reviewPreparedSnapshot === undefined ? null : structuredClone(reviewPreparedSnapshot);
 
 export class TransactionReviewSessions {
   #sessions = new Map<string, TransactionReviewSession>();
@@ -25,16 +31,20 @@ export class TransactionReviewSessions {
       sessionToken: crypto.randomUUID(),
       status: "preparing",
       updatedAt,
+      reviewPreparedSnapshot: null,
       error: null,
-      prepareFailure: null,
-      approvalBlocker: null,
-      reviewNotices: [],
+      blocker: null,
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
   }
 
-  markReady(transactionId: string, sessionToken: string, updatedAt: number): TransactionReviewSession | null {
+  markReady(
+    transactionId: string,
+    sessionToken: string,
+    updatedAt: number,
+    reviewPreparedSnapshot?: TransactionPrepared | null,
+  ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
     if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
       return null;
@@ -44,10 +54,33 @@ export class TransactionReviewSessions {
       ...current,
       status: "ready",
       updatedAt,
+      reviewPreparedSnapshot: cloneReviewPreparedSnapshot(reviewPreparedSnapshot),
       error: null,
-      prepareFailure: current.prepareFailure,
-      approvalBlocker: current.approvalBlocker,
-      reviewNotices: structuredClone(current.reviewNotices),
+      blocker: null,
+    };
+    this.#sessions.set(transactionId, next);
+    return structuredClone(next);
+  }
+
+  markBlocked(
+    transactionId: string,
+    sessionToken: string,
+    updatedAt: number,
+    blocker: TransactionReviewBlocker,
+    reviewPreparedSnapshot?: TransactionPrepared | null,
+  ): TransactionReviewSession | null {
+    const current = this.#sessions.get(transactionId);
+    if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
+      return null;
+    }
+
+    const next: TransactionReviewSession = {
+      ...current,
+      status: "blocked",
+      updatedAt,
+      reviewPreparedSnapshot: cloneReviewPreparedSnapshot(reviewPreparedSnapshot),
+      error: null,
+      blocker: structuredClone(blocker),
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
@@ -57,7 +90,8 @@ export class TransactionReviewSessions {
     transactionId: string,
     sessionToken: string,
     updatedAt: number,
-    error: TransactionReviewError | null,
+    error: TransactionReviewError,
+    reviewPreparedSnapshot?: TransactionPrepared | null,
   ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
     if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
@@ -68,10 +102,9 @@ export class TransactionReviewSessions {
       ...current,
       status: "failed",
       updatedAt,
-      error,
-      prepareFailure: current.prepareFailure,
-      approvalBlocker: current.approvalBlocker,
-      reviewNotices: structuredClone(current.reviewNotices),
+      reviewPreparedSnapshot: cloneReviewPreparedSnapshot(reviewPreparedSnapshot),
+      error: structuredClone(error),
+      blocker: null,
     };
     this.#sessions.set(transactionId, next);
     return structuredClone(next);
@@ -91,39 +124,12 @@ export class TransactionReviewSessions {
       ...current,
       status: "invalidated",
       updatedAt,
+      reviewPreparedSnapshot: null,
       error: toReviewError(event),
-      prepareFailure: current.prepareFailure,
-      approvalBlocker: current.approvalBlocker,
-      reviewNotices: structuredClone(current.reviewNotices),
+      blocker: null,
       invalidatedBy: event.terminalReason,
     };
     this.#sessions.set(event.subject.transactionId, next);
-    return structuredClone(next);
-  }
-
-  setPreparedDiagnostics(
-    transactionId: string,
-    sessionToken: string,
-    updatedAt: number,
-    diagnostics: {
-      prepareFailure: TransactionReviewMessage | null;
-      approvalBlocker: TransactionReviewMessage | null;
-      reviewNotices: TransactionReviewMessage[];
-    },
-  ): TransactionReviewSession | null {
-    const current = this.#sessions.get(transactionId);
-    if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
-      return null;
-    }
-
-    const next: TransactionReviewSession = {
-      ...current,
-      updatedAt,
-      prepareFailure: diagnostics.prepareFailure,
-      approvalBlocker: diagnostics.approvalBlocker,
-      reviewNotices: structuredClone(diagnostics.reviewNotices),
-    };
-    this.#sessions.set(transactionId, next);
     return structuredClone(next);
   }
 }

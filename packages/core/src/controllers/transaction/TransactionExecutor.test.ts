@@ -42,13 +42,7 @@ const createNamespaceTransactionStub = (
     ...(overrides?.validate ? { validate: overrides.validate } : {}),
   },
   proposal: {
-    prepare:
-      overrides?.prepare ??
-      vi.fn(async () => ({
-        prepared: {},
-        warnings: [],
-        issues: [],
-      })),
+    prepare: overrides?.prepare ?? vi.fn(async () => ({ status: "ready", prepared: {} })),
     ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit } : {}),
   },
   execution: {
@@ -644,7 +638,7 @@ describe("TransactionExecutor", () => {
     const validateRequest = vi.fn(() => {
       throw arxError({
         reason: ArxReasons.RpcInvalidParams,
-        message: "chainId does not match active chain.",
+        message: "Transaction chainId does not match the active chain.",
         data: { code: "transaction.prepare.chain_id_mismatch" },
       });
     });
@@ -672,7 +666,7 @@ describe("TransactionExecutor", () => {
       ),
     ).rejects.toMatchObject({
       reason: ArxReasons.RpcInvalidParams,
-      message: "chainId does not match active chain.",
+      message: "Transaction chainId does not match the active chain.",
     });
 
     expect(validateRequest).toHaveBeenCalledWith({
@@ -978,16 +972,14 @@ describe("TransactionExecutor", () => {
       if (prepareRun === 1) {
         await firstPrepareSettled;
         return {
+          status: "ready",
           prepared: { gas: "0x5208", to: (context.request?.payload as { to?: string } | undefined)?.to ?? "old" },
-          warnings: [],
-          issues: [],
         };
       }
 
       return {
+        status: "ready",
         prepared: { gas: "0x5300", to: (context.request?.payload as { to?: string } | undefined)?.to ?? "new" },
-        warnings: [],
-        issues: [],
       };
     });
 

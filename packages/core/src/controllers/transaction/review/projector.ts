@@ -1,64 +1,60 @@
 import type { TransactionMeta } from "../types.js";
-import type { SendTransactionApprovalReview, TransactionReviewSession, TransactionReviewState } from "./types.js";
+import type { NamespaceTransactionReview, SendTransactionApprovalReview, TransactionReviewSession } from "./types.js";
 
-const deriveReviewState = (
-  meta: TransactionMeta | undefined,
-  session?: TransactionReviewSession | undefined,
-): TransactionReviewState => {
-  if (!session) {
-    if (!meta) {
-      return {
-        status: "preparing",
-        updatedAt: 0,
-      };
-    }
-
-    if (!meta.prepared) {
-      return {
-        status: "preparing",
-        updatedAt: meta.updatedAt,
-      };
-    }
-
-    return {
-      status: "ready",
-      updatedAt: meta.updatedAt,
-    };
-  }
-
-  return {
-    status: session.status === "invalidated" ? "failed" : session.status,
-    updatedAt: session.updatedAt,
-  };
-};
-
-export const projectTransactionReviewState = (
-  transaction: TransactionMeta | undefined,
-  session?: TransactionReviewSession | undefined,
-) => {
-  const reviewState = deriveReviewState(transaction, session);
-  const prepareFailure = session?.prepareFailure ?? null;
-  const approvalBlocker = reviewState.status === "ready" ? (session?.approvalBlocker ?? null) : null;
-  const reviewNotices = session?.reviewNotices ?? [];
-
-  return {
-    reviewState,
-    prepareFailure,
-    approvalBlocker,
-    reviewNotices,
-  } satisfies Pick<
-    SendTransactionApprovalReview,
-    "reviewState" | "prepareFailure" | "approvalBlocker" | "reviewNotices"
-  >;
+const deriveUpdatedAt = (transaction: TransactionMeta | undefined, session?: TransactionReviewSession): number => {
+  return session?.updatedAt ?? transaction?.updatedAt ?? 0;
 };
 
 export const buildSendTransactionApprovalReview = (args: {
   transaction: TransactionMeta | undefined;
   session?: TransactionReviewSession | undefined;
-  namespaceReview: SendTransactionApprovalReview["namespaceReview"];
+  namespaceReview: NamespaceTransactionReview | null;
 }): SendTransactionApprovalReview => {
+  const updatedAt = deriveUpdatedAt(args.transaction, args.session);
+
+  if (!args.session) {
+    if (args.transaction?.prepared) {
+      return {
+        updatedAt,
+        namespaceReview: args.namespaceReview,
+        prepare: { state: "ready" },
+      };
+    }
+
+    return {
+      updatedAt,
+      namespaceReview: args.namespaceReview,
+      prepare: { state: "preparing" },
+    };
+  }
+
+  if (args.session.status === "ready") {
+    return {
+      updatedAt,
+      namespaceReview: args.namespaceReview,
+      prepare: { state: "ready" },
+    };
+  }
+
+  if (args.session.status === "blocked" && args.session.blocker) {
+    return {
+      updatedAt,
+      namespaceReview: args.namespaceReview,
+      prepare: { state: "blocked", blocker: args.session.blocker },
+    };
+  }
+
+  if ((args.session.status === "failed" || args.session.status === "invalidated") && args.session.error) {
+    return {
+      updatedAt,
+      namespaceReview: args.namespaceReview,
+      prepare: { state: "failed", error: args.session.error },
+    };
+  }
+
   return {
-    ...projectTransactionReviewState(args.transaction, args.session),
+    updatedAt,
     namespaceReview: args.namespaceReview,
+    prepare: { state: "preparing" },
   };
 };

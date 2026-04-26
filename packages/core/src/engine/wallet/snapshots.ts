@@ -8,7 +8,7 @@ import type { SessionStatusService } from "../../services/runtime/sessionStatus.
 import { createUiSessionAccess } from "../../ui/server/sessionAccess.js";
 import { buildUiSnapshot } from "../../ui/server/snapshot.js";
 import type { UiApprovalsAccess } from "../../ui/server/types.js";
-import type { WalletAccounts, WalletApprovals, WalletDappConnections, WalletSnapshots } from "../types.js";
+import type { WalletAccounts, WalletDappConnections, WalletSnapshots } from "../types.js";
 import { buildProviderSnapshot, type ProviderProjectionDeps } from "./providerProjection.js";
 
 export const createWalletSnapshots = (deps: {
@@ -41,7 +41,6 @@ export const createWalletSnapshots = (deps: {
     chainViews,
     permissionViews,
     accounts,
-    approvals,
     namespaceBindings,
     dappConnections,
     providerProjection,

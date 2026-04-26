@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { TEST_ADDRESSES } from "./__fixtures__/constants.js";
 import { createPrepareContext } from "./__fixtures__/contexts.js";
-import { createTestPrepareTransaction } from "./__fixtures__/prepareTransaction.js";
+import { createTestPrepareTransaction, requireReadyPrepared } from "./__fixtures__/prepareTransaction.js";
 import { createEip155RpcMock } from "./__mocks__/rpc.js";
 
 describe("prepareTransaction - field handling", () => {
@@ -18,12 +18,13 @@ describe("prepareTransaction - field handling", () => {
       ctx.request.payload.nonce = "0xA";
 
       const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(result.prepared.value).toBe("0xde0b6b3a7640000");
-      expect(result.prepared.gas).toBe("0x5208");
-      expect(result.prepared.gasPrice).toBe("0x3b9aca00");
-      expect(result.prepared.nonce).toBe("0xa");
-      expect(BigInt(result.prepared.value as `0x${string}`).toString(10)).toBe("1000000000000000000");
+      expect(prepared.value).toBe("0xde0b6b3a7640000");
+      expect(prepared.gas).toBe("0x5208");
+      expect(prepared.gasPrice).toBe("0x3b9aca00");
+      expect(prepared.nonce).toBe("0xa");
+      expect(BigInt(prepared.value as `0x${string}`).toString(10)).toBe("1000000000000000000");
     });
 
     it("normalizes payload data field to lowercase hex", async () => {
@@ -37,8 +38,9 @@ describe("prepareTransaction - field handling", () => {
       ctx.request.payload.data = "0xABCD";
 
       const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(result.prepared.data).toBe("0xabcd");
+      expect(prepared.data).toBe("0xabcd");
       expect(rpc.estimateGas).toHaveBeenCalledWith(expect.objectContaining({ data: "0xabcd" }));
     });
   });
@@ -56,10 +58,10 @@ describe("prepareTransaction - field handling", () => {
       ctx.request.payload.data = "0x";
 
       const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(result.prepared.value).toBe("0x0");
-      expect(result.prepared.data).toBe("0x");
-      expect(result.issues).toHaveLength(0);
+      expect(prepared.value).toBe("0x0");
+      expect(prepared.data).toBe("0x");
     });
   });
 
@@ -76,8 +78,9 @@ describe("prepareTransaction - field handling", () => {
       ctx.request.payload.data = "0x60006000";
 
       const result = await prepareTransaction(ctx);
+      const prepared = requireReadyPrepared(result);
 
-      expect(result.prepared.to).toBeNull();
+      expect(prepared.to).toBeNull();
     });
 
     it("omits to field in callParams when deploying contracts", async () => {

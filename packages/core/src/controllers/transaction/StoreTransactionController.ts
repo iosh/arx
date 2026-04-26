@@ -109,6 +109,12 @@ export class StoreTransactionController implements TransactionController {
       namespaces: options.namespaces,
       reviewSessions: this.#reviewSessions,
       logger,
+      onReviewSessionChanged: (transactionId, updatedAt) => {
+        options.messenger.publish(TRANSACTION_STATE_CHANGED, {
+          revision: updatedAt,
+          transactionIds: [transactionId],
+        });
+      },
     });
 
     this.#executor = new TransactionExecutor({
@@ -167,11 +173,13 @@ export class StoreTransactionController implements TransactionController {
       (transaction ? this.#executor.buildApprovalRequestPayload(transaction, input.transactionId) : null);
     const namespace = transaction?.namespace ?? request?.request.namespace;
     const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
+    const reviewPreparedSnapshot = session ? session.reviewPreparedSnapshot : (transaction?.prepared ?? null);
     const namespaceReview =
       namespaceTransaction && request
         ? (namespaceTransaction.proposal?.buildReview?.({
             transaction,
             request,
+            reviewPreparedSnapshot,
           }) ?? null)
         : null;
 
@@ -237,7 +245,7 @@ export class StoreTransactionController implements TransactionController {
     });
   }
 
-  approveTransaction(id: string): Promise<TransactionMeta | null> {
+  approveTransaction(id: string): ReturnType<TransactionController["approveTransaction"]> {
     return this.#executor.approveTransaction(id);
   }
 

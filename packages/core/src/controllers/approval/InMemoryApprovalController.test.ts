@@ -286,8 +286,6 @@ describe("InMemoryApprovalController", () => {
               to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             },
           },
-          warnings: [],
-          issues: [],
         },
       },
       requester,

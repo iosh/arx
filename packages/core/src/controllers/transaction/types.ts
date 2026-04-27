@@ -12,7 +12,7 @@ import type {
   TransactionSubmitted,
 } from "../../transactions/types.js";
 import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
-import type { SendTransactionApprovalReview, TransactionReviewSession } from "./review/types.js";
+import type { SendTransactionApprovalReview } from "./review/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 export type DurableTransactionStatus = Exclude<TransactionStatus, "pending" | "approved" | "signed">;
@@ -123,7 +123,6 @@ export type TransactionController = {
     transactionId: string;
     request?: TransactionApprovalRequestPayload | undefined;
   }): SendTransactionApprovalReview;
-  getReviewSession(transactionId: string): TransactionReviewSession | undefined;
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
@@ -138,7 +137,6 @@ export type TransactionController = {
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionApproveResult>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
-  processTransaction(id: string): Promise<void>;
   resumePending(): Promise<void>;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;

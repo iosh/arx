@@ -314,7 +314,6 @@ export type WalletTransactions = Readonly<{
   waitForTransactionSubmission: TransactionController["waitForTransactionSubmission"];
   approveTransaction: TransactionController["approveTransaction"];
   rejectTransaction: TransactionController["rejectTransaction"];
-  processTransaction: TransactionController["processTransaction"];
   onStatusChanged: TransactionController["onStatusChanged"];
   onStateChanged: TransactionController["onStateChanged"];
 }>;

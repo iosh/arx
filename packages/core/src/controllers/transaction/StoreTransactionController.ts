@@ -42,6 +42,24 @@ const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransac
 
 const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUSES.has(meta.status);
 
+type TransactionSubmissionState =
+  | { state: "submitted"; resolution: TransactionSubmissionResolution }
+  | { state: "failed"; error: TransactionSubmissionError }
+  | { state: "waiting" };
+
+const readTransactionSubmissionState = (meta: TransactionMeta): TransactionSubmissionState => {
+  if (isSubmittedTransaction(meta)) {
+    const { locator } = meta;
+    return { state: "submitted", resolution: { locator, meta } };
+  }
+
+  if (isFailedTransaction(meta)) {
+    return { state: "failed", error: new TransactionSubmissionError(meta) };
+  }
+
+  return { state: "waiting" };
+};
+
 type TransactionTimestampReader = () => number;
 
 const createTransactionTimestampReader = (readSystemTime: () => number): TransactionTimestampReader => {
@@ -187,10 +205,6 @@ export class StoreTransactionController implements TransactionController {
     return this.#proposals.getMeta(id);
   }
 
-  getReviewSession(transactionId: string) {
-    return this.#proposals.getReviewSession(transactionId);
-  }
-
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
     return this.#proposals.getApprovalReview(input);
   }
@@ -215,38 +229,64 @@ export class StoreTransactionController implements TransactionController {
     return this.#proposals.applyDraftEdit(input);
   }
 
-  async waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
-    const initial = this.getMeta(id) ?? (await this.#view.getOrLoad(id));
-    if (!initial) {
-      throw new Error(`Transaction ${id} not found after approval`);
+  waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
+    const cached = this.getMeta(id);
+    if (cached) {
+      const state = readTransactionSubmissionState(cached);
+      if (state.state === "submitted") return Promise.resolve(state.resolution);
+      if (state.state === "failed") return Promise.reject(state.error);
     }
 
-    if (isSubmittedTransaction(initial)) {
-      const { locator } = initial;
-      return { locator, meta: initial };
-    }
-    if (isFailedTransaction(initial)) {
-      throw new TransactionSubmissionError(initial);
-    }
+    return new Promise<TransactionSubmissionResolution>((resolve, reject) => {
+      let isWaiting = true;
 
-    return await new Promise<TransactionSubmissionResolution>((resolve, reject) => {
+      const stopWaiting = () => {
+        if (!isWaiting) return false;
+        isWaiting = false;
+        unsubscribe();
+        return true;
+      };
+
+      const completeFromMeta = (meta: TransactionMeta) => {
+        const state = readTransactionSubmissionState(meta);
+        if (state.state === "waiting" || !stopWaiting()) {
+          return;
+        }
+
+        if (state.state === "submitted") {
+          resolve(state.resolution);
+          return;
+        }
+
+        reject(state.error);
+      };
+
+      const failWaiting = (error: unknown) => {
+        if (stopWaiting()) {
+          reject(error);
+        }
+      };
+
       const unsubscribe = this.onStatusChanged(({ id: changeId, meta }) => {
-        if (changeId !== id) {
-          return;
-        }
-
-        if (isSubmittedTransaction(meta)) {
-          unsubscribe();
-          const { locator } = meta;
-          resolve({ locator, meta });
-          return;
-        }
-
-        if (isFailedTransaction(meta)) {
-          unsubscribe();
-          reject(new TransactionSubmissionError(meta));
+        if (changeId === id) {
+          completeFromMeta(meta);
         }
       });
+
+      const runtimeMeta = this.getMeta(id);
+      const initial = runtimeMeta ? Promise.resolve(runtimeMeta) : this.#view.getOrLoad(id);
+
+      initial.then(
+        (initialMeta) => {
+          if (!initialMeta) {
+            failWaiting(new Error(`Transaction ${id} not found after approval`));
+            return;
+          }
+
+          completeFromMeta(initialMeta);
+        },
+        (error) => failWaiting(error),
+      );
     });
   }
 
@@ -256,10 +296,6 @@ export class StoreTransactionController implements TransactionController {
 
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
     return this.#execution.rejectTransaction(id, reason);
-  }
-
-  processTransaction(id: string): Promise<void> {
-    return this.#execution.processTransaction(id);
   }
 
   resumePending(): Promise<void> {

@@ -38,8 +38,7 @@ type TransactionExecutionServiceDeps = {
 };
 
 export class TransactionExecutionService
-  implements
-    Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "processTransaction" | "resumePending">
+  implements Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "resumePending">
 {
   #runtime: RuntimeTransactionStore;
   #view: StoreTransactionView;

@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
+import type { TransactionRecord } from "../../storage/records.js";
 import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../transactions/namespace/types.js";
+import { DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { StoreTransactionController } from "./StoreTransactionController.js";
-import { TRANSACTION_TOPICS } from "./topics.js";
+import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "./topics.js";
+import type { TransactionMeta } from "./types.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 const chainRef = "eip155:10";
@@ -19,7 +22,38 @@ const requestContext = {
   requestId: "request-1",
 };
 
-const createTransactionsService = (): TransactionsService => ({
+const createBroadcastRecord = (id: string): TransactionRecord => ({
+  id,
+  chainRef,
+  origin: requestContext.origin,
+  fromAccountKey: accountCodecs.toAccountKeyFromAddress({ chainRef, address: from }),
+  status: "broadcast",
+  submitted: DEFAULT_SUBMITTED,
+  locator: DEFAULT_LOCATOR,
+  createdAt: 1,
+  updatedAt: 1,
+});
+
+const createBroadcastMeta = (id: string): TransactionMeta => ({
+  id,
+  namespace: "eip155",
+  chainRef,
+  origin: requestContext.origin,
+  from,
+  request: null,
+  prepared: null,
+  status: "broadcast",
+  submitted: DEFAULT_SUBMITTED,
+  locator: DEFAULT_LOCATOR,
+  receipt: null,
+  replacedId: null,
+  error: null,
+  userRejected: false,
+  createdAt: 1,
+  updatedAt: 1,
+});
+
+const createTransactionsService = (overrides?: Partial<TransactionsService>): TransactionsService => ({
   subscribeChanged: vi.fn(() => () => {}),
   get: vi.fn(async () => null),
   list: vi.fn(async () => []),
@@ -29,14 +63,22 @@ const createTransactionsService = (): TransactionsService => ({
   transition: vi.fn(async () => null),
   patchIfStatus: vi.fn(async () => null),
   remove: vi.fn(async () => {}),
+  ...overrides,
 });
 
-const createController = (namespaceTransaction: NamespaceTransaction) => {
+const createController = (
+  namespaceTransaction: NamespaceTransaction,
+  options?: {
+    service?: TransactionsService;
+    messenger?: Messenger;
+  },
+) => {
   const namespaces = new NamespaceTransactions([["eip155", namespaceTransaction]]);
   const accountKey = accountCodecs.toAccountKeyFromAddress({ chainRef, address: from });
+  const messenger = options?.messenger ?? new Messenger();
 
   return new StoreTransactionController({
-    messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
+    messenger: messenger.scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
     networkSelection: {
       getSelectedChainRef: () => chainRef,
@@ -63,90 +105,44 @@ const createController = (namespaceTransaction: NamespaceTransaction) => {
       onFinished: vi.fn(() => () => {}),
     },
     namespaces,
-    service: createTransactionsService(),
+    service: options?.service ?? createTransactionsService(),
     now: () => 1,
   });
 };
 
 describe("StoreTransactionController", () => {
-  it("projects blocked prepared snapshots for review without making the transaction executable", async () => {
-    const prepare = vi.fn(async () => ({
-      status: "blocked" as const,
-      blocker: {
-        reason: "transaction.prepare.insufficient_funds",
-        message: "Insufficient funds for transaction.",
-      },
-      prepared: {
-        gas: "0x5208",
-        gasPrice: "0x3b9aca00",
-      },
-    }));
-    const buildReview = vi.fn(({ reviewPreparedSnapshot }) => ({
-      namespace: "eip155" as const,
-      summary: {
-        from,
-        to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        value: "0x1",
-      },
-      execution: {
-        gas: reviewPreparedSnapshot?.gas,
-        gasPrice: reviewPreparedSnapshot?.gasPrice,
-      },
-    }));
-    const controller = createController({
-      proposal: {
-        prepare,
-        buildReview,
-      },
-      tracking: {
-        fetchReceipt: vi.fn(async () => null),
-      },
-    });
-
-    const handoff = await controller.beginTransactionApproval(
+  it("does not miss submission while loading the initial transaction state", async () => {
+    const messenger = new Messenger();
+    const service = createTransactionsService();
+    const controller = createController(
       {
-        namespace: "eip155",
-        chainRef,
-        payload: {
-          from,
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x1",
+        proposal: {
+          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+        },
+        tracking: {
+          fetchReceipt: vi.fn(async () => null),
         },
       },
-      requestContext,
-      { from },
+      { service, messenger },
     );
-
-    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(controller.getReviewSession(handoff.transactionId)?.status).toBe("blocked"));
-
-    expect(controller.getMeta(handoff.transactionId)?.prepared).toBeNull();
-    expect(await controller.approveTransaction(handoff.transactionId)).toMatchObject({
-      status: "failed",
-      reason: "prepare_blocked",
-      message: "Insufficient funds for transaction.",
+    const record = createBroadcastRecord("tx-1");
+    vi.mocked(service.get).mockImplementationOnce(async () => {
+      messenger.publish(TRANSACTION_STATUS_CHANGED, {
+        id: record.id,
+        previousStatus: "signed",
+        nextStatus: "broadcast",
+        meta: createBroadcastMeta(record.id),
+      });
+      return record;
     });
-    expect(controller.getApprovalReview({ transactionId: handoff.transactionId })).toMatchObject({
-      prepare: {
-        state: "blocked",
-        blocker: {
-          reason: "transaction.prepare.insufficient_funds",
-        },
-      },
-      namespaceReview: {
-        execution: {
-          gas: "0x5208",
-          gasPrice: "0x3b9aca00",
-        },
+
+    const pending = controller.waitForTransactionSubmission(record.id);
+    await expect(pending).resolves.toMatchObject({
+      locator: DEFAULT_LOCATOR,
+      meta: {
+        id: record.id,
+        status: "broadcast",
       },
     });
-    expect(buildReview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reviewPreparedSnapshot: {
-          gas: "0x5208",
-          gasPrice: "0x3b9aca00",
-        },
-      }),
-    );
   });
 });

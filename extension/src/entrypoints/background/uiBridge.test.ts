@@ -543,7 +543,6 @@ const createControllers = () => {
   };
   const transactions = {
     approveTransaction: async () => null,
-    processTransaction: async () => {},
     onStateChanged: () => () => {},
   };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };

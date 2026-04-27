@@ -51,12 +51,7 @@ export class TransactionProposalService
   implements
     Pick<
       TransactionController,
-      | "getMeta"
-      | "getApprovalReview"
-      | "getReviewSession"
-      | "beginTransactionApproval"
-      | "retryPrepare"
-      | "applyDraftEdit"
+      "getMeta" | "getApprovalReview" | "beginTransactionApproval" | "retryPrepare" | "applyDraftEdit"
     >
 {
   #runtime: RuntimeTransactionStore;
@@ -87,10 +82,6 @@ export class TransactionProposalService
 
   getMeta(id: string): TransactionMeta | undefined {
     return this.#runtime.get(id) ?? this.#view.getMeta(id);
-  }
-
-  getReviewSession(transactionId: string) {
-    return this.#reviewSessions.get(transactionId);
   }
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {

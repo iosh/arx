@@ -150,6 +150,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       const approvedMeta = await handoff.waitForApprovalDecision();
       expect(["approved", "signed", "broadcast"]).toContain(approvedMeta.status);
@@ -276,6 +277,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
               },
             },
             makeRequestContext("https://dapp.example"),
+            { from },
           );
           await handoff.waitForApprovalDecision();
           return handoff.transactionId;
@@ -372,6 +374,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await handoff.waitForApprovalDecision();
 
@@ -495,6 +498,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await first.waitForApprovalDecision();
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
@@ -512,6 +516,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await second.waitForApprovalDecision();
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(2));
@@ -602,6 +607,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await handoff.waitForApprovalDecision();
 
@@ -684,6 +690,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
             },
           },
           makeRequestContext("https://dapp.example"),
+          { from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
         ),
       ).rejects.toMatchObject({
         reason: "ChainNotSupported",
@@ -755,6 +762,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await handoff.waitForApprovalDecision();
 
@@ -840,6 +848,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
           },
         },
         makeRequestContext("https://dapp.example"),
+        { from: fromAddress },
       );
       await handoff.waitForApprovalDecision();
 

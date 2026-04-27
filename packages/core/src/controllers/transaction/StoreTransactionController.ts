@@ -8,12 +8,12 @@ import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.j
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
-import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { TransactionReviewSessions } from "./review/session.js";
 import { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
-import { TransactionExecutor } from "./TransactionExecutor.js";
+import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import { TransactionProposalService } from "./TransactionProposalService.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
@@ -42,12 +42,29 @@ const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransac
 
 const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUSES.has(meta.status);
 
+type TransactionTimestampReader = () => number;
+
+const createTransactionTimestampReader = (readSystemTime: () => number): TransactionTimestampReader => {
+  let lastTimestamp = 0;
+
+  return () => {
+    const currentTimestamp = readSystemTime();
+    if (currentTimestamp <= lastTimestamp) {
+      lastTimestamp += 1;
+      return lastTimestamp;
+    }
+
+    lastTimestamp = currentTimestamp;
+    return currentTimestamp;
+  };
+};
+
 export type StoreTransactionControllerOptions = {
   messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
-  accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
+  accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create" | "onFinished">;
   namespaces: NamespaceTransactions;
   service: TransactionsService;
@@ -62,25 +79,24 @@ export type StoreTransactionControllerOptions = {
 };
 
 /**
- * Persistent transactions controller:
- * - Single source of truth: TransactionsService (backed by the `transactions` table)
- * - Read model: StoreTransactionView (bounded LRU + best-effort sync)
- * - Execution: TransactionExecutor (queue + signing/broadcast + receipt tracking)
+ * Transaction facade.
+ *
+ * Runtime proposals stay in memory; durable records are store-backed and start
+ * after broadcast succeeds.
  */
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
   #runtime: RuntimeTransactionStore;
   #view: StoreTransactionView;
-  #executor: TransactionExecutor;
-  #namespaces: NamespaceTransactions;
-  #reviewSessions: TransactionReviewSessions;
+  #proposals: TransactionProposalService;
+  #execution: TransactionExecutionService;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
-    this.#namespaces = options.namespaces;
-    this.#reviewSessions = new TransactionReviewSessions();
+    const reviewSessions = new TransactionReviewSessions();
 
-    const now = options.now ?? Date.now;
+    const readSystemTime = options.now ?? Date.now;
+    const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
     const stateLimit = options.stateLimit ?? 200;
     const logger = options.logger ?? (() => {});
 
@@ -107,7 +123,7 @@ export class StoreTransactionController implements TransactionController {
     const prepare = new TransactionPrepareManager({
       runtime: this.#runtime,
       namespaces: options.namespaces,
-      reviewSessions: this.#reviewSessions,
+      reviewSessions,
       logger,
       onReviewSessionChanged: (transactionId, updatedAt) => {
         options.messenger.publish(TRANSACTION_STATE_CHANGED, {
@@ -117,7 +133,7 @@ export class StoreTransactionController implements TransactionController {
       },
     });
 
-    this.#executor = new TransactionExecutor({
+    this.#proposals = new TransactionProposalService({
       runtime: this.#runtime,
       view: this.#view,
       accountCodecs: options.accountCodecs,
@@ -126,15 +142,25 @@ export class StoreTransactionController implements TransactionController {
       accounts: options.accounts,
       approvals: options.approvals,
       namespaces: options.namespaces,
+      prepare,
+      reviewSessions,
+      readTransactionTimestamp,
+    });
+
+    this.#execution = new TransactionExecutionService({
+      runtime: this.#runtime,
+      view: this.#view,
+      accountCodecs: options.accountCodecs,
+      namespaces: options.namespaces,
       service: options.service,
       prepare,
-      reviewSessions: this.#reviewSessions,
+      proposals: this.#proposals,
       tracking,
-      now,
+      readTransactionTimestamp,
     });
 
     options.approvals.onFinished((event) => {
-      const changed = this.#reviewSessions.invalidateFromApproval(event, now());
+      const changed = this.#proposals.invalidateFromApproval(event);
       if (changed) {
         this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
           revision: changed.updatedAt,
@@ -148,7 +174,7 @@ export class StoreTransactionController implements TransactionController {
         return;
       }
 
-      if (this.#reviewSessions.delete(id)) {
+      if (this.#proposals.deleteReviewSession(id)) {
         this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
           revision: meta.updatedAt,
           transactionIds: [id],
@@ -158,56 +184,35 @@ export class StoreTransactionController implements TransactionController {
   }
 
   getMeta(id: string): TransactionMeta | undefined {
-    return this.#runtime.get(id) ?? this.#view.getMeta(id);
+    return this.#proposals.getMeta(id);
   }
 
   getReviewSession(transactionId: string) {
-    return this.#reviewSessions.get(transactionId);
+    return this.#proposals.getReviewSession(transactionId);
   }
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
-    const transaction = this.#runtime.get(input.transactionId) ?? this.#view.getMeta(input.transactionId);
-    const session = this.#reviewSessions.get(input.transactionId);
-    const request =
-      input.request ??
-      (transaction ? this.#executor.buildApprovalRequestPayload(transaction, input.transactionId) : null);
-    const namespace = transaction?.namespace ?? request?.request.namespace;
-    const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
-    const reviewPreparedSnapshot = session ? session.reviewPreparedSnapshot : (transaction?.prepared ?? null);
-    const namespaceReview =
-      namespaceTransaction && request
-        ? (namespaceTransaction.proposal?.buildReview?.({
-            transaction,
-            request,
-            reviewPreparedSnapshot,
-          }) ?? null)
-        : null;
-
-    return buildSendTransactionApprovalReview({
-      transaction,
-      session,
-      namespaceReview,
-    });
+    return this.#proposals.getApprovalReview(input);
   }
 
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
-    options?: BeginTransactionApprovalOptions,
+    options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
-    return this.#executor.beginTransactionApproval(request, requestContext, options);
+    return this.#proposals.beginTransactionApproval(request, requestContext, options);
   }
 
   retryPrepare(transactionId: string): Promise<void> {
-    return this.#executor.retryPrepare(transactionId);
+    return this.#proposals.retryPrepare(transactionId);
   }
 
   applyDraftEdit(input: {
     transactionId: string;
-    changes: Record<string, unknown>[];
-    mode?: string | undefined;
+    changes: ReadonlyArray<Record<string, unknown>>;
+    mode?: string;
   }): Promise<void> {
-    return this.#executor.applyDraftEdit(input);
+    return this.#proposals.applyDraftEdit(input);
   }
 
   async waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
@@ -246,19 +251,19 @@ export class StoreTransactionController implements TransactionController {
   }
 
   approveTransaction(id: string): ReturnType<TransactionController["approveTransaction"]> {
-    return this.#executor.approveTransaction(id);
+    return this.#execution.approveTransaction(id);
   }
 
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
-    return this.#executor.rejectTransaction(id, reason);
+    return this.#execution.rejectTransaction(id, reason);
   }
 
   processTransaction(id: string): Promise<void> {
-    return this.#executor.processTransaction(id);
+    return this.#execution.processTransaction(id);
   }
 
   resumePending(): Promise<void> {
-    return this.#executor.resumePending();
+    return this.#execution.resumePending();
   }
 
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void {

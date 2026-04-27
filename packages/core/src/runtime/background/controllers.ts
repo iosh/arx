@@ -170,7 +170,6 @@ export const initControllers = ({
       getChain: (chainRef) => supportedChainsController.getChain(chainRef),
     },
     accounts: {
-      getActiveAccountForNamespace: (params) => accountController.getActiveAccountForNamespace(params),
       listOwnedForNamespace: (params) => accountController.listOwnedForNamespace(params),
     },
     approvals: {

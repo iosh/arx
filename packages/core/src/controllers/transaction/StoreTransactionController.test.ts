@@ -45,13 +45,6 @@ const createController = (namespaceTransaction: NamespaceTransaction) => {
       getChain: () => null,
     },
     accounts: {
-      getActiveAccountForNamespace: () => ({
-        accountKey,
-        namespace: "eip155",
-        chainRef,
-        canonicalAddress: from,
-        displayAddress: from,
-      }),
       listOwnedForNamespace: () => [
         {
           accountKey,
@@ -121,6 +114,7 @@ describe("StoreTransactionController", () => {
         },
       },
       requestContext,
+      { from },
     );
 
     await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));

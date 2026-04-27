@@ -601,6 +601,7 @@ describe("createArxWallet", () => {
           sessionId: PROVIDER_SESSION_ID,
           requestId: "request-1",
         },
+        { from: ACCOUNT_ADDRESS },
       );
       transactionId = handoff.transactionId;
       void handoff.waitForApprovalDecision().catch(() => null);

@@ -8,7 +8,7 @@ const EDITABLE_FIELDS = new Set(["gas", "gasPrice", "maxFeePerGas", "maxPriority
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const readFieldChange = (change: Record<string, unknown>) => {
+const readFieldChange = (change: Readonly<Record<string, unknown>>) => {
   const field = typeof change.field === "string" ? change.field : null;
   if (!field || !EDITABLE_FIELDS.has(field)) {
     throw new Error(`Unsupported transaction draft field "${String(change.field)}".`);

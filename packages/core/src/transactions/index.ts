@@ -22,7 +22,6 @@ export type {
   TransactionProposalBlocker,
   TransactionProposalError,
   TransactionReplacementKey,
-  TransactionRequestDeriver,
   TransactionSignContext,
   TransactionTrackingContext,
   TransactionValidationContext,

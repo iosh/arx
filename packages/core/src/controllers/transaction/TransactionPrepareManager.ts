@@ -6,7 +6,7 @@ import { isPrepareEligibleTransactionStatus } from "./status.js";
 import type { TransactionMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
 
-const DEFAULT_PREPARE_TIMEOUT_MS = 20_000;
+const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 type Options = {
@@ -14,7 +14,7 @@ type Options = {
   namespaces: NamespaceTransactions;
   reviewSessions: TransactionReviewSessions;
   logger?: (message: string, data?: unknown) => void;
-  prepareTimeoutMs?: number;
+  namespaceProposalPrepareTimeoutMs?: number;
   backgroundConcurrency?: number;
   onReviewSessionChanged?: (transactionId: string, updatedAt: number) => void;
 };
@@ -25,7 +25,7 @@ export class TransactionPrepareManager {
   #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
   #onReviewSessionChanged: (transactionId: string, updatedAt: number) => void;
-  #timeoutMs: number;
+  #namespaceProposalPrepareTimeoutMs: number;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
 
@@ -39,7 +39,8 @@ export class TransactionPrepareManager {
     this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
     this.#onReviewSessionChanged = options.onReviewSessionChanged ?? (() => {});
-    this.#timeoutMs = options.prepareTimeoutMs ?? DEFAULT_PREPARE_TIMEOUT_MS;
+    this.#namespaceProposalPrepareTimeoutMs =
+      options.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
     this.#prepareConcurrencyLimit = Math.max(
       1,
       options.backgroundConcurrency ?? DEFAULT_BACKGROUND_PREPARE_CONCURRENCY,
@@ -47,7 +48,7 @@ export class TransactionPrepareManager {
   }
 
   queuePrepare(id: string) {
-    void this.ensurePrepared(id, { source: "background" }).catch((error) => {
+    void this.#prepareTransactionInBackground(id).catch((error) => {
       // Best-effort background preparation; failures are surfaced via review state.
       this.#logger("transactions: prepare failed", {
         id,
@@ -56,9 +57,17 @@ export class TransactionPrepareManager {
     });
   }
 
-  async ensurePrepared(
+  async prepareTransactionForExecution(id: string): Promise<TransactionMeta | null> {
+    return await this.#runPrepareUntilCurrent(id, { source: "execution" });
+  }
+
+  async #prepareTransactionInBackground(id: string): Promise<TransactionMeta | null> {
+    return await this.#runPrepareUntilCurrent(id, { source: "background" });
+  }
+
+  async #runPrepareUntilCurrent(
     id: string,
-    opts?: { timeoutMs?: number; source?: "background" | "execution" },
+    opts: { source: "background" | "execution" },
   ): Promise<TransactionMeta | null> {
     while (true) {
       const existing = this.#prepareInFlight.get(id);
@@ -100,9 +109,9 @@ export class TransactionPrepareManager {
 
   async #prepareAndPersistInternal(
     id: string,
-    opts?: { timeoutMs?: number; source?: "background" | "execution" },
+    opts: { source: "background" | "execution" },
   ): Promise<TransactionMeta | null> {
-    const timeoutMs = opts?.timeoutMs ?? this.#timeoutMs;
+    const timeoutMs = this.#namespaceProposalPrepareTimeoutMs;
 
     const state = this.#runtime.peek(id);
     if (!state) return null;
@@ -127,11 +136,17 @@ export class TransactionPrepareManager {
     if (!namespaceTransaction) {
       const next = this.#runtime.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#runtime.get(id) ?? null;
-      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, {
-        reason: "transaction.adapter_missing",
-        message: `No namespace transaction registered for namespace ${meta.namespace}`,
-        data: { namespace: meta.namespace },
-      });
+      const changed = this.#reviewSessions.markFailed(
+        id,
+        session.sessionToken,
+        next.updatedAt,
+        {
+          reason: "transaction.adapter_missing",
+          message: `No namespace transaction registered for namespace ${meta.namespace}`,
+          data: { namespace: meta.namespace },
+        },
+        null,
+      );
       if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
       return next;
     }
@@ -144,7 +159,7 @@ export class TransactionPrepareManager {
         value: namespaceTransaction.proposal?.prepare,
       });
       const runPrepare = async () => await this.#withTimeout(prepare(context), timeoutMs);
-      const result = opts?.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
+      const result = opts.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
 
       const reviewPreparedSnapshot = result.prepared ?? null;
       const executionPrepared = result.status === "ready" ? result.prepared : null;
@@ -195,7 +210,7 @@ export class TransactionPrepareManager {
               reason: "transaction.prepare_failed",
               message: String(error),
             };
-      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, reviewError);
+      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, reviewError, null);
       if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
       return next;
     }

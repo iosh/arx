@@ -79,7 +79,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         buildEip155ApprovalReview({
           transaction,
           request,
-          ...(reviewPreparedSnapshot !== undefined ? { reviewPreparedSnapshot } : {}),
+          reviewPreparedSnapshot,
         }),
       applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
     },

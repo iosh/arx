@@ -41,6 +41,7 @@ export const createUiCommonHandlers = (deps: UiHandlerDeps): UiMethodHandlerMap 
     ...createTransactionsHandlers({
       transactions: access.transactions,
       chains: access.chains,
+      accounts: access.accounts,
       session: access.session,
       namespaceBindings: access.namespaceBindings,
       surface,

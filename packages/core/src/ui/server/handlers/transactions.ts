@@ -3,6 +3,7 @@ import * as Value from "ox/Value";
 import type { RequestContext } from "../../../rpc/requestContext.js";
 import type { TransactionRequest } from "../../../transactions/types.js";
 import type {
+  UiAccountsAccess,
   UiChainsAccess,
   UiHandlers,
   UiNamespaceBindingsAccess,
@@ -23,6 +24,7 @@ const createUiRequestContext = (surface: UiSurfaceIdentity): RequestContext => (
 export const createTransactionsHandlers = (deps: {
   transactions: UiTransactionsAccess;
   chains: UiChainsAccess;
+  accounts: Pick<UiAccountsAccess, "getActiveAccountForNamespace">;
   session: UiSessionAccess;
   namespaceBindings: UiNamespaceBindingsAccess;
   surface: UiSurfaceIdentity;
@@ -49,6 +51,18 @@ export const createTransactionsHandlers = (deps: {
         });
       }
 
+      const activeAccount = deps.accounts.getActiveAccountForNamespace({
+        namespace: chain.namespace,
+        chainRef: resolvedChainRef,
+      });
+      if (!activeAccount) {
+        throw arxError({
+          reason: ArxReasons.PermissionDenied,
+          message: "No active account is available to send this transaction.",
+          data: { chainRef: resolvedChainRef, namespace: chain.namespace },
+        });
+      }
+
       const trimmedValue = valueEther.trim();
       let wei: bigint;
       try {
@@ -69,7 +83,9 @@ export const createTransactionsHandlers = (deps: {
         valueWei: wei,
       });
 
-      const handoff = await deps.transactions.beginTransactionApproval(request, requestContext);
+      const handoff = await deps.transactions.beginTransactionApproval(request, requestContext, {
+        from: activeAccount.canonicalAddress,
+      });
 
       return { approvalId: handoff.approvalId };
     },

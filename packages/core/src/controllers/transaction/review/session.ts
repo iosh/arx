@@ -8,10 +8,8 @@ const toReviewError = (event: ApprovalFinishedEvent<unknown>): TransactionReview
   ...(event.error ? { data: event.error } : {}),
 });
 
-const cloneReviewPreparedSnapshot = (
-  reviewPreparedSnapshot?: TransactionPrepared | null,
-): TransactionPrepared | null =>
-  reviewPreparedSnapshot === undefined ? null : structuredClone(reviewPreparedSnapshot);
+const cloneReviewPreparedSnapshot = (reviewPreparedSnapshot: TransactionPrepared | null): TransactionPrepared | null =>
+  reviewPreparedSnapshot === null ? null : structuredClone(reviewPreparedSnapshot);
 
 export class TransactionReviewSessions {
   #sessions = new Map<string, TransactionReviewSession>();
@@ -43,7 +41,7 @@ export class TransactionReviewSessions {
     transactionId: string,
     sessionToken: string,
     updatedAt: number,
-    reviewPreparedSnapshot?: TransactionPrepared | null,
+    reviewPreparedSnapshot: TransactionPrepared | null,
   ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
     if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
@@ -67,7 +65,7 @@ export class TransactionReviewSessions {
     sessionToken: string,
     updatedAt: number,
     blocker: TransactionReviewBlocker,
-    reviewPreparedSnapshot?: TransactionPrepared | null,
+    reviewPreparedSnapshot: TransactionPrepared | null,
   ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
     if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {
@@ -91,7 +89,7 @@ export class TransactionReviewSessions {
     sessionToken: string,
     updatedAt: number,
     error: TransactionReviewError,
-    reviewPreparedSnapshot?: TransactionPrepared | null,
+    reviewPreparedSnapshot: TransactionPrepared | null,
   ): TransactionReviewSession | null {
     const current = this.#sessions.get(transactionId);
     if (!current || current.sessionToken !== sessionToken || current.status === "invalidated") {

@@ -66,19 +66,17 @@ export type ReplacementResolution = {
   status: "replaced";
 };
 
-export type TransactionRequestDeriver = (request: TransactionRequest, chainRef: ChainRef) => TransactionRequest;
-
 export type TransactionApprovalReviewContext = {
   transaction: TransactionMeta | undefined;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
-  reviewPreparedSnapshot?: TransactionPrepared | null;
+  reviewPreparedSnapshot: TransactionPrepared | null;
 };
 
 export type TransactionDraftEditContext = {
   transaction: TransactionMeta;
   request: TransactionRequest;
-  changes: Record<string, unknown>[];
-  mode?: string | undefined;
+  changes: ReadonlyArray<Record<string, unknown>>;
+  mode?: string;
 };
 
 export type NamespaceTransactionRequest = {
@@ -116,4 +114,3 @@ export type NamespaceTransaction = {
   execution?: NamespaceTransactionExecution;
   tracking?: NamespaceTransactionTracking;
 };
-export type { TransactionSubmissionLocator, TransactionSubmitted } from "../types.js";

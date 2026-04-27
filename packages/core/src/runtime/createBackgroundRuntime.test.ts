@@ -20,6 +20,7 @@ import {
   MemoryPermissionsPort,
   MemorySettingsPort,
   MemoryTransactionsPort,
+  TEST_MNEMONIC,
 } from "./__fixtures__/backgroundTestSetup.js";
 import { createBackgroundRuntime } from "./createBackgroundRuntime.js";
 
@@ -139,6 +140,23 @@ const createTestRuntime = (params?: {
 const initializeUnlockedSession = async (runtime: ReturnType<typeof createBackgroundRuntime>) => {
   await runtime.services.session.createVault({ password: "test" });
   await runtime.services.session.unlock.unlock({ password: "test" });
+};
+
+const createActiveAccount = async (
+  runtime: ReturnType<typeof createBackgroundRuntime>,
+  chainRef = MAINNET_CHAIN.chainRef,
+) => {
+  const { address } = await runtime.services.keyring.confirmNewMnemonic({ mnemonic: TEST_MNEMONIC });
+  await runtime.controllers.accounts.setActiveAccount({
+    namespace: MAINNET_CHAIN.namespace,
+    chainRef,
+    accountKey: toAccountKeyFromAddress({
+      chainRef,
+      address,
+      accountCodecs: runtime.services.accountCodecs,
+    }),
+  });
+  return address;
 };
 
 const createHandlersForRuntime = (
@@ -740,6 +758,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
+    const from = await createActiveAccount(runtime);
 
     const approvalId = "33333333-3333-4333-8333-333333333333";
     const beginTransactionApproval = vi
@@ -782,6 +801,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
         requestId: expect.any(String),
         origin: "chrome-extension://arx",
       }),
+      { from },
     );
 
     runtime.lifecycle.shutdown();
@@ -871,6 +891,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
+    await createActiveAccount(runtime);
 
     const beginTransactionApproval = vi
       .spyOn(runtime.controllers.transactions, "beginTransactionApproval")
@@ -951,6 +972,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await runtime.lifecycle.initialize();
     runtime.lifecycle.start();
     await initializeUnlockedSession(runtime);
+    await createActiveAccount(runtime);
 
     vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval").mockRejectedValue(
       new Error("create approval failed"),

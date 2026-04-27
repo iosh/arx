@@ -1,7 +1,7 @@
 import type { ApprovalKinds, ApprovalRequestByKind } from "../../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../../controllers/transaction/review/types.js";
 import type { TransactionMeta } from "../../../controllers/transaction/types.js";
-import type { Eip155TransactionPayload } from "../../types.js";
+import type { Eip155TransactionPayload, TransactionPrepared } from "../../types.js";
 import type { Eip155PreparedTransaction } from "./types.js";
 
 const getApprovalPayload = (args: {
@@ -23,10 +23,10 @@ const getApprovalPayload = (args: {
 export const buildEip155ApprovalReview = (args: {
   transaction: TransactionMeta | undefined;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
-  reviewPreparedSnapshot?: Record<string, unknown> | null;
+  reviewPreparedSnapshot: TransactionPrepared | null;
 }): NamespaceTransactionReview => {
   const requestPayload = getApprovalPayload(args);
-  const prepared = args.reviewPreparedSnapshot as Partial<Eip155PreparedTransaction> | null | undefined;
+  const prepared = args.reviewPreparedSnapshot as Partial<Eip155PreparedTransaction> | null;
   const sourceRequest = args.transaction?.request?.namespace === "eip155" ? args.transaction.request : null;
   const sourcePayload: Eip155TransactionPayload = sourceRequest
     ? (sourceRequest.payload as Eip155TransactionPayload)

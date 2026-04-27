@@ -95,6 +95,7 @@ export type TransactionApproveResult =
     };
 
 export type BeginTransactionApprovalOptions = {
+  from: AccountAddress;
   providerRequestHandle?: ProviderRequestHandle | null;
 };
 
@@ -126,13 +127,13 @@ export type TransactionController = {
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
-    options?: BeginTransactionApprovalOptions,
+    options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff>;
   retryPrepare(transactionId: string): Promise<void>;
   applyDraftEdit(input: {
     transactionId: string;
-    changes: Record<string, unknown>[];
-    mode?: string | undefined;
+    changes: ReadonlyArray<Record<string, unknown>>;
+    mode?: string;
   }): Promise<void>;
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionApproveResult>;

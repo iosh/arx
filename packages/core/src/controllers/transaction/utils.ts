@@ -33,6 +33,23 @@ export const createTransactionSubmissionUnavailableError = (params: { namespace:
   });
 };
 
+export const createTransactionPersistenceError = (params: {
+  cause: Error;
+  transaction: TransactionMeta;
+}): TransactionError => ({
+  name: "TransactionPersistenceError",
+  message: "Transaction was broadcast but could not be persisted locally.",
+  data: {
+    cause: {
+      name: params.cause.name,
+      message: params.cause.message,
+    },
+    transactionId: params.transaction.id,
+    submitted: structuredClone(params.transaction.submitted),
+    locator: structuredClone(params.transaction.locator),
+  },
+});
+
 export const coerceTransactionError = (reason?: Error | TransactionError | undefined): TransactionError | undefined => {
   if (!reason) return undefined;
   if ("name" in reason && "message" in reason && typeof reason.name === "string") {

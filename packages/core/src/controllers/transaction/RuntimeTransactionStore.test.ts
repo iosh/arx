@@ -189,6 +189,7 @@ describe("RuntimeTransactionStore", () => {
     });
     expect(next?.prepared).toBeNull();
     expect(store.peek("33333333-3333-4333-8333-333333333333")?.draftRevision).toBe(1);
+    expect(store.peek("33333333-3333-4333-8333-333333333333")?.preparedAtDraftRevision).toBeNull();
   });
 
   it("accepts prepared writes and status transitions only when the expected revision or status still matches", () => {
@@ -213,6 +214,7 @@ describe("RuntimeTransactionStore", () => {
     expect(store.commitPrepared("44444444-4444-4444-8444-444444444444", 0, { gas: "0x5208" })).toMatchObject({
       prepared: { gas: "0x5208" },
     });
+    expect(store.peek("44444444-4444-4444-8444-444444444444")?.preparedAtDraftRevision).toBe(0);
 
     expect(
       store.replaceDraftRequest({
@@ -232,6 +234,7 @@ describe("RuntimeTransactionStore", () => {
       prepared: null,
     });
     expect(store.peek("44444444-4444-4444-8444-444444444444")?.draftRevision).toBe(1);
+    expect(store.peek("44444444-4444-4444-8444-444444444444")?.preparedAtDraftRevision).toBeNull();
 
     expect(store.commitPrepared("44444444-4444-4444-8444-444444444444", 0, { gas: "0x5300" })).toBeNull();
     expect(

@@ -444,7 +444,17 @@ describe("TransactionExecutionService", () => {
       submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
       error: {
-        message: "Local transaction store unavailable",
+        name: "TransactionPersistenceError",
+        message: "Transaction was broadcast but could not be persisted locally.",
+        data: {
+          cause: {
+            name: "Error",
+            message: "Local transaction store unavailable",
+          },
+          transactionId: REQUEST_ID,
+          submitted: DEFAULT_SUBMITTED,
+          locator: DEFAULT_LOCATOR,
+        },
       },
     });
   });
@@ -633,7 +643,7 @@ describe("TransactionExecutionService", () => {
     );
   });
 
-  it("resets signed runtime transactions to approved when signing is interrupted by lock", async () => {
+  it("fails runtime transactions when signing is interrupted by lock", async () => {
     const lockError = arxError({
       reason: ArxReasons.SessionLocked,
       message: "Wallet is locked.",
@@ -655,7 +665,12 @@ describe("TransactionExecutionService", () => {
 
     expect(runtime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "approved",
+      status: "failed",
+      userRejected: false,
+      error: {
+        name: "ArxError",
+        message: "Wallet is locked.",
+      },
     });
     expect(broadcastTransaction).not.toHaveBeenCalled();
   });

@@ -360,7 +360,7 @@ export class TransactionProposalService
         data: { transactionId: id, prepareState: review.status },
       };
     }
-    if (!existing.prepared) {
+    if (!this.#runtime.hasCurrentPrepared(id)) {
       return {
         status: "failed",
         reason: "prepare_not_ready",

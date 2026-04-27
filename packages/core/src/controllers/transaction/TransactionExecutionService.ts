@@ -16,6 +16,7 @@ import {
   coerceTransactionError,
   createMissingNamespaceTransactionError,
   createReceiptTrackingUnsupportedError,
+  createTransactionPersistenceError,
   isUserRejectedError,
 } from "./utils.js";
 
@@ -249,10 +250,10 @@ export class TransactionExecutionService
           toStatus: "failed",
           updatedAt: this.#readTransactionTimestamp(),
           patch: {
-            error: coerceTransactionError(persistenceFailure) ?? {
-              name: "TransactionPersistenceError",
-              message: "Transaction was broadcast but could not be persisted locally.",
-            },
+            error: createTransactionPersistenceError({
+              cause: persistenceFailure,
+              transaction: broadcastMeta,
+            }),
           },
         });
         return;
@@ -265,7 +266,7 @@ export class TransactionExecutionService
       this.#tracking.handleTransition(previous, next);
     } catch (err) {
       if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
-        this.#runtime.resetSignedToApproved(id, this.#readTransactionTimestamp());
+        await this.rejectTransaction(id, err);
         return;
       }
       await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));

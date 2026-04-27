@@ -634,9 +634,9 @@ describe("TransactionProposalService", () => {
   it("approves only ready prepared proposals for execution", () => {
     const { service, runtime, reviewSessions } = createProposalService();
     createRuntimeTransaction(runtime, {
-      prepared: { gas: "0x5208" },
       status: "pending",
     });
+    runtime.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
     markReviewReady(reviewSessions, REQUEST_ID);
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
@@ -646,6 +646,39 @@ describe("TransactionProposalService", () => {
         status: "approved",
       },
     });
+  });
+
+  it("rejects execution approval when prepared params do not belong to the current draft", () => {
+    const { service, runtime, reviewSessions } = createProposalService();
+    createRuntimeTransaction(runtime, {
+      status: "pending",
+    });
+    runtime.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
+    runtime.replaceDraftRequest({
+      id: REQUEST_ID,
+      fromStatus: "pending",
+      request: {
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        payload: {
+          from: DEFAULT_FROM,
+          to: DEFAULT_TO,
+          value: "0x1",
+        },
+      },
+      updatedAt: 2,
+    });
+    runtime.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
+    markReviewReady(reviewSessions, REQUEST_ID);
+
+    expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
+      status: "failed",
+      reason: "prepare_not_ready",
+      data: {
+        transactionId: REQUEST_ID,
+      },
+    });
+    expect(runtime.get(REQUEST_ID)?.status).toBe("pending");
   });
 
   it("blocks execution approval when review is not ready", () => {

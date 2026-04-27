@@ -18,6 +18,7 @@ export type RuntimeTransactionState = {
   fromAccountKey: string;
   request: TransactionMeta["request"];
   prepared: TransactionMeta["prepared"];
+  preparedAtDraftRevision: number | null;
   status: TransactionStatus;
   submitted: TransactionMeta["submitted"];
   locator: TransactionMeta["locator"];
@@ -32,9 +33,18 @@ export type RuntimeTransactionState = {
 
 type RuntimeTransactionInit = Omit<
   RuntimeTransactionState,
-  "prepared" | "submitted" | "locator" | "receipt" | "replacedId" | "error" | "userRejected" | "draftRevision"
+  | "prepared"
+  | "preparedAtDraftRevision"
+  | "submitted"
+  | "locator"
+  | "receipt"
+  | "replacedId"
+  | "error"
+  | "userRejected"
+  | "draftRevision"
 > & {
   prepared?: TransactionMeta["prepared"] | undefined;
+  preparedAtDraftRevision?: number | null | undefined;
   submitted?: TransactionMeta["submitted"] | undefined;
   locator?: TransactionMeta["locator"] | undefined;
   receipt?: TransactionMeta["receipt"] | undefined;
@@ -56,7 +66,14 @@ const isDurableStatus = (status: TransactionStatus): status is DurableTransactio
 type RuntimeTransactionPatch = Partial<
   Omit<
     RuntimeTransactionState,
-    "id" | "namespace" | "chainRef" | "origin" | "fromAccountKey" | "draftRevision" | "createdAt"
+    | "id"
+    | "namespace"
+    | "chainRef"
+    | "origin"
+    | "fromAccountKey"
+    | "preparedAtDraftRevision"
+    | "draftRevision"
+    | "createdAt"
   >
 >;
 
@@ -73,6 +90,9 @@ const buildRuntimeTransactionState = (
   ...input,
   request: structuredClone(input.request),
   prepared: structuredClone(input.prepared ?? null),
+  preparedAtDraftRevision: input.prepared
+    ? (input.preparedAtDraftRevision ?? input.draftRevision ?? 0)
+    : (input.preparedAtDraftRevision ?? null),
   submitted: structuredClone(input.submitted ?? null),
   locator: structuredClone(input.locator ?? null),
   receipt: structuredClone(input.receipt ?? null),
@@ -98,6 +118,7 @@ const applyRuntimeTransactionPatch = (
   }
   if (patch.prepared !== undefined) {
     next.prepared = structuredClone(patch.prepared);
+    next.preparedAtDraftRevision = null;
   }
   if (patch.submitted !== undefined) {
     next.submitted = structuredClone(patch.submitted);
@@ -175,22 +196,11 @@ export class RuntimeTransactionStore {
       updatedAt: input.updatedAt,
     });
     next.draftRevision = current.draftRevision + 1;
+    next.preparedAtDraftRevision = null;
 
     this.#records.set(input.id, next);
     this.#scheduleStateChanged(input.id);
     return this.#toMeta(next);
-  }
-
-  resetSignedToApproved(id: string, updatedAt: number): TransactionMeta | null {
-    const current = this.#records.get(id);
-    if (!current) return null;
-
-    return this.transition({
-      id,
-      fromStatus: "signed",
-      toStatus: "approved",
-      updatedAt,
-    });
   }
 
   commitPrepared(
@@ -207,7 +217,18 @@ export class RuntimeTransactionStore {
       return null;
     }
 
-    return this.patch(id, { prepared });
+    const next = applyRuntimeTransactionPatch(current, { prepared });
+    next.preparedAtDraftRevision = prepared ? expectedDraftRevision : null;
+
+    this.#records.set(id, next);
+    this.#emitStatusChange(current, next);
+    this.#scheduleStateChanged(id);
+    return this.#toMeta(next);
+  }
+
+  hasCurrentPrepared(id: string): boolean {
+    const current = this.#records.get(id);
+    return Boolean(current?.prepared && current.preparedAtDraftRevision === current.draftRevision);
   }
 
   transition(input: {

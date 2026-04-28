@@ -151,6 +151,63 @@ describe("TransactionProposalStore", () => {
     expect(reloaded?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
   });
 
+  it("projects proposal views without durable record fields", () => {
+    const store = createStore();
+
+    store.create({
+      id: "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      approvalId: "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      baseRequest: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      },
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
+      },
+      prepared: { gas: "0x5208" },
+      submitted: {
+        hash: "0x1234",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
+      locator: { format: "eip155.tx_hash", value: "0x1234" },
+      status: "approved",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    const view = store.getView("2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
+    expect(view).toMatchObject({
+      kind: "proposal",
+      id: "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      approvalId: "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      phase: "approved",
+      baseRequest: {
+        payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      },
+      currentRequest: {
+        payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
+      },
+      prepared: { gas: "0x5208" },
+      review: {
+        prepare: { state: "ready" },
+      },
+    });
+    expect(view).not.toHaveProperty("submitted");
+    expect(view).not.toHaveProperty("locator");
+    expect(view).not.toHaveProperty("receipt");
+    expect(view).not.toHaveProperty("replacedId");
+  });
+
   it("increments draft revision and clears prepared state when replacing the draft request", () => {
     const store = createStore();
 

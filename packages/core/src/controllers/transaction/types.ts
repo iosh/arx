@@ -3,6 +3,7 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
+import type { TransactionStatus as StorageTransactionStatus } from "../../storage/records.js";
 import type {
   TransactionError,
   TransactionPrepared,
@@ -16,6 +17,9 @@ import type { SendTransactionApprovalReview } from "./review/types.js";
 
 export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
 export type DurableTransactionStatus = Exclude<TransactionStatus, "pending" | "approved" | "signed">;
+export type TransactionRecordStatus = StorageTransactionStatus;
+
+export type TransactionProposalPhase = "pending" | "approved" | "executing" | "invalidated" | "failed";
 
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
@@ -59,6 +63,43 @@ export type TransactionMeta = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type TransactionProposalView = {
+  kind: "proposal";
+  id: string;
+  approvalId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  fromAccountKey: string;
+  from: AccountAddress | null;
+  baseRequest: TransactionRequest;
+  currentRequest: TransactionRequest;
+  draftRevision: number;
+  prepared: TransactionPrepared | null;
+  review: SendTransactionApprovalReview;
+  phase: TransactionProposalPhase;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type TransactionRecordView = {
+  kind: "record";
+  id: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress | null;
+  status: TransactionRecordStatus;
+  submitted: TransactionSubmitted;
+  locator: TransactionSubmissionLocator;
+  receipt: TransactionReceipt | null;
+  replacedId: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type TransactionView = TransactionProposalView | TransactionRecordView;
 
 export type TransactionApprovalRequestPayload = {
   chainRef: ChainRef;
@@ -119,6 +160,7 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
 
 export type TransactionController = {
   getMeta(id: string): TransactionMeta | undefined;
+  getView(id: string): TransactionView | undefined;
   getApprovalReview(input: {
     transactionId: string;
     request?: TransactionApprovalRequestPayload | undefined;

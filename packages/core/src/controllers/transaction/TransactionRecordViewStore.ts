@@ -3,7 +3,13 @@ import { getChainRefNamespace } from "../../chains/caip.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
-import type { TransactionMeta, TransactionReceipt, TransactionStateChange, TransactionStatusChange } from "./types.js";
+import type {
+  TransactionMeta,
+  TransactionReceipt,
+  TransactionRecordView,
+  TransactionStateChange,
+  TransactionStatusChange,
+} from "./types.js";
 
 type Options = {
   messenger: TransactionMessenger;
@@ -27,7 +33,7 @@ export class TransactionRecordViewStore {
   #logger: (message: string, data?: unknown) => void;
   #fromDecodeLogged: Set<string> = new Set();
 
-  #records: Map<string, TransactionMeta> = new Map();
+  #records: Map<string, TransactionRecordView> = new Map();
 
   #stateRevision = 0;
   #statePublishScheduled = false;
@@ -51,6 +57,11 @@ export class TransactionRecordViewStore {
 
   getMeta(id: string): TransactionMeta | undefined {
     const existing = this.#touch(id);
+    return existing ? this.#buildMetaFromRecordView(existing) : undefined;
+  }
+
+  getView(id: string): TransactionRecordView | undefined {
+    const existing = this.#touch(id);
     return existing ? structuredClone(existing) : undefined;
   }
 
@@ -59,33 +70,49 @@ export class TransactionRecordViewStore {
    * Does not touch LRU ordering.
    */
   peek(id: string): TransactionMeta | undefined {
+    const existing = this.#records.get(id);
+    return existing ? this.#buildMetaFromRecordView(existing) : undefined;
+  }
+
+  peekView(id: string): TransactionRecordView | undefined {
     return this.#records.get(id);
   }
 
   async getOrLoad(id: string): Promise<TransactionMeta | null> {
-    const cached = this.peek(id);
+    const view = await this.getOrLoadView(id);
+    return view ? this.#buildMetaFromRecordView(view) : null;
+  }
+
+  async getOrLoadView(id: string): Promise<TransactionRecordView | null> {
+    const cached = this.peekView(id);
     if (cached) return structuredClone(cached);
 
     const record = await this.#service.get(id);
     if (!record) return null;
 
-    const meta = this.#toTransactionMeta(record);
+    const view = this.#buildRecordView(record);
     // Loading a specific id is an authoritative read (do emit status events if changed).
-    this.commitMeta(meta);
-    return structuredClone(meta);
+    this.commitView(view);
+    return structuredClone(view);
   }
 
   /**
    * Authoritative commit: updates cache and emits status change when status differs.
    */
   commitRecord(record: TransactionRecord): { previous?: TransactionMeta; next: TransactionMeta } {
-    const next = this.#toTransactionMeta(record);
-    const previous = this.commitMeta(next);
+    const committed = this.commitRecordView(record);
+    const next = this.#buildMetaFromRecordView(committed.next);
+    return committed.previous ? { previous: this.#buildMetaFromRecordView(committed.previous), next } : { next };
+  }
+
+  commitRecordView(record: TransactionRecord): { previous?: TransactionRecordView; next: TransactionRecordView } {
+    const next = this.#buildRecordView(record);
+    const previous = this.commitView(next);
     return previous ? { previous, next } : { next };
   }
 
-  commitMeta(next: TransactionMeta): TransactionMeta | undefined {
-    const previous = this.peek(next.id);
+  commitView(next: TransactionRecordView): TransactionRecordView | undefined {
+    const previous = this.peekView(next.id);
     this.#upsert(next);
 
     if (previous && previous.status !== next.status) {
@@ -93,7 +120,7 @@ export class TransactionRecordViewStore {
         id: next.id,
         previousStatus: previous.status,
         nextStatus: next.status,
-        meta: structuredClone(next),
+        meta: this.#buildMetaFromRecordView(next),
       };
       this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
     }
@@ -108,8 +135,8 @@ export class TransactionRecordViewStore {
   ingestRecords(records: TransactionRecord[]): void {
     // Insert oldest -> newest so LRU eviction keeps the most recent entries.
     for (const record of [...records].reverse()) {
-      const meta = this.#toTransactionMeta(record);
-      this.#upsert(meta);
+      const view = this.#buildRecordView(record);
+      this.#upsert(view);
     }
   }
 
@@ -145,10 +172,10 @@ export class TransactionRecordViewStore {
     }
   }
 
-  #upsert(meta: TransactionMeta) {
+  #upsert(view: TransactionRecordView) {
     // Maintain a bounded LRU cache for synchronous reads (e.g. getMeta()).
-    this.#records.delete(meta.id);
-    this.#records.set(meta.id, structuredClone(meta));
+    this.#records.delete(view.id);
+    this.#records.set(view.id, structuredClone(view));
 
     while (this.#records.size > this.#stateLimit) {
       const oldest = this.#records.keys().next().value as string | undefined;
@@ -157,10 +184,10 @@ export class TransactionRecordViewStore {
       this.#fromDecodeLogged.delete(oldest);
     }
 
-    this.#scheduleStateChanged(meta.id);
+    this.#scheduleStateChanged(view.id);
   }
 
-  #touch(id: string): TransactionMeta | undefined {
+  #touch(id: string): TransactionRecordView | undefined {
     const existing = this.#records.get(id);
     if (!existing) return undefined;
     this.#records.delete(id);
@@ -200,24 +227,42 @@ export class TransactionRecordViewStore {
     }
   }
 
-  #toTransactionMeta(record: TransactionRecord): TransactionMeta {
+  #buildRecordView(record: TransactionRecord): TransactionRecordView {
     return {
+      kind: "record",
       id: record.id,
       namespace: getChainRefNamespace(record.chainRef),
       chainRef: record.chainRef,
       origin: record.origin,
       from: this.#safeFromAccountKeyToAddress(record),
-      request: null,
-      prepared: null,
       status: record.status,
       submitted: structuredClone(record.submitted),
       locator: structuredClone(record.locator),
       receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
       replacedId: record.replacedId ?? null,
-      error: null,
-      userRejected: false,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+    };
+  }
+
+  #buildMetaFromRecordView(view: TransactionRecordView): TransactionMeta {
+    return {
+      id: view.id,
+      namespace: view.namespace,
+      chainRef: view.chainRef,
+      origin: view.origin,
+      from: view.from,
+      request: null,
+      prepared: null,
+      status: view.status,
+      submitted: structuredClone(view.submitted),
+      locator: structuredClone(view.locator),
+      receipt: structuredClone(view.receipt),
+      replacedId: view.replacedId,
+      error: null,
+      userRejected: false,
+      createdAt: view.createdAt,
+      updatedAt: view.updatedAt,
     };
   }
 }

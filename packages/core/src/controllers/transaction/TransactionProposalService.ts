@@ -26,6 +26,7 @@ import type {
   TransactionError,
   TransactionMeta,
   TransactionRequest,
+  TransactionView,
 } from "./types.js";
 import {
   coerceTransactionError,
@@ -35,7 +36,7 @@ import {
 
 type TransactionProposalServiceDeps = {
   proposalStore: TransactionProposalStore;
-  recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad">;
+  recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad" | "getView" | "getOrLoadView">;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -55,7 +56,7 @@ export class TransactionProposalService
     >
 {
   #proposalStore: TransactionProposalStore;
-  #recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad">;
+  #recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad" | "getView" | "getOrLoadView">;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   #supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -84,8 +85,21 @@ export class TransactionProposalService
     return this.#proposalStore.get(id) ?? this.#recordView.getMeta(id);
   }
 
+  getView(id: string): TransactionView | undefined {
+    const proposalView = this.#proposalStore.getView(id);
+    if (!proposalView) {
+      return this.#recordView.getView(id);
+    }
+
+    return {
+      ...proposalView,
+      review: this.getApprovalReview({ transactionId: id }),
+    };
+  }
+
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
-    const transaction = this.getMeta(input.transactionId);
+    const proposalView = this.#proposalStore.getView(input.transactionId);
+    const transaction = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
     const session = this.#reviewSessions.get(input.transactionId);
     const request =
       input.request ?? (transaction ? this.#buildApprovalRequestPayload(transaction, input.transactionId) : null);
@@ -123,9 +137,6 @@ export class TransactionProposalService
     if (request.namespace !== derived.namespace) {
       throw new Error(`Transaction namespace mismatch: request=${request.namespace} chainRef=${chainRef}`);
     }
-
-    const id = crypto.randomUUID();
-    const timestamp = this.#readTransactionTimestamp();
 
     const namespaceTransaction = this.#namespaces.get(derived.namespace);
     if (!namespaceTransaction) {
@@ -171,8 +182,13 @@ export class TransactionProposalService
     };
     namespaceTransaction.request?.validate?.(validationContext);
 
+    const id = crypto.randomUUID();
+    const approvalId = crypto.randomUUID();
+    const timestamp = this.#readTransactionTimestamp();
+
     const proposalMeta = this.#proposalStore.create({
       id,
+      approvalId,
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef,
@@ -184,7 +200,6 @@ export class TransactionProposalService
     });
 
     const approvalRequest = this.#buildApprovalRequestPayload(proposalMeta, proposalMeta.id);
-    const approvalId = crypto.randomUUID();
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
       approvalHandle = options?.providerRequestHandle

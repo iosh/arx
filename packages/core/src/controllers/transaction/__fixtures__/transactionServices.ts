@@ -11,7 +11,7 @@ import type { TransactionReviewSessions } from "../review/session.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
-import type { TransactionMeta } from "../types.js";
+import type { TransactionMeta, TransactionRecordView } from "../types.js";
 
 export const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 export const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
@@ -206,8 +206,11 @@ export const createTransactionsServiceStub = (
 export const createRecordViewStub = (params?: {
   from?: string;
   getMeta?: TransactionRecordViewStore["getMeta"];
+  getView?: TransactionRecordViewStore["getView"];
   getOrLoad?: TransactionRecordViewStore["getOrLoad"];
+  getOrLoadView?: TransactionRecordViewStore["getOrLoadView"];
   commitRecord?: TransactionRecordViewStore["commitRecord"];
+  commitRecordView?: TransactionRecordViewStore["commitRecordView"];
   requestSync?: TransactionRecordViewStore["requestSync"];
 }): TransactionRecordViewStore => {
   const from = params?.from ?? DEFAULT_FROM;
@@ -233,11 +236,33 @@ export const createRecordViewStub = (params?: {
         updatedAt: record.updatedAt,
       } satisfies TransactionMeta,
     }));
+  const commitRecordView =
+    params?.commitRecordView ??
+    vi.fn((record: TransactionRecord) => ({
+      next: {
+        kind: "record",
+        id: record.id,
+        namespace: record.chainRef.split(":", 1)[0] ?? "",
+        chainRef: record.chainRef,
+        origin: record.origin,
+        from,
+        status: record.status,
+        submitted: record.submitted,
+        locator: record.locator,
+        receipt: record.receipt ?? null,
+        replacedId: record.replacedId ?? null,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      } satisfies TransactionRecordView,
+    }));
 
   return {
     getMeta: params?.getMeta ?? vi.fn(() => undefined),
+    getView: params?.getView ?? vi.fn(() => undefined),
     getOrLoad: params?.getOrLoad ?? vi.fn(async () => null),
+    getOrLoadView: params?.getOrLoadView ?? vi.fn(async () => null),
     commitRecord,
+    commitRecordView,
     requestSync: params?.requestSync ?? vi.fn(),
   } as TransactionRecordViewStore;
 };

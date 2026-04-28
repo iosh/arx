@@ -27,6 +27,7 @@ import type {
   TransactionStatus,
   TransactionStatusChange,
   TransactionSubmissionResolution,
+  TransactionView,
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
@@ -203,6 +204,10 @@ export class StoreTransactionController implements TransactionController {
 
   getMeta(id: string): TransactionMeta | undefined {
     return this.#proposals.getMeta(id);
+  }
+
+  getView(id: string): TransactionView | undefined {
+    return this.#proposals.getView(id);
   }
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {

@@ -214,17 +214,20 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         raw: "0x1111",
       };
     });
-    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => ({
-      locator: {
-        format: "eip155.tx_hash",
-        value: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
-      },
-      submitted: buildEip155Submitted({
-        txHash: `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`,
-        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
-        prepared: prepared as Record<string, unknown>,
-      }),
-    }));
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => {
+      const txHash = `0x${(signedCount + 100).toString(16).padStart(64, "0")}` as `0x${string}`;
+      return {
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+        submitted: buildEip155Submitted({
+          txHash,
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+      };
+    });
     const fetchReceipt = vi.fn<NamespaceTransactionTracking["fetchReceipt"]>(async () => null);
 
     const adapter = createNamespaceTransactionMock({

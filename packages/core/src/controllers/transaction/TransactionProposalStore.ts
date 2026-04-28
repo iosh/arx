@@ -4,6 +4,8 @@ import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type Transaction
 import type {
   DurableTransactionStatus,
   TransactionMeta,
+  TransactionProposalPhase,
+  TransactionProposalView,
   TransactionRequest,
   TransactionStateChange,
   TransactionStatus,
@@ -12,10 +14,12 @@ import type {
 
 export type TransactionProposalState = {
   id: string;
+  approvalId: string;
   namespace: string;
   chainRef: string;
   origin: string;
   fromAccountKey: string;
+  baseRequest: TransactionMeta["request"];
   request: TransactionMeta["request"];
   prepared: TransactionMeta["prepared"];
   preparedAtDraftRevision: number | null;
@@ -33,6 +37,8 @@ export type TransactionProposalState = {
 
 type TransactionProposalInit = Omit<
   TransactionProposalState,
+  | "approvalId"
+  | "baseRequest"
   | "prepared"
   | "preparedAtDraftRevision"
   | "submitted"
@@ -43,6 +49,8 @@ type TransactionProposalInit = Omit<
   | "userRejected"
   | "draftRevision"
 > & {
+  approvalId?: string | undefined;
+  baseRequest?: TransactionMeta["request"] | undefined;
   prepared?: TransactionMeta["prepared"] | undefined;
   preparedAtDraftRevision?: number | null | undefined;
   submitted?: TransactionMeta["submitted"] | undefined;
@@ -63,14 +71,33 @@ const isDurableStatus = (status: TransactionStatus): status is DurableTransactio
   return status === "broadcast" || status === "confirmed" || status === "failed" || status === "replaced";
 };
 
+const toTransactionProposalPhase = (status: TransactionStatus): TransactionProposalPhase => {
+  switch (status) {
+    case "pending":
+      return "pending";
+    case "approved":
+      return "approved";
+    case "signed":
+    case "broadcast":
+      return "executing";
+    case "failed":
+      return "failed";
+    case "confirmed":
+    case "replaced":
+      return "invalidated";
+  }
+};
+
 type TransactionProposalPatch = Partial<
   Omit<
     TransactionProposalState,
     | "id"
+    | "approvalId"
     | "namespace"
     | "chainRef"
     | "origin"
     | "fromAccountKey"
+    | "baseRequest"
     | "preparedAtDraftRevision"
     | "draftRevision"
     | "createdAt"
@@ -88,6 +115,8 @@ const buildTransactionProposalState = (
   input: TransactionProposalInit | TransactionProposalState,
 ): TransactionProposalState => ({
   ...input,
+  approvalId: input.approvalId ?? input.id,
+  baseRequest: structuredClone(input.baseRequest ?? input.request),
   request: structuredClone(input.request),
   prepared: structuredClone(input.prepared ?? null),
   preparedAtDraftRevision: input.prepared
@@ -162,6 +191,11 @@ export class TransactionProposalStore {
   get(id: string): TransactionMeta | undefined {
     const state = this.#records.get(id);
     return state ? this.#toMeta(state) : undefined;
+  }
+
+  getView(id: string): TransactionProposalView | undefined {
+    const state = this.#records.get(id);
+    return state ? this.#buildProposalView(state) : undefined;
   }
 
   peek(id: string): TransactionProposalState | undefined {
@@ -301,6 +335,53 @@ export class TransactionProposalStore {
       replacedId: state.replacedId,
       error: state.error,
       userRejected: state.userRejected,
+      createdAt: state.createdAt,
+      updatedAt: state.updatedAt,
+    });
+  }
+
+  #buildProposalView(state: TransactionProposalState): TransactionProposalView | undefined {
+    if (!state.baseRequest || !state.request) {
+      return undefined;
+    }
+
+    let from: string | null = null;
+    try {
+      from = this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: state.fromAccountKey });
+    } catch {
+      from = null;
+    }
+
+    return structuredClone({
+      kind: "proposal",
+      id: state.id,
+      approvalId: state.approvalId,
+      namespace: state.namespace,
+      chainRef: state.chainRef,
+      origin: state.origin,
+      fromAccountKey: state.fromAccountKey,
+      from,
+      baseRequest: state.baseRequest,
+      currentRequest: state.request,
+      draftRevision: state.draftRevision,
+      prepared: state.prepared,
+      review: {
+        updatedAt: state.updatedAt,
+        namespaceReview: null,
+        prepare: state.prepared
+          ? { state: "ready" }
+          : state.status === "failed" && state.error
+            ? {
+                state: "failed",
+                error: {
+                  reason: state.error.name || "transaction.failed",
+                  message: state.error.message || "Transaction failed.",
+                  ...(state.error.data !== undefined ? { data: state.error.data } : {}),
+                },
+              }
+            : { state: "preparing" },
+      },
+      phase: toTransactionProposalPhase(state.status),
       createdAt: state.createdAt,
       updatedAt: state.updatedAt,
     });

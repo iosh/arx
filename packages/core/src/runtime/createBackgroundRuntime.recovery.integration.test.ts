@@ -29,25 +29,28 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       status: "success",
       receipt: { status: "0x1", blockNumber: "0x10" },
     }));
+    const prepareTransaction = vi.fn(async () => ({ status: "ready" as const, prepared: {} }));
+    const signTransaction = vi.fn(async (_ctx, _prepared) => ({ raw: "0x" }));
+    const broadcastTransaction = vi.fn(async () => ({
+      submitted: {
+        hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
+      locator: {
+        format: "eip155.tx_hash" as const,
+        value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+    }));
 
     const adapter: NamespaceTransaction = {
       proposal: {
-        prepare: vi.fn(async () => ({ status: "ready", prepared: {} })),
+        prepare: prepareTransaction,
       },
       execution: {
-        sign: vi.fn(async (_ctx, _prepared) => ({ raw: "0x" })),
-        broadcast: vi.fn(async () => ({
-          submitted: {
-            hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            chainId: "0x1",
-            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            nonce: "0x7",
-          },
-          locator: {
-            format: "eip155.tx_hash",
-            value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          },
-        })),
+        sign: signTransaction,
+        broadcast: broadcastTransaction,
       },
       tracking: { fetchReceipt },
     };
@@ -90,6 +93,9 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
       await flushAsync();
 
+      expect(prepareTransaction).toHaveBeenCalledTimes(0);
+      expect(signTransaction).toHaveBeenCalledTimes(0);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(0);
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
       const meta = context.runtime.controllers.transactions.getMeta(txId);

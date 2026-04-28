@@ -622,6 +622,7 @@ export type SetupBackgroundOptions = {
   permissionsSeed?: PermissionRecord[];
   vaultMeta?: VaultMetaSnapshot | null;
   transactionsSeed?: TransactionRecord[];
+  transactionsPort?: MemoryTransactionsPort;
   autoLockDurationMs?: number;
   now?: () => number;
   timers?: RpcTimers;
@@ -643,7 +644,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
   const networkSelectionPort = new MemoryNetworkSelectionPort(options.networkSelectionSeed ?? null);
   const vaultMetaPort = new MemoryVaultMetaPort(options.vaultMeta ?? null);
   const permissionsPort = new MemoryPermissionsPort(options.permissionsSeed ?? []);
-  const transactionsPort = new MemoryTransactionsPort(options.transactionsSeed ?? []);
+  const transactionsPort = options.transactionsPort ?? new MemoryTransactionsPort(options.transactionsSeed ?? []);
   const accountsPort = new MemoryAccountsPort(options.accountsSeed ?? []);
   const keyringMetasPort = new MemoryKeyringMetasPort(options.keyringMetasSeed ?? []);
 

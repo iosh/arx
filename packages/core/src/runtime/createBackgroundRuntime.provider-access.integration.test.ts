@@ -1,12 +1,21 @@
 import { ArxReasons, arxError, type NamespaceProtocolAdapter } from "@arx/errors";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { AccountCodec } from "../accounts/addressing/codec.js";
 import type { ChainRef } from "../chains/ids.js";
 import type { ChainMetadata } from "../chains/metadata.js";
 import type { ChainAddressCodec } from "../chains/types.js";
+import { ApprovalKinds } from "../controllers/approval/types.js";
 import { defineNamespaceManifest, eip155NamespaceManifest, type NamespaceManifest } from "../namespaces/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import type {
+  NamespaceTransaction,
+  NamespaceTransactionExecution,
+  NamespaceTransactionProposal,
+  NamespaceTransactionTracking,
+} from "../transactions/namespace/types.js";
+import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import type { CreateBackgroundRuntimeResult } from "./__fixtures__/backgroundTestSetup.js";
 import {
   createChainMetadata,
@@ -56,6 +65,83 @@ const deriveActiveAccount = async (runtime: CreateBackgroundRuntimeResult) => {
 
   return { chain, address: account.address };
 };
+
+const grantProviderPermission = async (
+  runtime: CreateBackgroundRuntimeResult,
+  input: { origin: string; chainRef: string; address: string },
+) => {
+  const chain = runtime.controllers?.supportedChains?.getChain(input.chainRef)?.metadata;
+  if (!chain) {
+    throw new Error(`Missing chain metadata for ${input.chainRef}`);
+  }
+
+  await runtime.controllers.permissions.grantAuthorization(input.origin, {
+    namespace: chain.namespace,
+    chains: [
+      {
+        chainRef: input.chainRef,
+        accountKeys: [
+          toAccountKeyFromAddress({
+            chainRef: input.chainRef,
+            address: input.address,
+            accountCodecs: runtime.services.accountCodecs,
+          }),
+        ],
+      },
+    ],
+  });
+};
+
+const buildEip155Submitted = (params: {
+  txHash: `0x${string}`;
+  from: string;
+  chainId?: `0x${string}`;
+  prepared?: Record<string, unknown>;
+}) => ({
+  hash: params.txHash,
+  chainId: params.chainId ?? "0x1",
+  from: params.from,
+  ...(typeof params.prepared?.nonce === "string" ? { nonce: params.prepared.nonce as `0x${string}` } : {}),
+});
+
+const createNamespaceTransactionMock = (params: {
+  prepareTransaction: NamespaceTransactionProposal["prepare"];
+  signTransaction?: NamespaceTransactionExecution["sign"];
+  broadcastTransaction?: NamespaceTransactionExecution["broadcast"];
+  tracking?: NamespaceTransactionTracking;
+}): NamespaceTransaction => ({
+  proposal: {
+    prepare: params.prepareTransaction,
+  },
+  execution: {
+    sign: params.signTransaction ?? vi.fn(async () => ({ raw: "0x1111" })),
+    broadcast:
+      params.broadcastTransaction ??
+      vi.fn(async (ctx, _signed, prepared) => {
+        const txHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
+        return {
+          submitted: buildEip155Submitted({
+            txHash,
+            from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+            prepared: prepared as Record<string, unknown>,
+          }),
+          locator: {
+            format: "eip155.tx_hash",
+            value: txHash,
+          },
+        };
+      }),
+  },
+  ...(params.tracking ? { tracking: params.tracking } : { tracking: { fetchReceipt: vi.fn(async () => null) } }),
+});
+
+const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
+  createApprovalReadService({
+    approvals: runtime.controllers.approvals,
+    accounts: runtime.controllers.accounts,
+    chainViews: runtime.services.chainViews,
+    transactions: runtime.controllers.transactions,
+  });
 
 const buildProviderContext = (input: {
   chainRef: string;
@@ -496,6 +582,329 @@ describe("createBackgroundRuntime provider access", () => {
 
       unsubscribe();
     } finally {
+      background.destroy();
+    }
+  });
+
+  it("exposes eth_sendTransaction approval detail before prepare is ready and completes after ready approval", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    let releasePrepare: (() => void) | null = null;
+    const prepareReleased = new Promise<void>((resolve) => {
+      releasePrepare = resolve;
+    });
+    const prepareTransaction = vi.fn<NamespaceTransactionProposal["prepare"]>(async () => {
+      await prepareReleased;
+      return {
+        status: "ready",
+        prepared: {
+          gas: "0x5208",
+          nonce: "0x7",
+        },
+      };
+    });
+    const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => ({ raw: "0x1111" }));
+    const txHash = "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => ({
+      submitted: buildEip155Submitted({
+        txHash,
+        from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+        prepared: prepared as Record<string, unknown>,
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: txHash,
+      },
+    }));
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(
+      chain.namespace,
+      createNamespaceTransactionMock({
+        prepareTransaction,
+        signTransaction,
+        broadcastTransaction,
+      }),
+    );
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
+
+    let capturedApprovalId: string | null = null;
+    const approvalCreated = new Promise<void>((resolve) => {
+      const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
+        if (record.kind !== ApprovalKinds.SendTransaction) {
+          return;
+        }
+        capturedApprovalId = record.approvalId;
+        unsubscribe();
+        resolve();
+      });
+    });
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: activeChain.chainRef,
+        address,
+      });
+
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+        id: "rpc-send-ready",
+        jsonrpc: "2.0",
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: address,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        ],
+        origin: ORIGIN,
+        context: buildProviderContext({
+          namespace: activeChain.namespace,
+          chainRef: activeChain.chainRef,
+        }),
+      });
+
+      await approvalCreated;
+      await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
+
+      const readApprovals = createApprovalReader(background.runtime);
+      expect(capturedApprovalId).toBeTruthy();
+      expect(readApprovals.getDetail(capturedApprovalId ?? "")).toMatchObject({
+        kind: ApprovalKinds.SendTransaction,
+        actions: {
+          canApprove: false,
+          canReject: true,
+        },
+        review: {
+          prepare: {
+            state: "preparing",
+          },
+        },
+      });
+
+      releasePrepare?.();
+      await vi.waitFor(() =>
+        expect(readApprovals.getDetail(capturedApprovalId ?? "")).toMatchObject({
+          kind: ApprovalKinds.SendTransaction,
+          actions: {
+            canApprove: true,
+          },
+          review: {
+            prepare: {
+              state: "ready",
+            },
+          },
+        }),
+      );
+
+      await background.runtime.controllers.approvals.resolve({
+        approvalId: capturedApprovalId ?? "",
+        action: "approve",
+      });
+
+      await expect(pendingResponse).resolves.toMatchObject({
+        id: "rpc-send-ready",
+        jsonrpc: "2.0",
+        result: txHash,
+      });
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+    } finally {
+      releasePrepare?.();
+      background.destroy();
+    }
+  });
+
+  it("returns eth_sendTransaction success after broadcast even when local transaction persistence fails", async () => {
+    class FailingCreateTransactionsPort extends MemoryTransactionsPort {
+      createCalls = 0;
+
+      async create(_record: Parameters<MemoryTransactionsPort["create"]>[0]): Promise<void> {
+        this.createCalls += 1;
+        throw new Error("Local transaction store unavailable");
+      }
+    }
+
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    const txHash = "0x2222222222222222222222222222222222222222222222222222222222222222";
+    let releaseBroadcast: (() => void) | null = null;
+    const broadcastReleased = new Promise<void>((resolve) => {
+      releaseBroadcast = resolve;
+    });
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => {
+      await broadcastReleased;
+      return {
+        submitted: buildEip155Submitted({
+          txHash,
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+      };
+    });
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(
+      chain.namespace,
+      createNamespaceTransactionMock({
+        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x7" } })),
+        broadcastTransaction,
+      }),
+    );
+    const transactionsPort = new FailingCreateTransactionsPort();
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactionsPort,
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
+    let capturedTransactionId: string | null = null;
+    const unsubscribeApprovalCreated = background.runtime.controllers.approvals.onCreated(({ record }) => {
+      capturedTransactionId = record.kind === ApprovalKinds.SendTransaction ? record.subject.transactionId : null;
+    });
+    const unsubscribeAutoApproval = background.enableAutoApproval();
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: activeChain.chainRef,
+        address,
+      });
+
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+        id: "rpc-send-persist-fail",
+        jsonrpc: "2.0",
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: address,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        ],
+        origin: ORIGIN,
+        context: buildProviderContext({
+          namespace: activeChain.namespace,
+          chainRef: activeChain.chainRef,
+        }),
+      });
+
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+      await flushAsync();
+      releaseBroadcast?.();
+
+      await expect(pendingResponse).resolves.toMatchObject({
+        id: "rpc-send-persist-fail",
+        jsonrpc: "2.0",
+        result: txHash,
+      });
+
+      await vi.waitFor(() => expect(transactionsPort.createCalls).toBe(1));
+      await expect(transactionsPort.list()).resolves.toEqual([]);
+      expect(capturedTransactionId).toBeTruthy();
+      expect(
+        capturedTransactionId ? background.runtime.controllers.transactions.getMeta(capturedTransactionId) : null,
+      ).toMatchObject({
+        status: "failed",
+        submitted: {
+          hash: txHash,
+        },
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+        error: {
+          name: "TransactionPersistenceError",
+        },
+      });
+    } finally {
+      releaseBroadcast?.();
+      unsubscribeAutoApproval();
+      unsubscribeApprovalCreated();
+      background.destroy();
+    }
+  });
+
+  it("returns eth_sendTransaction failure when broadcast fails and does not create a success record", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async () => {
+      throw new Error("RPC unavailable");
+    });
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(
+      chain.namespace,
+      createNamespaceTransactionMock({
+        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
+        broadcastTransaction,
+      }),
+    );
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
+    const unsubscribeAutoApproval = background.enableAutoApproval();
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: activeChain.chainRef,
+        address,
+      });
+
+      await expect(
+        background.runtime.providerAccess.executeRpcRequest({
+          id: "rpc-send-broadcast-fail",
+          jsonrpc: "2.0",
+          method: "eth_sendTransaction",
+          params: [
+            {
+              from: address,
+              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              value: "0x0",
+            },
+          ],
+          origin: ORIGIN,
+          context: buildProviderContext({
+            namespace: activeChain.namespace,
+            chainRef: activeChain.chainRef,
+          }),
+        }),
+      ).resolves.toMatchObject({
+        id: "rpc-send-broadcast-fail",
+        jsonrpc: "2.0",
+        error: {
+          code: -32603,
+        },
+      });
+
+      expect(broadcastTransaction).toHaveBeenCalledTimes(1);
+      await expect(background.transactionsPort.list()).resolves.toEqual([]);
+    } finally {
+      unsubscribeAutoApproval();
       background.destroy();
     }
   });

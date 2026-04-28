@@ -8,9 +8,9 @@ import {
   createNamespacesStub,
   createNamespaceTransactionStub,
   createPrepareStub,
-  createRuntime,
-  createRuntimeTransaction,
-  createViewStub,
+  createProposalStore,
+  createTransactionProposal,
+  createRecordViewStub,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -26,18 +26,18 @@ import type { TransactionMeta } from "./types.js";
 const createProposalService = (params?: {
   chainRef?: string;
   from?: string;
-  runtime?: ReturnType<typeof createRuntime>;
+  proposalStore?: ReturnType<typeof createProposalStore>;
   reviewSessions?: TransactionReviewSessions;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
     create: (...args: never[]) => unknown;
   };
   prepare?: ReturnType<typeof createPrepareStub>;
-  view?: ReturnType<typeof createViewStub>;
+  recordView?: ReturnType<typeof createRecordViewStub>;
 }) => {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
-  const runtime = params?.runtime ?? createRuntime();
+  const proposalStore = params?.proposalStore ?? createProposalStore();
   const reviewSessions = params?.reviewSessions ?? new TransactionReviewSessions();
   const queuePrepare = vi.fn();
   const prepare = params?.prepare ?? createPrepareStub({ queuePrepare });
@@ -48,8 +48,8 @@ const createProposalService = (params?: {
       settled: Promise.resolve(undefined),
     }));
   const service = new TransactionProposalService({
-    runtime,
-    view: params?.view ?? createViewStub({ from }),
+    proposalStore,
+    recordView: params?.recordView ?? createRecordViewStub({ from }),
     accountCodecs,
     networkSelection: {
       getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
@@ -69,7 +69,7 @@ const createProposalService = (params?: {
 
   return {
     service,
-    runtime,
+    proposalStore,
     reviewSessions,
     queuePrepare,
     createApproval,
@@ -87,7 +87,7 @@ describe("TransactionProposalService", () => {
         settleApproval = resolve;
       }),
     }));
-    const { service, runtime, queuePrepare, chainRef } = createProposalService({
+    const { service, proposalStore, queuePrepare, chainRef } = createProposalService({
       approvals: {
         create: createApproval as never,
       },
@@ -124,7 +124,7 @@ describe("TransactionProposalService", () => {
         namespace: "eip155",
       },
     });
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "pending",
       chainRef,
@@ -217,14 +217,14 @@ describe("TransactionProposalService", () => {
     expect(createApproval).toHaveBeenCalledTimes(1);
   });
 
-  it("fails the runtime transaction if provider scope is lost before approval attach completes", async () => {
+  it("fails the proposal if provider scope is lost before approval attach completes", async () => {
     const attachFailure = arxError({
       reason: ArxReasons.TransportDisconnected,
       message: "Transport disconnected.",
       data: { portId: REQUEST_CONTEXT.portId },
     });
     const queuePrepare = vi.fn();
-    const { service, runtime } = createProposalService({
+    const { service, proposalStore } = createProposalService({
       prepare: createPrepareStub({
         queuePrepare,
       }),
@@ -267,7 +267,7 @@ describe("TransactionProposalService", () => {
     randomUuidSpy.mockRestore();
 
     expect(queuePrepare).not.toHaveBeenCalled();
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "failed",
       error: {
@@ -281,7 +281,7 @@ describe("TransactionProposalService", () => {
 
   it("uses namespace-specific active chain when request.chainRef is absent", async () => {
     let settleApproval: (() => void) | null = null;
-    const { service, runtime, queuePrepare, chainRef } = createProposalService({
+    const { service, proposalStore, queuePrepare, chainRef } = createProposalService({
       approvals: {
         create: vi.fn(() => ({
           approvalId: APPROVAL_ID,
@@ -317,11 +317,11 @@ describe("TransactionProposalService", () => {
     const result = await handoff.waitForApprovalDecision();
 
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
-    expect(runtime.get(REQUEST_ID)?.chainRef).toBe(chainRef);
+    expect(proposalStore.get(REQUEST_ID)?.chainRef).toBe(chainRef);
     expect(result).toMatchObject({ chainRef, namespace: "eip155" });
   });
 
-  it("delegates chain-specific request derivation to the namespace transaction before runtime persistence", async () => {
+  it("delegates chain-specific request derivation to the namespace transaction before proposal store persistence", async () => {
     const deriveRequestForChain = vi.fn((request: TransactionRequest, resolvedChainRef: string) => ({
       ...request,
       chainRef: resolvedChainRef,
@@ -330,7 +330,7 @@ describe("TransactionProposalService", () => {
         chainId: "0xa",
       },
     }));
-    const { service, runtime, chainRef } = createProposalService({
+    const { service, proposalStore, chainRef } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           deriveForChain: deriveRequestForChain as never,
@@ -371,7 +371,7 @@ describe("TransactionProposalService", () => {
       },
       chainRef,
     );
-    expect(runtime.get(REQUEST_ID)?.request).toEqual({
+    expect(proposalStore.get(REQUEST_ID)?.request).toEqual({
       namespace: "eip155",
       chainRef,
       payload: expect.objectContaining({
@@ -382,7 +382,7 @@ describe("TransactionProposalService", () => {
 
   it("rejects before creating approval when no namespace transaction is registered", async () => {
     const createApproval = vi.fn();
-    const { service, runtime } = createProposalService({
+    const { service, proposalStore } = createProposalService({
       namespaces: createNamespacesStub(() => undefined),
       approvals: {
         create: createApproval as never,
@@ -407,13 +407,13 @@ describe("TransactionProposalService", () => {
       name: "NamespaceTransactionMissingError",
     });
 
-    expect(runtime.get(REQUEST_ID)).toBeUndefined();
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     expect(createApproval).not.toHaveBeenCalled();
   });
 
   it("rejects before creating approval when request validation finds invalid fee fields", async () => {
     const createApproval = vi.fn();
-    const { service, runtime } = createProposalService({
+    const { service, proposalStore } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           validate: () => {
@@ -449,7 +449,7 @@ describe("TransactionProposalService", () => {
       message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
     });
 
-    expect(runtime.get(REQUEST_ID)).toBeUndefined();
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     expect(createApproval).not.toHaveBeenCalled();
   });
 
@@ -507,7 +507,7 @@ describe("TransactionProposalService", () => {
   });
 
   it("reruns prepare after a draft edit invalidates an in-flight prepare result", async () => {
-    const runtime = createRuntime();
+    const proposalStore = createProposalStore();
     const reviewSessions = new TransactionReviewSessions();
     let prepareRun = 0;
     let releaseFirstPrepare: (() => void) | null = null;
@@ -549,19 +549,19 @@ describe("TransactionProposalService", () => {
       }),
     );
     const prepare = new TransactionPrepareManager({
-      runtime,
+      proposalStore,
       namespaces: namespaces as never,
       reviewSessions,
     });
 
     const { service } = createProposalService({
-      runtime,
+      proposalStore,
       reviewSessions,
       namespaces,
       prepare: prepare as never,
     });
 
-    createRuntimeTransaction(runtime, {
+    createTransactionProposal(proposalStore, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,
@@ -590,8 +590,8 @@ describe("TransactionProposalService", () => {
     await backgroundPrepare;
 
     expect(prepareTransaction).toHaveBeenCalledTimes(2);
-    expect(runtime.peek(REQUEST_ID)?.draftRevision).toBe(1);
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.peek(REQUEST_ID)?.draftRevision).toBe(1);
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       request: {
         payload: {
           to: "0xcccccccccccccccccccccccccccccccccccccccc",
@@ -605,7 +605,7 @@ describe("TransactionProposalService", () => {
   });
 
   it("rejects draft edits after approval begins", async () => {
-    const { service, runtime } = createProposalService({
+    const { service, proposalStore } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           applyDraftEdit: (({ request }: { request: TransactionMeta["request"] }) => request) as never,
@@ -613,7 +613,7 @@ describe("TransactionProposalService", () => {
       ),
     });
 
-    createRuntimeTransaction(runtime, {
+    createTransactionProposal(proposalStore, {
       prepared: { gas: "0x5208" },
       status: "approved",
     });
@@ -625,18 +625,65 @@ describe("TransactionProposalService", () => {
       }),
     ).rejects.toThrow("Transaction draft can only be edited before approval.");
 
-    expect(runtime.peek(REQUEST_ID)?.draftRevision).toBe(0);
-    expect(runtime.get(REQUEST_ID)?.request?.payload).toMatchObject({
+    expect(proposalStore.peek(REQUEST_ID)?.draftRevision).toBe(0);
+    expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: DEFAULT_TO,
     });
   });
 
+  it("does not treat durable record views as editable proposals", async () => {
+    const applyDraftEdit = vi.fn();
+    const durableMeta: TransactionMeta = {
+      id: REQUEST_ID,
+      namespace: "eip155",
+      chainRef: DEFAULT_CHAIN_REF,
+      origin: REQUEST_CONTEXT.origin,
+      from: DEFAULT_FROM,
+      request: null,
+      prepared: null,
+      status: "broadcast",
+      submitted: {
+        hash: "0x1234",
+        chainId: "0xa",
+        from: DEFAULT_FROM,
+        nonce: "0x7",
+      },
+      locator: { format: "eip155.tx_hash", value: "0x1234" },
+      receipt: null,
+      replacedId: null,
+      error: null,
+      userRejected: false,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const { service, queuePrepare } = createProposalService({
+      recordView: createRecordViewStub({
+        getMeta: vi.fn(() => durableMeta),
+      }),
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          applyDraftEdit: applyDraftEdit as never,
+        }),
+      ),
+    });
+
+    await expect(
+      service.applyDraftEdit({
+        transactionId: REQUEST_ID,
+        changes: [{ op: "replace", path: "/to", value: "0xcccccccccccccccccccccccccccccccccccccccc" }],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(applyDraftEdit).not.toHaveBeenCalled();
+    expect(queuePrepare).not.toHaveBeenCalled();
+  });
+
   it("approves only ready prepared proposals for execution", () => {
-    const { service, runtime, reviewSessions } = createProposalService();
-    createRuntimeTransaction(runtime, {
+    const { service, proposalStore, reviewSessions } = createProposalService();
+    createTransactionProposal(proposalStore, {
       status: "pending",
     });
-    runtime.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
+    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
     markReviewReady(reviewSessions, REQUEST_ID);
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
@@ -649,12 +696,12 @@ describe("TransactionProposalService", () => {
   });
 
   it("rejects execution approval when prepared params do not belong to the current draft", () => {
-    const { service, runtime, reviewSessions } = createProposalService();
-    createRuntimeTransaction(runtime, {
+    const { service, proposalStore, reviewSessions } = createProposalService();
+    createTransactionProposal(proposalStore, {
       status: "pending",
     });
-    runtime.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
-    runtime.replaceDraftRequest({
+    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
+    proposalStore.replaceDraftRequest({
       id: REQUEST_ID,
       fromStatus: "pending",
       request: {
@@ -668,7 +715,7 @@ describe("TransactionProposalService", () => {
       },
       updatedAt: 2,
     });
-    runtime.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
+    proposalStore.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
     markReviewReady(reviewSessions, REQUEST_ID);
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
@@ -678,12 +725,12 @@ describe("TransactionProposalService", () => {
         transactionId: REQUEST_ID,
       },
     });
-    expect(runtime.get(REQUEST_ID)?.status).toBe("pending");
+    expect(proposalStore.get(REQUEST_ID)?.status).toBe("pending");
   });
 
   it("blocks execution approval when review is not ready", () => {
-    const { service, runtime, reviewSessions } = createProposalService();
-    createRuntimeTransaction(runtime, {
+    const { service, proposalStore, reviewSessions } = createProposalService();
+    createTransactionProposal(proposalStore, {
       prepared: null,
       status: "pending",
     });
@@ -697,7 +744,7 @@ describe("TransactionProposalService", () => {
         prepareState: "preparing",
       },
     });
-    expect(runtime.get(REQUEST_ID)?.status).toBe("pending");
+    expect(proposalStore.get(REQUEST_ID)?.status).toBe("pending");
   });
 
   it("projects namespace review from the review prepared snapshot", () => {
@@ -712,14 +759,14 @@ describe("TransactionProposalService", () => {
         gas: "0x5208",
       },
     }));
-    const { service, runtime, reviewSessions } = createProposalService({
+    const { service, proposalStore, reviewSessions } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           buildReview: buildReview as never,
         }),
       ),
     });
-    createRuntimeTransaction(runtime, {
+    createTransactionProposal(proposalStore, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,

@@ -7,10 +7,10 @@ import {
   createNamespacesStub,
   createNamespaceTransactionStub,
   createPrepareStub,
-  createRuntime,
-  createRuntimeTransaction,
+  createProposalStore,
+  createRecordViewStub,
+  createTransactionProposal,
   createTransactionsServiceStub,
-  createViewStub,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_LOCATOR,
@@ -52,16 +52,16 @@ const createTrackingStub = (params?: {
   }) as never;
 
 const createExecutionService = (params?: {
-  runtime?: ReturnType<typeof createRuntime>;
+  proposalStore?: ReturnType<typeof createProposalStore>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   service?: ReturnType<typeof createTransactionsServiceStub>;
   prepare?: ReturnType<typeof createPrepareStub>;
-  view?: ReturnType<typeof createViewStub>;
+  recordView?: ReturnType<typeof createRecordViewStub>;
   proposals?: ReturnType<typeof createProposalServiceStub>;
   tracking?: ReturnType<typeof createTrackingStub>;
 }) => {
-  const runtime = params?.runtime ?? createRuntime();
-  const view = params?.view ?? createViewStub();
+  const proposalStore = params?.proposalStore ?? createProposalStore();
+  const recordView = params?.recordView ?? createRecordViewStub();
   const service =
     params?.service ??
     createTransactionsServiceStub({
@@ -80,12 +80,12 @@ const createExecutionService = (params?: {
   const prepare =
     params?.prepare ??
     createPrepareStub({
-      prepareTransactionForExecution: vi.fn(async (id: string) => runtime.get(id) ?? null),
+      prepareTransactionForExecution: vi.fn(async (id: string) => proposalStore.get(id) ?? null),
     });
   const tracking = params?.tracking ?? createTrackingStub();
   const execution = new TransactionExecutionService({
-    runtime,
-    view,
+    proposalStore,
+    recordView,
     accountCodecs,
     namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
     service,
@@ -97,19 +97,19 @@ const createExecutionService = (params?: {
 
   return {
     execution,
-    runtime,
-    view,
+    proposalStore,
+    recordView,
     service,
     prepare,
     tracking,
   };
 };
 
-const createApprovedRuntimeTransaction = (
-  runtime: ReturnType<typeof createRuntime>,
+const createApprovedTransactionProposal = (
+  proposalStore: ReturnType<typeof createProposalStore>,
   input?: Partial<TransactionMeta>,
 ) =>
-  createRuntimeTransaction(runtime, {
+  createTransactionProposal(proposalStore, {
     prepared: { gas: "0x5208" },
     status: "approved",
     ...input,
@@ -117,14 +117,14 @@ const createApprovedRuntimeTransaction = (
 
 describe("TransactionExecutionService", () => {
   it("enqueues approved proposals for execution", async () => {
-    const runtime = createRuntime();
-    createApprovedRuntimeTransaction(runtime);
+    const proposalStore = createProposalStore();
+    createApprovedTransactionProposal(proposalStore);
     const approveForExecution = vi.fn(() => ({
       status: "approved" as const,
-      transaction: runtime.get(REQUEST_ID) as TransactionMeta,
+      transaction: proposalStore.get(REQUEST_ID) as TransactionMeta,
     }));
     const { execution } = createExecutionService({
-      runtime,
+      proposalStore,
       proposals: createProposalServiceStub({ approveForExecution }),
     });
     const processTransaction = vi.fn(async () => {});
@@ -163,14 +163,14 @@ describe("TransactionExecutionService", () => {
   });
 
   it("fails with a stable namespace-transaction-missing error when execution reaches a namespace without a namespace transaction", async () => {
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() => undefined),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     await execution.processTransaction(REQUEST_ID);
 
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "failed",
       error: {
@@ -181,8 +181,8 @@ describe("TransactionExecutionService", () => {
   });
 
   it("marks signer-stage user rejection as userRejected before broadcast", async () => {
-    const { execution, runtime } = createExecutionService();
-    createRuntimeTransaction(runtime, {
+    const { execution, proposalStore } = createExecutionService();
+    createTransactionProposal(proposalStore, {
       prepared: {},
       status: "signed",
     });
@@ -190,7 +190,7 @@ describe("TransactionExecutionService", () => {
     const rejectionError = Object.assign(new Error("User rejected transaction"), { code: 4001 });
     await execution.rejectTransaction(REQUEST_ID, rejectionError);
 
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "failed",
       userRejected: true,
@@ -256,7 +256,7 @@ describe("TransactionExecutionService", () => {
         get: vi.fn(async () => toRecord(durableMeta)),
         transition,
       }),
-      view: createViewStub({
+      recordView: createRecordViewStub({
         commitRecord,
       }),
       tracking: createTrackingStub({
@@ -305,8 +305,8 @@ describe("TransactionExecutionService", () => {
     }));
     const handleTransition = vi.fn();
     const deleteReviewSession = vi.fn(() => true);
-    const view = createViewStub();
-    const { execution, runtime } = createExecutionService({
+    const recordView = createRecordViewStub();
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: signTransaction as never,
@@ -316,7 +316,7 @@ describe("TransactionExecutionService", () => {
       service: createTransactionsServiceStub({
         createSubmitted,
       }),
-      view,
+      recordView,
       tracking: createTrackingStub({
         handleTransition,
       }),
@@ -325,7 +325,7 @@ describe("TransactionExecutionService", () => {
       }),
     });
 
-    createApprovedRuntimeTransaction(runtime, {
+    createApprovedTransactionProposal(proposalStore, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,
@@ -362,16 +362,16 @@ describe("TransactionExecutionService", () => {
         },
       }),
     );
-    expect(runtime.get(REQUEST_ID)).toBeUndefined();
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     expect(deleteReviewSession).toHaveBeenCalledWith(REQUEST_ID);
-    expect(view.commitRecord).toHaveBeenCalledTimes(1);
+    expect(recordView.commitRecord).toHaveBeenCalledTimes(1);
     expect(handleTransition).toHaveBeenCalledTimes(1);
   });
 
   it("does not create a durable record when broadcast fails", async () => {
     const broadcastError = new Error("RPC unavailable");
     const createSubmitted = vi.fn();
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           broadcast: vi.fn(async () => {
@@ -383,12 +383,12 @@ describe("TransactionExecutionService", () => {
         createSubmitted: createSubmitted as never,
       }),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     await execution.processTransaction(REQUEST_ID);
 
     expect(createSubmitted).not.toHaveBeenCalled();
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       status: "failed",
       error: {
         message: "RPC unavailable",
@@ -400,7 +400,7 @@ describe("TransactionExecutionService", () => {
     const signError = new Error("Signer failed");
     const createSubmitted = vi.fn();
     const broadcastTransaction = vi.fn();
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: vi.fn(async () => {
@@ -413,13 +413,13 @@ describe("TransactionExecutionService", () => {
         createSubmitted: createSubmitted as never,
       }),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     await execution.processTransaction(REQUEST_ID);
 
     expect(broadcastTransaction).not.toHaveBeenCalled();
     expect(createSubmitted).not.toHaveBeenCalled();
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       status: "failed",
       error: {
         message: "Signer failed",
@@ -427,19 +427,19 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("keeps a failed runtime proposal when durable persistence fails after broadcast", async () => {
-    const { execution, runtime } = createExecutionService({
+  it("keeps a failed proposal when durable persistence fails after broadcast", async () => {
+    const { execution, proposalStore } = createExecutionService({
       service: createTransactionsServiceStub({
         createSubmitted: vi.fn(async () => {
           throw new Error("Local transaction store unavailable");
         }),
       }),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     await execution.processTransaction(REQUEST_ID);
 
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       status: "failed",
       submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
@@ -459,7 +459,7 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("does not revive a rejected runtime transaction after async signing resolves", async () => {
+  it("does not revive a rejected proposal after async signing resolves", async () => {
     let releaseSign: (() => void) | null = null;
     const signStarted = new Promise<void>((resolve) => {
       releaseSign = resolve;
@@ -473,7 +473,7 @@ describe("TransactionExecutionService", () => {
       locator: DEFAULT_LOCATOR,
     }));
 
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: signTransaction as never,
@@ -481,7 +481,7 @@ describe("TransactionExecutionService", () => {
         }),
       ),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     const processing = execution.processTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -490,7 +490,7 @@ describe("TransactionExecutionService", () => {
     releaseSign?.();
     await processing;
 
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "failed",
       error: {
@@ -525,8 +525,8 @@ describe("TransactionExecutionService", () => {
       updatedAt: input.createdAt ?? 1,
     }));
 
-    const view = createViewStub();
-    const { execution, runtime } = createExecutionService({
+    const recordView = createRecordViewStub();
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: signTransaction as never,
@@ -536,9 +536,9 @@ describe("TransactionExecutionService", () => {
       service: createTransactionsServiceStub({
         createSubmitted,
       }),
-      view,
+      recordView,
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     const processing = execution.processTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -549,11 +549,11 @@ describe("TransactionExecutionService", () => {
     await processing;
 
     expect(createSubmitted).toHaveBeenCalledTimes(1);
-    expect(runtime.get(REQUEST_ID)).toBeUndefined();
-    expect(view.commitRecord).toHaveBeenCalledTimes(1);
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
+    expect(recordView.commitRecord).toHaveBeenCalledTimes(1);
   });
 
-  it("re-enqueues approved runtime transactions when resuming pending work", async () => {
+  it("re-enqueues approved proposals when resuming pending work", async () => {
     const broadcastMeta: TransactionMeta = {
       id: "durable-tx",
       namespace: "eip155",
@@ -598,10 +598,10 @@ describe("TransactionExecutionService", () => {
       .fn<(params?: unknown) => Promise<TransactionRecord[]>>()
       .mockResolvedValueOnce([toRecord(broadcastMeta)])
       .mockResolvedValueOnce([]);
-    const view = createViewStub({
+    const recordView = createRecordViewStub({
       commitRecord,
     });
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       service: createTransactionsServiceStub({
         list: list as never,
       }),
@@ -609,11 +609,11 @@ describe("TransactionExecutionService", () => {
         handleTransition: vi.fn(),
         resumeBroadcast,
       }),
-      view,
+      recordView,
     });
 
-    createApprovedRuntimeTransaction(runtime);
-    createRuntimeTransaction(runtime, {
+    createApprovedTransactionProposal(proposalStore);
+    createTransactionProposal(proposalStore, {
       id: "signed-tx",
       fromAccountKey: createDefaultAccountKey(),
       request: {
@@ -643,13 +643,13 @@ describe("TransactionExecutionService", () => {
     );
   });
 
-  it("fails runtime transactions when signing is interrupted by lock", async () => {
+  it("fails proposals when signing is interrupted by lock", async () => {
     const lockError = arxError({
       reason: ArxReasons.SessionLocked,
       message: "Wallet is locked.",
     });
     const broadcastTransaction = vi.fn();
-    const { execution, runtime } = createExecutionService({
+    const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: vi.fn(async () => {
@@ -659,11 +659,11 @@ describe("TransactionExecutionService", () => {
         }),
       ),
     });
-    createApprovedRuntimeTransaction(runtime);
+    createApprovedTransactionProposal(proposalStore);
 
     await execution.processTransaction(REQUEST_ID);
 
-    expect(runtime.get(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       status: "failed",
       userRejected: false,
@@ -676,18 +676,18 @@ describe("TransactionExecutionService", () => {
   });
 
   it("prepares for execution when an approved transaction is missing prepared params", async () => {
-    const runtime = createRuntime();
-    createRuntimeTransaction(runtime, {
+    const proposalStore = createProposalStore();
+    createTransactionProposal(proposalStore, {
       prepared: null,
       status: "approved",
     });
     const prepareTransactionForExecution = vi.fn(async () => {
-      runtime.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
-      return runtime.get(REQUEST_ID) ?? null;
+      proposalStore.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
+      return proposalStore.get(REQUEST_ID) ?? null;
     });
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const { execution } = createExecutionService({
-      runtime,
+      proposalStore,
       prepare: createPrepareStub({
         prepareTransactionForExecution,
       }),

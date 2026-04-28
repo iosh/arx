@@ -7,14 +7,14 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
-import { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import { TransactionReviewSessions } from "./review/session.js";
-import { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
+import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
+import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   BeginTransactionApprovalOptions,
@@ -104,8 +104,8 @@ export type StoreTransactionControllerOptions = {
  */
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
-  #runtime: RuntimeTransactionStore;
-  #view: StoreTransactionView;
+  #proposalStore: TransactionProposalStore;
+  #recordView: TransactionRecordViewStore;
   #proposals: TransactionProposalService;
   #execution: TransactionExecutionService;
 
@@ -118,12 +118,12 @@ export class StoreTransactionController implements TransactionController {
     const stateLimit = options.stateLimit ?? 200;
     const logger = options.logger ?? (() => {});
 
-    this.#runtime = new RuntimeTransactionStore({
+    this.#proposalStore = new TransactionProposalStore({
       messenger: options.messenger,
       accountCodecs: options.accountCodecs,
     });
 
-    this.#view = new StoreTransactionView({
+    this.#recordView = new TransactionRecordViewStore({
       messenger: options.messenger,
       service: options.service,
       accountCodecs: options.accountCodecs,
@@ -132,14 +132,14 @@ export class StoreTransactionController implements TransactionController {
     });
 
     const tracking = new TransactionReceiptTracking({
-      view: this.#view,
+      recordView: this.#recordView,
       namespaces: options.namespaces,
       service: options.service,
       ...(options.tracker ? { tracker: options.tracker } : {}),
     });
 
     const prepare = new TransactionPrepareManager({
-      runtime: this.#runtime,
+      proposalStore: this.#proposalStore,
       namespaces: options.namespaces,
       reviewSessions,
       logger,
@@ -152,8 +152,8 @@ export class StoreTransactionController implements TransactionController {
     });
 
     this.#proposals = new TransactionProposalService({
-      runtime: this.#runtime,
-      view: this.#view,
+      proposalStore: this.#proposalStore,
+      recordView: this.#recordView,
       accountCodecs: options.accountCodecs,
       networkSelection: options.networkSelection,
       supportedChains: options.supportedChains,
@@ -166,8 +166,8 @@ export class StoreTransactionController implements TransactionController {
     });
 
     this.#execution = new TransactionExecutionService({
-      runtime: this.#runtime,
-      view: this.#view,
+      proposalStore: this.#proposalStore,
+      recordView: this.#recordView,
       accountCodecs: options.accountCodecs,
       namespaces: options.namespaces,
       service: options.service,
@@ -273,8 +273,8 @@ export class StoreTransactionController implements TransactionController {
         }
       });
 
-      const runtimeMeta = this.getMeta(id);
-      const initial = runtimeMeta ? Promise.resolve(runtimeMeta) : this.#view.getOrLoad(id);
+      const cachedMeta = this.getMeta(id);
+      const initial = cachedMeta ? Promise.resolve(cachedMeta) : this.#recordView.getOrLoad(id);
 
       initial.then(
         (initialMeta) => {

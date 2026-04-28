@@ -14,18 +14,17 @@ type Options = {
 };
 
 /**
- * Store-backed read model:
+ * Durable record-backed read model:
  * - bounded LRU cache for synchronous reads (getMeta())
  * - coalesced best-effort sync on store change
  * - emits transaction:statusChanged and transaction:stateChanged
  */
-export class StoreTransactionView {
+export class TransactionRecordViewStore {
   #messenger: TransactionMessenger;
   #service: TransactionsService;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #stateLimit: number;
   #logger: (message: string, data?: unknown) => void;
-  #unsubscribeStore: (() => void) | null = null;
   #fromDecodeLogged: Set<string> = new Set();
 
   #records: Map<string, TransactionMeta> = new Map();
@@ -44,23 +43,10 @@ export class StoreTransactionView {
     this.#stateLimit = stateLimit;
     this.#logger = logger ?? (() => {});
 
-    this.#unsubscribeStore = this.#service.subscribeChanged(() => this.requestSync());
+    this.#service.subscribeChanged(() => this.requestSync());
 
     // Best-effort initial sync so RPC/UI can see store-backed transactions quickly after cold starts.
     this.requestSync();
-  }
-
-  destroy() {
-    if (!this.#unsubscribeStore) return;
-    try {
-      this.#unsubscribeStore();
-    } catch (error) {
-      this.#logger("transactions:view failed to remove store listener", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      this.#unsubscribeStore = null;
-    }
   }
 
   getMeta(id: string): TransactionMeta | undefined {
@@ -137,8 +123,8 @@ export class StoreTransactionView {
         try {
           await this.syncRecent();
         } catch (error) {
-          // Best-effort: view sync should never destabilize the worker.
-          this.#logger("transactions:view sync failed", {
+          // Best-effort: record view sync should never destabilize the worker.
+          this.#logger("transactions:record-view sync failed", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
@@ -203,7 +189,7 @@ export class StoreTransactionView {
     } catch (error) {
       if (!this.#fromDecodeLogged.has(record.id)) {
         this.#fromDecodeLogged.add(record.id);
-        this.#logger("transactions:view failed to derive from address", {
+        this.#logger("transactions:record-view failed to derive from address", {
           id: record.id,
           chainRef: record.chainRef,
           fromAccountKey: record.fromAccountKey,

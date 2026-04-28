@@ -3,26 +3,26 @@ import type { TransactionRecord } from "../../storage/records.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptResolution, ReplacementResolution } from "../../transactions/namespace/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
+import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionMeta } from "./types.js";
 import { buildTrackingContext, encodeReplacementKey } from "./utils.js";
 
 type Options = {
-  view: StoreTransactionView;
+  recordView: TransactionRecordViewStore;
   namespaces: NamespaceTransactions;
   service: TransactionsService;
   tracker?: ReceiptTracker;
 };
 
 export class TransactionReceiptTracking {
-  #view: StoreTransactionView;
+  #recordView: TransactionRecordViewStore;
   #namespaces: NamespaceTransactions;
   #service: TransactionsService;
   #tracker: ReceiptTracker;
 
-  constructor({ view, namespaces, service, tracker }: Options) {
-    this.#view = view;
+  constructor({ recordView, namespaces, service, tracker }: Options) {
+    this.#recordView = recordView;
     this.#namespaces = namespaces;
     this.#service = service;
 
@@ -189,7 +189,7 @@ export class TransactionReceiptTracking {
         patch: { replacedId: confirmed.id },
       });
       if (patched) {
-        this.#view.commitRecord(patched);
+        this.#recordView.commitRecord(patched);
       }
     }
   }
@@ -228,7 +228,7 @@ export class TransactionReceiptTracking {
   }
 
   #deriveReplacementKeyFromRecord(record: TransactionRecord): string | null {
-    const meta = this.#view.peek(record.id) ?? this.#view.commitRecord(record).next;
+    const meta = this.#recordView.peek(record.id) ?? this.#recordView.commitRecord(record).next;
     return this.#deriveReplacementKey(meta);
   }
 
@@ -277,21 +277,21 @@ export class TransactionReceiptTracking {
       patch: params.patch,
     });
     if (!updated) return null;
-    const committed = this.#view.commitRecord(updated);
+    const committed = this.#recordView.commitRecord(updated);
     const { previous, next } = committed;
     this.handleTransition(previous, next);
     return committed;
   }
 
   async #loadBroadcastMeta(id: string): Promise<TransactionMeta | null> {
-    const cached = this.#view.peek(id);
+    const cached = this.#recordView.peek(id);
     if (cached) {
       return cached.status === "broadcast" ? cached : null;
     }
 
     const record = await this.#service.get(id);
     if (!record) return null;
-    const meta = this.#view.commitRecord(record).next;
+    const meta = this.#recordView.commitRecord(record).next;
     return meta.status === "broadcast" ? meta : null;
   }
 }

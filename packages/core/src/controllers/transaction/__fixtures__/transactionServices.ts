@@ -7,9 +7,9 @@ import type { TransactionsService } from "../../../services/store/transactions/t
 import type { TransactionRecord } from "../../../storage/records.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
-import { RuntimeTransactionStore } from "../RuntimeTransactionStore.js";
 import type { TransactionReviewSessions } from "../review/session.js";
-import type { StoreTransactionView } from "../StoreTransactionView.js";
+import { TransactionProposalStore } from "../TransactionProposalStore.js";
+import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionMeta } from "../types.js";
 
@@ -76,8 +76,8 @@ export const createNamespaceTransactionStub = (
     : { tracking: createReceiptTrackingStub() }),
 });
 
-export const createRuntime = () =>
-  new RuntimeTransactionStore({
+export const createProposalStore = () =>
+  new TransactionProposalStore({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
@@ -109,8 +109,8 @@ export const createAccountControllerStub = (params?: {
   };
 };
 
-export const createRuntimeTransaction = (
-  runtime: RuntimeTransactionStore,
+export const createTransactionProposal = (
+  proposalStore: TransactionProposalStore,
   input?: Partial<TransactionMeta> & {
     draftRevision?: number;
     fromAccountKey?: string;
@@ -118,7 +118,7 @@ export const createRuntimeTransaction = (
 ): TransactionMeta => {
   const chainRef = input?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = input?.from ?? DEFAULT_FROM;
-  return runtime.create({
+  return proposalStore.create({
     id: input?.id ?? REQUEST_ID,
     namespace: input?.namespace ?? "eip155",
     chainRef,
@@ -203,13 +203,13 @@ export const createTransactionsServiceStub = (
   remove: overrides?.remove ?? vi.fn(async () => {}),
 });
 
-export const createViewStub = (params?: {
+export const createRecordViewStub = (params?: {
   from?: string;
-  getMeta?: StoreTransactionView["getMeta"];
-  getOrLoad?: StoreTransactionView["getOrLoad"];
-  commitRecord?: StoreTransactionView["commitRecord"];
-  requestSync?: StoreTransactionView["requestSync"];
-}): StoreTransactionView => {
+  getMeta?: TransactionRecordViewStore["getMeta"];
+  getOrLoad?: TransactionRecordViewStore["getOrLoad"];
+  commitRecord?: TransactionRecordViewStore["commitRecord"];
+  requestSync?: TransactionRecordViewStore["requestSync"];
+}): TransactionRecordViewStore => {
   const from = params?.from ?? DEFAULT_FROM;
   const commitRecord =
     params?.commitRecord ??
@@ -239,7 +239,7 @@ export const createViewStub = (params?: {
     getOrLoad: params?.getOrLoad ?? vi.fn(async () => null),
     commitRecord,
     requestSync: params?.requestSync ?? vi.fn(),
-  } as StoreTransactionView;
+  } as TransactionRecordViewStore;
 };
 
 export const createPrepareStub = (overrides?: {

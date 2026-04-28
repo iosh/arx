@@ -10,12 +10,12 @@ import type { TransactionValidationContext } from "../../transactions/namespace/
 import type { ApprovalController, ApprovalFinishedEvent, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
-import type { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import type { TransactionReviewSessions } from "./review/session.js";
-import type { StoreTransactionView } from "./StoreTransactionView.js";
 import { isTerminalTransactionStatus } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalChainMetadata,
@@ -34,8 +34,8 @@ import {
 } from "./utils.js";
 
 type TransactionProposalServiceDeps = {
-  runtime: RuntimeTransactionStore;
-  view: Pick<StoreTransactionView, "getMeta" | "getOrLoad">;
+  proposalStore: TransactionProposalStore;
+  recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad">;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -54,8 +54,8 @@ export class TransactionProposalService
       "getMeta" | "getApprovalReview" | "beginTransactionApproval" | "retryPrepare" | "applyDraftEdit"
     >
 {
-  #runtime: RuntimeTransactionStore;
-  #view: Pick<StoreTransactionView, "getMeta" | "getOrLoad">;
+  #proposalStore: TransactionProposalStore;
+  #recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad">;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   #supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -67,8 +67,8 @@ export class TransactionProposalService
   #readTransactionTimestamp: () => number;
 
   constructor(deps: TransactionProposalServiceDeps) {
-    this.#runtime = deps.runtime;
-    this.#view = deps.view;
+    this.#proposalStore = deps.proposalStore;
+    this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#networkSelection = deps.networkSelection;
     this.#supportedChains = deps.supportedChains;
@@ -81,7 +81,7 @@ export class TransactionProposalService
   }
 
   getMeta(id: string): TransactionMeta | undefined {
-    return this.#runtime.get(id) ?? this.#view.getMeta(id);
+    return this.#proposalStore.get(id) ?? this.#recordView.getMeta(id);
   }
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
@@ -171,7 +171,7 @@ export class TransactionProposalService
     };
     namespaceTransaction.request?.validate?.(validationContext);
 
-    const runtimeMeta = this.#runtime.create({
+    const proposalMeta = this.#proposalStore.create({
       id,
       createdAt: timestamp,
       namespace: derived.namespace,
@@ -183,7 +183,7 @@ export class TransactionProposalService
       updatedAt: timestamp,
     });
 
-    const approvalRequest = this.#buildApprovalRequestPayload(runtimeMeta, runtimeMeta.id);
+    const approvalRequest = this.#buildApprovalRequestPayload(proposalMeta, proposalMeta.id);
     const approvalId = crypto.randomUUID();
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
@@ -200,13 +200,13 @@ export class TransactionProposalService
                   request: approvalRequest,
                   subject: {
                     kind: "transaction",
-                    transactionId: runtimeMeta.id,
+                    transactionId: proposalMeta.id,
                   },
                 },
               ),
             {
               approvalId,
-              createdAt: runtimeMeta.createdAt,
+              createdAt: proposalMeta.createdAt,
             },
           )
         : requestApproval(
@@ -215,29 +215,30 @@ export class TransactionProposalService
               kind: ApprovalKinds.SendTransaction,
               requestContext,
               approvalId,
-              createdAt: runtimeMeta.createdAt,
+              createdAt: proposalMeta.createdAt,
               request: approvalRequest,
               subject: {
                 kind: "transaction",
-                transactionId: runtimeMeta.id,
+                transactionId: proposalMeta.id,
               },
             },
           );
     } catch (error) {
       const rejectionError = error instanceof Error ? error : new Error(String(error));
-      this.#failRuntimeProposal(runtimeMeta.id, rejectionError);
+      this.#failProposal(proposalMeta.id, rejectionError);
       throw error;
     }
 
     this.#prepare.queuePrepare(id);
 
     return {
-      transactionId: runtimeMeta.id,
+      transactionId: proposalMeta.id,
       approvalId: approvalHandle.approvalId,
-      pendingMeta: runtimeMeta,
+      pendingMeta: proposalMeta,
       waitForApprovalDecision: async () => {
         await approvalHandle.settled;
-        const next = this.#runtime.get(id) ?? this.#view.getMeta(id) ?? (await this.#view.getOrLoad(id));
+        const next =
+          this.#proposalStore.get(id) ?? this.#recordView.getMeta(id) ?? (await this.#recordView.getOrLoad(id));
         if (!next) {
           throw new Error(`Transaction ${id} is no longer active`);
         }
@@ -247,7 +248,7 @@ export class TransactionProposalService
   }
 
   async retryPrepare(transactionId: string): Promise<void> {
-    const meta = this.#runtime.get(transactionId);
+    const meta = this.#proposalStore.get(transactionId);
     if (!meta || isTerminalTransactionStatus(meta.status)) {
       return;
     }
@@ -260,7 +261,7 @@ export class TransactionProposalService
     changes: ReadonlyArray<Record<string, unknown>>;
     mode?: string;
   }): Promise<void> {
-    const meta = this.#runtime.get(input.transactionId);
+    const meta = this.#proposalStore.get(input.transactionId);
     if (!meta || isTerminalTransactionStatus(meta.status)) {
       return;
     }
@@ -284,7 +285,7 @@ export class TransactionProposalService
       ...(input.mode ? { mode: input.mode } : {}),
     });
 
-    const edited = this.#runtime.replaceDraftRequest({
+    const edited = this.#proposalStore.replaceDraftRequest({
       id: meta.id,
       fromStatus: "pending",
       request: structuredClone(nextRequest),
@@ -298,7 +299,7 @@ export class TransactionProposalService
   }
 
   approveForExecution(id: string): TransactionApproveResult {
-    const existing = this.#runtime.get(id) ?? null;
+    const existing = this.#proposalStore.get(id) ?? null;
     if (!existing) {
       return {
         status: "failed",
@@ -351,7 +352,7 @@ export class TransactionProposalService
         data: { transactionId: id, prepareState: review.status },
       };
     }
-    if (!this.#runtime.hasCurrentPrepared(id)) {
+    if (!this.#proposalStore.hasCurrentPrepared(id)) {
       return {
         status: "failed",
         reason: "prepare_not_ready",
@@ -361,7 +362,7 @@ export class TransactionProposalService
       };
     }
 
-    const updated = this.#runtime.transition({
+    const updated = this.#proposalStore.transition({
       id,
       fromStatus: "pending",
       toStatus: "approved",
@@ -371,7 +372,7 @@ export class TransactionProposalService
       return {
         status: "failed",
         reason: "not_pending",
-        transaction: this.#runtime.get(id),
+        transaction: this.#proposalStore.get(id),
         message: "Transaction is no longer pending approval.",
         data: { transactionId: id },
       };
@@ -380,13 +381,13 @@ export class TransactionProposalService
     return { status: "approved", transaction: updated };
   }
 
-  #failRuntimeProposal(id: string, reason?: Error | TransactionError): void {
-    const runtime = this.#runtime.get(id);
-    if (!runtime || isTerminalTransactionStatus(runtime.status)) {
+  #failProposal(id: string, reason?: Error | TransactionError): void {
+    const proposal = this.#proposalStore.get(id);
+    if (!proposal || isTerminalTransactionStatus(proposal.status)) {
       return;
     }
 
-    this.#runtime.transition({
+    this.#proposalStore.transition({
       id,
       fromStatus: ["pending", "approved", "signed"],
       toStatus: "failed",
@@ -447,7 +448,7 @@ export class TransactionProposalService
       return meta.request;
     }
 
-    throw new Error(`Transaction ${meta.id} no longer has an editable runtime request.`);
+    throw new Error(`Transaction ${meta.id} no longer has an editable proposal request.`);
   }
 
   #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {

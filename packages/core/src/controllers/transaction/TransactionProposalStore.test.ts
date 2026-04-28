@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
-import { RuntimeTransactionStore } from "./RuntimeTransactionStore.js";
+import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TRANSACTION_TOPICS } from "./topics.js";
 
 const createStore = () =>
-  new RuntimeTransactionStore({
+  new TransactionProposalStore({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs: {
       toCanonicalAddressFromAccountKey: () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13,8 +13,8 @@ const createStore = () =>
 
 const accountKey = "test-account-key";
 
-describe("RuntimeTransactionStore", () => {
-  it("defensively copies created state so later caller mutations do not leak into runtime state", () => {
+describe("TransactionProposalStore", () => {
+  it("defensively copies created state so later caller mutations do not leak into proposal state", () => {
     const store = createStore();
     const request = {
       namespace: "eip155" as const,
@@ -80,7 +80,7 @@ describe("RuntimeTransactionStore", () => {
     expect(meta?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
   });
 
-  it("returns detached meta snapshots so consumer mutations do not write back into runtime state", () => {
+  it("returns detached meta snapshots so consumer mutations do not write back into proposal state", () => {
     const store = createStore();
 
     const created = store.create({
@@ -267,7 +267,7 @@ describe("RuntimeTransactionStore", () => {
     });
   });
 
-  it("only lists approved runtime transactions as executable recovery work", () => {
+  it("only lists approved proposals as executable recovery work", () => {
     const store = createStore();
 
     store.create({

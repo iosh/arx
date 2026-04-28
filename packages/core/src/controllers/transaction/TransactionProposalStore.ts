@@ -10,7 +10,7 @@ import type {
   TransactionStatusChange,
 } from "./types.js";
 
-export type RuntimeTransactionState = {
+export type TransactionProposalState = {
   id: string;
   namespace: string;
   chainRef: string;
@@ -31,8 +31,8 @@ export type RuntimeTransactionState = {
   updatedAt: number;
 };
 
-type RuntimeTransactionInit = Omit<
-  RuntimeTransactionState,
+type TransactionProposalInit = Omit<
+  TransactionProposalState,
   | "prepared"
   | "preparedAtDraftRevision"
   | "submitted"
@@ -63,9 +63,9 @@ const isDurableStatus = (status: TransactionStatus): status is DurableTransactio
   return status === "broadcast" || status === "confirmed" || status === "failed" || status === "replaced";
 };
 
-type RuntimeTransactionPatch = Partial<
+type TransactionProposalPatch = Partial<
   Omit<
-    RuntimeTransactionState,
+    TransactionProposalState,
     | "id"
     | "namespace"
     | "chainRef"
@@ -77,16 +77,16 @@ type RuntimeTransactionPatch = Partial<
   >
 >;
 
-type RuntimeTransactionTransitionPatch = Partial<
+type TransactionProposalTransitionPatch = Partial<
   Pick<
-    RuntimeTransactionState,
+    TransactionProposalState,
     "prepared" | "submitted" | "locator" | "receipt" | "replacedId" | "error" | "userRejected"
   >
 >;
 
-const buildRuntimeTransactionState = (
-  input: RuntimeTransactionInit | RuntimeTransactionState,
-): RuntimeTransactionState => ({
+const buildTransactionProposalState = (
+  input: TransactionProposalInit | TransactionProposalState,
+): TransactionProposalState => ({
   ...input,
   request: structuredClone(input.request),
   prepared: structuredClone(input.prepared ?? null),
@@ -102,11 +102,11 @@ const buildRuntimeTransactionState = (
   draftRevision: input.draftRevision ?? 0,
 });
 
-const applyRuntimeTransactionPatch = (
-  current: RuntimeTransactionState,
-  patch: RuntimeTransactionPatch,
-): RuntimeTransactionState => {
-  const next: RuntimeTransactionState = {
+const applyTransactionProposalPatch = (
+  current: TransactionProposalState,
+  patch: TransactionProposalPatch,
+): TransactionProposalState => {
+  const next: TransactionProposalState = {
     ...current,
     ...(patch.updatedAt !== undefined ? { updatedAt: patch.updatedAt } : {}),
     ...(patch.status !== undefined ? { status: patch.status } : {}),
@@ -139,10 +139,10 @@ const applyRuntimeTransactionPatch = (
   return next;
 };
 
-export class RuntimeTransactionStore {
+export class TransactionProposalStore {
   #messenger: TransactionMessenger;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
-  #records = new Map<string, RuntimeTransactionState>();
+  #records = new Map<string, TransactionProposalState>();
   #stateRevision = 0;
   #statePublishScheduled = false;
   #pendingStateChangeIds = new Set<string>();
@@ -152,8 +152,8 @@ export class RuntimeTransactionStore {
     this.#accountCodecs = accountCodecs;
   }
 
-  create(input: RuntimeTransactionInit): TransactionMeta {
-    const next = buildRuntimeTransactionState(input);
+  create(input: TransactionProposalInit): TransactionMeta {
+    const next = buildTransactionProposalState(input);
     this.#records.set(next.id, next);
     this.#scheduleStateChanged(next.id);
     return this.#toMeta(next);
@@ -164,15 +164,15 @@ export class RuntimeTransactionStore {
     return state ? this.#toMeta(state) : undefined;
   }
 
-  peek(id: string): RuntimeTransactionState | undefined {
+  peek(id: string): TransactionProposalState | undefined {
     return this.#records.get(id);
   }
 
-  patch(id: string, patch: RuntimeTransactionPatch): TransactionMeta | null {
+  patch(id: string, patch: TransactionProposalPatch): TransactionMeta | null {
     const current = this.#records.get(id);
     if (!current) return null;
 
-    const next = applyRuntimeTransactionPatch(current, patch);
+    const next = applyTransactionProposalPatch(current, patch);
 
     this.#records.set(id, next);
     this.#emitStatusChange(current, next);
@@ -189,7 +189,7 @@ export class RuntimeTransactionStore {
     const current = this.#records.get(input.id);
     if (!current || current.status !== input.fromStatus) return null;
 
-    const next = applyRuntimeTransactionPatch(current, {
+    const next = applyTransactionProposalPatch(current, {
       request: input.request,
       prepared: null,
       error: null,
@@ -217,7 +217,7 @@ export class RuntimeTransactionStore {
       return null;
     }
 
-    const next = applyRuntimeTransactionPatch(current, { prepared });
+    const next = applyTransactionProposalPatch(current, { prepared });
     next.preparedAtDraftRevision = prepared ? expectedDraftRevision : null;
 
     this.#records.set(id, next);
@@ -236,7 +236,7 @@ export class RuntimeTransactionStore {
     fromStatus: TransactionStatus | readonly TransactionStatus[];
     toStatus: TransactionStatus;
     updatedAt: number;
-    patch?: RuntimeTransactionTransitionPatch | undefined;
+    patch?: TransactionProposalTransitionPatch | undefined;
   }): TransactionMeta | null {
     const current = this.#records.get(input.id);
     if (!current) return null;
@@ -278,7 +278,7 @@ export class RuntimeTransactionStore {
     return this.#toMeta(current);
   }
 
-  #toMeta(state: RuntimeTransactionState): TransactionMeta {
+  #toMeta(state: TransactionProposalState): TransactionMeta {
     let from: string | null = null;
     try {
       from = this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: state.fromAccountKey });
@@ -306,7 +306,7 @@ export class RuntimeTransactionStore {
     });
   }
 
-  #emitStatusChange(previous: RuntimeTransactionState, next: RuntimeTransactionState) {
+  #emitStatusChange(previous: TransactionProposalState, next: TransactionProposalState) {
     if (previous.status === next.status) {
       return;
     }

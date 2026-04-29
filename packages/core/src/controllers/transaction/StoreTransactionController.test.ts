@@ -128,9 +128,25 @@ describe("StoreTransactionController", () => {
     const record = createBroadcastRecord("tx-1");
     vi.mocked(service.get).mockImplementationOnce(async () => {
       messenger.publish(TRANSACTION_STATUS_CHANGED, {
+        kind: "record_status",
         id: record.id,
-        previousStatus: "signed",
+        previousStatus: null,
         nextStatus: "broadcast",
+        record: {
+          kind: "record",
+          id: record.id,
+          namespace: "eip155",
+          chainRef: record.chainRef,
+          origin: record.origin,
+          from,
+          status: "broadcast",
+          submitted: record.submitted,
+          locator: record.locator,
+          receipt: null,
+          replacedId: null,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        },
         meta: createBroadcastMeta(record.id),
       });
       return record;

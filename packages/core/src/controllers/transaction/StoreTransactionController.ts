@@ -8,14 +8,19 @@ import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.j
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import { TransactionReviewSessions } from "./review/session.js";
-import { isTerminalTransactionStatus } from "./status.js";
+import { isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
+import {
+  TRANSACTION_STATE_CHANGED,
+  TRANSACTION_STATUS_CHANGED,
+  TRANSACTION_SUBMITTED,
+  type TransactionMessenger,
+} from "./topics.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalHandoff,
@@ -24,24 +29,20 @@ import type {
   TransactionMeta,
   TransactionRequest,
   TransactionStateChange,
-  TransactionStatus,
   TransactionStatusChange,
   TransactionSubmissionResolution,
   TransactionView,
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
-const SUBMITTED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["broadcast", "confirmed"]);
-const FAILED_TRANSACTION_STATUSES = new Set<TransactionStatus>(["failed", "replaced"]);
-
 type SubmittedTransactionMeta = TransactionMeta & {
   locator: NonNullable<TransactionMeta["locator"]>;
 };
 
 const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransactionMeta =>
-  SUBMITTED_TRANSACTION_STATUSES.has(meta.status) && meta.locator !== null;
+  (meta.status === "broadcast" || meta.status === "confirmed") && meta.locator !== null;
 
-const isFailedTransaction = (meta: TransactionMeta) => FAILED_TRANSACTION_STATUSES.has(meta.status);
+const isFailedTransaction = (meta: TransactionMeta) => meta.status === "failed" || meta.status === "replaced";
 
 type TransactionSubmissionState =
   | { state: "submitted"; resolution: TransactionSubmissionResolution }
@@ -109,6 +110,8 @@ export class StoreTransactionController implements TransactionController {
   #recordView: TransactionRecordViewStore;
   #proposals: TransactionProposalService;
   #execution: TransactionExecutionService;
+  #submitted = new Map<string, TransactionSubmissionResolution>();
+  #submittedLimit: number;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
@@ -117,6 +120,7 @@ export class StoreTransactionController implements TransactionController {
     const readSystemTime = options.now ?? Date.now;
     const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
     const stateLimit = options.stateLimit ?? 200;
+    this.#submittedLimit = stateLimit;
     const logger = options.logger ?? (() => {});
 
     this.#proposalStore = new TransactionProposalStore({
@@ -167,6 +171,7 @@ export class StoreTransactionController implements TransactionController {
     });
 
     this.#execution = new TransactionExecutionService({
+      messenger: options.messenger,
       proposalStore: this.#proposalStore,
       recordView: this.#recordView,
       accountCodecs: options.accountCodecs,
@@ -188,8 +193,12 @@ export class StoreTransactionController implements TransactionController {
       }
     });
 
-    this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED, ({ id, meta }) => {
-      if (!isTerminalTransactionStatus(meta.status)) {
+    this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED, (change) => {
+      const { id, meta } = change;
+      if (change.kind === "proposal_phase" && !isProposalTerminal(change.proposal)) {
+        return;
+      }
+      if (change.kind === "record_status" && !isTransactionRecordTerminal(change.record)) {
         return;
       }
 
@@ -199,6 +208,13 @@ export class StoreTransactionController implements TransactionController {
           transactionIds: [id],
         });
       }
+    });
+
+    this.#messenger.subscribe(TRANSACTION_SUBMITTED, ({ id, locator, meta }) => {
+      this.#rememberSubmittedTransaction(id, {
+        locator: structuredClone(locator),
+        meta: structuredClone(meta),
+      });
     });
   }
 
@@ -235,6 +251,11 @@ export class StoreTransactionController implements TransactionController {
   }
 
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
+    const submitted = this.#submitted.get(id);
+    if (submitted) {
+      return Promise.resolve(structuredClone(submitted));
+    }
+
     const cached = this.getMeta(id);
     if (cached) {
       const state = readTransactionSubmissionState(cached);
@@ -249,6 +270,7 @@ export class StoreTransactionController implements TransactionController {
         if (!isWaiting) return false;
         isWaiting = false;
         unsubscribe();
+        unsubscribeSubmitted();
         return true;
       };
 
@@ -277,6 +299,16 @@ export class StoreTransactionController implements TransactionController {
           completeFromMeta(meta);
         }
       });
+      const unsubscribeSubmitted = this.#messenger.subscribe(
+        TRANSACTION_SUBMITTED,
+        ({ id: changeId, locator, meta }) => {
+          if (changeId === id) {
+            if (stopWaiting()) {
+              resolve({ locator: structuredClone(locator), meta: structuredClone(meta) });
+            }
+          }
+        },
+      );
 
       const cachedMeta = this.getMeta(id);
       const initial = cachedMeta ? Promise.resolve(cachedMeta) : this.#recordView.getOrLoad(id);
@@ -313,5 +345,16 @@ export class StoreTransactionController implements TransactionController {
 
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void {
     return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED, handler);
+  }
+
+  #rememberSubmittedTransaction(id: string, resolution: TransactionSubmissionResolution): void {
+    this.#submitted.delete(id);
+    this.#submitted.set(id, resolution);
+
+    while (this.#submitted.size > this.#submittedLimit) {
+      const oldest = this.#submitted.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.#submitted.delete(oldest);
+    }
   }
 }

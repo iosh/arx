@@ -9,6 +9,7 @@ import { createEip155ReceiptService } from "./receipt.js";
 
 const BASE_CONTEXT: TransactionTrackingContext = {
   ...createReceiptContext(),
+  request: null,
   submitted: {
     hash: TEST_TX_HASH,
     chainId: "0x1",
@@ -67,10 +68,6 @@ describe("createEip155ReceiptService", () => {
 
     const context: TransactionTrackingContext = {
       ...BASE_CONTEXT,
-      request: {
-        ...BASE_CONTEXT.request,
-        payload: BASE_CONTEXT.request.payload,
-      },
     };
 
     const result = await service.detectReplacement(context);
@@ -88,10 +85,6 @@ describe("createEip155ReceiptService", () => {
 
     const context: TransactionTrackingContext = {
       ...BASE_CONTEXT,
-      request: {
-        ...BASE_CONTEXT.request,
-        payload: BASE_CONTEXT.request.payload,
-      },
     };
 
     const result = await service.detectReplacement(context);

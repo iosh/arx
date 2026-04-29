@@ -3,9 +3,9 @@ import type { TransactionRecord } from "../../storage/records.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptResolution, ReplacementResolution } from "../../transactions/namespace/types.js";
 import { createReceiptTracker, type ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import { isTerminalTransactionStatus } from "./status.js";
+import { isTransactionRecordTerminal } from "./status.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionMeta } from "./types.js";
+import type { TransactionRecordStatus, TransactionRecordView } from "./types.js";
 import { buildTrackingContext, encodeReplacementKey } from "./utils.js";
 
 type Options = {
@@ -56,8 +56,8 @@ export class TransactionReceiptTracking {
   /**
    * Called after state transitions. Starts/stops receipt polling as needed.
    */
-  handleTransition(previous: TransactionMeta | undefined, next: TransactionMeta) {
-    if (next.status === "broadcast" && next.submitted && next.locator) {
+  handleTransition(previous: TransactionRecordView | undefined, next: TransactionRecordView) {
+    if (next.status === "broadcast") {
       const namespaceTransaction = this.#namespaces.get(next.namespace);
       if (!namespaceTransaction?.tracking) {
         void this.#handleTrackingUnsupported(
@@ -68,9 +68,6 @@ export class TransactionReceiptTracking {
       }
 
       const context = buildTrackingContext(next);
-      if (!context) {
-        return;
-      }
       if (this.#tracker.isTracking(next.id)) {
         this.#tracker.resume(next.id, context);
       } else {
@@ -79,12 +76,12 @@ export class TransactionReceiptTracking {
       return;
     }
 
-    if (previous?.status === "broadcast" && next.status !== "broadcast") {
+    if (previous?.status === "broadcast") {
       this.#tracker.stop(next.id);
       return;
     }
 
-    if (isTerminalTransactionStatus(next.status)) {
+    if (isTransactionRecordTerminal(next)) {
       this.#tracker.stop(next.id);
     }
   }
@@ -92,19 +89,18 @@ export class TransactionReceiptTracking {
   /**
    * Used on cold start recovery to resume polling from persisted broadcast txs.
    */
-  resumeBroadcast(meta: TransactionMeta) {
-    if (meta.status !== "broadcast" || !meta.submitted || !meta.locator) return;
-    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+  resumeBroadcast(record: TransactionRecordView) {
+    if (record.status !== "broadcast") return;
+    const namespaceTransaction = this.#namespaces.get(record.namespace);
     if (!namespaceTransaction?.tracking) {
       void this.#handleTrackingUnsupported(
-        meta.id,
-        new Error(`Namespace transaction ${meta.namespace} cannot fetch receipts.`),
+        record.id,
+        new Error(`Namespace transaction ${record.namespace} cannot fetch receipts.`),
       ).catch(() => {});
       return;
     }
-    const context = buildTrackingContext(meta);
-    if (!context) return;
-    this.#tracker.resume(meta.id, context);
+    const context = buildTrackingContext(record);
+    this.#tracker.resume(record.id, context);
   }
 
   async #applyReceiptResolution(id: string, resolution: ReceiptResolution): Promise<void> {
@@ -139,7 +135,7 @@ export class TransactionReceiptTracking {
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     const trackingContext = buildTrackingContext(meta);
     let replacedId = resolution.replacedId;
-    if (replacedId === undefined && namespaceTransaction?.tracking?.deriveReplacementKey && trackingContext) {
+    if (replacedId === undefined && namespaceTransaction?.tracking?.deriveReplacementKey) {
       const key = namespaceTransaction.tracking.deriveReplacementKey(trackingContext);
       if (key) {
         const replacementKey = encodeReplacementKey(key);
@@ -163,7 +159,7 @@ export class TransactionReceiptTracking {
     });
   }
 
-  async #linkConfirmedReplacement(confirmed: TransactionMeta): Promise<void> {
+  async #linkConfirmedReplacement(confirmed: TransactionRecordView): Promise<void> {
     const replacementKey = this.#deriveReplacementKey(confirmed);
     if (!replacementKey) return;
 
@@ -228,14 +224,14 @@ export class TransactionReceiptTracking {
   }
 
   #deriveReplacementKeyFromRecord(record: TransactionRecord): string | null {
-    const meta = this.#recordView.peek(record.id) ?? this.#recordView.commitRecord(record).next;
-    return this.#deriveReplacementKey(meta);
+    const view = this.#recordView.peekView(record.id) ?? this.#recordView.commitRecordView(record).next;
+    return this.#deriveReplacementKey(view);
   }
 
-  #deriveReplacementKey(meta: TransactionMeta): string | null {
-    const namespaceTransaction = this.#namespaces.get(meta.namespace);
-    const trackingContext = buildTrackingContext(meta);
-    if (!namespaceTransaction?.tracking?.deriveReplacementKey || !trackingContext) return null;
+  #deriveReplacementKey(record: TransactionRecordView): string | null {
+    const namespaceTransaction = this.#namespaces.get(record.namespace);
+    const trackingContext = buildTrackingContext(record);
+    if (!namespaceTransaction?.tracking?.deriveReplacementKey) return null;
     const key = namespaceTransaction.tracking.deriveReplacementKey(trackingContext);
     return key ? encodeReplacementKey(key) : null;
   }
@@ -266,10 +262,10 @@ export class TransactionReceiptTracking {
 
   async #transitionAndCommit(params: {
     id: string;
-    fromStatus: "broadcast" | "confirmed" | "failed" | "replaced";
-    toStatus: "broadcast" | "confirmed" | "failed" | "replaced";
+    fromStatus: TransactionRecordStatus;
+    toStatus: TransactionRecordStatus;
     patch: NonNullable<Parameters<TransactionsService["transition"]>[0]["patch"]>;
-  }): Promise<{ previous?: TransactionMeta; next: TransactionMeta } | null> {
+  }): Promise<{ previous?: TransactionRecordView; next: TransactionRecordView } | null> {
     const updated = await this.#service.transition({
       id: params.id,
       fromStatus: params.fromStatus,
@@ -277,21 +273,21 @@ export class TransactionReceiptTracking {
       patch: params.patch,
     });
     if (!updated) return null;
-    const committed = this.#recordView.commitRecord(updated);
+    const committed = this.#recordView.commitRecordView(updated);
     const { previous, next } = committed;
     this.handleTransition(previous, next);
     return committed;
   }
 
-  async #loadBroadcastMeta(id: string): Promise<TransactionMeta | null> {
-    const cached = this.#recordView.peek(id);
+  async #loadBroadcastMeta(id: string): Promise<TransactionRecordView | null> {
+    const cached = this.#recordView.peekView(id);
     if (cached) {
       return cached.status === "broadcast" ? cached : null;
     }
 
     const record = await this.#service.get(id);
     if (!record) return null;
-    const meta = this.#recordView.commitRecord(record).next;
-    return meta.status === "broadcast" ? meta : null;
+    const view = this.#recordView.commitRecordView(record).next;
+    return view.status === "broadcast" ? view : null;
   }
 }

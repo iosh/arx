@@ -701,9 +701,8 @@ describe("TransactionProposalService", () => {
       status: "pending",
     });
     proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
-    proposalStore.replaceDraftRequest({
+    proposalStore.replacePendingDraftRequest({
       id: REQUEST_ID,
-      fromStatus: "pending",
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,

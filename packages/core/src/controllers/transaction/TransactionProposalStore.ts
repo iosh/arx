@@ -1,15 +1,13 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import { isPrepareEligibleTransactionStatus } from "./status.js";
+import { canPrepareProposal } from "./status.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
-  DurableTransactionStatus,
   TransactionMeta,
   TransactionProposalPhase,
+  TransactionProposalPhaseChange,
   TransactionProposalView,
   TransactionRequest,
   TransactionStateChange,
-  TransactionStatus,
-  TransactionStatusChange,
 } from "./types.js";
 
 export type TransactionProposalState = {
@@ -23,7 +21,7 @@ export type TransactionProposalState = {
   request: TransactionMeta["request"];
   prepared: TransactionMeta["prepared"];
   preparedAtDraftRevision: number | null;
-  status: TransactionStatus;
+  phase: TransactionProposalPhase;
   submitted: TransactionMeta["submitted"];
   locator: TransactionMeta["locator"];
   receipt: TransactionMeta["receipt"];
@@ -41,6 +39,7 @@ type TransactionProposalInit = Omit<
   | "baseRequest"
   | "prepared"
   | "preparedAtDraftRevision"
+  | "phase"
   | "submitted"
   | "locator"
   | "receipt"
@@ -67,27 +66,6 @@ type Options = {
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
 };
 
-const isDurableStatus = (status: TransactionStatus): status is DurableTransactionStatus => {
-  return status === "broadcast" || status === "confirmed" || status === "failed" || status === "replaced";
-};
-
-const toTransactionProposalPhase = (status: TransactionStatus): TransactionProposalPhase => {
-  switch (status) {
-    case "pending":
-      return "pending";
-    case "approved":
-      return "approved";
-    case "signed":
-    case "broadcast":
-      return "executing";
-    case "failed":
-      return "failed";
-    case "confirmed":
-    case "replaced":
-      return "invalidated";
-  }
-};
-
 type TransactionProposalPatch = Partial<
   Omit<
     TransactionProposalState,
@@ -98,6 +76,7 @@ type TransactionProposalPatch = Partial<
     | "origin"
     | "fromAccountKey"
     | "baseRequest"
+    | "phase"
     | "preparedAtDraftRevision"
     | "draftRevision"
     | "createdAt"
@@ -111,9 +90,7 @@ type TransactionProposalTransitionPatch = Partial<
   >
 >;
 
-const buildTransactionProposalState = (
-  input: TransactionProposalInit | TransactionProposalState,
-): TransactionProposalState => ({
+const buildTransactionProposalState = (input: TransactionProposalInit): TransactionProposalState => ({
   ...input,
   approvalId: input.approvalId ?? input.id,
   baseRequest: structuredClone(input.baseRequest ?? input.request),
@@ -129,6 +106,7 @@ const buildTransactionProposalState = (
   error: structuredClone(input.error ?? null),
   userRejected: input.userRejected ?? false,
   draftRevision: input.draftRevision ?? 0,
+  phase: "pending",
 });
 
 const applyTransactionProposalPatch = (
@@ -138,7 +116,6 @@ const applyTransactionProposalPatch = (
   const next: TransactionProposalState = {
     ...current,
     ...(patch.updatedAt !== undefined ? { updatedAt: patch.updatedAt } : {}),
-    ...(patch.status !== undefined ? { status: patch.status } : {}),
     ...(patch.userRejected !== undefined ? { userRejected: patch.userRejected } : {}),
   };
 
@@ -181,7 +158,7 @@ export class TransactionProposalStore {
     this.#accountCodecs = accountCodecs;
   }
 
-  create(input: TransactionProposalInit): TransactionMeta {
+  createPendingProposal(input: TransactionProposalInit): TransactionMeta {
     const next = buildTransactionProposalState(input);
     this.#records.set(next.id, next);
     this.#scheduleStateChanged(next.id);
@@ -214,14 +191,13 @@ export class TransactionProposalStore {
     return this.#toMeta(next);
   }
 
-  replaceDraftRequest(input: {
+  replacePendingDraftRequest(input: {
     id: string;
-    fromStatus: "pending";
     request: TransactionRequest;
     updatedAt: number;
   }): TransactionMeta | null {
     const current = this.#records.get(input.id);
-    if (!current || current.status !== input.fromStatus) return null;
+    if (!current || current.phase !== "pending") return null;
 
     const next = applyTransactionProposalPatch(current, {
       request: input.request,
@@ -243,11 +219,7 @@ export class TransactionProposalStore {
     prepared: TransactionMeta["prepared"],
   ): TransactionMeta | null {
     const current = this.#records.get(id);
-    if (
-      !current ||
-      current.draftRevision !== expectedDraftRevision ||
-      !isPrepareEligibleTransactionStatus(current.status)
-    ) {
+    if (!current || current.draftRevision !== expectedDraftRevision || !canPrepareProposal(current)) {
       return null;
     }
 
@@ -265,25 +237,49 @@ export class TransactionProposalStore {
     return Boolean(current?.prepared && current.preparedAtDraftRevision === current.draftRevision);
   }
 
-  transition(input: {
+  approvePendingProposal(input: { id: string; updatedAt: number }): TransactionMeta | null {
+    return this.#moveProposal({
+      id: input.id,
+      expected: "pending",
+      next: "approved",
+      updatedAt: input.updatedAt,
+    });
+  }
+
+  startExecution(input: { id: string; updatedAt: number }): TransactionMeta | null {
+    return this.#moveProposal({
+      id: input.id,
+      expected: "approved",
+      next: "executing",
+      updatedAt: input.updatedAt,
+    });
+  }
+
+  failProposalBeforeBroadcast(input: {
     id: string;
-    fromStatus: TransactionStatus | readonly TransactionStatus[];
-    toStatus: TransactionStatus;
     updatedAt: number;
     patch?: TransactionProposalTransitionPatch | undefined;
   }): TransactionMeta | null {
-    const current = this.#records.get(input.id);
-    if (!current) return null;
-
-    const expected = Array.isArray(input.fromStatus) ? input.fromStatus : [input.fromStatus];
-    if (!expected.includes(current.status)) {
-      return null;
-    }
-
-    return this.patch(input.id, {
-      status: input.toStatus,
+    return this.#moveProposal({
+      id: input.id,
+      expected: ["pending", "approved", "executing"],
+      next: "failed",
       updatedAt: input.updatedAt,
-      ...(input.patch ?? {}),
+      patch: input.patch,
+    });
+  }
+
+  failExecutingProposal(input: {
+    id: string;
+    updatedAt: number;
+    patch?: TransactionProposalTransitionPatch | undefined;
+  }): TransactionMeta | null {
+    return this.#moveProposal({
+      id: input.id,
+      expected: "executing",
+      next: "failed",
+      updatedAt: input.updatedAt,
+      patch: input.patch,
     });
   }
 
@@ -295,15 +291,15 @@ export class TransactionProposalStore {
     return deleted;
   }
 
-  listExecutableIds(): string[] {
+  listExecutableProposalIds(): string[] {
     return Array.from(this.#records.values())
-      .filter((record) => record.status === "approved")
+      .filter((record) => record.phase === "approved")
       .map((record) => record.id);
   }
 
-  markDurablySubmitted(id: string): TransactionMeta | null {
+  clearProposalAfterRecordPersisted(id: string): TransactionMeta | null {
     const current = this.#records.get(id);
-    if (!current || !isDurableStatus(current.status)) {
+    if (!current || current.phase !== "executing") {
       return null;
     }
 
@@ -328,7 +324,7 @@ export class TransactionProposalStore {
       from,
       request: state.request,
       prepared: state.prepared,
-      status: state.status,
+      status: state.phase,
       submitted: state.submitted,
       locator: state.locator,
       receipt: state.receipt,
@@ -370,7 +366,7 @@ export class TransactionProposalStore {
         namespaceReview: null,
         prepare: state.prepared
           ? { state: "ready" }
-          : state.status === "failed" && state.error
+          : state.phase === "failed" && state.error
             ? {
                 state: "failed",
                 error: {
@@ -381,24 +377,56 @@ export class TransactionProposalStore {
               }
             : { state: "preparing" },
       },
-      phase: toTransactionProposalPhase(state.status),
+      phase: state.phase,
       createdAt: state.createdAt,
       updatedAt: state.updatedAt,
     });
   }
 
   #emitStatusChange(previous: TransactionProposalState, next: TransactionProposalState) {
-    if (previous.status === next.status) {
+    if (previous.phase === next.phase) {
       return;
     }
 
-    const payload: TransactionStatusChange = {
+    const proposal = this.#buildProposalView(next);
+    if (!proposal) return;
+
+    const payload: TransactionProposalPhaseChange = {
+      kind: "proposal_phase",
       id: next.id,
-      previousStatus: previous.status,
-      nextStatus: next.status,
+      previousPhase: previous.phase,
+      nextPhase: next.phase,
+      proposal,
       meta: this.#toMeta(next),
     };
     this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
+  }
+
+  #moveProposal(input: {
+    id: string;
+    expected: TransactionProposalPhase | readonly TransactionProposalPhase[];
+    next: TransactionProposalPhase;
+    updatedAt: number;
+    patch?: TransactionProposalTransitionPatch | undefined;
+  }): TransactionMeta | null {
+    const current = this.#records.get(input.id);
+    if (!current) return null;
+
+    const expected = Array.isArray(input.expected) ? input.expected : [input.expected];
+    if (!expected.includes(current.phase)) {
+      return null;
+    }
+
+    const next = applyTransactionProposalPatch(current, {
+      updatedAt: input.updatedAt,
+      ...(input.patch ?? {}),
+    });
+    next.phase = input.next;
+
+    this.#records.set(input.id, next);
+    this.#emitStatusChange(current, next);
+    this.#scheduleStateChanged(input.id);
+    return this.#toMeta(next);
   }
 
   #scheduleStateChanged(id: string) {

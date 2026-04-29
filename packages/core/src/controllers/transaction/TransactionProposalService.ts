@@ -12,7 +12,7 @@ import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import type { TransactionReviewSessions } from "./review/session.js";
-import { isTerminalTransactionStatus } from "./status.js";
+import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
@@ -186,7 +186,7 @@ export class TransactionProposalService
     const approvalId = crypto.randomUUID();
     const timestamp = this.#readTransactionTimestamp();
 
-    const proposalMeta = this.#proposalStore.create({
+    const proposalMeta = this.#proposalStore.createPendingProposal({
       id,
       approvalId,
       createdAt: timestamp,
@@ -195,7 +195,6 @@ export class TransactionProposalService
       origin: requestContext.origin,
       fromAccountKey,
       request: structuredClone(derivedRequest),
-      status: "pending",
       updatedAt: timestamp,
     });
 
@@ -263,8 +262,8 @@ export class TransactionProposalService
   }
 
   async retryPrepare(transactionId: string): Promise<void> {
-    const meta = this.#proposalStore.get(transactionId);
-    if (!meta || isTerminalTransactionStatus(meta.status)) {
+    const proposal = this.#proposalStore.peek(transactionId);
+    if (!proposal || isProposalTerminal(proposal)) {
       return;
     }
 
@@ -277,10 +276,11 @@ export class TransactionProposalService
     mode?: string;
   }): Promise<void> {
     const meta = this.#proposalStore.get(input.transactionId);
-    if (!meta || isTerminalTransactionStatus(meta.status)) {
+    const proposal = this.#proposalStore.peek(input.transactionId);
+    if (!meta || !proposal || isProposalTerminal(proposal)) {
       return;
     }
-    if (meta.status !== "pending") {
+    if (proposal.phase !== "pending") {
       throw new Error("Transaction draft can only be edited before approval.");
     }
 
@@ -300,9 +300,8 @@ export class TransactionProposalService
       ...(input.mode ? { mode: input.mode } : {}),
     });
 
-    const edited = this.#proposalStore.replaceDraftRequest({
+    const edited = this.#proposalStore.replacePendingDraftRequest({
       id: meta.id,
-      fromStatus: "pending",
       request: structuredClone(nextRequest),
       updatedAt: this.#readTransactionTimestamp(),
     });
@@ -323,13 +322,14 @@ export class TransactionProposalService
         data: { transactionId: id },
       };
     }
-    if (existing.status !== "pending") {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || proposal.phase !== "pending") {
       return {
         status: "failed",
         reason: "not_pending",
         transaction: existing,
         message: "Transaction is no longer pending approval.",
-        data: { transactionId: id, status: existing.status },
+        data: { transactionId: id, phase: proposal?.phase ?? existing.status },
       };
     }
 
@@ -377,10 +377,8 @@ export class TransactionProposalService
       };
     }
 
-    const updated = this.#proposalStore.transition({
+    const updated = this.#proposalStore.approvePendingProposal({
       id,
-      fromStatus: "pending",
-      toStatus: "approved",
       updatedAt: this.#readTransactionTimestamp(),
     });
     if (!updated) {
@@ -397,15 +395,13 @@ export class TransactionProposalService
   }
 
   #failProposal(id: string, reason?: Error | TransactionError): void {
-    const proposal = this.#proposalStore.get(id);
-    if (!proposal || isTerminalTransactionStatus(proposal.status)) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || isProposalTerminal(proposal)) {
       return;
     }
 
-    this.#proposalStore.transition({
+    this.#proposalStore.failProposalBeforeBroadcast({
       id,
-      fromStatus: ["pending", "approved", "signed"],
-      toStatus: "failed",
       updatedAt: this.#readTransactionTimestamp(),
       patch: {
         error: coerceTransactionError(reason) ?? null,

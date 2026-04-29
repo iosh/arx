@@ -3,12 +3,13 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
-import { isExecutableTransactionStatus, isTerminalTransactionStatus } from "./status.js";
+import { canStartProposalExecution, isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalService } from "./TransactionProposalService.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import { TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import type { TransactionApproveResult, TransactionController, TransactionError } from "./types.js";
 import {
   buildPrepareContext,
@@ -26,6 +27,7 @@ type TransactionProposalExecutionGateway = Pick<
 >;
 
 type TransactionExecutionServiceDeps = {
+  messenger: TransactionMessenger;
   proposalStore: TransactionProposalStore;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
@@ -40,6 +42,7 @@ type TransactionExecutionServiceDeps = {
 export class TransactionExecutionService
   implements Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "resumePending">
 {
+  #messenger: TransactionMessenger;
   #proposalStore: TransactionProposalStore;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
@@ -56,8 +59,10 @@ export class TransactionExecutionService
   #scheduled = false;
   #cancelledByUser = new Set<string>();
   #broadcasting = new Set<string>();
+  #broadcastedPendingPersist = new Set<string>();
 
   constructor(deps: TransactionExecutionServiceDeps) {
+    this.#messenger = deps.messenger;
     this.#proposalStore = deps.proposalStore;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
@@ -86,17 +91,15 @@ export class TransactionExecutionService
       this.#cancelledByUser.add(id);
     }
 
-    const proposal = this.#proposalStore.get(id);
-    if (proposal && !isTerminalTransactionStatus(proposal.status)) {
+    const proposal = this.#proposalStore.peek(id);
+    if (proposal && !isProposalTerminal(proposal)) {
       this.#queued.delete(id);
-      if (proposal.status === "broadcast" || this.#broadcasting.has(id)) {
+      if (this.#broadcasting.has(id) || this.#broadcastedPendingPersist.has(id)) {
         this.#cancelledByUser.delete(id);
         return;
       }
-      this.#proposalStore.transition({
+      this.#proposalStore.failProposalBeforeBroadcast({
         id,
-        fromStatus: ["pending", "approved", "signed"],
-        toStatus: "failed",
         updatedAt: this.#readTransactionTimestamp(),
         patch: {
           error,
@@ -113,21 +116,12 @@ export class TransactionExecutionService
       return;
     }
 
-    const latest = this.#recordView.commitRecord(latestRecord).next;
-    if (
-      latest.status !== "broadcast" &&
-      latest.status !== "confirmed" &&
-      latest.status !== "failed" &&
-      latest.status !== "replaced"
-    ) {
-      this.#cancelledByUser.delete(id);
-      return;
-    }
+    const latest = this.#recordView.commitRecordView(latestRecord).next;
     if (latest.status === "broadcast" && wantsUserRejected) {
       this.#cancelledByUser.delete(id);
       return;
     }
-    if (isTerminalTransactionStatus(latest.status)) {
+    if (isTransactionRecordTerminal(latest)) {
       this.#cancelledByUser.delete(id);
       return;
     }
@@ -138,7 +132,7 @@ export class TransactionExecutionService
       toStatus: "failed",
     });
     if (updated) {
-      const { previous, next } = this.#recordView.commitRecord(updated);
+      const { previous, next } = this.#recordView.commitRecordView(updated);
       this.#tracking.stop(id);
       this.#tracking.handleTransition(previous, next);
     }
@@ -151,7 +145,8 @@ export class TransactionExecutionService
     }
 
     let meta = this.#proposalStore.get(id);
-    if (!meta || !isExecutableTransactionStatus(meta.status)) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!meta || !proposal || !canStartProposalExecution(proposal)) {
       return;
     }
 
@@ -177,21 +172,22 @@ export class TransactionExecutionService
         meta = next;
       }
 
+      const executingMeta = this.#proposalStore.startExecution({
+        id,
+        updatedAt: this.#readTransactionTimestamp(),
+      });
+      if (!executingMeta) {
+        return;
+      }
+      meta = executingMeta;
+
       const sign = requireNamespaceTransactionOperation({
         namespace: meta.namespace,
         operation: "execution.sign",
         value: namespaceTransaction.execution?.sign,
       });
       const signed = await sign(buildSignContext(meta), prepared);
-      const signedMeta = this.#proposalStore.transition({
-        id,
-        fromStatus: meta.status,
-        toStatus: "signed",
-        updatedAt: this.#readTransactionTimestamp(),
-      });
-      if (!signedMeta) {
-        return;
-      }
+      if (this.#proposalStore.peek(id)?.phase !== "executing") return;
 
       if (this.#isCancelled(id)) {
         return;
@@ -199,43 +195,44 @@ export class TransactionExecutionService
 
       this.#broadcasting.add(id);
       const broadcastTransaction = requireNamespaceTransactionOperation({
-        namespace: signedMeta.namespace,
+        namespace: meta.namespace,
         operation: "execution.broadcast",
         value: namespaceTransaction.execution?.broadcast,
       });
       let broadcast: Awaited<ReturnType<typeof broadcastTransaction>>;
       try {
-        broadcast = await broadcastTransaction(buildPrepareContext(signedMeta), signed, prepared);
+        broadcast = await broadcastTransaction(buildPrepareContext(meta), signed, prepared);
       } finally {
         this.#broadcasting.delete(id);
       }
-      const broadcastMeta = this.#proposalStore.transition({
-        id,
-        fromStatus: "signed",
-        toStatus: "broadcast",
+      this.#broadcastedPendingPersist.add(id);
+      const submittedMeta = this.#proposalStore.patch(id, {
         updatedAt: this.#readTransactionTimestamp(),
-        patch: {
-          submitted: structuredClone(broadcast.submitted),
-          locator: structuredClone(broadcast.locator),
-        },
+        submitted: structuredClone(broadcast.submitted),
+        locator: structuredClone(broadcast.locator),
       });
-      if (!broadcastMeta) {
+      if (!submittedMeta || this.#proposalStore.peek(id)?.phase !== "executing") {
         return;
       }
+      this.#messenger.publish(TRANSACTION_SUBMITTED, {
+        id,
+        locator: structuredClone(broadcast.locator),
+        meta: submittedMeta,
+      });
 
       let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
-        if (!broadcastMeta.from) {
-          throw new Error(`Transaction ${broadcastMeta.id} is missing a from address.`);
+        if (!submittedMeta.from) {
+          throw new Error(`Transaction ${submittedMeta.id} is missing a from address.`);
         }
         durable = await this.#service.createSubmitted({
-          id: broadcastMeta.id,
-          createdAt: broadcastMeta.createdAt,
-          chainRef: broadcastMeta.chainRef,
-          origin: broadcastMeta.origin,
+          id: submittedMeta.id,
+          createdAt: submittedMeta.createdAt,
+          chainRef: submittedMeta.chainRef,
+          origin: submittedMeta.origin,
           fromAccountKey: this.#accountCodecs.toAccountKeyFromAddress({
-            chainRef: broadcastMeta.chainRef,
-            address: broadcastMeta.from,
+            chainRef: submittedMeta.chainRef,
+            address: submittedMeta.from,
           }),
           status: "broadcast",
           submitted: structuredClone(broadcast.submitted),
@@ -243,25 +240,23 @@ export class TransactionExecutionService
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
-        this.#proposalStore.transition({
+        this.#proposalStore.failExecutingProposal({
           id,
-          fromStatus: "broadcast",
-          toStatus: "failed",
           updatedAt: this.#readTransactionTimestamp(),
           patch: {
             error: createTransactionPersistenceError({
               cause: persistenceFailure,
-              transaction: broadcastMeta,
+              transaction: submittedMeta,
             }),
           },
         });
         return;
       }
 
-      this.#proposalStore.markDurablySubmitted(id);
+      this.#proposalStore.clearProposalAfterRecordPersisted(id);
       this.#proposals.deleteReviewSession(id);
 
-      const { previous, next } = this.#recordView.commitRecord(durable);
+      const { previous, next } = this.#recordView.commitRecordView(durable);
       this.#tracking.handleTransition(previous, next);
     } catch (err) {
       if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
@@ -269,19 +264,21 @@ export class TransactionExecutionService
         return;
       }
       await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
+    } finally {
+      this.#broadcastedPendingPersist.delete(id);
     }
   }
 
   async resumePending(): Promise<void> {
     this.#recordView.requestSync();
-    for (const proposalId of this.#proposalStore.listExecutableIds()) {
+    for (const proposalId of this.#proposalStore.listExecutableProposalIds()) {
       this.#enqueue(proposalId);
     }
 
     const broadcast = await this.#listAllByStatus("broadcast");
     for (const record of broadcast) {
-      const meta = this.#recordView.commitRecord(record).next;
-      this.#tracking.resumeBroadcast(meta);
+      const view = this.#recordView.commitRecordView(record).next;
+      this.#tracking.resumeBroadcast(view);
     }
   }
 

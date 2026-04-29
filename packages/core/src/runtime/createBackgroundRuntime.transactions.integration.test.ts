@@ -79,6 +79,15 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const toStatusTimeline = (events: TransactionStatusChange[], id: string) =>
+  events
+    .filter((event) => event.id === id)
+    .map((event) =>
+      event.kind === "proposal_phase"
+        ? [`proposal:${event.previousPhase}`, `proposal:${event.nextPhase}`]
+        : [`record:${event.previousStatus ?? "created"}`, `record:${event.nextStatus}`],
+    );
+
 describe("createBackgroundRuntime (transactions integration)", () => {
   it("processes an auto-approved transaction through receipt confirmation", async () => {
     const chain = createChainMetadata({
@@ -153,7 +162,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         { from: fromAddress },
       );
       const approvedMeta = await handoff.waitForApprovalDecision();
-      expect(["approved", "signed", "broadcast"]).toContain(approvedMeta.status);
+      expect(["approved", "executing", "broadcast"]).toContain(approvedMeta.status);
       const submission = await context.runtime.controllers.transactions.waitForTransactionSubmission(
         handoff.transactionId,
       );
@@ -171,15 +180,13 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       await vi.waitFor(() => expect(fetchReceipt).toHaveBeenCalledTimes(1));
 
-      const timeline = statusEvents
-        .filter((event) => event.id === handoff.transactionId)
-        .map(({ previousStatus, nextStatus }) => [previousStatus, nextStatus]);
+      const timeline = toStatusTimeline(statusEvents, handoff.transactionId);
 
       expect(timeline).toEqual([
-        ["pending", "approved"],
-        ["approved", "signed"],
-        ["signed", "broadcast"],
-        ["broadcast", "confirmed"],
+        ["proposal:pending", "proposal:approved"],
+        ["proposal:approved", "proposal:executing"],
+        ["record:created", "record:broadcast"],
+        ["record:broadcast", "record:confirmed"],
       ]);
 
       const confirmedMeta = context.runtime.controllers.transactions.getMeta(handoff.transactionId);
@@ -283,6 +290,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
             { from },
           );
           await handoff.waitForApprovalDecision();
+          await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
           return handoff.transactionId;
         }),
       );
@@ -297,14 +305,12 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       }
 
       submissionIds.forEach((id) => {
-        const timeline = statusEvents
-          .filter((event) => event.id === id)
-          .map(({ previousStatus, nextStatus }) => [previousStatus, nextStatus]);
+        const timeline = toStatusTimeline(statusEvents, id);
 
         expect(timeline).toEqual([
-          ["pending", "approved"],
-          ["approved", "signed"],
-          ["signed", "broadcast"],
+          ["proposal:pending", "proposal:approved"],
+          ["proposal:approved", "proposal:executing"],
+          ["record:created", "record:broadcast"],
         ]);
       });
     } finally {

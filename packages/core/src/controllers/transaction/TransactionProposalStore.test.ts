@@ -35,7 +35,7 @@ describe("TransactionProposalStore", () => {
     const receipt = { blockNumber: "0x10" };
     const error = { name: "Error", message: "boom", data: { code: "E_FAIL" } };
 
-    store.create({
+    store.createPendingProposal({
       id: "11111111-1111-4111-8111-111111111111",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -43,7 +43,6 @@ describe("TransactionProposalStore", () => {
       fromAccountKey: accountKey,
       request,
       prepared,
-      status: "signed",
       submitted,
       locator,
       receipt,
@@ -53,6 +52,8 @@ describe("TransactionProposalStore", () => {
       createdAt: 1,
       updatedAt: 1,
     });
+    store.approvePendingProposal({ id: "11111111-1111-4111-8111-111111111111", updatedAt: 1 });
+    store.startExecution({ id: "11111111-1111-4111-8111-111111111111", updatedAt: 1 });
 
     request.payload.gas = "0x9999";
     prepared.fee.maxFeePerGas = "0x9";
@@ -83,7 +84,7 @@ describe("TransactionProposalStore", () => {
   it("returns detached meta snapshots so consumer mutations do not write back into proposal state", () => {
     const store = createStore();
 
-    const created = store.create({
+    const created = store.createPendingProposal({
       id: "22222222-2222-4222-8222-222222222222",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -98,7 +99,6 @@ describe("TransactionProposalStore", () => {
         },
       },
       prepared: { fee: { maxFeePerGas: "0x1" } },
-      status: "approved",
       submitted: {
         hash: "0x1234",
         chainId: "0x1",
@@ -113,6 +113,7 @@ describe("TransactionProposalStore", () => {
       createdAt: 1,
       updatedAt: 1,
     });
+    store.approvePendingProposal({ id: "22222222-2222-4222-8222-222222222222", updatedAt: 1 });
     if (created.request) {
       created.request.payload.gas = "0x9999";
     }
@@ -154,7 +155,7 @@ describe("TransactionProposalStore", () => {
   it("projects proposal views without durable record fields", () => {
     const store = createStore();
 
-    store.create({
+    store.createPendingProposal({
       id: "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       approvalId: "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       namespace: "eip155",
@@ -179,10 +180,10 @@ describe("TransactionProposalStore", () => {
         nonce: "0x7",
       },
       locator: { format: "eip155.tx_hash", value: "0x1234" },
-      status: "approved",
       createdAt: 1,
       updatedAt: 2,
     });
+    store.approvePendingProposal({ id: "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", updatedAt: 2 });
 
     const view = store.getView("2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
 
@@ -211,7 +212,7 @@ describe("TransactionProposalStore", () => {
   it("increments draft revision and clears prepared state when replacing the draft request", () => {
     const store = createStore();
 
-    store.create({
+    store.createPendingProposal({
       id: "33333333-3333-4333-8333-333333333333",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -223,14 +224,12 @@ describe("TransactionProposalStore", () => {
         payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", gas: "0x5208" },
       },
       prepared: { fee: { maxFeePerGas: "0x1" } },
-      status: "pending",
       createdAt: 1,
       updatedAt: 1,
     });
 
-    const next = store.replaceDraftRequest({
+    const next = store.replacePendingDraftRequest({
       id: "33333333-3333-4333-8333-333333333333",
-      fromStatus: "pending",
       request: {
         namespace: "eip155",
         chainRef: "eip155:1",
@@ -249,10 +248,10 @@ describe("TransactionProposalStore", () => {
     expect(store.peek("33333333-3333-4333-8333-333333333333")?.preparedAtDraftRevision).toBeNull();
   });
 
-  it("accepts prepared writes and status transitions only when the expected revision or status still matches", () => {
+  it("accepts prepared writes and lifecycle moves only when the expected revision or state still matches", () => {
     const store = createStore();
 
-    store.create({
+    store.createPendingProposal({
       id: "44444444-4444-4444-8444-444444444444",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -263,7 +262,6 @@ describe("TransactionProposalStore", () => {
         chainRef: "eip155:1",
         payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
       },
-      status: "pending",
       createdAt: 1,
       updatedAt: 1,
     });
@@ -274,9 +272,8 @@ describe("TransactionProposalStore", () => {
     expect(store.peek("44444444-4444-4444-8444-444444444444")?.preparedAtDraftRevision).toBe(0);
 
     expect(
-      store.replaceDraftRequest({
+      store.replacePendingDraftRequest({
         id: "44444444-4444-4444-8444-444444444444",
-        fromStatus: "pending",
         request: {
           namespace: "eip155",
           chainRef: "eip155:1",
@@ -295,39 +292,28 @@ describe("TransactionProposalStore", () => {
 
     expect(store.commitPrepared("44444444-4444-4444-8444-444444444444", 0, { gas: "0x5300" })).toBeNull();
     expect(
-      store.transition({
+      store.approvePendingProposal({
         id: "44444444-4444-4444-8444-444444444444",
-        fromStatus: "pending",
-        toStatus: "approved",
         updatedAt: 3,
       }),
     ).toMatchObject({
       status: "approved",
     });
+    expect(store.approvePendingProposal({ id: "44444444-4444-4444-8444-444444444444", updatedAt: 4 })).toBeNull();
     expect(
-      store.transition({
+      store.startExecution({
         id: "44444444-4444-4444-8444-444444444444",
-        fromStatus: "signed",
-        toStatus: "broadcast",
-        updatedAt: 4,
-      }),
-    ).toBeNull();
-    expect(
-      store.transition({
-        id: "44444444-4444-4444-8444-444444444444",
-        fromStatus: "approved",
-        toStatus: "signed",
         updatedAt: 4,
       }),
     ).toMatchObject({
-      status: "signed",
+      status: "executing",
     });
   });
 
   it("only lists approved proposals as executable recovery work", () => {
     const store = createStore();
 
-    store.create({
+    store.createPendingProposal({
       id: "55555555-5555-4555-8555-555555555555",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -338,11 +324,11 @@ describe("TransactionProposalStore", () => {
         chainRef: "eip155:1",
         payload: {},
       },
-      status: "approved",
       createdAt: 1,
       updatedAt: 1,
     });
-    store.create({
+    store.approvePendingProposal({ id: "55555555-5555-4555-8555-555555555555", updatedAt: 1 });
+    store.createPendingProposal({
       id: "66666666-6666-4666-8666-666666666666",
       namespace: "eip155",
       chainRef: "eip155:1",
@@ -353,11 +339,12 @@ describe("TransactionProposalStore", () => {
         chainRef: "eip155:1",
         payload: {},
       },
-      status: "signed",
       createdAt: 1,
       updatedAt: 1,
     });
+    store.approvePendingProposal({ id: "66666666-6666-4666-8666-666666666666", updatedAt: 1 });
+    store.startExecution({ id: "66666666-6666-4666-8666-666666666666", updatedAt: 1 });
 
-    expect(store.listExecutableIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
+    expect(store.listExecutableProposalIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
   });
 });

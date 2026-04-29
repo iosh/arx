@@ -47,7 +47,7 @@ export type TransactionValidationContext = TransactionPrepareContext;
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
 export type TransactionTrackingContext = Omit<TransactionPrepareContext, "request"> & {
-  request: TransactionRequest | null;
+  request: null;
   submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
 };

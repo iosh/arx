@@ -5,7 +5,7 @@ import type {
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
-import type { TransactionError, TransactionMeta } from "./types.js";
+import type { TransactionError, TransactionMeta, TransactionRecordView } from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {
   const error = new Error(`No namespace transaction registered for namespace ${namespace}`);
@@ -85,21 +85,15 @@ export const buildPrepareContext = (meta: TransactionMeta): TransactionPrepareCo
   request: structuredClone(meta.request ?? { namespace: meta.namespace, chainRef: meta.chainRef, payload: {} }),
 });
 
-export const buildTrackingContext = (meta: TransactionMeta): TransactionTrackingContext | null => {
-  if (!meta.submitted || !meta.locator) {
-    return null;
-  }
-
-  return {
-    namespace: meta.namespace,
-    chainRef: meta.chainRef,
-    origin: meta.origin,
-    from: meta.from,
-    request: structuredClone(meta.request),
-    submitted: structuredClone(meta.submitted),
-    locator: structuredClone(meta.locator),
-  };
-};
+export const buildTrackingContext = (record: TransactionRecordView): TransactionTrackingContext => ({
+  namespace: record.namespace,
+  chainRef: record.chainRef,
+  origin: record.origin,
+  from: record.from,
+  request: null,
+  submitted: structuredClone(record.submitted),
+  locator: structuredClone(record.locator),
+});
 
 export const encodeReplacementKey = (key: TransactionReplacementKey): string => {
   return `${key.scope}:${key.value}`;

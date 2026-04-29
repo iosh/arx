@@ -15,11 +15,9 @@ import type {
 import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
 
-export type TransactionStatus = "pending" | "approved" | "signed" | "broadcast" | "confirmed" | "failed" | "replaced";
-export type DurableTransactionStatus = Exclude<TransactionStatus, "pending" | "approved" | "signed">;
-export type TransactionRecordStatus = StorageTransactionStatus;
-
 export type TransactionProposalPhase = "pending" | "approved" | "executing" | "invalidated" | "failed";
+export type TransactionRecordStatus = StorageTransactionStatus;
+export type TransactionMetaStatus = TransactionProposalPhase | TransactionRecordStatus;
 
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
@@ -33,16 +31,35 @@ export type TransactionApprovalChainMetadata = {
   } | null;
 };
 
-export type TransactionStatusChange = {
+export type TransactionProposalPhaseChange = {
+  kind: "proposal_phase";
   id: string;
-  previousStatus: TransactionStatus;
-  nextStatus: TransactionStatus;
+  previousPhase: TransactionProposalPhase;
+  nextPhase: TransactionProposalPhase;
+  proposal: TransactionProposalView;
   meta: TransactionMeta;
 };
+
+export type TransactionRecordStatusChange = {
+  kind: "record_status";
+  id: string;
+  previousStatus: TransactionRecordStatus | null;
+  nextStatus: TransactionRecordStatus;
+  record: TransactionRecordView;
+  meta: TransactionMeta;
+};
+
+export type TransactionStatusChange = TransactionProposalPhaseChange | TransactionRecordStatusChange;
 
 export type TransactionStateChange = {
   revision: number;
   transactionIds: string[];
+};
+
+export type TransactionSubmittedChange = {
+  id: string;
+  locator: TransactionSubmissionLocator;
+  meta: TransactionMeta;
 };
 
 export type TransactionMeta = {
@@ -53,7 +70,7 @@ export type TransactionMeta = {
   from: AccountAddress | null;
   request: TransactionRequest | null;
   prepared: TransactionPrepared | null;
-  status: TransactionStatus;
+  status: TransactionMetaStatus;
   submitted: TransactionSubmitted | null;
   locator: TransactionSubmissionLocator | null;
   receipt: TransactionReceipt | null;

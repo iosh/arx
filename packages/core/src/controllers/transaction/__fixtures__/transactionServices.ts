@@ -111,14 +111,16 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
-  input?: Partial<TransactionMeta> & {
+  input?: Partial<Omit<TransactionMeta, "status">> & {
+    status?: "pending" | "approved" | "executing" | "failed" | undefined;
     draftRevision?: number;
     fromAccountKey?: string;
   },
 ): TransactionMeta => {
   const chainRef = input?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = input?.from ?? DEFAULT_FROM;
-  return proposalStore.create({
+  const requestedPhase = input?.status ?? "pending";
+  const created = proposalStore.createPendingProposal({
     id: input?.id ?? REQUEST_ID,
     namespace: input?.namespace ?? "eip155",
     chainRef,
@@ -142,10 +144,35 @@ export const createTransactionProposal = (
     error: input?.error ?? undefined,
     userRejected: input?.userRejected ?? undefined,
     draftRevision: input?.draftRevision ?? undefined,
-    status: input?.status ?? "pending",
     createdAt: input?.createdAt ?? 1,
     updatedAt: input?.updatedAt ?? 1,
   });
+
+  if (requestedPhase === "pending") return created;
+
+  const id = created.id;
+  const updatedAt = input?.updatedAt ?? 1;
+  if (requestedPhase === "approved") {
+    return proposalStore.approvePendingProposal({ id, updatedAt }) ?? created;
+  }
+  if (requestedPhase === "executing") {
+    proposalStore.approvePendingProposal({ id, updatedAt });
+    return proposalStore.startExecution({ id, updatedAt }) ?? created;
+  }
+  if (requestedPhase === "failed") {
+    return (
+      proposalStore.failProposalBeforeBroadcast({
+        id,
+        updatedAt,
+        patch: {
+          error: input?.error ?? undefined,
+          userRejected: input?.userRejected ?? undefined,
+        },
+      }) ?? created
+    );
+  }
+
+  return created;
 };
 
 export const toRecord = (meta: TransactionMeta): TransactionRecord => ({

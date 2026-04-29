@@ -7,17 +7,7 @@ const BASE_CONTEXT: TransactionTrackingContext = {
   chainRef: "eip155:1",
   origin: "https://dapp.example",
   from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  request: {
-    namespace: "eip155",
-    chainRef: "eip155:1",
-    payload: {
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      nonce: "0x1",
-      value: "0x0",
-      data: "0x",
-    },
-  },
+  request: null,
   submitted: {
     hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     chainId: "0x1",

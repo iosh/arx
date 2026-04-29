@@ -1,16 +1,32 @@
-import type { TransactionStatus } from "./types.js";
+import type { TransactionProposalPhase, TransactionRecordStatus } from "./types.js";
 
-export const TERMINAL_TRANSACTION_STATUSES = new Set<TransactionStatus>(["confirmed", "failed", "replaced"]);
+type TransactionProposalStateRef = {
+  phase: TransactionProposalPhase;
+};
 
-export const EXECUTABLE_TRANSACTION_STATUSES = new Set<TransactionStatus>(["approved"]);
+type TransactionRecordStateRef = {
+  status: TransactionRecordStatus;
+};
 
-export const PREPARE_ELIGIBLE_TRANSACTION_STATUSES = new Set<TransactionStatus>(["pending", "approved", "signed"]);
+export const isProposalTerminal = (proposal: TransactionProposalStateRef): boolean => {
+  return proposal.phase === "invalidated" || proposal.phase === "failed";
+};
 
-export const isTerminalTransactionStatus = (status: TransactionStatus): boolean =>
-  TERMINAL_TRANSACTION_STATUSES.has(status);
+export const canStartProposalExecution = (proposal: TransactionProposalStateRef): boolean => {
+  return proposal.phase === "approved";
+};
 
-export const isExecutableTransactionStatus = (status: TransactionStatus): boolean =>
-  EXECUTABLE_TRANSACTION_STATUSES.has(status);
+export const canPrepareProposal = (proposal: TransactionProposalStateRef): boolean => {
+  return proposal.phase === "pending" || proposal.phase === "approved";
+};
 
-export const isPrepareEligibleTransactionStatus = (status: TransactionStatus): boolean =>
-  PREPARE_ELIGIBLE_TRANSACTION_STATUSES.has(status);
+export const isTransactionRecordTerminal = (record: TransactionRecordStateRef): boolean => {
+  switch (record.status) {
+    case "confirmed":
+    case "failed":
+    case "replaced":
+      return true;
+    case "broadcast":
+      return false;
+  }
+};

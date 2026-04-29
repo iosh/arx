@@ -1,5 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
+import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
@@ -21,7 +22,8 @@ import {
   toRecord,
 } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
-import type { TransactionApproveResult, TransactionMeta } from "./types.js";
+import { TRANSACTION_TOPICS } from "./topics.js";
+import type { TransactionApproveResult, TransactionMeta, TransactionRecordView } from "./types.js";
 
 const createProposalServiceStub = (params?: {
   approveForExecution?: (id: string) => TransactionApproveResult;
@@ -42,8 +44,8 @@ const createProposalServiceStub = (params?: {
 
 const createTrackingStub = (params?: {
   stop?: (id: string) => void;
-  handleTransition?: (previous: TransactionMeta | undefined, next: TransactionMeta) => void;
-  resumeBroadcast?: (meta: TransactionMeta) => void;
+  handleTransition?: (previous: TransactionRecordView | undefined, next: TransactionRecordView) => void;
+  resumeBroadcast?: (record: TransactionRecordView) => void;
 }) =>
   ({
     stop: params?.stop ?? vi.fn(),
@@ -84,6 +86,7 @@ const createExecutionService = (params?: {
     });
   const tracking = params?.tracking ?? createTrackingStub();
   const execution = new TransactionExecutionService({
+    messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     proposalStore,
     recordView,
     accountCodecs,
@@ -114,6 +117,36 @@ const createApprovedTransactionProposal = (
     status: "approved",
     ...input,
   });
+
+const createRecordViewFromMeta = (meta: TransactionMeta): TransactionRecordView => {
+  if (
+    meta.status !== "broadcast" &&
+    meta.status !== "confirmed" &&
+    meta.status !== "failed" &&
+    meta.status !== "replaced"
+  ) {
+    throw new Error(`Expected durable record status, received ${meta.status}`);
+  }
+  if (!meta.submitted || !meta.locator) {
+    throw new Error("Expected submitted durable meta");
+  }
+
+  return {
+    kind: "record",
+    id: meta.id,
+    namespace: meta.namespace,
+    chainRef: meta.chainRef,
+    origin: meta.origin,
+    from: meta.from,
+    status: meta.status,
+    submitted: meta.submitted,
+    locator: meta.locator,
+    receipt: meta.receipt,
+    replacedId: meta.replacedId,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+  };
+};
 
 describe("TransactionExecutionService", () => {
   it("enqueues approved proposals for execution", async () => {
@@ -180,11 +213,11 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("marks signer-stage user rejection as userRejected before broadcast", async () => {
+  it("marks execution-stage user rejection as userRejected before broadcast", async () => {
     const { execution, proposalStore } = createExecutionService();
     createTransactionProposal(proposalStore, {
       prepared: {},
-      status: "signed",
+      status: "executing",
     });
 
     const rejectionError = Object.assign(new Error("User rejected transaction"), { code: 4001 });
@@ -232,20 +265,20 @@ describe("TransactionExecutionService", () => {
       updatedAt: 2,
     };
     const transition = vi.fn(async () => toRecord(failedMeta));
-    const commitRecord = vi.fn((record: TransactionRecord) => {
+    const commitRecordView = vi.fn((record: TransactionRecord) => {
       if (record.status === "broadcast") {
         return {
-          next: durableMeta,
+          next: createRecordViewFromMeta(durableMeta),
         };
       }
 
-      const next = {
+      const next = createRecordViewFromMeta({
         ...failedMeta,
         locator: record.locator,
         updatedAt: record.updatedAt,
-      };
+      });
       return {
-        previous: durableMeta,
+        previous: createRecordViewFromMeta(durableMeta),
         next,
       };
     });
@@ -257,7 +290,7 @@ describe("TransactionExecutionService", () => {
         transition,
       }),
       recordView: createRecordViewStub({
-        commitRecord,
+        commitRecordView,
       }),
       tracking: createTrackingStub({
         stop,
@@ -273,7 +306,10 @@ describe("TransactionExecutionService", () => {
       toStatus: "failed",
     });
     expect(stop).toHaveBeenCalledWith(REQUEST_ID);
-    expect(handleTransition).toHaveBeenCalledWith(durableMeta, failedMeta);
+    expect(handleTransition).toHaveBeenCalledWith(
+      createRecordViewFromMeta(durableMeta),
+      createRecordViewFromMeta(failedMeta),
+    );
   });
 
   it("creates a durable record only after broadcast succeeds", async () => {
@@ -364,7 +400,7 @@ describe("TransactionExecutionService", () => {
     );
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     expect(deleteReviewSession).toHaveBeenCalledWith(REQUEST_ID);
-    expect(recordView.commitRecord).toHaveBeenCalledTimes(1);
+    expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
     expect(handleTransition).toHaveBeenCalledTimes(1);
   });
 
@@ -550,7 +586,64 @@ describe("TransactionExecutionService", () => {
 
     expect(createSubmitted).toHaveBeenCalledTimes(1);
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
-    expect(recordView.commitRecord).toHaveBeenCalledTimes(1);
+    expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the broadcast result when rejection races during durable persistence", async () => {
+    let releasePersistence: (() => void) | null = null;
+    let persistenceStarted: (() => void) | null = null;
+    const persistenceStartedPromise = new Promise<void>((resolve) => {
+      persistenceStarted = resolve;
+    });
+    const persistenceBlocked = new Promise<void>((resolve) => {
+      releasePersistence = resolve;
+    });
+    const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
+    const broadcastTransaction = vi.fn(async () => ({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    }));
+    const createSubmitted = vi.fn(async (input) => {
+      persistenceStarted?.();
+      await persistenceBlocked;
+      return {
+        id: input.id ?? REQUEST_ID,
+        chainRef: input.chainRef,
+        origin: input.origin,
+        fromAccountKey: input.fromAccountKey,
+        status: "broadcast" as const,
+        submitted: input.submitted,
+        locator: input.locator,
+        createdAt: input.createdAt ?? 1,
+        updatedAt: input.createdAt ?? 1,
+      };
+    });
+
+    const recordView = createRecordViewStub();
+    const { execution, proposalStore } = createExecutionService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          sign: signTransaction as never,
+          broadcast: broadcastTransaction as never,
+        }),
+      ),
+      service: createTransactionsServiceStub({
+        createSubmitted,
+      }),
+      recordView,
+    });
+    createApprovedTransactionProposal(proposalStore);
+
+    const processing = execution.processTransaction(REQUEST_ID);
+    await persistenceStartedPromise;
+
+    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled after submission"));
+    releasePersistence?.();
+    await processing;
+
+    expect(createSubmitted).toHaveBeenCalledTimes(1);
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
+    expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
   });
 
   it("re-enqueues approved proposals when resuming pending work", async () => {
@@ -573,25 +666,22 @@ describe("TransactionExecutionService", () => {
       updatedAt: 1,
     };
     const processTransaction = vi.fn(async () => {});
-    const commitRecord = vi.fn((record: TransactionRecord) => ({
+    const commitRecordView = vi.fn((record: TransactionRecord) => ({
       next: {
+        kind: "record",
         id: record.id,
         namespace: "eip155",
         chainRef: record.chainRef,
         origin: record.origin,
         from: DEFAULT_FROM,
-        request: null,
-        prepared: null,
         status: record.status,
         submitted: record.submitted,
         locator: record.locator,
         receipt: record.receipt ?? null,
         replacedId: record.replacedId ?? null,
-        error: null,
-        userRejected: false,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
-      } satisfies TransactionMeta,
+      } satisfies TransactionRecordView,
     }));
     const resumeBroadcast = vi.fn();
     const list = vi
@@ -599,7 +689,7 @@ describe("TransactionExecutionService", () => {
       .mockResolvedValueOnce([toRecord(broadcastMeta)])
       .mockResolvedValueOnce([]);
     const recordView = createRecordViewStub({
-      commitRecord,
+      commitRecordView,
     });
     const { execution, proposalStore } = createExecutionService({
       service: createTransactionsServiceStub({
@@ -614,7 +704,7 @@ describe("TransactionExecutionService", () => {
 
     createApprovedTransactionProposal(proposalStore);
     createTransactionProposal(proposalStore, {
-      id: "signed-tx",
+      id: "executing-tx",
       fromAccountKey: createDefaultAccountKey(),
       request: {
         namespace: "eip155",
@@ -622,7 +712,7 @@ describe("TransactionExecutionService", () => {
         payload: { from: DEFAULT_FROM, to: "0xcccccccccccccccccccccccccccccccccccccccc", value: "0x0" },
       },
       prepared: { gas: "0x5208" },
-      status: "signed",
+      status: "executing",
     });
 
     const processSpy = vi.spyOn(execution, "processTransaction").mockImplementation(processTransaction);
@@ -631,10 +721,10 @@ describe("TransactionExecutionService", () => {
     await Promise.resolve();
 
     expect(processSpy).toHaveBeenCalledWith(REQUEST_ID);
-    expect(processSpy).not.toHaveBeenCalledWith("signed-tx");
+    expect(processSpy).not.toHaveBeenCalledWith("executing-tx");
     processSpy.mockRestore();
     expect(list).toHaveBeenCalledTimes(2);
-    expect(commitRecord).toHaveBeenCalledWith(toRecord(broadcastMeta));
+    expect(commitRecordView).toHaveBeenCalledWith(toRecord(broadcastMeta));
     expect(resumeBroadcast).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "durable-tx",

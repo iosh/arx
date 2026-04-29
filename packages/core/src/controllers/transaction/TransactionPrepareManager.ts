@@ -1,7 +1,7 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import type { TransactionReviewSessions } from "./review/session.js";
-import { isPrepareEligibleTransactionStatus } from "./status.js";
+import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
@@ -78,7 +78,7 @@ export class TransactionPrepareManager {
       } else {
         const initial = this.#proposalStore.peek(id);
         if (!initial) return null;
-        if (initial.prepared || !isPrepareEligibleTransactionStatus(initial.status)) {
+        if (initial.prepared || !canPrepareProposal(initial)) {
           return this.#proposalStore.get(id) ?? null;
         }
         settledDraftRevision = initial.draftRevision;
@@ -98,7 +98,7 @@ export class TransactionPrepareManager {
       }
 
       const latest = this.#proposalStore.peek(id);
-      if (!latest || latest.prepared || !isPrepareEligibleTransactionStatus(latest.status)) {
+      if (!latest || latest.prepared || !canPrepareProposal(latest)) {
         return latest ? (this.#proposalStore.get(id) ?? null) : null;
       }
       if (latest.draftRevision === settledDraftRevision) {
@@ -125,7 +125,7 @@ export class TransactionPrepareManager {
     }
 
     // No need to prepare once a tx is no longer eligible for enrichment.
-    if (!isPrepareEligibleTransactionStatus(state.status)) {
+    if (!canPrepareProposal(state)) {
       return meta;
     }
 

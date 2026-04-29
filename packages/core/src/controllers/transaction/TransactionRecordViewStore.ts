@@ -6,9 +6,9 @@ import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type Transaction
 import type {
   TransactionMeta,
   TransactionReceipt,
+  TransactionRecordStatusChange,
   TransactionRecordView,
   TransactionStateChange,
-  TransactionStatusChange,
 } from "./types.js";
 
 type Options = {
@@ -66,7 +66,7 @@ export class TransactionRecordViewStore {
   }
 
   /**
-   * Internal access for orchestrators (do not mutate).
+   * Meta projection access for orchestrators (do not mutate).
    * Does not touch LRU ordering.
    */
   peek(id: string): TransactionMeta | undefined {
@@ -74,6 +74,10 @@ export class TransactionRecordViewStore {
     return existing ? this.#buildMetaFromRecordView(existing) : undefined;
   }
 
+  /**
+   * Record view access for orchestrators (do not mutate).
+   * Does not touch LRU ordering.
+   */
   peekView(id: string): TransactionRecordView | undefined {
     return this.#records.get(id);
   }
@@ -91,8 +95,8 @@ export class TransactionRecordViewStore {
     if (!record) return null;
 
     const view = this.#buildRecordView(record);
-    // Loading a specific id is an authoritative read (do emit status events if changed).
-    this.commitView(view);
+    // Specific reads warm the cache but do not synthesize lifecycle events.
+    this.#upsert(view);
     return structuredClone(view);
   }
 
@@ -115,11 +119,13 @@ export class TransactionRecordViewStore {
     const previous = this.peekView(next.id);
     this.#upsert(next);
 
-    if (previous && previous.status !== next.status) {
-      const payload: TransactionStatusChange = {
+    if (!previous || previous.status !== next.status) {
+      const payload: TransactionRecordStatusChange = {
+        kind: "record_status",
         id: next.id,
-        previousStatus: previous.status,
+        previousStatus: previous?.status ?? null,
         nextStatus: next.status,
+        record: structuredClone(next),
         meta: this.#buildMetaFromRecordView(next),
       };
       this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);

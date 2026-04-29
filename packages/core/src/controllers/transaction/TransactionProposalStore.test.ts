@@ -25,14 +25,6 @@ describe("TransactionProposalStore", () => {
       },
     };
     const prepared = { fee: { maxFeePerGas: "0x1" } };
-    const submitted = {
-      hash: "0x1234",
-      chainId: "0x1",
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      nonce: "0x7",
-    };
-    const locator = { format: "eip155.tx_hash" as const, value: "0x1234" };
-    const receipt = { blockNumber: "0x10" };
     const error = { name: "Error", message: "boom", data: { code: "E_FAIL" } };
 
     store.createPendingProposal({
@@ -43,10 +35,6 @@ describe("TransactionProposalStore", () => {
       fromAccountKey: accountKey,
       request,
       prepared,
-      submitted,
-      locator,
-      receipt,
-      replacedId: "22222222-2222-4222-8222-222222222222",
       error,
       userRejected: false,
       createdAt: 1,
@@ -57,9 +45,6 @@ describe("TransactionProposalStore", () => {
 
     request.payload.gas = "0x9999";
     prepared.fee.maxFeePerGas = "0x9";
-    submitted.nonce = "0x9";
-    locator.value = "0x9999";
-    receipt.blockNumber = "0x99";
     error.data.code = "E_CHANGED";
 
     const meta = store.get("11111111-1111-4111-8111-111111111111");
@@ -69,15 +54,10 @@ describe("TransactionProposalStore", () => {
       gas: "0x5208",
     });
     expect(meta?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
-    expect(meta?.submitted).toEqual({
-      hash: "0x1234",
-      chainId: "0x1",
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      nonce: "0x7",
-    });
-    expect(meta?.locator).toEqual({ format: "eip155.tx_hash", value: "0x1234" });
-    expect(meta?.receipt).toEqual({ blockNumber: "0x10" });
-    expect(meta?.replacedId).toBe("22222222-2222-4222-8222-222222222222");
+    expect(meta).not.toHaveProperty("submitted");
+    expect(meta).not.toHaveProperty("locator");
+    expect(meta).not.toHaveProperty("receipt");
+    expect(meta).not.toHaveProperty("replacedId");
     expect(meta?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
   });
 
@@ -99,15 +79,6 @@ describe("TransactionProposalStore", () => {
         },
       },
       prepared: { fee: { maxFeePerGas: "0x1" } },
-      submitted: {
-        hash: "0x1234",
-        chainId: "0x1",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        nonce: "0x7",
-      },
-      locator: { format: "eip155.tx_hash", value: "0x1234" },
-      receipt: { blockNumber: "0x10" },
-      replacedId: "33333333-3333-4333-8333-333333333333",
       error: { name: "Error", message: "boom", data: { code: "E_FAIL" } },
       userRejected: false,
       createdAt: 1,
@@ -120,16 +91,6 @@ describe("TransactionProposalStore", () => {
     if (created.prepared) {
       (created.prepared as { fee: { maxFeePerGas: string } }).fee.maxFeePerGas = "0x9";
     }
-    if (created.submitted) {
-      (created.submitted as { nonce: string }).nonce = "0x9";
-    }
-    if (created.locator) {
-      created.locator.value = "0x9999";
-    }
-    if (created.receipt) {
-      (created.receipt as { blockNumber: string }).blockNumber = "0x99";
-    }
-    created.replacedId = "44444444-4444-4444-8444-444444444444";
     if (created.error?.data && typeof created.error.data === "object") {
       (created.error.data as { code: string }).code = "E_CHANGED";
     }
@@ -140,15 +101,10 @@ describe("TransactionProposalStore", () => {
       gas: "0x5208",
     });
     expect(reloaded?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
-    expect(reloaded?.submitted).toEqual({
-      hash: "0x1234",
-      chainId: "0x1",
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      nonce: "0x7",
-    });
-    expect(reloaded?.locator).toEqual({ format: "eip155.tx_hash", value: "0x1234" });
-    expect(reloaded?.receipt).toEqual({ blockNumber: "0x10" });
-    expect(reloaded?.replacedId).toBe("33333333-3333-4333-8333-333333333333");
+    expect(reloaded).not.toHaveProperty("submitted");
+    expect(reloaded).not.toHaveProperty("locator");
+    expect(reloaded).not.toHaveProperty("receipt");
+    expect(reloaded).not.toHaveProperty("replacedId");
     expect(reloaded?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
   });
 
@@ -173,13 +129,6 @@ describe("TransactionProposalStore", () => {
         payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
       },
       prepared: { gas: "0x5208" },
-      submitted: {
-        hash: "0x1234",
-        chainId: "0x1",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        nonce: "0x7",
-      },
-      locator: { format: "eip155.tx_hash", value: "0x1234" },
       createdAt: 1,
       updatedAt: 2,
     });

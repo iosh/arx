@@ -58,28 +58,45 @@ export type TransactionStateChange = {
 
 export type TransactionSubmittedChange = {
   id: string;
+  submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
-  meta: TransactionMeta;
 };
 
-export type TransactionMeta = {
+type TransactionMetaBase = {
   id: string;
   namespace: string;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest | null;
-  prepared: TransactionPrepared | null;
-  status: TransactionMetaStatus;
-  submitted: TransactionSubmitted | null;
-  locator: TransactionSubmissionLocator | null;
-  receipt: TransactionReceipt | null;
-  replacedId: string | null;
-  error: TransactionError | null;
-  userRejected: boolean;
   createdAt: number;
   updatedAt: number;
 };
+
+export type TransactionProposalMeta = TransactionMetaBase & {
+  request: TransactionRequest;
+  prepared: TransactionPrepared | null;
+  status: TransactionProposalPhase;
+  submitted?: never;
+  locator?: never;
+  receipt?: never;
+  replacedId?: never;
+  error: TransactionError | null;
+  userRejected: boolean;
+};
+
+export type TransactionRecordMeta = TransactionMetaBase & {
+  request: null;
+  prepared: null;
+  status: TransactionRecordStatus;
+  submitted: TransactionSubmitted;
+  locator: TransactionSubmissionLocator;
+  receipt: TransactionReceipt | null;
+  replacedId: string | null;
+  error: null;
+  userRejected: false;
+};
+
+export type TransactionMeta = TransactionProposalMeta | TransactionRecordMeta;
 
 export type TransactionProposalView = {
   kind: "proposal";
@@ -158,8 +175,8 @@ export type BeginTransactionApprovalOptions = {
 };
 
 export type TransactionSubmissionResolution = {
+  submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
-  meta: TransactionMeta;
 };
 
 export class TransactionSubmissionError extends Error {

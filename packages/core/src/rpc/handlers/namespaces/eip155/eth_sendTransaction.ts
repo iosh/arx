@@ -53,7 +53,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       });
       await handoff.waitForApprovalDecision();
       const submission = await controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
-      const submitted = submission.meta.submitted as { hash?: unknown } | null;
+      const submitted = submission.submitted as { hash?: unknown };
       const hash = typeof submitted?.hash === "string" ? submitted.hash : null;
       if (!hash) {
         throw arxError({
@@ -61,7 +61,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
           message: "EIP-155 transaction submission did not return a transaction hash.",
           data: {
             id: handoff.transactionId,
-            submitted: submission.meta.submitted,
+            submitted: submission.submitted,
             locator: submission.locator,
           },
         });

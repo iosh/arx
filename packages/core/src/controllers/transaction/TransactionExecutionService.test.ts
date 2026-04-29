@@ -477,8 +477,6 @@ describe("TransactionExecutionService", () => {
 
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       status: "failed",
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
       error: {
         name: "TransactionPersistenceError",
         message: "Transaction was broadcast but could not be persisted locally.",
@@ -493,6 +491,8 @@ describe("TransactionExecutionService", () => {
         },
       },
     });
+    expect(proposalStore.get(REQUEST_ID)).not.toHaveProperty("submitted");
+    expect(proposalStore.get(REQUEST_ID)).not.toHaveProperty("locator");
   });
 
   it("does not revive a rejected proposal after async signing resolves", async () => {

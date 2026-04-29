@@ -111,7 +111,7 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
-  input?: Partial<Omit<TransactionMeta, "status">> & {
+  input?: Partial<Omit<TransactionMeta, "status" | "submitted" | "locator" | "receipt" | "replacedId">> & {
     status?: "pending" | "approved" | "executing" | "failed" | undefined;
     draftRevision?: number;
     fromAccountKey?: string;
@@ -137,10 +137,6 @@ export const createTransactionProposal = (
       },
     },
     prepared: input?.prepared ?? undefined,
-    submitted: input?.submitted ?? undefined,
-    locator: input?.locator ?? undefined,
-    receipt: input?.receipt ?? undefined,
-    replacedId: input?.replacedId ?? undefined,
     error: input?.error ?? undefined,
     userRejected: input?.userRejected ?? undefined,
     draftRevision: input?.draftRevision ?? undefined,
@@ -190,8 +186,8 @@ export const toRecord = (meta: TransactionMeta): TransactionRecord => ({
       : "failed",
   submitted: meta.submitted ?? DEFAULT_SUBMITTED,
   locator: meta.locator ?? DEFAULT_LOCATOR,
-  ...(meta.receipt !== null ? { receipt: meta.receipt } : {}),
-  ...(meta.replacedId !== null ? { replacedId: meta.replacedId } : {}),
+  ...(meta.receipt !== undefined && meta.receipt !== null ? { receipt: meta.receipt } : {}),
+  ...(meta.replacedId !== undefined && meta.replacedId !== null ? { replacedId: meta.replacedId } : {}),
   createdAt: meta.createdAt,
   updatedAt: meta.updatedAt,
 });

@@ -206,33 +206,28 @@ export class TransactionExecutionService
         this.#broadcasting.delete(id);
       }
       this.#broadcastedPendingPersist.add(id);
-      const submittedMeta = this.#proposalStore.patch(id, {
-        updatedAt: this.#readTransactionTimestamp(),
-        submitted: structuredClone(broadcast.submitted),
-        locator: structuredClone(broadcast.locator),
-      });
-      if (!submittedMeta || this.#proposalStore.peek(id)?.phase !== "executing") {
+      if (this.#proposalStore.peek(id)?.phase !== "executing") {
         return;
       }
       this.#messenger.publish(TRANSACTION_SUBMITTED, {
         id,
+        submitted: structuredClone(broadcast.submitted),
         locator: structuredClone(broadcast.locator),
-        meta: submittedMeta,
       });
 
       let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
-        if (!submittedMeta.from) {
-          throw new Error(`Transaction ${submittedMeta.id} is missing a from address.`);
+        if (!meta.from) {
+          throw new Error(`Transaction ${meta.id} is missing a from address.`);
         }
         durable = await this.#service.createSubmitted({
-          id: submittedMeta.id,
-          createdAt: submittedMeta.createdAt,
-          chainRef: submittedMeta.chainRef,
-          origin: submittedMeta.origin,
+          id: meta.id,
+          createdAt: meta.createdAt,
+          chainRef: meta.chainRef,
+          origin: meta.origin,
           fromAccountKey: this.#accountCodecs.toAccountKeyFromAddress({
-            chainRef: submittedMeta.chainRef,
-            address: submittedMeta.from,
+            chainRef: meta.chainRef,
+            address: meta.from,
           }),
           status: "broadcast",
           submitted: structuredClone(broadcast.submitted),
@@ -246,7 +241,9 @@ export class TransactionExecutionService
           patch: {
             error: createTransactionPersistenceError({
               cause: persistenceFailure,
-              transaction: submittedMeta,
+              transactionId: id,
+              submitted: broadcast.submitted,
+              locator: broadcast.locator,
             }),
           },
         });

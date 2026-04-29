@@ -5,7 +5,13 @@ import type {
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
-import type { TransactionError, TransactionMeta, TransactionRecordView } from "./types.js";
+import type {
+  TransactionError,
+  TransactionMeta,
+  TransactionRecordView,
+  TransactionSubmissionLocator,
+  TransactionSubmitted,
+} from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {
   const error = new Error(`No namespace transaction registered for namespace ${namespace}`);
@@ -35,7 +41,9 @@ export const createTransactionSubmissionUnavailableError = (params: { namespace:
 
 export const createTransactionPersistenceError = (params: {
   cause: Error;
-  transaction: TransactionMeta;
+  transactionId: string;
+  submitted: TransactionSubmitted;
+  locator: TransactionSubmissionLocator;
 }): TransactionError => ({
   name: "TransactionPersistenceError",
   message: "Transaction was broadcast but could not be persisted locally.",
@@ -44,9 +52,9 @@ export const createTransactionPersistenceError = (params: {
       name: params.cause.name,
       message: params.cause.message,
     },
-    transactionId: params.transaction.id,
-    submitted: structuredClone(params.transaction.submitted),
-    locator: structuredClone(params.transaction.locator),
+    transactionId: params.transactionId,
+    submitted: structuredClone(params.submitted),
+    locator: structuredClone(params.locator),
   },
 });
 

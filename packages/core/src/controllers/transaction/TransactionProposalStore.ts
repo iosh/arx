@@ -2,7 +2,9 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { canPrepareProposal } from "./status.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
-  TransactionMeta,
+  TransactionError,
+  TransactionPrepared,
+  TransactionProposalMeta,
   TransactionProposalPhase,
   TransactionProposalPhaseChange,
   TransactionProposalView,
@@ -17,16 +19,12 @@ export type TransactionProposalState = {
   chainRef: string;
   origin: string;
   fromAccountKey: string;
-  baseRequest: TransactionMeta["request"];
-  request: TransactionMeta["request"];
-  prepared: TransactionMeta["prepared"];
+  baseRequest: TransactionRequest;
+  request: TransactionRequest;
+  prepared: TransactionPrepared | null;
   preparedAtDraftRevision: number | null;
   phase: TransactionProposalPhase;
-  submitted: TransactionMeta["submitted"];
-  locator: TransactionMeta["locator"];
-  receipt: TransactionMeta["receipt"];
-  replacedId: TransactionMeta["replacedId"];
-  error: TransactionMeta["error"];
+  error: TransactionError | null;
   userRejected: boolean;
   draftRevision: number;
   createdAt: number;
@@ -40,23 +38,15 @@ type TransactionProposalInit = Omit<
   | "prepared"
   | "preparedAtDraftRevision"
   | "phase"
-  | "submitted"
-  | "locator"
-  | "receipt"
-  | "replacedId"
   | "error"
   | "userRejected"
   | "draftRevision"
 > & {
   approvalId?: string | undefined;
-  baseRequest?: TransactionMeta["request"] | undefined;
-  prepared?: TransactionMeta["prepared"] | undefined;
+  baseRequest?: TransactionRequest | undefined;
+  prepared?: TransactionPrepared | null | undefined;
   preparedAtDraftRevision?: number | null | undefined;
-  submitted?: TransactionMeta["submitted"] | undefined;
-  locator?: TransactionMeta["locator"] | undefined;
-  receipt?: TransactionMeta["receipt"] | undefined;
-  replacedId?: TransactionMeta["replacedId"] | undefined;
-  error?: TransactionMeta["error"] | undefined;
+  error?: TransactionError | null | undefined;
   userRejected?: boolean | undefined;
   draftRevision?: number | undefined;
 };
@@ -84,10 +74,7 @@ type TransactionProposalPatch = Partial<
 >;
 
 type TransactionProposalTransitionPatch = Partial<
-  Pick<
-    TransactionProposalState,
-    "prepared" | "submitted" | "locator" | "receipt" | "replacedId" | "error" | "userRejected"
-  >
+  Pick<TransactionProposalState, "prepared" | "error" | "userRejected">
 >;
 
 const buildTransactionProposalState = (input: TransactionProposalInit): TransactionProposalState => ({
@@ -99,10 +86,6 @@ const buildTransactionProposalState = (input: TransactionProposalInit): Transact
   preparedAtDraftRevision: input.prepared
     ? (input.preparedAtDraftRevision ?? input.draftRevision ?? 0)
     : (input.preparedAtDraftRevision ?? null),
-  submitted: structuredClone(input.submitted ?? null),
-  locator: structuredClone(input.locator ?? null),
-  receipt: structuredClone(input.receipt ?? null),
-  replacedId: input.replacedId ?? null,
   error: structuredClone(input.error ?? null),
   userRejected: input.userRejected ?? false,
   draftRevision: input.draftRevision ?? 0,
@@ -126,18 +109,6 @@ const applyTransactionProposalPatch = (
     next.prepared = structuredClone(patch.prepared);
     next.preparedAtDraftRevision = null;
   }
-  if (patch.submitted !== undefined) {
-    next.submitted = structuredClone(patch.submitted);
-  }
-  if (patch.locator !== undefined) {
-    next.locator = structuredClone(patch.locator);
-  }
-  if (patch.receipt !== undefined) {
-    next.receipt = structuredClone(patch.receipt);
-  }
-  if (patch.replacedId !== undefined) {
-    next.replacedId = patch.replacedId;
-  }
   if (patch.error !== undefined) {
     next.error = structuredClone(patch.error);
   }
@@ -158,14 +129,14 @@ export class TransactionProposalStore {
     this.#accountCodecs = accountCodecs;
   }
 
-  createPendingProposal(input: TransactionProposalInit): TransactionMeta {
+  createPendingProposal(input: TransactionProposalInit): TransactionProposalMeta {
     const next = buildTransactionProposalState(input);
     this.#records.set(next.id, next);
     this.#scheduleStateChanged(next.id);
     return this.#toMeta(next);
   }
 
-  get(id: string): TransactionMeta | undefined {
+  get(id: string): TransactionProposalMeta | undefined {
     const state = this.#records.get(id);
     return state ? this.#toMeta(state) : undefined;
   }
@@ -179,7 +150,7 @@ export class TransactionProposalStore {
     return this.#records.get(id);
   }
 
-  patch(id: string, patch: TransactionProposalPatch): TransactionMeta | null {
+  patch(id: string, patch: TransactionProposalPatch): TransactionProposalMeta | null {
     const current = this.#records.get(id);
     if (!current) return null;
 
@@ -195,7 +166,7 @@ export class TransactionProposalStore {
     id: string;
     request: TransactionRequest;
     updatedAt: number;
-  }): TransactionMeta | null {
+  }): TransactionProposalMeta | null {
     const current = this.#records.get(input.id);
     if (!current || current.phase !== "pending") return null;
 
@@ -216,8 +187,8 @@ export class TransactionProposalStore {
   commitPrepared(
     id: string,
     expectedDraftRevision: number,
-    prepared: TransactionMeta["prepared"],
-  ): TransactionMeta | null {
+    prepared: TransactionPrepared | null,
+  ): TransactionProposalMeta | null {
     const current = this.#records.get(id);
     if (!current || current.draftRevision !== expectedDraftRevision || !canPrepareProposal(current)) {
       return null;
@@ -237,7 +208,7 @@ export class TransactionProposalStore {
     return Boolean(current?.prepared && current.preparedAtDraftRevision === current.draftRevision);
   }
 
-  approvePendingProposal(input: { id: string; updatedAt: number }): TransactionMeta | null {
+  approvePendingProposal(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
     return this.#moveProposal({
       id: input.id,
       expected: "pending",
@@ -246,7 +217,7 @@ export class TransactionProposalStore {
     });
   }
 
-  startExecution(input: { id: string; updatedAt: number }): TransactionMeta | null {
+  startExecution(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
     return this.#moveProposal({
       id: input.id,
       expected: "approved",
@@ -259,7 +230,7 @@ export class TransactionProposalStore {
     id: string;
     updatedAt: number;
     patch?: TransactionProposalTransitionPatch | undefined;
-  }): TransactionMeta | null {
+  }): TransactionProposalMeta | null {
     return this.#moveProposal({
       id: input.id,
       expected: ["pending", "approved", "executing"],
@@ -273,7 +244,7 @@ export class TransactionProposalStore {
     id: string;
     updatedAt: number;
     patch?: TransactionProposalTransitionPatch | undefined;
-  }): TransactionMeta | null {
+  }): TransactionProposalMeta | null {
     return this.#moveProposal({
       id: input.id,
       expected: "executing",
@@ -297,7 +268,7 @@ export class TransactionProposalStore {
       .map((record) => record.id);
   }
 
-  clearProposalAfterRecordPersisted(id: string): TransactionMeta | null {
+  clearProposalAfterRecordPersisted(id: string): TransactionProposalMeta | null {
     const current = this.#records.get(id);
     if (!current || current.phase !== "executing") {
       return null;
@@ -308,7 +279,7 @@ export class TransactionProposalStore {
     return this.#toMeta(current);
   }
 
-  #toMeta(state: TransactionProposalState): TransactionMeta {
+  #toMeta(state: TransactionProposalState): TransactionProposalMeta {
     let from: string | null = null;
     try {
       from = this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: state.fromAccountKey });
@@ -325,10 +296,6 @@ export class TransactionProposalStore {
       request: state.request,
       prepared: state.prepared,
       status: state.phase,
-      submitted: state.submitted,
-      locator: state.locator,
-      receipt: state.receipt,
-      replacedId: state.replacedId,
       error: state.error,
       userRejected: state.userRejected,
       createdAt: state.createdAt,
@@ -408,7 +375,7 @@ export class TransactionProposalStore {
     next: TransactionProposalPhase;
     updatedAt: number;
     patch?: TransactionProposalTransitionPatch | undefined;
-  }): TransactionMeta | null {
+  }): TransactionProposalMeta | null {
     const current = this.#records.get(input.id);
     if (!current) return null;
 

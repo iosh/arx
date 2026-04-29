@@ -7,7 +7,7 @@ import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTra
 import type { NamespaceTransaction } from "../../transactions/namespace/types.js";
 import { DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { StoreTransactionController } from "./StoreTransactionController.js";
-import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "./topics.js";
+import { TRANSACTION_STATUS_CHANGED, TRANSACTION_SUBMITTED, TRANSACTION_TOPICS } from "./topics.js";
 import type { TransactionMeta } from "./types.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
@@ -154,11 +154,35 @@ describe("StoreTransactionController", () => {
 
     const pending = controller.waitForTransactionSubmission(record.id);
     await expect(pending).resolves.toMatchObject({
+      submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
-      meta: {
-        id: record.id,
-        status: "broadcast",
+    });
+  });
+
+  it("resolves submission waits from the broadcast result without durable meta fields", async () => {
+    const messenger = new Messenger();
+    const controller = createController(
+      {
+        proposal: {
+          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+        },
+        tracking: {
+          fetchReceipt: vi.fn(async () => null),
+        },
       },
+      { messenger },
+    );
+
+    const pending = controller.waitForTransactionSubmission("tx-2");
+    messenger.publish(TRANSACTION_SUBMITTED, {
+      id: "tx-2",
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+
+    await expect(pending).resolves.toEqual({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
     });
   });
 });

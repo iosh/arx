@@ -36,11 +36,12 @@ import type {
 import { TransactionSubmissionError } from "./types.js";
 
 type SubmittedTransactionMeta = TransactionMeta & {
+  submitted: NonNullable<TransactionMeta["submitted"]>;
   locator: NonNullable<TransactionMeta["locator"]>;
 };
 
 const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransactionMeta =>
-  (meta.status === "broadcast" || meta.status === "confirmed") && meta.locator !== null;
+  (meta.status === "broadcast" || meta.status === "confirmed") && Boolean(meta.submitted && meta.locator);
 
 const isFailedTransaction = (meta: TransactionMeta) => meta.status === "failed" || meta.status === "replaced";
 
@@ -51,8 +52,8 @@ type TransactionSubmissionState =
 
 const readTransactionSubmissionState = (meta: TransactionMeta): TransactionSubmissionState => {
   if (isSubmittedTransaction(meta)) {
-    const { locator } = meta;
-    return { state: "submitted", resolution: { locator, meta } };
+    const { submitted, locator } = meta;
+    return { state: "submitted", resolution: { submitted, locator } };
   }
 
   if (isFailedTransaction(meta)) {
@@ -210,10 +211,10 @@ export class StoreTransactionController implements TransactionController {
       }
     });
 
-    this.#messenger.subscribe(TRANSACTION_SUBMITTED, ({ id, locator, meta }) => {
+    this.#messenger.subscribe(TRANSACTION_SUBMITTED, ({ id, submitted, locator }) => {
       this.#rememberSubmittedTransaction(id, {
+        submitted: structuredClone(submitted),
         locator: structuredClone(locator),
-        meta: structuredClone(meta),
       });
     });
   }
@@ -301,10 +302,10 @@ export class StoreTransactionController implements TransactionController {
       });
       const unsubscribeSubmitted = this.#messenger.subscribe(
         TRANSACTION_SUBMITTED,
-        ({ id: changeId, locator, meta }) => {
+        ({ id: changeId, submitted, locator }) => {
           if (changeId === id) {
             if (stopWaiting()) {
-              resolve({ locator: structuredClone(locator), meta: structuredClone(meta) });
+              resolve({ submitted: structuredClone(submitted), locator: structuredClone(locator) });
             }
           }
         },

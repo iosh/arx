@@ -823,17 +823,24 @@ describe("createBackgroundRuntime provider access", () => {
         capturedTransactionId ? background.runtime.controllers.transactions.getMeta(capturedTransactionId) : null,
       ).toMatchObject({
         status: "failed",
-        submitted: {
-          hash: txHash,
-        },
-        locator: {
-          format: "eip155.tx_hash",
-          value: txHash,
-        },
         error: {
           name: "TransactionPersistenceError",
+          data: {
+            submitted: {
+              hash: txHash,
+            },
+            locator: {
+              format: "eip155.tx_hash",
+              value: txHash,
+            },
+          },
         },
       });
+      const persistenceFailureMeta = capturedTransactionId
+        ? background.runtime.controllers.transactions.getMeta(capturedTransactionId)
+        : null;
+      expect(persistenceFailureMeta).not.toHaveProperty("submitted");
+      expect(persistenceFailureMeta).not.toHaveProperty("locator");
     } finally {
       releaseBroadcast?.();
       unsubscribeAutoApproval();

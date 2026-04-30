@@ -202,12 +202,13 @@ export const createExecutor = (runtime: ReturnType<typeof createRuntime>) => {
         ({
           id: (ctx.requestContext?.requestId ?? "test-request") as string,
           providerNamespace: "eip155",
+          signal: new AbortController().signal,
           attachBlockingApproval: <T>(
-            createApproval: (reservation: { id: string; createdAt: number }) => T,
-            reservation?: Partial<{ id: string; createdAt: number }>,
+            createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
+            reservation?: Partial<{ approvalId: string; createdAt: number }>,
           ) =>
             createApproval({
-              id: reservation?.id ?? "test-request-approval",
+              approvalId: reservation?.approvalId ?? "test-request-approval",
               createdAt: reservation?.createdAt ?? 0,
             }),
           fulfill: () => true,

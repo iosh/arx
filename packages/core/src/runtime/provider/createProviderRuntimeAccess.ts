@@ -251,37 +251,31 @@ export const createProviderRuntimeAccess = ({
     };
 
     const runEngineRequest = async (begun: BegunProviderRuntimeRequest): Promise<JsonRpcResponse> => {
-      const buildTerminalErrorResponse = (fallback: unknown) => {
-        return buildErrorResponse(begun.providerRequestHandle.getTerminalError() ?? fallback, begun.resolvedContext);
-      };
-
+      // Scope-cancel error mapping lives at the handler/controller boundary.
+      // Long-running handlers must honor the request signal before reporting success.
       return await new Promise<JsonRpcResponse>((resolve) => {
         handleRpcRequest(begun.engineRequest, (error, response) => {
           if (error) {
-            const didReject = begun.providerRequestHandle.reject();
-            resolve(didReject ? buildErrorResponse(error, begun.resolvedContext) : buildTerminalErrorResponse(error));
+            begun.providerRequestHandle.reject();
+            resolve(buildErrorResponse(error, begun.resolvedContext));
             return;
           }
 
           if (!response) {
             const missingResponseError = new Error("Missing JSON-RPC response");
-            const didReject = begun.providerRequestHandle.reject();
-            resolve(
-              didReject
-                ? buildErrorResponse(missingResponseError, begun.resolvedContext)
-                : buildTerminalErrorResponse(missingResponseError),
-            );
+            begun.providerRequestHandle.reject();
+            resolve(buildErrorResponse(missingResponseError, begun.resolvedContext));
             return;
           }
 
           if ("error" in response) {
-            const didReject = begun.providerRequestHandle.reject();
-            resolve(didReject ? (response as JsonRpcResponse) : buildTerminalErrorResponse(response.error));
+            begun.providerRequestHandle.reject();
+            resolve(response as JsonRpcResponse);
             return;
           }
 
-          const didFulfill = begun.providerRequestHandle.fulfill();
-          resolve(didFulfill ? (response as JsonRpcResponse) : buildTerminalErrorResponse(response));
+          begun.providerRequestHandle.fulfill();
+          resolve(response as JsonRpcResponse);
         });
       });
     };

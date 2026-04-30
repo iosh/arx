@@ -19,6 +19,10 @@ const isRejectedBeforeBroadcast = (params: {
   error: { code?: number | undefined; name?: string | undefined } | null;
 }) => params.userRejected || params.error?.code === 4001 || params.error?.name === "TransactionRejectedError";
 
+const isTransportDisconnectedBeforeCompletion = (
+  error: { code?: number | undefined; name?: string | undefined } | null,
+) => error?.code === 4900 || error?.name === "TransportDisconnectedError";
+
 export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprovalMethod({
   requestKind: RpcRequestKinds.TransactionSubmission,
   locked: lockedQueue(),
@@ -49,10 +53,9 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
       const handoff = await controllers.transactions.beginTransactionApproval(prepared, requestContext, {
         from,
-        providerRequestHandle,
+        requestBinding: providerRequestHandle,
       });
-      await handoff.waitForApprovalDecision();
-      const submission = await controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
+      const submission = await handoff.waitForProviderCompletion();
       const submitted = submission.submitted as { hash?: unknown };
       const hash = typeof submitted?.hash === "string" ? submitted.hash : null;
       if (!hash) {
@@ -84,6 +87,14 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         }
 
         const failure = failedMeta.error;
+        if (isTransportDisconnectedBeforeCompletion(failure)) {
+          throw arxError({
+            reason: ArxReasons.TransportDisconnected,
+            message: failure?.message ?? "Transport disconnected.",
+            data: { origin, id: failedMeta.id },
+          });
+        }
+
         if (failure && typeof failure.code === "number") {
           const rpcLikeError = new Error(failure.message ?? "Transaction failed") as RpcLikeError;
           rpcLikeError.code = failure.code;

@@ -9,7 +9,7 @@ import type { TransactionProposalService } from "./TransactionProposalService.js
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import { TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
+import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import type { TransactionApproveResult, TransactionController, TransactionError } from "./types.js";
 import {
   buildPrepareContext,
@@ -192,8 +192,8 @@ export class TransactionExecutionService
       if (this.#isCancelled(id)) {
         return;
       }
-
       this.#broadcasting.add(id);
+      this.#messenger.publish(TRANSACTION_BROADCAST_STARTED, { id });
       const broadcastTransaction = requireNamespaceTransactionOperation({
         namespace: meta.namespace,
         operation: "execution.broadcast",
@@ -206,9 +206,6 @@ export class TransactionExecutionService
         this.#broadcasting.delete(id);
       }
       this.#broadcastedPendingPersist.add(id);
-      if (this.#proposalStore.peek(id)?.phase !== "executing") {
-        return;
-      }
       this.#messenger.publish(TRANSACTION_SUBMITTED, {
         id,
         submitted: structuredClone(broadcast.submitted),

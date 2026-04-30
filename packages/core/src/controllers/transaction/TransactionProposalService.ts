@@ -19,7 +19,7 @@ import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalChainMetadata,
-  TransactionApprovalHandoff,
+  TransactionApprovalRequestHandoff,
   TransactionApprovalRequestPayload,
   TransactionApproveResult,
   TransactionController,
@@ -49,11 +49,7 @@ type TransactionProposalServiceDeps = {
 };
 
 export class TransactionProposalService
-  implements
-    Pick<
-      TransactionController,
-      "getMeta" | "getApprovalReview" | "beginTransactionApproval" | "retryPrepare" | "applyDraftEdit"
-    >
+  implements Pick<TransactionController, "getMeta" | "getApprovalReview" | "retryPrepare" | "applyDraftEdit">
 {
   #proposalStore: TransactionProposalStore;
   #recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad" | "getView" | "getOrLoadView">;
@@ -126,7 +122,7 @@ export class TransactionProposalService
     request: TransactionRequest,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalHandoff> {
+  ): Promise<TransactionApprovalRequestHandoff> {
     const namespaceActiveChainRef = this.#networkSelection.getSelectedChainRef(request.namespace);
     const chainRef = request.chainRef ?? namespaceActiveChainRef ?? null;
     if (!chainRef) {
@@ -201,8 +197,8 @@ export class TransactionProposalService
     const approvalRequest = this.#buildApprovalRequestPayload(proposalMeta, proposalMeta.id);
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
-      approvalHandle = options?.providerRequestHandle
-        ? options.providerRequestHandle.attachBlockingApproval(
+      approvalHandle = options?.requestBinding
+        ? options.requestBinding.attachBlockingApproval(
             ({ approvalId: reservedApprovalId, createdAt }) =>
               requestApproval(
                 { approvals: this.#approvals, now: this.#readTransactionTimestamp },
@@ -242,6 +238,10 @@ export class TransactionProposalService
       this.#failProposal(proposalMeta.id, rejectionError);
       throw error;
     }
+
+    // waitForApprovalDecision() consumes this promise. This catch only prevents an
+    // unhandled rejection when the caller abandons the handoff.
+    void approvalHandle.settled.catch(() => undefined);
 
     this.#prepare.queuePrepare(id);
 

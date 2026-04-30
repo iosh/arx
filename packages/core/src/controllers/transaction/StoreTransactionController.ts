@@ -35,15 +35,14 @@ import type {
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
-type SubmittedTransactionMeta = TransactionMeta & {
-  submitted: NonNullable<TransactionMeta["submitted"]>;
-  locator: NonNullable<TransactionMeta["locator"]>;
-};
+const isFailedProposalSubmission = (meta: TransactionMeta) =>
+  meta.status === "failed" && meta.request !== null && !meta.submitted && !meta.locator;
 
-const isSubmittedTransaction = (meta: TransactionMeta): meta is SubmittedTransactionMeta =>
-  (meta.status === "broadcast" || meta.status === "confirmed") && Boolean(meta.submitted && meta.locator);
-
-const isFailedTransaction = (meta: TransactionMeta) => meta.status === "failed" || meta.status === "replaced";
+const createTransactionTransportDisconnectedError = (): TransactionError => ({
+  name: "TransportDisconnectedError",
+  message: "Transport disconnected.",
+  code: 4900,
+});
 
 type TransactionSubmissionState =
   | { state: "submitted"; resolution: TransactionSubmissionResolution }
@@ -51,12 +50,19 @@ type TransactionSubmissionState =
   | { state: "waiting" };
 
 const readTransactionSubmissionState = (meta: TransactionMeta): TransactionSubmissionState => {
-  if (isSubmittedTransaction(meta)) {
-    const { submitted, locator } = meta;
-    return { state: "submitted", resolution: { submitted, locator } };
+  if (meta.request === null) {
+    // Durable records only exist after broadcast succeeds. Later record transitions
+    // like failed/replaced do not change the original provider completion result.
+    return {
+      state: "submitted",
+      resolution: {
+        submitted: structuredClone(meta.submitted),
+        locator: structuredClone(meta.locator),
+      },
+    };
   }
 
-  if (isFailedTransaction(meta)) {
+  if (isFailedProposalSubmission(meta)) {
     return { state: "failed", error: new TransactionSubmissionError(meta) };
   }
 
@@ -236,7 +242,7 @@ export class StoreTransactionController implements TransactionController {
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
-    return this.#proposals.beginTransactionApproval(request, requestContext, options);
+    return this.#beginTransactionApprovalWithProviderCompletion(request, requestContext, options);
   }
 
   retryPrepare(transactionId: string): Promise<void> {
@@ -260,7 +266,9 @@ export class StoreTransactionController implements TransactionController {
     const cached = this.getMeta(id);
     if (cached) {
       const state = readTransactionSubmissionState(cached);
-      if (state.state === "submitted") return Promise.resolve(state.resolution);
+      if (state.state === "submitted") {
+        return Promise.resolve(state.resolution);
+      }
       if (state.state === "failed") return Promise.reject(state.error);
     }
 
@@ -289,12 +297,6 @@ export class StoreTransactionController implements TransactionController {
         reject(state.error);
       };
 
-      const failWaiting = (error: unknown) => {
-        if (stopWaiting()) {
-          reject(error);
-        }
-      };
-
       const unsubscribe = this.onStatusChanged(({ id: changeId, meta }) => {
         if (changeId === id) {
           completeFromMeta(meta);
@@ -310,21 +312,41 @@ export class StoreTransactionController implements TransactionController {
           }
         },
       );
+      const submittedAfterSubscribe = this.#submitted.get(id);
+      if (submittedAfterSubscribe) {
+        if (stopWaiting()) {
+          resolve(structuredClone(submittedAfterSubscribe));
+        }
+        return;
+      }
 
-      const cachedMeta = this.getMeta(id);
-      const initial = cachedMeta ? Promise.resolve(cachedMeta) : this.#recordView.getOrLoad(id);
-
-      initial.then(
-        (initialMeta) => {
-          if (!initialMeta) {
-            failWaiting(new Error(`Transaction ${id} not found after approval`));
-            return;
-          }
-
-          completeFromMeta(initialMeta);
-        },
-        (error) => failWaiting(error),
-      );
+      const initialMeta = this.getMeta(id);
+      if (initialMeta) {
+        completeFromMeta(initialMeta);
+        if (!isWaiting) {
+          return;
+        }
+      } else {
+        void this.#recordView.getOrLoad(id).then(
+          (loadedMeta) => {
+            if (!isWaiting) {
+              return;
+            }
+            if (!loadedMeta) {
+              if (stopWaiting()) {
+                reject(new Error(`Transaction ${id} not found after approval`));
+              }
+              return;
+            }
+            completeFromMeta(loadedMeta);
+          },
+          (error) => {
+            if (stopWaiting()) {
+              reject(error);
+            }
+          },
+        );
+      }
     });
   }
 
@@ -357,5 +379,70 @@ export class StoreTransactionController implements TransactionController {
       if (!oldest) break;
       this.#submitted.delete(oldest);
     }
+  }
+
+  async #beginTransactionApprovalWithProviderCompletion(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    options: BeginTransactionApprovalOptions,
+  ): Promise<TransactionApprovalHandoff> {
+    const handoff = await this.#proposals.beginTransactionApproval(request, requestContext, options);
+    const abortSignal = options.requestBinding?.signal ?? null;
+
+    if (!abortSignal) {
+      return {
+        ...handoff,
+        waitForProviderCompletion: () => this.waitForTransactionSubmission(handoff.transactionId),
+      };
+    }
+
+    const cancelBeforeBroadcast = () => {
+      void this.rejectTransaction(handoff.transactionId, createTransactionTransportDisconnectedError());
+    };
+
+    let cleanupAbortBinding = () => {};
+    let isCleanedUp = false;
+    let unsubscribeTerminal = () => {};
+    const cleanup = () => {
+      if (isCleanedUp) {
+        return;
+      }
+      isCleanedUp = true;
+      cleanupAbortBinding();
+      cleanupAbortBinding = () => {};
+      unsubscribeTerminal();
+    };
+
+    unsubscribeTerminal = this.onStatusChanged((change) => {
+      if (change.id !== handoff.transactionId) {
+        return;
+      }
+      if (
+        (change.kind === "proposal_phase" && isProposalTerminal(change.proposal)) ||
+        (change.kind === "record_status" && isTransactionRecordTerminal(change.record))
+      ) {
+        cleanup();
+      }
+    });
+
+    if (abortSignal.aborted) {
+      cancelBeforeBroadcast();
+    } else {
+      abortSignal.addEventListener("abort", cancelBeforeBroadcast, { once: true });
+      cleanupAbortBinding = () => {
+        abortSignal.removeEventListener("abort", cancelBeforeBroadcast);
+      };
+    }
+
+    return {
+      ...handoff,
+      waitForProviderCompletion: async () => {
+        try {
+          return await this.waitForTransactionSubmission(handoff.transactionId);
+        } finally {
+          cleanup();
+        }
+      },
+    };
   }
 }

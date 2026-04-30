@@ -22,7 +22,7 @@ import {
   toRecord,
 } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
-import { TRANSACTION_TOPICS } from "./topics.js";
+import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type { TransactionApproveResult, TransactionMeta, TransactionRecordView } from "./types.js";
 
 const createProposalServiceStub = (params?: {
@@ -61,6 +61,7 @@ const createExecutionService = (params?: {
   recordView?: ReturnType<typeof createRecordViewStub>;
   proposals?: ReturnType<typeof createProposalServiceStub>;
   tracking?: ReturnType<typeof createTrackingStub>;
+  messenger?: Messenger;
 }) => {
   const proposalStore = params?.proposalStore ?? createProposalStore();
   const recordView = params?.recordView ?? createRecordViewStub();
@@ -85,8 +86,9 @@ const createExecutionService = (params?: {
       prepareTransactionForExecution: vi.fn(async (id: string) => proposalStore.get(id) ?? null),
     });
   const tracking = params?.tracking ?? createTrackingStub();
+  const messenger = params?.messenger ?? new Messenger();
   const execution = new TransactionExecutionService({
-    messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
+    messenger: messenger.scope({ publish: TRANSACTION_TOPICS }),
     proposalStore,
     recordView,
     accountCodecs,
@@ -105,6 +107,7 @@ const createExecutionService = (params?: {
     service,
     prepare,
     tracking,
+    messenger,
   };
 };
 
@@ -534,6 +537,51 @@ describe("TransactionExecutionService", () => {
       },
     });
     expect(broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("treats the broadcast-started event as already irreversible for cancellation races", async () => {
+    const messenger = new Messenger();
+    const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
+    const broadcastTransaction = vi.fn(async () => ({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    }));
+    const createSubmitted = vi.fn(async (input) => ({
+      id: input.id ?? REQUEST_ID,
+      chainRef: input.chainRef,
+      origin: input.origin,
+      fromAccountKey: input.fromAccountKey,
+      status: "broadcast" as const,
+      submitted: input.submitted,
+      locator: input.locator,
+      createdAt: input.createdAt ?? 1,
+      updatedAt: input.createdAt ?? 1,
+    }));
+    const recordView = createRecordViewStub();
+    const { execution, proposalStore } = createExecutionService({
+      messenger,
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          sign: signTransaction as never,
+          broadcast: broadcastTransaction as never,
+        }),
+      ),
+      service: createTransactionsServiceStub({
+        createSubmitted,
+      }),
+      recordView,
+    });
+    createApprovedTransactionProposal(proposalStore);
+
+    messenger.subscribe(TRANSACTION_BROADCAST_STARTED, ({ id }) => {
+      void execution.rejectTransaction(id, new Error("User cancelled too late"));
+    });
+
+    await execution.processTransaction(REQUEST_ID);
+
+    expect(createSubmitted).toHaveBeenCalledTimes(1);
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
+    expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the broadcast result when rejection races after broadcast has started", async () => {

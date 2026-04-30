@@ -724,6 +724,196 @@ describe("createBackgroundRuntime provider access", () => {
     }
   });
 
+  it("keeps eth_sendTransaction successful when the provider scope is lost during broadcast", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    let releaseBroadcast: (() => void) | null = null;
+    const broadcastReleased = new Promise<void>((resolve) => {
+      releaseBroadcast = resolve;
+    });
+    const txHash = "0x1919191919191919191919191919191919191919191919191919191919191919";
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async (ctx, _signed, prepared) => {
+      await broadcastReleased;
+      return {
+        submitted: buildEip155Submitted({
+          txHash,
+          from: ctx.from ?? "0x0000000000000000000000000000000000000000",
+          prepared: prepared as Record<string, unknown>,
+        }),
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+      };
+    });
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(
+      chain.namespace,
+      createNamespaceTransactionMock({
+        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x9" } })),
+        broadcastTransaction,
+      }),
+    );
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
+    const unsubscribeAutoApproval = background.enableAutoApproval();
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: activeChain.chainRef,
+        address,
+      });
+
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+        id: "rpc-send-broadcast-cancelled",
+        jsonrpc: "2.0",
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: address,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        ],
+        origin: ORIGIN,
+        context: buildProviderContext({
+          namespace: activeChain.namespace,
+          chainRef: activeChain.chainRef,
+        }),
+      });
+
+      await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
+      await expect(
+        background.runtime.providerAccess.cancelRequestScope({
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "session-1",
+        }),
+      ).resolves.toBe(1);
+
+      releaseBroadcast?.();
+
+      await expect(pendingResponse).resolves.toMatchObject({
+        id: "rpc-send-broadcast-cancelled",
+        jsonrpc: "2.0",
+        result: txHash,
+      });
+      await vi.waitFor(async () => {
+        const records = await background.transactionsPort.list();
+        expect(records).toHaveLength(1);
+      });
+    } finally {
+      releaseBroadcast?.();
+      unsubscribeAutoApproval();
+      background.destroy();
+    }
+  });
+
+  it("stops eth_sendTransaction before broadcast when the provider scope is lost during signing", async () => {
+    const chain = createChainMetadata({
+      chainRef: "eip155:1",
+      chainId: "0x1",
+      displayName: "Ethereum Mainnet",
+    });
+    let releaseSign: (() => void) | null = null;
+    const signReleased = new Promise<void>((resolve) => {
+      releaseSign = resolve;
+    });
+    const signTransaction = vi.fn<NamespaceTransactionExecution["sign"]>(async () => {
+      await signReleased;
+      return { raw: "0x1111" };
+    });
+    const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async () => ({
+      submitted: buildEip155Submitted({
+        txHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+        from: "0x0000000000000000000000000000000000000000",
+      }),
+      locator: {
+        format: "eip155.tx_hash",
+        value: "0x3333333333333333333333333333333333333333333333333333333333333333",
+      },
+    }));
+    const namespaceTransactions = new NamespaceTransactions();
+    namespaceTransactions.register(
+      chain.namespace,
+      createNamespaceTransactionMock({
+        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0xa" } })),
+        signTransaction,
+        broadcastTransaction,
+      }),
+    );
+    const background = await setupBackground({
+      chainSeed: [chain],
+      transactions: { namespaces: namespaceTransactions },
+      persistDebounceMs: 0,
+    });
+    const unsubscribeAutoApproval = background.enableAutoApproval();
+
+    try {
+      await initializeUnlockedSession(background.runtime);
+      const { chain: activeChain, address } = await deriveActiveAccount(background.runtime);
+      await grantProviderPermission(background.runtime, {
+        origin: ORIGIN,
+        chainRef: activeChain.chainRef,
+        address,
+      });
+
+      const pendingResponse = background.runtime.providerAccess.executeRpcRequest({
+        id: "rpc-send-sign-cancelled",
+        jsonrpc: "2.0",
+        method: "eth_sendTransaction",
+        params: [
+          {
+            from: address,
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x0",
+          },
+        ],
+        origin: ORIGIN,
+        context: buildProviderContext({
+          namespace: activeChain.namespace,
+          chainRef: activeChain.chainRef,
+        }),
+      });
+
+      await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+      await expect(
+        background.runtime.providerAccess.cancelRequestScope({
+          transport: "provider",
+          origin: ORIGIN,
+          portId: "port-1",
+          sessionId: "session-1",
+        }),
+      ).resolves.toBe(1);
+
+      releaseSign?.();
+      const response = await pendingResponse;
+
+      expect(response).toMatchObject({
+        id: "rpc-send-sign-cancelled",
+        jsonrpc: "2.0",
+        error: {
+          code: 4900,
+        },
+      });
+      expect(broadcastTransaction).not.toHaveBeenCalled();
+    } finally {
+      releaseSign?.();
+      unsubscribeAutoApproval();
+      background.destroy();
+    }
+  });
+
   it("returns eth_sendTransaction success after broadcast even when local transaction persistence fails", async () => {
     class FailingCreateTransactionsPort extends MemoryTransactionsPort {
       createCalls = 0;

@@ -75,6 +75,53 @@ describe("createProviderRequests", () => {
     });
   });
 
+  it("aborts request-bound work when the provider scope is cancelled", async () => {
+    const providerRequests = createProviderRequests({
+      generateId: () => "request-4",
+      now: () => 400,
+      cancelApproval: async () => {},
+    });
+
+    const handle = providerRequests.beginRequest({
+      scope: REQUEST_SCOPE,
+      rpcId: "rpc-send",
+      providerNamespace: "eip155",
+      method: "eth_sendTransaction",
+    });
+
+    expect(handle.signal.aborted).toBe(false);
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+
+    expect(handle.signal.aborted).toBe(true);
+    expect(handle.signal.reason).toMatchObject({
+      reason: ArxReasons.TransportDisconnected,
+    });
+    expect(providerRequests.has("request-4")).toBe(false);
+  });
+
+  it("keeps a cancelled request terminal even if completion arrives later", async () => {
+    const providerRequests = createProviderRequests({
+      generateId: () => "request-5",
+      now: () => 500,
+      cancelApproval: async () => {},
+    });
+
+    const handle = providerRequests.beginRequest({
+      scope: REQUEST_SCOPE,
+      rpcId: "rpc-send-fail",
+      providerNamespace: "eip155",
+      method: "eth_sendTransaction",
+    });
+
+    await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
+
+    expect(handle.reject()).toBe(false);
+    expect(handle.getTerminalError()).toMatchObject({
+      reason: ArxReasons.TransportDisconnected,
+    });
+    expect(providerRequests.has("request-5")).toBe(false);
+  });
+
   it("does not resurrect a request when it is cancelled while creating the blocking approval", async () => {
     const cancelApproval = vi.fn(async () => {});
     const generatedIds = ["request-3", "approval-3"];

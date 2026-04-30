@@ -156,7 +156,7 @@ describe("TransactionProposalService", () => {
     });
   });
 
-  it("attaches provider-scoped transaction approvals through the provider request handle", async () => {
+  it("attaches transaction approvals through the provided approval binding", async () => {
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,
       settled: Promise.resolve(undefined),
@@ -195,14 +195,9 @@ describe("TransactionProposalService", () => {
       REQUEST_CONTEXT,
       {
         from: DEFAULT_FROM,
-        providerRequestHandle: {
+        requestBinding: {
           id: REQUEST_CONTEXT.requestId,
-          providerNamespace: "eip155",
           attachBlockingApproval,
-          fulfill: () => true,
-          reject: () => true,
-          cancel: async () => true,
-          getTerminalError: () => null,
         },
       },
     );
@@ -249,16 +244,11 @@ describe("TransactionProposalService", () => {
         REQUEST_CONTEXT,
         {
           from: DEFAULT_FROM,
-          providerRequestHandle: {
+          requestBinding: {
             id: REQUEST_CONTEXT.requestId,
-            providerNamespace: "eip155",
             attachBlockingApproval: () => {
               throw attachFailure;
             },
-            fulfill: () => true,
-            reject: () => true,
-            cancel: async () => true,
-            getTerminalError: () => attachFailure,
           },
         },
       ),
@@ -271,7 +261,7 @@ describe("TransactionProposalService", () => {
       id: REQUEST_ID,
       status: "failed",
       error: {
-        name: "ArxError",
+        name: "TransportDisconnectedError",
         message: "Transport disconnected.",
         data: { portId: REQUEST_CONTEXT.portId },
       },

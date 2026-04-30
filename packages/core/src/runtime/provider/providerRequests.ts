@@ -34,6 +34,7 @@ export type BlockingApprovalReservation = {
 export type ProviderRequestHandle = {
   id: string;
   providerNamespace: string;
+  signal: AbortSignal;
   attachBlockingApproval<K extends ApprovalKind>(
     createApproval: (reservation: BlockingApprovalReservation) => ApprovalHandle<K>,
     reservation?: Partial<BlockingApprovalReservation>,
@@ -133,6 +134,7 @@ export const createProviderRequests = ({
 
   const beginRequest = (input: ProviderRequestBeginInput): ProviderRequestHandle => {
     const id = generateId();
+    const abortController = new AbortController();
     let currentRecord: ProviderRequestRecord = {
       id,
       scope: { ...input.scope },
@@ -174,6 +176,7 @@ export const createProviderRequests = ({
     const handle: ProviderRequestHandle = {
       id,
       providerNamespace: currentRecord.providerNamespace,
+      signal: abortController.signal,
       attachBlockingApproval: (createApproval, reservationInput) => {
         if (terminalState) {
           throw createTerminalRequestError(currentRecord, terminalState);
@@ -223,6 +226,8 @@ export const createProviderRequests = ({
         if (!didTransition) {
           return false;
         }
+
+        abortController.abort(createTerminalRequestError(currentRecord, { status: "cancelled", reason }));
 
         if (currentRecord.blockingApprovalId) {
           await cancelApproval({

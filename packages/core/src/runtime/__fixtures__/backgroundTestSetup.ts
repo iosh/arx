@@ -823,6 +823,7 @@ export const createRpcHarness = async (options: RpcHarnessOptions = {}): Promise
             providerRequestHandle: {
               id: requestContext.requestId,
               providerNamespace: namespace,
+              signal: new AbortController().signal,
               attachBlockingApproval: <T>(
                 createApproval: (reservation: { approvalId: string; createdAt: number }) => T,
                 reservation?: Partial<{ approvalId: string; createdAt: number }>,

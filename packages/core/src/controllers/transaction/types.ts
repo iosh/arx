@@ -2,7 +2,6 @@ import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
 import type { TransactionStatus as StorageTransactionStatus } from "../../storage/records.js";
 import type {
   TransactionError,
@@ -12,7 +11,7 @@ import type {
   TransactionSubmissionLocator,
   TransactionSubmitted,
 } from "../../transactions/types.js";
-import type { ApprovalCreateParams, ApprovalKinds } from "../approval/types.js";
+import type { ApprovalCreateParams, ApprovalHandle, ApprovalKind, ApprovalKinds } from "../approval/types.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
 
 export type TransactionProposalPhase = "pending" | "approved" | "executing" | "invalidated" | "failed";
@@ -60,6 +59,24 @@ export type TransactionSubmittedChange = {
   id: string;
   submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
+};
+
+export type TransactionBroadcastStartedChange = {
+  id: string;
+};
+
+export type TransactionApprovalReservation = {
+  approvalId: string;
+  createdAt: number;
+};
+
+export type TransactionRequestBinding = {
+  id: string;
+  signal?: AbortSignal | null;
+  attachBlockingApproval<K extends ApprovalKind>(
+    createApproval: (reservation: TransactionApprovalReservation) => ApprovalHandle<K>,
+    reservation?: Partial<TransactionApprovalReservation>,
+  ): ApprovalHandle<K>;
 };
 
 type TransactionMetaBase = {
@@ -145,11 +162,15 @@ export type TransactionApprovalRequestPayload = {
 
 export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKinds.SendTransaction>;
 
-export type TransactionApprovalHandoff = {
+export type TransactionApprovalRequestHandoff = {
   transactionId: string;
   approvalId: string;
   pendingMeta: TransactionMeta;
   waitForApprovalDecision(): Promise<TransactionMeta>;
+};
+
+export type TransactionApprovalHandoff = TransactionApprovalRequestHandoff & {
+  waitForProviderCompletion(): Promise<TransactionSubmissionResolution>;
 };
 
 export type TransactionApproveFailureReason =
@@ -171,7 +192,7 @@ export type TransactionApproveResult =
 
 export type BeginTransactionApprovalOptions = {
   from: AccountAddress;
-  providerRequestHandle?: ProviderRequestHandle | null;
+  requestBinding?: TransactionRequestBinding | null;
 };
 
 export type TransactionSubmissionResolution = {

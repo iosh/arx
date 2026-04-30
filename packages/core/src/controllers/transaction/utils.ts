@@ -60,6 +60,14 @@ export const createTransactionPersistenceError = (params: {
 
 export const coerceTransactionError = (reason?: Error | TransactionError | undefined): TransactionError | undefined => {
   if (!reason) return undefined;
+  if (isArxError(reason) && reason.reason === ArxReasons.TransportDisconnected) {
+    return {
+      name: "TransportDisconnectedError",
+      message: reason.message,
+      code: 4900,
+      ...(reason.data !== undefined ? { data: reason.data } : {}),
+    };
+  }
   if ("name" in reason && "message" in reason && typeof reason.name === "string") {
     const error: TransactionError = {
       name: reason.name,

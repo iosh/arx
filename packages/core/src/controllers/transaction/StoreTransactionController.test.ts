@@ -2,13 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
-import type { TransactionRecord } from "../../storage/records.js";
 import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../transactions/namespace/types.js";
 import { DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { StoreTransactionController } from "./StoreTransactionController.js";
-import { TRANSACTION_STATUS_CHANGED, TRANSACTION_SUBMITTED, TRANSACTION_TOPICS } from "./topics.js";
-import type { TransactionMeta } from "./types.js";
+import { TRANSACTION_SUBMITTED, TRANSACTION_TOPICS } from "./topics.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 const chainRef = "eip155:10";
@@ -21,37 +19,6 @@ const requestContext = {
   sessionId: "session-1",
   requestId: "request-1",
 };
-
-const createBroadcastRecord = (id: string): TransactionRecord => ({
-  id,
-  chainRef,
-  origin: requestContext.origin,
-  fromAccountKey: accountCodecs.toAccountKeyFromAddress({ chainRef, address: from }),
-  status: "broadcast",
-  submitted: DEFAULT_SUBMITTED,
-  locator: DEFAULT_LOCATOR,
-  createdAt: 1,
-  updatedAt: 1,
-});
-
-const createBroadcastMeta = (id: string): TransactionMeta => ({
-  id,
-  namespace: "eip155",
-  chainRef,
-  origin: requestContext.origin,
-  from,
-  request: null,
-  prepared: null,
-  status: "broadcast",
-  submitted: DEFAULT_SUBMITTED,
-  locator: DEFAULT_LOCATOR,
-  receipt: null,
-  replacedId: null,
-  error: null,
-  userRejected: false,
-  createdAt: 1,
-  updatedAt: 1,
-});
 
 const createTransactionsService = (overrides?: Partial<TransactionsService>): TransactionsService => ({
   subscribeChanged: vi.fn(() => () => {}),
@@ -111,54 +78,6 @@ const createController = (
 };
 
 describe("StoreTransactionController", () => {
-  it("does not miss submission while loading the initial transaction state", async () => {
-    const messenger = new Messenger();
-    const service = createTransactionsService();
-    const controller = createController(
-      {
-        proposal: {
-          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
-        },
-        tracking: {
-          fetchReceipt: vi.fn(async () => null),
-        },
-      },
-      { service, messenger },
-    );
-    const record = createBroadcastRecord("tx-1");
-    vi.mocked(service.get).mockImplementationOnce(async () => {
-      messenger.publish(TRANSACTION_STATUS_CHANGED, {
-        kind: "record_status",
-        id: record.id,
-        previousStatus: null,
-        nextStatus: "broadcast",
-        record: {
-          kind: "record",
-          id: record.id,
-          namespace: "eip155",
-          chainRef: record.chainRef,
-          origin: record.origin,
-          from,
-          status: "broadcast",
-          submitted: record.submitted,
-          locator: record.locator,
-          receipt: null,
-          replacedId: null,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-        },
-        meta: createBroadcastMeta(record.id),
-      });
-      return record;
-    });
-
-    const pending = controller.waitForTransactionSubmission(record.id);
-    await expect(pending).resolves.toMatchObject({
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
-    });
-  });
-
   it("resolves submission waits from the broadcast result without durable meta fields", async () => {
     const messenger = new Messenger();
     const controller = createController(
@@ -183,6 +102,91 @@ describe("StoreTransactionController", () => {
     await expect(pending).resolves.toEqual({
       submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
+    });
+  });
+
+  it("loads submission waits from durable storage when in-memory caches are cold", async () => {
+    const accountKey = accountCodecs.toAccountKeyFromAddress({ chainRef, address: from });
+    const controller = createController(
+      {
+        proposal: {
+          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+        },
+        tracking: {
+          fetchReceipt: vi.fn(async () => null),
+        },
+      },
+      {
+        service: createTransactionsService({
+          get: vi.fn(async (id) => {
+            if (id !== "durable-tx") {
+              return null;
+            }
+            return {
+              id,
+              chainRef,
+              origin: requestContext.origin,
+              fromAccountKey: accountKey,
+              status: "broadcast" as const,
+              submitted: DEFAULT_SUBMITTED,
+              locator: DEFAULT_LOCATOR,
+              createdAt: 1,
+              updatedAt: 1,
+            };
+          }),
+        }),
+      },
+    );
+
+    await expect(controller.waitForTransactionSubmission("durable-tx")).resolves.toEqual({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+  });
+
+  it("rejects missing submission waits instead of hanging forever", async () => {
+    const controller = createController({
+      proposal: {
+        prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+      },
+      tracking: {
+        fetchReceipt: vi.fn(async () => null),
+      },
+    });
+
+    await expect(controller.waitForTransactionSubmission("missing-tx")).rejects.toThrow(
+      "Transaction missing-tx not found after approval",
+    );
+  });
+
+  it("rejects submission waits when the proposal failed before broadcast", async () => {
+    const controller = createController({
+      proposal: {
+        prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+      },
+      tracking: {
+        fetchReceipt: vi.fn(async () => null),
+      },
+    });
+
+    const handoff = await controller.beginTransactionApproval(
+      {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+        },
+      },
+      requestContext,
+      { from },
+    );
+
+    await controller.rejectTransaction(handoff.transactionId, new Error("User cancelled before submission"));
+
+    await expect(controller.waitForTransactionSubmission(handoff.transactionId)).rejects.toMatchObject({
+      message: "User cancelled before submission",
     });
   });
 });

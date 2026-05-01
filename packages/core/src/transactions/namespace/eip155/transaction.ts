@@ -84,7 +84,7 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
       applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
     },
     execution: {
-      sign: (context, prepared) => deps.signer.signTransaction(context, prepared),
+      sign: (context, prepared, options) => deps.signer.signTransaction(context, prepared, options),
       async broadcast(context, signed, prepared) {
         const broadcast = await deps.broadcaster.broadcast(context, signed);
         const preparedTransaction = prepared as Eip155PreparedTransaction;

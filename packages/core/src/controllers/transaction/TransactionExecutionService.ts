@@ -41,6 +41,11 @@ type TransactionExecutionServiceDeps = {
 
 type TransactionExecutionAttemptPhase = "queued" | "processing" | "signing" | "broadcasting" | "persisting_record";
 
+type TransactionExecutionAttemptState = {
+  phase: TransactionExecutionAttemptPhase;
+  signAbortController: AbortController | null;
+};
+
 export class TransactionExecutionService
   implements Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "resumePending">
 {
@@ -59,7 +64,7 @@ export class TransactionExecutionService
   #queued = new Set<string>();
   #processing = new Set<string>();
   #scheduled = false;
-  #attempts = new Map<string, TransactionExecutionAttemptPhase>();
+  #attempts = new Map<string, TransactionExecutionAttemptState>();
 
   constructor(deps: TransactionExecutionServiceDeps) {
     this.#messenger = deps.messenger;
@@ -88,29 +93,40 @@ export class TransactionExecutionService
     return this.#finalizeExternalCancellation(id, reason);
   }
 
-  async #finalizeProposalFailure(
-    id: string,
-    reason: Error | TransactionError | undefined,
-    source: "external" | "internal",
-  ): Promise<void> {
+  #buildCancellationState(reason?: Error | TransactionError) {
     const error = coerceTransactionError(reason) ?? null;
-    const wantsUserRejected = isUserRejectedError(reason, error ?? undefined);
+    return {
+      error,
+      userRejected: isUserRejectedError(reason, error ?? undefined),
+    };
+  }
 
+  #failActiveProposal(
+    id: string,
+    cancellation: {
+      error: TransactionError | null;
+      userRejected: boolean;
+    },
+  ): boolean {
     const proposal = this.#proposalStore.peek(id);
-    if (proposal && !isProposalTerminal(proposal)) {
-      this.#queued.delete(id);
-      const attemptPhase = this.#attempts.get(id);
-      if (source === "external" && this.#shouldIgnoreIrreversibleAttemptCancellation(attemptPhase)) {
-        return;
-      }
-      this.#proposalStore.failProposal({
-        id,
-        updatedAt: this.#readTransactionTimestamp(),
-        patch: {
-          error,
-          userRejected: wantsUserRejected,
-        },
-      });
+    if (!proposal || isProposalTerminal(proposal)) {
+      return false;
+    }
+
+    this.#proposalStore.failProposal({
+      id,
+      updatedAt: this.#readTransactionTimestamp(),
+      patch: {
+        error: cancellation.error,
+        userRejected: cancellation.userRejected,
+      },
+    });
+    return true;
+  }
+
+  async #finalizeExecutionFailure(id: string, reason?: Error | TransactionError): Promise<void> {
+    const cancellation = this.#buildCancellationState(reason);
+    if (this.#failActiveProposal(id, cancellation)) {
       return;
     }
 
@@ -120,7 +136,7 @@ export class TransactionExecutionService
     }
 
     const latest = this.#recordView.commitRecordView(latestRecord).next;
-    if (latest.status === "broadcast" && wantsUserRejected) {
+    if (latest.status === "broadcast" && cancellation.userRejected) {
       return;
     }
     if (isTransactionRecordTerminal(latest)) {
@@ -149,18 +165,18 @@ export class TransactionExecutionService
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
-      this.#attempts.set(id, "processing");
+      this.#setAttemptPhase(id, "processing");
       await this.#finalizeExecutionFailure(id, createMissingNamespaceTransactionError(meta.namespace));
       return;
     }
     if (!namespaceTransaction.tracking) {
-      this.#attempts.set(id, "processing");
+      this.#setAttemptPhase(id, "processing");
       await this.#finalizeExecutionFailure(id, createReceiptTrackingUnsupportedError(meta.namespace));
       return;
     }
 
     try {
-      this.#attempts.set(id, "processing");
+      this.#setAttemptPhase(id, "processing");
       let prepared = meta.prepared;
       if (!prepared) {
         const next = await this.#prepare.prepareTransactionForExecution(id);
@@ -183,13 +199,16 @@ export class TransactionExecutionService
         operation: "execution.sign",
         value: namespaceTransaction.execution?.sign,
       });
-      this.#attempts.set(id, "signing");
-      const signed = await sign(buildSignContext(meta), prepared);
+      const signAbortController = new AbortController();
+      this.#setAttemptPhase(id, "signing", signAbortController);
+      const signed = await sign(buildSignContext(meta), prepared, {
+        signal: signAbortController.signal,
+      });
       if (!this.#canContinueAttempt(id)) {
         return;
       }
 
-      this.#attempts.set(id, "broadcasting");
+      this.#setAttemptPhase(id, "broadcasting");
       this.#messenger.publish(TRANSACTION_BROADCAST_STARTED, { id });
       const broadcastTransaction = requireNamespaceTransactionOperation({
         namespace: meta.namespace,
@@ -204,7 +223,7 @@ export class TransactionExecutionService
         locator: structuredClone(broadcast.locator),
       });
 
-      this.#attempts.set(id, "persisting_record");
+      this.#setAttemptPhase(id, "persisting_record");
       let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
         if (!meta.from) {
@@ -272,7 +291,10 @@ export class TransactionExecutionService
   #enqueue(id: string) {
     if (this.#processing.has(id) || this.#queued.has(id)) return;
     this.#queued.add(id);
-    this.#attempts.set(id, "queued");
+    this.#attempts.set(id, {
+      phase: "queued",
+      signAbortController: null,
+    });
     this.#queue.push(id);
     this.#scheduleProcess();
   }
@@ -310,16 +332,48 @@ export class TransactionExecutionService
     return proposal?.phase === "approved";
   }
 
-  #shouldIgnoreIrreversibleAttemptCancellation(attemptPhase: TransactionExecutionAttemptPhase | undefined): boolean {
-    return attemptPhase === "broadcasting" || attemptPhase === "persisting_record";
+  #setAttemptPhase(
+    id: string,
+    phase: TransactionExecutionAttemptPhase,
+    signAbortController: AbortController | null = null,
+  ): void {
+    this.#attempts.set(id, {
+      phase,
+      signAbortController,
+    });
+  }
+
+  #removeFromQueue(id: string): void {
+    this.#queued.delete(id);
+    if (this.#queue.length === 0) {
+      return;
+    }
+    this.#queue = this.#queue.filter((queuedId) => queuedId !== id);
+  }
+
+  #isIrreversibleAttempt(phase: TransactionExecutionAttemptPhase | undefined): boolean {
+    return phase === "broadcasting" || phase === "persisting_record";
   }
 
   async #finalizeExternalCancellation(id: string, reason?: Error | TransactionError): Promise<void> {
-    return this.#finalizeProposalFailure(id, reason, "external");
-  }
+    const cancellation = this.#buildCancellationState(reason);
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || isProposalTerminal(proposal)) {
+      return;
+    }
 
-  async #finalizeExecutionFailure(id: string, reason?: Error | TransactionError): Promise<void> {
-    return this.#finalizeProposalFailure(id, reason, "internal");
+    this.#removeFromQueue(id);
+    const attempt = this.#attempts.get(id) ?? null;
+    if (attempt) {
+      if (attempt.phase === "signing") {
+        attempt.signAbortController?.abort(reason);
+      }
+      if (this.#isIrreversibleAttempt(attempt.phase)) {
+        return;
+      }
+    }
+
+    this.#failActiveProposal(id, cancellation);
   }
 
   async #listAllByStatus(status: "broadcast" | "confirmed" | "failed" | "replaced") {

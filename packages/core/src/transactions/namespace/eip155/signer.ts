@@ -9,7 +9,7 @@ import * as TypedData from "ox/TypedData";
 import { eip155Codec } from "../../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
-import type { SignedTransactionPayload, TransactionSignContext } from "../types.js";
+import type { SignedTransactionPayload, TransactionSignContext, TransactionSignOptions } from "../types.js";
 import type { Eip155PreparedTransaction } from "./types.js";
 
 const textEncoder = new TextEncoder();
@@ -22,6 +22,7 @@ export type Eip155Signer = {
   signTransaction: (
     context: TransactionSignContext,
     prepared: Record<string, unknown>,
+    options?: TransactionSignOptions,
   ) => Promise<SignedTransactionPayload>;
   signPersonalMessage: (params: { accountKey: string; message: HexType | string }) => Promise<HexType>;
   signTypedData: (params: { accountKey: string; typedData: string }) => Promise<HexType>;
@@ -42,6 +43,19 @@ const readErrorMessage = (value: unknown) => {
 };
 
 const isHexValue = (value: unknown): value is HexType => typeof value === "string" && value.startsWith("0x");
+
+const throwIfSignAborted = (signal?: AbortSignal) => {
+  if (!signal?.aborted) {
+    return;
+  }
+
+  const reason = signal.reason;
+  if (reason instanceof Error) {
+    throw reason;
+  }
+
+  throw new Error("Transaction signing aborted.");
+};
 
 function toBigInt(value: HexType | null | undefined, label: string, required: true): bigint;
 function toBigInt(value: HexType | null | undefined, label: string, required?: false): bigint | undefined;
@@ -203,13 +217,15 @@ const parseTypedDataPayload = (raw: string) => {
 };
 
 export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer => {
-  const signTransaction: Eip155Signer["signTransaction"] = async (context, preparedInput) => {
+  const signTransaction: Eip155Signer["signTransaction"] = async (context, preparedInput, options) => {
     if (context.namespace !== "eip155") {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
         message: `EIP-155 signer cannot handle namespace "${context.namespace}".`,
       });
     }
+
+    throwIfSignAborted(options?.signal);
 
     const requestPayload = context.request.payload;
     const payloadFrom =
@@ -224,6 +240,7 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
 
     const fromAccountKey = toEip155AccountKey({ chainRef: context.chainRef, address: context.from });
     await accountSigning.assertAccountUnlocked(fromAccountKey);
+    throwIfSignAborted(options?.signal);
     const prepared = preparedInput as Eip155PreparedTransaction;
     const chainId = deriveChainId(context, preparedInput);
     const envelope = buildEnvelope(prepared, chainId);

@@ -34,6 +34,10 @@ export type SignedTransactionPayload = {
   raw: string;
 };
 
+export type TransactionSignOptions = {
+  signal?: AbortSignal | undefined;
+};
+
 export type TransactionPrepareContext = {
   namespace: string;
   chainRef: ChainRef;
@@ -91,7 +95,11 @@ export type NamespaceTransactionProposal = {
 };
 
 export type NamespaceTransactionExecution = {
-  sign(context: TransactionSignContext, prepared: TransactionPrepared): Promise<SignedTransactionPayload>;
+  sign(
+    context: TransactionSignContext,
+    prepared: TransactionPrepared,
+    options?: TransactionSignOptions,
+  ): Promise<SignedTransactionPayload>;
   broadcast(
     context: TransactionPrepareContext,
     signed: SignedTransactionPayload,

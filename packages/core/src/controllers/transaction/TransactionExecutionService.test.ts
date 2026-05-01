@@ -238,7 +238,40 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("marks durable broadcast transactions as failed when rejection happens after submission", async () => {
+  it("cancels a queued execution before processing starts", async () => {
+    const proposalStore = createProposalStore();
+    createApprovedTransactionProposal(proposalStore);
+    const approveForExecution = vi.fn(() => ({
+      status: "approved" as const,
+      transaction: proposalStore.get(REQUEST_ID) as TransactionMeta,
+    }));
+    const { execution } = createExecutionService({
+      proposalStore,
+      proposals: createProposalServiceStub({ approveForExecution }),
+    });
+    const processSpy = vi.spyOn(execution, "processTransaction").mockResolvedValue(undefined);
+
+    const approved = execution.approveTransaction(REQUEST_ID);
+    await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
+    await expect(approved).resolves.toMatchObject({
+      status: "approved",
+    });
+    await Promise.resolve();
+
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
+      id: REQUEST_ID,
+      status: "failed",
+      userRejected: false,
+      error: {
+        message: "Transport disconnected.",
+      },
+    });
+
+    processSpy.mockRestore();
+  });
+
+  it("does not rewrite a durable broadcast transaction when rejection happens after submission", async () => {
     const durableMeta: TransactionMeta = {
       id: REQUEST_ID,
       namespace: "eip155",
@@ -262,27 +295,13 @@ describe("TransactionExecutionService", () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    const failedMeta: TransactionMeta = {
-      ...durableMeta,
-      status: "failed",
-      updatedAt: 2,
-    };
-    const transition = vi.fn(async () => toRecord(failedMeta));
     const commitRecordView = vi.fn((record: TransactionRecord) => {
-      if (record.status === "broadcast") {
-        return {
-          next: createRecordViewFromMeta(durableMeta),
-        };
-      }
-
-      const next = createRecordViewFromMeta({
-        ...failedMeta,
-        locator: record.locator,
-        updatedAt: record.updatedAt,
-      });
       return {
-        previous: createRecordViewFromMeta(durableMeta),
-        next,
+        next: createRecordViewFromMeta({
+          ...durableMeta,
+          locator: record.locator,
+          updatedAt: record.updatedAt,
+        }),
       };
     });
     const stop = vi.fn();
@@ -290,7 +309,6 @@ describe("TransactionExecutionService", () => {
     const { execution } = createExecutionService({
       service: createTransactionsServiceStub({
         get: vi.fn(async () => toRecord(durableMeta)),
-        transition,
       }),
       recordView: createRecordViewStub({
         commitRecordView,
@@ -303,16 +321,8 @@ describe("TransactionExecutionService", () => {
 
     await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
 
-    expect(transition).toHaveBeenCalledWith({
-      id: REQUEST_ID,
-      fromStatus: "broadcast",
-      toStatus: "failed",
-    });
-    expect(stop).toHaveBeenCalledWith(REQUEST_ID);
-    expect(handleTransition).toHaveBeenCalledWith(
-      createRecordViewFromMeta(durableMeta),
-      createRecordViewFromMeta(failedMeta),
-    );
+    expect(stop).not.toHaveBeenCalled();
+    expect(handleTransition).not.toHaveBeenCalled();
   });
 
   it("creates a durable record only after broadcast succeeds", async () => {
@@ -526,6 +536,54 @@ describe("TransactionExecutionService", () => {
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
 
     await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
+    releaseSign?.();
+    await processing;
+
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
+      id: REQUEST_ID,
+      status: "failed",
+      error: {
+        message: "User cancelled before submission",
+      },
+    });
+    expect(broadcastTransaction).not.toHaveBeenCalled();
+  });
+
+  it("aborts an in-flight signing attempt when external cancellation arrives", async () => {
+    let observedSignal: AbortSignal | null = null;
+    let releaseSign: (() => void) | null = null;
+    const signBlocked = new Promise<void>((resolve) => {
+      releaseSign = resolve;
+    });
+    const signTransaction = vi.fn(async (_context, _prepared, options?: { signal?: AbortSignal }) => {
+      observedSignal = options?.signal ?? null;
+      await signBlocked;
+      if (observedSignal?.aborted) {
+        throw (observedSignal.reason as Error) ?? new Error("Transaction signing aborted.");
+      }
+      return { raw: "0x1111" };
+    });
+    const broadcastTransaction = vi.fn(async () => ({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    }));
+
+    const { execution, proposalStore } = createExecutionService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          sign: signTransaction as never,
+          broadcast: broadcastTransaction as never,
+        }),
+      ),
+    });
+    createApprovedTransactionProposal(proposalStore);
+
+    const processing = execution.processTransaction(REQUEST_ID);
+    await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
+
+    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
+    expect(observedSignal?.aborted).toBe(true);
+
     releaseSign?.();
     await processing;
 
@@ -826,6 +884,6 @@ describe("TransactionExecutionService", () => {
     await execution.processTransaction(REQUEST_ID);
 
     expect(prepareTransactionForExecution).toHaveBeenCalledWith(REQUEST_ID);
-    expect(signTransaction).toHaveBeenCalledWith(expect.anything(), { gas: "0x5208" });
+    expect(signTransaction).toHaveBeenCalledWith(expect.anything(), { gas: "0x5208" }, { signal: expect.anything() });
   });
 });

@@ -241,17 +241,15 @@ export class TransactionExecutionService
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
-        this.#proposalStore.failProposal({
+        this.#proposalStore.markUnpersistedProposal({
           id,
           updatedAt: this.#readTransactionTimestamp(),
-          patch: {
-            error: createTransactionPersistenceError({
-              cause: persistenceFailure,
-              transactionId: id,
-              submitted: broadcast.submitted,
-              locator: broadcast.locator,
-            }),
-          },
+          error: createTransactionPersistenceError({
+            cause: persistenceFailure,
+            transactionId: id,
+            submitted: broadcast.submitted,
+            locator: broadcast.locator,
+          }),
         });
         return;
       }

@@ -409,6 +409,23 @@ export class TransactionProposalStore {
     });
   }
 
+  markUnpersistedProposal(input: {
+    id: string;
+    updatedAt: number;
+    error: TransactionError;
+  }): TransactionProposalMeta | null {
+    return this.#moveProposal({
+      id: input.id,
+      expected: "approved",
+      next: "unpersisted",
+      updatedAt: input.updatedAt,
+      patch: {
+        error: input.error,
+        userRejected: false,
+      },
+    });
+  }
+
   delete(id: string): boolean {
     const deleted = this.#records.delete(id);
     if (deleted) {
@@ -503,7 +520,7 @@ export class TransactionProposalStore {
       review,
       phase: state.phase,
       failure:
-        state.phase === "failed" || state.userRejected || state.error
+        state.phase === "failed" || state.phase === "unpersisted" || state.userRejected || state.error
           ? {
               error: structuredClone(state.error),
               userRejected: state.userRejected,

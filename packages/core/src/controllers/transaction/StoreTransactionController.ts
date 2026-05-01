@@ -38,6 +38,29 @@ import { TransactionSubmissionError } from "./types.js";
 const isFailedProposalSubmission = (view: TransactionView): view is TransactionProposalView =>
   view.kind === "proposal" && view.phase === "failed";
 
+const isUnpersistedProposalSubmission = (view: TransactionView): view is TransactionProposalView =>
+  view.kind === "proposal" && view.phase === "unpersisted";
+
+const readUnpersistedSubmissionResolution = (view: TransactionProposalView): TransactionSubmissionResolution | null => {
+  const data = view.failure?.error?.data;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const candidate = data as {
+    submitted?: unknown;
+    locator?: unknown;
+  };
+  if (!candidate.submitted || !candidate.locator) {
+    return null;
+  }
+
+  return {
+    submitted: structuredClone(candidate.submitted) as TransactionSubmissionResolution["submitted"],
+    locator: structuredClone(candidate.locator) as TransactionSubmissionResolution["locator"],
+  };
+};
+
 const createTransactionTransportDisconnectedError = (): TransactionError => ({
   name: "TransportDisconnectedError",
   message: "Transport disconnected.",
@@ -59,6 +82,18 @@ const readTransactionSubmissionOutcome = (view: TransactionView): TransactionSub
 
   if (isFailedProposalSubmission(view)) {
     return { state: "failed", error: new TransactionSubmissionError(view) };
+  }
+
+  if (isUnpersistedProposalSubmission(view)) {
+    const resolution = readUnpersistedSubmissionResolution(view);
+    if (!resolution) {
+      return null;
+    }
+
+    return {
+      state: "submitted",
+      resolution,
+    };
   }
 
   return null;

@@ -39,7 +39,7 @@ export const sendTransactionApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Send
       });
     }
 
-    return result.transaction;
+    return null;
   },
   async onReject(record, input, deps) {
     await deps.transactions.rejectTransaction(requireTransactionSubject(record).transactionId, input.error);

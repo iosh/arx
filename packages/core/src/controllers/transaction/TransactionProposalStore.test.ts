@@ -391,4 +391,56 @@ describe("TransactionProposalStore", () => {
 
     expect(store.listExecutableProposalIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
   });
+
+  it("marks a proposal as unpersisted when broadcast succeeded but local record creation failed", () => {
+    const store = createStore();
+    const id = "77777777-7777-4777-8777-777777777777";
+
+    store.createPendingProposal({
+      id,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    store.approvePendingProposal({ id, updatedAt: 2 });
+
+    expect(
+      store.markUnpersistedProposal({
+        id,
+        updatedAt: 3,
+        error: {
+          name: "TransactionPersistenceError",
+          message: "Transaction was broadcast but could not be persisted locally.",
+          data: {
+            submitted: { hash: "0xdeadbeef" },
+            locator: { format: "eip155.tx_hash", value: "0xdeadbeef" },
+          },
+        },
+      }),
+    ).toMatchObject({
+      status: "unpersisted",
+      error: {
+        name: "TransactionPersistenceError",
+      },
+    });
+
+    expect(store.getView(id)).toMatchObject({
+      kind: "proposal",
+      phase: "unpersisted",
+      failure: {
+        error: {
+          name: "TransactionPersistenceError",
+        },
+      },
+    });
+    expect(store.listExecutableProposalIds()).toEqual([]);
+  });
 });

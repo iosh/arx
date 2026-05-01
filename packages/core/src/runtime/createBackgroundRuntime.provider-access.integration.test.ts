@@ -1016,7 +1016,7 @@ describe("createBackgroundRuntime provider access", () => {
         capturedTransactionId ? background.runtime.controllers.transactions.getView(capturedTransactionId) : null,
       ).toMatchObject({
         kind: "proposal",
-        phase: "failed",
+        phase: "unpersisted",
         failure: {
           error: {
             name: "TransactionPersistenceError",

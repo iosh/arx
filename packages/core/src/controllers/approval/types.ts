@@ -4,7 +4,7 @@ import type { ChainNamespace } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { AccountKey } from "../../storage/records.js";
 import type { RequestPermissionsApprovalPayload, RequestPermissionsApprovalResult } from "../permission/types.js";
-import type { TransactionApprovalRequestPayload, TransactionProposalView } from "../transaction/types.js";
+import type { TransactionApprovalRequestPayload } from "../transaction/types.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
 export { getApprovalKind, getApprovalType } from "./constants.js";
@@ -76,7 +76,7 @@ export type ApprovalResultByKind = {
   [ApprovalKinds.RequestPermissions]: RequestPermissionsApprovalResult;
   [ApprovalKinds.SignMessage]: string;
   [ApprovalKinds.SignTypedData]: string;
-  [ApprovalKinds.SendTransaction]: TransactionProposalView;
+  [ApprovalKinds.SendTransaction]: null;
   [ApprovalKinds.SwitchChain]: null;
   [ApprovalKinds.AddChain]: null;
 };

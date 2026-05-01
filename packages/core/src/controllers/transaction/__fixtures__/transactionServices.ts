@@ -111,7 +111,7 @@ export const createAccountControllerStub = (params?: {
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
   input?: Partial<TransactionProposalMeta> & {
-    status?: "pending" | "approved" | "failed" | undefined;
+    status?: "pending" | "approved" | "failed" | "unpersisted" | undefined;
     draftRevision?: number;
     fromAccountKey?: string;
   },
@@ -158,6 +158,19 @@ export const createTransactionProposal = (
         patch: {
           error: input?.error ?? undefined,
           userRejected: input?.userRejected ?? undefined,
+        },
+      }) ?? created
+    );
+  }
+  if (requestedPhase === "unpersisted") {
+    proposalStore.approvePendingProposal({ id, updatedAt });
+    return (
+      proposalStore.markUnpersistedProposal({
+        id,
+        updatedAt,
+        error: input?.error ?? {
+          name: "TransactionPersistenceError",
+          message: "Transaction was broadcast but could not be persisted locally.",
         },
       }) ?? created
     );

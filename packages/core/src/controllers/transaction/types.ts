@@ -19,7 +19,7 @@ import type {
   TransactionReviewRuntimeStatus,
 } from "./review/types.js";
 
-export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
+export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed" | "unpersisted";
 export type TransactionRecordStatus = StorageTransactionStatus;
 
 export type TransactionApprovalChainMetadata = {

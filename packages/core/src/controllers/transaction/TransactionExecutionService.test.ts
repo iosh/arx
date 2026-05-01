@@ -66,7 +66,7 @@ const createProposalServiceStub = (params?: { approveForExecution?: (id: string)
           },
           review: {
             updatedAt: 1,
-            prepare: { state: "idle" },
+            prepare: { state: "preparing" },
             namespaceReview: null,
           },
           phase: "approved",
@@ -510,7 +510,7 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("keeps a failed proposal when durable persistence fails after broadcast", async () => {
+  it("keeps an unpersisted proposal when durable persistence fails after broadcast", async () => {
     const { execution, proposalStore } = createExecutionService({
       service: createTransactionsServiceStub({
         createSubmitted: vi.fn(async () => {
@@ -523,7 +523,7 @@ describe("TransactionExecutionService", () => {
     await execution.processTransaction(REQUEST_ID);
 
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
-      status: "failed",
+      status: "unpersisted",
       error: {
         name: "TransactionPersistenceError",
         message: "Transaction was broadcast but could not be persisted locally.",

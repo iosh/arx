@@ -1,59 +1,49 @@
-import type { TransactionMeta } from "../types.js";
-import type { NamespaceTransactionReview, SendTransactionApprovalReview, TransactionReviewSession } from "./types.js";
-
-const deriveUpdatedAt = (transaction: TransactionMeta | undefined, session?: TransactionReviewSession): number => {
-  return session?.updatedAt ?? transaction?.updatedAt ?? 0;
-};
+import type {
+  NamespaceTransactionReview,
+  SendTransactionApprovalReview,
+  TransactionProposalReviewState,
+} from "./types.js";
 
 export const buildSendTransactionApprovalReview = (args: {
-  transaction: TransactionMeta | undefined;
-  session?: TransactionReviewSession | undefined;
+  updatedAt: number;
+  review: TransactionProposalReviewState | null;
+  hasPrepared?: boolean | undefined;
   namespaceReview: NamespaceTransactionReview | null;
 }): SendTransactionApprovalReview => {
-  const updatedAt = deriveUpdatedAt(args.transaction, args.session);
-
-  if (!args.session) {
-    if (args.transaction?.prepared) {
-      return {
-        updatedAt,
-        namespaceReview: args.namespaceReview,
-        prepare: { state: "ready" },
-      };
-    }
-
+  if (args.review?.status === "ready") {
     return {
-      updatedAt,
-      namespaceReview: args.namespaceReview,
-      prepare: { state: "preparing" },
-    };
-  }
-
-  if (args.session.status === "ready") {
-    return {
-      updatedAt,
+      updatedAt: args.updatedAt,
       namespaceReview: args.namespaceReview,
       prepare: { state: "ready" },
     };
   }
 
-  if (args.session.status === "blocked" && args.session.blocker) {
+  if (args.review?.status === "blocked" && args.review.blocker) {
     return {
-      updatedAt,
+      updatedAt: args.updatedAt,
       namespaceReview: args.namespaceReview,
-      prepare: { state: "blocked", blocker: args.session.blocker },
+      prepare: { state: "blocked", blocker: args.review.blocker },
     };
   }
 
-  if ((args.session.status === "failed" || args.session.status === "invalidated") && args.session.error) {
+  if ((args.review?.status === "failed" || args.review?.status === "invalidated") && args.review.error) {
     return {
-      updatedAt,
+      updatedAt: args.updatedAt,
       namespaceReview: args.namespaceReview,
-      prepare: { state: "failed", error: args.session.error },
+      prepare: { state: "failed", error: args.review.error },
+    };
+  }
+
+  if (args.hasPrepared) {
+    return {
+      updatedAt: args.updatedAt,
+      namespaceReview: args.namespaceReview,
+      prepare: { state: "ready" },
     };
   }
 
   return {
-    updatedAt,
+    updatedAt: args.updatedAt,
     namespaceReview: args.namespaceReview,
     prepare: { state: "preparing" },
   };

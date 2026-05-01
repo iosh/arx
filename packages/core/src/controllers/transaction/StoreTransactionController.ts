@@ -7,7 +7,6 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { ApprovalController } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
-import { TransactionReviewSessions } from "./review/session.js";
 import { isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -118,7 +117,6 @@ export class StoreTransactionController implements TransactionController {
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
-    const reviewSessions = new TransactionReviewSessions();
 
     const readSystemTime = options.now ?? Date.now;
     const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
@@ -149,14 +147,7 @@ export class StoreTransactionController implements TransactionController {
     const prepare = new TransactionPrepareManager({
       proposalStore: this.#proposalStore,
       namespaces: options.namespaces,
-      reviewSessions,
       logger,
-      onReviewSessionChanged: (transactionId, updatedAt) => {
-        options.messenger.publish(TRANSACTION_STATE_CHANGED, {
-          revision: updatedAt,
-          transactionIds: [transactionId],
-        });
-      },
     });
 
     this.#proposals = new TransactionProposalService({
@@ -169,7 +160,6 @@ export class StoreTransactionController implements TransactionController {
       approvals: options.approvals,
       namespaces: options.namespaces,
       prepare,
-      reviewSessions,
       readTransactionTimestamp,
     });
 
@@ -191,24 +181,7 @@ export class StoreTransactionController implements TransactionController {
       if (changed) {
         this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
           revision: changed.updatedAt,
-          transactionIds: [changed.transactionId],
-        });
-      }
-    });
-
-    this.#messenger.subscribe(TRANSACTION_STATUS_CHANGED, (change) => {
-      const { id, meta } = change;
-      if (change.kind === "proposal_phase" && !isProposalTerminal(change.proposal)) {
-        return;
-      }
-      if (change.kind === "record_status" && !isTransactionRecordTerminal(change.record)) {
-        return;
-      }
-
-      if (this.#proposals.deleteReviewSession(id)) {
-        this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
-          revision: meta.updatedAt,
-          transactionIds: [id],
+          transactionIds: [event.subject?.kind === "transaction" ? event.subject.transactionId : ""].filter(Boolean),
         });
       }
     });

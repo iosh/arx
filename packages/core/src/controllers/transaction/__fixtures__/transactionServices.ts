@@ -7,7 +7,6 @@ import type { TransactionsService } from "../../../services/store/transactions/t
 import type { TransactionRecord } from "../../../storage/records.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
-import type { TransactionReviewSessions } from "../review/session.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
@@ -304,7 +303,25 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
     ),
 });
 
-export const markReviewReady = (reviewSessions: TransactionReviewSessions, transactionId: string, updatedAt = 1) => {
-  const session = reviewSessions.begin(transactionId, updatedAt);
-  reviewSessions.markReady(transactionId, session.sessionToken, updatedAt, {});
+export const markReviewReady = (
+  proposalStore: TransactionProposalStore,
+  transactionId: string,
+  input?: { updatedAt?: number; reviewPreparedSnapshot?: TransactionMeta["prepared"] },
+) => {
+  const updatedAt = input?.updatedAt ?? 1;
+  const current = proposalStore.peek(transactionId);
+  if (!current) {
+    throw new Error(`Proposal ${transactionId} not found`);
+  }
+  const session = proposalStore.beginPrepareSession({ id: transactionId, updatedAt });
+  if (!session) {
+    throw new Error(`Failed to begin prepare session for ${transactionId}`);
+  }
+  proposalStore.markReviewReady({
+    id: transactionId,
+    expectedDraftRevision: current.draftRevision,
+    sessionToken: session.sessionToken,
+    updatedAt,
+    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? {},
+  });
 };

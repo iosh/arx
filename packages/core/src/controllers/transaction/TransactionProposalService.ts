@@ -11,7 +11,6 @@ import type { ApprovalController, ApprovalFinishedEvent, ApprovalHandle } from "
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
-import type { TransactionReviewSessions } from "./review/session.js";
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
@@ -24,6 +23,7 @@ import type {
   TransactionApproveResult,
   TransactionController,
   TransactionError,
+  TransactionMeta,
   TransactionProposalMeta,
   TransactionRequest,
   TransactionView,
@@ -45,7 +45,6 @@ type TransactionProposalServiceDeps = {
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
   prepare: TransactionPrepareManager;
-  reviewSessions: TransactionReviewSessions;
   readTransactionTimestamp: () => number;
 };
 
@@ -61,7 +60,6 @@ export class TransactionProposalService
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
   #prepare: TransactionPrepareManager;
-  #reviewSessions: TransactionReviewSessions;
   #readTransactionTimestamp: () => number;
 
   constructor(deps: TransactionProposalServiceDeps) {
@@ -74,7 +72,6 @@ export class TransactionProposalService
     this.#approvals = deps.approvals;
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
-    this.#reviewSessions = deps.reviewSessions;
     this.#readTransactionTimestamp = deps.readTransactionTimestamp;
   }
 
@@ -97,12 +94,11 @@ export class TransactionProposalService
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
     const proposalView = this.#proposalStore.getView(input.transactionId);
     const proposalMeta = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
-    const session = this.#reviewSessions.get(input.transactionId);
     const request =
       input.request ?? (proposalMeta ? this.#buildApprovalRequestPayload(proposalMeta, input.transactionId) : null);
     const namespace = proposalMeta?.namespace ?? request?.request.namespace;
     const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
-    const reviewPreparedSnapshot = session ? session.reviewPreparedSnapshot : (proposalMeta?.prepared ?? null);
+    const reviewPreparedSnapshot = proposalView?.reviewState.reviewPreparedSnapshot ?? proposalMeta?.prepared ?? null;
     const namespaceReview =
       namespaceTransaction && request
         ? (namespaceTransaction.proposal?.buildReview?.({
@@ -113,8 +109,22 @@ export class TransactionProposalService
         : null;
 
     return buildSendTransactionApprovalReview({
-      transaction: proposalMeta,
-      session,
+      updatedAt: proposalView?.reviewState.updatedAt ?? proposalMeta?.updatedAt ?? 0,
+      review:
+        proposalView?.reviewState.status && proposalView.reviewState.sessionToken
+          ? {
+              sessionToken: proposalView.reviewState.sessionToken,
+              status: proposalView.reviewState.status,
+              updatedAt: proposalView.reviewState.updatedAt,
+              reviewPreparedSnapshot: proposalView.reviewState.reviewPreparedSnapshot,
+              blocker: proposalView.reviewState.blocker,
+              error: proposalView.reviewState.error,
+              ...(proposalView.reviewState.invalidatedBy !== undefined
+                ? { invalidatedBy: proposalView.reviewState.invalidatedBy }
+                : {}),
+            }
+          : null,
+      hasPrepared: Boolean(proposalMeta?.prepared),
       namespaceReview,
     });
   }
@@ -334,38 +344,38 @@ export class TransactionProposalService
       };
     }
 
-    const review = this.#reviewSessions.get(id);
-    if (review?.status === "blocked") {
+    const reviewState = this.#proposalStore.getView(id)?.reviewState ?? null;
+    if (reviewState?.status === "blocked") {
       return {
         status: "failed",
         reason: "prepare_blocked",
         transaction: existing,
-        message: review.blocker?.message ?? "Transaction is blocked.",
+        message: reviewState.blocker?.message ?? "Transaction is blocked.",
         data: {
           transactionId: id,
-          ...(review.blocker ? { blocker: review.blocker } : {}),
+          ...(reviewState.blocker ? { blocker: reviewState.blocker } : {}),
         },
       };
     }
-    if (review?.status === "failed") {
+    if (reviewState?.status === "failed" || reviewState?.status === "invalidated") {
       return {
         status: "failed",
         reason: "prepare_failed",
         transaction: existing,
-        message: review.error?.message ?? "Transaction preparation failed.",
+        message: reviewState.error?.message ?? "Transaction preparation failed.",
         data: {
           transactionId: id,
-          ...(review.error ? { error: review.error } : {}),
+          ...(reviewState.error ? { error: reviewState.error } : {}),
         },
       };
     }
-    if (review && review.status !== "ready") {
+    if (reviewState?.status && reviewState.status !== "ready") {
       return {
         status: "failed",
         reason: "prepare_not_ready",
         transaction: existing,
         message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: review.status },
+        data: { transactionId: id, prepareState: reviewState.status },
       };
     }
     if (!this.#proposalStore.hasCurrentPrepared(id)) {
@@ -412,11 +422,7 @@ export class TransactionProposalService
   }
 
   invalidateFromApproval(event: ApprovalFinishedEvent<unknown>) {
-    return this.#reviewSessions.invalidateFromApproval(event, this.#readTransactionTimestamp());
-  }
-
-  deleteReviewSession(transactionId: string): boolean {
-    return this.#reviewSessions.delete(transactionId);
+    return this.#proposalStore.invalidateReviewFromApproval(event, this.#readTransactionTimestamp());
   }
 
   #buildApprovalRequestPayload(

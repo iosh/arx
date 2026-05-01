@@ -12,7 +12,12 @@ import type {
   TransactionSubmitted,
 } from "../../transactions/types.js";
 import type { ApprovalCreateParams, ApprovalHandle, ApprovalKind, ApprovalKinds } from "../approval/types.js";
-import type { SendTransactionApprovalReview } from "./review/types.js";
+import type {
+  SendTransactionApprovalReview,
+  TransactionReviewBlocker,
+  TransactionReviewError,
+  TransactionReviewRuntimeStatus,
+} from "./review/types.js";
 
 export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
@@ -128,6 +133,15 @@ export type TransactionProposalView = {
   currentRequest: TransactionRequest;
   draftRevision: number;
   prepared: TransactionPrepared | null;
+  reviewState: {
+    sessionToken: string | null;
+    status: TransactionReviewRuntimeStatus | null;
+    reviewPreparedSnapshot: TransactionPrepared | null;
+    blocker: TransactionReviewBlocker | null;
+    error: TransactionReviewError | null;
+    invalidatedBy?: string | undefined;
+    updatedAt: number;
+  };
   review: SendTransactionApprovalReview;
   phase: TransactionProposalPhase;
   createdAt: number;

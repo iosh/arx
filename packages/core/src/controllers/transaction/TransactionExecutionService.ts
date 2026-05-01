@@ -21,10 +21,7 @@ import {
   isUserRejectedError,
 } from "./utils.js";
 
-type TransactionProposalExecutionGateway = Pick<
-  TransactionProposalService,
-  "approveForExecution" | "deleteReviewSession"
->;
+type TransactionProposalExecutionGateway = Pick<TransactionProposalService, "approveForExecution">;
 
 type TransactionExecutionServiceDeps = {
   messenger: TransactionMessenger;
@@ -260,7 +257,6 @@ export class TransactionExecutionService
       }
 
       this.#proposalStore.clearProposalAfterRecordPersisted(id);
-      this.#proposals.deleteReviewSession(id);
 
       const { previous, next } = this.#recordView.commitRecordView(durable);
       this.#tracking.handleTransition(previous, next);

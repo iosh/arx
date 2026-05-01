@@ -62,9 +62,7 @@ export type TransactionReviewPrepare = z.infer<typeof TransactionReviewPrepareSc
 export type SendTransactionApprovalReview = z.infer<typeof SendTransactionApprovalReviewSchema>;
 
 export type TransactionReviewRuntimeStatus = TransactionReviewPrepare["state"] | "invalidated";
-
-export type TransactionReviewSession = {
-  transactionId: string;
+export type TransactionProposalReviewState = {
   sessionToken: string;
   status: TransactionReviewRuntimeStatus;
   updatedAt: number;

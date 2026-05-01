@@ -4,7 +4,6 @@ import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
-  createDefaultAccountKey,
   createNamespacesStub,
   createNamespaceTransactionStub,
   createPrepareStub,
@@ -25,10 +24,7 @@ import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type { TransactionApproveResult, TransactionMeta, TransactionRecordView } from "./types.js";
 
-const createProposalServiceStub = (params?: {
-  approveForExecution?: (id: string) => TransactionApproveResult;
-  deleteReviewSession?: (transactionId: string) => boolean;
-}) =>
+const createProposalServiceStub = (params?: { approveForExecution?: (id: string) => TransactionApproveResult }) =>
   ({
     approveForExecution:
       params?.approveForExecution ??
@@ -39,7 +35,6 @@ const createProposalServiceStub = (params?: {
           status: "approved",
         },
       })),
-    deleteReviewSession: params?.deleteReviewSession ?? vi.fn(() => false),
   }) as never;
 
 const createTrackingStub = (params?: {
@@ -353,7 +348,6 @@ describe("TransactionExecutionService", () => {
       updatedAt: input.createdAt ?? 1,
     }));
     const handleTransition = vi.fn();
-    const deleteReviewSession = vi.fn(() => true);
     const recordView = createRecordViewStub();
     const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
@@ -369,9 +363,7 @@ describe("TransactionExecutionService", () => {
       tracking: createTrackingStub({
         handleTransition,
       }),
-      proposals: createProposalServiceStub({
-        deleteReviewSession,
-      }),
+      proposals: createProposalServiceStub(),
     });
 
     createApprovedTransactionProposal(proposalStore, {
@@ -412,7 +404,6 @@ describe("TransactionExecutionService", () => {
       }),
     );
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
-    expect(deleteReviewSession).toHaveBeenCalledWith(REQUEST_ID);
     expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
     expect(handleTransition).toHaveBeenCalledTimes(1);
   });

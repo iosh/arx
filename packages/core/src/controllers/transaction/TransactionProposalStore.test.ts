@@ -252,6 +252,108 @@ describe("TransactionProposalStore", () => {
     });
   });
 
+  it("owns review session state and rejects stale or invalidated review writes", () => {
+    const store = createStore();
+    const id = "4bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+    store.createPendingProposal({
+      id,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const started = store.beginPrepareSession({ id, updatedAt: 2 });
+    expect(started).toMatchObject({
+      status: "preparing",
+    });
+
+    expect(
+      store.markReviewBlocked({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: started?.sessionToken ?? "",
+        updatedAt: 3,
+        blocker: {
+          reason: "transaction.prepare.insufficient_funds",
+          message: "Insufficient funds for transaction.",
+        },
+        reviewPreparedSnapshot: { gas: "0x5208" },
+      }),
+    ).toMatchObject({
+      status: "blocked",
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
+
+    store.replacePendingDraftRequest({
+      id,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
+      },
+      updatedAt: 4,
+    });
+
+    expect(
+      store.markReviewReady({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: started?.sessionToken ?? "",
+        updatedAt: 5,
+        reviewPreparedSnapshot: { gas: "0x5300" },
+      }),
+    ).toBeNull();
+
+    const current = store.peek(id);
+    const currentSession = store.beginPrepareSession({ id, updatedAt: 6 });
+    expect(
+      store.invalidateReviewFromApproval(
+        {
+          approvalId: "approval-1",
+          status: "cancelled",
+          terminalReason: "locked",
+          subject: { kind: "transaction", transactionId: id },
+        },
+        7,
+      ),
+    ).toMatchObject({
+      status: "invalidated",
+      error: {
+        reason: "approval.locked",
+      },
+    });
+
+    expect(
+      store.markReviewFailed({
+        id,
+        expectedDraftRevision: current?.draftRevision ?? 1,
+        sessionToken: currentSession?.sessionToken ?? "",
+        updatedAt: 8,
+        error: {
+          reason: "transaction.prepare_failed",
+          message: "should be dropped",
+        },
+        reviewPreparedSnapshot: null,
+      }),
+    ).toBeNull();
+
+    expect(store.getView(id)?.reviewState).toMatchObject({
+      status: "invalidated",
+      error: {
+        reason: "approval.locked",
+      },
+    });
+  });
+
   it("only lists approved proposals as executable recovery work", () => {
     const store = createStore();
 

@@ -1,6 +1,5 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
-import type { TransactionReviewSessions } from "./review/session.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionMeta } from "./types.js";
@@ -12,19 +11,15 @@ const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 type Options = {
   proposalStore: TransactionProposalStore;
   namespaces: NamespaceTransactions;
-  reviewSessions: TransactionReviewSessions;
   logger?: (message: string, data?: unknown) => void;
   namespaceProposalPrepareTimeoutMs?: number;
   backgroundConcurrency?: number;
-  onReviewSessionChanged?: (transactionId: string, updatedAt: number) => void;
 };
 
 export class TransactionPrepareManager {
   #proposalStore: TransactionProposalStore;
   #namespaces: NamespaceTransactions;
-  #reviewSessions: TransactionReviewSessions;
   #logger: (message: string, data?: unknown) => void;
-  #onReviewSessionChanged: (transactionId: string, updatedAt: number) => void;
   #namespaceProposalPrepareTimeoutMs: number;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
@@ -36,9 +31,7 @@ export class TransactionPrepareManager {
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
     this.#namespaces = options.namespaces;
-    this.#reviewSessions = options.reviewSessions;
     this.#logger = options.logger ?? (() => {});
-    this.#onReviewSessionChanged = options.onReviewSessionChanged ?? (() => {});
     this.#namespaceProposalPrepareTimeoutMs =
       options.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
     this.#prepareConcurrencyLimit = Math.max(
@@ -129,25 +122,28 @@ export class TransactionPrepareManager {
       return meta;
     }
 
-    const session = this.#reviewSessions.begin(id, Date.now());
-    this.#proposalStore.patch(id, { updatedAt: meta.updatedAt });
+    const startedAt = Date.now();
+    const session = this.#proposalStore.beginPrepareSession({ id, updatedAt: startedAt });
+    if (!session) {
+      return this.#proposalStore.get(id) ?? null;
+    }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
       const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#proposalStore.get(id) ?? null;
-      const changed = this.#reviewSessions.markFailed(
+      this.#proposalStore.markReviewFailed({
         id,
-        session.sessionToken,
-        next.updatedAt,
-        {
+        expectedDraftRevision,
+        sessionToken: session.sessionToken,
+        updatedAt: next.updatedAt,
+        error: {
           reason: "transaction.adapter_missing",
           message: `No namespace transaction registered for namespace ${meta.namespace}`,
           data: { namespace: meta.namespace },
         },
-        null,
-      );
-      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+        reviewPreparedSnapshot: null,
+      });
       return next;
     }
 
@@ -167,31 +163,36 @@ export class TransactionPrepareManager {
       if (!next) return this.#proposalStore.get(id) ?? null;
 
       if (result.status === "ready") {
-        const changed = this.#reviewSessions.markReady(id, session.sessionToken, next.updatedAt, result.prepared);
-        if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+        this.#proposalStore.markReviewReady({
+          id,
+          expectedDraftRevision,
+          sessionToken: session.sessionToken,
+          updatedAt: next.updatedAt,
+          reviewPreparedSnapshot: result.prepared,
+        });
         return next;
       }
 
       if (result.status === "blocked") {
-        const changed = this.#reviewSessions.markBlocked(
+        this.#proposalStore.markReviewBlocked({
           id,
-          session.sessionToken,
-          next.updatedAt,
-          result.blocker,
+          expectedDraftRevision,
+          sessionToken: session.sessionToken,
+          updatedAt: next.updatedAt,
+          blocker: result.blocker,
           reviewPreparedSnapshot,
-        );
-        if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+        });
         return next;
       }
 
-      const changed = this.#reviewSessions.markFailed(
+      this.#proposalStore.markReviewFailed({
         id,
-        session.sessionToken,
-        next.updatedAt,
-        result.error,
+        expectedDraftRevision,
+        sessionToken: session.sessionToken,
+        updatedAt: next.updatedAt,
+        error: result.error,
         reviewPreparedSnapshot,
-      );
-      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+      });
       return next;
     } catch (error) {
       const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, null);
@@ -210,8 +211,14 @@ export class TransactionPrepareManager {
               reason: "transaction.prepare_failed",
               message: String(error),
             };
-      const changed = this.#reviewSessions.markFailed(id, session.sessionToken, next.updatedAt, reviewError, null);
-      if (changed) this.#onReviewSessionChanged(id, changed.updatedAt);
+      this.#proposalStore.markReviewFailed({
+        id,
+        expectedDraftRevision,
+        sessionToken: session.sessionToken,
+        updatedAt: next.updatedAt,
+        error: reviewError,
+        reviewPreparedSnapshot: null,
+      });
       return next;
     }
   }

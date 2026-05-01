@@ -24,11 +24,12 @@ import type {
   TransactionApproveResult,
   TransactionController,
   TransactionError,
-  TransactionMeta,
+  TransactionProposalMeta,
   TransactionRequest,
   TransactionView,
 } from "./types.js";
 import {
+  buildProposalContext,
   coerceTransactionError,
   createMissingNamespaceTransactionError,
   createTransactionSubmissionUnavailableError,
@@ -95,24 +96,24 @@ export class TransactionProposalService
 
   getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
     const proposalView = this.#proposalStore.getView(input.transactionId);
-    const transaction = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
+    const proposalMeta = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
     const session = this.#reviewSessions.get(input.transactionId);
     const request =
-      input.request ?? (transaction ? this.#buildApprovalRequestPayload(transaction, input.transactionId) : null);
-    const namespace = transaction?.namespace ?? request?.request.namespace;
+      input.request ?? (proposalMeta ? this.#buildApprovalRequestPayload(proposalMeta, input.transactionId) : null);
+    const namespace = proposalMeta?.namespace ?? request?.request.namespace;
     const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
-    const reviewPreparedSnapshot = session ? session.reviewPreparedSnapshot : (transaction?.prepared ?? null);
+    const reviewPreparedSnapshot = session ? session.reviewPreparedSnapshot : (proposalMeta?.prepared ?? null);
     const namespaceReview =
       namespaceTransaction && request
         ? (namespaceTransaction.proposal?.buildReview?.({
-            transaction,
+            proposal: proposalMeta ? buildProposalContext(proposalMeta) : null,
             request,
             reviewPreparedSnapshot,
           }) ?? null)
         : null;
 
     return buildSendTransactionApprovalReview({
-      transaction,
+      transaction: proposalMeta,
       session,
       namespaceReview,
     });
@@ -291,7 +292,7 @@ export class TransactionProposalService
 
     const request = this.#requireRuntimeRequest(meta);
     const nextRequest = namespaceTransaction.proposal.applyDraftEdit({
-      transaction: meta,
+      proposal: buildProposalContext(meta),
       request: structuredClone({
         ...request,
         chainRef: request.chainRef ?? meta.chainRef,
@@ -418,7 +419,10 @@ export class TransactionProposalService
     return this.#reviewSessions.delete(transactionId);
   }
 
-  #buildApprovalRequestPayload(meta: TransactionMeta | null, transactionId: string): TransactionApprovalRequestPayload {
+  #buildApprovalRequestPayload(
+    meta: TransactionProposalMeta | null,
+    transactionId: string,
+  ): TransactionApprovalRequestPayload {
     if (!meta) {
       throw new Error(`Transaction ${transactionId} not found`);
     }
@@ -454,15 +458,11 @@ export class TransactionProposalService
     });
   }
 
-  #requireRuntimeRequest(meta: TransactionMeta): TransactionRequest {
-    if (meta.request) {
-      return meta.request;
-    }
-
-    throw new Error(`Transaction ${meta.id} no longer has an editable proposal request.`);
+  #requireRuntimeRequest(meta: TransactionProposalMeta): TransactionRequest {
+    return meta.request;
   }
 
-  #buildChainMetadata(meta: TransactionMeta): TransactionApprovalChainMetadata | null {
+  #buildChainMetadata(meta: TransactionProposalMeta): TransactionApprovalChainMetadata | null {
     const resolved = this.#supportedChains.getChain(meta.chainRef)?.metadata ?? null;
     if (!resolved) return null;
 

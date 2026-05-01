@@ -1,7 +1,7 @@
 import type { Eip155TransactionPayload } from "../../../types.js";
-import type { TransactionPrepareContext } from "../../types.js";
+import type { TransactionPrepareContext, TransactionTrackingContext } from "../../types.js";
 
-import { TEST_ADDRESSES, TEST_CHAINS, TEST_VALUES } from "./constants.js";
+import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./constants.js";
 
 /**
  * Creates a minimal EIP-155 transaction request for testing.
@@ -61,22 +61,23 @@ export const createBroadcasterContext = (
 /**
  * Creates a context for receipt tests (transaction is already broadcast).
  */
-export const createReceiptContext = (overrides: Partial<TransactionPrepareContext> = {}): TransactionPrepareContext => {
-  const baseRequest: TransactionPrepareContext["request"] = {
-    namespace: "eip155",
-    chainRef: TEST_CHAINS.MAINNET,
-    payload: {
-      from: TEST_ADDRESSES.ACCOUNT_AA,
-      to: TEST_ADDRESSES.ACCOUNT_BB,
-      nonce: "0x3",
-      value: TEST_VALUES.ZERO,
-      data: TEST_VALUES.EMPTY_DATA,
-    },
-  };
-
-  return createPrepareContext({
+export const createReceiptContext = (
+  overrides: Partial<TransactionTrackingContext> = {},
+): TransactionTrackingContext => ({
+  recordId: "record-1",
+  namespace: "eip155",
+  chainRef: TEST_CHAINS.MAINNET,
+  origin: "https://dapp.example",
+  from: TEST_ADDRESSES.ACCOUNT_AA,
+  submitted: {
+    hash: TEST_TX_HASH,
+    chainId: TEST_CHAINS.MAINNET_CHAIN_ID,
     from: TEST_ADDRESSES.ACCOUNT_AA,
-    request: baseRequest,
-    ...overrides,
-  });
-};
+    nonce: "0x3",
+  },
+  locator: {
+    format: "eip155.tx_hash",
+    value: TEST_TX_HASH,
+  },
+  ...overrides,
+});

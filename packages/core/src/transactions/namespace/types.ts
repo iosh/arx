@@ -2,7 +2,6 @@ import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
-import type { TransactionMeta } from "../../controllers/transaction/types.js";
 import type {
   TransactionPrepared,
   TransactionReceipt,
@@ -50,8 +49,25 @@ export type TransactionValidationContext = TransactionPrepareContext;
 
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
-export type TransactionTrackingContext = Omit<TransactionPrepareContext, "request"> & {
-  request: null;
+export type TransactionProposalContext = {
+  proposalId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress | null;
+  currentRequest: TransactionRequest;
+  prepared: TransactionPrepared | null;
+};
+
+export type TransactionRecordContext = {
+  recordId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress | null;
+};
+
+export type TransactionTrackingContext = TransactionRecordContext & {
   submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
 };
@@ -71,13 +87,13 @@ export type ReplacementResolution = {
 };
 
 export type TransactionApprovalReviewContext = {
-  transaction: TransactionMeta | undefined;
+  proposal: TransactionProposalContext | null;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
   reviewPreparedSnapshot: TransactionPrepared | null;
 };
 
 export type TransactionDraftEditContext = {
-  transaction: TransactionMeta;
+  proposal: TransactionProposalContext;
   request: TransactionRequest;
   changes: ReadonlyArray<Record<string, unknown>>;
   mode?: string;

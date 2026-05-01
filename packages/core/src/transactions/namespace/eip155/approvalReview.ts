@@ -1,16 +1,16 @@
 import type { ApprovalKinds, ApprovalRequestByKind } from "../../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../../controllers/transaction/review/types.js";
-import type { TransactionMeta } from "../../../controllers/transaction/types.js";
 import type { Eip155TransactionPayload, TransactionPrepared } from "../../types.js";
+import type { TransactionProposalContext } from "../types.js";
 import type { Eip155PreparedTransaction } from "./types.js";
 
 const getApprovalPayload = (args: {
-  transaction: TransactionMeta | undefined;
+  proposal: TransactionProposalContext | null;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
 }): Eip155TransactionPayload => {
-  const transactionPayload = args.transaction?.request?.payload;
-  if (args.transaction?.request?.namespace === "eip155") {
-    return transactionPayload as Eip155TransactionPayload;
+  const proposalPayload = args.proposal?.currentRequest.payload;
+  if (args.proposal?.currentRequest.namespace === "eip155") {
+    return proposalPayload as Eip155TransactionPayload;
   }
 
   if (args.request.request.namespace !== "eip155") {
@@ -21,13 +21,13 @@ const getApprovalPayload = (args: {
 };
 
 export const buildEip155ApprovalReview = (args: {
-  transaction: TransactionMeta | undefined;
+  proposal: TransactionProposalContext | null;
   request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
   reviewPreparedSnapshot: TransactionPrepared | null;
 }): NamespaceTransactionReview => {
   const requestPayload = getApprovalPayload(args);
   const prepared = args.reviewPreparedSnapshot as Partial<Eip155PreparedTransaction> | null;
-  const sourceRequest = args.transaction?.request?.namespace === "eip155" ? args.transaction.request : null;
+  const sourceRequest = args.proposal?.currentRequest.namespace === "eip155" ? args.proposal.currentRequest : null;
   const sourcePayload: Eip155TransactionPayload = sourceRequest
     ? (sourceRequest.payload as Eip155TransactionPayload)
     : requestPayload;
@@ -35,7 +35,7 @@ export const buildEip155ApprovalReview = (args: {
   return {
     namespace: "eip155",
     summary: {
-      from: args.transaction?.from ?? args.request.from ?? "",
+      from: args.proposal?.from ?? args.request.from ?? "",
       to: typeof sourcePayload.to === "string" ? sourcePayload.to : null,
       value: sourcePayload.value,
       data: sourcePayload.data,

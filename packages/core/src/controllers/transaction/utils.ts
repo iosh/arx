@@ -1,13 +1,15 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type {
   TransactionPrepareContext,
+  TransactionProposalContext,
+  TransactionRecordContext,
   TransactionReplacementKey,
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
 import type {
   TransactionError,
-  TransactionMeta,
+  TransactionProposalMeta,
   TransactionRecordView,
   TransactionSubmissionLocator,
   TransactionSubmitted,
@@ -93,20 +95,37 @@ export const isUserRejectedError = (reason: unknown, coerced?: TransactionError)
   return rejected || coerced?.code === 4001 || coerced?.name === "TransactionRejectedError";
 };
 
-export const buildPrepareContext = (meta: TransactionMeta): TransactionPrepareContext => ({
+export const buildProposalContext = (meta: TransactionProposalMeta): TransactionProposalContext => ({
+  proposalId: meta.id,
   namespace: meta.namespace,
   chainRef: meta.chainRef,
   origin: meta.origin,
   from: meta.from,
-  request: structuredClone(meta.request ?? { namespace: meta.namespace, chainRef: meta.chainRef, payload: {} }),
+  currentRequest: structuredClone(meta.request),
+  prepared: structuredClone(meta.prepared),
 });
 
-export const buildTrackingContext = (record: TransactionRecordView): TransactionTrackingContext => ({
+export const buildPrepareContext = (meta: TransactionProposalMeta): TransactionPrepareContext => {
+  const proposal = buildProposalContext(meta);
+  return {
+    namespace: proposal.namespace,
+    chainRef: proposal.chainRef,
+    origin: proposal.origin,
+    from: proposal.from,
+    request: proposal.currentRequest,
+  };
+};
+
+export const buildRecordContext = (record: TransactionRecordView): TransactionRecordContext => ({
+  recordId: record.id,
   namespace: record.namespace,
   chainRef: record.chainRef,
   origin: record.origin,
   from: record.from,
-  request: null,
+});
+
+export const buildTrackingContext = (record: TransactionRecordView): TransactionTrackingContext => ({
+  ...buildRecordContext(record),
   submitted: structuredClone(record.submitted),
   locator: structuredClone(record.locator),
 });
@@ -115,7 +134,7 @@ export const encodeReplacementKey = (key: TransactionReplacementKey): string => 
   return `${key.scope}:${key.value}`;
 };
 
-export const buildSignContext = (meta: TransactionMeta): TransactionSignContext => {
+export const buildSignContext = (meta: TransactionProposalMeta): TransactionSignContext => {
   const ctx = buildPrepareContext(meta);
   if (!ctx.from) {
     throw arxError({

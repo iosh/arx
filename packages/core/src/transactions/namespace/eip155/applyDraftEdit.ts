@@ -21,6 +21,10 @@ const readFieldChange = (change: Readonly<Record<string, unknown>>) => {
 };
 
 export const applyEip155TransactionDraftEdit = (context: TransactionDraftEditContext): TransactionRequest => {
+  if (context.proposal.currentRequest.namespace !== "eip155") {
+    throw new Error(`EIP-155 draft editor cannot edit namespace "${context.proposal.currentRequest.namespace}".`);
+  }
+
   if (context.request.namespace !== "eip155") {
     throw new Error(`EIP-155 draft editor cannot edit namespace "${context.request.namespace}".`);
   }

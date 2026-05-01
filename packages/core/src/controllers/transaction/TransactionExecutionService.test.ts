@@ -220,7 +220,7 @@ describe("TransactionExecutionService", () => {
     const { execution, proposalStore } = createExecutionService();
     createTransactionProposal(proposalStore, {
       prepared: {},
-      status: "executing",
+      status: "approved",
     });
 
     const rejectionError = Object.assign(new Error("User rejected transaction"), { code: 4001 });
@@ -751,25 +751,12 @@ describe("TransactionExecutionService", () => {
     });
 
     createApprovedTransactionProposal(proposalStore);
-    createTransactionProposal(proposalStore, {
-      id: "executing-tx",
-      fromAccountKey: createDefaultAccountKey(),
-      request: {
-        namespace: "eip155",
-        chainRef: DEFAULT_CHAIN_REF,
-        payload: { from: DEFAULT_FROM, to: "0xcccccccccccccccccccccccccccccccccccccccc", value: "0x0" },
-      },
-      prepared: { gas: "0x5208" },
-      status: "executing",
-    });
-
     const processSpy = vi.spyOn(execution, "processTransaction").mockImplementation(processTransaction);
 
     await execution.resumePending();
     await Promise.resolve();
 
     expect(processSpy).toHaveBeenCalledWith(REQUEST_ID);
-    expect(processSpy).not.toHaveBeenCalledWith("executing-tx");
     processSpy.mockRestore();
     expect(list).toHaveBeenCalledTimes(2);
     expect(commitRecordView).toHaveBeenCalledWith(toRecord(broadcastMeta));

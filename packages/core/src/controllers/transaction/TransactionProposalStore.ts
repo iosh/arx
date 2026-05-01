@@ -217,37 +217,14 @@ export class TransactionProposalStore {
     });
   }
 
-  startExecution(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
-    return this.#moveProposal({
-      id: input.id,
-      expected: "approved",
-      next: "executing",
-      updatedAt: input.updatedAt,
-    });
-  }
-
-  failProposalBeforeBroadcast(input: {
+  failProposal(input: {
     id: string;
     updatedAt: number;
     patch?: TransactionProposalTransitionPatch | undefined;
   }): TransactionProposalMeta | null {
     return this.#moveProposal({
       id: input.id,
-      expected: ["pending", "approved", "executing"],
-      next: "failed",
-      updatedAt: input.updatedAt,
-      patch: input.patch,
-    });
-  }
-
-  failExecutingProposal(input: {
-    id: string;
-    updatedAt: number;
-    patch?: TransactionProposalTransitionPatch | undefined;
-  }): TransactionProposalMeta | null {
-    return this.#moveProposal({
-      id: input.id,
-      expected: "executing",
+      expected: ["pending", "approved"],
       next: "failed",
       updatedAt: input.updatedAt,
       patch: input.patch,
@@ -270,7 +247,7 @@ export class TransactionProposalStore {
 
   clearProposalAfterRecordPersisted(id: string): TransactionProposalMeta | null {
     const current = this.#records.get(id);
-    if (!current || current.phase !== "executing") {
+    if (!current || current.phase !== "approved") {
       return null;
     }
 

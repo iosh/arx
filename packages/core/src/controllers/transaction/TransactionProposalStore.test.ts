@@ -41,8 +41,6 @@ describe("TransactionProposalStore", () => {
       updatedAt: 1,
     });
     store.approvePendingProposal({ id: "11111111-1111-4111-8111-111111111111", updatedAt: 1 });
-    store.startExecution({ id: "11111111-1111-4111-8111-111111111111", updatedAt: 1 });
-
     request.payload.gas = "0x9999";
     prepared.fee.maxFeePerGas = "0x9";
     error.data.code = "E_CHANGED";
@@ -249,13 +247,8 @@ describe("TransactionProposalStore", () => {
       status: "approved",
     });
     expect(store.approvePendingProposal({ id: "44444444-4444-4444-8444-444444444444", updatedAt: 4 })).toBeNull();
-    expect(
-      store.startExecution({
-        id: "44444444-4444-4444-8444-444444444444",
-        updatedAt: 4,
-      }),
-    ).toMatchObject({
-      status: "executing",
+    expect(store.clearProposalAfterRecordPersisted("44444444-4444-4444-8444-444444444444")).toMatchObject({
+      status: "approved",
     });
   });
 
@@ -292,7 +285,7 @@ describe("TransactionProposalStore", () => {
       updatedAt: 1,
     });
     store.approvePendingProposal({ id: "66666666-6666-4666-8666-666666666666", updatedAt: 1 });
-    store.startExecution({ id: "66666666-6666-4666-8666-666666666666", updatedAt: 1 });
+    store.clearProposalAfterRecordPersisted("66666666-6666-4666-8666-666666666666");
 
     expect(store.listExecutableProposalIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
   });

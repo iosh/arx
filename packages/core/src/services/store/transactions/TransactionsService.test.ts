@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { type TransactionRecord, TransactionRecordSchema } from "../../../storage/records.js";
 import type { TransactionsPort } from "./port.js";
 import { createTransactionsService } from "./TransactionsService.js";
+import type { TransactionRecordConflictError } from "./types.js";
 
 const createInMemoryPort = (seed: TransactionRecord[] = []) => {
   const store = new Map<string, TransactionRecord>(seed.map((record) => [record.id, record]));
@@ -150,7 +151,7 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("createSubmitted() rejects duplicate ids instead of overwriting an existing record", async () => {
+  it("createSubmitted() returns the existing record for repeated submissions with the same id and locator", async () => {
     const { port } = createInMemoryPort([
       createSubmittedRecord({
         id: "33333333-3333-4333-8333-333333333333",
@@ -168,17 +169,20 @@ describe("TransactionsService", () => {
         fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         status: "broadcast",
         submitted: {
-          hash: "0x4444",
+          hash: "0x3333",
           chainId: "0x1",
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          nonce: "0x8",
+          nonce: "0x7",
         },
-        locator: { format: "eip155.tx_hash", value: "0x4444" },
+        locator: { format: "eip155.tx_hash", value: "0x3333" },
       }),
-    ).rejects.toThrow(/duplicate transaction id/i);
+    ).resolves.toMatchObject({
+      id: "33333333-3333-4333-8333-333333333333",
+      locator: { format: "eip155.tx_hash", value: "0x3333" },
+    });
   });
 
-  it("createSubmitted() rejects duplicate (chainRef, locator) pairs", async () => {
+  it("createSubmitted() rejects conflicting repeated submissions for the same id", async () => {
     const { port } = createInMemoryPort([
       createSubmittedRecord({
         id: "44444444-4444-4444-8444-444444444444",
@@ -190,7 +194,38 @@ describe("TransactionsService", () => {
 
     await expect(
       service.createSubmitted({
+        id: "44444444-4444-4444-8444-444444444444",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        status: "broadcast",
+        submitted: {
+          hash: "0xbbbb",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x8",
+        },
+        locator: { format: "eip155.tx_hash", value: "0xbbbb" },
+      }),
+    ).rejects.toMatchObject({
+      name: "TransactionRecordConflictError",
+      conflict: { kind: "id", id: "44444444-4444-4444-8444-444444444444" },
+    } satisfies Partial<TransactionRecordConflictError>);
+  });
+
+  it("createSubmitted() returns the existing record for repeated submissions with the same locator", async () => {
+    const { port } = createInMemoryPort([
+      createSubmittedRecord({
         id: "55555555-5555-4555-8555-555555555555",
+        status: "broadcast",
+        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
+      }),
+    ]);
+    const service = createTransactionsService({ port, now: () => 2_000 });
+
+    await expect(
+      service.createSubmitted({
+        id: "66666666-6666-4666-8666-666666666666",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
         fromAccountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -203,7 +238,10 @@ describe("TransactionsService", () => {
         },
         locator: { format: "eip155.tx_hash", value: "0xaaaa" },
       }),
-    ).rejects.toThrow(/Duplicate transaction locator/i);
+    ).resolves.toMatchObject({
+      id: "55555555-5555-4555-8555-555555555555",
+      locator: { format: "eip155.tx_hash", value: "0xaaaa" },
+    });
   });
 
   it("transition() throws on invalid status transitions", async () => {
@@ -332,7 +370,14 @@ describe("TransactionsService", () => {
           locator: { format: "eip155.tx_hash", value: "0xaaaa" },
         },
       }),
-    ).rejects.toThrow(/Duplicate transaction locator/i);
+    ).rejects.toMatchObject({
+      name: "TransactionRecordConflictError",
+      conflict: {
+        kind: "locator",
+        chainRef: "eip155:1",
+        existingId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+    } satisfies Partial<TransactionRecordConflictError>);
   });
 
   it("patchIfStatus() patches replacement relation without changing status", async () => {

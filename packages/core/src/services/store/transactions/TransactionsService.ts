@@ -11,14 +11,39 @@ import type {
   TransactionsService,
   TransitionTransactionParams,
 } from "./types.js";
+import { TransactionRecordConflictError } from "./types.js";
 
 export type CreateTransactionsServiceOptions = {
   port: TransactionsPort;
   now?: () => number;
 };
 
-const createDuplicateTransactionIdError = (id: TransactionRecord["id"]) => {
-  return new Error(`Duplicate transaction id "${id}"`);
+const createSubmittedTransactionIdConflictError = (id: TransactionRecord["id"]): TransactionRecordConflictError => {
+  return new TransactionRecordConflictError({ kind: "id", id });
+};
+
+const createSubmittedTransactionLocatorConflictError = (params: {
+  chainRef: TransactionRecord["chainRef"];
+  locator: TransactionRecord["locator"];
+  existingId: TransactionRecord["id"];
+}): TransactionRecordConflictError => {
+  return new TransactionRecordConflictError({
+    kind: "locator",
+    chainRef: params.chainRef,
+    locator: structuredClone(params.locator),
+    existingId: params.existingId,
+  });
+};
+
+const matchesSubmittedLocator = (
+  left: Pick<TransactionRecord, "chainRef" | "locator">,
+  right: Pick<TransactionRecord, "chainRef" | "locator">,
+) => {
+  return (
+    left.chainRef === right.chainRef &&
+    left.locator.format === right.locator.format &&
+    left.locator.value === right.locator.value
+  );
 };
 
 const compareTransactionsNewestFirst = (left: TransactionRecord, right: TransactionRecord) => {
@@ -74,7 +99,11 @@ export const createTransactionsService = ({
 
     const existing = await port.get(record.id);
     if (existing) {
-      throw createDuplicateTransactionIdError(record.id);
+      const parsedExisting = TransactionRecordSchema.parse(existing);
+      if (matchesSubmittedLocator(parsedExisting, record)) {
+        return parsedExisting;
+      }
+      throw createSubmittedTransactionIdConflictError(record.id);
     }
 
     const duplicateLocatorRecord = await port.findByChainRefAndLocator({
@@ -82,10 +111,36 @@ export const createTransactionsService = ({
       locator: record.locator,
     });
     if (duplicateLocatorRecord) {
-      throw new Error(`Duplicate transaction locator for chainRef ${record.chainRef}`);
+      const parsedLocatorRecord = TransactionRecordSchema.parse(duplicateLocatorRecord);
+      if (parsedLocatorRecord.id === record.id) {
+        return parsedLocatorRecord;
+      }
+      return parsedLocatorRecord;
     }
 
-    await port.create(record);
+    try {
+      await port.create(record);
+    } catch (error) {
+      const retryExisting = await port.get(record.id);
+      if (retryExisting) {
+        const parsedRetryExisting = TransactionRecordSchema.parse(retryExisting);
+        if (matchesSubmittedLocator(parsedRetryExisting, record)) {
+          return parsedRetryExisting;
+        }
+        throw createSubmittedTransactionIdConflictError(record.id);
+      }
+
+      const retryLocatorRecord = await port.findByChainRefAndLocator({
+        chainRef: record.chainRef,
+        locator: record.locator,
+      });
+      if (retryLocatorRecord) {
+        const parsedRetryLocatorRecord = TransactionRecordSchema.parse(retryLocatorRecord);
+        return parsedRetryLocatorRecord;
+      }
+
+      throw error;
+    }
     changed.emit({ kind: "createSubmitted", id: record.id });
     return record;
   };
@@ -121,7 +176,11 @@ export const createTransactionsService = ({
     });
 
     if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
-      throw new Error(`Duplicate transaction locator for chainRef ${nextCandidate.chainRef}`);
+      throw createSubmittedTransactionLocatorConflictError({
+        chainRef: nextCandidate.chainRef,
+        locator: nextCandidate.locator,
+        existingId: duplicateLocatorRecord.id,
+      });
     }
 
     const checked = TransactionRecordSchema.parse(nextCandidate);
@@ -173,7 +232,11 @@ export const createTransactionsService = ({
     });
 
     if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
-      throw new Error(`Duplicate transaction locator for chainRef ${nextCandidate.chainRef}`);
+      throw createSubmittedTransactionLocatorConflictError({
+        chainRef: nextCandidate.chainRef,
+        locator: nextCandidate.locator,
+        existingId: duplicateLocatorRecord.id,
+      });
     }
 
     const checked = TransactionRecordSchema.parse(nextCandidate);

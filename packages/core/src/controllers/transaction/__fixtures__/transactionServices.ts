@@ -112,7 +112,7 @@ export const createAccountControllerStub = (params?: {
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
   input?: Partial<Omit<TransactionMeta, "status" | "submitted" | "locator" | "receipt" | "replacedId">> & {
-    status?: "pending" | "approved" | "executing" | "failed" | undefined;
+    status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
     fromAccountKey?: string;
   },
@@ -151,13 +151,9 @@ export const createTransactionProposal = (
   if (requestedPhase === "approved") {
     return proposalStore.approvePendingProposal({ id, updatedAt }) ?? created;
   }
-  if (requestedPhase === "executing") {
-    proposalStore.approvePendingProposal({ id, updatedAt });
-    return proposalStore.startExecution({ id, updatedAt }) ?? created;
-  }
   if (requestedPhase === "failed") {
     return (
-      proposalStore.failProposalBeforeBroadcast({
+      proposalStore.failProposal({
         id,
         updatedAt,
         patch: {

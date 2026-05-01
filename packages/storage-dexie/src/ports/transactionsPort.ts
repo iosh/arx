@@ -29,64 +29,42 @@ export class DexieTransactionsPort implements TransactionsPort {
     await this.ctx.ready;
 
     const limit = query?.limit ?? 100;
-    const batchSize = Math.max(50, Math.min(200, limit * 2));
-
     const chainRef = query?.chainRef;
     const status = query?.status;
     const before = query?.before;
-    const minCreatedAt = Number.MIN_SAFE_INTEGER;
-    const maxCreatedAt = Number.MAX_SAFE_INTEGER;
-    const minId = "";
-    const maxId = "\uffff";
-
-    const base = (() => {
+    const candidateRows = await (() => {
       if (chainRef !== undefined) {
-        const upper = before !== undefined ? [chainRef, before.createdAt, before.id] : [chainRef, maxCreatedAt, maxId];
-        const includeUpper = before === undefined;
-        return this.table
-          .where("[chainRef+createdAt+id]")
-          .between([chainRef, minCreatedAt, minId], upper, true, includeUpper)
-          .reverse();
+        return this.table.where("chainRef").equals(chainRef).toArray();
       }
-
       if (status !== undefined) {
-        const upper = before !== undefined ? [status, before.createdAt, before.id] : [status, maxCreatedAt, maxId];
-        const includeUpper = before === undefined;
-        return this.table
-          .where("[status+createdAt+id]")
-          .between([status, minCreatedAt, minId], upper, true, includeUpper)
-          .reverse();
+        return this.table.where("status").equals(status).toArray();
       }
-
-      if (before !== undefined) {
-        return this.table.where("[createdAt+id]").below([before.createdAt, before.id]).reverse();
-      }
-
-      return this.table.orderBy("[createdAt+id]").reverse();
+      return this.table.toArray();
     })();
 
-    const out: TransactionRecord[] = [];
-    let offset = 0;
+    const records: TransactionRecord[] = [];
+    for (const row of candidateRows) {
+      const id = typeof (row as { id?: unknown }).id === "string" ? row.id : undefined;
+      const parsed = await this.parseRow(row, id);
+      if (!parsed) continue;
 
-    while (out.length < limit) {
-      const rows = await base.offset(offset).limit(batchSize).toArray();
-      if (rows.length === 0) break;
-      offset += rows.length;
-
-      for (const row of rows) {
-        const id = typeof (row as { id?: unknown }).id === "string" ? row.id : undefined;
-        const parsed = await this.parseRow(row, id);
-        if (!parsed) continue;
-
-        if (chainRef !== undefined && parsed.chainRef !== chainRef) continue;
-        if (status !== undefined && parsed.status !== status) continue;
-
-        out.push(parsed);
-        if (out.length >= limit) break;
+      if (chainRef !== undefined && parsed.chainRef !== chainRef) continue;
+      if (status !== undefined && parsed.status !== status) continue;
+      if (
+        before !== undefined &&
+        !(
+          parsed.createdAt < before.createdAt ||
+          (parsed.createdAt === before.createdAt && parsed.id.localeCompare(before.id) < 0)
+        )
+      ) {
+        continue;
       }
+
+      records.push(parsed);
     }
 
-    return out;
+    records.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
+    return records.slice(0, limit);
   }
 
   async findByChainRefAndLocator(params: {

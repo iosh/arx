@@ -5,6 +5,7 @@ export type {
   CreateSubmittedTransactionParams,
   ListTransactionsParams,
   PatchTransactionParams,
+  TransactionRecordConflictError,
   TransactionsChangedPayload,
   TransactionsService,
   TransitionTransactionParams,

@@ -162,7 +162,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         { from: fromAddress },
       );
       const approvedMeta = await handoff.waitForApprovalDecision();
-      expect(["approved", "executing", "broadcast"]).toContain(approvedMeta.status);
+      expect(["approved", "broadcast"]).toContain(approvedMeta.status);
       const submission = await context.runtime.controllers.transactions.waitForTransactionSubmission(
         handoff.transactionId,
       );
@@ -184,7 +184,6 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(timeline).toEqual([
         ["proposal:pending", "proposal:approved"],
-        ["proposal:approved", "proposal:executing"],
         ["record:created", "record:broadcast"],
         ["record:broadcast", "record:confirmed"],
       ]);
@@ -309,7 +308,6 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
         expect(timeline).toEqual([
           ["proposal:pending", "proposal:approved"],
-          ["proposal:approved", "proposal:executing"],
           ["record:created", "record:broadcast"],
         ]);
       });

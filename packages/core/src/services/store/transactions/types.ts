@@ -13,6 +13,36 @@ export type TransactionsChangedPayload =
     }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
+export class TransactionRecordConflictError extends Error {
+  readonly conflict:
+    | { kind: "id"; id: TransactionRecord["id"] }
+    | {
+        kind: "locator";
+        chainRef: ChainRef;
+        locator: TransactionRecord["locator"];
+        existingId: TransactionRecord["id"];
+      };
+
+  constructor(
+    conflict:
+      | { kind: "id"; id: TransactionRecord["id"] }
+      | {
+          kind: "locator";
+          chainRef: ChainRef;
+          locator: TransactionRecord["locator"];
+          existingId: TransactionRecord["id"];
+        },
+  ) {
+    const message =
+      conflict.kind === "id"
+        ? `Conflicting submitted transaction id "${conflict.id}"`
+        : `Conflicting submitted transaction locator for chainRef ${conflict.chainRef}`;
+    super(message);
+    this.name = "TransactionRecordConflictError";
+    this.conflict = conflict;
+  }
+}
+
 export type CreateSubmittedTransactionParams = {
   /**
    * Optional caller-provided id to keep controller-level ids stable.

@@ -400,7 +400,7 @@ export class TransactionProposalService
       return;
     }
 
-    this.#proposalStore.failProposalBeforeBroadcast({
+    this.#proposalStore.failProposal({
       id,
       updatedAt: this.#readTransactionTimestamp(),
       patch: {

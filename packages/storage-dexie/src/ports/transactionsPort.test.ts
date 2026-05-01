@@ -146,12 +146,28 @@ describe("DexieTransactionsPort", () => {
       updatedAt: 3000,
     });
     const r2 = createRecord({
-      ...r1,
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      locator: { format: "eip155.tx_hash", value: "0x5556" },
+      submitted: {
+        hash: "0x5556",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x8",
+      },
+      createdAt: 3000,
+      updatedAt: 3000,
     });
     const r3 = createRecord({
-      ...r1,
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      locator: { format: "eip155.tx_hash", value: "0x5557" },
+      submitted: {
+        hash: "0x5557",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x9",
+      },
+      createdAt: 3000,
+      updatedAt: 3000,
     });
 
     await port.create(r1);
@@ -201,6 +217,35 @@ describe("DexieTransactionsPort", () => {
       locator: { format: "eip155.tx_hash", value: "txid-1" },
     });
     expect(miss).toBeNull();
+  });
+
+  it("enforces unique (chainRef, locator) pairs at the database level", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
+
+    const first = createRecord({
+      id: "12121212-1212-4212-8212-121212121212",
+      locator: { format: "eip155.tx_hash", value: "0x7777" },
+      submitted: {
+        hash: "0x7777",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x7",
+      },
+    });
+    const second = createRecord({
+      id: "13131313-1313-4313-8313-131313131313",
+      locator: { format: "eip155.tx_hash", value: "0x7777" },
+      submitted: {
+        hash: "0x7777",
+        chainId: "0x1",
+        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        nonce: "0x8",
+      },
+    });
+
+    await port.create(first);
+    await expect(port.create(second)).rejects.toThrow();
   });
 
   it("updateIfStatus() updates only when expectedStatus matches", async () => {

@@ -30,6 +30,7 @@ import type {
   TransactionRequest,
   TransactionStateChange,
   TransactionStatusChange,
+  TransactionSubmissionOutcome,
   TransactionSubmissionResolution,
   TransactionView,
 } from "./types.js";
@@ -44,12 +45,7 @@ const createTransactionTransportDisconnectedError = (): TransactionError => ({
   code: 4900,
 });
 
-type TransactionSubmissionState =
-  | { state: "submitted"; resolution: TransactionSubmissionResolution }
-  | { state: "failed"; error: TransactionSubmissionError }
-  | { state: "waiting" };
-
-const readTransactionSubmissionState = (meta: TransactionMeta): TransactionSubmissionState => {
+const readTransactionSubmissionOutcome = (meta: TransactionMeta): TransactionSubmissionOutcome | null => {
   if (meta.request === null) {
     // Durable records only exist after broadcast succeeds. Later record transitions
     // like failed/replaced do not change the original provider completion result.
@@ -66,7 +62,7 @@ const readTransactionSubmissionState = (meta: TransactionMeta): TransactionSubmi
     return { state: "failed", error: new TransactionSubmissionError(meta) };
   }
 
-  return { state: "waiting" };
+  return null;
 };
 
 type TransactionTimestampReader = () => number;
@@ -117,8 +113,8 @@ export class StoreTransactionController implements TransactionController {
   #recordView: TransactionRecordViewStore;
   #proposals: TransactionProposalService;
   #execution: TransactionExecutionService;
-  #submitted = new Map<string, TransactionSubmissionResolution>();
-  #submittedLimit: number;
+  #submissionOutcomes = new Map<string, TransactionSubmissionOutcome>();
+  #submissionOutcomeLimit: number;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
@@ -127,7 +123,7 @@ export class StoreTransactionController implements TransactionController {
     const readSystemTime = options.now ?? Date.now;
     const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
     const stateLimit = options.stateLimit ?? 200;
-    this.#submittedLimit = stateLimit;
+    this.#submissionOutcomeLimit = stateLimit;
     const logger = options.logger ?? (() => {});
 
     this.#proposalStore = new TransactionProposalStore({
@@ -218,9 +214,12 @@ export class StoreTransactionController implements TransactionController {
     });
 
     this.#messenger.subscribe(TRANSACTION_SUBMITTED, ({ id, submitted, locator }) => {
-      this.#rememberSubmittedTransaction(id, {
-        submitted: structuredClone(submitted),
-        locator: structuredClone(locator),
+      this.#rememberSubmissionOutcome(id, {
+        state: "submitted",
+        resolution: {
+          submitted: structuredClone(submitted),
+          locator: structuredClone(locator),
+        },
       });
     });
   }
@@ -258,18 +257,22 @@ export class StoreTransactionController implements TransactionController {
   }
 
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution> {
-    const submitted = this.#submitted.get(id);
-    if (submitted) {
-      return Promise.resolve(structuredClone(submitted));
+    const outcome = this.#submissionOutcomes.get(id);
+    if (outcome) {
+      return outcome.state === "submitted"
+        ? Promise.resolve(structuredClone(outcome.resolution))
+        : Promise.reject(outcome.error);
     }
 
     const cached = this.getMeta(id);
     if (cached) {
-      const state = readTransactionSubmissionState(cached);
-      if (state.state === "submitted") {
-        return Promise.resolve(state.resolution);
+      const derived = readTransactionSubmissionOutcome(cached);
+      if (derived) {
+        this.#rememberSubmissionOutcome(id, derived);
+        return derived.state === "submitted"
+          ? Promise.resolve(structuredClone(derived.resolution))
+          : Promise.reject(derived.error);
       }
-      if (state.state === "failed") return Promise.reject(state.error);
     }
 
     return new Promise<TransactionSubmissionResolution>((resolve, reject) => {
@@ -284,17 +287,18 @@ export class StoreTransactionController implements TransactionController {
       };
 
       const completeFromMeta = (meta: TransactionMeta) => {
-        const state = readTransactionSubmissionState(meta);
-        if (state.state === "waiting" || !stopWaiting()) {
+        const outcome = readTransactionSubmissionOutcome(meta);
+        if (!outcome || !stopWaiting()) {
           return;
         }
 
-        if (state.state === "submitted") {
-          resolve(state.resolution);
+        this.#rememberSubmissionOutcome(id, outcome);
+        if (outcome.state === "submitted") {
+          resolve(structuredClone(outcome.resolution));
           return;
         }
 
-        reject(state.error);
+        reject(outcome.error);
       };
 
       const unsubscribe = this.onStatusChanged(({ id: changeId, meta }) => {
@@ -312,10 +316,14 @@ export class StoreTransactionController implements TransactionController {
           }
         },
       );
-      const submittedAfterSubscribe = this.#submitted.get(id);
-      if (submittedAfterSubscribe) {
+      const outcomeAfterSubscribe = this.#submissionOutcomes.get(id);
+      if (outcomeAfterSubscribe) {
         if (stopWaiting()) {
-          resolve(structuredClone(submittedAfterSubscribe));
+          if (outcomeAfterSubscribe.state === "submitted") {
+            resolve(structuredClone(outcomeAfterSubscribe.resolution));
+          } else {
+            reject(outcomeAfterSubscribe.error);
+          }
         }
         return;
       }
@@ -370,14 +378,14 @@ export class StoreTransactionController implements TransactionController {
     return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED, handler);
   }
 
-  #rememberSubmittedTransaction(id: string, resolution: TransactionSubmissionResolution): void {
-    this.#submitted.delete(id);
-    this.#submitted.set(id, resolution);
+  #rememberSubmissionOutcome(id: string, outcome: TransactionSubmissionOutcome): void {
+    this.#submissionOutcomes.delete(id);
+    this.#submissionOutcomes.set(id, structuredClone(outcome));
 
-    while (this.#submitted.size > this.#submittedLimit) {
-      const oldest = this.#submitted.keys().next().value as string | undefined;
+    while (this.#submissionOutcomes.size > this.#submissionOutcomeLimit) {
+      const oldest = this.#submissionOutcomes.keys().next().value as string | undefined;
       if (!oldest) break;
-      this.#submitted.delete(oldest);
+      this.#submissionOutcomes.delete(oldest);
     }
   }
 

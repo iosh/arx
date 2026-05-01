@@ -14,7 +14,7 @@ import type {
 import type { ApprovalCreateParams, ApprovalHandle, ApprovalKind, ApprovalKinds } from "../approval/types.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
 
-export type TransactionProposalPhase = "pending" | "approved" | "executing" | "invalidated" | "failed";
+export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
 export type TransactionMetaStatus = TransactionProposalPhase | TransactionRecordStatus;
 
@@ -199,6 +199,10 @@ export type TransactionSubmissionResolution = {
   submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
 };
+
+export type TransactionSubmissionOutcome =
+  | { state: "submitted"; resolution: TransactionSubmissionResolution }
+  | { state: "failed"; error: TransactionSubmissionError };
 
 export class TransactionSubmissionError extends Error {
   readonly meta: TransactionMeta;

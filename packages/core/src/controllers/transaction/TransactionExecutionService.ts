@@ -39,6 +39,8 @@ type TransactionExecutionServiceDeps = {
   readTransactionTimestamp: () => number;
 };
 
+type TransactionExecutionAttemptPhase = "queued" | "processing" | "signing" | "broadcasting" | "persisting_record";
+
 export class TransactionExecutionService
   implements Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "resumePending">
 {
@@ -57,9 +59,7 @@ export class TransactionExecutionService
   #queued = new Set<string>();
   #processing = new Set<string>();
   #scheduled = false;
-  #cancelledByUser = new Set<string>();
-  #broadcasting = new Set<string>();
-  #broadcastedPendingPersist = new Set<string>();
+  #attempts = new Map<string, TransactionExecutionAttemptPhase>();
 
   constructor(deps: TransactionExecutionServiceDeps) {
     this.#messenger = deps.messenger;
@@ -85,20 +85,25 @@ export class TransactionExecutionService
   }
 
   async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
+    return this.#finalizeExternalCancellation(id, reason);
+  }
+
+  async #finalizeProposalFailure(
+    id: string,
+    reason: Error | TransactionError | undefined,
+    source: "external" | "internal",
+  ): Promise<void> {
     const error = coerceTransactionError(reason) ?? null;
     const wantsUserRejected = isUserRejectedError(reason, error ?? undefined);
-    if (wantsUserRejected) {
-      this.#cancelledByUser.add(id);
-    }
 
     const proposal = this.#proposalStore.peek(id);
     if (proposal && !isProposalTerminal(proposal)) {
       this.#queued.delete(id);
-      if (this.#broadcasting.has(id) || this.#broadcastedPendingPersist.has(id)) {
-        this.#cancelledByUser.delete(id);
+      const attemptPhase = this.#attempts.get(id);
+      if (source === "external" && this.#shouldIgnoreIrreversibleAttemptCancellation(attemptPhase)) {
         return;
       }
-      this.#proposalStore.failProposalBeforeBroadcast({
+      this.#proposalStore.failProposal({
         id,
         updatedAt: this.#readTransactionTimestamp(),
         patch: {
@@ -106,23 +111,19 @@ export class TransactionExecutionService
           userRejected: wantsUserRejected,
         },
       });
-      this.#cancelledByUser.delete(id);
       return;
     }
 
     const latestRecord = await this.#service.get(id);
     if (!latestRecord) {
-      this.#cancelledByUser.delete(id);
       return;
     }
 
     const latest = this.#recordView.commitRecordView(latestRecord).next;
     if (latest.status === "broadcast" && wantsUserRejected) {
-      this.#cancelledByUser.delete(id);
       return;
     }
     if (isTransactionRecordTerminal(latest)) {
-      this.#cancelledByUser.delete(id);
       return;
     }
 
@@ -136,82 +137,74 @@ export class TransactionExecutionService
       this.#tracking.stop(id);
       this.#tracking.handleTransition(previous, next);
     }
-    this.#cancelledByUser.delete(id);
   }
 
   async processTransaction(id: string): Promise<void> {
-    if (this.#isCancelled(id)) {
-      return;
-    }
-
     let meta = this.#proposalStore.get(id);
     const proposal = this.#proposalStore.peek(id);
     if (!meta || !proposal || !canStartProposalExecution(proposal)) {
+      this.#attempts.delete(id);
       return;
     }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
-      await this.rejectTransaction(id, createMissingNamespaceTransactionError(meta.namespace));
+      this.#attempts.set(id, "processing");
+      await this.#finalizeExecutionFailure(id, createMissingNamespaceTransactionError(meta.namespace));
       return;
     }
     if (!namespaceTransaction.tracking) {
-      await this.rejectTransaction(id, createReceiptTrackingUnsupportedError(meta.namespace));
+      this.#attempts.set(id, "processing");
+      await this.#finalizeExecutionFailure(id, createReceiptTrackingUnsupportedError(meta.namespace));
       return;
     }
 
     try {
+      this.#attempts.set(id, "processing");
       let prepared = meta.prepared;
       if (!prepared) {
         const next = await this.#prepare.prepareTransactionForExecution(id);
         if (!next?.prepared) {
-          await this.rejectTransaction(id, new Error("Transaction preparation did not produce prepared parameters"));
+          await this.#finalizeExecutionFailure(
+            id,
+            new Error("Transaction preparation did not produce prepared parameters"),
+          );
           return;
         }
         prepared = next.prepared;
         meta = next;
       }
-
-      const executingMeta = this.#proposalStore.startExecution({
-        id,
-        updatedAt: this.#readTransactionTimestamp(),
-      });
-      if (!executingMeta) {
+      if (!this.#canContinueAttempt(id)) {
         return;
       }
-      meta = executingMeta;
 
       const sign = requireNamespaceTransactionOperation({
         namespace: meta.namespace,
         operation: "execution.sign",
         value: namespaceTransaction.execution?.sign,
       });
+      this.#attempts.set(id, "signing");
       const signed = await sign(buildSignContext(meta), prepared);
-      if (this.#proposalStore.peek(id)?.phase !== "executing") return;
-
-      if (this.#isCancelled(id)) {
+      if (!this.#canContinueAttempt(id)) {
         return;
       }
-      this.#broadcasting.add(id);
+
+      this.#attempts.set(id, "broadcasting");
       this.#messenger.publish(TRANSACTION_BROADCAST_STARTED, { id });
       const broadcastTransaction = requireNamespaceTransactionOperation({
         namespace: meta.namespace,
         operation: "execution.broadcast",
         value: namespaceTransaction.execution?.broadcast,
       });
-      let broadcast: Awaited<ReturnType<typeof broadcastTransaction>>;
-      try {
-        broadcast = await broadcastTransaction(buildPrepareContext(meta), signed, prepared);
-      } finally {
-        this.#broadcasting.delete(id);
-      }
-      this.#broadcastedPendingPersist.add(id);
+      const broadcast = await broadcastTransaction(buildPrepareContext(meta), signed, prepared);
+
       this.#messenger.publish(TRANSACTION_SUBMITTED, {
         id,
         submitted: structuredClone(broadcast.submitted),
         locator: structuredClone(broadcast.locator),
       });
 
+      this.#attempts.set(id, "persisting_record");
       let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
         if (!meta.from) {
@@ -232,7 +225,7 @@ export class TransactionExecutionService
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
-        this.#proposalStore.failExecutingProposal({
+        this.#proposalStore.failProposal({
           id,
           updatedAt: this.#readTransactionTimestamp(),
           patch: {
@@ -254,12 +247,12 @@ export class TransactionExecutionService
       this.#tracking.handleTransition(previous, next);
     } catch (err) {
       if (err && isArxError(err) && err.reason === ArxReasons.SessionLocked) {
-        await this.rejectTransaction(id, err);
+        await this.#finalizeExecutionFailure(id, err);
         return;
       }
-      await this.rejectTransaction(id, err instanceof Error ? err : new Error("Transaction processing failed"));
+      await this.#finalizeExecutionFailure(id, err instanceof Error ? err : new Error("Transaction processing failed"));
     } finally {
-      this.#broadcastedPendingPersist.delete(id);
+      this.#attempts.delete(id);
     }
   }
 
@@ -279,6 +272,7 @@ export class TransactionExecutionService
   #enqueue(id: string) {
     if (this.#processing.has(id) || this.#queued.has(id)) return;
     this.#queued.add(id);
+    this.#attempts.set(id, "queued");
     this.#queue.push(id);
     this.#scheduleProcess();
   }
@@ -311,8 +305,21 @@ export class TransactionExecutionService
     }
   }
 
-  #isCancelled(id: string): boolean {
-    return this.#cancelledByUser.has(id);
+  #canContinueAttempt(id: string): boolean {
+    const proposal = this.#proposalStore.peek(id);
+    return proposal?.phase === "approved";
+  }
+
+  #shouldIgnoreIrreversibleAttemptCancellation(attemptPhase: TransactionExecutionAttemptPhase | undefined): boolean {
+    return attemptPhase === "broadcasting" || attemptPhase === "persisting_record";
+  }
+
+  async #finalizeExternalCancellation(id: string, reason?: Error | TransactionError): Promise<void> {
+    return this.#finalizeProposalFailure(id, reason, "external");
+  }
+
+  async #finalizeExecutionFailure(id: string, reason?: Error | TransactionError): Promise<void> {
+    return this.#finalizeProposalFailure(id, reason, "internal");
   }
 
   async #listAllByStatus(status: "broadcast" | "confirmed" | "failed" | "replaced") {

@@ -189,4 +189,30 @@ describe("StoreTransactionController", () => {
       message: "User cancelled before submission",
     });
   });
+
+  it("resolves submission waits from the runtime outcome cache after local persistence fails", async () => {
+    const messenger = new Messenger();
+    const controller = createController(
+      {
+        proposal: {
+          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
+        },
+        tracking: {
+          fetchReceipt: vi.fn(async () => null),
+        },
+      },
+      { messenger },
+    );
+
+    messenger.publish(TRANSACTION_SUBMITTED, {
+      id: "tx-persist-failed",
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+
+    await expect(controller.waitForTransactionSubmission("tx-persist-failed")).resolves.toEqual({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+  });
 });

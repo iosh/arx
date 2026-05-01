@@ -309,7 +309,7 @@ export type WalletNetworks = Readonly<{
 
 /** Transaction approvals, execution, and status tracking. */
 export type WalletTransactions = Readonly<{
-  getMeta: TransactionController["getMeta"];
+  getView: TransactionController["getView"];
   beginTransactionApproval: TransactionController["beginTransactionApproval"];
   waitForTransactionSubmission: TransactionController["waitForTransactionSubmission"];
   approveTransaction: TransactionController["approveTransaction"];

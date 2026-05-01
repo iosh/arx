@@ -22,7 +22,12 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
-import type { TransactionApproveResult, TransactionMeta, TransactionRecordView } from "./types.js";
+import type {
+  TransactionApproveResult,
+  TransactionProposalMeta,
+  TransactionProposalView,
+  TransactionRecordView,
+} from "./types.js";
 
 const createProposalServiceStub = (params?: { approveForExecution?: (id: string) => TransactionApproveResult }) =>
   ({
@@ -31,8 +36,43 @@ const createProposalServiceStub = (params?: { approveForExecution?: (id: string)
       vi.fn(() => ({
         status: "approved",
         transaction: {
+          kind: "proposal",
           id: REQUEST_ID,
-          status: "approved",
+          approvalId: "approval-id",
+          namespace: "eip155",
+          chainRef: DEFAULT_CHAIN_REF,
+          origin: REQUEST_CONTEXT.origin,
+          fromAccountKey: "account-key",
+          from: DEFAULT_FROM,
+          baseRequest: {
+            namespace: "eip155",
+            chainRef: DEFAULT_CHAIN_REF,
+            payload: { from: DEFAULT_FROM, to: DEFAULT_TO, value: "0x0" },
+          },
+          currentRequest: {
+            namespace: "eip155",
+            chainRef: DEFAULT_CHAIN_REF,
+            payload: { from: DEFAULT_FROM, to: DEFAULT_TO, value: "0x0" },
+          },
+          draftRevision: 0,
+          prepared: null,
+          reviewState: {
+            sessionToken: null,
+            status: null,
+            reviewPreparedSnapshot: null,
+            blocker: null,
+            error: null,
+            updatedAt: 1,
+          },
+          review: {
+            updatedAt: 1,
+            prepare: { state: "idle" },
+            namespaceReview: null,
+          },
+          phase: "approved",
+          failure: null,
+          createdAt: 1,
+          updatedAt: 1,
         },
       })),
   }) as never;
@@ -108,7 +148,7 @@ const createExecutionService = (params?: {
 
 const createApprovedTransactionProposal = (
   proposalStore: ReturnType<typeof createProposalStore>,
-  input?: Partial<TransactionMeta>,
+  input?: Partial<TransactionProposalMeta>,
 ) =>
   createTransactionProposal(proposalStore, {
     prepared: { gas: "0x5208" },
@@ -116,33 +156,29 @@ const createApprovedTransactionProposal = (
     ...input,
   });
 
-const createRecordViewFromMeta = (meta: TransactionMeta): TransactionRecordView => {
-  if (
-    meta.status !== "broadcast" &&
-    meta.status !== "confirmed" &&
-    meta.status !== "failed" &&
-    meta.status !== "replaced"
-  ) {
-    throw new Error(`Expected durable record status, received ${meta.status}`);
-  }
-  if (!meta.submitted || !meta.locator) {
-    throw new Error("Expected submitted durable meta");
-  }
-
+const createRecordView = (input: {
+  id?: string;
+  status: TransactionRecordView["status"];
+  submitted?: TransactionRecordView["submitted"];
+  locator?: TransactionRecordView["locator"];
+  receipt?: TransactionRecordView["receipt"];
+  replacedId?: TransactionRecordView["replacedId"];
+  updatedAt?: number;
+}): TransactionRecordView => {
   return {
     kind: "record",
-    id: meta.id,
-    namespace: meta.namespace,
-    chainRef: meta.chainRef,
-    origin: meta.origin,
-    from: meta.from,
-    status: meta.status,
-    submitted: meta.submitted,
-    locator: meta.locator,
-    receipt: meta.receipt,
-    replacedId: meta.replacedId,
-    createdAt: meta.createdAt,
-    updatedAt: meta.updatedAt,
+    id: input.id ?? REQUEST_ID,
+    namespace: "eip155",
+    chainRef: DEFAULT_CHAIN_REF,
+    origin: REQUEST_CONTEXT.origin,
+    from: DEFAULT_FROM,
+    status: input.status,
+    submitted: input.submitted ?? DEFAULT_SUBMITTED,
+    locator: input.locator ?? DEFAULT_LOCATOR,
+    receipt: input.receipt ?? null,
+    replacedId: input.replacedId ?? null,
+    createdAt: 1,
+    updatedAt: input.updatedAt ?? 1,
   };
 };
 
@@ -152,7 +188,7 @@ describe("TransactionExecutionService", () => {
     createApprovedTransactionProposal(proposalStore);
     const approveForExecution = vi.fn(() => ({
       status: "approved" as const,
-      transaction: proposalStore.get(REQUEST_ID) as TransactionMeta,
+      transaction: createProposalServiceStub().approveForExecution(REQUEST_ID).transaction as TransactionProposalView,
     }));
     const { execution } = createExecutionService({
       proposalStore,
@@ -238,7 +274,7 @@ describe("TransactionExecutionService", () => {
     createApprovedTransactionProposal(proposalStore);
     const approveForExecution = vi.fn(() => ({
       status: "approved" as const,
-      transaction: proposalStore.get(REQUEST_ID) as TransactionMeta,
+      transaction: createProposalServiceStub().approveForExecution(REQUEST_ID).transaction as TransactionProposalView,
     }));
     const { execution } = createExecutionService({
       proposalStore,
@@ -267,14 +303,7 @@ describe("TransactionExecutionService", () => {
   });
 
   it("does not rewrite a durable broadcast transaction when rejection happens after submission", async () => {
-    const durableMeta: TransactionMeta = {
-      id: REQUEST_ID,
-      namespace: "eip155",
-      chainRef: DEFAULT_CHAIN_REF,
-      origin: REQUEST_CONTEXT.origin,
-      from: DEFAULT_FROM,
-      request: null,
-      prepared: null,
+    const durableMeta = createRecordView({
       status: "broadcast",
       submitted: {
         hash: "0x1234",
@@ -283,18 +312,13 @@ describe("TransactionExecutionService", () => {
         nonce: "0x7",
       },
       locator: { format: "eip155.tx_hash", value: "0x1234" },
-      receipt: null,
-      replacedId: null,
-      error: null,
-      userRejected: false,
-      createdAt: 1,
-      updatedAt: 1,
-    };
+    });
     const commitRecordView = vi.fn((record: TransactionRecord) => {
       return {
-        next: createRecordViewFromMeta({
-          ...durableMeta,
+        next: createRecordView({
           locator: record.locator,
+          status: durableMeta.status,
+          submitted: durableMeta.submitted,
           updatedAt: record.updatedAt,
         }),
       };
@@ -303,7 +327,26 @@ describe("TransactionExecutionService", () => {
     const handleTransition = vi.fn();
     const { execution } = createExecutionService({
       service: createTransactionsServiceStub({
-        get: vi.fn(async () => toRecord(durableMeta)),
+        get: vi.fn(async () =>
+          toRecord({
+            id: durableMeta.id,
+            namespace: durableMeta.namespace,
+            chainRef: durableMeta.chainRef,
+            origin: durableMeta.origin,
+            from: durableMeta.from,
+            request: {
+              namespace: "eip155",
+              chainRef: durableMeta.chainRef,
+              payload: { from: durableMeta.from, to: DEFAULT_TO, value: "0x0" },
+            },
+            prepared: null,
+            status: "approved",
+            error: null,
+            userRejected: false,
+            createdAt: durableMeta.createdAt,
+            updatedAt: durableMeta.updatedAt,
+          }),
+        ),
       }),
       recordView: createRecordViewStub({
         commitRecordView,
@@ -744,24 +787,10 @@ describe("TransactionExecutionService", () => {
   });
 
   it("re-enqueues approved proposals when resuming pending work", async () => {
-    const broadcastMeta: TransactionMeta = {
+    const broadcastMeta = createRecordView({
       id: "durable-tx",
-      namespace: "eip155",
-      chainRef: DEFAULT_CHAIN_REF,
-      origin: REQUEST_CONTEXT.origin,
-      from: DEFAULT_FROM,
-      request: null,
-      prepared: null,
       status: "broadcast",
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
-      receipt: null,
-      replacedId: null,
-      error: null,
-      userRejected: false,
-      createdAt: 1,
-      updatedAt: 1,
-    };
+    });
     const processTransaction = vi.fn(async () => {});
     const commitRecordView = vi.fn((record: TransactionRecord) => ({
       next: {
@@ -783,7 +812,22 @@ describe("TransactionExecutionService", () => {
     const resumeBroadcast = vi.fn();
     const list = vi
       .fn<(params?: unknown) => Promise<TransactionRecord[]>>()
-      .mockResolvedValueOnce([toRecord(broadcastMeta)])
+      .mockResolvedValueOnce([
+        {
+          id: broadcastMeta.id,
+          chainRef: broadcastMeta.chainRef,
+          origin: broadcastMeta.origin,
+          fromAccountKey: accountCodecs.toAccountKeyFromAddress({
+            chainRef: broadcastMeta.chainRef,
+            address: broadcastMeta.from ?? DEFAULT_FROM,
+          }),
+          status: broadcastMeta.status,
+          submitted: broadcastMeta.submitted,
+          locator: broadcastMeta.locator,
+          createdAt: broadcastMeta.createdAt,
+          updatedAt: broadcastMeta.updatedAt,
+        },
+      ])
       .mockResolvedValueOnce([]);
     const recordView = createRecordViewStub({
       commitRecordView,
@@ -808,7 +852,12 @@ describe("TransactionExecutionService", () => {
     expect(processSpy).toHaveBeenCalledWith(REQUEST_ID);
     processSpy.mockRestore();
     expect(list).toHaveBeenCalledTimes(2);
-    expect(commitRecordView).toHaveBeenCalledWith(toRecord(broadcastMeta));
+    expect(commitRecordView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "durable-tx",
+        status: "broadcast",
+      }),
+    );
     expect(resumeBroadcast).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "durable-tx",

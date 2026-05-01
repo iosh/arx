@@ -24,7 +24,7 @@ type ApprovalReadServiceDeps = {
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
-  transactions: Pick<TransactionController, "getApprovalReview" | "getMeta">;
+  transactions: Pick<TransactionController, "getApprovalReview" | "getView">;
 };
 
 const isApprovalRecord = <K extends ApprovalRecord["kind"]>(

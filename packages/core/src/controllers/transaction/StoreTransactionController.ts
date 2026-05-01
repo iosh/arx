@@ -25,7 +25,7 @@ import type {
   TransactionApprovalHandoff,
   TransactionController,
   TransactionError,
-  TransactionMeta,
+  TransactionProposalView,
   TransactionRequest,
   TransactionStateChange,
   TransactionStatusChange,
@@ -35,8 +35,8 @@ import type {
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
-const isFailedProposalSubmission = (meta: TransactionMeta) =>
-  meta.status === "failed" && meta.request !== null && !meta.submitted && !meta.locator;
+const isFailedProposalSubmission = (view: TransactionView): view is TransactionProposalView =>
+  view.kind === "proposal" && view.phase === "failed";
 
 const createTransactionTransportDisconnectedError = (): TransactionError => ({
   name: "TransportDisconnectedError",
@@ -44,21 +44,21 @@ const createTransactionTransportDisconnectedError = (): TransactionError => ({
   code: 4900,
 });
 
-const readTransactionSubmissionOutcome = (meta: TransactionMeta): TransactionSubmissionOutcome | null => {
-  if (meta.request === null) {
+const readTransactionSubmissionOutcome = (view: TransactionView): TransactionSubmissionOutcome | null => {
+  if (view.kind === "record") {
     // Durable records only exist after broadcast succeeds. Later record transitions
     // like failed/replaced do not change the original provider completion result.
     return {
       state: "submitted",
       resolution: {
-        submitted: structuredClone(meta.submitted),
-        locator: structuredClone(meta.locator),
+        submitted: structuredClone(view.submitted),
+        locator: structuredClone(view.locator),
       },
     };
   }
 
-  if (isFailedProposalSubmission(meta)) {
-    return { state: "failed", error: new TransactionSubmissionError(meta) };
+  if (isFailedProposalSubmission(view)) {
+    return { state: "failed", error: new TransactionSubmissionError(view) };
   }
 
   return null;
@@ -93,7 +93,7 @@ export type StoreTransactionControllerOptions = {
   now?: () => number;
   tracker?: ReceiptTracker;
   /**
-   * Cache size for synchronous reads (e.g. getMeta()).
+   * Cache size for synchronous reads (e.g. getView()).
    * This is not a persistence boundary.
    */
   stateLimit?: number;
@@ -197,10 +197,6 @@ export class StoreTransactionController implements TransactionController {
     });
   }
 
-  getMeta(id: string): TransactionMeta | undefined {
-    return this.#proposals.getMeta(id);
-  }
-
   getView(id: string): TransactionView | undefined {
     return this.#proposals.getView(id);
   }
@@ -237,7 +233,7 @@ export class StoreTransactionController implements TransactionController {
         : Promise.reject(outcome.error);
     }
 
-    const cached = this.getMeta(id);
+    const cached = this.getView(id);
     if (cached) {
       const derived = readTransactionSubmissionOutcome(cached);
       if (derived) {
@@ -259,8 +255,8 @@ export class StoreTransactionController implements TransactionController {
         return true;
       };
 
-      const completeFromMeta = (meta: TransactionMeta) => {
-        const outcome = readTransactionSubmissionOutcome(meta);
+      const completeFromView = (view: TransactionView) => {
+        const outcome = readTransactionSubmissionOutcome(view);
         if (!outcome || !stopWaiting()) {
           return;
         }
@@ -274,9 +270,11 @@ export class StoreTransactionController implements TransactionController {
         reject(outcome.error);
       };
 
-      const unsubscribe = this.onStatusChanged(({ id: changeId, meta }) => {
+      const unsubscribe = this.onStatusChanged((change) => {
+        const view = change.kind === "proposal_phase" ? change.proposal : change.record;
+        const changeId = view.id;
         if (changeId === id) {
-          completeFromMeta(meta);
+          completeFromView(view);
         }
       });
       const unsubscribeSubmitted = this.#messenger.subscribe(
@@ -301,25 +299,25 @@ export class StoreTransactionController implements TransactionController {
         return;
       }
 
-      const initialMeta = this.getMeta(id);
-      if (initialMeta) {
-        completeFromMeta(initialMeta);
+      const initialView = this.getView(id);
+      if (initialView) {
+        completeFromView(initialView);
         if (!isWaiting) {
           return;
         }
       } else {
-        void this.#recordView.getOrLoad(id).then(
-          (loadedMeta) => {
+        void this.#recordView.getOrLoadView(id).then(
+          (loadedView) => {
             if (!isWaiting) {
               return;
             }
-            if (!loadedMeta) {
+            if (!loadedView) {
               if (stopWaiting()) {
                 reject(new Error(`Transaction ${id} not found after approval`));
               }
               return;
             }
-            completeFromMeta(loadedMeta);
+            completeFromView(loadedView);
           },
           (error) => {
             if (stopWaiting()) {

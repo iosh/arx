@@ -20,7 +20,7 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
-import type { TransactionMeta } from "./types.js";
+import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
 const createProposalService = (params?: {
   chainRef?: string;
@@ -112,9 +112,10 @@ describe("TransactionProposalService", () => {
     expect(handoff).toMatchObject({
       transactionId: REQUEST_ID,
       approvalId: APPROVAL_ID,
-      pendingMeta: {
+      pendingView: {
         id: REQUEST_ID,
-        status: "pending",
+        kind: "proposal",
+        phase: "pending",
         chainRef,
         namespace: "eip155",
       },
@@ -147,7 +148,8 @@ describe("TransactionProposalService", () => {
     settleApproval?.();
     await expect(handoff.waitForApprovalDecision()).resolves.toMatchObject({
       id: REQUEST_ID,
-      status: "pending",
+      kind: "proposal",
+      phase: "pending",
     });
   });
 
@@ -498,7 +500,7 @@ describe("TransactionProposalService", () => {
     const firstPrepareSettled = new Promise<void>((resolve) => {
       releaseFirstPrepare = resolve;
     });
-    const prepareTransaction = vi.fn(async (context: TransactionMeta) => {
+    const prepareTransaction = vi.fn(async (context: TransactionProposalMeta) => {
       prepareRun += 1;
       if (prepareRun === 1) {
         await firstPrepareSettled;
@@ -523,7 +525,7 @@ describe("TransactionProposalService", () => {
     const namespaces = createNamespacesStub(() =>
       createNamespaceTransactionStub({
         prepare: prepareTransaction as never,
-        applyDraftEdit: (({ request }: { request: NonNullable<TransactionMeta["request"]> }) => ({
+        applyDraftEdit: (({ request }: { request: NonNullable<TransactionProposalMeta["request"]> }) => ({
           ...request,
           payload: {
             ...request.payload,
@@ -590,7 +592,7 @@ describe("TransactionProposalService", () => {
     const { service, proposalStore } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
-          applyDraftEdit: (({ request }: { request: TransactionMeta["request"] }) => request) as never,
+          applyDraftEdit: (({ request }: { request: TransactionProposalMeta["request"] }) => request) as never,
         }),
       ),
     });
@@ -615,14 +617,13 @@ describe("TransactionProposalService", () => {
 
   it("does not treat durable record views as editable proposals", async () => {
     const applyDraftEdit = vi.fn();
-    const durableMeta: TransactionMeta = {
+    const durableView: TransactionRecordView = {
+      kind: "record",
       id: REQUEST_ID,
       namespace: "eip155",
       chainRef: DEFAULT_CHAIN_REF,
       origin: REQUEST_CONTEXT.origin,
       from: DEFAULT_FROM,
-      request: null,
-      prepared: null,
       status: "broadcast",
       submitted: {
         hash: "0x1234",
@@ -633,14 +634,12 @@ describe("TransactionProposalService", () => {
       locator: { format: "eip155.tx_hash", value: "0x1234" },
       receipt: null,
       replacedId: null,
-      error: null,
-      userRejected: false,
       createdAt: 1,
       updatedAt: 1,
     };
     const { service, queuePrepare } = createProposalService({
       recordView: createRecordViewStub({
-        getMeta: vi.fn(() => durableMeta),
+        getView: vi.fn(() => durableView),
       }),
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
@@ -672,7 +671,8 @@ describe("TransactionProposalService", () => {
       status: "approved",
       transaction: {
         id: REQUEST_ID,
-        status: "approved",
+        kind: "proposal",
+        phase: "approved",
       },
     });
   });

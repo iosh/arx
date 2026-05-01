@@ -83,7 +83,7 @@ export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissio
 
 export type UiTransactionsAccess = Pick<
   TransactionController,
-  "beginTransactionApproval" | "getMeta" | "retryPrepare" | "applyDraftEdit"
+  "beginTransactionApproval" | "getView" | "retryPrepare" | "applyDraftEdit"
 >;
 
 export type UiTransactionEventsAccess = {

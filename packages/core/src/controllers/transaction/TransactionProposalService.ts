@@ -23,8 +23,8 @@ import type {
   TransactionApproveResult,
   TransactionController,
   TransactionError,
-  TransactionMeta,
   TransactionProposalMeta,
+  TransactionProposalView,
   TransactionRequest,
   TransactionView,
 } from "./types.js";
@@ -37,7 +37,7 @@ import {
 
 type TransactionProposalServiceDeps = {
   proposalStore: TransactionProposalStore;
-  recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad" | "getView" | "getOrLoadView">;
+  recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -49,10 +49,10 @@ type TransactionProposalServiceDeps = {
 };
 
 export class TransactionProposalService
-  implements Pick<TransactionController, "getMeta" | "getApprovalReview" | "retryPrepare" | "applyDraftEdit">
+  implements Pick<TransactionController, "getView" | "getApprovalReview" | "retryPrepare" | "applyDraftEdit">
 {
   #proposalStore: TransactionProposalStore;
-  #recordView: Pick<TransactionRecordViewStore, "getMeta" | "getOrLoad" | "getView" | "getOrLoadView">;
+  #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   #supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -73,10 +73,6 @@ export class TransactionProposalService
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
     this.#readTransactionTimestamp = deps.readTransactionTimestamp;
-  }
-
-  getMeta(id: string): TransactionMeta | undefined {
-    return this.#proposalStore.get(id) ?? this.#recordView.getMeta(id);
   }
 
   getView(id: string): TransactionView | undefined {
@@ -259,11 +255,10 @@ export class TransactionProposalService
     return {
       transactionId: proposalMeta.id,
       approvalId: approvalHandle.approvalId,
-      pendingMeta: proposalMeta,
+      pendingView: this.#requireProposalView(proposalMeta.id),
       waitForApprovalDecision: async () => {
         await approvalHandle.settled;
-        const next =
-          this.#proposalStore.get(id) ?? this.#recordView.getMeta(id) ?? (await this.#recordView.getOrLoad(id));
+        const next = this.getView(id) ?? (await this.#recordView.getOrLoadView(id));
         if (!next) {
           throw new Error(`Transaction ${id} is no longer active`);
         }
@@ -324,7 +319,7 @@ export class TransactionProposalService
   }
 
   approveForExecution(id: string): TransactionApproveResult {
-    const existing = this.#proposalStore.get(id) ?? null;
+    const existing = this.#requireProposalViewOrNull(id);
     if (!existing) {
       return {
         status: "failed",
@@ -340,7 +335,7 @@ export class TransactionProposalService
         reason: "not_pending",
         transaction: existing,
         message: "Transaction is no longer pending approval.",
-        data: { transactionId: id, phase: proposal?.phase ?? existing.status },
+        data: { transactionId: id, phase: proposal?.phase ?? existing.phase },
       };
     }
 
@@ -396,13 +391,13 @@ export class TransactionProposalService
       return {
         status: "failed",
         reason: "not_pending",
-        transaction: this.#proposalStore.get(id),
+        transaction: this.#requireProposalViewOrNull(id) ?? undefined,
         message: "Transaction is no longer pending approval.",
         data: { transactionId: id },
       };
     }
 
-    return { status: "approved", transaction: updated };
+    return { status: "approved", transaction: this.#requireProposalView(id) };
   }
 
   #failProposal(id: string, reason?: Error | TransactionError): void {
@@ -466,6 +461,22 @@ export class TransactionProposalService
 
   #requireRuntimeRequest(meta: TransactionProposalMeta): TransactionRequest {
     return meta.request;
+  }
+
+  #requireProposalView(id: string): TransactionProposalView {
+    const proposal = this.#proposalStore.getView(id);
+    if (!proposal) {
+      throw new Error(`Transaction ${id} is not an active proposal`);
+    }
+
+    return {
+      ...proposal,
+      review: this.getApprovalReview({ transactionId: id }),
+    };
+  }
+
+  #requireProposalViewOrNull(id: string): TransactionProposalView | null {
+    return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : null;
   }
 
   #buildChainMetadata(meta: TransactionProposalMeta): TransactionApprovalChainMetadata | null {

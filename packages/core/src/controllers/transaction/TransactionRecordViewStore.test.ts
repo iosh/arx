@@ -64,7 +64,7 @@ describe("TransactionRecordViewStore", () => {
     expect(statusChanges).toEqual([]);
   });
 
-  it("keeps record views free of proposal-only fields while preserving the TransactionMeta facade", async () => {
+  it("keeps record views free of proposal-only fields", async () => {
     const record = createRecord();
     const store = createStore(createService([record]));
 
@@ -82,15 +82,5 @@ describe("TransactionRecordViewStore", () => {
     expect(view).not.toHaveProperty("prepared");
     expect(view).not.toHaveProperty("error");
     expect(view).not.toHaveProperty("userRejected");
-
-    expect(store.getMeta(record.id)).toMatchObject({
-      id: record.id,
-      request: null,
-      prepared: null,
-      error: null,
-      userRejected: false,
-      submitted: record.submitted,
-      locator: record.locator,
-    });
   });
 });

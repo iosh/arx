@@ -502,6 +502,13 @@ export class TransactionProposalStore {
       },
       review,
       phase: state.phase,
+      failure:
+        state.phase === "failed" || state.userRejected || state.error
+          ? {
+              error: structuredClone(state.error),
+              userRejected: state.userRejected,
+            }
+          : null,
       createdAt: state.createdAt,
       updatedAt: state.updatedAt,
     });
@@ -521,7 +528,6 @@ export class TransactionProposalStore {
       previousPhase: previous.phase,
       nextPhase: next.phase,
       proposal,
-      meta: this.#toMeta(next),
     };
     this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
   }

@@ -4,7 +4,6 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { TransactionRecord } from "../../storage/records.js";
 import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
-  TransactionMeta,
   TransactionReceipt,
   TransactionRecordStatusChange,
   TransactionRecordView,
@@ -21,7 +20,7 @@ type Options = {
 
 /**
  * Durable record-backed read model:
- * - bounded LRU cache for synchronous reads (getMeta())
+ * - bounded LRU cache for synchronous reads (getView())
  * - coalesced best-effort sync on store change
  * - emits transaction:statusChanged and transaction:stateChanged
  */
@@ -55,23 +54,9 @@ export class TransactionRecordViewStore {
     this.requestSync();
   }
 
-  getMeta(id: string): TransactionMeta | undefined {
-    const existing = this.#touch(id);
-    return existing ? this.#buildMetaFromRecordView(existing) : undefined;
-  }
-
   getView(id: string): TransactionRecordView | undefined {
     const existing = this.#touch(id);
     return existing ? structuredClone(existing) : undefined;
-  }
-
-  /**
-   * Meta projection access for orchestrators (do not mutate).
-   * Does not touch LRU ordering.
-   */
-  peek(id: string): TransactionMeta | undefined {
-    const existing = this.#records.get(id);
-    return existing ? this.#buildMetaFromRecordView(existing) : undefined;
   }
 
   /**
@@ -80,11 +65,6 @@ export class TransactionRecordViewStore {
    */
   peekView(id: string): TransactionRecordView | undefined {
     return this.#records.get(id);
-  }
-
-  async getOrLoad(id: string): Promise<TransactionMeta | null> {
-    const view = await this.getOrLoadView(id);
-    return view ? this.#buildMetaFromRecordView(view) : null;
   }
 
   async getOrLoadView(id: string): Promise<TransactionRecordView | null> {
@@ -103,12 +83,6 @@ export class TransactionRecordViewStore {
   /**
    * Authoritative commit: updates cache and emits status change when status differs.
    */
-  commitRecord(record: TransactionRecord): { previous?: TransactionMeta; next: TransactionMeta } {
-    const committed = this.commitRecordView(record);
-    const next = this.#buildMetaFromRecordView(committed.next);
-    return committed.previous ? { previous: this.#buildMetaFromRecordView(committed.previous), next } : { next };
-  }
-
   commitRecordView(record: TransactionRecord): { previous?: TransactionRecordView; next: TransactionRecordView } {
     const next = this.#buildRecordView(record);
     const previous = this.commitView(next);
@@ -126,7 +100,6 @@ export class TransactionRecordViewStore {
         previousStatus: previous?.status ?? null,
         nextStatus: next.status,
         record: structuredClone(next),
-        meta: this.#buildMetaFromRecordView(next),
       };
       this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
     }
@@ -179,7 +152,7 @@ export class TransactionRecordViewStore {
   }
 
   #upsert(view: TransactionRecordView) {
-    // Maintain a bounded LRU cache for synchronous reads (e.g. getMeta()).
+    // Maintain a bounded LRU cache for synchronous reads (e.g. getView()).
     this.#records.delete(view.id);
     this.#records.set(view.id, structuredClone(view));
 
@@ -248,27 +221,6 @@ export class TransactionRecordViewStore {
       replacedId: record.replacedId ?? null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
-    };
-  }
-
-  #buildMetaFromRecordView(view: TransactionRecordView): TransactionMeta {
-    return {
-      id: view.id,
-      namespace: view.namespace,
-      chainRef: view.chainRef,
-      origin: view.origin,
-      from: view.from,
-      request: null,
-      prepared: null,
-      status: view.status,
-      submitted: structuredClone(view.submitted),
-      locator: structuredClone(view.locator),
-      receipt: structuredClone(view.receipt),
-      replacedId: view.replacedId,
-      error: null,
-      userRejected: false,
-      createdAt: view.createdAt,
-      updatedAt: view.updatedAt,
     };
   }
 }

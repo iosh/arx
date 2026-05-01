@@ -185,7 +185,7 @@ export class TransactionReceiptTracking {
         patch: { replacedId: confirmed.id },
       });
       if (patched) {
-        this.#recordView.commitRecord(patched);
+        this.#recordView.commitRecordView(patched);
       }
     }
   }

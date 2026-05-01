@@ -766,7 +766,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       .mockImplementation(async (request) => ({
         transactionId: approvalId,
         approvalId,
-        pendingMeta: { id: approvalId, request } as never,
+        pendingView: { id: approvalId, currentRequest: request } as never,
         waitForApprovalDecision: async () => ({ id: approvalId }) as never,
       }));
 
@@ -898,7 +898,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       .mockImplementation(async (request, requester) => ({
         transactionId: requester.sessionId,
         approvalId: requester.sessionId,
-        pendingMeta: { id: requester.sessionId, request } as never,
+        pendingView: { id: requester.sessionId, currentRequest: request } as never,
         waitForApprovalDecision: async () => ({ id: requester.sessionId }) as never,
       }));
 

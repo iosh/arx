@@ -21,7 +21,6 @@ import type {
 
 export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
-export type TransactionMetaStatus = TransactionProposalPhase | TransactionRecordStatus;
 
 export type TransactionApprovalChainMetadata = {
   chainRef: ChainRef;
@@ -41,7 +40,6 @@ export type TransactionProposalPhaseChange = {
   previousPhase: TransactionProposalPhase;
   nextPhase: TransactionProposalPhase;
   proposal: TransactionProposalView;
-  meta: TransactionMeta;
 };
 
 export type TransactionRecordStatusChange = {
@@ -50,7 +48,6 @@ export type TransactionRecordStatusChange = {
   previousStatus: TransactionRecordStatus | null;
   nextStatus: TransactionRecordStatus;
   record: TransactionRecordView;
-  meta: TransactionMeta;
 };
 
 export type TransactionStatusChange = TransactionProposalPhaseChange | TransactionRecordStatusChange;
@@ -106,20 +103,6 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   userRejected: boolean;
 };
 
-export type TransactionRecordMeta = TransactionMetaBase & {
-  request: null;
-  prepared: null;
-  status: TransactionRecordStatus;
-  submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
-  receipt: TransactionReceipt | null;
-  replacedId: string | null;
-  error: null;
-  userRejected: false;
-};
-
-export type TransactionMeta = TransactionProposalMeta | TransactionRecordMeta;
-
 export type TransactionProposalView = {
   kind: "proposal";
   id: string;
@@ -144,6 +127,10 @@ export type TransactionProposalView = {
   };
   review: SendTransactionApprovalReview;
   phase: TransactionProposalPhase;
+  failure: {
+    error: TransactionError | null;
+    userRejected: boolean;
+  } | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -179,8 +166,8 @@ export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKin
 export type TransactionApprovalRequestHandoff = {
   transactionId: string;
   approvalId: string;
-  pendingMeta: TransactionMeta;
-  waitForApprovalDecision(): Promise<TransactionMeta>;
+  pendingView: TransactionProposalView;
+  waitForApprovalDecision(): Promise<TransactionView>;
 };
 
 export type TransactionApprovalHandoff = TransactionApprovalRequestHandoff & {
@@ -195,11 +182,11 @@ export type TransactionApproveFailureReason =
   | "prepare_failed";
 
 export type TransactionApproveResult =
-  | { status: "approved"; transaction: TransactionMeta }
+  | { status: "approved"; transaction: TransactionProposalView }
   | {
       status: "failed";
       reason: TransactionApproveFailureReason;
-      transaction?: TransactionMeta | undefined;
+      transaction?: TransactionProposalView | undefined;
       message: string;
       data?: unknown;
     };
@@ -219,12 +206,12 @@ export type TransactionSubmissionOutcome =
   | { state: "failed"; error: TransactionSubmissionError };
 
 export class TransactionSubmissionError extends Error {
-  readonly meta: TransactionMeta;
+  readonly proposal: TransactionProposalView;
 
-  constructor(meta: TransactionMeta) {
-    super(meta.error?.message ?? "Transaction submission failed");
+  constructor(proposal: TransactionProposalView) {
+    super(proposal.failure?.error?.message ?? "Transaction submission failed");
     this.name = "TransactionSubmissionError";
-    this.meta = meta;
+    this.proposal = proposal;
   }
 }
 
@@ -232,7 +219,6 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
   error instanceof TransactionSubmissionError;
 
 export type TransactionController = {
-  getMeta(id: string): TransactionMeta | undefined;
   getView(id: string): TransactionView | undefined;
   getApprovalReview(input: {
     transactionId: string;

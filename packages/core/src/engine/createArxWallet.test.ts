@@ -606,7 +606,10 @@ describe("createArxWallet", () => {
       transactionId = handoff.transactionId;
       void handoff.waitForApprovalDecision().catch(() => null);
 
-      expect(wallet.transactions.getMeta(handoff.transactionId)?.status).toBe("pending");
+      expect(wallet.transactions.getView(handoff.transactionId)).toMatchObject({
+        kind: "proposal",
+        phase: "pending",
+      });
       expect(await transactionsPort.list()).toEqual([]);
     } finally {
       await runtime.shutdown();
@@ -633,7 +636,7 @@ describe("createArxWallet", () => {
       if (transactionId === null) {
         throw new Error("Expected transaction id to be set before restart.");
       }
-      expect(reopened.wallet.transactions.getMeta(transactionId)).toBeUndefined();
+      expect(reopened.wallet.transactions.getView(transactionId)).toBeUndefined();
       expect(await transactionsPort.list()).toEqual([]);
       expect(prepareTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction).toHaveBeenCalledTimes(0);
@@ -700,7 +703,8 @@ describe("createArxWallet", () => {
       await flushAsync();
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
-      expect(runtime.wallet.transactions.getMeta("44444444-4444-4444-8444-444444444444")).toMatchObject({
+      expect(runtime.wallet.transactions.getView("44444444-4444-4444-8444-444444444444")).toMatchObject({
+        kind: "record",
         status: "confirmed",
         receipt: {
           status: "0x1",

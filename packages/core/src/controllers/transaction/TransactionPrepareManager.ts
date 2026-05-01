@@ -2,7 +2,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionMeta } from "./types.js";
+import type { TransactionProposalMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
@@ -50,18 +50,18 @@ export class TransactionPrepareManager {
     });
   }
 
-  async prepareTransactionForExecution(id: string): Promise<TransactionMeta | null> {
+  async prepareTransactionForExecution(id: string): Promise<TransactionProposalMeta | null> {
     return await this.#runPrepareUntilCurrent(id, { source: "execution" });
   }
 
-  async #prepareTransactionInBackground(id: string): Promise<TransactionMeta | null> {
+  async #prepareTransactionInBackground(id: string): Promise<TransactionProposalMeta | null> {
     return await this.#runPrepareUntilCurrent(id, { source: "background" });
   }
 
   async #runPrepareUntilCurrent(
     id: string,
     opts: { source: "background" | "execution" },
-  ): Promise<TransactionMeta | null> {
+  ): Promise<TransactionProposalMeta | null> {
     while (true) {
       const existing = this.#prepareInFlight.get(id);
       let settledDraftRevision: number;
@@ -103,7 +103,7 @@ export class TransactionPrepareManager {
   async #prepareAndPersistInternal(
     id: string,
     opts: { source: "background" | "execution" },
-  ): Promise<TransactionMeta | null> {
+  ): Promise<TransactionProposalMeta | null> {
     const timeoutMs = this.#namespaceProposalPrepareTimeoutMs;
 
     const state = this.#proposalStore.peek(id);

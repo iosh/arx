@@ -76,22 +76,23 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       }
 
       if (isTransactionSubmissionError(error)) {
-        const failedMeta = error.meta;
+        const failedProposal = error.proposal;
+        const failure = failedProposal.failure?.error ?? null;
+        const userRejected = failedProposal.failure?.userRejected ?? false;
 
-        if (isRejectedBeforeBroadcast({ userRejected: failedMeta.userRejected, error: failedMeta.error })) {
+        if (isRejectedBeforeBroadcast({ userRejected, error: failure })) {
           throw arxError({
             reason: ArxReasons.ApprovalRejected,
             message: "User rejected transaction",
-            data: { origin, id: failedMeta.id },
+            data: { origin, id: failedProposal.id },
           });
         }
 
-        const failure = failedMeta.error;
         if (isTransportDisconnectedBeforeCompletion(failure)) {
           throw arxError({
             reason: ArxReasons.TransportDisconnected,
             message: failure?.message ?? "Transport disconnected.",
-            data: { origin, id: failedMeta.id },
+            data: { origin, id: failedProposal.id },
           });
         }
 
@@ -107,7 +108,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
         throw arxError({
           reason: ArxReasons.RpcInternal,
           message: failure?.message ?? "Transaction failed to broadcast",
-          data: { origin, id: failedMeta.id, error: failure ?? undefined },
+          data: { origin, id: failedProposal.id, error: failure ?? undefined },
         });
       }
 

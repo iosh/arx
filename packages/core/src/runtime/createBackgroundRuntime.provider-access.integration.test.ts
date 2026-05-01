@@ -573,11 +573,14 @@ describe("createBackgroundRuntime provider access", () => {
       });
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getMeta(capturedTransactionId) : undefined,
+        capturedTransactionId ? background.runtime.controllers.transactions.getView(capturedTransactionId) : undefined,
       ).toMatchObject({
         id: capturedTransactionId,
-        status: "failed",
-        userRejected: false,
+        kind: "proposal",
+        phase: "failed",
+        failure: {
+          userRejected: false,
+        },
       });
 
       unsubscribe();
@@ -1010,27 +1013,31 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getMeta(capturedTransactionId) : null,
+        capturedTransactionId ? background.runtime.controllers.transactions.getView(capturedTransactionId) : null,
       ).toMatchObject({
-        status: "failed",
-        error: {
-          name: "TransactionPersistenceError",
-          data: {
-            submitted: {
-              hash: txHash,
-            },
-            locator: {
-              format: "eip155.tx_hash",
-              value: txHash,
+        kind: "proposal",
+        phase: "failed",
+        failure: {
+          error: {
+            name: "TransactionPersistenceError",
+            data: {
+              submitted: {
+                hash: txHash,
+              },
+              locator: {
+                format: "eip155.tx_hash",
+                value: txHash,
+              },
             },
           },
         },
       });
-      const persistenceFailureMeta = capturedTransactionId
-        ? background.runtime.controllers.transactions.getMeta(capturedTransactionId)
+      const persistenceFailureView = capturedTransactionId
+        ? background.runtime.controllers.transactions.getView(capturedTransactionId)
         : null;
-      expect(persistenceFailureMeta).not.toHaveProperty("submitted");
-      expect(persistenceFailureMeta).not.toHaveProperty("locator");
+      expect(persistenceFailureView).toMatchObject({
+        kind: "proposal",
+      });
     } finally {
       releaseBroadcast?.();
       unsubscribeAutoApproval();

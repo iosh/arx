@@ -10,7 +10,7 @@ import type { NamespaceTransaction } from "../../../transactions/namespace/types
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
-import type { TransactionMeta, TransactionRecordView } from "../types.js";
+import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
 
 export const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 export const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
@@ -110,12 +110,12 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
-  input?: Partial<Omit<TransactionMeta, "status" | "submitted" | "locator" | "receipt" | "replacedId">> & {
+  input?: Partial<TransactionProposalMeta> & {
     status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
     fromAccountKey?: string;
   },
-): TransactionMeta => {
+): TransactionProposalMeta => {
   const chainRef = input?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = input?.from ?? DEFAULT_FROM;
   const requestedPhase = input?.status ?? "pending";
@@ -166,7 +166,7 @@ export const createTransactionProposal = (
   return created;
 };
 
-export const toRecord = (meta: TransactionMeta): TransactionRecord => ({
+export const toRecord = (meta: TransactionProposalMeta): TransactionRecord => ({
   id: meta.id,
   chainRef: meta.chainRef,
   origin: meta.origin,
@@ -223,37 +223,12 @@ export const createTransactionsServiceStub = (
 
 export const createRecordViewStub = (params?: {
   from?: string;
-  getMeta?: TransactionRecordViewStore["getMeta"];
   getView?: TransactionRecordViewStore["getView"];
-  getOrLoad?: TransactionRecordViewStore["getOrLoad"];
   getOrLoadView?: TransactionRecordViewStore["getOrLoadView"];
-  commitRecord?: TransactionRecordViewStore["commitRecord"];
   commitRecordView?: TransactionRecordViewStore["commitRecordView"];
   requestSync?: TransactionRecordViewStore["requestSync"];
 }): TransactionRecordViewStore => {
   const from = params?.from ?? DEFAULT_FROM;
-  const commitRecord =
-    params?.commitRecord ??
-    vi.fn((record: TransactionRecord) => ({
-      next: {
-        id: record.id,
-        namespace: record.chainRef.split(":", 1)[0] ?? "",
-        chainRef: record.chainRef,
-        origin: record.origin,
-        from,
-        request: null,
-        prepared: null,
-        status: record.status,
-        submitted: record.submitted,
-        locator: record.locator,
-        receipt: record.receipt ?? null,
-        replacedId: record.replacedId ?? null,
-        error: null,
-        userRejected: false,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-      } satisfies TransactionMeta,
-    }));
   const commitRecordView =
     params?.commitRecordView ??
     vi.fn((record: TransactionRecord) => ({
@@ -275,11 +250,8 @@ export const createRecordViewStub = (params?: {
     }));
 
   return {
-    getMeta: params?.getMeta ?? vi.fn(() => undefined),
     getView: params?.getView ?? vi.fn(() => undefined),
-    getOrLoad: params?.getOrLoad ?? vi.fn(async () => null),
     getOrLoadView: params?.getOrLoadView ?? vi.fn(async () => null),
-    commitRecord,
     commitRecordView,
     requestSync: params?.requestSync ?? vi.fn(),
   } as TransactionRecordViewStore;
@@ -287,7 +259,7 @@ export const createRecordViewStub = (params?: {
 
 export const createPrepareStub = (overrides?: {
   queuePrepare?: (id: string) => void;
-  prepareTransactionForExecution?: (id: string) => Promise<TransactionMeta | null>;
+  prepareTransactionForExecution?: (id: string) => Promise<TransactionProposalMeta | null>;
 }) => ({
   queuePrepare: overrides?.queuePrepare ?? vi.fn(),
   prepareTransactionForExecution: overrides?.prepareTransactionForExecution ?? vi.fn(async () => null),
@@ -306,7 +278,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
   transactionId: string,
-  input?: { updatedAt?: number; reviewPreparedSnapshot?: TransactionMeta["prepared"] },
+  input?: { updatedAt?: number; reviewPreparedSnapshot?: TransactionProposalMeta["prepared"] },
 ) => {
   const updatedAt = input?.updatedAt ?? 1;
   const current = proposalStore.peek(transactionId);

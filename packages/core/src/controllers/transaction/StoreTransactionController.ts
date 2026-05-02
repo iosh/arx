@@ -15,11 +15,7 @@ import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
-import {
-  TRANSACTION_STATE_CHANGED,
-  TRANSACTION_STATUS_CHANGED,
-  type TransactionMessenger,
-} from "./topics.js";
+import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalHandoff,
@@ -183,8 +179,8 @@ export class StoreTransactionController implements TransactionController {
     return this.#proposals.getRecordView(id);
   }
 
-  getTransactionApprovalReview(input: Parameters<TransactionController["getTransactionApprovalReview"]>[0]) {
-    return this.#proposals.getTransactionApprovalReview(input);
+  getTransactionApprovalReview(transactionId: string) {
+    return this.#proposals.getTransactionApprovalReview(transactionId);
   }
 
   beginTransactionApproval(

@@ -573,7 +573,9 @@ describe("createBackgroundRuntime provider access", () => {
       });
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId) : undefined,
+        capturedTransactionId
+          ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
+          : undefined,
       ).toMatchObject({
         id: capturedTransactionId,
         phase: "failed",
@@ -1012,7 +1014,9 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId) : null,
+        capturedTransactionId
+          ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
+          : null,
       ).toMatchObject({
         phase: "unpersisted",
         failure: {

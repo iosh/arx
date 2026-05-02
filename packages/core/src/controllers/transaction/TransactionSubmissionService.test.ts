@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LOCATOR, DEFAULT_SUBMITTED, createRecordViewStub } from "./__fixtures__/transactionServices.js";
+import { createRecordViewStub, DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 
 describe("TransactionSubmissionService", () => {

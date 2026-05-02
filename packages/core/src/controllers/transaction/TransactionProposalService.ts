@@ -29,7 +29,7 @@ import type {
   TransactionRequest,
 } from "./types.js";
 import {
-  buildProposalContext,
+  buildProposalStateContext,
   coerceTransactionError,
   createMissingNamespaceTransactionError,
   createTransactionSubmissionUnavailableError,
@@ -83,19 +83,15 @@ export class TransactionProposalService
     return this.#recordView.getView(id);
   }
 
-  getTransactionApprovalReview(input: Parameters<TransactionController["getTransactionApprovalReview"]>[0]) {
-    const proposalView = this.#proposalStore.getView(input.transactionId);
-    const proposalMeta = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
-    const request =
-      input.request ?? (proposalMeta ? this.#buildApprovalRequestPayload(proposalMeta, input.transactionId) : null);
-    const namespace = proposalMeta?.namespace ?? request?.request.namespace;
-    const namespaceTransaction = namespace ? this.#namespaces.get(namespace) : undefined;
+  getTransactionApprovalReview(transactionId: string) {
+    const proposalView = this.#proposalStore.getView(transactionId);
+    const proposalMeta = proposalView ? this.#proposalStore.get(transactionId) : undefined;
+    const namespaceTransaction = proposalMeta ? this.#namespaces.get(proposalMeta.namespace) : undefined;
     const reviewPreparedSnapshot = proposalView?.reviewState.reviewPreparedSnapshot ?? proposalMeta?.prepared ?? null;
     const namespaceReview =
-      namespaceTransaction && request
+      proposalMeta && namespaceTransaction
         ? (namespaceTransaction.proposal?.buildReview?.({
-            proposal: proposalMeta ? buildProposalContext(proposalMeta) : null,
-            request,
+            ...buildProposalStateContext(proposalMeta),
             reviewPreparedSnapshot,
           }) ?? null)
         : null;
@@ -179,7 +175,7 @@ export class TransactionProposalService
       from: ownedAccount.canonicalAddress,
       request: structuredClone(derivedRequest),
     };
-    namespaceTransaction.request?.validate?.(validationContext);
+    namespaceTransaction.request?.validateRequest?.(validationContext);
 
     const id = crypto.randomUUID();
     const approvalId = crypto.randomUUID();
@@ -284,7 +280,7 @@ export class TransactionProposalService
 
     const request = this.#requireRuntimeRequest(meta);
     const nextRequest = namespaceTransaction.proposal.applyDraftEdit({
-      proposal: buildProposalContext(meta),
+      ...buildProposalStateContext(meta),
       request: structuredClone({
         ...request,
         chainRef: request.chainRef ?? meta.chainRef,
@@ -458,7 +454,7 @@ export class TransactionProposalService
 
     return {
       ...proposal,
-      review: this.getTransactionApprovalReview({ transactionId: id }),
+      review: this.getTransactionApprovalReview(id),
     };
   }
 

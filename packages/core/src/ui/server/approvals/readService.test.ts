@@ -135,7 +135,7 @@ const createReadService = (records: ApprovalRecord[], reviews?: Record<string, S
     accounts: ACCOUNTS,
     chainViews: CHAIN_VIEWS,
     transactions: {
-      getTransactionApprovalReview: ({ transactionId }) => reviews?.[transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
+      getTransactionApprovalReview: (transactionId) => reviews?.[transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
     },
   });
 };

@@ -92,23 +92,21 @@ const waitForProposalReady = async (controller: StoreTransactionController, tran
 
 describe("StoreTransactionController", () => {
   it("resolves submission waits from the broadcast result without durable meta fields", async () => {
-    const controller = createController(
-      {
-        proposal: {
-          prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
-        },
-        execution: {
-          sign: vi.fn(async () => ({ raw: "0x1111" })),
-          broadcast: vi.fn(async () => ({
-            submitted: DEFAULT_SUBMITTED,
-            locator: DEFAULT_LOCATOR,
-          })),
-        },
-        tracking: {
-          fetchReceipt: vi.fn(async () => null),
-        },
+    const controller = createController({
+      proposal: {
+        prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
       },
-    );
+      execution: {
+        sign: vi.fn(async () => ({ raw: "0x1111" })),
+        broadcast: vi.fn(async () => ({
+          submitted: DEFAULT_SUBMITTED,
+          locator: DEFAULT_LOCATOR,
+        })),
+      },
+      tracking: {
+        fetchReceipt: vi.fn(async () => null),
+      },
+    });
 
     const handoff = await controller.beginTransactionApproval(
       {
@@ -253,5 +251,4 @@ describe("StoreTransactionController", () => {
       locator: DEFAULT_LOCATOR,
     });
   });
-
 });

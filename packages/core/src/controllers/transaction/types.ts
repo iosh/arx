@@ -222,10 +222,7 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
   error instanceof TransactionSubmissionError;
 
 export type TransactionController = {
-  getTransactionApprovalReview(input: {
-    transactionId: string;
-    request?: TransactionApprovalRequestPayload | undefined;
-  }): SendTransactionApprovalReview;
+  getTransactionApprovalReview(transactionId: string): SendTransactionApprovalReview;
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,

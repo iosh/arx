@@ -1,7 +1,7 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type {
   TransactionPrepareContext,
-  TransactionProposalContext,
+  TransactionProposalStateContext,
   TransactionRecordContext,
   TransactionReplacementKey,
   TransactionSignContext,
@@ -95,24 +95,23 @@ export const isUserRejectedError = (reason: unknown, coerced?: TransactionError)
   return rejected || coerced?.code === 4001 || coerced?.name === "TransactionRejectedError";
 };
 
-export const buildProposalContext = (meta: TransactionProposalMeta): TransactionProposalContext => ({
-  proposalId: meta.id,
+export const buildProposalStateContext = (meta: TransactionProposalMeta): TransactionProposalStateContext => ({
+  transactionId: meta.id,
   namespace: meta.namespace,
   chainRef: meta.chainRef,
   origin: meta.origin,
   from: meta.from,
-  currentRequest: structuredClone(meta.request),
-  prepared: structuredClone(meta.prepared),
+  request: structuredClone(meta.request),
 });
 
 export const buildPrepareContext = (meta: TransactionProposalMeta): TransactionPrepareContext => {
-  const proposal = buildProposalContext(meta);
+  const proposal = buildProposalStateContext(meta);
   return {
     namespace: proposal.namespace,
     chainRef: proposal.chainRef,
     origin: proposal.origin,
     from: proposal.from,
-    request: proposal.currentRequest,
+    request: proposal.request,
   };
 };
 

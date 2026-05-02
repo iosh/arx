@@ -6,11 +6,7 @@ import {
   type ApprovalRecord,
   type ApprovalSubject,
 } from "../../../controllers/approval/types.js";
-import type {
-  SendTransactionApprovalReview,
-  TransactionApprovalRequestPayload,
-  TransactionController,
-} from "../../../controllers/transaction/types.js";
+import type { SendTransactionApprovalReview, TransactionController } from "../../../controllers/transaction/types.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
 import type {
@@ -28,10 +24,7 @@ type ApprovalReadServiceDeps = {
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
   transactions: {
-    getTransactionApprovalReview(input: {
-      transactionId: string;
-      request?: TransactionApprovalRequestPayload | undefined;
-    }): SendTransactionApprovalReview;
+    getTransactionApprovalReview(transactionId: string): SendTransactionApprovalReview;
   };
 };
 
@@ -252,10 +245,7 @@ const buildSendTransactionDetail = (
     throw new Error(`Send-transaction approval ${record.approvalId} is missing a transaction subject.`);
   }
 
-  const review = deps.transactions.getTransactionApprovalReview({
-    transactionId: subject.transactionId,
-    request: record.request,
-  });
+  const review = deps.transactions.getTransactionApprovalReview(subject.transactionId);
 
   return {
     ...toDetailMeta(record),

@@ -396,7 +396,7 @@ describe("TransactionProposalService", () => {
     const { service, proposalStore } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
-          validate: () => {
+          validateRequest: () => {
             throw arxError({
               reason: ArxReasons.RpcInvalidParams,
               message: "Cannot mix legacy gasPrice with EIP-1559 fields.",
@@ -444,7 +444,7 @@ describe("TransactionProposalService", () => {
     const { service, chainRef } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
-          validate: validateRequest as never,
+          validateRequest: validateRequest as never,
         }),
       ),
     });
@@ -484,6 +484,66 @@ describe("TransactionProposalService", () => {
         },
       },
     });
+  });
+
+  it("derives the namespace request before validateRequest runs", async () => {
+    const calls: string[] = [];
+    const deriveForChain = vi.fn((request: TransactionRequest, resolvedChainRef: string) => {
+      calls.push("deriveForChain");
+      return {
+        ...request,
+        chainRef: resolvedChainRef,
+        payload: {
+          ...request.payload,
+          chainId: "0xa",
+        },
+      };
+    });
+    const validateRequest = vi.fn((context: { request: TransactionRequest }) => {
+      calls.push("validateRequest");
+      expect(context.request).toEqual({
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        payload: {
+          from: DEFAULT_FROM,
+          to: DEFAULT_TO,
+          value: "0x0",
+          chainId: "0xa",
+        },
+      });
+    });
+    const { service } = createProposalService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          deriveForChain: deriveForChain as never,
+          validateRequest: validateRequest as never,
+        }),
+      ),
+    });
+
+    const randomUuidSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce(REQUEST_ID)
+      .mockReturnValueOnce(APPROVAL_ID);
+
+    await service.beginTransactionApproval(
+      {
+        namespace: "eip155",
+        payload: {
+          from: DEFAULT_FROM,
+          to: DEFAULT_TO,
+          value: "0x0",
+        },
+      },
+      REQUEST_CONTEXT,
+      { from: DEFAULT_FROM },
+    );
+
+    randomUuidSpy.mockRestore();
+
+    expect(calls).toEqual(["deriveForChain", "validateRequest"]);
+    expect(deriveForChain).toHaveBeenCalledTimes(1);
+    expect(validateRequest).toHaveBeenCalledTimes(1);
   });
 
   it("reruns prepare after a draft edit invalidates an in-flight prepare result", async () => {
@@ -768,7 +828,7 @@ describe("TransactionProposalService", () => {
       },
     });
 
-    expect(service.getTransactionApprovalReview({ transactionId: REQUEST_ID })).toMatchObject({
+    expect(service.getTransactionApprovalReview(REQUEST_ID)).toMatchObject({
       updatedAt: 2,
       prepare: {
         state: "blocked",
@@ -786,5 +846,25 @@ describe("TransactionProposalService", () => {
         },
       }),
     );
+  });
+
+  it("does not build namespace review from approval request fallback when the proposal is missing", () => {
+    const buildReview = vi.fn();
+    const { service } = createProposalService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          buildReview: buildReview as never,
+        }),
+      ),
+    });
+
+    expect(service.getTransactionApprovalReview(REQUEST_ID)).toEqual({
+      updatedAt: 0,
+      namespaceReview: null,
+      prepare: {
+        state: "preparing",
+      },
+    });
+    expect(buildReview).not.toHaveBeenCalled();
   });
 });

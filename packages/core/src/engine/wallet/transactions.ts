@@ -10,7 +10,7 @@ export const createWalletTransactions = (deps: { transactions: TransactionContro
     waitForTransactionSubmission: (id) => transactions.waitForTransactionSubmission(id),
     approveTransaction: (id) => transactions.approveTransaction(id),
     rejectTransaction: (id, reason) => transactions.rejectTransaction(id, reason),
-    getTransactionApprovalReview: (input) => transactions.getTransactionApprovalReview(input),
+    getTransactionApprovalReview: ({ transactionId }) => transactions.getTransactionApprovalReview(transactionId),
     onStatusChanged: (handler) => transactions.onStatusChanged(handler),
     onStateChanged: (handler) => transactions.onStateChanged(handler),
   };

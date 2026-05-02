@@ -54,8 +54,8 @@ import type {
 } from "../controllers/unlock/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
-import type { RequestContext } from "../rpc/requestContext.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
+import type { RequestContext } from "../rpc/requestContext.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,
@@ -331,9 +331,7 @@ export type WalletTransactions = Readonly<{
   waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
   approveTransaction(id: string): Promise<TransactionApproveResult>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
-  getTransactionApprovalReview(input: {
-    transactionId: string;
-  }): SendTransactionApprovalReview;
+  getTransactionApprovalReview(input: { transactionId: string }): SendTransactionApprovalReview;
   onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 }>;

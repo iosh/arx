@@ -71,16 +71,11 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         }
         return deriveEip155TransactionRequestForChain(request as Eip155TransactionRequest, chainRef);
       },
-      validate: validateRequest,
+      validateRequest,
     },
     proposal: {
       prepare: prepareTransaction,
-      buildReview: ({ proposal, request, reviewPreparedSnapshot }) =>
-        buildEip155ApprovalReview({
-          proposal,
-          request,
-          reviewPreparedSnapshot,
-        }),
+      buildReview: (context) => buildEip155ApprovalReview(context),
       applyDraftEdit: (context) => applyEip155TransactionDraftEdit(context),
     },
     execution: {

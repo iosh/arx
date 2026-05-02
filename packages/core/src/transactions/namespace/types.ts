@@ -1,6 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { ApprovalKinds, ApprovalRequestByKind } from "../../controllers/approval/types.js";
 import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
 import type {
   TransactionPrepared,
@@ -49,14 +48,13 @@ export type TransactionValidationContext = TransactionPrepareContext;
 
 export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
 
-export type TransactionProposalContext = {
-  proposalId: string;
+export type TransactionProposalStateContext = {
+  transactionId: string;
   namespace: string;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  currentRequest: TransactionRequest;
-  prepared: TransactionPrepared | null;
+  request: TransactionRequest;
 };
 
 export type TransactionRecordContext = {
@@ -87,13 +85,21 @@ export type ReplacementResolution = {
 };
 
 export type TransactionApprovalReviewContext = {
-  proposal: TransactionProposalContext | null;
-  request: ApprovalRequestByKind[typeof ApprovalKinds.SendTransaction];
+  transactionId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress | null;
+  request: TransactionRequest;
   reviewPreparedSnapshot: TransactionPrepared | null;
 };
 
 export type TransactionDraftEditContext = {
-  proposal: TransactionProposalContext;
+  transactionId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress | null;
   request: TransactionRequest;
   changes: ReadonlyArray<Record<string, unknown>>;
   mode?: string;
@@ -101,7 +107,7 @@ export type TransactionDraftEditContext = {
 
 export type NamespaceTransactionRequest = {
   deriveForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
-  validate?(context: TransactionValidationContext): void;
+  validateRequest?(context: TransactionValidationContext): void;
 };
 
 export type NamespaceTransactionProposal = {

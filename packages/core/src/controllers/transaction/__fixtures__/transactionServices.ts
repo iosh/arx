@@ -43,7 +43,7 @@ export const createReceiptTrackingStub = () => ({
 export const createNamespaceTransactionStub = (
   overrides?: Partial<{
     deriveForChain: (...args: never[]) => unknown;
-    validate: (...args: never[]) => unknown;
+    validateRequest: (...args: never[]) => unknown;
     prepare: (...args: never[]) => unknown;
     buildReview: (...args: never[]) => unknown;
     applyDraftEdit: (...args: never[]) => unknown;
@@ -54,7 +54,7 @@ export const createNamespaceTransactionStub = (
 ): NamespaceTransaction => ({
   request: {
     ...(overrides?.deriveForChain ? { deriveForChain: overrides.deriveForChain as never } : {}),
-    ...(overrides?.validate ? { validate: overrides.validate as never } : {}),
+    ...(overrides?.validateRequest ? { validateRequest: overrides.validateRequest as never } : {}),
   },
   proposal: {
     prepare: (overrides?.prepare as never) ?? vi.fn(async () => ({ status: "ready", prepared: {} })),
@@ -283,7 +283,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
     get ??
     vi.fn(() =>
       createNamespaceTransactionStub({
-        validate: () => undefined,
+        validateRequest: () => undefined,
       }),
     ),
 });

@@ -1,6 +1,6 @@
 export type NamespaceTransactionOperation =
   | "request.deriveForChain"
-  | "request.validate"
+  | "request.validateRequest"
   | "proposal.prepare"
   | "proposal.buildReview"
   | "proposal.applyDraftEdit"

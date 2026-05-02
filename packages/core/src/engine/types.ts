@@ -35,7 +35,16 @@ import type {
   SupportedChainEntity,
   SupportedChainsUpdate,
 } from "../controllers/supportedChains/types.js";
-import type { TransactionController } from "../controllers/transaction/types.js";
+import type {
+  BeginTransactionApprovalOptions,
+  SendTransactionApprovalReview,
+  TransactionApproveResult,
+  TransactionError,
+  TransactionRequest,
+  TransactionStateChange,
+  TransactionStatusChange,
+  TransactionSubmissionResolution,
+} from "../controllers/transaction/types.js";
 import type {
   UnlockLockedPayload,
   UnlockParams,
@@ -45,6 +54,7 @@ import type {
 } from "../controllers/unlock/types.js";
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
+import type { RequestContext } from "../rpc/requestContext.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
 import type {
   ConfirmNewMnemonicParams,
@@ -309,13 +319,23 @@ export type WalletNetworks = Readonly<{
 
 /** Transaction approvals, execution, and status tracking. */
 export type WalletTransactions = Readonly<{
-  getView: TransactionController["getView"];
-  beginTransactionApproval: TransactionController["beginTransactionApproval"];
-  waitForTransactionSubmission: TransactionController["waitForTransactionSubmission"];
-  approveTransaction: TransactionController["approveTransaction"];
-  rejectTransaction: TransactionController["rejectTransaction"];
-  onStatusChanged: TransactionController["onStatusChanged"];
-  onStateChanged: TransactionController["onStateChanged"];
+  beginTransactionApproval(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    options: BeginTransactionApprovalOptions,
+  ): Promise<{
+    transactionId: string;
+    approvalId: string;
+    waitForProviderCompletion(): Promise<TransactionSubmissionResolution>;
+  }>;
+  waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
+  approveTransaction(id: string): Promise<TransactionApproveResult>;
+  rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
+  getTransactionApprovalReview(input: {
+    transactionId: string;
+  }): SendTransactionApprovalReview;
+  onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
+  onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 }>;
 
 /** Ephemeral prompts outside the approvals flow. */

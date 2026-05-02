@@ -704,14 +704,8 @@ const createUiAccessForTest = (input: {
                     ({
                       transactionId: "approval-id",
                       approvalId: "approval-id",
-                      pendingView: { id: "approval-id" },
-                      waitForApprovalDecision: async () => ({ id: "approval-id" }),
                     }) as never,
                 ) as never),
-          getView:
-            "getView" in input.controllers.transactions
-              ? input.controllers.transactions.getView
-              : vi.fn(() => undefined),
           onStateChanged: input.controllers.transactions.onStateChanged,
         } as never,
         chains: {

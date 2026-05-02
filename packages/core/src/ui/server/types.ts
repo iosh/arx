@@ -2,8 +2,14 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { PermissionsEvents } from "../../controllers/permission/types.js";
-import type { TransactionController } from "../../controllers/transaction/types.js";
+import type {
+  BeginTransactionApprovalOptions,
+  TransactionApprovalRequestHandoff,
+  TransactionRequest,
+  TransactionStateChange,
+} from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
+import type { RequestContext } from "../../rpc/requestContext.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
@@ -80,10 +86,20 @@ export type UiApprovalEventsAccess = {
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
-export type UiTransactionsAccess = Pick<
-  TransactionController,
-  "beginTransactionApproval" | "getView" | "retryPrepare" | "applyDraftEdit" | "onStateChanged"
->;
+export type UiTransactionsAccess = {
+  beginTransactionApproval(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    options: BeginTransactionApprovalOptions,
+  ): Promise<TransactionApprovalRequestHandoff>;
+  retryPrepare(transactionId: string): Promise<void>;
+  applyDraftEdit(input: {
+    transactionId: string;
+    changes: ReadonlyArray<Record<string, unknown>>;
+    mode?: string;
+  }): Promise<void>;
+  onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
+};
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<

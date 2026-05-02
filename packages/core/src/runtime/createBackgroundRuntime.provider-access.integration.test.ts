@@ -573,10 +573,9 @@ describe("createBackgroundRuntime provider access", () => {
       });
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getView(capturedTransactionId) : undefined,
+        capturedTransactionId ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId) : undefined,
       ).toMatchObject({
         id: capturedTransactionId,
-        kind: "proposal",
         phase: "failed",
         failure: {
           userRejected: false,
@@ -1013,9 +1012,8 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       expect(
-        capturedTransactionId ? background.runtime.controllers.transactions.getView(capturedTransactionId) : null,
+        capturedTransactionId ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId) : null,
       ).toMatchObject({
-        kind: "proposal",
         phase: "unpersisted",
         failure: {
           error: {
@@ -1033,11 +1031,9 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
       const persistenceFailureView = capturedTransactionId
-        ? background.runtime.controllers.transactions.getView(capturedTransactionId)
+        ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
         : null;
-      expect(persistenceFailureView).toMatchObject({
-        kind: "proposal",
-      });
+      expect(persistenceFailureView).toBeTruthy();
     } finally {
       releaseBroadcast?.();
       unsubscribeAutoApproval();

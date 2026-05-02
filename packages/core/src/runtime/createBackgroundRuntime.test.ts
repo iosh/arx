@@ -764,8 +764,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       .mockImplementation(async (request) => ({
         transactionId: approvalId,
         approvalId,
-        pendingView: { id: approvalId, currentRequest: request } as never,
-        waitForApprovalDecision: async () => ({ id: approvalId }) as never,
       }));
 
     const handlers = createHandlersForRuntime(runtime);
@@ -896,8 +894,6 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       .mockImplementation(async (request, requester) => ({
         transactionId: requester.sessionId,
         approvalId: requester.sessionId,
-        pendingView: { id: requester.sessionId, currentRequest: request } as never,
-        waitForApprovalDecision: async () => ({ id: requester.sessionId }) as never,
       }));
 
     const platform = {

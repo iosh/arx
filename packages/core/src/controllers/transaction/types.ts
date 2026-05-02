@@ -151,8 +151,6 @@ export type TransactionRecordView = {
   updatedAt: number;
 };
 
-export type TransactionView = TransactionProposalView | TransactionRecordView;
-
 export type TransactionApprovalRequestPayload = {
   chainRef: ChainRef;
   origin: string;
@@ -166,8 +164,6 @@ export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKin
 export type TransactionApprovalRequestHandoff = {
   transactionId: string;
   approvalId: string;
-  pendingView: TransactionProposalView;
-  waitForApprovalDecision(): Promise<TransactionView>;
 };
 
 export type TransactionApprovalHandoff = TransactionApprovalRequestHandoff & {
@@ -226,8 +222,7 @@ export const isTransactionSubmissionError = (error: unknown): error is Transacti
   error instanceof TransactionSubmissionError;
 
 export type TransactionController = {
-  getView(id: string): TransactionView | undefined;
-  getApprovalReview(input: {
+  getTransactionApprovalReview(input: {
     transactionId: string;
     request?: TransactionApprovalRequestPayload | undefined;
   }): SendTransactionApprovalReview;
@@ -250,6 +245,11 @@ export type TransactionController = {
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };
 
+export type TransactionProposalReadAccess = {
+  getProposalView(id: string): TransactionProposalView | undefined;
+  getRecordView(id: string): TransactionRecordView | undefined;
+};
+
 export type {
   Eip155SubmittedTransaction,
   Eip155TransactionPayload,
@@ -263,3 +263,5 @@ export type {
   TransactionSubmissionLocator,
   TransactionSubmitted,
 } from "../../transactions/types.js";
+
+export type { SendTransactionApprovalReview } from "./review/types.js";

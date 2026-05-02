@@ -39,11 +39,7 @@ const createUiAccess = () =>
             ({
               transactionId: "tx-1",
               approvalId: "approval-1",
-              pendingView: {} as never,
-              waitForApprovalDecision: async () => ({}) as never,
-              waitForProviderCompletion: async () => ({ submitted: {} as never, locator: {} as never }),
             }) as never,
-          getView: () => undefined,
           retryPrepare: async () => {},
           applyDraftEdit: async () => {},
           onStateChanged: (handler: (change: { transactionIds: string[]; approvalIds: string[] }) => void) => {

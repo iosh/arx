@@ -80,8 +80,8 @@ const createController = (
 
 const waitForProposalReady = async (controller: StoreTransactionController, transactionId: string) => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const view = controller.getView(transactionId);
-    if (view?.kind === "proposal" && view.reviewState.status === "ready") {
+    const view = controller.getProposalView(transactionId);
+    if (view?.reviewState.status === "ready") {
       return view;
     }
     await Promise.resolve();

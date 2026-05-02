@@ -112,13 +112,6 @@ describe("TransactionProposalService", () => {
     expect(handoff).toMatchObject({
       transactionId: REQUEST_ID,
       approvalId: APPROVAL_ID,
-      pendingView: {
-        id: REQUEST_ID,
-        kind: "proposal",
-        phase: "pending",
-        chainRef,
-        namespace: "eip155",
-      },
     });
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
@@ -146,7 +139,7 @@ describe("TransactionProposalService", () => {
     );
 
     settleApproval?.();
-    await expect(handoff.waitForApprovalDecision()).resolves.toMatchObject({
+    expect(service.getProposalView(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
       kind: "proposal",
       phase: "pending",
@@ -301,11 +294,11 @@ describe("TransactionProposalService", () => {
     randomUuidSpy.mockRestore();
 
     settleApproval?.();
-    const result = await handoff.waitForApprovalDecision();
+    await Promise.resolve();
 
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(proposalStore.get(REQUEST_ID)?.chainRef).toBe(chainRef);
-    expect(result).toMatchObject({ chainRef, namespace: "eip155" });
+    expect(service.getProposalView(REQUEST_ID)).toMatchObject({ chainRef, namespace: "eip155" });
   });
 
   it("delegates chain-specific request derivation to the namespace transaction before proposal store persistence", async () => {
@@ -775,7 +768,7 @@ describe("TransactionProposalService", () => {
       },
     });
 
-    expect(service.getApprovalReview({ transactionId: REQUEST_ID })).toMatchObject({
+    expect(service.getTransactionApprovalReview({ transactionId: REQUEST_ID })).toMatchObject({
       updatedAt: 2,
       prepare: {
         state: "blocked",

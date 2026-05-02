@@ -161,11 +161,6 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      const approvedView = await handoff.waitForApprovalDecision();
-      expect(
-        (approvedView.kind === "proposal" && approvedView.phase === "approved") ||
-          (approvedView.kind === "record" && approvedView.status === "broadcast"),
-      ).toBe(true);
       const submission = await context.runtime.controllers.transactions.waitForTransactionSubmission(
         handoff.transactionId,
       );
@@ -175,12 +170,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
       expect(fetchReceipt).toHaveBeenCalledTimes(0);
 
-      const broadcastView = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const broadcastView = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(broadcastView).toMatchObject({
-        kind: "record",
         status: "broadcast",
       });
-      expect(submission.locator).toEqual(broadcastView?.kind === "record" ? broadcastView.locator : undefined);
+      expect(submission.locator).toEqual(broadcastView?.locator);
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
 
@@ -194,9 +188,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         ["record:broadcast", "record:confirmed"],
       ]);
 
-      const confirmedView = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const confirmedView = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(confirmedView).toMatchObject({
-        kind: "record",
         status: "confirmed",
         receipt: confirmedReceipt,
       });
@@ -297,7 +290,6 @@ describe("createBackgroundRuntime (transactions integration)", () => {
             makeRequestContext("https://dapp.example"),
             { from },
           );
-          await handoff.waitForApprovalDecision();
           await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
           return handoff.transactionId;
         }),
@@ -308,9 +300,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(3));
 
       for (const id of submissionIds) {
-        const view = context.runtime.controllers.transactions.getView(id);
+        const view = context.runtime.controllers.transactions.getRecordView(id);
         expect(view).toMatchObject({
-          kind: "record",
           status: "broadcast",
         });
       }
@@ -395,7 +386,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await handoff.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -407,12 +398,11 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
       expect(detectReplacement).toHaveBeenCalledTimes(1);
 
-      const replacedView = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const replacedView = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(replacedView).toMatchObject({
-        kind: "record",
         status: "replaced",
       });
-      expect(replacedView?.kind === "record" ? replacedView.locator : undefined).toEqual({
+      expect(replacedView?.locator).toEqual({
         format: "eip155.tx_hash",
         value: "0x1111111111111111111111111111111111111111111111111111111111111111",
       });
@@ -522,7 +512,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await first.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(first.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
       const second = await context.runtime.controllers.transactions.beginTransactionApproval(
@@ -540,23 +530,21 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await second.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(second.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(2));
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
       await flushAsync();
 
       await vi.waitFor(() => {
-        const replacement = context.runtime.controllers.transactions.getView(second.transactionId);
+        const replacement = context.runtime.controllers.transactions.getRecordView(second.transactionId);
         expect(replacement).toMatchObject({
-          kind: "record",
           status: "confirmed",
         });
       });
 
-      const replaced = context.runtime.controllers.transactions.getView(first.transactionId);
+      const replaced = context.runtime.controllers.transactions.getRecordView(first.transactionId);
       expect(replaced).toMatchObject({
-        kind: "record",
         status: "replaced",
         replacedId: second.transactionId,
       });
@@ -635,7 +623,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await handoff.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
 
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
@@ -643,9 +631,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       await flushAsync();
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
-      const afterError = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const afterError = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(afterError).toMatchObject({
-        kind: "record",
         status: "broadcast",
       });
 
@@ -655,9 +642,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       expect(fetchReceipt).toHaveBeenCalledTimes(2);
 
       await vi.waitFor(() => {
-        const confirmed = context.runtime.controllers.transactions.getView(handoff.transactionId);
+        const confirmed = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
         expect(confirmed).toMatchObject({
-          kind: "record",
           status: "confirmed",
         });
       });
@@ -796,7 +782,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await handoff.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
 
       await flushAsync();
 
@@ -808,9 +794,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(20);
 
-      const failedView = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const failedView = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(failedView).toMatchObject({
-        kind: "record",
         status: "failed",
       });
 
@@ -885,7 +870,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await handoff.waitForApprovalDecision();
+      await context.runtime.controllers.transactions.waitForTransactionSubmission(handoff.transactionId);
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -896,9 +881,8 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
-      const failedView = context.runtime.controllers.transactions.getView(handoff.transactionId);
+      const failedView = context.runtime.controllers.transactions.getRecordView(handoff.transactionId);
       expect(failedView).toMatchObject({
-        kind: "record",
         status: "failed",
         receipt: failedReceipt,
       });

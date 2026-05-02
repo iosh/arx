@@ -25,8 +25,8 @@ import type {
   TransactionError,
   TransactionProposalMeta,
   TransactionProposalView,
+  TransactionRecordView,
   TransactionRequest,
-  TransactionView,
 } from "./types.js";
 import {
   buildProposalContext,
@@ -49,7 +49,7 @@ type TransactionProposalServiceDeps = {
 };
 
 export class TransactionProposalService
-  implements Pick<TransactionController, "getView" | "getApprovalReview" | "retryPrepare" | "applyDraftEdit">
+  implements Pick<TransactionController, "getTransactionApprovalReview" | "retryPrepare" | "applyDraftEdit">
 {
   #proposalStore: TransactionProposalStore;
   #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
@@ -75,19 +75,15 @@ export class TransactionProposalService
     this.#readTransactionTimestamp = deps.readTransactionTimestamp;
   }
 
-  getView(id: string): TransactionView | undefined {
-    const proposalView = this.#proposalStore.getView(id);
-    if (!proposalView) {
-      return this.#recordView.getView(id);
-    }
-
-    return {
-      ...proposalView,
-      review: this.getApprovalReview({ transactionId: id }),
-    };
+  getProposalView(id: string): TransactionProposalView | undefined {
+    return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : undefined;
   }
 
-  getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
+  getRecordView(id: string): TransactionRecordView | undefined {
+    return this.#recordView.getView(id);
+  }
+
+  getTransactionApprovalReview(input: Parameters<TransactionController["getTransactionApprovalReview"]>[0]) {
     const proposalView = this.#proposalStore.getView(input.transactionId);
     const proposalMeta = proposalView ? this.#proposalStore.get(input.transactionId) : undefined;
     const request =
@@ -246,8 +242,8 @@ export class TransactionProposalService
       throw error;
     }
 
-    // waitForApprovalDecision() consumes this promise. This catch only prevents an
-    // unhandled rejection when the caller abandons the handoff.
+    // Keep the approval promise observed even if the caller only uses the
+    // transaction/approval ids from the handoff.
     void approvalHandle.settled.catch(() => undefined);
 
     this.#prepare.queuePrepare(id);
@@ -255,15 +251,6 @@ export class TransactionProposalService
     return {
       transactionId: proposalMeta.id,
       approvalId: approvalHandle.approvalId,
-      pendingView: this.#requireProposalView(proposalMeta.id),
-      waitForApprovalDecision: async () => {
-        await approvalHandle.settled;
-        const next = this.getView(id) ?? (await this.#recordView.getOrLoadView(id));
-        if (!next) {
-          throw new Error(`Transaction ${id} is no longer active`);
-        }
-        return next;
-      },
     };
   }
 
@@ -471,7 +458,7 @@ export class TransactionProposalService
 
     return {
       ...proposal,
-      review: this.getApprovalReview({ transactionId: id }),
+      review: this.getTransactionApprovalReview({ transactionId: id }),
     };
   }
 

@@ -25,11 +25,13 @@ import type {
   TransactionApprovalHandoff,
   TransactionController,
   TransactionError,
+  TransactionProposalReadAccess,
+  TransactionProposalView,
+  TransactionRecordView,
   TransactionRequest,
   TransactionStateChange,
   TransactionStatusChange,
   TransactionSubmissionResolution,
-  TransactionView,
 } from "./types.js";
 
 const createTransactionTransportDisconnectedError = (): TransactionError => ({
@@ -173,12 +175,16 @@ export class StoreTransactionController implements TransactionController {
     });
   }
 
-  getView(id: string): TransactionView | undefined {
-    return this.#proposals.getView(id);
+  getProposalView(id: string): TransactionProposalView | undefined {
+    return this.#proposals.getProposalView(id);
   }
 
-  getApprovalReview(input: Parameters<TransactionController["getApprovalReview"]>[0]) {
-    return this.#proposals.getApprovalReview(input);
+  getRecordView(id: string): TransactionRecordView | undefined {
+    return this.#proposals.getRecordView(id);
+  }
+
+  getTransactionApprovalReview(input: Parameters<TransactionController["getTransactionApprovalReview"]>[0]) {
+    return this.#proposals.getTransactionApprovalReview(input);
   }
 
   beginTransactionApproval(
@@ -334,3 +340,5 @@ export class StoreTransactionController implements TransactionController {
     };
   }
 }
+
+export type StoreTransactionAccess = TransactionController & TransactionProposalReadAccess;

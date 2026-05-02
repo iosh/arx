@@ -5,12 +5,12 @@ export const createWalletTransactions = (deps: { transactions: TransactionContro
   const { transactions } = deps;
 
   return {
-    getView: (id) => transactions.getView(id),
     beginTransactionApproval: (request, requestContext, options) =>
       transactions.beginTransactionApproval(request, requestContext, options),
     waitForTransactionSubmission: (id) => transactions.waitForTransactionSubmission(id),
     approveTransaction: (id) => transactions.approveTransaction(id),
     rejectTransaction: (id, reason) => transactions.rejectTransaction(id, reason),
+    getTransactionApprovalReview: (input) => transactions.getTransactionApprovalReview(input),
     onStatusChanged: (handler) => transactions.onStatusChanged(handler),
     onStateChanged: (handler) => transactions.onStateChanged(handler),
   };

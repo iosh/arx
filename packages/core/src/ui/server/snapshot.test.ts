@@ -90,9 +90,6 @@ const createDeps = () => ({
     hasTransaction: () => false,
     hasTransactionReceiptTracking: () => false,
   },
-  transactions: {
-    getMeta: () => undefined,
-  },
 });
 
 describe("buildUiSnapshot", () => {

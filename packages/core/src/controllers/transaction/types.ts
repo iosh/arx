@@ -53,8 +53,8 @@ export type TransactionRecordStatusChange = {
 export type TransactionStatusChange = TransactionProposalPhaseChange | TransactionRecordStatusChange;
 
 export type TransactionStateChange = {
-  revision: number;
   transactionIds: string[];
+  approvalIds: string[];
 };
 
 export type TransactionSubmittedChange = {

@@ -135,7 +135,6 @@ const createReadService = (records: ApprovalRecord[], reviews?: Record<string, S
     accounts: ACCOUNTS,
     chainViews: CHAIN_VIEWS,
     transactions: {
-      getMeta: () => undefined,
       getApprovalReview: ({ transactionId }) => reviews?.[transactionId] ?? SEND_TRANSACTION_REVIEW_READY,
     },
   });
@@ -475,8 +474,13 @@ describe("createApprovalReadService", () => {
       }),
     ]);
 
-    expect(readService.listAffectedApprovalIds({ approvalId: "approval-send-1" })).toEqual(["approval-send-1"]);
-    expect(readService.listAffectedApprovalIds({ transactionId: "tx-2" })).toEqual(["approval-send-2"]);
-    expect(readService.listAffectedApprovalIds({ transactionId: "missing" })).toEqual([]);
+    expect(readService.getDetail("approval-send-1")).toMatchObject({
+      approvalId: "approval-send-1",
+      kind: ApprovalKinds.SendTransaction,
+    });
+    expect(readService.getDetail("approval-send-2")).toMatchObject({
+      approvalId: "approval-send-2",
+      kind: ApprovalKinds.SendTransaction,
+    });
   });
 });

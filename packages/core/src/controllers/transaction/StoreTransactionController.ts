@@ -122,7 +122,7 @@ export type StoreTransactionControllerOptions = {
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "create" | "onFinished">;
+  approvals: Pick<ApprovalController, "create" | "onFinished" | "listPendingIdsBySubject">;
   namespaces: NamespaceTransactions;
   service: TransactionsService;
   now?: () => number;
@@ -143,15 +143,20 @@ export type StoreTransactionControllerOptions = {
  */
 export class StoreTransactionController implements TransactionController {
   #messenger: TransactionMessenger;
+  #approvals: Pick<ApprovalController, "listPendingIdsBySubject">;
   #proposalStore: TransactionProposalStore;
   #recordView: TransactionRecordViewStore;
   #proposals: TransactionProposalService;
   #execution: TransactionExecutionService;
   #submissionOutcomes = new Map<string, TransactionSubmissionOutcome>();
   #submissionOutcomeLimit: number;
+  #pendingStateTransactionIds = new Set<string>();
+  #pendingStateApprovalIds = new Set<string>();
+  #stateFlushScheduled = false;
 
   constructor(options: StoreTransactionControllerOptions) {
     this.#messenger = options.messenger;
+    this.#approvals = options.approvals;
 
     const readSystemTime = options.now ?? Date.now;
     const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
@@ -211,12 +216,15 @@ export class StoreTransactionController implements TransactionController {
       readTransactionTimestamp,
     });
 
+    this.#proposalStore.onChanged((transactionIds) => this.#enqueueStateChange({ transactionIds }));
+    this.#recordView.onChanged((transactionIds) => this.#enqueueStateChange({ transactionIds }));
+
     options.approvals.onFinished((event) => {
-      const changed = this.#proposals.invalidateFromApproval(event);
-      if (changed) {
-        this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
-          revision: changed.updatedAt,
-          transactionIds: [event.subject?.kind === "transaction" ? event.subject.transactionId : ""].filter(Boolean),
+      this.#proposals.invalidateFromApproval(event);
+      if (event.subject?.kind === "transaction") {
+        this.#enqueueStateChange({
+          transactionIds: [event.subject.transactionId],
+          approvalIds: [event.approvalId],
         });
       }
     });
@@ -382,6 +390,50 @@ export class StoreTransactionController implements TransactionController {
 
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void {
     return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED, handler);
+  }
+
+  #enqueueStateChange(change: { transactionIds: string[]; approvalIds?: string[] }): void {
+    for (const transactionId of change.transactionIds) {
+      this.#pendingStateTransactionIds.add(transactionId);
+    }
+    for (const approvalId of change.approvalIds ?? []) {
+      this.#pendingStateApprovalIds.add(approvalId);
+    }
+
+    if (this.#stateFlushScheduled) {
+      return;
+    }
+
+    this.#stateFlushScheduled = true;
+    queueMicrotask(() => {
+      this.#stateFlushScheduled = false;
+      this.#publishPendingStateChange();
+    });
+  }
+
+  #publishPendingStateChange(): void {
+    const transactionIds = [...this.#pendingStateTransactionIds];
+    const approvalIds = new Set<string>(this.#pendingStateApprovalIds);
+    this.#pendingStateTransactionIds.clear();
+    this.#pendingStateApprovalIds.clear();
+
+    for (const transactionId of transactionIds) {
+      for (const approvalId of this.#listPendingApprovalIdsForTransaction(transactionId)) {
+        approvalIds.add(approvalId);
+      }
+    }
+
+    this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
+      transactionIds,
+      approvalIds: [...approvalIds],
+    });
+  }
+
+  #listPendingApprovalIdsForTransaction(transactionId: string): string[] {
+    return this.#approvals.listPendingIdsBySubject({
+      kind: "transaction",
+      transactionId,
+    });
   }
 
   #rememberSubmissionOutcome(id: string, outcome: TransactionSubmissionOutcome): void {

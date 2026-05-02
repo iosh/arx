@@ -175,6 +175,7 @@ export const initControllers = ({
     approvals: {
       create: (request, requester) => approvalController.create(request, requester),
       onFinished: (handler) => approvalController.onFinished(handler),
+      listPendingIdsBySubject: (subject) => approvalController.listPendingIdsBySubject(subject),
     },
     namespaces: namespaceTransactions,
     service: transactionsService,

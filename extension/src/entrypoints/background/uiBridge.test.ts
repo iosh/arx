@@ -681,7 +681,6 @@ const createUiAccessForTest = (input: {
           read: {
             listPendingEntries: vi.fn(() => []),
             getDetail: vi.fn(() => null),
-            listAffectedApprovalIds: vi.fn(() => []),
           },
           write: {
             resolve: vi.fn(async () => ({
@@ -713,8 +712,8 @@ const createUiAccessForTest = (input: {
             "getView" in input.controllers.transactions
               ? input.controllers.transactions.getView
               : vi.fn(() => undefined),
+          onStateChanged: input.controllers.transactions.onStateChanged,
         } as never,
-        transactionEvents: input.controllers.transactions as never,
         chains: {
           ...(input.chainViewsOverride ?? controllerViews.chainViews),
           selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),

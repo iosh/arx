@@ -71,6 +71,7 @@ const createController = (
         settled: Promise.resolve(undefined as never),
       })),
       onFinished: vi.fn(() => () => {}),
+      listPendingIdsBySubject: vi.fn(() => []),
     },
     namespaces,
     service: options?.service ?? createTransactionsService(),

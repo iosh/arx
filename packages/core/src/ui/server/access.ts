@@ -105,18 +105,14 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
 
     const unsubs = [
       server.access.approvalEvents.onCreated(() => emitApprovalsChanged()),
-      server.access.approvalEvents.onFinished(({ approvalId }) => {
+      server.access.approvalEvents.onFinished((event) => {
         emitApprovalsChanged();
-        emitApprovalDetailChanged(approvalId);
-      }),
-      server.access.transactionEvents.onStateChanged((change) => {
-        const affectedApprovalIds = new Set<string>();
-        for (const transactionId of change.transactionIds) {
-          for (const approvalId of server.access.approvals.read.listAffectedApprovalIds({ transactionId })) {
-            affectedApprovalIds.add(approvalId);
-          }
+        if (event.subject?.kind !== "transaction") {
+          emitApprovalDetailChanged(event.approvalId);
         }
-        for (const approvalId of affectedApprovalIds) {
+      }),
+      server.access.transactions.onStateChanged((change) => {
+        for (const approvalId of new Set(change.approvalIds)) {
           emitApprovalDetailChanged(approvalId);
         }
       }),

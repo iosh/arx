@@ -19,12 +19,11 @@ type ApprovalReadServiceDeps = {
   approvals: {
     get(approvalId: string): ApprovalRecord | undefined;
     getSubject(approvalId: string): ApprovalSubject | undefined;
-    listPendingIdsBySubject(subject: ApprovalSubject): string[];
     getState(): { pending: ApprovalQueueItem[] };
   };
   accounts: Pick<WalletAccounts, "getActiveAccountForNamespace" | "listOwnedForNamespace">;
   chainViews: Pick<ChainViewsService, "getApprovalReviewChainView" | "findAvailableChainView">;
-  transactions: Pick<TransactionController, "getApprovalReview" | "getView">;
+  transactions: Pick<TransactionController, "getApprovalReview">;
 };
 
 const isApprovalRecord = <K extends ApprovalRecord["kind"]>(
@@ -297,20 +296,8 @@ export const createApprovalReadService = (deps: ApprovalReadServiceDeps) => {
     throw new Error(`Unsupported approval kind: ${record.kind}`);
   };
 
-  const listAffectedApprovalIds = (change: { approvalId: string } | { transactionId: string }): string[] => {
-    if ("approvalId" in change) {
-      return [change.approvalId];
-    }
-
-    return deps.approvals.listPendingIdsBySubject({
-      kind: "transaction",
-      transactionId: change.transactionId,
-    });
-  };
-
   return {
     listPending,
     getDetail,
-    listAffectedApprovalIds,
   };
 };

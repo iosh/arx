@@ -64,7 +64,6 @@ export type UiAccountsAccess = Pick<
 export type UiApprovalsReadModelAccess = {
   listPendingEntries(): ApprovalListEntry[];
   getDetail(id: string): ApprovalDetail | null;
-  listAffectedApprovalIds(change: { approvalId: string } | { transactionId: string }): string[];
 };
 
 export type UiApprovalsWriteAccess = Pick<ApprovalController, "resolve">;
@@ -83,12 +82,8 @@ export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissio
 
 export type UiTransactionsAccess = Pick<
   TransactionController,
-  "beginTransactionApproval" | "getView" | "retryPrepare" | "applyDraftEdit"
+  "beginTransactionApproval" | "getView" | "retryPrepare" | "applyDraftEdit" | "onStateChanged"
 >;
-
-export type UiTransactionEventsAccess = {
-  onStateChanged: TransactionController["onStateChanged"];
-};
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<
@@ -122,7 +117,6 @@ export type UiServerAccess = {
   approvalEvents: UiApprovalEventsAccess;
   permissions: UiPermissionsAccess;
   transactions: UiTransactionsAccess;
-  transactionEvents: UiTransactionEventsAccess;
   chains: UiChainsAccess;
   accountCodecs: UiAccountCodecsAccess;
   session: UiSessionAccess;

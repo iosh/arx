@@ -182,7 +182,6 @@ const createHandlersForRuntime = (
         read: {
           listPendingEntries: () => approvalReadService.listPending(),
           getDetail: (approvalId) => approvalReadService.getDetail(approvalId),
-          listAffectedApprovalIds: (change) => approvalReadService.listAffectedApprovalIds(change),
         },
         write: {
           resolve: runtime.controllers.approvals.resolve.bind(runtime.controllers.approvals),
@@ -195,7 +194,6 @@ const createHandlersForRuntime = (
         ),
       },
       transactions: runtime.controllers.transactions,
-      transactionEvents: runtime.controllers.transactions,
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
           runtime.services.chainViews,

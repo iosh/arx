@@ -2,13 +2,8 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
-import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
-import type {
-  TransactionReceipt,
-  TransactionRecordStatusChange,
-  TransactionRecordView,
-  TransactionStateChange,
-} from "./types.js";
+import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
+import type { TransactionReceipt, TransactionRecordStatusChange, TransactionRecordView } from "./types.js";
 
 type Options = {
   messenger: TransactionMessenger;
@@ -22,7 +17,7 @@ type Options = {
  * Durable record-backed read model:
  * - bounded LRU cache for synchronous reads (getView())
  * - coalesced best-effort sync on store change
- * - emits transaction:statusChanged and transaction:stateChanged
+ * - emits transaction:statusChanged
  */
 export class TransactionRecordViewStore {
   #messenger: TransactionMessenger;
@@ -33,10 +28,7 @@ export class TransactionRecordViewStore {
   #fromDecodeLogged: Set<string> = new Set();
 
   #records: Map<string, TransactionRecordView> = new Map();
-
-  #stateRevision = 0;
-  #statePublishScheduled = false;
-  #pendingStateChangeIds: Set<string> = new Set();
+  #changeListeners = new Set<(transactionIds: string[]) => void>();
 
   #syncWanted = false;
   #syncInFlight: Promise<void> | null = null;
@@ -146,9 +138,7 @@ export class TransactionRecordViewStore {
   }
 
   notifyStateChanged(transactionIds: string[]): void {
-    for (const id of transactionIds) {
-      this.#scheduleStateChanged(id);
-    }
+    this.#notifyChanged(transactionIds);
   }
 
   #upsert(view: TransactionRecordView) {
@@ -163,7 +153,7 @@ export class TransactionRecordViewStore {
       this.#fromDecodeLogged.delete(oldest);
     }
 
-    this.#scheduleStateChanged(view.id);
+    this.#notifyChanged([view.id]);
   }
 
   #touch(id: string): TransactionRecordView | undefined {
@@ -174,19 +164,17 @@ export class TransactionRecordViewStore {
     return existing;
   }
 
-  #scheduleStateChanged(id: string) {
-    this.#pendingStateChangeIds.add(id);
-    if (this.#statePublishScheduled) return;
-    this.#statePublishScheduled = true;
+  onChanged(handler: (transactionIds: string[]) => void): () => void {
+    this.#changeListeners.add(handler);
+    return () => {
+      this.#changeListeners.delete(handler);
+    };
+  }
 
-    queueMicrotask(() => {
-      this.#statePublishScheduled = false;
-      this.#stateRevision += 1;
-      const transactionIds = [...this.#pendingStateChangeIds];
-      this.#pendingStateChangeIds.clear();
-      const payload: TransactionStateChange = { revision: this.#stateRevision, transactionIds };
-      this.#messenger.publish(TRANSACTION_STATE_CHANGED, payload);
-    });
+  #notifyChanged(transactionIds: string[]) {
+    for (const handler of this.#changeListeners) {
+      handler(transactionIds);
+    }
   }
 
   #safeFromAccountKeyToAddress(record: TransactionRecord): string | null {

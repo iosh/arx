@@ -8,7 +8,7 @@ import type {
   TransactionReviewRuntimeStatus,
 } from "./review/types.js";
 import { canPrepareProposal } from "./status.js";
-import { TRANSACTION_STATE_CHANGED, TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
+import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   TransactionError,
   TransactionPrepared,
@@ -17,7 +17,6 @@ import type {
   TransactionProposalPhaseChange,
   TransactionProposalView,
   TransactionRequest,
-  TransactionStateChange,
 } from "./types.js";
 
 export type TransactionProposalState = {
@@ -191,9 +190,7 @@ export class TransactionProposalStore {
   #messenger: TransactionMessenger;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #records = new Map<string, TransactionProposalState>();
-  #stateRevision = 0;
-  #statePublishScheduled = false;
-  #pendingStateChangeIds = new Set<string>();
+  #changeListeners = new Set<(transactionIds: string[]) => void>();
 
   constructor({ messenger, accountCodecs }: Options) {
     this.#messenger = messenger;
@@ -203,7 +200,7 @@ export class TransactionProposalStore {
   createPendingProposal(input: TransactionProposalInit): TransactionProposalMeta {
     const next = buildTransactionProposalState(input);
     this.#records.set(next.id, next);
-    this.#scheduleStateChanged(next.id);
+    this.#notifyChanged([next.id]);
     return this.#toMeta(next);
   }
 
@@ -229,7 +226,7 @@ export class TransactionProposalStore {
 
     this.#records.set(id, next);
     this.#emitStatusChange(current, next);
-    this.#scheduleStateChanged(id);
+    this.#notifyChanged([id]);
     return this.#toMeta(next);
   }
 
@@ -250,7 +247,7 @@ export class TransactionProposalStore {
     });
 
     this.#records.set(input.id, next);
-    this.#scheduleStateChanged(input.id);
+    this.#notifyChanged([input.id]);
     return buildProposalReviewState(next);
   }
 
@@ -272,7 +269,7 @@ export class TransactionProposalStore {
     next.preparedAtDraftRevision = null;
 
     this.#records.set(input.id, next);
-    this.#scheduleStateChanged(input.id);
+    this.#notifyChanged([input.id]);
     return this.#toMeta(next);
   }
 
@@ -291,7 +288,7 @@ export class TransactionProposalStore {
 
     this.#records.set(id, next);
     this.#emitStatusChange(current, next);
-    this.#scheduleStateChanged(id);
+    this.#notifyChanged([id]);
     return this.#toMeta(next);
   }
 
@@ -377,7 +374,7 @@ export class TransactionProposalStore {
     });
 
     this.#records.set(event.subject.transactionId, next);
-    this.#scheduleStateChanged(event.subject.transactionId);
+    this.#notifyChanged([event.subject.transactionId]);
     return buildProposalReviewState(next);
   }
 
@@ -429,7 +426,7 @@ export class TransactionProposalStore {
   delete(id: string): boolean {
     const deleted = this.#records.delete(id);
     if (deleted) {
-      this.#scheduleStateChanged(id);
+      this.#notifyChanged([id]);
     }
     return deleted;
   }
@@ -447,7 +444,7 @@ export class TransactionProposalStore {
     }
 
     this.#records.delete(id);
-    this.#scheduleStateChanged(id);
+    this.#notifyChanged([id]);
     return this.#toMeta(current);
   }
 
@@ -582,7 +579,7 @@ export class TransactionProposalStore {
     });
 
     this.#records.set(id, next);
-    this.#scheduleStateChanged(id);
+    this.#notifyChanged([id]);
     return buildProposalReviewState(next);
   }
 
@@ -609,22 +606,24 @@ export class TransactionProposalStore {
 
     this.#records.set(input.id, next);
     this.#emitStatusChange(current, next);
-    this.#scheduleStateChanged(input.id);
+    this.#notifyChanged([input.id]);
     return this.#toMeta(next);
   }
 
-  #scheduleStateChanged(id: string) {
-    this.#pendingStateChangeIds.add(id);
-    if (this.#statePublishScheduled) return;
-    this.#statePublishScheduled = true;
+  onChanged(handler: (transactionIds: string[]) => void): () => void {
+    this.#changeListeners.add(handler);
+    return () => {
+      this.#changeListeners.delete(handler);
+    };
+  }
 
-    queueMicrotask(() => {
-      this.#statePublishScheduled = false;
-      this.#stateRevision += 1;
-      const transactionIds = [...this.#pendingStateChangeIds];
-      this.#pendingStateChangeIds.clear();
-      const payload: TransactionStateChange = { revision: this.#stateRevision, transactionIds };
-      this.#messenger.publish(TRANSACTION_STATE_CHANGED, payload);
-    });
+  notifyChanged(transactionIds: string[]): void {
+    this.#notifyChanged(transactionIds);
+  }
+
+  #notifyChanged(transactionIds: string[]) {
+    for (const handler of this.#changeListeners) {
+      handler(transactionIds);
+    }
   }
 }

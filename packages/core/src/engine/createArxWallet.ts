@@ -192,7 +192,6 @@ const createWalletUiDeps = (
           read: {
             listPendingEntries: () => approvalReadService.listPending(),
             getDetail: (id) => approvalReadService.getDetail(id),
-            listAffectedApprovalIds: (change) => approvalReadService.listAffectedApprovalIds(change),
           },
           write: {
             resolve: (input) => runtime.controllers.approvals.resolve(input),
@@ -203,7 +202,6 @@ const createWalletUiDeps = (
           buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
         },
         transactions: runtime.controllers.transactions,
-        transactionEvents: runtime.controllers.transactions,
         chains: {
           buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),
           findAvailableChainView: (chainRef) => runtime.services.chainViews.findAvailableChainView(chainRef),
@@ -503,8 +501,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       read: {
         listPendingEntries: () => approvalReadService.listPending(),
         getDetail: (id: string) => approvalReadService.getDetail(id),
-        listAffectedApprovalIds: (change: { approvalId: string } | { transactionId: string }) =>
-          approvalReadService.listAffectedApprovalIds(change),
       },
       write: {
         resolve: (input) => sessionScope.controllersBase.approvals.resolve(input),

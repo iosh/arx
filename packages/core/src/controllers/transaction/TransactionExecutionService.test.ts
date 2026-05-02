@@ -21,6 +21,7 @@ import {
   toRecord,
 } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
+import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type {
   TransactionApproveResult,
@@ -122,6 +123,10 @@ const createExecutionService = (params?: {
     });
   const tracking = params?.tracking ?? createTrackingStub();
   const messenger = params?.messenger ?? new Messenger();
+  const submissionService = new TransactionSubmissionService({
+    recordView,
+    stateLimit: 50,
+  });
   const execution = new TransactionExecutionService({
     messenger: messenger.scope({ publish: TRANSACTION_TOPICS }),
     proposalStore,
@@ -129,6 +134,7 @@ const createExecutionService = (params?: {
     accountCodecs,
     namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
     service,
+    submissionService,
     prepare: prepare as never,
     proposals: params?.proposals ?? createProposalServiceStub(),
     tracking,

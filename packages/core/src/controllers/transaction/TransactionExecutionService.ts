@@ -9,6 +9,7 @@ import type { TransactionProposalService } from "./TransactionProposalService.js
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import type { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import type { TransactionApproveResult, TransactionController, TransactionError } from "./types.js";
 import {
@@ -30,6 +31,7 @@ type TransactionExecutionServiceDeps = {
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: NamespaceTransactions;
   service: TransactionsService;
+  submissionService: TransactionSubmissionService;
   prepare: TransactionPrepareManager;
   proposals: TransactionProposalExecutionGateway;
   tracking: TransactionReceiptTracking;
@@ -52,6 +54,7 @@ export class TransactionExecutionService
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: NamespaceTransactions;
   #service: TransactionsService;
+  #submissionService: TransactionSubmissionService;
   #prepare: TransactionPrepareManager;
   #proposals: TransactionProposalExecutionGateway;
   #tracking: TransactionReceiptTracking;
@@ -70,6 +73,7 @@ export class TransactionExecutionService
     this.#accountCodecs = deps.accountCodecs;
     this.#namespaces = deps.namespaces;
     this.#service = deps.service;
+    this.#submissionService = deps.submissionService;
     this.#prepare = deps.prepare;
     this.#proposals = deps.proposals;
     this.#tracking = deps.tracking;
@@ -117,6 +121,12 @@ export class TransactionExecutionService
         error: cancellation.error,
         userRejected: cancellation.userRejected,
       },
+    });
+    this.#submissionService.recordFailure(id, {
+      transactionId: id,
+      error: cancellation.error,
+      userRejected: cancellation.userRejected,
+      message: cancellation.error?.message ?? "Transaction submission failed",
     });
     return true;
   }
@@ -216,6 +226,10 @@ export class TransactionExecutionService
 
       this.#messenger.publish(TRANSACTION_SUBMITTED, {
         id,
+        submitted: structuredClone(broadcast.submitted),
+        locator: structuredClone(broadcast.locator),
+      });
+      this.#submissionService.recordSubmitted(id, {
         submitted: structuredClone(broadcast.submitted),
         locator: structuredClone(broadcast.locator),
       });

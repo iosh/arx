@@ -6,8 +6,7 @@ import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTra
 import type { NamespaceTransaction } from "../../transactions/namespace/types.js";
 import { DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { StoreTransactionController } from "./StoreTransactionController.js";
-import { TRANSACTION_SUBMITTED, TRANSACTION_TOPICS } from "./topics.js";
-import type { TransactionView } from "./types.js";
+import { TRANSACTION_TOPICS } from "./topics.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 const chainRef = "eip155:10";
@@ -79,33 +78,57 @@ const createController = (
   });
 };
 
-const setView = (controller: StoreTransactionController, id: string, view: TransactionView) => {
-  vi.spyOn(controller, "getView").mockImplementation((candidateId: string) => (candidateId === id ? view : undefined));
+const waitForProposalReady = async (controller: StoreTransactionController, transactionId: string) => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const view = controller.getView(transactionId);
+    if (view?.kind === "proposal" && view.reviewState.status === "ready") {
+      return view;
+    }
+    await Promise.resolve();
+  }
+
+  throw new Error(`Transaction ${transactionId} did not become review-ready`);
 };
 
 describe("StoreTransactionController", () => {
   it("resolves submission waits from the broadcast result without durable meta fields", async () => {
-    const messenger = new Messenger();
     const controller = createController(
       {
         proposal: {
           prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
         },
+        execution: {
+          sign: vi.fn(async () => ({ raw: "0x1111" })),
+          broadcast: vi.fn(async () => ({
+            submitted: DEFAULT_SUBMITTED,
+            locator: DEFAULT_LOCATOR,
+          })),
+        },
         tracking: {
           fetchReceipt: vi.fn(async () => null),
         },
       },
-      { messenger },
     );
 
-    const pending = controller.waitForTransactionSubmission("tx-2");
-    messenger.publish(TRANSACTION_SUBMITTED, {
-      id: "tx-2",
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
-    });
+    const handoff = await controller.beginTransactionApproval(
+      {
+        namespace: "eip155",
+        chainRef,
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
+        },
+      },
+      requestContext,
+      { from },
+    );
 
-    await expect(pending).resolves.toEqual({
+    await waitForProposalReady(controller, handoff.transactionId);
+    const approveResult = await controller.approveTransaction(handoff.transactionId);
+    expect(approveResult).toMatchObject({ status: "approved" });
+
+    await expect(controller.waitForTransactionSubmission(handoff.transactionId)).resolves.toEqual({
       submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
     });
@@ -150,21 +173,6 @@ describe("StoreTransactionController", () => {
     });
   });
 
-  it("rejects missing submission waits instead of hanging forever", async () => {
-    const controller = createController({
-      proposal: {
-        prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
-      },
-      tracking: {
-        fetchReceipt: vi.fn(async () => null),
-      },
-    });
-
-    await expect(controller.waitForTransactionSubmission("missing-tx")).rejects.toThrow(
-      "Transaction missing-tx not found after approval",
-    );
-  });
-
   it("rejects submission waits when the proposal failed before broadcast", async () => {
     const controller = createController({
       proposal: {
@@ -197,94 +205,53 @@ describe("StoreTransactionController", () => {
   });
 
   it("resolves submission waits from the runtime outcome cache after local persistence fails", async () => {
-    const messenger = new Messenger();
     const controller = createController(
       {
         proposal: {
           prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
         },
+        execution: {
+          sign: vi.fn(async () => ({ raw: "0x1111" })),
+          broadcast: vi.fn(async () => ({
+            submitted: DEFAULT_SUBMITTED,
+            locator: DEFAULT_LOCATOR,
+          })),
+        },
         tracking: {
           fetchReceipt: vi.fn(async () => null),
         },
       },
-      { messenger },
+      {
+        service: createTransactionsService({
+          createSubmitted: vi.fn(async () => {
+            throw new Error("Local transaction store unavailable");
+          }),
+        }),
+      },
     );
 
-    messenger.publish(TRANSACTION_SUBMITTED, {
-      id: "tx-persist-failed",
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
-    });
-
-    await expect(controller.waitForTransactionSubmission("tx-persist-failed")).resolves.toEqual({
-      submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
-    });
-  });
-
-  it("recovers submission waits from an unpersisted proposal view when runtime caches are gone", async () => {
-    const controller = createController({
-      proposal: {
-        prepare: vi.fn(async () => ({ status: "ready" as const, prepared: {} })),
-      },
-      tracking: {
-        fetchReceipt: vi.fn(async () => null),
-      },
-    });
-
-    setView(controller, "tx-unpersisted", {
-      kind: "proposal",
-      id: "tx-unpersisted",
-      approvalId: "approval-unpersisted",
-      namespace: "eip155",
-      chainRef,
-      origin: requestContext.origin,
-      fromAccountKey: accountCodecs.toAccountKeyFromAddress({ chainRef, address: from }),
-      from,
-      baseRequest: {
+    const handoff = await controller.beginTransactionApproval(
+      {
         namespace: "eip155",
         chainRef,
-        payload: { from, to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", value: "0x0" },
-      },
-      currentRequest: {
-        namespace: "eip155",
-        chainRef,
-        payload: { from, to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", value: "0x0" },
-      },
-      draftRevision: 0,
-      prepared: { gas: "0x5208" },
-      reviewState: {
-        sessionToken: null,
-        status: null,
-        reviewPreparedSnapshot: null,
-        blocker: null,
-        error: null,
-        updatedAt: 1,
-      },
-      review: {
-        updatedAt: 1,
-        namespaceReview: null,
-        prepare: { state: "ready" },
-      },
-      phase: "unpersisted",
-      failure: {
-        error: {
-          name: "TransactionPersistenceError",
-          message: "Transaction was broadcast but could not be persisted locally.",
-          data: {
-            submitted: DEFAULT_SUBMITTED,
-            locator: DEFAULT_LOCATOR,
-          },
+        payload: {
+          from,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          value: "0x0",
         },
-        userRejected: false,
       },
-      createdAt: 1,
-      updatedAt: 1,
-    });
+      requestContext,
+      { from },
+    );
 
-    await expect(controller.waitForTransactionSubmission("tx-unpersisted")).resolves.toEqual({
+    await waitForProposalReady(controller, handoff.transactionId);
+    const approveResult = await controller.approveTransaction(handoff.transactionId);
+    expect(approveResult).toMatchObject({ status: "approved" });
+
+    await expect(controller.waitForTransactionSubmission(handoff.transactionId)).resolves.toEqual({
       submitted: DEFAULT_SUBMITTED,
       locator: DEFAULT_LOCATOR,
     });
   });
+
 });

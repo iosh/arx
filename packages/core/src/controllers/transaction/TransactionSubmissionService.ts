@@ -1,0 +1,133 @@
+import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import type {
+  TransactionSubmissionFailure,
+  TransactionSubmissionOutcome,
+  TransactionSubmissionResolution,
+} from "./types.js";
+import { TransactionSubmissionError } from "./types.js";
+
+type TransactionSubmissionServiceOptions = {
+  recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
+  stateLimit: number;
+};
+
+type SubmissionWaiter = {
+  resolve: (value: TransactionSubmissionResolution) => void;
+  reject: (reason: Error) => void;
+};
+
+export class TransactionSubmissionService {
+  #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
+  #outcomes = new Map<string, TransactionSubmissionOutcome>();
+  #waiters = new Map<string, Set<SubmissionWaiter>>();
+  #stateLimit: number;
+
+  constructor(options: TransactionSubmissionServiceOptions) {
+    this.#recordView = options.recordView;
+    this.#stateLimit = options.stateLimit;
+  }
+
+  recordSubmitted(id: string, resolution: TransactionSubmissionResolution): void {
+    this.#cacheOutcome(id, {
+      state: "submitted",
+      resolution: structuredClone(resolution),
+    });
+    this.#flushWaiters(id);
+  }
+
+  recordFailure(id: string, failure: TransactionSubmissionFailure): void {
+    this.#cacheOutcome(id, {
+      state: "failed",
+      failure: structuredClone(failure),
+    });
+    this.#flushWaiters(id);
+  }
+
+  async waitForSubmissionOutcome(id: string): Promise<TransactionSubmissionResolution> {
+    const cached = this.#outcomes.get(id);
+    if (cached) {
+      return this.#readOutcomeOrThrow(cached);
+    }
+
+    const durable = this.#recordView.getView(id) ?? (await this.#recordView.getOrLoadView(id));
+    if (durable) {
+      const resolution = {
+        submitted: structuredClone(durable.submitted),
+        locator: structuredClone(durable.locator),
+      };
+      this.recordSubmitted(id, resolution);
+      return structuredClone(resolution);
+    }
+
+    return await new Promise<TransactionSubmissionResolution>((resolve, reject) => {
+      const waiter: SubmissionWaiter = { resolve, reject };
+      const existing = this.#waiters.get(id);
+      if (existing) {
+        existing.add(waiter);
+      } else {
+        this.#waiters.set(id, new Set([waiter]));
+      }
+
+      const outcome = this.#outcomes.get(id);
+      if (outcome) {
+        this.#settleWaiter(waiter, outcome);
+        this.#deleteWaiter(id, waiter);
+      }
+    });
+  }
+
+  #readOutcomeOrThrow(outcome: TransactionSubmissionOutcome): TransactionSubmissionResolution {
+    if (outcome.state === "submitted") {
+      return structuredClone(outcome.resolution);
+    }
+
+    throw new TransactionSubmissionError(outcome.failure);
+  }
+
+  #cacheOutcome(id: string, outcome: TransactionSubmissionOutcome): void {
+    this.#outcomes.delete(id);
+    this.#outcomes.set(id, structuredClone(outcome));
+
+    while (this.#outcomes.size > this.#stateLimit) {
+      const oldest = this.#outcomes.keys().next().value as string | undefined;
+      if (!oldest) {
+        break;
+      }
+      this.#outcomes.delete(oldest);
+    }
+  }
+
+  #flushWaiters(id: string): void {
+    const waiters = this.#waiters.get(id);
+    const outcome = this.#outcomes.get(id);
+    if (!waiters || !outcome) {
+      return;
+    }
+
+    this.#waiters.delete(id);
+    for (const waiter of waiters) {
+      this.#settleWaiter(waiter, outcome);
+    }
+  }
+
+  #settleWaiter(waiter: SubmissionWaiter, outcome: TransactionSubmissionOutcome): void {
+    if (outcome.state === "submitted") {
+      waiter.resolve(structuredClone(outcome.resolution));
+      return;
+    }
+
+    waiter.reject(new TransactionSubmissionError(outcome.failure));
+  }
+
+  #deleteWaiter(id: string, waiter: SubmissionWaiter): void {
+    const waiters = this.#waiters.get(id);
+    if (!waiters) {
+      return;
+    }
+
+    waiters.delete(waiter);
+    if (waiters.size === 0) {
+      this.#waiters.delete(id);
+    }
+  }
+}

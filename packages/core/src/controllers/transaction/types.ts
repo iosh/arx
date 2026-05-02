@@ -201,17 +201,24 @@ export type TransactionSubmissionResolution = {
   locator: TransactionSubmissionLocator;
 };
 
+export type TransactionSubmissionFailure = {
+  transactionId: string;
+  error: TransactionError | null;
+  userRejected: boolean;
+  message: string;
+};
+
 export type TransactionSubmissionOutcome =
   | { state: "submitted"; resolution: TransactionSubmissionResolution }
-  | { state: "failed"; error: TransactionSubmissionError };
+  | { state: "failed"; failure: TransactionSubmissionFailure };
 
 export class TransactionSubmissionError extends Error {
-  readonly proposal: TransactionProposalView;
+  readonly failure: TransactionSubmissionFailure;
 
-  constructor(proposal: TransactionProposalView) {
-    super(proposal.failure?.error?.message ?? "Transaction submission failed");
+  constructor(failure: TransactionSubmissionFailure) {
+    super(failure.message);
     this.name = "TransactionSubmissionError";
-    this.proposal = proposal;
+    this.failure = structuredClone(failure);
   }
 }
 

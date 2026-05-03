@@ -7,6 +7,7 @@ import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
+import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalFinishedEvent, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { SupportedChainsController } from "../supportedChains/types.js";
@@ -14,19 +15,17 @@ import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalChainMetadata,
+  TransactionApprovalCommands,
   TransactionApprovalRequestHandoff,
   TransactionApprovalRequestPayload,
-  TransactionApproveResult,
-  TransactionController,
-  TransactionError,
+  TransactionApprovalResult,
+  TransactionApprovalReviewReader,
   TransactionProposalMeta,
+  TransactionProposalReader,
   TransactionProposalView,
-  TransactionRecordView,
-  TransactionRequest,
 } from "./types.js";
 import {
   buildProposalStateContext,
@@ -37,7 +36,6 @@ import {
 
 type TransactionProposalServiceDeps = {
   proposalStore: TransactionProposalStore;
-  recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -49,10 +47,9 @@ type TransactionProposalServiceDeps = {
 };
 
 export class TransactionProposalService
-  implements Pick<TransactionController, "getTransactionApprovalReview" | "retryPrepare" | "applyDraftEdit">
+  implements TransactionApprovalReviewReader, TransactionApprovalCommands, TransactionProposalReader
 {
   #proposalStore: TransactionProposalStore;
-  #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   #supportedChains: Pick<SupportedChainsController, "getChain">;
@@ -64,7 +61,6 @@ export class TransactionProposalService
 
   constructor(deps: TransactionProposalServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#networkSelection = deps.networkSelection;
     this.#supportedChains = deps.supportedChains;
@@ -77,10 +73,6 @@ export class TransactionProposalService
 
   getProposalView(id: string): TransactionProposalView | undefined {
     return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : undefined;
-  }
-
-  getRecordView(id: string): TransactionRecordView | undefined {
-    return this.#recordView.getView(id);
   }
 
   getTransactionApprovalReview(transactionId: string) {
@@ -301,7 +293,7 @@ export class TransactionProposalService
     await this.retryPrepare(meta.id);
   }
 
-  approveForExecution(id: string): TransactionApproveResult {
+  approveForExecution(id: string): TransactionApprovalResult {
     const existing = this.#requireProposalViewOrNull(id);
     if (!existing) {
       return {

@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import type { TransactionApproveFailureReason } from "../../controllers/transaction/types.js";
+import type { TransactionApprovalFailureReason } from "../../controllers/transaction/types.js";
 import { parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 
@@ -14,7 +14,7 @@ const requireTransactionSubject = (
   throw new Error(`Send-transaction approval ${record.approvalId} is missing a transaction subject.`);
 };
 
-const mapApproveFailureReason = (reason: TransactionApproveFailureReason) => {
+const mapApproveFailureReason = (reason: TransactionApprovalFailureReason) => {
   if (reason === "not_found") return ArxReasons.RpcInvalidParams;
   if (reason === "prepare_failed") return ArxReasons.RpcInternal;
   return ArxReasons.RpcInvalidRequest;

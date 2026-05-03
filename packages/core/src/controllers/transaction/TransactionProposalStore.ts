@@ -1,4 +1,5 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { TransactionError, TransactionPrepared, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalFinishedEvent } from "../approval/types.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import type {
@@ -10,13 +11,10 @@ import type {
 import { canPrepareProposal } from "./status.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
-  TransactionError,
-  TransactionPrepared,
   TransactionProposalMeta,
   TransactionProposalPhase,
   TransactionProposalPhaseChange,
   TransactionProposalView,
-  TransactionRequest,
 } from "./types.js";
 
 export type TransactionProposalState = {

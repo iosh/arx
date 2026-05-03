@@ -1114,7 +1114,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const txSpy = vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval");
+    const txSpy = vi.spyOn(runtime.controllers.providerTransactionCommands, "beginTransactionApproval");
     try {
       await expect(
         execute({
@@ -1164,7 +1164,7 @@ describe("eip155 handlers - core error paths", () => {
     });
 
     const execute = createExecutor(runtime);
-    const txSpy = vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval");
+    const txSpy = vi.spyOn(runtime.controllers.providerTransactionCommands, "beginTransactionApproval");
     const approvalCreated = vi.fn();
     const unsubscribeApproval = runtime.controllers.approvals.onCreated(approvalCreated);
 

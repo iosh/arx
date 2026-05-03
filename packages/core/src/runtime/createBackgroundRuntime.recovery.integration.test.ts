@@ -98,7 +98,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
 
-      const view = context.runtime.controllers.transactions.getRecordView(txId);
+      const view = context.runtime.transactions.records.getRecordView(txId);
       expect(view).toMatchObject({
         status: "confirmed",
         receipt: {

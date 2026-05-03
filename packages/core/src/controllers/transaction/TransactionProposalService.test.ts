@@ -9,7 +9,6 @@ import {
   createNamespaceTransactionStub,
   createPrepareStub,
   createProposalStore,
-  createRecordViewStub,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -20,7 +19,7 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
+import type { TransactionProposalMeta } from "./types.js";
 
 const createProposalService = (params?: {
   chainRef?: string;
@@ -31,7 +30,6 @@ const createProposalService = (params?: {
     create: (...args: never[]) => unknown;
   };
   prepare?: ReturnType<typeof createPrepareStub>;
-  recordView?: ReturnType<typeof createRecordViewStub>;
 }) => {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
@@ -46,7 +44,6 @@ const createProposalService = (params?: {
     }));
   const service = new TransactionProposalService({
     proposalStore,
-    recordView: params?.recordView ?? createRecordViewStub({ from }),
     accountCodecs,
     networkSelection: {
       getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
@@ -666,50 +663,6 @@ describe("TransactionProposalService", () => {
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: DEFAULT_TO,
     });
-  });
-
-  it("does not treat durable record views as editable proposals", async () => {
-    const applyDraftEdit = vi.fn();
-    const durableView: TransactionRecordView = {
-      kind: "record",
-      id: REQUEST_ID,
-      namespace: "eip155",
-      chainRef: DEFAULT_CHAIN_REF,
-      origin: REQUEST_CONTEXT.origin,
-      from: DEFAULT_FROM,
-      status: "broadcast",
-      submitted: {
-        hash: "0x1234",
-        chainId: "0xa",
-        from: DEFAULT_FROM,
-        nonce: "0x7",
-      },
-      locator: { format: "eip155.tx_hash", value: "0x1234" },
-      receipt: null,
-      replacedId: null,
-      createdAt: 1,
-      updatedAt: 1,
-    };
-    const { service, queuePrepare } = createProposalService({
-      recordView: createRecordViewStub({
-        getView: vi.fn(() => durableView),
-      }),
-      namespaces: createNamespacesStub(() =>
-        createNamespaceTransactionStub({
-          applyDraftEdit: applyDraftEdit as never,
-        }),
-      ),
-    });
-
-    await expect(
-      service.applyDraftEdit({
-        transactionId: REQUEST_ID,
-        changes: [{ op: "replace", path: "/to", value: "0xcccccccccccccccccccccccccccccccccccccccc" }],
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(applyDraftEdit).not.toHaveBeenCalled();
-    expect(queuePrepare).not.toHaveBeenCalled();
   });
 
   it("approves only ready prepared proposals for execution", () => {

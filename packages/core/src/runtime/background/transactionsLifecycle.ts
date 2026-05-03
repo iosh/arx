@@ -1,9 +1,9 @@
-import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { TransactionBroadcastRecovery } from "../../controllers/transaction/types.js";
 import type { UnlockController } from "../../controllers/unlock/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 
 export type TransactionsLifecycleOptions = {
-  controller: Pick<TransactionController, "resumePending">;
+  controller: TransactionBroadcastRecovery;
   service: Pick<TransactionsService, "list">;
   unlock: Pick<UnlockController, "onUnlocked" | "isUnlocked">;
   logger?: (message: string, error?: unknown) => void;
@@ -31,13 +31,13 @@ export const createTransactionsLifecycle = (options: TransactionsLifecycleOption
       if (unsubscribe) return;
 
       unsubscribe = options.unlock.onUnlocked(() => {
-        void options.controller.resumePending().catch((error) => {
+        void options.controller.resumePending().catch((error: unknown) => {
           logger("transactions: failed to resume pending", error);
         });
       });
 
       if (options.unlock.isUnlocked()) {
-        void options.controller.resumePending().catch((error) => {
+        void options.controller.resumePending().catch((error: unknown) => {
           logger("transactions: failed to resume pending", error);
         });
       }

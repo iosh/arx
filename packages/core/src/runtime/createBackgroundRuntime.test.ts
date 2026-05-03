@@ -172,7 +172,7 @@ const createHandlersForRuntime = (
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.controllers.transactions,
+    transactions: runtime.transactions.review,
   });
 
   return createUiServerRuntime({
@@ -193,7 +193,13 @@ const createHandlersForRuntime = (
           runtime.services.permissionViews,
         ),
       },
-      transactions: runtime.controllers.transactions,
+      transactions: {
+        beginTransactionApproval: (request, requestContext, transactionOptions) =>
+          runtime.transactions.commands.beginTransactionApproval(request, requestContext, transactionOptions),
+        retryPrepare: (transactionId) => runtime.transactions.commands.retryPrepare(transactionId),
+        applyDraftEdit: (input) => runtime.transactions.commands.applyDraftEdit(input),
+        onStateChanged: (listener) => runtime.transactions.stateChanges.onStateChanged(listener),
+      },
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
           runtime.services.chainViews,
@@ -760,7 +766,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const approvalId = "33333333-3333-4333-8333-333333333333";
     const beginTransactionApproval = vi
-      .spyOn(runtime.controllers.transactions, "beginTransactionApproval")
+      .spyOn(runtime.transactions.commands, "beginTransactionApproval")
       .mockImplementation(async (request) => ({
         transactionId: approvalId,
         approvalId,
@@ -890,7 +896,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await createActiveAccount(runtime);
 
     const beginTransactionApproval = vi
-      .spyOn(runtime.controllers.transactions, "beginTransactionApproval")
+      .spyOn(runtime.transactions.commands, "beginTransactionApproval")
       .mockImplementation(async (request, requester) => ({
         transactionId: requester.sessionId,
         approvalId: requester.sessionId,
@@ -968,7 +974,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.controllers.transactions, "beginTransactionApproval").mockRejectedValue(
+    vi.spyOn(runtime.transactions.commands, "beginTransactionApproval").mockRejectedValue(
       new Error("create approval failed"),
     );
 

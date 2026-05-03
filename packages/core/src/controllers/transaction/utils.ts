@@ -7,13 +7,8 @@ import type {
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
-import type {
-  TransactionError,
-  TransactionProposalMeta,
-  TransactionRecordView,
-  TransactionSubmissionLocator,
-  TransactionSubmitted,
-} from "./types.js";
+import type { TransactionError, TransactionSubmissionLocator, TransactionSubmitted } from "../../transactions/types.js";
+import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {
   const error = new Error(`No namespace transaction registered for namespace ${namespace}`);

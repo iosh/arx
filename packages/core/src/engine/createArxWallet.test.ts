@@ -583,7 +583,7 @@ describe("createArxWallet", () => {
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
-      const handoff = await wallet.transactions.beginTransactionApproval(
+      const handoff = await runtime.transactions.commands.beginTransactionApproval(
         {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
@@ -605,10 +605,8 @@ describe("createArxWallet", () => {
       );
       transactionId = handoff.transactionId;
 
-      expect(wallet.transactions.getTransactionApprovalReview({ transactionId: handoff.transactionId })).toMatchObject({
-        prepare: {
-          state: "preparing",
-        },
+      expect(runtime.transactions.review.getTransactionApprovalReview(handoff.transactionId)).toMatchObject({
+        prepare: { state: "preparing" },
       });
       expect(await transactionsPort.list()).toEqual([]);
     } finally {
@@ -703,7 +701,7 @@ describe("createArxWallet", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
       expect(
-        await runtime.wallet.transactions.waitForTransactionSubmission("44444444-4444-4444-8444-444444444444"),
+        await runtime.transactions.submission.waitForSubmissionOutcome("44444444-4444-4444-8444-444444444444"),
       ).toMatchObject({
         submitted: {
           hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

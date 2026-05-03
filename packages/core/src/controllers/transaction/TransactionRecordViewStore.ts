@@ -2,8 +2,9 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { getChainRefNamespace } from "../../chains/caip.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
+import type { TransactionReceipt } from "../../transactions/types.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
-import type { TransactionReceipt, TransactionRecordStatusChange, TransactionRecordView } from "./types.js";
+import type { TransactionRecordReader, TransactionRecordStatusChange, TransactionRecordView } from "./types.js";
 
 type Options = {
   messenger: TransactionMessenger;
@@ -19,7 +20,7 @@ type Options = {
  * - coalesced best-effort sync on store change
  * - emits transaction:statusChanged
  */
-export class TransactionRecordViewStore {
+export class TransactionRecordViewStore implements TransactionRecordReader {
   #messenger: TransactionMessenger;
   #service: TransactionsService;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
@@ -49,6 +50,10 @@ export class TransactionRecordViewStore {
   getView(id: string): TransactionRecordView | undefined {
     const existing = this.#touch(id);
     return existing ? structuredClone(existing) : undefined;
+  }
+
+  getRecordView(id: string): TransactionRecordView | undefined {
+    return this.getView(id);
   }
 
   /**

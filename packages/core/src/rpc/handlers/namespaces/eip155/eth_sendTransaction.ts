@@ -51,7 +51,7 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     try {
       const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
       const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
-      const handoff = await controllers.transactions.beginTransactionApproval(prepared, requestContext, {
+      const handoff = await controllers.providerTransactionCommands.beginTransactionApproval(prepared, requestContext, {
         from,
         requestBinding: providerRequestHandle,
       });

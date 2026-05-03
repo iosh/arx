@@ -720,7 +720,7 @@ export const setupBackground = async (options: SetupBackgroundOptions = {}): Pro
         pending.delete(approvalId);
         return;
       }
-      const review = runtime.controllers.transactions.getTransactionApprovalReview(subject.transactionId);
+      const review = runtime.transactions.review.getTransactionApprovalReview(subject.transactionId);
       if (review.prepare.state !== "ready") {
         return;
       }

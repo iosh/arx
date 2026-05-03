@@ -31,6 +31,7 @@ import {
   createUiWalletSetupAccess,
   type UiRuntimeAccess,
   type UiRuntimeDispatchResult,
+  type UiTransactionsAccess,
 } from "@arx/core/ui/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTRYPOINTS } from "./constants";
@@ -541,9 +542,45 @@ const createControllers = () => {
       return CHAIN;
     },
   };
-  const transactions = {
-    approveTransaction: async () => null,
-    onStateChanged: () => () => {},
+  const transactionCommands = {
+    beginTransactionApproval: vi.fn(async () => ({
+      transactionId: "approval-id",
+      approvalId: "approval-id",
+    })),
+    retryPrepare: vi.fn(async () => {}),
+    applyDraftEdit: vi.fn(async () => {}),
+  };
+  const providerTransactionCommands = {
+    beginTransactionApproval: vi.fn(async () => ({
+      transactionId: "approval-id",
+      approvalId: "approval-id",
+      waitForProviderCompletion: async () => ({
+        submitted: {
+          hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          chainId: CHAIN.chainId,
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+        locator: {
+          format: "eip155.tx_hash" as const,
+          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        },
+      }),
+    })),
+  };
+  const transactionExecution = {
+    approveTransaction: vi.fn(async () => null),
+    rejectTransaction: vi.fn(async () => {}),
+  };
+  const transactionRecovery = {
+    resumePending: vi.fn(async () => {}),
+  };
+  const transactionReview = {
+    getTransactionApprovalReview: vi.fn(() => ({
+      updatedAt: 0,
+      review: null,
+      hasPrepared: false,
+      namespaceReview: null,
+    })),
   };
   const signers = { eip155: { signPersonalMessage: async () => "", signTypedData: async () => "" } };
   const chainViews = {
@@ -576,7 +613,11 @@ const createControllers = () => {
     approvals,
     permissions,
     network,
-    transactions,
+    transactionCommands,
+    providerTransactionCommands,
+    transactionExecution,
+    transactionRecovery,
+    transactionReview,
     signers,
     chainViews,
     permissionViews,
@@ -601,6 +642,7 @@ const createUiAccessForTest = (input: {
   selectWalletChain?: (chainRef: string) => Promise<void>;
   chainViewsOverride?: Record<string, unknown>;
   permissionViewsOverride?: { buildUiPermissionsSnapshot: () => unknown };
+  transactionsAccess?: Partial<UiTransactionsAccess>;
   namespaceBindings?: {
     getUi: (namespace: string) =>
       | {
@@ -696,17 +738,24 @@ const createUiAccessForTest = (input: {
             .buildUiPermissionsSnapshot as never,
         },
         transactions: {
-          beginTransactionApproval:
-            "beginTransactionApproval" in input.controllers.transactions
-              ? input.controllers.transactions.beginTransactionApproval
-              : (vi.fn(
-                  async () =>
-                    ({
-                      transactionId: "approval-id",
-                      approvalId: "approval-id",
-                    }) as never,
-                ) as never),
-          onStateChanged: input.controllers.transactions.onStateChanged,
+          beginTransactionApproval: (request, requestContext, transactionOptions) =>
+            input.transactionsAccess?.beginTransactionApproval
+              ? input.transactionsAccess.beginTransactionApproval(request, requestContext, transactionOptions)
+              : input.controllers.transactionCommands.beginTransactionApproval(
+                  request,
+                  requestContext,
+                  transactionOptions,
+                ),
+          retryPrepare: (transactionId) =>
+            input.transactionsAccess?.retryPrepare
+              ? input.transactionsAccess.retryPrepare(transactionId)
+              : input.controllers.transactionCommands.retryPrepare(transactionId),
+          applyDraftEdit: (draft) =>
+            input.transactionsAccess?.applyDraftEdit
+              ? input.transactionsAccess.applyDraftEdit(draft)
+              : input.controllers.transactionCommands.applyDraftEdit(draft),
+          onStateChanged: (listener) =>
+            input.transactionsAccess?.onStateChanged ? input.transactionsAccess.onStateChanged(listener) : () => {},
         } as never,
         chains: {
           ...(input.chainViewsOverride ?? controllerViews.chainViews),

@@ -1,5 +1,6 @@
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
+import type { TransactionRuntime } from "../../controllers/transaction/types.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   materializeNamespaceRuntimeSupport,
@@ -67,6 +68,7 @@ export type RuntimeBootstrapScope = {
 export type RuntimeSessionScope = {
   namespaceSession: RuntimeSessionNamespaceAssembly;
   controllersBase: ControllersBase;
+  transactionRuntime: TransactionRuntime;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: ReturnType<typeof initControllers>["deferredNetworkInitialState"];
   namespaceTransactions: ReturnType<typeof initControllers>["namespaceTransactions"];
@@ -193,7 +195,10 @@ export const createRuntimeSessionScope = ({
   };
   engineOptions?: EngineOptions;
   vaultMetaPort?: VaultMetaPort;
-  createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
+  createApprovalExecutor?: (params: {
+    controllersBase: ControllersBase;
+    transactionRuntime: TransactionRuntime;
+  }) => ApprovalExecutor | undefined;
   sessionOptions?: SessionOptions;
 }): RuntimeSessionScope => {
   const { settingsService, networkSelection, customRpc, transactionsService, accountsStore, keyringMetas } =
@@ -221,6 +226,7 @@ export const createRuntimeSessionScope = ({
 
   const {
     controllersBase,
+    transactionRuntime,
     networkController,
     supportedChainsController,
     permissionsReady,
@@ -278,6 +284,7 @@ export const createRuntimeSessionScope = ({
   return {
     namespaceSession,
     controllersBase,
+    transactionRuntime,
     permissionsReady,
     deferredNetworkInitialState,
     namespaceTransactions: controllersInit.namespaceTransactions,
@@ -336,7 +343,7 @@ export const createRuntimeSupportScope = ({
   });
 
   const transactionsLifecycle = createTransactionsLifecycle({
-    controller: sessionScope.controllersBase.transactions,
+    controller: sessionScope.transactionRuntime.recovery,
     service: sessionScope.transactionsService,
     unlock: sessionScope.sessionLayer.session.unlock,
     logger: bootstrapScope.storageLogger,

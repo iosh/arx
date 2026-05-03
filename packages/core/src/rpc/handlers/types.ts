@@ -7,7 +7,13 @@ import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
-import type { TransactionController } from "../../controllers/transaction/types.js";
+import type {
+  ProviderTransactionApprovalCommands,
+  TransactionApprovalCommands,
+  TransactionApprovalExecutor,
+  TransactionApprovalReviewReader,
+  TransactionBroadcastRecovery,
+} from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
@@ -22,7 +28,11 @@ export type HandlerControllers = {
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  transactions: TransactionController;
+  transactionCommands: TransactionApprovalCommands;
+  providerTransactionCommands: ProviderTransactionApprovalCommands;
+  transactionExecution: TransactionApprovalExecutor;
+  transactionRecovery: TransactionBroadcastRecovery;
+  transactionReview: TransactionApprovalReviewReader;
   supportedChains?: SupportedChainsController;
   chainAddressCodecs: ChainAddressCodecRegistry;
   clock: {

@@ -1,8 +1,8 @@
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type {
   TransactionSubmissionFailure,
-  TransactionSubmissionOutcome,
   TransactionSubmissionResolution,
+  TransactionSubmissionTracker,
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
@@ -16,9 +16,13 @@ type SubmissionWaiter = {
   reject: (reason: Error) => void;
 };
 
-export class TransactionSubmissionService {
+type SubmissionOutcome =
+  | { state: "submitted"; resolution: TransactionSubmissionResolution }
+  | { state: "failed"; failure: TransactionSubmissionFailure };
+
+export class TransactionSubmissionService implements TransactionSubmissionTracker {
   #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
-  #outcomes = new Map<string, TransactionSubmissionOutcome>();
+  #outcomes = new Map<string, SubmissionOutcome>();
   #waiters = new Map<string, Set<SubmissionWaiter>>();
   #stateLimit: number;
 
@@ -76,7 +80,7 @@ export class TransactionSubmissionService {
     });
   }
 
-  #readOutcomeOrThrow(outcome: TransactionSubmissionOutcome): TransactionSubmissionResolution {
+  #readOutcomeOrThrow(outcome: SubmissionOutcome): TransactionSubmissionResolution {
     if (outcome.state === "submitted") {
       return structuredClone(outcome.resolution);
     }
@@ -84,7 +88,7 @@ export class TransactionSubmissionService {
     throw new TransactionSubmissionError(outcome.failure);
   }
 
-  #cacheOutcome(id: string, outcome: TransactionSubmissionOutcome): void {
+  #cacheOutcome(id: string, outcome: SubmissionOutcome): void {
     this.#outcomes.delete(id);
     this.#outcomes.set(id, structuredClone(outcome));
 
@@ -110,7 +114,7 @@ export class TransactionSubmissionService {
     }
   }
 
-  #settleWaiter(waiter: SubmissionWaiter, outcome: TransactionSubmissionOutcome): void {
+  #settleWaiter(waiter: SubmissionWaiter, outcome: SubmissionOutcome): void {
     if (outcome.state === "submitted") {
       waiter.resolve(structuredClone(outcome.resolution));
       return;

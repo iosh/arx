@@ -36,16 +36,6 @@ import type {
   SupportedChainsUpdate,
 } from "../controllers/supportedChains/types.js";
 import type {
-  BeginTransactionApprovalOptions,
-  SendTransactionApprovalReview,
-  TransactionApproveResult,
-  TransactionError,
-  TransactionRequest,
-  TransactionStateChange,
-  TransactionStatusChange,
-  TransactionSubmissionResolution,
-} from "../controllers/transaction/types.js";
-import type {
   UnlockLockedPayload,
   UnlockParams,
   UnlockReason,
@@ -317,25 +307,6 @@ export type WalletNetworks = Readonly<{
   onCustomRpcChanged(listener: CustomRpcChangedHandler): () => void;
 }>;
 
-/** Transaction approvals, execution, and status tracking. */
-export type WalletTransactions = Readonly<{
-  beginTransactionApproval(
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    options: BeginTransactionApprovalOptions,
-  ): Promise<{
-    transactionId: string;
-    approvalId: string;
-    waitForProviderCompletion(): Promise<TransactionSubmissionResolution>;
-  }>;
-  waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
-  approveTransaction(id: string): Promise<TransactionApproveResult>;
-  rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
-  getTransactionApprovalReview(input: { transactionId: string }): SendTransactionApprovalReview;
-  onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
-  onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
-}>;
-
 /** Ephemeral prompts outside the approvals flow. */
 export type WalletAttention = Readonly<{
   requestAttention: AttentionService["requestAttention"];
@@ -456,8 +427,6 @@ export type ArxWallet = Readonly<{
   permissions: WalletPermissions;
   /** Network selection and preferences. */
   networks: WalletNetworks;
-  /** Transaction approvals, execution, and status tracking. */
-  transactions: WalletTransactions;
   /** Ephemeral prompts. */
   attention: WalletAttention;
   /** In-memory dApp connections. */

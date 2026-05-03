@@ -11,7 +11,7 @@ import type {
   TransactionSubmissionLocator,
   TransactionSubmitted,
 } from "../../transactions/types.js";
-import type { ApprovalCreateParams, ApprovalHandle, ApprovalKind, ApprovalKinds } from "../approval/types.js";
+import type { ApprovalHandle, ApprovalKind } from "../approval/types.js";
 import type {
   SendTransactionApprovalReview,
   TransactionReviewBlocker,
@@ -159,8 +159,6 @@ export type TransactionApprovalRequestPayload = {
   request: TransactionRequest;
 };
 
-export type TransactionApprovalRequest = ApprovalCreateParams<typeof ApprovalKinds.SendTransaction>;
-
 export type TransactionApprovalRequestHandoff = {
   transactionId: string;
   approvalId: string;
@@ -170,18 +168,18 @@ export type TransactionApprovalHandoff = TransactionApprovalRequestHandoff & {
   waitForProviderCompletion(): Promise<TransactionSubmissionResolution>;
 };
 
-export type TransactionApproveFailureReason =
+export type TransactionApprovalFailureReason =
   | "not_found"
   | "not_pending"
   | "prepare_not_ready"
   | "prepare_blocked"
   | "prepare_failed";
 
-export type TransactionApproveResult =
+export type TransactionApprovalResult =
   | { status: "approved"; transaction: TransactionProposalView }
   | {
       status: "failed";
-      reason: TransactionApproveFailureReason;
+      reason: TransactionApprovalFailureReason;
       transaction?: TransactionProposalView | undefined;
       message: string;
       data?: unknown;
@@ -204,10 +202,6 @@ export type TransactionSubmissionFailure = {
   message: string;
 };
 
-export type TransactionSubmissionOutcome =
-  | { state: "submitted"; resolution: TransactionSubmissionResolution }
-  | { state: "failed"; failure: TransactionSubmissionFailure };
-
 export class TransactionSubmissionError extends Error {
   readonly failure: TransactionSubmissionFailure;
 
@@ -221,44 +215,67 @@ export class TransactionSubmissionError extends Error {
 export const isTransactionSubmissionError = (error: unknown): error is TransactionSubmissionError =>
   error instanceof TransactionSubmissionError;
 
-export type TransactionController = {
+export type TransactionApprovalReviewReader = {
   getTransactionApprovalReview(transactionId: string): SendTransactionApprovalReview;
+};
+
+export type TransactionApprovalCommands = {
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalHandoff>;
+  ): Promise<TransactionApprovalRequestHandoff>;
   retryPrepare(transactionId: string): Promise<void>;
   applyDraftEdit(input: {
     transactionId: string;
     changes: ReadonlyArray<Record<string, unknown>>;
     mode?: string;
   }): Promise<void>;
-  waitForTransactionSubmission(id: string): Promise<TransactionSubmissionResolution>;
-  approveTransaction(id: string): Promise<TransactionApproveResult>;
+};
+
+export type ProviderTransactionApprovalCommands = {
+  beginTransactionApproval(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    options: BeginTransactionApprovalOptions,
+  ): Promise<TransactionApprovalHandoff>;
+};
+
+export type TransactionSubmissionTracker = {
+  waitForSubmissionOutcome(id: string): Promise<TransactionSubmissionResolution>;
+};
+
+export type TransactionApprovalExecutor = {
+  approveTransaction(id: string): Promise<TransactionApprovalResult>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
+};
+
+export type TransactionBroadcastRecovery = {
   resumePending(): Promise<void>;
-  onStatusChanged(handler: (change: TransactionStatusChange) => void): () => void;
+};
+
+export type TransactionStateChangeEvents = {
   onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
 };
 
-export type TransactionProposalReadAccess = {
+export type TransactionProposalReader = {
   getProposalView(id: string): TransactionProposalView | undefined;
+};
+
+export type TransactionRecordReader = {
   getRecordView(id: string): TransactionRecordView | undefined;
 };
 
-export type {
-  Eip155SubmittedTransaction,
-  Eip155TransactionPayload,
-  Eip155TransactionPayloadWithFrom,
-  Eip155TransactionRequest,
-  TransactionError,
-  TransactionPayload,
-  TransactionPrepared,
-  TransactionReceipt,
-  TransactionRequest,
-  TransactionSubmissionLocator,
-  TransactionSubmitted,
-} from "../../transactions/types.js";
+export type TransactionRuntime = Readonly<{
+  commands: TransactionApprovalCommands;
+  providerCommands: ProviderTransactionApprovalCommands;
+  execution: TransactionApprovalExecutor;
+  recovery: TransactionBroadcastRecovery;
+  submission: TransactionSubmissionTracker;
+  stateChanges: TransactionStateChangeEvents;
+  review: TransactionApprovalReviewReader;
+  proposals: TransactionProposalReader;
+  records: TransactionRecordReader;
+}>;
 
 export type { SendTransactionApprovalReview } from "./review/types.js";

@@ -24,13 +24,13 @@ import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type {
-  TransactionApproveResult,
+  TransactionApprovalResult,
   TransactionProposalMeta,
   TransactionProposalView,
   TransactionRecordView,
 } from "./types.js";
 
-const createProposalServiceStub = (params?: { approveForExecution?: (id: string) => TransactionApproveResult }) =>
+const createProposalServiceStub = (params?: { approveForExecution?: (id: string) => TransactionApprovalResult }) =>
   ({
     approveForExecution:
       params?.approveForExecution ??

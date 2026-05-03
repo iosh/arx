@@ -140,7 +140,7 @@ const createApprovalReader = (runtime: CreateBackgroundRuntimeResult) =>
     approvals: runtime.controllers.approvals,
     accounts: runtime.controllers.accounts,
     chainViews: runtime.services.chainViews,
-    transactions: runtime.controllers.transactions,
+    transactions: runtime.transactions.review,
   });
 
 const buildProviderContext = (input: {
@@ -574,7 +574,7 @@ describe("createBackgroundRuntime provider access", () => {
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
       expect(
         capturedTransactionId
-          ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
+          ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId)
           : undefined,
       ).toMatchObject({
         id: capturedTransactionId,
@@ -1014,9 +1014,7 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       expect(
-        capturedTransactionId
-          ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
-          : null,
+        capturedTransactionId ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId) : null,
       ).toMatchObject({
         phase: "unpersisted",
         failure: {
@@ -1035,7 +1033,7 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
       const persistenceFailureView = capturedTransactionId
-        ? background.runtime.controllers.transactions.getProposalView(capturedTransactionId)
+        ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId)
         : null;
       expect(persistenceFailureView).toBeTruthy();
     } finally {

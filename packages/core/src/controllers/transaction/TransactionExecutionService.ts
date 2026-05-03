@@ -3,6 +3,7 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
+import type { TransactionError } from "../../transactions/types.js";
 import { canStartProposalExecution, isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalService } from "./TransactionProposalService.js";
@@ -11,7 +12,7 @@ import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
-import type { TransactionApproveResult, TransactionController, TransactionError } from "./types.js";
+import type { TransactionApprovalExecutor, TransactionApprovalResult, TransactionBroadcastRecovery } from "./types.js";
 import {
   buildPrepareContext,
   buildSignContext,
@@ -45,9 +46,7 @@ type TransactionExecutionAttemptState = {
   signAbortController: AbortController | null;
 };
 
-export class TransactionExecutionService
-  implements Pick<TransactionController, "approveTransaction" | "rejectTransaction" | "resumePending">
-{
+export class TransactionExecutionService implements TransactionApprovalExecutor, TransactionBroadcastRecovery {
   #messenger: TransactionMessenger;
   #proposalStore: TransactionProposalStore;
   #recordView: TransactionRecordViewStore;
@@ -80,7 +79,7 @@ export class TransactionExecutionService
     this.#readTransactionTimestamp = deps.readTransactionTimestamp;
   }
 
-  async approveTransaction(id: string): Promise<TransactionApproveResult> {
+  async approveTransaction(id: string): Promise<TransactionApprovalResult> {
     const result = this.#proposals.approveForExecution(id);
     if (result.status === "failed") {
       return result;

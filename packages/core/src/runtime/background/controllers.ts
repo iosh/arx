@@ -22,9 +22,9 @@ import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "..
 import { InMemorySupportedChainsController } from "../../controllers/supportedChains/SupportedChainsController.js";
 import { SUPPORTED_CHAINS_TOPICS } from "../../controllers/supportedChains/topics.js";
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
-import { StoreTransactionController } from "../../controllers/transaction/StoreTransactionController.js";
+import { createTransactionRuntime } from "../../controllers/transaction/createTransactionRuntime.js";
 import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
-import type { TransactionController } from "../../controllers/transaction/types.js";
+import type { TransactionRuntime } from "../../controllers/transaction/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
@@ -68,12 +68,12 @@ export type ControllersBase = {
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  transactions: TransactionController;
   supportedChains: SupportedChainsController;
 };
 
 export type ControllersInitResult = {
   controllersBase: ControllersBase;
+  transactionRuntime: TransactionRuntime;
   namespaceTransactions: NamespaceTransactions;
   networkController: NetworkController;
   supportedChainsController: SupportedChainsController;
@@ -103,7 +103,10 @@ export const initControllers = ({
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   networkPlan: RuntimeNetworkPlan;
   options: ControllerLayerOptions;
-  createApprovalExecutor?: (controllersBase: ControllersBase) => ApprovalExecutor | undefined;
+  createApprovalExecutor?: (params: {
+    controllersBase: ControllersBase;
+    transactionRuntime: TransactionRuntime;
+  }) => ApprovalExecutor | undefined;
 }): ControllersInitResult => {
   const {
     network: networkOptions,
@@ -162,7 +165,7 @@ export const initControllers = ({
     ...(supportedChainsOptions.logger ? { logger: supportedChainsOptions.logger } : {}),
   });
 
-  const transactionController = new StoreTransactionController({
+  const transactionRuntime = createTransactionRuntime({
     messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
     accountCodecs,
     networkSelection,
@@ -187,14 +190,17 @@ export const initControllers = ({
     accounts: accountController,
     approvals: approvalController,
     permissions: permissionsController,
-    transactions: transactionController,
     supportedChains: supportedChainsController,
   };
 
-  approvalExecutor = createApprovalExecutor?.(controllersBase);
+  approvalExecutor = createApprovalExecutor?.({
+    controllersBase,
+    transactionRuntime,
+  });
 
   return {
     controllersBase,
+    transactionRuntime,
     namespaceTransactions,
     networkController,
     supportedChainsController,

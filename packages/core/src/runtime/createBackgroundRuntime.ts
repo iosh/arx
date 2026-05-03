@@ -1,4 +1,5 @@
 import type { AccountCodecRegistry } from "../accounts/addressing/codec.js";
+import type { TransactionRuntime } from "../controllers/transaction/types.js";
 import { assembleArxWalletRuntime } from "../engine/createArxWallet.js";
 import { createWalletNamespaceModuleFromManifest } from "../engine/modules/manifestInterop.js";
 import type { ArxWallet, WalletCreateUiOptions } from "../engine/types.js";
@@ -84,6 +85,7 @@ export type CreateBackgroundRuntimeOptions = Omit<ControllerLayerOptions, "suppo
 export type BackgroundRuntime = {
   bus: Messenger;
   controllers: HandlerControllers;
+  transactions: TransactionRuntime;
   services: {
     attention: ReturnType<typeof createAttentionService>;
     chainActivation: ReturnType<typeof createChainActivationService>;
@@ -199,6 +201,7 @@ export const createBackgroundRuntime = (options: CreateBackgroundRuntimeOptions)
   return {
     bus: runtime.bus,
     controllers: runtime.controllers,
+    transactions: runtime.transactions,
     services: runtime.services,
     rpc: {
       engine: runtime.rpc.engine,

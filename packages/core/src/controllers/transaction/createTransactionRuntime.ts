@@ -5,7 +5,6 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
-import type { SupportedChainsController } from "../supportedChains/types.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
@@ -38,7 +37,6 @@ export type CreateTransactionRuntimeOptions = {
   messenger: import("./topics.js").TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
-  supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create" | "onFinished" | "listPendingIdsBySubject">;
   namespaces: NamespaceTransactions;
@@ -90,7 +88,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     proposalStore,
     accountCodecs: options.accountCodecs,
     networkSelection: options.networkSelection,
-    supportedChains: options.supportedChains,
     accounts: options.accounts,
     approvals: options.approvals,
     namespaces: options.namespaces,

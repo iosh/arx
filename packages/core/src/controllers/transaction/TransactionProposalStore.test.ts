@@ -139,9 +139,6 @@ describe("TransactionProposalStore", () => {
       id: "2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       approvalId: "2bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       phase: "approved",
-      baseRequest: {
-        payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-      },
       currentRequest: {
         payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
       },
@@ -346,10 +343,12 @@ describe("TransactionProposalStore", () => {
       }),
     ).toBeNull();
 
-    expect(store.getView(id)?.reviewState).toMatchObject({
-      status: "invalidated",
-      error: {
-        reason: "approval.locked",
+    expect(store.getView(id)?.review).toMatchObject({
+      prepare: {
+        state: "failed",
+        error: {
+          reason: "approval.locked",
+        },
       },
     });
   });
@@ -392,7 +391,7 @@ describe("TransactionProposalStore", () => {
     expect(store.listExecutableProposalIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
   });
 
-  it("marks a proposal as unpersisted when broadcast succeeded but local record creation failed", () => {
+  it("removes an approved proposal once a durable record handoff succeeds", () => {
     const store = createStore();
     const id = "77777777-7777-4777-8777-777777777777";
 
@@ -412,35 +411,10 @@ describe("TransactionProposalStore", () => {
     });
     store.approvePendingProposal({ id, updatedAt: 2 });
 
-    expect(
-      store.markUnpersistedProposal({
-        id,
-        updatedAt: 3,
-        error: {
-          name: "TransactionPersistenceError",
-          message: "Transaction was broadcast but could not be persisted locally.",
-          data: {
-            submitted: { hash: "0xdeadbeef" },
-            locator: { format: "eip155.tx_hash", value: "0xdeadbeef" },
-          },
-        },
-      }),
-    ).toMatchObject({
-      status: "unpersisted",
-      error: {
-        name: "TransactionPersistenceError",
-      },
+    expect(store.clearProposalAfterRecordPersisted(id)).toMatchObject({
+      status: "approved",
     });
-
-    expect(store.getView(id)).toMatchObject({
-      kind: "proposal",
-      phase: "unpersisted",
-      failure: {
-        error: {
-          name: "TransactionPersistenceError",
-        },
-      },
-    });
+    expect(store.getView(id)).toBeUndefined();
     expect(store.listExecutableProposalIds()).toEqual([]);
   });
 });

@@ -253,7 +253,7 @@ const buildSendTransactionDetail = (
       canReject: true,
     },
     request: {
-      transactionId: subject.transactionId,
+      transactionId: record.request.transactionId,
       chainRef: record.request.chainRef,
       origin: record.request.origin,
     },

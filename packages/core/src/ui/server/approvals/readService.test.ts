@@ -336,20 +336,9 @@ describe("createApprovalReadService", () => {
         },
         createdAt: 7,
         request: {
+          transactionId: "tx-ready",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            chainRef: "eip155:1",
-            payload: {
-              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              value: "0x1",
-              data: "0x",
-            },
-          },
         },
       }),
       createRecord({
@@ -364,18 +353,9 @@ describe("createApprovalReadService", () => {
         },
         createdAt: 8,
         request: {
+          transactionId: "tx-blocked",
           chainRef: "eip155:1",
           origin: "https://dapp.example",
-          chain: null,
-          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          request: {
-            namespace: "eip155",
-            chainRef: "eip155:1",
-            payload: {
-              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            },
-          },
         },
       }),
     ];

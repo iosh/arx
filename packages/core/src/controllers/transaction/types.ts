@@ -1,4 +1,3 @@
-import type { Hex } from "ox/Hex";
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
@@ -12,27 +11,10 @@ import type {
   TransactionSubmitted,
 } from "../../transactions/types.js";
 import type { ApprovalHandle, ApprovalKind } from "../approval/types.js";
-import type {
-  SendTransactionApprovalReview,
-  TransactionReviewBlocker,
-  TransactionReviewError,
-  TransactionReviewRuntimeStatus,
-} from "./review/types.js";
+import type { SendTransactionApprovalReview } from "./review/types.js";
 
-export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed" | "unpersisted";
+export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
-
-export type TransactionApprovalChainMetadata = {
-  chainRef: ChainRef;
-  namespace: string;
-  name: string;
-  shortName?: string | null;
-  chainId?: Hex | null;
-  nativeCurrency?: {
-    symbol: string;
-    decimals: number;
-  } | null;
-};
 
 export type TransactionProposalPhaseChange = {
   kind: "proposal_phase";
@@ -110,21 +92,9 @@ export type TransactionProposalView = {
   namespace: string;
   chainRef: ChainRef;
   origin: string;
-  fromAccountKey: string;
   from: AccountAddress | null;
-  baseRequest: TransactionRequest;
   currentRequest: TransactionRequest;
-  draftRevision: number;
   prepared: TransactionPrepared | null;
-  reviewState: {
-    sessionToken: string | null;
-    status: TransactionReviewRuntimeStatus | null;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-    blocker: TransactionReviewBlocker | null;
-    error: TransactionReviewError | null;
-    invalidatedBy?: string | undefined;
-    updatedAt: number;
-  };
   review: SendTransactionApprovalReview;
   phase: TransactionProposalPhase;
   failure: {
@@ -151,12 +121,10 @@ export type TransactionRecordView = {
   updatedAt: number;
 };
 
-export type TransactionApprovalRequestPayload = {
+export type SendTransactionApprovalSubjectRequest = {
+  transactionId: string;
   chainRef: ChainRef;
   origin: string;
-  chain?: TransactionApprovalChainMetadata | null;
-  from: AccountAddress | null;
-  request: TransactionRequest;
 };
 
 export type TransactionApprovalRequestHandoff = {
@@ -193,6 +161,14 @@ export type BeginTransactionApprovalOptions = {
 export type TransactionSubmissionResolution = {
   submitted: TransactionSubmitted;
   locator: TransactionSubmissionLocator;
+  persistenceFailure?: TransactionSubmissionPersistenceFailure | undefined;
+};
+
+export type TransactionSubmissionPersistenceFailure = {
+  transactionId: string;
+  error: TransactionError;
+  submitted: TransactionSubmitted;
+  locator: TransactionSubmissionLocator;
 };
 
 export type TransactionSubmissionFailure = {
@@ -212,8 +188,22 @@ export class TransactionSubmissionError extends Error {
   }
 }
 
+export class TransactionSubmissionPersistenceError extends Error {
+  readonly failure: TransactionSubmissionPersistenceFailure;
+
+  constructor(failure: TransactionSubmissionPersistenceFailure) {
+    super(failure.error.message);
+    this.name = "TransactionSubmissionPersistenceError";
+    this.failure = structuredClone(failure);
+  }
+}
+
 export const isTransactionSubmissionError = (error: unknown): error is TransactionSubmissionError =>
   error instanceof TransactionSubmissionError;
+
+export const isTransactionSubmissionPersistenceError = (
+  error: unknown,
+): error is TransactionSubmissionPersistenceError => error instanceof TransactionSubmissionPersistenceError;
 
 export type TransactionApprovalReviewReader = {
   getTransactionApprovalReview(transactionId: string): SendTransactionApprovalReview;

@@ -254,16 +254,19 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
-        this.#proposalStore.markUnpersistedProposal({
-          id,
-          updatedAt: this.#readTransactionTimestamp(),
+        const failure = {
+          transactionId: id,
           error: createTransactionPersistenceError({
             cause: persistenceFailure,
             transactionId: id,
             submitted: broadcast.submitted,
             locator: broadcast.locator,
           }),
-        });
+          submitted: structuredClone(broadcast.submitted),
+          locator: structuredClone(broadcast.locator),
+        };
+        this.#submissionService.recordPersistenceFailure(id, failure);
+        this.#proposalStore.delete(id);
         return;
       }
 

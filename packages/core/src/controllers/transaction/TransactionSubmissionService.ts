@@ -1,6 +1,7 @@
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type {
   TransactionSubmissionFailure,
+  TransactionSubmissionPersistenceFailure,
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,
 } from "./types.js";
@@ -35,6 +36,22 @@ export class TransactionSubmissionService implements TransactionSubmissionTracke
     this.#cacheOutcome(id, {
       state: "submitted",
       resolution: structuredClone(resolution),
+    });
+    this.#flushWaiters(id);
+  }
+
+  recordPersistenceFailure(id: string, failure: TransactionSubmissionPersistenceFailure): void {
+    const current = this.#outcomes.get(id);
+    if (current?.state !== "submitted") {
+      return;
+    }
+
+    this.#cacheOutcome(id, {
+      state: "submitted",
+      resolution: {
+        ...structuredClone(current.resolution),
+        persistenceFailure: structuredClone(failure),
+      },
     });
     this.#flushWaiters(id);
   }

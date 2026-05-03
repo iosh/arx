@@ -43,28 +43,13 @@ const createProposalServiceStub = (params?: { approveForExecution?: (id: string)
           namespace: "eip155",
           chainRef: DEFAULT_CHAIN_REF,
           origin: REQUEST_CONTEXT.origin,
-          fromAccountKey: "account-key",
           from: DEFAULT_FROM,
-          baseRequest: {
-            namespace: "eip155",
-            chainRef: DEFAULT_CHAIN_REF,
-            payload: { from: DEFAULT_FROM, to: DEFAULT_TO, value: "0x0" },
-          },
           currentRequest: {
             namespace: "eip155",
             chainRef: DEFAULT_CHAIN_REF,
             payload: { from: DEFAULT_FROM, to: DEFAULT_TO, value: "0x0" },
           },
-          draftRevision: 0,
           prepared: null,
-          reviewState: {
-            sessionToken: null,
-            status: null,
-            reviewPreparedSnapshot: null,
-            blocker: null,
-            error: null,
-            updatedAt: 1,
-          },
           review: {
             updatedAt: 1,
             prepare: { state: "preparing" },
@@ -146,6 +131,7 @@ const createExecutionService = (params?: {
     proposalStore,
     recordView,
     service,
+    submissionService,
     prepare,
     tracking,
     messenger,
@@ -516,8 +502,8 @@ describe("TransactionExecutionService", () => {
     });
   });
 
-  it("keeps an unpersisted proposal when durable persistence fails after broadcast", async () => {
-    const { execution, proposalStore } = createExecutionService({
+  it("records submission persistence failure without keeping the proposal alive after broadcast", async () => {
+    const { execution, proposalStore, submissionService } = createExecutionService({
       service: createTransactionsServiceStub({
         createSubmitted: vi.fn(async () => {
           throw new Error("Local transaction store unavailable");
@@ -528,24 +514,27 @@ describe("TransactionExecutionService", () => {
 
     await execution.processTransaction(REQUEST_ID);
 
-    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
-      status: "unpersisted",
-      error: {
-        name: "TransactionPersistenceError",
-        message: "Transaction was broadcast but could not be persisted locally.",
-        data: {
-          cause: {
-            name: "Error",
-            message: "Local transaction store unavailable",
+    expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
+    await expect(submissionService.waitForSubmissionOutcome(REQUEST_ID)).resolves.toMatchObject({
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+      persistenceFailure: {
+        transactionId: REQUEST_ID,
+        error: {
+          name: "TransactionPersistenceError",
+          message: "Transaction was broadcast but could not be persisted locally.",
+          data: {
+            cause: {
+              name: "Error",
+              message: "Local transaction store unavailable",
+            },
+            transactionId: REQUEST_ID,
+            submitted: DEFAULT_SUBMITTED,
+            locator: DEFAULT_LOCATOR,
           },
-          transactionId: REQUEST_ID,
-          submitted: DEFAULT_SUBMITTED,
-          locator: DEFAULT_LOCATOR,
         },
       },
     });
-    expect(proposalStore.get(REQUEST_ID)).not.toHaveProperty("submitted");
-    expect(proposalStore.get(REQUEST_ID)).not.toHaveProperty("locator");
   });
 
   it("does not revive a rejected proposal after async signing resolves", async () => {

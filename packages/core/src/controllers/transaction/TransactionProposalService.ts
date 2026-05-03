@@ -10,17 +10,14 @@ import type { TransactionValidationContext } from "../../transactions/namespace/
 import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalFinishedEvent, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
-import type { SupportedChainsController } from "../supportedChains/types.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type {
   BeginTransactionApprovalOptions,
-  TransactionApprovalChainMetadata,
   TransactionApprovalCommands,
   TransactionApprovalRequestHandoff,
-  TransactionApprovalRequestPayload,
   TransactionApprovalResult,
   TransactionApprovalReviewReader,
   TransactionProposalMeta,
@@ -38,7 +35,6 @@ type TransactionProposalServiceDeps = {
   proposalStore: TransactionProposalStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
-  supportedChains: Pick<SupportedChainsController, "getChain">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
@@ -52,7 +48,6 @@ export class TransactionProposalService
   #proposalStore: TransactionProposalStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
-  #supportedChains: Pick<SupportedChainsController, "getChain">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
@@ -63,7 +58,6 @@ export class TransactionProposalService
     this.#proposalStore = deps.proposalStore;
     this.#accountCodecs = deps.accountCodecs;
     this.#networkSelection = deps.networkSelection;
-    this.#supportedChains = deps.supportedChains;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
     this.#namespaces = deps.namespaces;
@@ -76,10 +70,10 @@ export class TransactionProposalService
   }
 
   getTransactionApprovalReview(transactionId: string) {
-    const proposalView = this.#proposalStore.getView(transactionId);
-    const proposalMeta = proposalView ? this.#proposalStore.get(transactionId) : undefined;
+    const proposalMeta = this.#proposalStore.get(transactionId);
     const namespaceTransaction = proposalMeta ? this.#namespaces.get(proposalMeta.namespace) : undefined;
-    const reviewPreparedSnapshot = proposalView?.reviewState.reviewPreparedSnapshot ?? proposalMeta?.prepared ?? null;
+    const proposalState = proposalMeta ? this.#proposalStore.peek(transactionId) : undefined;
+    const reviewPreparedSnapshot = proposalState?.reviewPreparedSnapshot ?? proposalMeta?.prepared ?? null;
     const namespaceReview =
       proposalMeta && namespaceTransaction
         ? (namespaceTransaction.proposal?.buildReview?.({
@@ -89,18 +83,18 @@ export class TransactionProposalService
         : null;
 
     return buildSendTransactionApprovalReview({
-      updatedAt: proposalView?.reviewState.updatedAt ?? proposalMeta?.updatedAt ?? 0,
+      updatedAt: proposalState?.updatedAt ?? proposalMeta?.updatedAt ?? 0,
       review:
-        proposalView?.reviewState.status && proposalView.reviewState.sessionToken
+        proposalState?.reviewStatus && proposalState.reviewSessionToken
           ? {
-              sessionToken: proposalView.reviewState.sessionToken,
-              status: proposalView.reviewState.status,
-              updatedAt: proposalView.reviewState.updatedAt,
-              reviewPreparedSnapshot: proposalView.reviewState.reviewPreparedSnapshot,
-              blocker: proposalView.reviewState.blocker,
-              error: proposalView.reviewState.error,
-              ...(proposalView.reviewState.invalidatedBy !== undefined
-                ? { invalidatedBy: proposalView.reviewState.invalidatedBy }
+              sessionToken: proposalState.reviewSessionToken,
+              status: proposalState.reviewStatus,
+              updatedAt: proposalState.updatedAt,
+              reviewPreparedSnapshot: proposalState.reviewPreparedSnapshot,
+              blocker: proposalState.reviewBlocker,
+              error: proposalState.reviewError,
+              ...(proposalState.reviewInvalidatedBy !== undefined
+                ? { invalidatedBy: proposalState.reviewInvalidatedBy }
                 : {}),
             }
           : null,
@@ -185,7 +179,11 @@ export class TransactionProposalService
       updatedAt: timestamp,
     });
 
-    const approvalRequest = this.#buildApprovalRequestPayload(proposalMeta, proposalMeta.id);
+    const approvalRequest = {
+      transactionId: proposalMeta.id,
+      chainRef,
+      origin: requestContext.origin,
+    };
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
       approvalHandle = options?.requestBinding
@@ -314,38 +312,38 @@ export class TransactionProposalService
       };
     }
 
-    const reviewState = this.#proposalStore.getView(id)?.reviewState ?? null;
-    if (reviewState?.status === "blocked") {
+    const reviewState = this.#proposalStore.peek(id);
+    if (reviewState?.reviewStatus === "blocked") {
       return {
         status: "failed",
         reason: "prepare_blocked",
         transaction: existing,
-        message: reviewState.blocker?.message ?? "Transaction is blocked.",
+        message: reviewState.reviewBlocker?.message ?? "Transaction is blocked.",
         data: {
           transactionId: id,
-          ...(reviewState.blocker ? { blocker: reviewState.blocker } : {}),
+          ...(reviewState.reviewBlocker ? { blocker: reviewState.reviewBlocker } : {}),
         },
       };
     }
-    if (reviewState?.status === "failed" || reviewState?.status === "invalidated") {
+    if (reviewState?.reviewStatus === "failed" || reviewState?.reviewStatus === "invalidated") {
       return {
         status: "failed",
         reason: "prepare_failed",
         transaction: existing,
-        message: reviewState.error?.message ?? "Transaction preparation failed.",
+        message: reviewState.reviewError?.message ?? "Transaction preparation failed.",
         data: {
           transactionId: id,
-          ...(reviewState.error ? { error: reviewState.error } : {}),
+          ...(reviewState.reviewError ? { error: reviewState.reviewError } : {}),
         },
       };
     }
-    if (reviewState?.status && reviewState.status !== "ready") {
+    if (reviewState?.reviewStatus && reviewState.reviewStatus !== "ready") {
       return {
         status: "failed",
         reason: "prepare_not_ready",
         transaction: existing,
         message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: reviewState.status },
+        data: { transactionId: id, prepareState: reviewState.reviewStatus },
       };
     }
     if (!this.#proposalStore.hasCurrentPrepared(id)) {
@@ -395,24 +393,6 @@ export class TransactionProposalService
     return this.#proposalStore.invalidateReviewFromApproval(event, this.#readTransactionTimestamp());
   }
 
-  #buildApprovalRequestPayload(
-    meta: TransactionProposalMeta | null,
-    transactionId: string,
-  ): TransactionApprovalRequestPayload {
-    if (!meta) {
-      throw new Error(`Transaction ${transactionId} not found`);
-    }
-
-    const request = this.#requireRuntimeRequest(meta);
-    return {
-      chainRef: meta.chainRef,
-      origin: meta.origin,
-      chain: this.#buildChainMetadata(meta),
-      from: meta.from,
-      request: structuredClone(request),
-    };
-  }
-
   #requireOwnedFromAccount(params: {
     namespace: string;
     chainRef: string;
@@ -452,26 +432,5 @@ export class TransactionProposalService
 
   #requireProposalViewOrNull(id: string): TransactionProposalView | null {
     return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : null;
-  }
-
-  #buildChainMetadata(meta: TransactionProposalMeta): TransactionApprovalChainMetadata | null {
-    const resolved = this.#supportedChains.getChain(meta.chainRef)?.metadata ?? null;
-    if (!resolved) return null;
-
-    const chainId =
-      typeof resolved.chainId === "string" && resolved.chainId.startsWith("0x")
-        ? (resolved.chainId as `0x${string}`)
-        : null;
-
-    return {
-      chainRef: resolved.chainRef,
-      namespace: resolved.namespace,
-      name: resolved.displayName,
-      shortName: resolved.shortName ?? null,
-      chainId,
-      nativeCurrency: resolved.nativeCurrency
-        ? { symbol: resolved.nativeCurrency.symbol, decimals: resolved.nativeCurrency.decimals }
-        : null,
-    };
   }
 }

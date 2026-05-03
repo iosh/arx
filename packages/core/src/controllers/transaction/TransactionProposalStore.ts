@@ -404,23 +404,6 @@ export class TransactionProposalStore {
     });
   }
 
-  markUnpersistedProposal(input: {
-    id: string;
-    updatedAt: number;
-    error: TransactionError;
-  }): TransactionProposalMeta | null {
-    return this.#moveProposal({
-      id: input.id,
-      expected: "approved",
-      next: "unpersisted",
-      updatedAt: input.updatedAt,
-      patch: {
-        error: input.error,
-        userRejected: false,
-      },
-    });
-  }
-
   delete(id: string): boolean {
     const deleted = this.#records.delete(id);
     if (deleted) {
@@ -471,7 +454,7 @@ export class TransactionProposalStore {
   }
 
   #buildProposalView(state: TransactionProposalState): TransactionProposalView | undefined {
-    if (!state.baseRequest || !state.request) {
+    if (!state.request) {
       return undefined;
     }
 
@@ -497,25 +480,13 @@ export class TransactionProposalStore {
       namespace: state.namespace,
       chainRef: state.chainRef,
       origin: state.origin,
-      fromAccountKey: state.fromAccountKey,
       from,
-      baseRequest: state.baseRequest,
       currentRequest: state.request,
-      draftRevision: state.draftRevision,
       prepared: state.prepared,
-      reviewState: {
-        sessionToken: reviewState?.sessionToken ?? null,
-        status: reviewState?.status ?? null,
-        reviewPreparedSnapshot: reviewState?.reviewPreparedSnapshot ?? null,
-        blocker: reviewState?.blocker ?? null,
-        error: reviewState?.error ?? null,
-        ...(reviewState?.invalidatedBy !== undefined ? { invalidatedBy: reviewState.invalidatedBy } : {}),
-        updatedAt: reviewState?.updatedAt ?? state.updatedAt,
-      },
       review,
       phase: state.phase,
       failure:
-        state.phase === "failed" || state.phase === "unpersisted" || state.userRejected || state.error
+        state.phase === "failed" || state.userRejected || state.error
           ? {
               error: structuredClone(state.error),
               userRejected: state.userRejected,

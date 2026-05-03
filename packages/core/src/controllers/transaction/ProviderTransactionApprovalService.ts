@@ -73,7 +73,11 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
 
     const tryCleanupFromTerminalState = () => {
       const proposal = this.#proposals.getProposalView(handoff.transactionId);
-      if (proposal && isProposalTerminal(proposal)) {
+      if (!proposal) {
+        cleanup();
+        return;
+      }
+      if (isProposalTerminal(proposal)) {
         cleanup();
         return;
       }

@@ -64,4 +64,34 @@ describe("TransactionSubmissionService", () => {
       locator: DEFAULT_LOCATOR,
     });
   });
+
+  it("attaches persistence failure metadata to a submitted outcome", async () => {
+    const submissionService = new TransactionSubmissionService({
+      recordView: createRecordViewStub(),
+      stateLimit: 10,
+    });
+
+    submissionService.recordSubmitted("tx-4", {
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+    submissionService.recordPersistenceFailure("tx-4", {
+      transactionId: "tx-4",
+      error: {
+        name: "TransactionPersistenceError",
+        message: "Transaction was broadcast but could not be persisted locally.",
+      },
+      submitted: DEFAULT_SUBMITTED,
+      locator: DEFAULT_LOCATOR,
+    });
+
+    await expect(submissionService.waitForSubmissionOutcome("tx-4")).resolves.toMatchObject({
+      persistenceFailure: {
+        transactionId: "tx-4",
+        error: {
+          name: "TransactionPersistenceError",
+        },
+      },
+    });
+  });
 });

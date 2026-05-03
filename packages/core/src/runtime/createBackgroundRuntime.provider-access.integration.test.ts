@@ -1013,29 +1013,26 @@ describe("createBackgroundRuntime provider access", () => {
       await vi.waitFor(() => expect(transactionsPort.createCalls).toBe(1));
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
-      expect(
-        capturedTransactionId ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId) : null,
-      ).toMatchObject({
-        phase: "unpersisted",
-        failure: {
+      const submissionOutcome = capturedTransactionId
+        ? await background.runtime.transactions.submission.waitForSubmissionOutcome(capturedTransactionId)
+        : null;
+      expect(submissionOutcome).toMatchObject({
+        submitted: {
+          hash: txHash,
+        },
+        locator: {
+          format: "eip155.tx_hash",
+          value: txHash,
+        },
+        persistenceFailure: {
           error: {
             name: "TransactionPersistenceError",
-            data: {
-              submitted: {
-                hash: txHash,
-              },
-              locator: {
-                format: "eip155.tx_hash",
-                value: txHash,
-              },
-            },
           },
         },
       });
-      const persistenceFailureView = capturedTransactionId
-        ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId)
-        : null;
-      expect(persistenceFailureView).toBeTruthy();
+      expect(
+        capturedTransactionId ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId) : null,
+      ).toBeUndefined();
     } finally {
       releaseBroadcast?.();
       unsubscribeAutoApproval();

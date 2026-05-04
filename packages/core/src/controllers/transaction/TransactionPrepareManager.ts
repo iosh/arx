@@ -2,6 +2,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionProposalMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
 
@@ -10,6 +11,7 @@ const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 type Options = {
   proposalStore: TransactionProposalStore;
+  reviewSessions: TransactionReviewSessionStore;
   namespaces: NamespaceTransactions;
   logger?: (message: string, data?: unknown) => void;
   namespaceProposalPrepareTimeoutMs?: number;
@@ -18,6 +20,7 @@ type Options = {
 
 export class TransactionPrepareManager {
   #proposalStore: TransactionProposalStore;
+  #reviewSessions: TransactionReviewSessionStore;
   #namespaces: NamespaceTransactions;
   #logger: (message: string, data?: unknown) => void;
   #namespaceProposalPrepareTimeoutMs: number;
@@ -30,6 +33,7 @@ export class TransactionPrepareManager {
 
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
+    this.#reviewSessions = options.reviewSessions;
     this.#namespaces = options.namespaces;
     this.#logger = options.logger ?? (() => {});
     this.#namespaceProposalPrepareTimeoutMs =
@@ -123,16 +127,17 @@ export class TransactionPrepareManager {
     }
 
     const startedAt = Date.now();
-    const session = this.#proposalStore.beginPrepareSession({ id, updatedAt: startedAt });
-    if (!session) {
-      return this.#proposalStore.get(id) ?? null;
-    }
+    const session = this.#reviewSessions.reuseOrBeginPrepareSession({
+      id,
+      draftRevision: expectedDraftRevision,
+      updatedAt: startedAt,
+    });
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
       const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, null);
       if (!next) return this.#proposalStore.get(id) ?? null;
-      this.#proposalStore.markReviewFailed({
+      this.#reviewSessions.markReviewFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
@@ -163,7 +168,7 @@ export class TransactionPrepareManager {
       if (!next) return this.#proposalStore.get(id) ?? null;
 
       if (result.status === "ready") {
-        this.#proposalStore.markReviewReady({
+        this.#reviewSessions.markReviewReady({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
@@ -174,7 +179,7 @@ export class TransactionPrepareManager {
       }
 
       if (result.status === "blocked") {
-        this.#proposalStore.markReviewBlocked({
+        this.#reviewSessions.markReviewBlocked({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
@@ -185,7 +190,7 @@ export class TransactionPrepareManager {
         return next;
       }
 
-      this.#proposalStore.markReviewFailed({
+      this.#reviewSessions.markReviewFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
@@ -211,7 +216,7 @@ export class TransactionPrepareManager {
               reason: "transaction.prepare_failed",
               message: String(error),
             };
-      this.#proposalStore.markReviewFailed({
+      this.#reviewSessions.markReviewFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,

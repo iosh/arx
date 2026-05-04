@@ -5,10 +5,12 @@ import type { AccountController } from "../../../controllers/account/types.js";
 import { Messenger } from "../../../messenger/Messenger.js";
 import type { TransactionsService } from "../../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../../storage/records.js";
+import { buildEip155ApprovalReview } from "../../../transactions/namespace/eip155/approvalReview.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
+import { TransactionReviewSessionStore } from "../TransactionReviewSessionStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
 
@@ -58,7 +60,7 @@ export const createNamespaceTransactionStub = (
   },
   proposal: {
     prepare: (overrides?.prepare as never) ?? vi.fn(async () => ({ status: "ready", prepared: {} })),
-    ...(overrides?.buildReview ? { buildReview: overrides.buildReview as never } : {}),
+    buildReview: (overrides?.buildReview as never) ?? buildEip155ApprovalReview,
     ...(overrides?.applyDraftEdit ? { applyDraftEdit: overrides.applyDraftEdit as never } : {}),
   },
   execution: {
@@ -80,6 +82,8 @@ export const createProposalStore = () =>
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
+
+export const createReviewSessionStore = () => new TransactionReviewSessionStore();
 
 export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
   toAccountKeyFromAddress({
@@ -276,6 +280,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
+  reviewStore: TransactionReviewSessionStore,
   transactionId: string,
   input?: { updatedAt?: number; reviewPreparedSnapshot?: TransactionProposalMeta["prepared"] },
 ) => {
@@ -284,11 +289,12 @@ export const markReviewReady = (
   if (!current) {
     throw new Error(`Proposal ${transactionId} not found`);
   }
-  const session = proposalStore.beginPrepareSession({ id: transactionId, updatedAt });
-  if (!session) {
-    throw new Error(`Failed to begin prepare session for ${transactionId}`);
-  }
-  proposalStore.markReviewReady({
+  const session = reviewStore.beginPrepareSession({
+    id: transactionId,
+    draftRevision: current.draftRevision,
+    updatedAt,
+  });
+  reviewStore.markReviewReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
     sessionToken: session.sessionToken,

@@ -7,7 +7,6 @@ import type {
 export const buildSendTransactionApprovalReview = (args: {
   updatedAt: number;
   review: TransactionProposalReviewState | null;
-  hasPrepared?: boolean | undefined;
   namespaceReview: NamespaceTransactionReview | null;
 }): SendTransactionApprovalReview => {
   if (args.review?.status === "ready") {
@@ -31,14 +30,6 @@ export const buildSendTransactionApprovalReview = (args: {
       updatedAt: args.updatedAt,
       namespaceReview: args.namespaceReview,
       prepare: { state: "failed", error: args.review.error },
-    };
-  }
-
-  if (args.hasPrepared) {
-    return {
-      updatedAt: args.updatedAt,
-      namespaceReview: args.namespaceReview,
-      prepare: { state: "ready" },
     };
   }
 

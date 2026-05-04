@@ -9,6 +9,7 @@ import {
   createNamespaceTransactionStub,
   createPrepareStub,
   createProposalStore,
+  createReviewSessionStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -17,6 +18,7 @@ import {
   REQUEST_CONTEXT,
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
+import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
 import type { TransactionProposalMeta } from "./types.js";
@@ -25,6 +27,7 @@ const createProposalService = (params?: {
   chainRef?: string;
   from?: string;
   proposalStore?: ReturnType<typeof createProposalStore>;
+  reviewStore?: ReturnType<typeof createReviewSessionStore>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
     create: (...args: never[]) => unknown;
@@ -34,6 +37,8 @@ const createProposalService = (params?: {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
   const proposalStore = params?.proposalStore ?? createProposalStore();
+  const reviewStore = params?.reviewStore ?? createReviewSessionStore();
+  const namespaces = params?.namespaces ?? createNamespacesStub();
   const queuePrepare = vi.fn();
   const prepare = params?.prepare ?? createPrepareStub({ queuePrepare });
   const createApproval =
@@ -42,27 +47,33 @@ const createProposalService = (params?: {
       approvalId: APPROVAL_ID,
       settled: Promise.resolve(undefined),
     }));
+  const review = createTransactionApprovalReviewReader({
+    proposalStore,
+    reviewSessions: reviewStore,
+    namespaces: namespaces as never,
+  });
   const service = new TransactionProposalService({
     proposalStore,
+    reviewSessions: reviewStore,
+    review,
     accountCodecs,
     networkSelection: {
       getSelectedChainRef: (namespace: string) => (namespace === "eip155" ? chainRef : null),
-    },
-    supportedChains: {
-      getChain: () => null,
     },
     accounts: createAccountControllerStub({ chainRef, from }),
     approvals: {
       create: createApproval as never,
     },
-    namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
+    namespaces: namespaces as never,
     prepare: prepare as never,
     readTransactionTimestamp: () => 1,
   });
 
   return {
     service,
+    review,
     proposalStore,
+    reviewStore,
     queuePrepare,
     createApproval,
     chainRef,
@@ -79,7 +90,7 @@ describe("TransactionProposalService", () => {
         settleApproval = resolve;
       }),
     }));
-    const { service, proposalStore, queuePrepare, chainRef } = createProposalService({
+    const { service, proposalStore, reviewStore, queuePrepare, chainRef } = createProposalService({
       approvals: {
         create: createApproval as never,
       },
@@ -116,6 +127,10 @@ describe("TransactionProposalService", () => {
       chainRef,
     });
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(reviewStore.get(REQUEST_ID)).toMatchObject({
+      status: "preparing",
+      reviewPreparedSnapshot: null,
+    });
     expect(createApproval).toHaveBeenCalledWith(
       expect.objectContaining({
         approvalId: APPROVAL_ID,
@@ -545,6 +560,7 @@ describe("TransactionProposalService", () => {
 
   it("reruns prepare after a draft edit invalidates an in-flight prepare result", async () => {
     const proposalStore = createProposalStore();
+    const reviewStore = createReviewSessionStore();
     let prepareRun = 0;
     let releaseFirstPrepare: (() => void) | null = null;
     const firstPrepareSettled = new Promise<void>((resolve) => {
@@ -586,11 +602,13 @@ describe("TransactionProposalService", () => {
     );
     const prepare = new TransactionPrepareManager({
       proposalStore,
+      reviewSessions: reviewStore,
       namespaces: namespaces as never,
     });
 
     const { service } = createProposalService({
       proposalStore,
+      reviewStore,
       namespaces,
       prepare: prepare as never,
     });
@@ -625,6 +643,13 @@ describe("TransactionProposalService", () => {
 
     expect(prepareTransaction).toHaveBeenCalledTimes(2);
     expect(proposalStore.peek(REQUEST_ID)?.draftRevision).toBe(1);
+    expect(reviewStore.get(REQUEST_ID)).toMatchObject({
+      status: "ready",
+      reviewPreparedSnapshot: {
+        gas: "0x5300",
+        to: "0xcccccccccccccccccccccccccccccccccccccccc",
+      },
+    });
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       request: {
         payload: {
@@ -636,6 +661,70 @@ describe("TransactionProposalService", () => {
         to: "0xcccccccccccccccccccccccccccccccccccccccc",
       },
     });
+  });
+
+  it("resets review state to preparing immediately after a draft edit", async () => {
+    let releasePrepare: (() => void) | null = null;
+    const prepareStarted = new Promise<void>((resolve) => {
+      releasePrepare = resolve;
+    });
+    const proposalStore = createProposalStore();
+    const reviewStore = createReviewSessionStore();
+    const prepareTransaction = vi.fn(async () => {
+      await prepareStarted;
+      return {
+        status: "ready" as const,
+        prepared: {
+          gas: "0x5300",
+        },
+      };
+    });
+    const namespaces = createNamespacesStub(() =>
+      createNamespaceTransactionStub({
+        prepare: prepareTransaction as never,
+        applyDraftEdit: (({ request }: { request: NonNullable<TransactionProposalMeta["request"]> }) => ({
+          ...request,
+          payload: {
+            ...request.payload,
+            to: "0xcccccccccccccccccccccccccccccccccccccccc",
+          },
+        })) as never,
+      }),
+    );
+    const prepare = new TransactionPrepareManager({
+      proposalStore,
+      reviewSessions: reviewStore,
+      namespaces: namespaces as never,
+    });
+    const { service } = createProposalService({
+      proposalStore,
+      reviewStore,
+      namespaces,
+      prepare: prepare as never,
+    });
+
+    createTransactionProposal(proposalStore, {
+      status: "pending",
+    });
+    markReviewReady(proposalStore, reviewStore, REQUEST_ID, {
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
+
+    const editPromise = service.applyDraftEdit({
+      transactionId: REQUEST_ID,
+      changes: [{ op: "replace", path: "/to", value: "0xcccccccccccccccccccccccccccccccccccccccc" }],
+    });
+    await Promise.resolve();
+
+    expect(reviewStore.get(REQUEST_ID)).toMatchObject({
+      status: "preparing",
+      reviewPreparedSnapshot: null,
+      blocker: null,
+      error: null,
+    });
+
+    releasePrepare?.();
+    await editPromise;
   });
 
   it("rejects draft edits after approval begins", async () => {
@@ -666,12 +755,12 @@ describe("TransactionProposalService", () => {
   });
 
   it("approves only ready prepared proposals for execution", () => {
-    const { service, proposalStore } = createProposalService();
+    const { service, proposalStore, reviewStore } = createProposalService();
     createTransactionProposal(proposalStore, {
       status: "pending",
     });
     proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
-    markReviewReady(proposalStore, REQUEST_ID);
+    markReviewReady(proposalStore, reviewStore, REQUEST_ID);
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "approved",
@@ -683,8 +772,25 @@ describe("TransactionProposalService", () => {
     });
   });
 
-  it("rejects execution approval when prepared params do not belong to the current draft", () => {
+  it("rejects execution approval when the review session is missing even if prepared params exist", () => {
     const { service, proposalStore } = createProposalService();
+    createTransactionProposal(proposalStore, {
+      status: "pending",
+    });
+    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
+
+    expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
+      status: "failed",
+      reason: "prepare_not_ready",
+      data: {
+        transactionId: REQUEST_ID,
+        prepareState: "missing_review_session",
+      },
+    });
+  });
+
+  it("rejects execution approval when prepared params do not belong to the current draft", () => {
+    const { service, proposalStore, reviewStore } = createProposalService();
     createTransactionProposal(proposalStore, {
       status: "pending",
     });
@@ -703,7 +809,7 @@ describe("TransactionProposalService", () => {
       updatedAt: 2,
     });
     proposalStore.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
-    markReviewReady(proposalStore, REQUEST_ID);
+    markReviewReady(proposalStore, reviewStore, REQUEST_ID);
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -716,12 +822,12 @@ describe("TransactionProposalService", () => {
   });
 
   it("blocks execution approval when review is not ready", () => {
-    const { service, proposalStore } = createProposalService();
+    const { service, proposalStore, reviewStore } = createProposalService();
     createTransactionProposal(proposalStore, {
       prepared: null,
       status: "pending",
     });
-    proposalStore.beginPrepareSession({ id: REQUEST_ID, updatedAt: 1 });
+    reviewStore.beginPrepareSession({ id: REQUEST_ID, draftRevision: 0, updatedAt: 1 });
 
     expect(service.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -746,7 +852,7 @@ describe("TransactionProposalService", () => {
         gas: "0x5208",
       },
     }));
-    const { service, proposalStore } = createProposalService({
+    const { review, proposalStore, reviewStore } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           buildReview: buildReview as never,
@@ -766,11 +872,15 @@ describe("TransactionProposalService", () => {
       status: "pending",
     });
     const current = proposalStore.peek(REQUEST_ID);
-    const session = proposalStore.beginPrepareSession({ id: REQUEST_ID, updatedAt: 1 });
-    proposalStore.markReviewBlocked({
+    const session = reviewStore.beginPrepareSession({
+      id: REQUEST_ID,
+      draftRevision: current?.draftRevision ?? 0,
+      updatedAt: 1,
+    });
+    reviewStore.markReviewBlocked({
       id: REQUEST_ID,
       expectedDraftRevision: current?.draftRevision ?? 0,
-      sessionToken: session?.sessionToken ?? "",
+      sessionToken: session.sessionToken,
       updatedAt: 2,
       blocker: {
         reason: "transaction.prepare.insufficient_funds",
@@ -781,7 +891,7 @@ describe("TransactionProposalService", () => {
       },
     });
 
-    expect(service.getTransactionApprovalReview(REQUEST_ID)).toMatchObject({
+    expect(review.getTransactionApprovalReview(REQUEST_ID)).toMatchObject({
       updatedAt: 2,
       prepare: {
         state: "blocked",
@@ -801,9 +911,9 @@ describe("TransactionProposalService", () => {
     );
   });
 
-  it("does not build namespace review from approval request fallback when the proposal is missing", () => {
+  it("throws when the proposal is missing", () => {
     const buildReview = vi.fn();
-    const { service } = createProposalService({
+    const { review } = createProposalService({
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           buildReview: buildReview as never,
@@ -811,13 +921,16 @@ describe("TransactionProposalService", () => {
       ),
     });
 
-    expect(service.getTransactionApprovalReview(REQUEST_ID)).toEqual({
-      updatedAt: 0,
-      namespaceReview: null,
-      prepare: {
-        state: "preparing",
-      },
-    });
+    expect(() => review.getTransactionApprovalReview(REQUEST_ID)).toThrow("missing an active proposal");
     expect(buildReview).not.toHaveBeenCalled();
+  });
+
+  it("throws when an active proposal is missing a review session", () => {
+    const { review, proposalStore } = createProposalService();
+    createTransactionProposal(proposalStore, {
+      status: "pending",
+    });
+
+    expect(() => review.getTransactionApprovalReview(REQUEST_ID)).toThrow("is missing an active review session");
   });
 });

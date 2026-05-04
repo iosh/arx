@@ -10,10 +10,10 @@ import type { TransactionValidationContext } from "../../transactions/namespace/
 import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalFinishedEvent, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
-import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type {
   BeginTransactionApprovalOptions,
   TransactionApprovalCommands,
@@ -22,6 +22,7 @@ import type {
   TransactionApprovalReviewReader,
   TransactionProposalMeta,
   TransactionProposalReader,
+  TransactionProposalSnapshot,
   TransactionProposalView,
 } from "./types.js";
 import {
@@ -33,6 +34,8 @@ import {
 
 type TransactionProposalServiceDeps = {
   proposalStore: TransactionProposalStore;
+  reviewSessions: TransactionReviewSessionStore;
+  review: TransactionApprovalReviewReader;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
@@ -42,10 +45,10 @@ type TransactionProposalServiceDeps = {
   readTransactionTimestamp: () => number;
 };
 
-export class TransactionProposalService
-  implements TransactionApprovalReviewReader, TransactionApprovalCommands, TransactionProposalReader
-{
+export class TransactionProposalService implements TransactionApprovalCommands, TransactionProposalReader {
   #proposalStore: TransactionProposalStore;
+  #reviewSessions: TransactionReviewSessionStore;
+  #review: TransactionApprovalReviewReader;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
@@ -56,6 +59,8 @@ export class TransactionProposalService
 
   constructor(deps: TransactionProposalServiceDeps) {
     this.#proposalStore = deps.proposalStore;
+    this.#reviewSessions = deps.reviewSessions;
+    this.#review = deps.review;
     this.#accountCodecs = deps.accountCodecs;
     this.#networkSelection = deps.networkSelection;
     this.#accounts = deps.accounts;
@@ -66,41 +71,8 @@ export class TransactionProposalService
   }
 
   getProposalView(id: string): TransactionProposalView | undefined {
-    return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : undefined;
-  }
-
-  getTransactionApprovalReview(transactionId: string) {
-    const proposalMeta = this.#proposalStore.get(transactionId);
-    const namespaceTransaction = proposalMeta ? this.#namespaces.get(proposalMeta.namespace) : undefined;
-    const proposalState = proposalMeta ? this.#proposalStore.peek(transactionId) : undefined;
-    const reviewPreparedSnapshot = proposalState?.reviewPreparedSnapshot ?? proposalMeta?.prepared ?? null;
-    const namespaceReview =
-      proposalMeta && namespaceTransaction
-        ? (namespaceTransaction.proposal?.buildReview?.({
-            ...buildProposalStateContext(proposalMeta),
-            reviewPreparedSnapshot,
-          }) ?? null)
-        : null;
-
-    return buildSendTransactionApprovalReview({
-      updatedAt: proposalState?.updatedAt ?? proposalMeta?.updatedAt ?? 0,
-      review:
-        proposalState?.reviewStatus && proposalState.reviewSessionToken
-          ? {
-              sessionToken: proposalState.reviewSessionToken,
-              status: proposalState.reviewStatus,
-              updatedAt: proposalState.updatedAt,
-              reviewPreparedSnapshot: proposalState.reviewPreparedSnapshot,
-              blocker: proposalState.reviewBlocker,
-              error: proposalState.reviewError,
-              ...(proposalState.reviewInvalidatedBy !== undefined
-                ? { invalidatedBy: proposalState.reviewInvalidatedBy }
-                : {}),
-            }
-          : null,
-      hasPrepared: Boolean(proposalMeta?.prepared),
-      namespaceReview,
-    });
+    const proposal = this.#proposalStore.getView(id);
+    return proposal ? this.#buildProposalView(proposal) : undefined;
   }
 
   async beginTransactionApproval(
@@ -232,6 +204,11 @@ export class TransactionProposalService
     // transaction/approval ids from the handoff.
     void approvalHandle.settled.catch(() => undefined);
 
+    this.#reviewSessions.reuseOrBeginPrepareSession({
+      id,
+      draftRevision: 0,
+      updatedAt: timestamp,
+    });
     this.#prepare.queuePrepare(id);
 
     return {
@@ -246,6 +223,11 @@ export class TransactionProposalService
       return;
     }
 
+    this.#reviewSessions.reuseOrBeginPrepareSession({
+      id: transactionId,
+      draftRevision: proposal.draftRevision,
+      updatedAt: this.#readTransactionTimestamp(),
+    });
     this.#prepare.queuePrepare(transactionId);
   }
 
@@ -292,7 +274,7 @@ export class TransactionProposalService
   }
 
   approveForExecution(id: string): TransactionApprovalResult {
-    const existing = this.#requireProposalViewOrNull(id);
+    const existing = this.#proposalStore.getView(id) ?? null;
     if (!existing) {
       return {
         status: "failed",
@@ -312,38 +294,48 @@ export class TransactionProposalService
       };
     }
 
-    const reviewState = this.#proposalStore.peek(id);
-    if (reviewState?.reviewStatus === "blocked") {
-      return {
-        status: "failed",
-        reason: "prepare_blocked",
-        transaction: existing,
-        message: reviewState.reviewBlocker?.message ?? "Transaction is blocked.",
-        data: {
-          transactionId: id,
-          ...(reviewState.reviewBlocker ? { blocker: reviewState.reviewBlocker } : {}),
-        },
-      };
-    }
-    if (reviewState?.reviewStatus === "failed" || reviewState?.reviewStatus === "invalidated") {
-      return {
-        status: "failed",
-        reason: "prepare_failed",
-        transaction: existing,
-        message: reviewState.reviewError?.message ?? "Transaction preparation failed.",
-        data: {
-          transactionId: id,
-          ...(reviewState.reviewError ? { error: reviewState.reviewError } : {}),
-        },
-      };
-    }
-    if (reviewState?.reviewStatus && reviewState.reviewStatus !== "ready") {
+    const reviewState = this.#reviewSessions.get(id);
+    if (!reviewState) {
       return {
         status: "failed",
         reason: "prepare_not_ready",
         transaction: existing,
         message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: reviewState.reviewStatus },
+        data: { transactionId: id, prepareState: "missing_review_session" },
+      };
+    }
+
+    if (reviewState?.status === "blocked") {
+      return {
+        status: "failed",
+        reason: "prepare_blocked",
+        transaction: existing,
+        message: reviewState.blocker?.message ?? "Transaction is blocked.",
+        data: {
+          transactionId: id,
+          ...(reviewState.blocker ? { blocker: reviewState.blocker } : {}),
+        },
+      };
+    }
+    if (reviewState?.status === "failed" || reviewState?.status === "invalidated") {
+      return {
+        status: "failed",
+        reason: "prepare_failed",
+        transaction: existing,
+        message: reviewState.error?.message ?? "Transaction preparation failed.",
+        data: {
+          transactionId: id,
+          ...(reviewState.error ? { error: reviewState.error } : {}),
+        },
+      };
+    }
+    if (reviewState?.status && reviewState.status !== "ready") {
+      return {
+        status: "failed",
+        reason: "prepare_not_ready",
+        transaction: existing,
+        message: "Transaction preparation is not ready yet.",
+        data: { transactionId: id, prepareState: reviewState.status },
       };
     }
     if (!this.#proposalStore.hasCurrentPrepared(id)) {
@@ -364,7 +356,7 @@ export class TransactionProposalService
       return {
         status: "failed",
         reason: "not_pending",
-        transaction: this.#requireProposalViewOrNull(id) ?? undefined,
+        transaction: this.#proposalStore.getView(id) ?? undefined,
         message: "Transaction is no longer pending approval.",
         data: { transactionId: id },
       };
@@ -390,7 +382,7 @@ export class TransactionProposalService
   }
 
   invalidateFromApproval(event: ApprovalFinishedEvent<unknown>) {
-    return this.#proposalStore.invalidateReviewFromApproval(event, this.#readTransactionTimestamp());
+    return this.#reviewSessions.invalidateReviewFromApproval(event, this.#readTransactionTimestamp());
   }
 
   #requireOwnedFromAccount(params: {
@@ -424,13 +416,13 @@ export class TransactionProposalService
       throw new Error(`Transaction ${id} is not an active proposal`);
     }
 
-    return {
-      ...proposal,
-      review: this.getTransactionApprovalReview(id),
-    };
+    return this.#buildProposalView(proposal);
   }
 
-  #requireProposalViewOrNull(id: string): TransactionProposalView | null {
-    return this.#proposalStore.getView(id) ? this.#requireProposalView(id) : null;
+  #buildProposalView(proposal: TransactionProposalSnapshot): TransactionProposalView {
+    return {
+      ...proposal,
+      review: this.#review.getTransactionApprovalReview(proposal.id),
+    };
   }
 }

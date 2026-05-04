@@ -21,7 +21,7 @@ export type TransactionProposalPhaseChange = {
   id: string;
   previousPhase: TransactionProposalPhase;
   nextPhase: TransactionProposalPhase;
-  proposal: TransactionProposalView;
+  proposal: TransactionProposalSnapshot;
 };
 
 export type TransactionRecordStatusChange = {
@@ -85,7 +85,7 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   userRejected: boolean;
 };
 
-export type TransactionProposalView = {
+export type TransactionProposalSnapshot = {
   kind: "proposal";
   id: string;
   approvalId: string;
@@ -95,7 +95,6 @@ export type TransactionProposalView = {
   from: AccountAddress | null;
   currentRequest: TransactionRequest;
   prepared: TransactionPrepared | null;
-  review: SendTransactionApprovalReview;
   phase: TransactionProposalPhase;
   failure: {
     error: TransactionError | null;
@@ -103,6 +102,10 @@ export type TransactionProposalView = {
   } | null;
   createdAt: number;
   updatedAt: number;
+};
+
+export type TransactionProposalView = TransactionProposalSnapshot & {
+  review: SendTransactionApprovalReview;
 };
 
 export type TransactionRecordView = {
@@ -148,7 +151,7 @@ export type TransactionApprovalResult =
   | {
       status: "failed";
       reason: TransactionApprovalFailureReason;
-      transaction?: TransactionProposalView | undefined;
+      transaction?: TransactionProposalSnapshot | undefined;
       message: string;
       data?: unknown;
     };

@@ -6,12 +6,14 @@ import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.j
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
+import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalService } from "./TransactionProposalService.js";
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { TransactionStateChangePublisher } from "./TransactionStateChangePublisher.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
@@ -57,6 +59,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     messenger: options.messenger,
     accountCodecs: options.accountCodecs,
   });
+  const reviewSessions = new TransactionReviewSessionStore();
 
   const recordView = new TransactionRecordViewStore({
     messenger: options.messenger,
@@ -80,12 +83,21 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const prepare = new TransactionPrepareManager({
     proposalStore,
+    reviewSessions,
     namespaces: options.namespaces,
     logger,
   });
 
+  const review = createTransactionApprovalReviewReader({
+    proposalStore,
+    reviewSessions,
+    namespaces: options.namespaces,
+  });
+
   const proposals = new TransactionProposalService({
     proposalStore,
+    reviewSessions,
+    review,
     accountCodecs: options.accountCodecs,
     networkSelection: options.networkSelection,
     accounts: options.accounts,
@@ -98,6 +110,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   const execution = new TransactionExecutionService({
     messenger: options.messenger,
     proposalStore,
+    reviewSessions,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
@@ -115,6 +128,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   proposalStore.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
+  reviewSessions.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
   recordView.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
 
   options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
@@ -143,7 +157,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     recovery: execution,
     submission,
     stateChanges,
-    review: proposals,
+    review,
     proposals,
     records: recordView,
   };

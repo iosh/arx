@@ -10,6 +10,7 @@ import type { TransactionProposalService } from "./TransactionProposalService.js
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import type { TransactionApprovalExecutor, TransactionApprovalResult, TransactionBroadcastRecovery } from "./types.js";
@@ -28,6 +29,7 @@ type TransactionProposalExecutionGateway = Pick<TransactionProposalService, "app
 type TransactionExecutionServiceDeps = {
   messenger: TransactionMessenger;
   proposalStore: TransactionProposalStore;
+  reviewSessions: Pick<TransactionReviewSessionStore, "clear">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: NamespaceTransactions;
@@ -49,6 +51,7 @@ type TransactionExecutionAttemptState = {
 export class TransactionExecutionService implements TransactionApprovalExecutor, TransactionBroadcastRecovery {
   #messenger: TransactionMessenger;
   #proposalStore: TransactionProposalStore;
+  #reviewSessions: Pick<TransactionReviewSessionStore, "clear">;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: NamespaceTransactions;
@@ -68,6 +71,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
   constructor(deps: TransactionExecutionServiceDeps) {
     this.#messenger = deps.messenger;
     this.#proposalStore = deps.proposalStore;
+    this.#reviewSessions = deps.reviewSessions;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#namespaces = deps.namespaces;
@@ -267,10 +271,12 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
         };
         this.#submissionService.recordPersistenceFailure(id, failure);
         this.#proposalStore.delete(id);
+        this.#reviewSessions.clear(id);
         return;
       }
 
       this.#proposalStore.clearProposalAfterRecordPersisted(id);
+      this.#reviewSessions.clear(id);
 
       const { previous, next } = this.#recordView.commitRecordView(durable);
       this.#tracking.handleTransition(previous, next);

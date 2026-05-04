@@ -1,20 +1,12 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { TransactionError, TransactionPrepared, TransactionRequest } from "../../transactions/types.js";
-import type { ApprovalFinishedEvent } from "../approval/types.js";
-import { buildSendTransactionApprovalReview } from "./review/projector.js";
-import type {
-  TransactionProposalReviewState,
-  TransactionReviewBlocker,
-  TransactionReviewError,
-  TransactionReviewRuntimeStatus,
-} from "./review/types.js";
 import { canPrepareProposal } from "./status.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
   TransactionProposalMeta,
   TransactionProposalPhase,
   TransactionProposalPhaseChange,
-  TransactionProposalView,
+  TransactionProposalSnapshot,
 } from "./types.js";
 
 export type TransactionProposalState = {
@@ -24,19 +16,12 @@ export type TransactionProposalState = {
   chainRef: string;
   origin: string;
   fromAccountKey: string;
-  baseRequest: TransactionRequest;
   request: TransactionRequest;
   prepared: TransactionPrepared | null;
   preparedAtDraftRevision: number | null;
   phase: TransactionProposalPhase;
   error: TransactionError | null;
   userRejected: boolean;
-  reviewSessionToken: string | null;
-  reviewStatus: TransactionReviewRuntimeStatus | null;
-  reviewPreparedSnapshot: TransactionPrepared | null;
-  reviewBlocker: TransactionReviewBlocker | null;
-  reviewError: TransactionReviewError | null;
-  reviewInvalidatedBy?: string | undefined;
   draftRevision: number;
   createdAt: number;
   updatedAt: number;
@@ -44,32 +29,13 @@ export type TransactionProposalState = {
 
 type TransactionProposalInit = Omit<
   TransactionProposalState,
-  | "approvalId"
-  | "baseRequest"
-  | "prepared"
-  | "preparedAtDraftRevision"
-  | "phase"
-  | "error"
-  | "userRejected"
-  | "reviewSessionToken"
-  | "reviewStatus"
-  | "reviewPreparedSnapshot"
-  | "reviewBlocker"
-  | "reviewError"
-  | "draftRevision"
+  "approvalId" | "prepared" | "preparedAtDraftRevision" | "phase" | "error" | "userRejected" | "draftRevision"
 > & {
   approvalId?: string | undefined;
-  baseRequest?: TransactionRequest | undefined;
   prepared?: TransactionPrepared | null | undefined;
   preparedAtDraftRevision?: number | null | undefined;
   error?: TransactionError | null | undefined;
   userRejected?: boolean | undefined;
-  reviewSessionToken?: string | null | undefined;
-  reviewStatus?: TransactionReviewRuntimeStatus | null | undefined;
-  reviewPreparedSnapshot?: TransactionPrepared | null | undefined;
-  reviewBlocker?: TransactionReviewBlocker | null | undefined;
-  reviewError?: TransactionReviewError | null | undefined;
-  reviewInvalidatedBy?: string | undefined;
   draftRevision?: number | undefined;
 };
 
@@ -87,7 +53,6 @@ type TransactionProposalPatch = Partial<
     | "chainRef"
     | "origin"
     | "fromAccountKey"
-    | "baseRequest"
     | "phase"
     | "preparedAtDraftRevision"
     | "draftRevision"
@@ -102,7 +67,6 @@ type TransactionProposalTransitionPatch = Partial<
 const buildTransactionProposalState = (input: TransactionProposalInit): TransactionProposalState => ({
   ...input,
   approvalId: input.approvalId ?? input.id,
-  baseRequest: structuredClone(input.baseRequest ?? input.request),
   request: structuredClone(input.request),
   prepared: structuredClone(input.prepared ?? null),
   preparedAtDraftRevision: input.prepared
@@ -110,12 +74,6 @@ const buildTransactionProposalState = (input: TransactionProposalInit): Transact
     : (input.preparedAtDraftRevision ?? null),
   error: structuredClone(input.error ?? null),
   userRejected: input.userRejected ?? false,
-  reviewSessionToken: input.reviewSessionToken ?? null,
-  reviewStatus: input.reviewStatus ?? null,
-  reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot ?? null),
-  reviewBlocker: structuredClone(input.reviewBlocker ?? null),
-  reviewError: structuredClone(input.reviewError ?? null),
-  ...(input.reviewInvalidatedBy !== undefined ? { reviewInvalidatedBy: input.reviewInvalidatedBy } : {}),
   draftRevision: input.draftRevision ?? 0,
   phase: "pending",
 });
@@ -140,48 +98,8 @@ const applyTransactionProposalPatch = (
   if (patch.error !== undefined) {
     next.error = structuredClone(patch.error);
   }
-  if (patch.reviewSessionToken !== undefined) {
-    next.reviewSessionToken = patch.reviewSessionToken;
-  }
-  if (patch.reviewStatus !== undefined) {
-    next.reviewStatus = patch.reviewStatus;
-  }
-  if (patch.reviewPreparedSnapshot !== undefined) {
-    next.reviewPreparedSnapshot = structuredClone(patch.reviewPreparedSnapshot);
-  }
-  if (patch.reviewBlocker !== undefined) {
-    next.reviewBlocker = structuredClone(patch.reviewBlocker);
-  }
-  if (patch.reviewError !== undefined) {
-    next.reviewError = structuredClone(patch.reviewError);
-  }
-  if ("reviewInvalidatedBy" in patch) {
-    next.reviewInvalidatedBy = patch.reviewInvalidatedBy;
-  }
 
   return next;
-};
-
-const toReviewError = (event: ApprovalFinishedEvent<unknown>): TransactionReviewError => ({
-  reason: `approval.${event.terminalReason}`,
-  message: event.error?.message ?? "Approval is no longer active.",
-  ...(event.error ? { data: event.error } : {}),
-});
-
-const buildProposalReviewState = (state: TransactionProposalState): TransactionProposalReviewState | null => {
-  if (!state.reviewSessionToken || !state.reviewStatus) {
-    return null;
-  }
-
-  return structuredClone({
-    sessionToken: state.reviewSessionToken,
-    status: state.reviewStatus,
-    updatedAt: state.updatedAt,
-    reviewPreparedSnapshot: state.reviewPreparedSnapshot,
-    error: state.reviewError,
-    blocker: state.reviewBlocker,
-    ...(state.reviewInvalidatedBy !== undefined ? { invalidatedBy: state.reviewInvalidatedBy } : {}),
-  });
 };
 
 export class TransactionProposalStore {
@@ -207,7 +125,7 @@ export class TransactionProposalStore {
     return state ? this.#toMeta(state) : undefined;
   }
 
-  getView(id: string): TransactionProposalView | undefined {
+  getView(id: string): TransactionProposalSnapshot | undefined {
     const state = this.#records.get(id);
     return state ? this.#buildProposalView(state) : undefined;
   }
@@ -226,27 +144,6 @@ export class TransactionProposalStore {
     this.#emitStatusChange(current, next);
     this.#notifyChanged([id]);
     return this.#toMeta(next);
-  }
-
-  beginPrepareSession(input: { id: string; updatedAt: number }): TransactionProposalReviewState | null {
-    const current = this.#records.get(input.id);
-    if (!current || !canPrepareProposal(current)) {
-      return null;
-    }
-
-    const next = applyTransactionProposalPatch(current, {
-      updatedAt: input.updatedAt,
-      reviewSessionToken: crypto.randomUUID(),
-      reviewStatus: "preparing",
-      reviewPreparedSnapshot: null,
-      reviewBlocker: null,
-      reviewError: null,
-      reviewInvalidatedBy: undefined,
-    });
-
-    this.#records.set(input.id, next);
-    this.#notifyChanged([input.id]);
-    return buildProposalReviewState(next);
   }
 
   replacePendingDraftRequest(input: {
@@ -288,92 +185,6 @@ export class TransactionProposalStore {
     this.#emitStatusChange(current, next);
     this.#notifyChanged([id]);
     return this.#toMeta(next);
-  }
-
-  markReviewReady(input: {
-    id: string;
-    expectedDraftRevision: number;
-    sessionToken: string;
-    updatedAt: number;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-  }): TransactionProposalReviewState | null {
-    return this.#updateReviewState(input.id, {
-      expectedDraftRevision: input.expectedDraftRevision,
-      sessionToken: input.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "ready",
-      reviewPreparedSnapshot: input.reviewPreparedSnapshot,
-      blocker: null,
-      error: null,
-      invalidatedBy: undefined,
-    });
-  }
-
-  markReviewBlocked(input: {
-    id: string;
-    expectedDraftRevision: number;
-    sessionToken: string;
-    updatedAt: number;
-    blocker: TransactionReviewBlocker;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-  }): TransactionProposalReviewState | null {
-    return this.#updateReviewState(input.id, {
-      expectedDraftRevision: input.expectedDraftRevision,
-      sessionToken: input.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "blocked",
-      reviewPreparedSnapshot: input.reviewPreparedSnapshot,
-      blocker: input.blocker,
-      error: null,
-      invalidatedBy: undefined,
-    });
-  }
-
-  markReviewFailed(input: {
-    id: string;
-    expectedDraftRevision: number;
-    sessionToken: string;
-    updatedAt: number;
-    error: TransactionReviewError;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-  }): TransactionProposalReviewState | null {
-    return this.#updateReviewState(input.id, {
-      expectedDraftRevision: input.expectedDraftRevision,
-      sessionToken: input.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "failed",
-      reviewPreparedSnapshot: input.reviewPreparedSnapshot,
-      blocker: null,
-      error: input.error,
-      invalidatedBy: undefined,
-    });
-  }
-
-  invalidateReviewFromApproval(
-    event: ApprovalFinishedEvent<unknown>,
-    updatedAt: number,
-  ): TransactionProposalReviewState | null {
-    if (event.subject?.kind !== "transaction") {
-      return null;
-    }
-
-    const current = this.#records.get(event.subject.transactionId);
-    if (!current?.reviewSessionToken || !current.reviewStatus) {
-      return null;
-    }
-
-    const next = applyTransactionProposalPatch(current, {
-      updatedAt,
-      reviewStatus: "invalidated",
-      reviewPreparedSnapshot: null,
-      reviewBlocker: null,
-      reviewError: toReviewError(event),
-      reviewInvalidatedBy: event.terminalReason,
-    });
-
-    this.#records.set(event.subject.transactionId, next);
-    this.#notifyChanged([event.subject.transactionId]);
-    return buildProposalReviewState(next);
   }
 
   hasCurrentPrepared(id: string): boolean {
@@ -453,7 +264,7 @@ export class TransactionProposalStore {
     });
   }
 
-  #buildProposalView(state: TransactionProposalState): TransactionProposalView | undefined {
+  #buildProposalView(state: TransactionProposalState): TransactionProposalSnapshot | undefined {
     if (!state.request) {
       return undefined;
     }
@@ -465,14 +276,6 @@ export class TransactionProposalStore {
       from = null;
     }
 
-    const reviewState = buildProposalReviewState(state);
-    const review = buildSendTransactionApprovalReview({
-      updatedAt: state.updatedAt,
-      review: reviewState,
-      hasPrepared: Boolean(state.prepared),
-      namespaceReview: null,
-    });
-
     return structuredClone({
       kind: "proposal",
       id: state.id,
@@ -483,7 +286,6 @@ export class TransactionProposalStore {
       from,
       currentRequest: state.request,
       prepared: state.prepared,
-      review,
       phase: state.phase,
       failure:
         state.phase === "failed" || state.userRejected || state.error
@@ -513,43 +315,6 @@ export class TransactionProposalStore {
       proposal,
     };
     this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
-  }
-
-  #updateReviewState(
-    id: string,
-    input: {
-      expectedDraftRevision: number;
-      sessionToken: string;
-      updatedAt: number;
-      status: TransactionReviewRuntimeStatus;
-      reviewPreparedSnapshot: TransactionPrepared | null;
-      blocker: TransactionReviewBlocker | null;
-      error: TransactionReviewError | null;
-      invalidatedBy?: string | undefined;
-    },
-  ): TransactionProposalReviewState | null {
-    const current = this.#records.get(id);
-    if (
-      !current ||
-      current.draftRevision !== input.expectedDraftRevision ||
-      current.reviewSessionToken !== input.sessionToken ||
-      current.reviewStatus === "invalidated"
-    ) {
-      return null;
-    }
-
-    const next = applyTransactionProposalPatch(current, {
-      updatedAt: input.updatedAt,
-      reviewStatus: input.status,
-      reviewPreparedSnapshot: input.reviewPreparedSnapshot,
-      reviewBlocker: input.blocker,
-      reviewError: input.error,
-      reviewInvalidatedBy: input.invalidatedBy,
-    });
-
-    this.#records.set(id, next);
-    this.#notifyChanged([id]);
-    return buildProposalReviewState(next);
   }
 
   #moveProposal(input: {

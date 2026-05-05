@@ -9,7 +9,7 @@ type TransactionRecordStateRef = {
 };
 
 export const isProposalTerminal = (proposal: TransactionProposalStateRef): boolean => {
-  return proposal.phase === "invalidated" || proposal.phase === "failed";
+  return proposal.phase === "failed";
 };
 
 export const canStartProposalExecution = (proposal: TransactionProposalStateRef): boolean => {

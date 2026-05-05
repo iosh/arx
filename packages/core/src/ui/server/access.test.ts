@@ -40,7 +40,7 @@ const createUiAccess = () =>
               transactionId: "tx-1",
               approvalId: "approval-1",
             }) as never,
-          retryPrepare: async () => {},
+          rerunPrepare: async () => {},
           applyDraftEdit: async () => {},
           onStateChanged: (handler: (change: { transactionIds: string[]; approvalIds: string[] }) => void) => {
             transactionHandlers.add(handler);

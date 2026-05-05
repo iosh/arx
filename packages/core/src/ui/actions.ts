@@ -80,7 +80,7 @@ export const uiCommonActions = (client: UiClient) => {
 
     transactions: {
       requestSendTransactionApproval: call("ui.transactions.requestSendTransactionApproval"),
-      retryPrepare: call("ui.transactions.retryPrepare"),
+      rerunPrepare: call("ui.transactions.rerunPrepare"),
       applyDraftEdit: call("ui.transactions.applyDraftEdit"),
     },
 

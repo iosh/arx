@@ -2,6 +2,18 @@ import { z } from "zod";
 import { ChainRefSchema } from "../../../chains/ids.js";
 import { defineMethod } from "./types.js";
 
+const Eip155TransactionDraftChangeSchema = z.strictObject({
+  field: z.enum(["gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce"]),
+  value: z.string().min(1).nullable(),
+});
+
+const NamespaceTransactionDraftEditSchema = z.discriminatedUnion("namespace", [
+  z.strictObject({
+    namespace: z.literal("eip155"),
+    changes: z.array(Eip155TransactionDraftChangeSchema),
+  }),
+]);
+
 export const transactionsMethods = {
   "ui.transactions.requestSendTransactionApproval": defineMethod(
     "command",
@@ -15,7 +27,7 @@ export const transactionsMethods = {
     }),
     { broadcastSnapshot: true },
   ),
-  "ui.transactions.retryPrepare": defineMethod(
+  "ui.transactions.rerunPrepare": defineMethod(
     "command",
     z.strictObject({
       transactionId: z.string().min(1),
@@ -27,7 +39,7 @@ export const transactionsMethods = {
     "command",
     z.strictObject({
       transactionId: z.string().min(1),
-      changes: z.array(z.record(z.string(), z.unknown())),
+      edit: NamespaceTransactionDraftEditSchema,
       mode: z.string().min(1).optional(),
     }),
     z.null(),

@@ -1,0 +1,68 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  createNamespacesStub,
+  createPrepareStub,
+  createProposalStore,
+  createReviewSessionStore,
+  createTransactionProposal,
+  DEFAULT_CHAIN_REF,
+  DEFAULT_FROM,
+  DEFAULT_TO,
+  REQUEST_ID,
+} from "./__fixtures__/transactionServices.js";
+import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
+
+describe("TransactionProposalDraftService", () => {
+  it("applies a draft edit and queues prepare again", async () => {
+    const proposalStore = createProposalStore();
+    const reviewStore = createReviewSessionStore();
+    const queuePrepare = vi.fn();
+    const service = new TransactionProposalDraftService({
+      proposalStore,
+      reviewSessions: reviewStore,
+      namespaces: createNamespacesStub(
+        () =>
+          ({
+            proposal: {
+              prepare: vi.fn(async () => ({ status: "ready", prepared: {} })),
+              applyDraftEdit: ({ request }) => ({
+                ...request,
+                payload: {
+                  ...request.payload,
+                  to: "0xcccccccccccccccccccccccccccccccccccccccc",
+                },
+              }),
+            },
+          }) as never,
+      ),
+      prepare: createPrepareStub({ queuePrepare }),
+      readTransactionTimestamp: () => 1,
+    });
+
+    createTransactionProposal(proposalStore, {
+      request: {
+        namespace: "eip155",
+        chainRef: DEFAULT_CHAIN_REF,
+        payload: {
+          from: DEFAULT_FROM,
+          to: DEFAULT_TO,
+          value: "0x0",
+        },
+      },
+      status: "pending",
+    });
+
+    await service.applyDraftEdit({
+      transactionId: REQUEST_ID,
+      edit: {
+        namespace: "eip155",
+        changes: [{ field: "gas", value: "0x5300" }],
+      },
+    });
+
+    expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
+      to: "0xcccccccccccccccccccccccccccccccccccccccc",
+    });
+  });
+});

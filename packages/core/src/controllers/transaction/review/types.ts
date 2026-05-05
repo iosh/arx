@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { NamespaceTransactionReview } from "../../../transactions/review.js";
 import type { TransactionPrepared } from "../../../transactions/types.js";
 
 export const TransactionReviewErrorSchema = z.strictObject({
@@ -13,24 +14,6 @@ export const TransactionReviewBlockerSchema = z.strictObject({
   message: z.string().min(1),
   data: z.unknown().optional(),
 });
-
-export const Eip155TransactionReviewSchema = z.strictObject({
-  namespace: z.literal("eip155"),
-  summary: z.strictObject({
-    from: z.string().min(1),
-    to: z.string().nullable(),
-    value: z.string().optional(),
-    data: z.string().optional(),
-  }),
-  execution: z.strictObject({
-    gas: z.string().optional(),
-    gasPrice: z.string().optional(),
-    maxFeePerGas: z.string().optional(),
-    maxPriorityFeePerGas: z.string().optional(),
-  }),
-});
-
-export const NamespaceTransactionReviewSchema = z.discriminatedUnion("namespace", [Eip155TransactionReviewSchema]);
 
 export const TransactionReviewPrepareSchema = z.discriminatedUnion("state", [
   z.strictObject({
@@ -51,15 +34,18 @@ export const TransactionReviewPrepareSchema = z.discriminatedUnion("state", [
 
 export const SendTransactionApprovalReviewSchema = z.strictObject({
   updatedAt: z.number().int(),
-  namespaceReview: NamespaceTransactionReviewSchema.nullable(),
+  namespaceReview: z.unknown().nullable(),
   prepare: TransactionReviewPrepareSchema,
 });
 
 export type TransactionReviewBlocker = z.infer<typeof TransactionReviewBlockerSchema>;
 export type TransactionReviewError = z.infer<typeof TransactionReviewErrorSchema>;
-export type NamespaceTransactionReview = z.infer<typeof NamespaceTransactionReviewSchema>;
 export type TransactionReviewPrepare = z.infer<typeof TransactionReviewPrepareSchema>;
-export type SendTransactionApprovalReview = z.infer<typeof SendTransactionApprovalReviewSchema>;
+export type SendTransactionApprovalReview = {
+  updatedAt: number;
+  namespaceReview: NamespaceTransactionReview | null;
+  prepare: TransactionReviewPrepare;
+};
 
 export type TransactionReviewRuntimeStatus = TransactionReviewPrepare["state"] | "invalidated";
 export type TransactionProposalReviewState = {

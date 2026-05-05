@@ -1,5 +1,4 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
@@ -32,19 +31,14 @@ export const createTransactionApprovalReviewReader = (
         throw new Error(`Transaction ${transactionId} is missing namespace transaction "${proposalMeta.namespace}".`);
       }
 
-      const buildReview = requireNamespaceTransactionOperation({
-        namespace: proposalMeta.namespace,
-        operation: "proposal.buildReview",
-        value: namespaceTransaction.proposal?.buildReview,
-      });
-
       return buildSendTransactionApprovalReview({
         updatedAt: reviewState.updatedAt,
         review: reviewState,
-        namespaceReview: buildReview({
-          ...buildProposalStateContext(proposalMeta),
-          reviewPreparedSnapshot: reviewState.reviewPreparedSnapshot,
-        }),
+        namespaceReview:
+          namespaceTransaction.proposal?.buildReview?.({
+            ...buildProposalStateContext(proposalMeta),
+            reviewPreparedSnapshot: reviewState.reviewPreparedSnapshot,
+          }) ?? null,
       });
     },
   };

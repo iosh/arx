@@ -53,7 +53,6 @@ describe("TransactionProposalStore", () => {
     });
     expect(meta?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
     expect(meta).not.toHaveProperty("submitted");
-    expect(meta).not.toHaveProperty("locator");
     expect(meta).not.toHaveProperty("receipt");
     expect(meta).not.toHaveProperty("replacedId");
     expect(meta?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
@@ -100,7 +99,6 @@ describe("TransactionProposalStore", () => {
     });
     expect(reloaded?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
     expect(reloaded).not.toHaveProperty("submitted");
-    expect(reloaded).not.toHaveProperty("locator");
     expect(reloaded).not.toHaveProperty("receipt");
     expect(reloaded).not.toHaveProperty("replacedId");
     expect(reloaded?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
@@ -141,7 +139,6 @@ describe("TransactionProposalStore", () => {
     });
     expect(view).not.toHaveProperty("review");
     expect(view).not.toHaveProperty("submitted");
-    expect(view).not.toHaveProperty("locator");
     expect(view).not.toHaveProperty("receipt");
     expect(view).not.toHaveProperty("replacedId");
   });

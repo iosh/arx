@@ -1,5 +1,4 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
@@ -9,7 +8,10 @@ import { ProviderTransactionApprovalService } from "./ProviderTransactionApprova
 import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
-import { TransactionProposalService } from "./TransactionProposalService.js";
+import { TransactionProposalBeginService } from "./TransactionProposalBeginService.js";
+import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
+import { createTransactionProposalExecutionGate } from "./TransactionProposalExecutionGate.js";
+import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
@@ -38,7 +40,6 @@ const createTransactionTimestampReader = (readSystemTime: () => number): Transac
 export type CreateTransactionRuntimeOptions = {
   messenger: import("./topics.js").TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
-  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create" | "onFinished" | "listPendingIdsBySubject">;
   namespaces: NamespaceTransactions;
@@ -94,16 +95,30 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     namespaces: options.namespaces,
   });
 
-  const proposals = new TransactionProposalService({
+  const proposalBegin = new TransactionProposalBeginService({
     proposalStore,
     reviewSessions,
-    review,
     accountCodecs: options.accountCodecs,
-    networkSelection: options.networkSelection,
     accounts: options.accounts,
     approvals: options.approvals,
     namespaces: options.namespaces,
     prepare,
+    readTransactionTimestamp,
+  });
+  const proposalDraft = new TransactionProposalDraftService({
+    proposalStore,
+    reviewSessions,
+    namespaces: options.namespaces,
+    prepare,
+    readTransactionTimestamp,
+  });
+  const proposalReader = createTransactionProposalReader({
+    proposalStore,
+    review,
+  });
+  const proposalExecution = createTransactionProposalExecutionGate({
+    proposalStore,
+    reviewSessions,
     readTransactionTimestamp,
   });
 
@@ -117,7 +132,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     service: options.service,
     submissionService: submission,
     prepare,
-    proposals,
+    proposals: proposalExecution,
     tracking,
     readTransactionTimestamp,
   });
@@ -132,7 +147,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   recordView.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
 
   options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
-    proposals.invalidateFromApproval(event);
+    reviewSessions.invalidateReviewFromApproval(event, readTransactionTimestamp());
     if (event.subject?.kind === "transaction") {
       stateChanges.enqueue({
         transactionIds: [event.subject.transactionId],
@@ -141,24 +156,26 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     }
   });
 
-  const commands = proposals;
   const providerCommands: ProviderTransactionApprovalCommands = new ProviderTransactionApprovalService({
-    commands,
+    begin: proposalBegin,
     execution,
     submission,
-    proposals,
+    proposals: proposalReader,
     records: recordView,
   });
 
   return {
-    commands,
+    proposal: {
+      begin: proposalBegin,
+      draft: proposalDraft,
+    },
     providerCommands,
     execution,
     recovery: execution,
     submission,
     stateChanges,
     review,
-    proposals,
+    proposals: proposalReader,
     records: recordView,
   };
 };

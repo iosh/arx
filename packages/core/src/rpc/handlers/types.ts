@@ -9,10 +9,11 @@ import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "..
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
 import type {
   ProviderTransactionApprovalCommands,
-  TransactionApprovalCommands,
   TransactionApprovalExecutor,
   TransactionApprovalReviewReader,
   TransactionBroadcastRecovery,
+  TransactionProposalBeginCommands,
+  TransactionProposalDraftCommands,
 } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
@@ -28,7 +29,8 @@ export type HandlerControllers = {
   accounts: AccountController;
   approvals: ApprovalController;
   permissions: PermissionsReader & PermissionsWriter & PermissionsEvents;
-  transactionCommands: TransactionApprovalCommands;
+  transactionProposalBegin: TransactionProposalBeginCommands;
+  transactionProposalDraft: TransactionProposalDraftCommands;
   providerTransactionCommands: ProviderTransactionApprovalCommands;
   transactionExecution: TransactionApprovalExecutor;
   transactionRecovery: TransactionBroadcastRecovery;

@@ -3,17 +3,17 @@ import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionStatus as StorageTransactionStatus } from "../../storage/records.js";
 import type {
+  NamespaceTransactionDraftEdit,
   TransactionError,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
-  TransactionSubmissionLocator,
   TransactionSubmitted,
 } from "../../transactions/types.js";
 import type { ApprovalHandle, ApprovalKind } from "../approval/types.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
 
-export type TransactionProposalPhase = "pending" | "approved" | "invalidated" | "failed";
+export type TransactionProposalPhase = "pending" | "approved" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
 
 export type TransactionProposalPhaseChange = {
@@ -42,7 +42,6 @@ export type TransactionStateChange = {
 export type TransactionSubmittedChange = {
   id: string;
   submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
 };
 
 export type TransactionBroadcastStartedChange = {
@@ -78,7 +77,6 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   prepared: TransactionPrepared | null;
   status: TransactionProposalPhase;
   submitted?: never;
-  locator?: never;
   receipt?: never;
   replacedId?: never;
   error: TransactionError | null;
@@ -117,7 +115,6 @@ export type TransactionRecordView = {
   from: AccountAddress | null;
   status: TransactionRecordStatus;
   submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
   receipt: TransactionReceipt | null;
   replacedId: string | null;
   createdAt: number;
@@ -147,7 +144,7 @@ export type TransactionApprovalFailureReason =
   | "prepare_failed";
 
 export type TransactionApprovalResult =
-  | { status: "approved"; transaction: TransactionProposalView }
+  | { status: "approved"; transactionId: string }
   | {
       status: "failed";
       reason: TransactionApprovalFailureReason;
@@ -163,7 +160,6 @@ export type BeginTransactionApprovalOptions = {
 
 export type TransactionSubmissionResolution = {
   submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
   persistenceFailure?: TransactionSubmissionPersistenceFailure | undefined;
 };
 
@@ -171,7 +167,6 @@ export type TransactionSubmissionPersistenceFailure = {
   transactionId: string;
   error: TransactionError;
   submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
 };
 
 export type TransactionSubmissionFailure = {
@@ -212,19 +207,23 @@ export type TransactionApprovalReviewReader = {
   getTransactionApprovalReview(transactionId: string): SendTransactionApprovalReview;
 };
 
-export type TransactionApprovalCommands = {
+export type TransactionProposalBeginCommands = {
   beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalRequestHandoff>;
-  retryPrepare(transactionId: string): Promise<void>;
-  applyDraftEdit(input: {
-    transactionId: string;
-    changes: ReadonlyArray<Record<string, unknown>>;
-    mode?: string;
-  }): Promise<void>;
 };
+
+export type TransactionProposalDraftCommands = {
+  rerunPrepare(transactionId: string): Promise<void>;
+  applyDraftEdit(input: { transactionId: string; edit: NamespaceTransactionDraftEdit; mode?: string }): Promise<void>;
+};
+
+export type TransactionProposalCommandSet = Readonly<{
+  begin: TransactionProposalBeginCommands;
+  draft: TransactionProposalDraftCommands;
+}>;
 
 export type ProviderTransactionApprovalCommands = {
   beginTransactionApproval(
@@ -241,6 +240,10 @@ export type TransactionSubmissionTracker = {
 export type TransactionApprovalExecutor = {
   approveTransaction(id: string): Promise<TransactionApprovalResult>;
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
+};
+
+export type TransactionProposalExecutionGate = {
+  approveForExecution(id: string): TransactionApprovalResult;
 };
 
 export type TransactionBroadcastRecovery = {
@@ -260,7 +263,7 @@ export type TransactionRecordReader = {
 };
 
 export type TransactionRuntime = Readonly<{
-  commands: TransactionApprovalCommands;
+  proposal: TransactionProposalCommandSet;
   providerCommands: ProviderTransactionApprovalCommands;
   execution: TransactionApprovalExecutor;
   recovery: TransactionBroadcastRecovery;

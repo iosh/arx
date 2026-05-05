@@ -32,7 +32,7 @@ import type { NetworkSelectionService } from "../../services/store/networkSelect
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
-import { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { DEFAULT_STRATEGY } from "./constants.js";
 import type { RuntimeNetworkPlan } from "./networkDefaults.js";
 
@@ -73,13 +73,38 @@ export type ControllersBase = {
 
 export type ControllersInitResult = {
   controllersBase: ControllersBase;
-  transactionRuntime: TransactionRuntime;
-  namespaceTransactions: NamespaceTransactions;
   networkController: NetworkController;
   supportedChainsController: SupportedChainsController;
   permissionsController: PermissionsController;
   permissionsReady: Promise<void>;
   deferredNetworkInitialState: NetworkStateInput | null;
+  setApprovalExecutor(executor: ApprovalExecutor | undefined): void;
+};
+
+export const createTransactionRuntimeForControllers = (params: {
+  bus: Messenger;
+  accountCodecs: AccountCodecRegistry;
+  accounts: AccountController;
+  approvals: ApprovalController;
+  namespaces: NamespaceTransactions;
+  transactionsService: TransactionsService;
+  now?: () => number;
+}): TransactionRuntime => {
+  return createTransactionRuntime({
+    messenger: params.bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
+    accountCodecs: params.accountCodecs,
+    accounts: {
+      listOwnedForNamespace: (input) => params.accounts.listOwnedForNamespace(input),
+    },
+    approvals: {
+      create: (request, requester) => params.approvals.create(request, requester),
+      onFinished: (handler) => params.approvals.onFinished(handler),
+      listPendingIdsBySubject: (subject) => params.approvals.listPendingIdsBySubject(subject),
+    },
+    namespaces: params.namespaces,
+    service: params.transactionsService,
+    ...(params.now ? { now: params.now } : {}),
+  });
 };
 
 export const initControllers = ({
@@ -92,7 +117,6 @@ export const initControllers = ({
   networkSelection,
   networkPlan,
   options,
-  createApprovalExecutor,
 }: {
   bus: Messenger;
   accountCodecs: AccountCodecRegistry;
@@ -103,17 +127,8 @@ export const initControllers = ({
   networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   networkPlan: RuntimeNetworkPlan;
   options: ControllerLayerOptions;
-  createApprovalExecutor?: (params: {
-    controllersBase: ControllersBase;
-    transactionRuntime: TransactionRuntime;
-  }) => ApprovalExecutor | undefined;
 }): ControllersInitResult => {
-  const {
-    network: networkOptions,
-    approvals: approvalOptions,
-    transactions: transactionOptions,
-    supportedChains: supportedChainsOptions,
-  } = options;
+  const { network: networkOptions, approvals: approvalOptions, supportedChains: supportedChainsOptions } = options;
 
   if (!supportedChainsOptions?.port) {
     throw new Error("createBackgroundRuntime requires supportedChains.port");
@@ -155,34 +170,12 @@ export const initControllers = ({
   });
   const permissionsReady = permissionsController.waitForHydration();
 
-  const namespaceTransactions = transactionOptions?.namespaces ?? new NamespaceTransactions();
-
   const supportedChainsController = new InMemorySupportedChainsController({
     messenger: bus.scope({ name: "supportedChains", publish: SUPPORTED_CHAINS_TOPICS }),
     port: supportedChainsOptions.port,
     seed: supportedChainSeed,
     ...(supportedChainsOptions.now ? { now: supportedChainsOptions.now } : {}),
     ...(supportedChainsOptions.logger ? { logger: supportedChainsOptions.logger } : {}),
-  });
-
-  const transactionRuntime = createTransactionRuntime({
-    messenger: bus.scope({ name: "transactions", publish: TRANSACTION_TOPICS }),
-    accountCodecs,
-    networkSelection,
-    supportedChains: {
-      getChain: (chainRef) => supportedChainsController.getChain(chainRef),
-    },
-    accounts: {
-      listOwnedForNamespace: (params) => accountController.listOwnedForNamespace(params),
-    },
-    approvals: {
-      create: (request, requester) => approvalController.create(request, requester),
-      onFinished: (handler) => approvalController.onFinished(handler),
-      listPendingIdsBySubject: (subject) => approvalController.listPendingIdsBySubject(subject),
-    },
-    namespaces: namespaceTransactions,
-    service: transactionsService,
-    ...(networkOptions?.now ? { now: networkOptions.now } : {}),
   });
 
   const controllersBase: ControllersBase = {
@@ -193,19 +186,15 @@ export const initControllers = ({
     supportedChains: supportedChainsController,
   };
 
-  approvalExecutor = createApprovalExecutor?.({
-    controllersBase,
-    transactionRuntime,
-  });
-
   return {
     controllersBase,
-    transactionRuntime,
-    namespaceTransactions,
     networkController,
     supportedChainsController,
     permissionsController,
     permissionsReady,
     deferredNetworkInitialState: networkPlan.deferredState,
+    setApprovalExecutor(executor) {
+      approvalExecutor = executor;
+    },
   };
 };

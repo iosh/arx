@@ -2,7 +2,11 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { PermissionsEvents } from "../../controllers/permission/types.js";
-import type { TransactionApprovalCommands, TransactionStateChangeEvents } from "../../controllers/transaction/types.js";
+import type {
+  TransactionProposalBeginCommands,
+  TransactionProposalDraftCommands,
+  TransactionStateChangeEvents,
+} from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
@@ -81,8 +85,8 @@ export type UiApprovalEventsAccess = {
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
 export type UiTransactionsWriteAccess = Pick<
-  TransactionApprovalCommands,
-  "beginTransactionApproval" | "retryPrepare" | "applyDraftEdit"
+  TransactionProposalBeginCommands & TransactionProposalDraftCommands,
+  "beginTransactionApproval" | "rerunPrepare" | "applyDraftEdit"
 >;
 
 export type UiTransactionsEventsAccess = Pick<TransactionStateChangeEvents, "onStateChanged">;

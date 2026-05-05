@@ -81,10 +81,13 @@ describe("ui actions", () => {
       valueEther: "0.01",
       chainRef: "eip155:1",
     });
-    void actions.transactions.retryPrepare({ transactionId: "tx-1" });
+    void actions.transactions.rerunPrepare({ transactionId: "tx-1" });
     void actions.transactions.applyDraftEdit({
       transactionId: "tx-1",
-      changes: [{ field: "gas", value: "0x5208" }],
+      edit: {
+        namespace: "eip155",
+        changes: [{ field: "gas", value: "0x5208" }],
+      },
     });
 
     void actions.approvals.listPending();

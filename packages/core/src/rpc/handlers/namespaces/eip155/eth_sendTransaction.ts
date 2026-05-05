@@ -65,7 +65,6 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
           data: {
             id: handoff.transactionId,
             submitted: submission.submitted,
-            locator: submission.locator,
           },
         });
       }

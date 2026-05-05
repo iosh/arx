@@ -1,5 +1,5 @@
 import type { Eip155TransactionPayload } from "../../../types.js";
-import type { TransactionPrepareContext, TransactionTrackingContext } from "../../types.js";
+import type { Eip155PrepareContext, Eip155TrackingContext } from "../types.js";
 
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./constants.js";
 
@@ -8,7 +8,7 @@ import { TEST_ADDRESSES, TEST_CHAINS, TEST_TX_HASH, TEST_VALUES } from "./consta
  */
 export const createEip155Request = (
   overrides: Partial<Eip155TransactionPayload> = {},
-): TransactionPrepareContext["request"] => ({
+): Eip155PrepareContext["request"] => ({
   namespace: "eip155",
   chainRef: TEST_CHAINS.MAINNET,
   payload: {
@@ -24,7 +24,7 @@ export const createEip155Request = (
 /**
  * Creates a complete transaction prepare context for testing.
  */
-export const createPrepareContext = (overrides: Partial<TransactionPrepareContext> = {}): TransactionPrepareContext => {
+export const createPrepareContext = (overrides: Partial<Eip155PrepareContext> = {}): Eip155PrepareContext => {
   const request = overrides.request ?? createEip155Request();
 
   return {
@@ -40,10 +40,8 @@ export const createPrepareContext = (overrides: Partial<TransactionPrepareContex
 /**
  * Creates a context for broadcaster tests.
  */
-export const createBroadcasterContext = (
-  overrides: Partial<TransactionPrepareContext> = {},
-): TransactionPrepareContext => {
-  const baseRequest: TransactionPrepareContext["request"] = {
+export const createBroadcasterContext = (overrides: Partial<Eip155PrepareContext> = {}): Eip155PrepareContext => {
+  const baseRequest: Eip155PrepareContext["request"] = {
     namespace: "eip155",
     chainRef: TEST_CHAINS.MAINNET,
     payload: {
@@ -61,9 +59,7 @@ export const createBroadcasterContext = (
 /**
  * Creates a context for receipt tests (transaction is already broadcast).
  */
-export const createReceiptContext = (
-  overrides: Partial<TransactionTrackingContext> = {},
-): TransactionTrackingContext => ({
+export const createReceiptContext = (overrides: Partial<Eip155TrackingContext> = {}): Eip155TrackingContext => ({
   recordId: "record-1",
   namespace: "eip155",
   chainRef: TEST_CHAINS.MAINNET,
@@ -74,10 +70,6 @@ export const createReceiptContext = (
     chainId: TEST_CHAINS.MAINNET_CHAIN_ID,
     from: TEST_ADDRESSES.ACCOUNT_AA,
     nonce: "0x3",
-  },
-  locator: {
-    format: "eip155.tx_hash",
-    value: TEST_TX_HASH,
   },
   ...overrides,
 });

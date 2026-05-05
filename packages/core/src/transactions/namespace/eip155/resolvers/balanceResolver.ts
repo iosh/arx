@@ -1,6 +1,7 @@
 import * as Hex from "ox/Hex";
 import type { Eip155RpcCapabilities } from "../../../../rpc/namespaceClients/eip155.js";
-import type { Eip155PreparedTransaction, Eip155PrepareStepResult } from "../types.js";
+import type { Eip155PreparedTransaction } from "../../../types.js";
+import type { Eip155PrepareStepResult } from "../types.js";
 import {
   Eip155FieldParseError,
   parseHexQuantityToBigInt,

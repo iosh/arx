@@ -206,9 +206,9 @@ const createWalletUiDeps = (
         },
         transactions: {
           beginTransactionApproval: (request, requestContext, transactionOptions) =>
-            transactions.commands.beginTransactionApproval(request, requestContext, transactionOptions),
-          retryPrepare: (transactionId) => transactions.commands.retryPrepare(transactionId),
-          applyDraftEdit: (input) => transactions.commands.applyDraftEdit(input),
+            transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
+          rerunPrepare: (transactionId) => transactions.proposal.draft.rerunPrepare(transactionId),
+          applyDraftEdit: (input) => transactions.proposal.draft.applyDraftEdit(input),
           onStateChanged: (listener) => transactions.stateChanges.onStateChanged(listener),
         },
         chains: {
@@ -331,6 +331,14 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
       transactions: input.storage.ports.transactions,
     },
     ...(input.runtime?.engine ? { engineOptions: input.runtime.engine } : {}),
+    ...(input.storage.vaultMetaPort ? { vaultMetaPort: input.storage.vaultMetaPort } : {}),
+    ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
+  });
+
+  runtimeSupportScope = createRuntimeSupportScope({
+    bootstrapScope,
+    sessionScope,
+    namespaceRuntimeSupport: namespaceStages.runtimeSupport,
     createApprovalExecutor: ({ controllersBase, transactionRuntime }) =>
       createApprovalExecutor({
         registry: approvalFlowRegistry,
@@ -348,14 +356,6 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
           };
         },
       }),
-    ...(input.storage.vaultMetaPort ? { vaultMetaPort: input.storage.vaultMetaPort } : {}),
-    ...(runtimeSessionOptions ? { sessionOptions: runtimeSessionOptions } : {}),
-  });
-
-  runtimeSupportScope = createRuntimeSupportScope({
-    bootstrapScope,
-    sessionScope,
-    namespaceRuntimeSupport: namespaceStages.runtimeSupport,
     ...(input.runtime?.rpcClients ? { rpcClientOptions: input.runtime.rpcClients } : {}),
   });
 
@@ -375,11 +375,12 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   });
   const controllers: HandlerControllers = {
     ...sessionScope.controllersBase,
-    transactionCommands: sessionScope.transactionRuntime.commands,
-    providerTransactionCommands: sessionScope.transactionRuntime.providerCommands,
-    transactionExecution: sessionScope.transactionRuntime.execution,
-    transactionRecovery: sessionScope.transactionRuntime.recovery,
-    transactionReview: sessionScope.transactionRuntime.review,
+    transactionProposalBegin: runtimeSupportScope.transactionRuntime.proposal.begin,
+    transactionProposalDraft: runtimeSupportScope.transactionRuntime.proposal.draft,
+    providerTransactionCommands: runtimeSupportScope.transactionRuntime.providerCommands,
+    transactionExecution: runtimeSupportScope.transactionRuntime.execution,
+    transactionRecovery: runtimeSupportScope.transactionRuntime.recovery,
+    transactionReview: runtimeSupportScope.transactionRuntime.review,
     networkSelection: sessionScope.networkSelection,
     chainAddressCodecs: bootstrapScope.namespaceBootstrap.chainAddressCodecs,
     clock: {
@@ -468,7 +469,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     approvals: sessionScope.controllersBase.approvals,
     accounts,
     chainViews: sessionScope.chainViews,
-    transactions: sessionScope.transactionRuntime.review,
+    transactions: runtimeSupportScope.transactionRuntime.review,
   });
   const permissions = createWalletPermissions({
     permissions: sessionScope.controllersBase.permissions,
@@ -543,7 +544,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
     controllers,
-    transactions: sessionScope.transactionRuntime,
+    transactions: runtimeSupportScope.transactionRuntime,
     services,
     surfaceErrors: surfaceErrorEncoder,
   };
@@ -607,7 +608,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     shutdown,
     bus: bootstrapScope.bus,
     controllers,
-    transactions: sessionScope.transactionRuntime,
+    transactions: runtimeSupportScope.transactionRuntime,
     services,
     lifecycle,
     rpc: {

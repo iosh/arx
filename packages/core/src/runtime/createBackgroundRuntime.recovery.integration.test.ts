@@ -38,10 +38,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: {
-        format: "eip155.tx_hash" as const,
-        value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      },
     }));
 
     const adapter: NamespaceTransaction = {
@@ -55,8 +51,7 @@ describe("createBackgroundRuntime (recovery integration)", () => {
       tracking: { fetchReceipt },
     };
 
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(chain.namespace, adapter);
+    const namespaceTransactions = new NamespaceTransactions([[chain.namespace, adapter]]);
 
     const txId = "11111111-1111-4111-8111-111111111111";
     const seed: TransactionRecord = {
@@ -70,10 +65,6 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         chainId: "0x1",
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
-      },
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       },
       createdAt: 1_000,
       updatedAt: 1_000,

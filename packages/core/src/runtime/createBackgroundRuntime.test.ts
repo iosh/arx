@@ -4,6 +4,7 @@ import type { ChainMetadata } from "../chains/metadata.js";
 import { ApprovalKinds } from "../controllers/index.js";
 import { eip155NamespaceManifest } from "../namespaces/index.js";
 import type { NamespaceTransaction } from "../transactions/index.js";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionRequest } from "../transactions/types.js";
 import { createApprovalReadService } from "../ui/server/approvals/readService.js";
 import { createUiKeyringsAccess } from "../ui/server/keyringsAccess.js";
@@ -70,10 +71,6 @@ const createNamespaceTransactionWithoutTracking = (): NamespaceTransaction => ({
         hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
         chainId: "0x1",
         from: context.from,
-      },
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
       },
     }),
   },
@@ -195,9 +192,9 @@ const createHandlersForRuntime = (
       },
       transactions: {
         beginTransactionApproval: (request, requestContext, transactionOptions) =>
-          runtime.transactions.commands.beginTransactionApproval(request, requestContext, transactionOptions),
-        retryPrepare: (transactionId) => runtime.transactions.commands.retryPrepare(transactionId),
-        applyDraftEdit: (input) => runtime.transactions.commands.applyDraftEdit(input),
+          runtime.transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
+        rerunPrepare: (transactionId) => runtime.transactions.proposal.draft.rerunPrepare(transactionId),
+        applyDraftEdit: (input) => runtime.transactions.proposal.draft.applyDraftEdit(input),
         onStateChanged: (listener) => runtime.transactions.stateChanges.onStateChanged(listener),
       },
       chains: {
@@ -727,6 +724,96 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     runtime.lifecycle.shutdown();
   });
 
+  it("projects transaction capability from overridden namespace transactions", async () => {
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createUiBindings: () => ({
+                getNativeBalance: async () => 0n,
+                createSendTransactionRequest: () => ({
+                  namespace: "eip155",
+                  chainRef: MAINNET_CHAIN.chainRef,
+                  payload: {
+                    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    value: "0x0",
+                  },
+                }),
+              }),
+            },
+          },
+        ],
+      },
+      transactions: {
+        namespaces: new NamespaceTransactions([["eip155", createNamespaceTransactionWithoutTracking()]]),
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+    await initializeUnlockedSession(runtime);
+
+    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      hasTransaction: true,
+      hasTransactionReceiptTracking: false,
+      hasTransactionReplacementTracking: false,
+    });
+    expect(runtime.services.namespaceBindings.hasTransaction("eip155")).toBe(true);
+    expect(runtime.services.namespaceBindings.hasTransactionReceiptTracking("eip155")).toBe(false);
+
+    const handlers = createHandlersForRuntime(runtime);
+    await expect(handlers["ui.snapshot.get"]()).resolves.toMatchObject({
+      chainCapabilities: {
+        nativeBalance: true,
+        sendTransaction: false,
+      },
+    });
+
+    runtime.lifecycle.shutdown();
+  });
+
+  it("prefers overridden namespace transactions over manifest transaction construction", async () => {
+    const createTransaction = vi.fn(() => {
+      throw new Error("manifest transaction should not be constructed");
+    });
+
+    const runtime = createTestRuntime({
+      chainSeed: [MAINNET_CHAIN],
+      customChainsPort: new MemoryCustomChainsPort(),
+      namespaces: {
+        manifests: [
+          {
+            ...eip155NamespaceManifest,
+            runtime: {
+              ...eip155NamespaceManifest.runtime,
+              createTransaction,
+            },
+          },
+        ],
+      },
+      transactions: {
+        namespaces: new NamespaceTransactions([["eip155", createNamespaceTransactionWithoutTracking()]]),
+      },
+    });
+
+    await runtime.lifecycle.initialize();
+    runtime.lifecycle.start();
+
+    expect(createTransaction).not.toHaveBeenCalled();
+    expect(runtime.services.namespaceRuntimeSupport.get("eip155")).toMatchObject({
+      hasTransaction: true,
+      hasTransactionReceiptTracking: false,
+      hasTransactionReplacementTracking: false,
+    });
+
+    runtime.lifecycle.shutdown();
+  });
+
   it("builds send-transaction requests through namespace UI bindings", async () => {
     const createSendTransactionRequest = vi.fn(
       ({ chainRef, to, valueWei }: { chainRef: string; to: string; valueWei: bigint }) =>
@@ -766,7 +853,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const approvalId = "33333333-3333-4333-8333-333333333333";
     const beginTransactionApproval = vi
-      .spyOn(runtime.transactions.commands, "beginTransactionApproval")
+      .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
       .mockImplementation(async (request) => ({
         transactionId: approvalId,
         approvalId,
@@ -896,7 +983,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await createActiveAccount(runtime);
 
     const beginTransactionApproval = vi
-      .spyOn(runtime.transactions.commands, "beginTransactionApproval")
+      .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
       .mockImplementation(async (request, requester) => ({
         transactionId: requester.sessionId,
         approvalId: requester.sessionId,
@@ -974,7 +1061,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.transactions.commands, "beginTransactionApproval").mockRejectedValue(
+    vi.spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval").mockRejectedValue(
       new Error("create approval failed"),
     );
 

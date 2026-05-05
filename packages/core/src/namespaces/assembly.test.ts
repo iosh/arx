@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { assembleRuntimeNamespaceStages } from "./assembly.js";
+import { describe, expect, it, vi } from "vitest";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import {
+  assembleRuntimeNamespaceStages,
+  createChainAddressCodecRegistryFromManifests,
+  materializeNamespaceRuntimeSupport,
+} from "./assembly.js";
 import { eip155NamespaceManifest } from "./eip155/manifest.js";
 import type { NamespaceManifest } from "./types.js";
 
@@ -66,5 +71,79 @@ describe("namespace stage assembly", () => {
     expect(() => assembleRuntimeNamespaceStages([manifest])).toThrow(
       /runtime\.createTransaction requires runtime\.createSigner/,
     );
+  });
+
+  it("prefers overridden namespace transactions when materializing runtime support", () => {
+    const createTransaction = vi.fn(() => {
+      throw new Error("manifest transaction should not be constructed");
+    });
+    const manifest: NamespaceManifest = {
+      ...eip155NamespaceManifest,
+      runtime: {
+        ...eip155NamespaceManifest.runtime,
+        createTransaction,
+      },
+    };
+    const stages = assembleRuntimeNamespaceStages([manifest]);
+    const overriddenTransaction = {
+      proposal: {
+        prepare: async () => ({ status: "ready" as const, prepared: {} }),
+      },
+      execution: {
+        sign: async () => ({ raw: "0x1111" }),
+        broadcast: async () => ({
+          submitted: { hash: "0xhash", chainId: "0x1", from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        }),
+      },
+    };
+
+    const materialized = materializeNamespaceRuntimeSupport({
+      runtimeSupport: stages.runtimeSupport,
+      rpcClients: {
+        getClient: () => undefined,
+      },
+      chains: createChainAddressCodecRegistryFromManifests([manifest]),
+      accountSigning: {} as never,
+      rpcClientNamespaces: new Set(["eip155"]),
+      transactionOverrides: new NamespaceTransactions([["eip155", overriddenTransaction]]),
+    });
+
+    expect(createTransaction).not.toHaveBeenCalled();
+    expect(materialized.namespaceTransactions.require("eip155")).toBe(overriddenTransaction);
+    expect(materialized.bindings.hasTransaction("eip155")).toBe(true);
+    expect(materialized.bindings.hasTransactionReceiptTracking("eip155")).toBe(false);
+    expect(materialized.runtimeSupport.get("eip155")).toMatchObject({
+      hasTransaction: true,
+      hasTransactionReceiptTracking: false,
+      hasTransactionReplacementTracking: false,
+    });
+  });
+
+  it("rejects transaction overrides for namespaces that are not installed", () => {
+    const stages = assembleRuntimeNamespaceStages([eip155NamespaceManifest]);
+    const solanaOverride = {
+      proposal: {
+        prepare: async () => ({ status: "ready" as const, prepared: {} }),
+      },
+      execution: {
+        sign: async () => ({ raw: "0x1111" }),
+        broadcast: async () => ({
+          submitted: { hash: "0xhash", chainId: "0x1", from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        }),
+      },
+    };
+
+    expect(() =>
+      materializeNamespaceRuntimeSupport({
+        runtimeSupport: stages.runtimeSupport,
+        rpcClients: {
+          getClient: () => undefined,
+        },
+        chains: createChainAddressCodecRegistryFromManifests([eip155NamespaceManifest]),
+        accountSigning: {} as never,
+        rpcClientNamespaces: new Set(["eip155"]),
+        transactionOverrides: new NamespaceTransactions([["solana", solanaOverride]]),
+      }),
+    ).toThrow(/Transaction overrides must target installed namespaces/);
   });
 });

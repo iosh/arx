@@ -1,5 +1,6 @@
+import type { Eip155PreparedTransaction } from "../../../types.js";
 import type { Eip155FeeOracle } from "../feeOracle.js";
-import type { Eip155PreparedTransaction, Eip155PrepareStepResult, FeeResolutionResult } from "../types.js";
+import type { Eip155PrepareStepResult, FeeResolutionResult } from "../types.js";
 import { Eip155FieldParseError, parseOptionalHexQuantity, readErrorMessage } from "../utils/validation.js";
 
 type FeeResolverParams = {

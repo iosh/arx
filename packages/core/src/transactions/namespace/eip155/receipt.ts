@@ -1,8 +1,9 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155SubmittedTransaction } from "../../types.js";
-import type { ReceiptResolution, ReplacementResolution, TransactionTrackingContext } from "../types.js";
+import type { Eip155SubmittedTransaction, Eip155TransactionReceipt } from "../../types.js";
+import type { ReceiptResolution, ReplacementResolution } from "../types.js";
+import type { Eip155TrackingContext } from "./types.js";
 
 type ReceiptDeps = {
   rpcClientFactory: (chainRef: string) => Eip155RpcClient;
@@ -33,7 +34,7 @@ const cloneValue = (value: unknown): unknown => {
   return value;
 };
 
-const cloneReceipt = (receipt: RawReceipt): Record<string, unknown> => {
+const cloneReceipt = (receipt: RawReceipt): Eip155TransactionReceipt => {
   return Object.fromEntries(Object.entries(receipt).map(([key, entry]) => [key, cloneValue(entry)]));
 };
 
@@ -63,19 +64,6 @@ const deriveReceiptStatus = (receipt: RawReceipt): "success" | "failed" => {
   return "failed";
 };
 
-const readSubmitted = (context: TransactionTrackingContext): Eip155SubmittedTransaction | null => {
-  const submitted = context.submitted as Partial<Eip155SubmittedTransaction>;
-  if (
-    typeof submitted.hash !== "string" ||
-    typeof submitted.chainId !== "string" ||
-    typeof submitted.from !== "string" ||
-    typeof submitted.nonce !== "string"
-  ) {
-    return null;
-  }
-  return submitted as Eip155SubmittedTransaction;
-};
-
 const toBigInt = (value: string): bigint | null => {
   if (!HEX_PATTERN.test(value)) {
     return null;
@@ -88,8 +76,8 @@ const toBigInt = (value: string): bigint | null => {
 };
 
 export type Eip155ReceiptService = {
-  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
-  detectReplacement(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
+  fetchReceipt(context: Eip155TrackingContext): Promise<ReceiptResolution | null>;
+  detectReplacement(context: Eip155TrackingContext): Promise<ReplacementResolution | null>;
 };
 
 export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptService => {
@@ -108,8 +96,8 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
 
   return {
     async fetchReceipt(context) {
-      const submitted = readSubmitted(context);
-      const hash = submitted?.hash ?? (context.locator.format === "eip155.tx_hash" ? context.locator.value : null);
+      const submitted = context.submitted;
+      const hash = submitted.hash;
       if (!hash) {
         return null;
       }
@@ -136,8 +124,7 @@ export const createEip155ReceiptService = (deps: ReceiptDeps): Eip155ReceiptServ
       const from = context.from;
       if (!from) return null;
 
-      const originalNonceHex = readSubmitted(context)?.nonce ?? null;
-      if (!originalNonceHex) return null;
+      const originalNonceHex = context.submitted.nonce;
 
       const client = getClient(context.chainRef);
       const latestNonceHex = await client.getTransactionCount(from, { blockTag: "latest" });

@@ -1,20 +1,13 @@
-import { ArxReasons, arxError } from "@arx/errors";
 import type { ChainAddressCodecRegistry } from "../../../chains/registry.js";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155TransactionPayload } from "../../types.js";
-import type { TransactionPrepareContext } from "../types.js";
+import type { Eip155PreparedTransaction } from "../../types.js";
 import { createEip155FeeOracle, type Eip155FeeOracle } from "./feeOracle.js";
 import { createAddressResolver } from "./resolvers/addressResolver.js";
 import { checkBalanceForMaxCost } from "./resolvers/balanceResolver.js";
 import { deriveFees } from "./resolvers/feeResolver.js";
 import { deriveFields } from "./resolvers/fieldResolver.js";
 import { deriveGas } from "./resolvers/gasResolver.js";
-import type {
-  Eip155CallParams,
-  Eip155PreparedTransaction,
-  Eip155PrepareResult,
-  Eip155PrepareStepResult,
-} from "./types.js";
+import type { Eip155CallParams, Eip155PrepareContext, Eip155PrepareResult, Eip155PrepareStepResult } from "./types.js";
 import { pickDefined } from "./utils/helpers.js";
 import { readErrorMessage } from "./utils/validation.js";
 
@@ -44,15 +37,12 @@ export const createEip155PrepareTransaction = (deps: PrepareTransactionDeps) => 
   const deriveAddresses = createAddressResolver({ chains });
   const feeOracleFactory = deps.feeOracleFactory ?? ((rpc) => createEip155FeeOracle({ rpc }));
 
-  return async (ctx: TransactionPrepareContext): Promise<Eip155PrepareResult> => {
+  return async (ctx: Eip155PrepareContext): Promise<Eip155PrepareResult> => {
     if (ctx.namespace !== "eip155") {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `Transaction preparer expects namespace "eip155" but received "${ctx.namespace}"`,
-      });
+      throw new Error(`Transaction preparer expects namespace "eip155" but received "${ctx.namespace}"`);
     }
 
-    const payload = ctx.request.payload as Eip155TransactionPayload;
+    const payload = ctx.request.payload;
     const prepared: Eip155PreparedTransaction = {};
 
     const addresses = deriveAddresses(ctx, {

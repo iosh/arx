@@ -1,5 +1,23 @@
 import type { Hex } from "ox/Hex";
-import type { TransactionPrepareResult, TransactionProposalBlocker, TransactionProposalError } from "../types.js";
+import type { AccountAddress } from "../../../controllers/account/types.js";
+import type {
+  Eip155PreparedTransaction,
+  Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
+  Eip155TransactionRequest,
+} from "../../types.js";
+import type {
+  SignedTransactionPayload,
+  TransactionApprovalReviewContext,
+  TransactionDraftEditContext,
+  TransactionPrepareContext,
+  TransactionPrepareResult,
+  TransactionProposalBlocker,
+  TransactionProposalError,
+  TransactionRecordContext,
+  TransactionSignContext,
+  TransactionSignOptions,
+} from "../types.js";
 
 export type Eip155FeeMode = "legacy" | "eip1559" | "unknown";
 export type Eip155CallParams = {
@@ -9,20 +27,53 @@ export type Eip155CallParams = {
   data?: Hex;
 };
 
-export type Eip155PreparedTransaction = {
-  from?: Hex;
-  to?: Hex | null;
-  value?: Hex;
-  data?: Hex;
-  gas?: Hex;
-  nonce?: Hex;
-  chainId?: Hex;
-  gasPrice?: Hex;
-  maxFeePerGas?: Hex;
-  maxPriorityFeePerGas?: Hex;
+export type Eip155PrepareResult = TransactionPrepareResult<Eip155PreparedTransaction>;
+
+export type Eip155PrepareContext = Omit<TransactionPrepareContext, "namespace" | "request"> & {
+  namespace: "eip155";
+  request: Eip155TransactionRequest;
 };
 
-export type Eip155PrepareResult = TransactionPrepareResult<Eip155PreparedTransaction>;
+export type Eip155SignContext = Omit<TransactionSignContext, "namespace" | "request" | "from"> & {
+  namespace: "eip155";
+  from: AccountAddress;
+  request: Eip155TransactionRequest;
+};
+
+export type Eip155TrackingContext = TransactionRecordContext & {
+  namespace: "eip155";
+  submitted: Eip155SubmittedTransaction;
+};
+
+export type Eip155ApprovalReviewContext = Omit<
+  TransactionApprovalReviewContext,
+  "namespace" | "request" | "reviewPreparedSnapshot"
+> & {
+  namespace: "eip155";
+  request: Eip155TransactionRequest;
+  reviewPreparedSnapshot: Partial<Eip155PreparedTransaction> | null;
+};
+
+export type Eip155DraftEditContext = Omit<TransactionDraftEditContext, "namespace" | "request" | "edit"> & {
+  namespace: "eip155";
+  request: Eip155TransactionRequest;
+  edit: {
+    namespace: "eip155";
+    changes: readonly Eip155TransactionDraftChange[];
+  };
+};
+
+export type Eip155SignerContract = {
+  signTransaction(
+    context: Eip155SignContext,
+    prepared: Eip155PreparedTransaction,
+    options?: TransactionSignOptions,
+  ): Promise<SignedTransactionPayload>;
+};
+
+export type Eip155BroadcasterContract = {
+  broadcast(context: Eip155PrepareContext, signed: SignedTransactionPayload): Promise<{ hash: `0x${string}` }>;
+};
 
 export type Eip155PrepareStepResult<TPatch> =
   | { status: "ok"; patch: TPatch }

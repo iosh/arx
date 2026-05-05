@@ -1,24 +1,19 @@
 import { ArxReasons } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { TransactionTrackingContext } from "../types.js";
 import { TEST_TX_HASH } from "./__fixtures__/constants.js";
 import { createReceiptContext } from "./__fixtures__/contexts.js";
 import { createEip155RpcClient } from "./__mocks__/rpc.js";
 import { createEip155ReceiptService } from "./receipt.js";
+import type { Eip155TrackingContext } from "./types.js";
 
-const BASE_CONTEXT: TransactionTrackingContext = {
+const BASE_CONTEXT: Eip155TrackingContext = {
   ...createReceiptContext(),
-  request: null,
   submitted: {
     hash: TEST_TX_HASH,
     chainId: "0x1",
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     nonce: "0x3",
-  },
-  locator: {
-    format: "eip155.tx_hash",
-    value: TEST_TX_HASH,
   },
 };
 
@@ -66,7 +61,7 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const context: TransactionTrackingContext = {
+    const context: Eip155TrackingContext = {
       ...BASE_CONTEXT,
     };
 
@@ -83,7 +78,7 @@ describe("createEip155ReceiptService", () => {
       rpcClientFactory: () => client,
     });
 
-    const context: TransactionTrackingContext = {
+    const context: Eip155TrackingContext = {
       ...BASE_CONTEXT,
     };
 

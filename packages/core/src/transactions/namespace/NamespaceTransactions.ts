@@ -1,29 +1,46 @@
-import type { NamespaceTransaction } from "./types.js";
+import type { AnyNamespaceTransaction, NamespaceTransaction } from "./types.js";
 
 export class NamespaceTransactions {
-  #transactions: Map<string, NamespaceTransaction>;
+  #transactionByNamespace: ReadonlyMap<string, AnyNamespaceTransaction>;
 
-  constructor(initial?: Iterable<[string, NamespaceTransaction]>) {
-    this.#transactions = new Map(initial ?? []);
-  }
+  constructor(initial?: Iterable<[string, AnyNamespaceTransaction]>) {
+    const transactionByNamespace = new Map<string, AnyNamespaceTransaction>();
 
-  register(namespace: string, transaction: NamespaceTransaction, options?: { replace?: boolean }): void {
-    const replace = options?.replace ?? false;
-    if (!replace && this.#transactions.has(namespace)) {
-      throw new Error(`Namespace transaction for namespace "${namespace}" already registered`);
+    for (const [namespace, transaction] of initial ?? []) {
+      if (transactionByNamespace.has(namespace)) {
+        throw new Error(`Duplicate namespace transaction "${namespace}"`);
+      }
+      transactionByNamespace.set(namespace, transaction);
     }
-    this.#transactions.set(namespace, transaction);
+
+    this.#transactionByNamespace = transactionByNamespace;
   }
 
-  unregister(namespace: string): void {
-    this.#transactions.delete(namespace);
-  }
-
-  get(namespace: string): NamespaceTransaction | undefined {
-    return this.#transactions.get(namespace);
+  find(namespace: string): AnyNamespaceTransaction | undefined {
+    return this.#transactionByNamespace.get(namespace);
   }
 
   listNamespaces(): string[] {
-    return Array.from(this.#transactions.keys());
+    return [...this.#transactionByNamespace.keys()];
+  }
+
+  list(): AnyNamespaceTransaction[] {
+    return [...this.#transactionByNamespace.values()];
+  }
+
+  entries(): Array<[string, AnyNamespaceTransaction]> {
+    return [...this.#transactionByNamespace.entries()];
+  }
+
+  require(namespace: string): AnyNamespaceTransaction {
+    const transaction = this.find(namespace);
+    if (!transaction) {
+      throw new Error(`Missing namespace transaction "${namespace}"`);
+    }
+    return transaction;
+  }
+
+  get(namespace: string): AnyNamespaceTransaction | undefined {
+    return this.find(namespace);
   }
 }

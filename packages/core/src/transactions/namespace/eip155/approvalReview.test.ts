@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { TransactionApprovalReviewContext } from "../types.js";
 import { TEST_ADDRESSES, TEST_CHAINS, TEST_VALUES } from "./__fixtures__/constants.js";
 import { buildEip155ApprovalReview } from "./approvalReview.js";
+import type { Eip155ApprovalReviewContext } from "./types.js";
 
 describe("buildEip155ApprovalReview", () => {
   it("builds review from the proposal-review context only", () => {
-    const context: TransactionApprovalReviewContext = {
+    const context: Eip155ApprovalReviewContext = {
       transactionId: "proposal-1",
       namespace: "eip155",
       chainRef: TEST_CHAINS.MAINNET,

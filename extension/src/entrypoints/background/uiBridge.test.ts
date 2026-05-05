@@ -542,12 +542,14 @@ const createControllers = () => {
       return CHAIN;
     },
   };
-  const transactionCommands = {
+  const transactionProposalBegin = {
     beginTransactionApproval: vi.fn(async () => ({
       transactionId: "approval-id",
       approvalId: "approval-id",
     })),
-    retryPrepare: vi.fn(async () => {}),
+  };
+  const transactionProposalDraft = {
+    rerunPrepare: vi.fn(async () => {}),
     applyDraftEdit: vi.fn(async () => {}),
   };
   const providerTransactionCommands = {
@@ -559,10 +561,6 @@ const createControllers = () => {
           hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
           chainId: CHAIN.chainId,
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        },
-        locator: {
-          format: "eip155.tx_hash" as const,
-          value: "0x1111111111111111111111111111111111111111111111111111111111111111",
         },
       }),
     })),
@@ -613,7 +611,8 @@ const createControllers = () => {
     approvals,
     permissions,
     network,
-    transactionCommands,
+    transactionProposalBegin,
+    transactionProposalDraft,
     providerTransactionCommands,
     transactionExecution,
     transactionRecovery,
@@ -741,19 +740,19 @@ const createUiAccessForTest = (input: {
           beginTransactionApproval: (request, requestContext, transactionOptions) =>
             input.transactionsAccess?.beginTransactionApproval
               ? input.transactionsAccess.beginTransactionApproval(request, requestContext, transactionOptions)
-              : input.controllers.transactionCommands.beginTransactionApproval(
+              : input.controllers.transactionProposalBegin.beginTransactionApproval(
                   request,
                   requestContext,
                   transactionOptions,
                 ),
-          retryPrepare: (transactionId) =>
-            input.transactionsAccess?.retryPrepare
-              ? input.transactionsAccess.retryPrepare(transactionId)
-              : input.controllers.transactionCommands.retryPrepare(transactionId),
+          rerunPrepare: (transactionId) =>
+            input.transactionsAccess?.rerunPrepare
+              ? input.transactionsAccess.rerunPrepare(transactionId)
+              : input.controllers.transactionProposalDraft.rerunPrepare(transactionId),
           applyDraftEdit: (draft) =>
             input.transactionsAccess?.applyDraftEdit
               ? input.transactionsAccess.applyDraftEdit(draft)
-              : input.controllers.transactionCommands.applyDraftEdit(draft),
+              : input.controllers.transactionProposalDraft.applyDraftEdit(draft),
           onStateChanged: (listener) =>
             input.transactionsAccess?.onStateChanged ? input.transactionsAccess.onStateChanged(listener) : () => {},
         } as never,

@@ -167,19 +167,6 @@ export class MemoryTransactionsPort implements TransactionsPort {
     return all.slice(0, limit).map((r) => clone(r));
   }
 
-  async findByChainRefAndLocator(params: {
-    chainRef: string;
-    locator: TransactionRecord["locator"];
-  }): Promise<TransactionRecord | null> {
-    for (const record of this.#records.values()) {
-      if (record.chainRef !== params.chainRef) continue;
-      if (record.locator.format !== params.locator.format) continue;
-      if (record.locator.value !== params.locator.value) continue;
-      return clone(record);
-    }
-    return null;
-  }
-
   async create(record: TransactionRecord): Promise<void> {
     const checked = TransactionRecordSchema.parse(record);
     if (this.#records.has(checked.id)) {

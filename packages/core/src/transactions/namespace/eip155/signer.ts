@@ -9,8 +9,9 @@ import * as TypedData from "ox/TypedData";
 import { eip155Codec } from "../../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
-import type { SignedTransactionPayload, TransactionSignContext, TransactionSignOptions } from "../types.js";
-import type { Eip155PreparedTransaction } from "./types.js";
+import type { Eip155PreparedTransaction } from "../../types.js";
+import type { SignedTransactionPayload } from "../types.js";
+import type { Eip155SignContext, Eip155SignerContract } from "./types.js";
 
 const textEncoder = new TextEncoder();
 
@@ -19,11 +20,7 @@ type SignerDeps = {
 };
 
 export type Eip155Signer = {
-  signTransaction: (
-    context: TransactionSignContext,
-    prepared: Record<string, unknown>,
-    options?: TransactionSignOptions,
-  ) => Promise<SignedTransactionPayload>;
+  signTransaction: Eip155SignerContract["signTransaction"];
   signPersonalMessage: (params: { accountKey: string; message: HexType | string }) => Promise<HexType>;
   signTypedData: (params: { accountKey: string; typedData: string }) => Promise<HexType>;
 };
@@ -81,9 +78,9 @@ function toBigInt(value: HexType | null | undefined, label: string, required = f
  * Extract numeric chainId from transaction or context.
  * Validates chainId is a positive 53-bit safe integer.
  */
-const deriveChainId = (context: TransactionSignContext, prepared: Record<string, unknown>): number => {
+const deriveChainId = (context: Eip155SignContext, prepared: Eip155PreparedTransaction): number => {
   if (prepared.chainId) {
-    const numeric = Number(Hex.toBigInt(prepared.chainId as Hex.Hex));
+    const numeric = Number(Hex.toBigInt(prepared.chainId));
     if (!Number.isSafeInteger(numeric) || numeric <= 0) {
       throw arxError({
         reason: ArxReasons.RpcInvalidRequest,
@@ -218,13 +215,6 @@ const parseTypedDataPayload = (raw: string) => {
 
 export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer => {
   const signTransaction: Eip155Signer["signTransaction"] = async (context, preparedInput, options) => {
-    if (context.namespace !== "eip155") {
-      throw arxError({
-        reason: ArxReasons.RpcInvalidRequest,
-        message: `EIP-155 signer cannot handle namespace "${context.namespace}".`,
-      });
-    }
-
     throwIfSignAborted(options?.signal);
 
     const requestPayload = context.request.payload;
@@ -241,8 +231,8 @@ export const createEip155Signer = ({ accountSigning }: SignerDeps): Eip155Signer
     const fromAccountKey = toEip155AccountKey({ chainRef: context.chainRef, address: context.from });
     await accountSigning.assertAccountUnlocked(fromAccountKey);
     throwIfSignAborted(options?.signal);
-    const prepared = preparedInput as Eip155PreparedTransaction;
-    const chainId = deriveChainId(context, preparedInput);
+    const prepared = preparedInput;
+    const chainId = deriveChainId(context, prepared);
     const envelope = buildEnvelope(prepared, chainId);
 
     if (envelope.type === "eip1559") {

@@ -125,10 +125,6 @@ const createNamespaceTransactionMock = (params: {
             from: ctx.from ?? "0x0000000000000000000000000000000000000000",
             prepared: prepared as Record<string, unknown>,
           }),
-          locator: {
-            format: "eip155.tx_hash",
-            value: txHash,
-          },
         };
       }),
   },
@@ -618,20 +614,17 @@ describe("createBackgroundRuntime provider access", () => {
         from: ctx.from ?? "0x0000000000000000000000000000000000000000",
         prepared: prepared as Record<string, unknown>,
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: txHash,
-      },
     }));
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(
-      chain.namespace,
-      createNamespaceTransactionMock({
-        prepareTransaction,
-        signTransaction,
-        broadcastTransaction,
-      }),
-    );
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        chain.namespace,
+        createNamespaceTransactionMock({
+          prepareTransaction,
+          signTransaction,
+          broadcastTransaction,
+        }),
+      ],
+    ]);
     const background = await setupBackground({
       chainSeed: [chain],
       transactions: { namespaces: namespaceTransactions },
@@ -747,20 +740,17 @@ describe("createBackgroundRuntime provider access", () => {
           from: ctx.from ?? "0x0000000000000000000000000000000000000000",
           prepared: prepared as Record<string, unknown>,
         }),
-        locator: {
-          format: "eip155.tx_hash",
-          value: txHash,
-        },
       };
     });
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(
-      chain.namespace,
-      createNamespaceTransactionMock({
-        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x9" } })),
-        broadcastTransaction,
-      }),
-    );
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        chain.namespace,
+        createNamespaceTransactionMock({
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x9" } })),
+          broadcastTransaction,
+        }),
+      ],
+    ]);
     const background = await setupBackground({
       chainSeed: [chain],
       transactions: { namespaces: namespaceTransactions },
@@ -842,20 +832,17 @@ describe("createBackgroundRuntime provider access", () => {
         txHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
         from: "0x0000000000000000000000000000000000000000",
       }),
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x3333333333333333333333333333333333333333333333333333333333333333",
-      },
     }));
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(
-      chain.namespace,
-      createNamespaceTransactionMock({
-        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0xa" } })),
-        signTransaction,
-        broadcastTransaction,
-      }),
-    );
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        chain.namespace,
+        createNamespaceTransactionMock({
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0xa" } })),
+          signTransaction,
+          broadcastTransaction,
+        }),
+      ],
+    ]);
     const background = await setupBackground({
       chainSeed: [chain],
       transactions: { namespaces: namespaceTransactions },
@@ -946,20 +933,17 @@ describe("createBackgroundRuntime provider access", () => {
           from: ctx.from ?? "0x0000000000000000000000000000000000000000",
           prepared: prepared as Record<string, unknown>,
         }),
-        locator: {
-          format: "eip155.tx_hash",
-          value: txHash,
-        },
       };
     });
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(
-      chain.namespace,
-      createNamespaceTransactionMock({
-        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x7" } })),
-        broadcastTransaction,
-      }),
-    );
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        chain.namespace,
+        createNamespaceTransactionMock({
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { nonce: "0x7" } })),
+          broadcastTransaction,
+        }),
+      ],
+    ]);
     const transactionsPort = new FailingCreateTransactionsPort();
     const background = await setupBackground({
       chainSeed: [chain],
@@ -1020,10 +1004,6 @@ describe("createBackgroundRuntime provider access", () => {
         submitted: {
           hash: txHash,
         },
-        locator: {
-          format: "eip155.tx_hash",
-          value: txHash,
-        },
         persistenceFailure: {
           error: {
             name: "TransactionPersistenceError",
@@ -1050,14 +1030,15 @@ describe("createBackgroundRuntime provider access", () => {
     const broadcastTransaction = vi.fn<NamespaceTransactionExecution["broadcast"]>(async () => {
       throw new Error("RPC unavailable");
     });
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register(
-      chain.namespace,
-      createNamespaceTransactionMock({
-        prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
-        broadcastTransaction,
-      }),
-    );
+    const namespaceTransactions = new NamespaceTransactions([
+      [
+        chain.namespace,
+        createNamespaceTransactionMock({
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: {} })),
+          broadcastTransaction,
+        }),
+      ],
+    ]);
     const background = await setupBackground({
       chainSeed: [chain],
       transactions: { namespaces: namespaceTransactions },

@@ -1,19 +1,9 @@
-import type { NamespaceTransactionReview } from "../../../controllers/transaction/review/types.js";
-import type { Eip155TransactionPayload, TransactionPrepared } from "../../types.js";
-import type { TransactionApprovalReviewContext } from "../types.js";
-import type { Eip155PreparedTransaction } from "./types.js";
+import type { NamespaceTransactionReview } from "../../review.js";
+import type { Eip155ApprovalReviewContext } from "./types.js";
 
-const getReviewPayload = (context: TransactionApprovalReviewContext): Eip155TransactionPayload => {
-  if (context.request.namespace === "eip155") {
-    return context.request.payload as Eip155TransactionPayload;
-  }
-
-  throw new Error(`EIP-155 approval review received namespace "${context.request.namespace}"`);
-};
-
-export const buildEip155ApprovalReview = (context: TransactionApprovalReviewContext): NamespaceTransactionReview => {
-  const requestPayload = getReviewPayload(context);
-  const prepared = context.reviewPreparedSnapshot as Partial<Eip155PreparedTransaction> | null;
+export const buildEip155ApprovalReview = (context: Eip155ApprovalReviewContext): NamespaceTransactionReview => {
+  const requestPayload = context.request.payload;
+  const prepared = context.reviewPreparedSnapshot;
 
   return {
     namespace: "eip155",

@@ -156,10 +156,6 @@ const createTransactionRecord = (
     from: ACCOUNT_ADDRESS,
     nonce: "0x7",
   },
-  locator: {
-    format: "eip155.tx_hash",
-    value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-  },
   createdAt: 1_000,
   updatedAt: 1_000,
   ...overrides,
@@ -554,10 +550,6 @@ describe("createArxWallet", () => {
         from: ctx.from,
         ...(typeof prepared.nonce === "string" ? { nonce: prepared.nonce } : {}),
       },
-      locator: {
-        format: "eip155.tx_hash",
-        value: "0x1111111111111111111111111111111111111111111111111111111111111111",
-      },
     }));
     const transactionsPort = new MemoryTransactionsPort();
 
@@ -583,7 +575,7 @@ describe("createArxWallet", () => {
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
-      const handoff = await runtime.transactions.commands.beginTransactionApproval(
+      const handoff = await runtime.transactions.proposal.begin.beginTransactionApproval(
         {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
@@ -659,10 +651,6 @@ describe("createArxWallet", () => {
         createTransactionRecord({
           id: "44444444-4444-4444-8444-444444444444",
           status: "broadcast",
-          locator: {
-            format: "eip155.tx_hash",
-            value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          },
           submitted: {
             hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             chainId: "0x1",
@@ -681,10 +669,6 @@ describe("createArxWallet", () => {
               chainId: "0x1",
               from: ACCOUNT_ADDRESS,
               nonce: "0x7",
-            },
-            locator: {
-              format: "eip155.tx_hash",
-              value: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             },
           })),
           tracking: {

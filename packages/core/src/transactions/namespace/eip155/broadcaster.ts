@@ -1,6 +1,6 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { SignedTransactionPayload, TransactionPrepareContext } from "../types.js";
+import type { Eip155BroadcasterContract, Eip155PrepareContext } from "./types.js";
 
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 
@@ -9,10 +9,10 @@ type BroadcasterDeps = {
 };
 
 export type Eip155Broadcaster = {
-  broadcast(context: TransactionPrepareContext, signed: SignedTransactionPayload): Promise<{ hash: string }>;
+  broadcast: Eip155BroadcasterContract["broadcast"];
 };
 
-const toCanonicalTransactionHash = (value: unknown): string => {
+const toCanonicalTransactionHash = (value: unknown): `0x${string}` => {
   if (typeof value !== "string") {
     throw arxError({
       reason: ArxReasons.RpcInternal,
@@ -27,7 +27,7 @@ const toCanonicalTransactionHash = (value: unknown): string => {
       data: { hash: value },
     });
   }
-  return value.toLowerCase();
+  return value.toLowerCase() as `0x${string}`;
 };
 
 export const createEip155Broadcaster = (deps: BroadcasterDeps): Eip155Broadcaster => {

@@ -7,7 +7,8 @@ import type { RpcClientRegistry } from "../rpc/RpcClientRegistry.js";
 import type { RpcRegistry } from "../rpc/RpcRegistry.js";
 import type { NamespaceConfig } from "../runtime/keyring/namespaces.js";
 import type { AccountSigningService } from "../services/runtime/accountSigning.js";
-import type { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
+import type { AnyNamespaceTransaction } from "../transactions/namespace/types.js";
 import type {
   NamespaceApprovalBindings,
   NamespaceManifest,
@@ -239,20 +240,85 @@ const createNamespaceSignerRegistry = (signerByNamespace: ReadonlyMap<string, un
   };
 };
 
+const assertTransactionOverridesMatchInstalledNamespaces = (params: {
+  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
+  transactionOverrides?: NamespaceTransactions;
+}): void => {
+  const overrides = params.transactionOverrides;
+  if (!overrides) {
+    return;
+  }
+
+  const installedNamespaces = new Set(params.runtimeSupport.namespaces.map((spec) => spec.namespace));
+  const unknownNamespaces = overrides
+    .listNamespaces()
+    .filter((namespace) => !installedNamespaces.has(namespace))
+    .sort();
+
+  if (unknownNamespaces.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Transaction overrides must target installed namespaces; received unknown namespace overrides: ${unknownNamespaces.join(", ")}`,
+  );
+};
+
+const materializeNamespaceTransactions = (params: {
+  runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
+  rpcClients: Pick<RpcClientRegistry, "getClient">;
+  chains: ChainAddressCodecRegistry;
+  signerByNamespace: ReadonlyMap<string, unknown>;
+  transactionOverrides?: NamespaceTransactions;
+}): NamespaceTransactions => {
+  assertTransactionOverridesMatchInstalledNamespaces(params);
+
+  const transactionEntries: Array<[string, AnyNamespaceTransaction]> = [];
+  const overrideByNamespace = new Map(params.transactionOverrides?.entries() ?? []);
+
+  for (const spec of params.runtimeSupport.namespaces) {
+    const overriddenTransaction = overrideByNamespace.get(spec.namespace);
+    if (overriddenTransaction) {
+      transactionEntries.push([spec.namespace, overriddenTransaction]);
+      overrideByNamespace.delete(spec.namespace);
+      continue;
+    }
+
+    const createTransaction = spec.createTransaction;
+    if (!createTransaction) {
+      continue;
+    }
+
+    const signer = params.signerByNamespace.get(spec.namespace);
+    if (!signer) {
+      throw new Error(`Namespace transaction for namespace "${spec.namespace}" requires a signer binding`);
+    }
+
+    const transaction = createTransaction({
+      rpcClients: params.rpcClients,
+      chains: params.chains,
+      signer,
+    });
+    transactionEntries.push([spec.namespace, transaction]);
+  }
+
+  return new NamespaceTransactions(transactionEntries);
+};
+
 export const materializeNamespaceRuntimeSupport = (params: {
   runtimeSupport: RuntimeNamespaceRuntimeSupportAssembly;
-  namespaceTransactions: NamespaceTransactions;
   rpcClients: Pick<RpcClientRegistry, "getClient">;
   chains: ChainAddressCodecRegistry;
   accountSigning: AccountSigningService;
   rpcClientNamespaces: ReadonlySet<string>;
+  transactionOverrides?: NamespaceTransactions;
 }): {
+  namespaceTransactions: NamespaceTransactions;
   signers: HandlerControllers["signers"];
   bindings: NamespaceRuntimeBindingsRegistry;
   runtimeSupport: NamespaceRuntimeSupportIndex;
 } => {
-  const { runtimeSupport, namespaceTransactions, rpcClients, chains, accountSigning, rpcClientNamespaces } = params;
-
+  const { runtimeSupport, rpcClients, chains, accountSigning, rpcClientNamespaces, transactionOverrides } = params;
   const signerByNamespace = new Map<string, unknown>();
   const approvalByNamespace = new Map<string, NamespaceApprovalBindings>();
   const uiByNamespace = new Map<string, NamespaceUiBindings>();
@@ -286,31 +352,19 @@ export const materializeNamespaceRuntimeSupport = (params: {
     }
   }
 
-  for (const spec of runtimeSupport.namespaces) {
-    const createTransaction = spec.createTransaction;
-    if (!createTransaction || namespaceTransactions.get(spec.namespace)) {
-      continue;
-    }
-
-    const signer = signerByNamespace.get(spec.namespace);
-    if (!signer) {
-      throw new Error(`Namespace transaction for namespace "${spec.namespace}" requires a signer binding`);
-    }
-
-    const transaction = createTransaction({
-      rpcClients,
-      chains,
-      signer,
-    });
-    namespaceTransactions.register(spec.namespace, transaction);
-  }
-
+  const namespaceTransactions = materializeNamespaceTransactions({
+    runtimeSupport,
+    rpcClients,
+    chains,
+    signerByNamespace,
+    ...(transactionOverrides ? { transactionOverrides } : {}),
+  });
   const transactionNamespaces = new Set(namespaceTransactions.listNamespaces());
   const receiptTrackingNamespaces = new Set<string>();
   for (const spec of runtimeSupport.namespaces) {
     const approvalBindings = approvalByNamespace.get(spec.namespace);
     const uiBindings = uiByNamespace.get(spec.namespace);
-    const namespaceTransaction = namespaceTransactions.get(spec.namespace);
+    const namespaceTransaction = namespaceTransactions.find(spec.namespace);
     const tracking = namespaceTransaction?.tracking;
     if (tracking) {
       receiptTrackingNamespaces.add(spec.namespace);
@@ -329,6 +383,7 @@ export const materializeNamespaceRuntimeSupport = (params: {
   }
 
   return {
+    namespaceTransactions,
     signers: createNamespaceSignerRegistry(signerByNamespace),
     bindings: createNamespaceRuntimeBindingsRegistry({
       approvalByNamespace,

@@ -10,32 +10,32 @@ const dummy = (): NamespaceTransaction => ({
     sign: async (_ctx, _prepared) => ({ raw: "0x" }),
     broadcast: async () => ({
       submitted: { hash: "0xhash" },
-      locator: { format: "test.tx_hash", value: "0xhash" },
     }),
   },
 });
 
 describe("NamespaceTransactions", () => {
-  it("registers and retrieves adapters by namespace", () => {
-    const namespaceTransactions = new NamespaceTransactions();
+  it("stores and retrieves namespace transactions", () => {
     const adapter = dummy();
-    namespaceTransactions.register("eip155", adapter);
-    expect(namespaceTransactions.get("eip155")).toBe(adapter);
+    const namespaceTransactions = new NamespaceTransactions([["eip155", adapter]]);
+    expect(namespaceTransactions.find("eip155")).toBe(adapter);
+    expect(namespaceTransactions.require("eip155")).toBe(adapter);
+    expect(namespaceTransactions.list()).toEqual([adapter]);
     expect(namespaceTransactions.listNamespaces()).toEqual(["eip155"]);
   });
 
-  it("throws on duplicate register by default", () => {
-    const namespaceTransactions = new NamespaceTransactions();
-    namespaceTransactions.register("eip155", dummy());
-    expect(() => namespaceTransactions.register("eip155", dummy())).toThrowError(/already registered/);
+  it("throws on duplicate namespace entries", () => {
+    expect(
+      () =>
+        new NamespaceTransactions([
+          ["eip155", dummy()],
+          ["eip155", dummy()],
+        ]),
+    ).toThrowError(/Duplicate namespace transaction/);
   });
 
-  it("allows replacement when explicitly requested", () => {
+  it("throws when requiring a missing namespace transaction", () => {
     const namespaceTransactions = new NamespaceTransactions();
-    const first = dummy();
-    const second = dummy();
-    namespaceTransactions.register("eip155", first);
-    namespaceTransactions.register("eip155", second, { replace: true });
-    expect(namespaceTransactions.get("eip155")).toBe(second);
+    expect(() => namespaceTransactions.require("eip155")).toThrowError(/Missing namespace transaction/);
   });
 });

@@ -3,17 +3,21 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
-import type { TransactionError } from "../../transactions/types.js";
+import type { Eip155SubmittedTransaction, TransactionError } from "../../transactions/types.js";
 import { canStartProposalExecution, isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
-import type { TransactionProposalService } from "./TransactionProposalService.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
-import type { TransactionApprovalExecutor, TransactionApprovalResult, TransactionBroadcastRecovery } from "./types.js";
+import type {
+  TransactionApprovalExecutor,
+  TransactionApprovalResult,
+  TransactionBroadcastRecovery,
+  TransactionProposalExecutionGate,
+} from "./types.js";
 import {
   buildPrepareContext,
   buildSignContext,
@@ -23,8 +27,6 @@ import {
   createTransactionPersistenceError,
   isUserRejectedError,
 } from "./utils.js";
-
-type TransactionProposalExecutionGateway = Pick<TransactionProposalService, "approveForExecution">;
 
 type TransactionExecutionServiceDeps = {
   messenger: TransactionMessenger;
@@ -36,7 +38,7 @@ type TransactionExecutionServiceDeps = {
   service: TransactionsService;
   submissionService: TransactionSubmissionService;
   prepare: TransactionPrepareManager;
-  proposals: TransactionProposalExecutionGateway;
+  proposals: TransactionProposalExecutionGate;
   tracking: TransactionReceiptTracking;
   readTransactionTimestamp: () => number;
 };
@@ -46,6 +48,17 @@ type TransactionExecutionAttemptPhase = "queued" | "processing" | "signing" | "b
 type TransactionExecutionAttemptState = {
   phase: TransactionExecutionAttemptPhase;
   signAbortController: AbortController | null;
+};
+
+const requireDurableSubmittedShape = (params: {
+  namespace: string;
+  submitted: unknown;
+}): Eip155SubmittedTransaction => {
+  if (params.namespace === "eip155") {
+    return params.submitted as Eip155SubmittedTransaction;
+  }
+
+  throw new Error(`No durable transaction submission schema registered for namespace "${params.namespace}"`);
 };
 
 export class TransactionExecutionService implements TransactionApprovalExecutor, TransactionBroadcastRecovery {
@@ -58,7 +71,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
   #service: TransactionsService;
   #submissionService: TransactionSubmissionService;
   #prepare: TransactionPrepareManager;
-  #proposals: TransactionProposalExecutionGateway;
+  #proposals: TransactionProposalExecutionGate;
   #tracking: TransactionReceiptTracking;
   #readTransactionTimestamp: () => number;
 
@@ -230,14 +243,16 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
       this.#messenger.publish(TRANSACTION_SUBMITTED, {
         id,
         submitted: structuredClone(broadcast.submitted),
-        locator: structuredClone(broadcast.locator),
       });
       this.#submissionService.recordSubmitted(id, {
         submitted: structuredClone(broadcast.submitted),
-        locator: structuredClone(broadcast.locator),
       });
 
       this.#setAttemptPhase(id, "persisting_record");
+      const durableSubmitted = requireDurableSubmittedShape({
+        namespace: meta.namespace,
+        submitted: structuredClone(broadcast.submitted),
+      });
       let durable: Awaited<ReturnType<TransactionsService["createSubmitted"]>>;
       try {
         if (!meta.from) {
@@ -253,8 +268,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
             address: meta.from,
           }),
           status: "broadcast",
-          submitted: structuredClone(broadcast.submitted),
-          locator: structuredClone(broadcast.locator),
+          submitted: durableSubmitted,
         });
       } catch (error) {
         const persistenceFailure = error instanceof Error ? error : new Error("Transaction persistence failed");
@@ -264,10 +278,8 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
             cause: persistenceFailure,
             transactionId: id,
             submitted: broadcast.submitted,
-            locator: broadcast.locator,
           }),
           submitted: structuredClone(broadcast.submitted),
-          locator: structuredClone(broadcast.locator),
         };
         this.#submissionService.recordPersistenceFailure(id, failure);
         this.#proposalStore.delete(id);

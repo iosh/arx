@@ -23,7 +23,6 @@ const createRecord = (overrides?: Partial<TransactionRecord>): TransactionRecord
     from,
     nonce: "0x7",
   },
-  locator: { format: "eip155.tx_hash", value: "0x1234" },
   createdAt: 1,
   updatedAt: 1,
   ...overrides,
@@ -76,7 +75,6 @@ describe("TransactionRecordViewStore", () => {
       chainRef,
       status: "broadcast",
       submitted: record.submitted,
-      locator: record.locator,
     });
     expect(view).not.toHaveProperty("request");
     expect(view).not.toHaveProperty("prepared");

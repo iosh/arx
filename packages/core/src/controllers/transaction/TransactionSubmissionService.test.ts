@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRecordViewStub, DEFAULT_LOCATOR, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
+import { createRecordViewStub, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 
 describe("TransactionSubmissionService", () => {
@@ -12,12 +12,10 @@ describe("TransactionSubmissionService", () => {
     const pending = submissionService.waitForSubmissionOutcome("tx-1");
     submissionService.recordSubmitted("tx-1", {
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
 
     await expect(pending).resolves.toEqual({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
   });
 
@@ -56,12 +54,10 @@ describe("TransactionSubmissionService", () => {
 
     submissionService.recordSubmitted("tx-3", {
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
 
     await expect(submissionService.waitForSubmissionOutcome("tx-3")).resolves.toEqual({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
   });
 
@@ -73,7 +69,6 @@ describe("TransactionSubmissionService", () => {
 
     submissionService.recordSubmitted("tx-4", {
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
     submissionService.recordPersistenceFailure("tx-4", {
       transactionId: "tx-4",
@@ -82,7 +77,6 @@ describe("TransactionSubmissionService", () => {
         message: "Transaction was broadcast but could not be persisted locally.",
       },
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     });
 
     await expect(submissionService.waitForSubmissionOutcome("tx-4")).resolves.toMatchObject({

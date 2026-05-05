@@ -209,7 +209,6 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
       from: this.#safeFromAccountKeyToAddress(record),
       status: record.status,
       submitted: structuredClone(record.submitted),
-      locator: structuredClone(record.locator),
       receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
       replacedId: record.replacedId ?? null,
       createdAt: record.createdAt,

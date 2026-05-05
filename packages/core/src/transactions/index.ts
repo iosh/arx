@@ -26,10 +26,15 @@ export type {
   TransactionTrackingContext,
   TransactionValidationContext,
 } from "./namespace/types.js";
+export type { Eip155TransactionReview, NamespaceTransactionReview } from "./review.js";
 export type {
+  Eip155PreparedTransaction,
   Eip155SubmittedTransaction,
+  Eip155TransactionDraftChange,
   Eip155TransactionPayload,
   Eip155TransactionPayloadWithFrom,
+  Eip155TransactionReceipt,
   Eip155TransactionRequest,
+  NamespaceTransactionDraftEdit,
   TransactionRequest,
 } from "./types.js";

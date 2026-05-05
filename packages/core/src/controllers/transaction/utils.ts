@@ -7,7 +7,7 @@ import type {
   TransactionSignContext,
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
-import type { TransactionError, TransactionSubmissionLocator, TransactionSubmitted } from "../../transactions/types.js";
+import type { TransactionError, TransactionSubmitted } from "../../transactions/types.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {
@@ -40,7 +40,6 @@ export const createTransactionPersistenceError = (params: {
   cause: Error;
   transactionId: string;
   submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
 }): TransactionError => ({
   name: "TransactionPersistenceError",
   message: "Transaction was broadcast but could not be persisted locally.",
@@ -51,7 +50,6 @@ export const createTransactionPersistenceError = (params: {
     },
     transactionId: params.transactionId,
     submitted: structuredClone(params.submitted),
-    locator: structuredClone(params.locator),
   },
 });
 
@@ -121,7 +119,6 @@ export const buildRecordContext = (record: TransactionRecordView): TransactionRe
 export const buildTrackingContext = (record: TransactionRecordView): TransactionTrackingContext => ({
   ...buildRecordContext(record),
   submitted: structuredClone(record.submitted),
-  locator: structuredClone(record.locator),
 });
 
 export const encodeReplacementKey = (key: TransactionReplacementKey): string => {

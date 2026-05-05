@@ -9,34 +9,15 @@ export type TransactionsChangedPayload =
       kind: "patch";
       id: TransactionRecord["id"];
       status: TransactionStatus;
-      keys: Array<keyof Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
+      keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedId">>;
     }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
 export class TransactionRecordConflictError extends Error {
-  readonly conflict:
-    | { kind: "id"; id: TransactionRecord["id"] }
-    | {
-        kind: "locator";
-        chainRef: ChainRef;
-        locator: TransactionRecord["locator"];
-        existingId: TransactionRecord["id"];
-      };
+  readonly conflict: { kind: "id"; id: TransactionRecord["id"] };
 
-  constructor(
-    conflict:
-      | { kind: "id"; id: TransactionRecord["id"] }
-      | {
-          kind: "locator";
-          chainRef: ChainRef;
-          locator: TransactionRecord["locator"];
-          existingId: TransactionRecord["id"];
-        },
-  ) {
-    const message =
-      conflict.kind === "id"
-        ? `Conflicting submitted transaction id "${conflict.id}"`
-        : `Conflicting submitted transaction locator for chainRef ${conflict.chainRef}`;
+  constructor(conflict: { kind: "id"; id: TransactionRecord["id"] }) {
+    const message = `Conflicting submitted transaction id "${conflict.id}"`;
     super(message);
     this.name = "TransactionRecordConflictError";
     this.conflict = conflict;
@@ -53,7 +34,6 @@ export type CreateSubmittedTransactionParams = {
   origin: TransactionRecord["origin"];
   fromAccountKey: TransactionRecord["fromAccountKey"];
   submitted: TransactionRecord["submitted"];
-  locator: TransactionRecord["locator"];
   status: TransactionRecord["status"];
   receipt?: TransactionRecord["receipt"] | undefined;
   replacedId?: TransactionRecord["replacedId"] | undefined;
@@ -68,7 +48,7 @@ export type TransitionTransactionParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
+  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId">>;
 };
 
 export type ListTransactionsCursor = {
@@ -86,7 +66,7 @@ export type ListTransactionsParams = {
 export type PatchTransactionParams = {
   id: TransactionRecord["id"];
   expectedStatus: TransactionStatus;
-  patch: Partial<Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>;
+  patch: Partial<Pick<TransactionRecord, "receipt" | "replacedId">>;
 };
 
 export type TransactionsService = {

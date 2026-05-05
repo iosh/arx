@@ -14,7 +14,10 @@ export {
   RpcStrategySchema,
 } from "./schemas/rpc.js";
 export {
+  Eip155PreparedTransactionSchema,
+  Eip155SubmittedTransactionSchema,
   Eip155TransactionPayloadSchema,
+  Eip155TransactionReceiptSchema,
   Eip155TransactionRequestSchema,
   TransactionErrorSchema,
   TransactionPayloadSchema,
@@ -22,7 +25,6 @@ export {
   TransactionReceiptSchema,
   TransactionReplacementRelationSchema,
   TransactionRequestSchema,
-  TransactionSubmissionLocatorSchema,
   TransactionSubmittedSchema,
 } from "./schemas/transactions.js";
 export type { VaultMetaSnapshot } from "./schemas/vaultMeta.js";

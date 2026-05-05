@@ -3,9 +3,10 @@ import { getChainRefNamespace } from "../chains/caip.js";
 import { chainMetadataSchema, rpcEndpointSchema } from "../chains/metadata.js";
 import { KeyringTypeSchema } from "./keyringSchemas.js";
 import {
+  Eip155SubmittedTransactionSchema,
+  Eip155TransactionReceiptSchema,
   RpcStrategySchema,
   TransactionReceiptSchema,
-  TransactionSubmissionLocatorSchema,
   TransactionSubmittedSchema,
 } from "./schemas.js";
 import { chainRefSchema, epochMillisecondsSchema, nonEmptyStringSchema, originStringSchema } from "./validators.js";
@@ -275,28 +276,50 @@ export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 export const TransactionStatusSchema = z.enum(["broadcast", "confirmed", "failed", "replaced"]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
 
-export const TransactionRecordSchema = z
-  .strictObject({
-    id: z.uuid(),
-    chainRef: chainRefSchema,
-    origin: originStringSchema,
-    fromAccountKey: AccountKeySchema,
-    status: TransactionStatusSchema,
-    submitted: TransactionSubmittedSchema,
-    locator: TransactionSubmissionLocatorSchema,
-    receipt: TransactionReceiptSchema.optional(),
-    replacedId: z.uuid().nullable().optional(),
-    createdAt: epochMillisecondsSchema,
-    updatedAt: epochMillisecondsSchema,
-  })
-  .superRefine((value, ctx) => {
-    const accountNamespace = value.fromAccountKey.split(":", 1)[0];
-    if (accountNamespace !== getChainRefNamespace(value.chainRef)) {
-      ctx.addIssue({
-        code: "custom",
-        message: "fromAccountKey must belong to the same namespace as chainRef",
-        path: ["fromAccountKey"],
-      });
+const TransactionRecordBaseSchema = z.strictObject({
+  id: z.uuid(),
+  chainRef: chainRefSchema,
+  origin: originStringSchema,
+  fromAccountKey: AccountKeySchema,
+  status: TransactionStatusSchema,
+  replacedId: z.uuid().nullable().optional(),
+  createdAt: epochMillisecondsSchema,
+  updatedAt: epochMillisecondsSchema,
+});
+
+const Eip155TransactionRecordSchema = TransactionRecordBaseSchema.extend({
+  chainRef: z.string().regex(/^eip155:/),
+  submitted: Eip155SubmittedTransactionSchema,
+  receipt: Eip155TransactionReceiptSchema.optional(),
+});
+
+const TransactionRecordEnvelopeSchema = TransactionRecordBaseSchema.extend({
+  submitted: TransactionSubmittedSchema,
+  receipt: TransactionReceiptSchema.optional(),
+});
+
+export const TransactionRecordSchema = TransactionRecordEnvelopeSchema.superRefine((value, ctx) => {
+  const accountNamespace = value.fromAccountKey.split(":", 1)[0];
+  const chainNamespace = getChainRefNamespace(value.chainRef);
+  if (accountNamespace !== chainNamespace) {
+    ctx.addIssue({
+      code: "custom",
+      message: "fromAccountKey must belong to the same namespace as chainRef",
+      path: ["fromAccountKey"],
+    });
+  }
+
+  if (chainNamespace === "eip155") {
+    const parsed = Eip155TransactionRecordSchema.safeParse(value);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        ctx.addIssue({
+          code: "custom",
+          message: issue.message,
+          path: issue.path,
+        });
+      }
     }
-  });
+  }
+});
 export type TransactionRecord = z.infer<typeof TransactionRecordSchema>;

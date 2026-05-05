@@ -22,29 +22,10 @@ const createSubmittedTransactionIdConflictError = (id: TransactionRecord["id"]):
   return new TransactionRecordConflictError({ kind: "id", id });
 };
 
-const createSubmittedTransactionLocatorConflictError = (params: {
-  chainRef: TransactionRecord["chainRef"];
-  locator: TransactionRecord["locator"];
-  existingId: TransactionRecord["id"];
-}): TransactionRecordConflictError => {
-  return new TransactionRecordConflictError({
-    kind: "locator",
-    chainRef: params.chainRef,
-    locator: structuredClone(params.locator),
-    existingId: params.existingId,
-  });
-};
-
-const matchesSubmittedLocator = (
-  left: Pick<TransactionRecord, "chainRef" | "locator">,
-  right: Pick<TransactionRecord, "chainRef" | "locator">,
-) => {
-  return (
-    left.chainRef === right.chainRef &&
-    left.locator.format === right.locator.format &&
-    left.locator.value === right.locator.value
-  );
-};
+const matchesSubmittedPayload = (
+  left: Pick<TransactionRecord, "submitted">,
+  right: Pick<TransactionRecord, "submitted">,
+) => JSON.stringify(left.submitted) === JSON.stringify(right.submitted);
 
 const compareTransactionsNewestFirst = (left: TransactionRecord, right: TransactionRecord) => {
   return right.createdAt - left.createdAt || right.id.localeCompare(left.id);
@@ -89,7 +70,6 @@ export const createTransactionsService = ({
       fromAccountKey: params.fromAccountKey,
       status: params.status,
       submitted: structuredClone(params.submitted),
-      locator: structuredClone(params.locator),
       receipt: params.receipt !== undefined ? structuredClone(params.receipt) : undefined,
       replacedId: params.replacedId,
       createdAt: ts,
@@ -100,22 +80,10 @@ export const createTransactionsService = ({
     const existing = await port.get(record.id);
     if (existing) {
       const parsedExisting = TransactionRecordSchema.parse(existing);
-      if (matchesSubmittedLocator(parsedExisting, record)) {
+      if (matchesSubmittedPayload(parsedExisting, record)) {
         return parsedExisting;
       }
       throw createSubmittedTransactionIdConflictError(record.id);
-    }
-
-    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
-      chainRef: record.chainRef,
-      locator: record.locator,
-    });
-    if (duplicateLocatorRecord) {
-      const parsedLocatorRecord = TransactionRecordSchema.parse(duplicateLocatorRecord);
-      if (parsedLocatorRecord.id === record.id) {
-        return parsedLocatorRecord;
-      }
-      return parsedLocatorRecord;
     }
 
     try {
@@ -124,19 +92,10 @@ export const createTransactionsService = ({
       const retryExisting = await port.get(record.id);
       if (retryExisting) {
         const parsedRetryExisting = TransactionRecordSchema.parse(retryExisting);
-        if (matchesSubmittedLocator(parsedRetryExisting, record)) {
+        if (matchesSubmittedPayload(parsedRetryExisting, record)) {
           return parsedRetryExisting;
         }
         throw createSubmittedTransactionIdConflictError(record.id);
-      }
-
-      const retryLocatorRecord = await port.findByChainRefAndLocator({
-        chainRef: record.chainRef,
-        locator: record.locator,
-      });
-      if (retryLocatorRecord) {
-        const parsedRetryLocatorRecord = TransactionRecordSchema.parse(retryLocatorRecord);
-        return parsedRetryLocatorRecord;
       }
 
       throw error;
@@ -169,19 +128,6 @@ export const createTransactionsService = ({
       status: params.toStatus,
       updatedAt: now(),
     };
-
-    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
-      chainRef: nextCandidate.chainRef,
-      locator: nextCandidate.locator,
-    });
-
-    if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
-      throw createSubmittedTransactionLocatorConflictError({
-        chainRef: nextCandidate.chainRef,
-        locator: nextCandidate.locator,
-        existingId: duplicateLocatorRecord.id,
-      });
-    }
 
     const checked = TransactionRecordSchema.parse(nextCandidate);
 
@@ -226,19 +172,6 @@ export const createTransactionsService = ({
       updatedAt: now(),
     };
 
-    const duplicateLocatorRecord = await port.findByChainRefAndLocator({
-      chainRef: nextCandidate.chainRef,
-      locator: nextCandidate.locator,
-    });
-
-    if (duplicateLocatorRecord && duplicateLocatorRecord.id !== nextCandidate.id) {
-      throw createSubmittedTransactionLocatorConflictError({
-        chainRef: nextCandidate.chainRef,
-        locator: nextCandidate.locator,
-        existingId: duplicateLocatorRecord.id,
-      });
-    }
-
     const checked = TransactionRecordSchema.parse(nextCandidate);
     const updated = await port.updateIfStatus({
       id: checked.id,
@@ -251,7 +184,7 @@ export const createTransactionsService = ({
       kind: "patch",
       id: checked.id,
       status: checked.status,
-      keys: keys as Array<keyof Pick<TransactionRecord, "locator" | "receipt" | "replacedId">>,
+      keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedId">>,
     });
     return checked;
   };

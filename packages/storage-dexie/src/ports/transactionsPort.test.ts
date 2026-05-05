@@ -24,7 +24,6 @@ const createRecord = (overrides: Partial<TransactionRecord> & { id: string }) =>
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       nonce: "0x7",
     },
-    locator: { format: "eip155.tx_hash", value: "0x1111" },
     createdAt: 1000,
     updatedAt: 1000,
     ...overrides,
@@ -51,7 +50,6 @@ describe("DexieTransactionsPort", () => {
 
     const record = createRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      locator: { format: "eip155.tx_hash", value: "0x1111" },
       submitted: {
         hash: "0x1111",
         chainId: "0x1",
@@ -72,7 +70,6 @@ describe("DexieTransactionsPort", () => {
 
     const r1 = createRecord({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      locator: { format: "eip155.tx_hash", value: "0x2222" },
       submitted: {
         hash: "0x2222",
         chainId: "0x1",
@@ -86,7 +83,6 @@ describe("DexieTransactionsPort", () => {
     const r2 = createRecord({
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       status: "confirmed",
-      locator: { format: "eip155.tx_hash", value: "0x3333" },
       submitted: {
         hash: "0x3333",
         chainId: "0x1",
@@ -101,7 +97,6 @@ describe("DexieTransactionsPort", () => {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
       chainRef: "eip155:10",
       status: "confirmed",
-      locator: { format: "eip155.tx_hash", value: "0x4444" },
       submitted: {
         hash: "0x4444",
         chainId: "0xa",
@@ -135,7 +130,6 @@ describe("DexieTransactionsPort", () => {
 
     const r1 = createRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      locator: { format: "eip155.tx_hash", value: "0x5555" },
       submitted: {
         hash: "0x5555",
         chainId: "0x1",
@@ -147,7 +141,6 @@ describe("DexieTransactionsPort", () => {
     });
     const r2 = createRecord({
       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      locator: { format: "eip155.tx_hash", value: "0x5556" },
       submitted: {
         hash: "0x5556",
         chainId: "0x1",
@@ -159,7 +152,6 @@ describe("DexieTransactionsPort", () => {
     });
     const r3 = createRecord({
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      locator: { format: "eip155.tx_hash", value: "0x5557" },
       submitted: {
         hash: "0x5557",
         chainId: "0x1",
@@ -187,45 +179,12 @@ describe("DexieTransactionsPort", () => {
     expect(secondPage.map((record) => record.id)).toEqual([r1.id]);
   });
 
-  it("findByChainRefAndLocator() finds the record by (chainRef, locator)", async () => {
-    const storage = createDexieStorage({ databaseName: DB_NAME });
-    const port = storage.ports.transactions;
-
-    const record = createRecord({
-      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-      locator: { format: "eip155.tx_hash", value: "txid-1" },
-      submitted: {
-        hash: "txid-1",
-        chainId: "0x1",
-        from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        nonce: "0x7",
-      },
-      createdAt: 1000,
-      updatedAt: 2000,
-    });
-
-    await port.create(record);
-
-    const found = await port.findByChainRefAndLocator({
-      chainRef: "eip155:1",
-      locator: { format: "eip155.tx_hash", value: "txid-1" },
-    });
-    expect(found?.id).toBe(record.id);
-
-    const miss = await port.findByChainRefAndLocator({
-      chainRef: "eip155:10",
-      locator: { format: "eip155.tx_hash", value: "txid-1" },
-    });
-    expect(miss).toBeNull();
-  });
-
-  it("enforces unique (chainRef, locator) pairs at the database level", async () => {
+  it("allows multiple rows with the same submitted hash", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
 
     const first = createRecord({
       id: "12121212-1212-4212-8212-121212121212",
-      locator: { format: "eip155.tx_hash", value: "0x7777" },
       submitted: {
         hash: "0x7777",
         chainId: "0x1",
@@ -235,7 +194,6 @@ describe("DexieTransactionsPort", () => {
     });
     const second = createRecord({
       id: "13131313-1313-4313-8313-131313131313",
-      locator: { format: "eip155.tx_hash", value: "0x7777" },
       submitted: {
         hash: "0x7777",
         chainId: "0x1",
@@ -245,7 +203,7 @@ describe("DexieTransactionsPort", () => {
     });
 
     await port.create(first);
-    await expect(port.create(second)).rejects.toThrow();
+    await expect(port.create(second)).resolves.toBeUndefined();
   });
 
   it("updateIfStatus() updates only when expectedStatus matches", async () => {
@@ -254,7 +212,6 @@ describe("DexieTransactionsPort", () => {
 
     const record = createRecord({
       id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
-      locator: { format: "eip155.tx_hash", value: "0x6666" },
       submitted: {
         hash: "0x6666",
         chainId: "0x1",

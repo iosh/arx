@@ -14,7 +14,6 @@ const createTransactionRecord = (overrides: Partial<TransactionRecord> = {}) => 
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     nonce: "0x7",
   },
-  locator: { format: "eip155.tx_hash" as const, value: "0x1111" },
   createdAt: 0,
   updatedAt: 0,
   ...overrides,
@@ -97,7 +96,7 @@ describe("TransactionRecordSchema", () => {
     ).toThrow(/namespace/i);
   });
 
-  it("requires durable submitted and locator payloads", () => {
+  it("requires durable submitted payloads", () => {
     expect(() =>
       TransactionRecordSchema.parse(
         createTransactionRecord({
@@ -106,14 +105,18 @@ describe("TransactionRecordSchema", () => {
         }),
       ),
     ).toThrow(/submitted/i);
+  });
 
+  it("rejects transaction records whose submitted payloads drift from eip155 schema", () => {
     expect(() =>
       TransactionRecordSchema.parse(
         createTransactionRecord({
-          id: "33333333-3333-4333-8333-333333333333",
-          locator: null as never,
+          id: "44444444-4444-4444-8444-444444444444",
+          submitted: {
+            txHash: "request-1",
+          } as never,
         }),
       ),
-    ).toThrow(/locator/i);
+    ).toThrow(/submitted/i);
   });
 });

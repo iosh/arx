@@ -28,9 +28,8 @@ export const REQUEST_CONTEXT = {
   requestId: "request-1",
 };
 
-export const DEFAULT_LOCATOR = { format: "eip155.tx_hash" as const, value: "0xdeadbeef" };
 export const DEFAULT_SUBMITTED = {
-  hash: DEFAULT_LOCATOR.value,
+  hash: "0xdeadbeef",
   chainId: "0xa",
   from: DEFAULT_FROM,
   nonce: "0x7",
@@ -69,7 +68,6 @@ export const createNamespaceTransactionStub = (
       (overrides?.broadcast as never) ??
       vi.fn(async () => ({
         submitted: DEFAULT_SUBMITTED,
-        locator: DEFAULT_LOCATOR,
       })),
   },
   ...(overrides?.tracking !== undefined
@@ -183,7 +181,6 @@ export const toRecord = (meta: TransactionProposalMeta): TransactionRecord => ({
       ? meta.status
       : "failed",
   submitted: meta.submitted ?? DEFAULT_SUBMITTED,
-  locator: meta.locator ?? DEFAULT_LOCATOR,
   ...(meta.receipt !== undefined && meta.receipt !== null ? { receipt: meta.receipt } : {}),
   ...(meta.replacedId !== undefined && meta.replacedId !== null ? { replacedId: meta.replacedId } : {}),
   createdAt: meta.createdAt,
@@ -212,7 +209,6 @@ export const createTransactionsServiceStub = (
       fromAccountKey: input.fromAccountKey,
       status: input.status,
       submitted: input.submitted,
-      locator: input.locator,
       ...(input.receipt !== undefined ? { receipt: input.receipt } : {}),
       ...(input.replacedId !== undefined ? { replacedId: input.replacedId } : {}),
       createdAt: input.createdAt ?? 1,
@@ -244,7 +240,6 @@ export const createRecordViewStub = (params?: {
         from,
         status: record.status,
         submitted: record.submitted,
-        locator: record.locator,
         receipt: record.receipt ?? null,
         replacedId: record.replacedId ?? null,
         createdAt: record.createdAt,

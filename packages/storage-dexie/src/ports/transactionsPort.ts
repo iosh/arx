@@ -1,4 +1,3 @@
-import type { ChainRef } from "@arx/core/chains";
 import type { TransactionsPort } from "@arx/core/services";
 import { type TransactionRecord, TransactionRecordSchema } from "@arx/core/storage";
 import type { DexieCtx } from "../internal/ctx.js";
@@ -18,7 +17,7 @@ export class DexieTransactionsPort implements TransactionsPort {
   }
 
   async list(query?: {
-    chainRef?: ChainRef;
+    chainRef?: string;
     status?: TransactionRecord["status"];
     limit?: number;
     before?: {
@@ -65,27 +64,6 @@ export class DexieTransactionsPort implements TransactionsPort {
 
     records.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
     return records.slice(0, limit);
-  }
-
-  async findByChainRefAndLocator(params: {
-    chainRef: ChainRef;
-    locator: TransactionRecord["locator"];
-  }): Promise<TransactionRecord | null> {
-    await this.ctx.ready;
-
-    const row = await this.table
-      .where("[chainRef+locator.format+locator.value]")
-      .equals([params.chainRef, params.locator.format, params.locator.value])
-      .first();
-    const id = row && typeof (row as { id?: unknown }).id === "string" ? row.id : undefined;
-    const parsed = await this.parseRow(row, id);
-
-    if (!parsed) return null;
-    if (parsed.chainRef !== params.chainRef) return null;
-    if (parsed.locator.format !== params.locator.format || parsed.locator.value !== params.locator.value) {
-      return null;
-    }
-    return parsed;
   }
 
   async create(record: TransactionRecord): Promise<void> {

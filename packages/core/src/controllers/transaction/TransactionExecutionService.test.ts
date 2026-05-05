@@ -14,7 +14,6 @@ import {
   createTransactionsServiceStub,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
-  DEFAULT_LOCATOR,
   DEFAULT_SUBMITTED,
   DEFAULT_TO,
   REQUEST_CONTEXT,
@@ -24,43 +23,17 @@ import {
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
-import type {
-  TransactionApprovalResult,
-  TransactionProposalMeta,
-  TransactionProposalView,
-  TransactionRecordView,
-} from "./types.js";
+import type { TransactionApprovalResult, TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
-const createProposalServiceStub = (params?: { approveForExecution?: (id: string) => TransactionApprovalResult }) =>
+const createProposalExecutionGateStub = (params?: {
+  approveForExecution?: (id: string) => TransactionApprovalResult;
+}) =>
   ({
     approveForExecution:
       params?.approveForExecution ??
       vi.fn(() => ({
         status: "approved",
-        transaction: {
-          kind: "proposal",
-          id: REQUEST_ID,
-          approvalId: "approval-id",
-          namespace: "eip155",
-          chainRef: DEFAULT_CHAIN_REF,
-          origin: REQUEST_CONTEXT.origin,
-          from: DEFAULT_FROM,
-          currentRequest: {
-            namespace: "eip155",
-            chainRef: DEFAULT_CHAIN_REF,
-            payload: { from: DEFAULT_FROM, to: DEFAULT_TO, value: "0x0" },
-          },
-          prepared: null,
-          review: {
-            updatedAt: 1,
-            prepare: { state: "preparing" },
-            namespaceReview: null,
-          },
-          phase: "approved",
-          failure: null,
-          createdAt: 1,
-          updatedAt: 1,
-        },
+        transactionId: REQUEST_ID,
       })),
   }) as never;
 
@@ -99,7 +72,6 @@ const createExecutionService = (params?: {
         fromAccountKey: input.fromAccountKey,
         status: input.status,
         submitted: input.submitted,
-        locator: input.locator,
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       })),
@@ -125,7 +97,7 @@ const createExecutionService = (params?: {
     service,
     submissionService,
     prepare: prepare as never,
-    proposals: params?.proposals ?? createProposalServiceStub(),
+    proposals: params?.proposals ?? createProposalExecutionGateStub(),
     tracking,
     readTransactionTimestamp: () => 1,
   });
@@ -157,7 +129,6 @@ const createRecordView = (input: {
   id?: string;
   status: TransactionRecordView["status"];
   submitted?: TransactionRecordView["submitted"];
-  locator?: TransactionRecordView["locator"];
   receipt?: TransactionRecordView["receipt"];
   replacedId?: TransactionRecordView["replacedId"];
   updatedAt?: number;
@@ -171,7 +142,6 @@ const createRecordView = (input: {
     from: DEFAULT_FROM,
     status: input.status,
     submitted: input.submitted ?? DEFAULT_SUBMITTED,
-    locator: input.locator ?? DEFAULT_LOCATOR,
     receipt: input.receipt ?? null,
     replacedId: input.replacedId ?? null,
     createdAt: 1,
@@ -185,11 +155,11 @@ describe("TransactionExecutionService", () => {
     createApprovedTransactionProposal(proposalStore);
     const approveForExecution = vi.fn(() => ({
       status: "approved" as const,
-      transaction: createProposalServiceStub().approveForExecution(REQUEST_ID).transaction as TransactionProposalView,
+      transactionId: REQUEST_ID,
     }));
     const { execution } = createExecutionService({
       proposalStore,
-      proposals: createProposalServiceStub({ approveForExecution }),
+      proposals: createProposalExecutionGateStub({ approveForExecution }),
     });
     const processTransaction = vi.fn(async () => {});
     const processSpy = vi.spyOn(execution, "processTransaction").mockImplementation(processTransaction);
@@ -212,7 +182,7 @@ describe("TransactionExecutionService", () => {
       data: { transactionId: REQUEST_ID },
     }));
     const { execution } = createExecutionService({
-      proposals: createProposalServiceStub({ approveForExecution }),
+      proposals: createProposalExecutionGateStub({ approveForExecution }),
     });
     const processSpy = vi.spyOn(execution, "processTransaction").mockResolvedValue(undefined);
 
@@ -271,11 +241,11 @@ describe("TransactionExecutionService", () => {
     createApprovedTransactionProposal(proposalStore);
     const approveForExecution = vi.fn(() => ({
       status: "approved" as const,
-      transaction: createProposalServiceStub().approveForExecution(REQUEST_ID).transaction as TransactionProposalView,
+      transactionId: REQUEST_ID,
     }));
     const { execution } = createExecutionService({
       proposalStore,
-      proposals: createProposalServiceStub({ approveForExecution }),
+      proposals: createProposalExecutionGateStub({ approveForExecution }),
     });
     const processSpy = vi.spyOn(execution, "processTransaction").mockResolvedValue(undefined);
 
@@ -308,12 +278,10 @@ describe("TransactionExecutionService", () => {
         from: DEFAULT_FROM,
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x1234" },
     });
     const commitRecordView = vi.fn((record: TransactionRecord) => {
       return {
         next: createRecordView({
-          locator: record.locator,
           status: durableMeta.status,
           submitted: durableMeta.submitted,
           updatedAt: record.updatedAt,
@@ -371,10 +339,6 @@ describe("TransactionExecutionService", () => {
         from: DEFAULT_FROM,
         nonce: "0x7",
       },
-      locator: {
-        format: "eip155.tx_hash" as const,
-        value: "0x2222222222222222222222222222222222222222222222222222222222222222",
-      },
     }));
     const createSubmitted = vi.fn(async (input) => ({
       id: input.id ?? REQUEST_ID,
@@ -383,7 +347,6 @@ describe("TransactionExecutionService", () => {
       fromAccountKey: input.fromAccountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
-      locator: input.locator,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -403,7 +366,7 @@ describe("TransactionExecutionService", () => {
       tracking: createTrackingStub({
         handleTransition,
       }),
-      proposals: createProposalServiceStub(),
+      proposals: createProposalExecutionGateStub(),
     });
 
     createApprovedTransactionProposal(proposalStore, {
@@ -441,10 +404,6 @@ describe("TransactionExecutionService", () => {
           chainId: "0xa",
           from: DEFAULT_FROM,
           nonce: "0x7",
-        },
-        locator: {
-          format: "eip155.tx_hash",
-          value: "0x2222222222222222222222222222222222222222222222222222222222222222",
         },
       }),
     );
@@ -534,7 +493,6 @@ describe("TransactionExecutionService", () => {
     expect(reviewStore.get(REQUEST_ID)).toBeNull();
     await expect(submissionService.waitForSubmissionOutcome(REQUEST_ID)).resolves.toMatchObject({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
       persistenceFailure: {
         transactionId: REQUEST_ID,
         error: {
@@ -547,7 +505,6 @@ describe("TransactionExecutionService", () => {
             },
             transactionId: REQUEST_ID,
             submitted: DEFAULT_SUBMITTED,
-            locator: DEFAULT_LOCATOR,
           },
         },
       },
@@ -565,7 +522,6 @@ describe("TransactionExecutionService", () => {
     });
     const broadcastTransaction = vi.fn(async () => ({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     }));
 
     const { execution, proposalStore } = createExecutionService({
@@ -611,7 +567,6 @@ describe("TransactionExecutionService", () => {
     });
     const broadcastTransaction = vi.fn(async () => ({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     }));
 
     const { execution, proposalStore } = createExecutionService({
@@ -648,7 +603,6 @@ describe("TransactionExecutionService", () => {
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const broadcastTransaction = vi.fn(async () => ({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     }));
     const createSubmitted = vi.fn(async (input) => ({
       id: input.id ?? REQUEST_ID,
@@ -657,7 +611,6 @@ describe("TransactionExecutionService", () => {
       fromAccountKey: input.fromAccountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
-      locator: input.locator,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -698,7 +651,6 @@ describe("TransactionExecutionService", () => {
       await broadcastStarted;
       return {
         submitted: DEFAULT_SUBMITTED,
-        locator: DEFAULT_LOCATOR,
       };
     });
     const createSubmitted = vi.fn(async (input) => ({
@@ -708,7 +660,6 @@ describe("TransactionExecutionService", () => {
       fromAccountKey: input.fromAccountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
-      locator: input.locator,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -753,7 +704,6 @@ describe("TransactionExecutionService", () => {
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const broadcastTransaction = vi.fn(async () => ({
       submitted: DEFAULT_SUBMITTED,
-      locator: DEFAULT_LOCATOR,
     }));
     const createSubmitted = vi.fn(async (input) => {
       persistenceStarted?.();
@@ -765,7 +715,6 @@ describe("TransactionExecutionService", () => {
         fromAccountKey: input.fromAccountKey,
         status: "broadcast" as const,
         submitted: input.submitted,
-        locator: input.locator,
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       };
@@ -814,7 +763,6 @@ describe("TransactionExecutionService", () => {
         from: DEFAULT_FROM,
         status: record.status,
         submitted: record.submitted,
-        locator: record.locator,
         receipt: record.receipt ?? null,
         replacedId: record.replacedId ?? null,
         createdAt: record.createdAt,
@@ -835,7 +783,6 @@ describe("TransactionExecutionService", () => {
           }),
           status: broadcastMeta.status,
           submitted: broadcastMeta.submitted,
-          locator: broadcastMeta.locator,
           createdAt: broadcastMeta.createdAt,
           updatedAt: broadcastMeta.updatedAt,
         },

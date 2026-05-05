@@ -1,11 +1,11 @@
 import type { ChainRef } from "../../chains/ids.js";
 import type { AccountAddress } from "../../controllers/account/types.js";
-import type { NamespaceTransactionReview } from "../../controllers/transaction/review/types.js";
+import type { NamespaceTransactionReview } from "../review.js";
 import type {
+  NamespaceTransactionDraftEdit,
   TransactionPrepared,
   TransactionReceipt,
   TransactionRequest,
-  TransactionSubmissionLocator,
   TransactionSubmitted,
 } from "../types.js";
 
@@ -36,38 +36,42 @@ export type TransactionSignOptions = {
   signal?: AbortSignal | undefined;
 };
 
-export type TransactionPrepareContext = {
-  namespace: string;
+export type TransactionPrepareContext<TNamespace extends string = string> = {
+  namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest;
+  request: TransactionRequest<TNamespace>;
 };
 
-export type TransactionValidationContext = TransactionPrepareContext;
+export type TransactionValidationContext<TNamespace extends string = string> = TransactionPrepareContext<TNamespace>;
 
-export type TransactionSignContext = Omit<TransactionPrepareContext, "from"> & { from: AccountAddress };
+export type TransactionSignContext<TNamespace extends string = string> = Omit<
+  TransactionPrepareContext<TNamespace>,
+  "from"
+> & {
+  from: AccountAddress;
+};
 
-export type TransactionProposalStateContext = {
+export type TransactionProposalStateContext<TNamespace extends string = string> = {
   transactionId: string;
-  namespace: string;
+  namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest;
+  request: TransactionRequest<TNamespace>;
 };
 
-export type TransactionRecordContext = {
+export type TransactionRecordContext<TNamespace extends string = string> = {
   recordId: string;
-  namespace: string;
+  namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
 };
 
-export type TransactionTrackingContext = TransactionRecordContext & {
-  submitted: TransactionSubmitted;
-  locator: TransactionSubmissionLocator;
+export type TransactionTrackingContext<TNamespace extends string = string> = TransactionRecordContext<TNamespace> & {
+  submitted: TransactionSubmitted<TNamespace>;
 };
 
 export type TransactionReplacementKey = {
@@ -75,72 +79,75 @@ export type TransactionReplacementKey = {
   value: string;
 };
 
-export type ReceiptResolution =
-  | { status: "success"; receipt: TransactionReceipt }
-  | { status: "failed"; receipt: TransactionReceipt };
+export type ReceiptResolution<TNamespace extends string = string> =
+  | { status: "success"; receipt: TransactionReceipt<TNamespace> }
+  | { status: "failed"; receipt: TransactionReceipt<TNamespace> };
 
 export type ReplacementResolution = {
   replacedId?: string | null;
   status: "replaced";
 };
 
-export type TransactionApprovalReviewContext = {
+export type TransactionApprovalReviewContext<TNamespace extends string = string> = {
   transactionId: string;
-  namespace: string;
+  namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest;
-  reviewPreparedSnapshot: TransactionPrepared | null;
+  request: TransactionRequest<TNamespace>;
+  reviewPreparedSnapshot: TransactionPrepared<TNamespace> | null;
 };
 
-export type TransactionDraftEditContext = {
+export type TransactionDraftEditContext<TNamespace extends string = string> = {
   transactionId: string;
-  namespace: string;
+  namespace: TNamespace;
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress | null;
-  request: TransactionRequest;
-  changes: ReadonlyArray<Record<string, unknown>>;
+  request: TransactionRequest<TNamespace>;
+  edit: NamespaceTransactionDraftEdit<TNamespace>;
   mode?: string;
 };
 
-export type NamespaceTransactionRequest = {
-  deriveForChain?(request: TransactionRequest, chainRef: ChainRef): TransactionRequest;
-  validateRequest?(context: TransactionValidationContext): void;
+export type NamespaceTransactionRequest<TNamespace extends string = string> = {
+  deriveForChain?(request: TransactionRequest<TNamespace>, chainRef: ChainRef): TransactionRequest<TNamespace>;
+  validateRequest?(context: TransactionValidationContext<TNamespace>): void;
 };
 
-export type NamespaceTransactionProposal = {
-  prepare(context: TransactionPrepareContext): Promise<TransactionPrepareResult>;
-  buildReview?(context: TransactionApprovalReviewContext): NamespaceTransactionReview | null;
-  applyDraftEdit?(context: TransactionDraftEditContext): TransactionRequest;
+export type NamespaceTransactionProposal<TNamespace extends string = string> = {
+  prepare(
+    context: TransactionPrepareContext<TNamespace>,
+  ): Promise<TransactionPrepareResult<TransactionPrepared<TNamespace>>>;
+  buildReview?(context: TransactionApprovalReviewContext<TNamespace>): NamespaceTransactionReview | null;
+  applyDraftEdit?(context: TransactionDraftEditContext<TNamespace>): TransactionRequest<TNamespace>;
 };
 
-export type NamespaceTransactionExecution = {
+export type NamespaceTransactionExecution<TNamespace extends string = string> = {
   sign(
-    context: TransactionSignContext,
-    prepared: TransactionPrepared,
+    context: TransactionSignContext<TNamespace>,
+    prepared: TransactionPrepared<TNamespace>,
     options?: TransactionSignOptions,
   ): Promise<SignedTransactionPayload>;
   broadcast(
-    context: TransactionPrepareContext,
+    context: TransactionPrepareContext<TNamespace>,
     signed: SignedTransactionPayload,
-    prepared: TransactionPrepared,
+    prepared: TransactionPrepared<TNamespace>,
   ): Promise<{
-    submitted: TransactionSubmitted;
-    locator: TransactionSubmissionLocator;
+    submitted: TransactionSubmitted<TNamespace>;
   }>;
 };
 
-export type NamespaceTransactionTracking = {
-  fetchReceipt(context: TransactionTrackingContext): Promise<ReceiptResolution | null>;
-  detectReplacement?(context: TransactionTrackingContext): Promise<ReplacementResolution | null>;
-  deriveReplacementKey?(context: TransactionTrackingContext): TransactionReplacementKey | null;
+export type NamespaceTransactionTracking<TNamespace extends string = string> = {
+  fetchReceipt(context: TransactionTrackingContext<TNamespace>): Promise<ReceiptResolution<TNamespace> | null>;
+  detectReplacement?(context: TransactionTrackingContext<TNamespace>): Promise<ReplacementResolution | null>;
+  deriveReplacementKey?(context: TransactionTrackingContext<TNamespace>): TransactionReplacementKey | null;
 };
 
-export type NamespaceTransaction = {
-  request?: NamespaceTransactionRequest;
-  proposal?: NamespaceTransactionProposal;
-  execution?: NamespaceTransactionExecution;
-  tracking?: NamespaceTransactionTracking;
+export type NamespaceTransaction<TNamespace extends string = string> = {
+  request?: NamespaceTransactionRequest<TNamespace>;
+  proposal?: NamespaceTransactionProposal<TNamespace>;
+  execution?: NamespaceTransactionExecution<TNamespace>;
+  tracking?: NamespaceTransactionTracking<TNamespace>;
 };
+
+export type AnyNamespaceTransaction = NamespaceTransaction<string>;

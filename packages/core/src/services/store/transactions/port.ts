@@ -13,11 +13,6 @@ export interface TransactionsPort {
 
   list(query?: ListTransactionsQuery): Promise<TransactionRecord[]>;
 
-  findByChainRefAndLocator(params: {
-    chainRef: ChainRef;
-    locator: TransactionRecord["locator"];
-  }): Promise<TransactionRecord | null>;
-
   // Inserts a new transaction row. Duplicate ids must fail instead of overwriting.
   create(record: TransactionRecord): Promise<void>;
 

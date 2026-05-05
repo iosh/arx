@@ -74,7 +74,6 @@ export class TransactionSubmissionService implements TransactionSubmissionTracke
     if (durable) {
       const resolution = {
         submitted: structuredClone(durable.submitted),
-        locator: structuredClone(durable.locator),
       };
       this.recordSubmitted(id, resolution);
       return structuredClone(resolution);

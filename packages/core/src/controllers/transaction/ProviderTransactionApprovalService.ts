@@ -4,9 +4,9 @@ import { isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
-  TransactionApprovalCommands,
   TransactionApprovalExecutor,
   TransactionApprovalHandoff,
+  TransactionProposalBeginCommands,
   TransactionProposalReader,
   TransactionRecordReader,
   TransactionSubmissionTracker,
@@ -19,7 +19,7 @@ const createTransactionTransportDisconnectedError = (): TransactionError => ({
 });
 
 type ProviderTransactionApprovalServiceOptions = {
-  commands: TransactionApprovalCommands;
+  begin: TransactionProposalBeginCommands;
   execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
   submission: Pick<TransactionSubmissionTracker, "waitForSubmissionOutcome">;
   proposals: Pick<TransactionProposalReader, "getProposalView">;
@@ -27,14 +27,14 @@ type ProviderTransactionApprovalServiceOptions = {
 };
 
 export class ProviderTransactionApprovalService implements ProviderTransactionApprovalCommands {
-  #commands: TransactionApprovalCommands;
+  #begin: TransactionProposalBeginCommands;
   #execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
   #submission: Pick<TransactionSubmissionTracker, "waitForSubmissionOutcome">;
   #proposals: Pick<TransactionProposalReader, "getProposalView">;
   #records: Pick<TransactionRecordReader, "getRecordView">;
 
   constructor(options: ProviderTransactionApprovalServiceOptions) {
-    this.#commands = options.commands;
+    this.#begin = options.begin;
     this.#execution = options.execution;
     this.#submission = options.submission;
     this.#proposals = options.proposals;
@@ -46,7 +46,7 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalHandoff> {
-    const handoff = await this.#commands.beginTransactionApproval(request, requestContext, options);
+    const handoff = await this.#begin.beginTransactionApproval(request, requestContext, options);
     const abortSignal = options.requestBinding?.signal ?? null;
 
     if (!abortSignal) {

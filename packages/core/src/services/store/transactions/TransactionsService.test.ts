@@ -31,18 +31,6 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
 
       return all.slice(0, limit);
     },
-    async findByChainRefAndLocator(params) {
-      for (const record of store.values()) {
-        if (
-          record.chainRef === params.chainRef &&
-          record.locator.format === params.locator.format &&
-          record.locator.value === params.locator.value
-        ) {
-          return record;
-        }
-      }
-      return null;
-    },
     async create(record) {
       const checked = TransactionRecordSchema.parse(record);
       if (store.has(checked.id)) {
@@ -68,7 +56,7 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
 };
 
 const createSubmittedRecord = (
-  overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status" | "locator">,
+  overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status" | "submitted">,
 ): TransactionRecord =>
   TransactionRecordSchema.parse({
     id: overrides.id,
@@ -76,13 +64,7 @@ const createSubmittedRecord = (
     origin: "https://dapp.example",
     fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: overrides.status,
-    submitted: {
-      hash: overrides.locator.value,
-      chainId: "0x1",
-      from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      nonce: "0x7",
-    },
-    locator: overrides.locator,
+    submitted: overrides.submitted,
     createdAt: 1_000,
     updatedAt: 1_000,
     ...overrides,
@@ -110,7 +92,6 @@ describe("TransactionsService", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x1111" },
     });
 
     expect(created.status).toBe("broadcast");
@@ -120,43 +101,41 @@ describe("TransactionsService", () => {
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       nonce: "0x7",
     });
-    expect(created.locator).toEqual({ format: "eip155.tx_hash", value: "0x1111" });
     expect(created.createdAt).toBe(1_000);
     expect(created.updatedAt).toBe(1_000);
     expect(changed).toBe(1);
   });
 
-  it("createSubmitted() accepts namespace-specific submitted payloads without shared schema branches", async () => {
+  it("createSubmitted() rejects submitted payloads that do not match the active namespace schema", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
-    const created = await service.createSubmitted({
-      id: "22222222-2222-4222-8222-222222222222",
-      chainRef: "cosmos:cosmoshub-4",
-      origin: "https://dapp.example",
-      fromAccountKey: "cosmos:aa",
-      status: "broadcast",
-      submitted: {
-        txHash: "request-1",
-        memo: "delegate",
-        fee: { amount: "2500", denom: "uatom" },
-      },
-      locator: { format: "cosmos.tx_hash", value: "request-1" },
-    });
-
-    expect(created.submitted).toEqual({
-      txHash: "request-1",
-      memo: "delegate",
-      fee: { amount: "2500", denom: "uatom" },
-    });
+    await expect(
+      service.createSubmitted({
+        id: "22222222-2222-4222-8222-222222222222",
+        chainRef: "eip155:1",
+        origin: "https://dapp.example",
+        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        status: "broadcast",
+        submitted: {
+          txHash: "request-1",
+          memo: "delegate",
+        } as never,
+      }),
+    ).rejects.toThrow(/submitted/i);
   });
 
-  it("createSubmitted() returns the existing record for repeated submissions with the same id and locator", async () => {
+  it("createSubmitted() returns the existing record for repeated submissions with the same id and submitted payload", async () => {
     const { port } = createInMemoryPort([
       createSubmittedRecord({
         id: "33333333-3333-4333-8333-333333333333",
         status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0x3333" },
+        submitted: {
+          hash: "0x3333",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
       }),
     ]);
     const service = createTransactionsService({ port, now: () => 2_000 });
@@ -174,11 +153,12 @@ describe("TransactionsService", () => {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           nonce: "0x7",
         },
-        locator: { format: "eip155.tx_hash", value: "0x3333" },
       }),
     ).resolves.toMatchObject({
       id: "33333333-3333-4333-8333-333333333333",
-      locator: { format: "eip155.tx_hash", value: "0x3333" },
+      submitted: {
+        hash: "0x3333",
+      },
     });
   });
 
@@ -187,7 +167,12 @@ describe("TransactionsService", () => {
       createSubmittedRecord({
         id: "44444444-4444-4444-8444-444444444444",
         status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
+        submitted: {
+          hash: "0xaaaa",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
       }),
     ]);
     const service = createTransactionsService({ port, now: () => 2_000 });
@@ -205,43 +190,11 @@ describe("TransactionsService", () => {
           from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           nonce: "0x8",
         },
-        locator: { format: "eip155.tx_hash", value: "0xbbbb" },
       }),
     ).rejects.toMatchObject({
       name: "TransactionRecordConflictError",
       conflict: { kind: "id", id: "44444444-4444-4444-8444-444444444444" },
     } satisfies Partial<TransactionRecordConflictError>);
-  });
-
-  it("createSubmitted() returns the existing record for repeated submissions with the same locator", async () => {
-    const { port } = createInMemoryPort([
-      createSubmittedRecord({
-        id: "55555555-5555-4555-8555-555555555555",
-        status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
-      }),
-    ]);
-    const service = createTransactionsService({ port, now: () => 2_000 });
-
-    await expect(
-      service.createSubmitted({
-        id: "66666666-6666-4666-8666-666666666666",
-        chainRef: "eip155:1",
-        origin: "https://dapp.example",
-        fromAccountKey: "eip155:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        status: "broadcast",
-        submitted: {
-          hash: "0xaaaa",
-          chainId: "0x1",
-          from: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          nonce: "0x9",
-        },
-        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
-      }),
-    ).resolves.toMatchObject({
-      id: "55555555-5555-4555-8555-555555555555",
-      locator: { format: "eip155.tx_hash", value: "0xaaaa" },
-    });
   });
 
   it("transition() throws on invalid status transitions", async () => {
@@ -259,7 +212,6 @@ describe("TransactionsService", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x7777" },
     });
 
     await expect(
@@ -286,7 +238,6 @@ describe("TransactionsService", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x8888" },
     });
 
     let changed = 0;
@@ -319,7 +270,6 @@ describe("TransactionsService", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x9999" },
     });
 
     const updated = await service.transition({
@@ -337,7 +287,9 @@ describe("TransactionsService", () => {
     expect(updated).toMatchObject({
       id: tx.id,
       status: "confirmed",
-      locator: { format: "eip155.tx_hash", value: "0x9999" },
+      submitted: {
+        hash: "0x9999",
+      },
       receipt: {
         status: "0x1",
         blockNumber: "0x10",
@@ -346,46 +298,17 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("transition() enforces (chainRef, locator) uniqueness when patching locator", async () => {
-    const { port } = createInMemoryPort([
-      createSubmittedRecord({
-        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
-      }),
-      createSubmittedRecord({
-        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0xbbbb" },
-      }),
-    ]);
-    const service = createTransactionsService({ port, now: () => 2_000 });
-
-    await expect(
-      service.transition({
-        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        fromStatus: "broadcast",
-        toStatus: "replaced",
-        patch: {
-          locator: { format: "eip155.tx_hash", value: "0xaaaa" },
-        },
-      }),
-    ).rejects.toMatchObject({
-      name: "TransactionRecordConflictError",
-      conflict: {
-        kind: "locator",
-        chainRef: "eip155:1",
-        existingId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      },
-    } satisfies Partial<TransactionRecordConflictError>);
-  });
-
   it("patchIfStatus() patches replacement relation without changing status", async () => {
     const { port } = createInMemoryPort([
       createSubmittedRecord({
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         status: "replaced",
-        locator: { format: "eip155.tx_hash", value: "0xaaaa" },
+        submitted: {
+          hash: "0xaaaa",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
       }),
     ]);
     const service = createTransactionsService({ port, now: () => 2_000 });
@@ -414,9 +337,6 @@ describe("TransactionsService", () => {
       async list() {
         return [];
       },
-      async findByChainRefAndLocator() {
-        return null;
-      },
       async create(record) {
         const checked = TransactionRecordSchema.parse(record);
         if (store.has(checked.id)) {
@@ -443,7 +363,6 @@ describe("TransactionsService", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
-      locator: { format: "eip155.tx_hash", value: "0x1212" },
     });
 
     let changed = 0;
@@ -466,7 +385,12 @@ describe("TransactionsService", () => {
       createSubmittedRecord({
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         status: "broadcast",
-        locator: { format: "eip155.tx_hash", value: "0xcccc" },
+        submitted: {
+          hash: "0xcccc",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
       }),
     ]);
     const service = createTransactionsService({ port, now: () => 1_000 });

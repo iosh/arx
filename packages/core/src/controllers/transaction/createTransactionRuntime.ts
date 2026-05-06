@@ -15,14 +15,13 @@ import { createTransactionProposalReader } from "./TransactionProposalReadServic
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { TransactionStateChangePublisher } from "./TransactionStateChangePublisher.js";
 import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
-type TransactionTimestampReader = () => number;
+type TransactionClock = () => number;
 
-const createTransactionTimestampReader = (readSystemTime: () => number): TransactionTimestampReader => {
+const createTransactionClock = (readSystemTime: () => number): TransactionClock => {
   let lastTimestamp = 0;
 
   return () => {
@@ -52,7 +51,7 @@ export type CreateTransactionRuntimeOptions = {
 
 export const createTransactionRuntime = (options: CreateTransactionRuntimeOptions): TransactionRuntime => {
   const readSystemTime = options.now ?? Date.now;
-  const readTransactionTimestamp = createTransactionTimestampReader(readSystemTime);
+  const now = createTransactionClock(readSystemTime);
   const stateLimit = options.stateLimit ?? 200;
   const logger = options.logger ?? (() => {});
 
@@ -60,7 +59,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     messenger: options.messenger,
     accountCodecs: options.accountCodecs,
   });
-  const reviewSessions = new TransactionReviewSessionStore();
 
   const recordView = new TransactionRecordViewStore({
     messenger: options.messenger,
@@ -84,33 +82,30 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const prepare = new TransactionPrepareManager({
     proposalStore,
-    reviewSessions,
     namespaces: options.namespaces,
     logger,
+    now,
   });
 
   const review = createTransactionApprovalReviewReader({
     proposalStore,
-    reviewSessions,
     namespaces: options.namespaces,
   });
 
   const proposalBegin = new TransactionProposalBeginService({
     proposalStore,
-    reviewSessions,
     accountCodecs: options.accountCodecs,
     accounts: options.accounts,
     approvals: options.approvals,
     namespaces: options.namespaces,
     prepare,
-    readTransactionTimestamp,
+    now,
   });
   const proposalDraft = new TransactionProposalDraftService({
     proposalStore,
-    reviewSessions,
     namespaces: options.namespaces,
     prepare,
-    readTransactionTimestamp,
+    now,
   });
   const proposalReader = createTransactionProposalReader({
     proposalStore,
@@ -118,14 +113,12 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
   const proposalExecution = createTransactionProposalExecutionGate({
     proposalStore,
-    reviewSessions,
-    readTransactionTimestamp,
+    now,
   });
 
   const execution = new TransactionExecutionService({
     messenger: options.messenger,
     proposalStore,
-    reviewSessions,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
@@ -134,7 +127,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     prepare,
     proposals: proposalExecution,
     tracking,
-    readTransactionTimestamp,
+    now,
   });
 
   const stateChanges = new TransactionStateChangePublisher({
@@ -143,11 +136,10 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   proposalStore.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
-  reviewSessions.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
   recordView.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
 
   options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
-    reviewSessions.invalidateReviewFromApproval(event, readTransactionTimestamp());
+    proposalStore.invalidatePrepareFromApproval(event, now());
     if (event.subject?.kind === "transaction") {
       stateChanges.enqueue({
         transactionIds: [event.subject.transactionId],

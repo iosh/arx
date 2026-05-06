@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { NamespaceTransactionReview } from "../../../transactions/review.js";
+import { NamespaceTransactionReviewSchema } from "../../../transactions/review.js";
 import type { TransactionPrepared } from "../../../transactions/types.js";
 
 export const TransactionReviewErrorSchema = z.strictObject({
@@ -34,7 +35,7 @@ export const TransactionReviewPrepareSchema = z.discriminatedUnion("state", [
 
 export const SendTransactionApprovalReviewSchema = z.strictObject({
   updatedAt: z.number().int(),
-  namespaceReview: z.unknown().nullable(),
+  namespaceReview: NamespaceTransactionReviewSchema.nullable(),
   prepare: TransactionReviewPrepareSchema,
 });
 

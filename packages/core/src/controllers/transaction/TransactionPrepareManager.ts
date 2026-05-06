@@ -2,28 +2,56 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionProposalMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
+class TransactionPrepareTimeoutError extends Error {
+  constructor() {
+    super("Transaction preparation timed out.");
+    this.name = "TransactionPrepareTimeoutError";
+  }
+}
+
+const toPrepareReviewError = (error: unknown) => {
+  if (error instanceof TransactionPrepareTimeoutError) {
+    return {
+      reason: "transaction.prepare_timeout",
+      message: error.message,
+    } as const;
+  }
+
+  if (error instanceof Error) {
+    return {
+      reason: "transaction.prepare_failed",
+      message: error.message,
+      data: { name: error.name },
+    } as const;
+  }
+
+  return {
+    reason: "transaction.prepare_failed",
+    message: String(error),
+  } as const;
+};
+
 type Options = {
   proposalStore: TransactionProposalStore;
-  reviewSessions: TransactionReviewSessionStore;
   namespaces: NamespaceTransactions;
   logger?: (message: string, data?: unknown) => void;
   namespaceProposalPrepareTimeoutMs?: number;
   backgroundConcurrency?: number;
+  now?: () => number;
 };
 
 export class TransactionPrepareManager {
   #proposalStore: TransactionProposalStore;
-  #reviewSessions: TransactionReviewSessionStore;
   #namespaces: NamespaceTransactions;
   #logger: (message: string, data?: unknown) => void;
   #namespaceProposalPrepareTimeoutMs: number;
+  #now: () => number;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
 
@@ -31,13 +59,17 @@ export class TransactionPrepareManager {
   #prepareConcurrencyInUse = 0;
   #prepareConcurrencyWaiters: Array<() => void> = [];
 
+  #hasCurrentPrepared(id: string): boolean {
+    return this.#proposalStore.getPreparedForExecution(id) !== null;
+  }
+
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
-    this.#reviewSessions = options.reviewSessions;
     this.#namespaces = options.namespaces;
     this.#logger = options.logger ?? (() => {});
     this.#namespaceProposalPrepareTimeoutMs =
       options.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
+    this.#now = options.now ?? Date.now;
     this.#prepareConcurrencyLimit = Math.max(
       1,
       options.backgroundConcurrency ?? DEFAULT_BACKGROUND_PREPARE_CONCURRENCY,
@@ -75,7 +107,7 @@ export class TransactionPrepareManager {
       } else {
         const initial = this.#proposalStore.peek(id);
         if (!initial) return null;
-        if (initial.prepared || !canPrepareProposal(initial)) {
+        if (this.#hasCurrentPrepared(id) || !canPrepareProposal(initial)) {
           return this.#proposalStore.get(id) ?? null;
         }
         settledDraftRevision = initial.draftRevision;
@@ -95,7 +127,7 @@ export class TransactionPrepareManager {
       }
 
       const latest = this.#proposalStore.peek(id);
-      if (!latest || latest.prepared || !canPrepareProposal(latest)) {
+      if (!latest || this.#hasCurrentPrepared(id) || !canPrepareProposal(latest)) {
         return latest ? (this.#proposalStore.get(id) ?? null) : null;
       }
       if (latest.draftRevision === settledDraftRevision) {
@@ -117,7 +149,7 @@ export class TransactionPrepareManager {
     const meta = this.#proposalStore.get(id);
     if (!meta) return null;
 
-    if (state.prepared) {
+    if (this.#hasCurrentPrepared(id)) {
       return meta;
     }
 
@@ -126,22 +158,22 @@ export class TransactionPrepareManager {
       return meta;
     }
 
-    const startedAt = Date.now();
-    const session = this.#reviewSessions.reuseOrBeginPrepareSession({
+    const startedAt = this.#now();
+    const session = this.#proposalStore.getOrStartPrepare({
       id,
-      draftRevision: expectedDraftRevision,
       updatedAt: startedAt,
     });
+    if (!session) {
+      return this.#proposalStore.get(id) ?? null;
+    }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
-      const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, null);
-      if (!next) return this.#proposalStore.get(id) ?? null;
-      this.#reviewSessions.markReviewFailed({
+      const next = this.#proposalStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
-        updatedAt: next.updatedAt,
+        updatedAt: this.#now(),
         error: {
           reason: "transaction.adapter_missing",
           message: `No namespace transaction registered for namespace ${meta.namespace}`,
@@ -149,6 +181,7 @@ export class TransactionPrepareManager {
         },
         reviewPreparedSnapshot: null,
       });
+      if (!next) return this.#proposalStore.get(id) ?? null;
       return next;
     }
 
@@ -163,67 +196,54 @@ export class TransactionPrepareManager {
       const result = opts.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
 
       const reviewPreparedSnapshot = result.prepared ?? null;
-      const executionPrepared = result.status === "ready" ? result.prepared : null;
-      const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, executionPrepared);
-      if (!next) return this.#proposalStore.get(id) ?? null;
+      const settledAt = this.#now();
 
       if (result.status === "ready") {
-        this.#reviewSessions.markReviewReady({
+        const next = this.#proposalStore.settlePrepareReady({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
-          updatedAt: next.updatedAt,
-          reviewPreparedSnapshot: result.prepared,
+          updatedAt: settledAt,
+          executionPrepared: result.prepared,
+          reviewPreparedSnapshot,
         });
+        if (!next) return this.#proposalStore.get(id) ?? null;
         return next;
       }
 
       if (result.status === "blocked") {
-        this.#reviewSessions.markReviewBlocked({
+        const next = this.#proposalStore.settlePrepareBlocked({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
-          updatedAt: next.updatedAt,
+          updatedAt: settledAt,
           blocker: result.blocker,
           reviewPreparedSnapshot,
         });
+        if (!next) return this.#proposalStore.get(id) ?? null;
         return next;
       }
 
-      this.#reviewSessions.markReviewFailed({
+      const next = this.#proposalStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
-        updatedAt: next.updatedAt,
+        updatedAt: settledAt,
         error: result.error,
         reviewPreparedSnapshot,
       });
+      if (!next) return this.#proposalStore.get(id) ?? null;
       return next;
     } catch (error) {
-      const next = this.#proposalStore.commitPrepared(id, expectedDraftRevision, null);
-      if (!next) return this.#proposalStore.get(id) ?? null;
-      const reviewError =
-        error instanceof Error
-          ? {
-              reason:
-                error.name === "TransactionPrepareTimeoutError"
-                  ? "transaction.prepare_timeout"
-                  : "transaction.prepare_failed",
-              message: error.message,
-              ...(error.name ? { data: { name: error.name } } : {}),
-            }
-          : {
-              reason: "transaction.prepare_failed",
-              message: String(error),
-            };
-      this.#reviewSessions.markReviewFailed({
+      const next = this.#proposalStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
-        updatedAt: next.updatedAt,
-        error: reviewError,
+        updatedAt: this.#now(),
+        error: toPrepareReviewError(error),
         reviewPreparedSnapshot: null,
       });
+      if (!next) return this.#proposalStore.get(id) ?? null;
       return next;
     }
   }
@@ -255,9 +275,7 @@ export class TransactionPrepareManager {
     const timeout = new Promise<never>((_, reject) => {
       // Simple timeout guard for slow/unresponsive RPC nodes.
       timer = setTimeout(() => {
-        const error = new Error("Transaction preparation timed out.");
-        error.name = "TransactionPrepareTimeoutError";
-        reject(error);
+        reject(new TransactionPrepareTimeoutError());
       }, timeoutMs);
     });
 

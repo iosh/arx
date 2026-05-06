@@ -9,7 +9,6 @@ import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionSubmissionService } from "./TransactionSubmissionService.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import type {
@@ -31,7 +30,6 @@ import {
 type TransactionExecutionServiceDeps = {
   messenger: TransactionMessenger;
   proposalStore: TransactionProposalStore;
-  reviewSessions: Pick<TransactionReviewSessionStore, "clear">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: NamespaceTransactions;
@@ -40,7 +38,7 @@ type TransactionExecutionServiceDeps = {
   prepare: TransactionPrepareManager;
   proposals: TransactionProposalExecutionGate;
   tracking: TransactionReceiptTracking;
-  readTransactionTimestamp: () => number;
+  now: () => number;
 };
 
 type TransactionExecutionAttemptPhase = "queued" | "processing" | "signing" | "broadcasting" | "persisting_record";
@@ -64,7 +62,6 @@ const requireDurableSubmittedShape = (params: {
 export class TransactionExecutionService implements TransactionApprovalExecutor, TransactionBroadcastRecovery {
   #messenger: TransactionMessenger;
   #proposalStore: TransactionProposalStore;
-  #reviewSessions: Pick<TransactionReviewSessionStore, "clear">;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: NamespaceTransactions;
@@ -73,7 +70,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
   #prepare: TransactionPrepareManager;
   #proposals: TransactionProposalExecutionGate;
   #tracking: TransactionReceiptTracking;
-  #readTransactionTimestamp: () => number;
+  #now: () => number;
 
   #queue: string[] = [];
   #queued = new Set<string>();
@@ -84,7 +81,6 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
   constructor(deps: TransactionExecutionServiceDeps) {
     this.#messenger = deps.messenger;
     this.#proposalStore = deps.proposalStore;
-    this.#reviewSessions = deps.reviewSessions;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#namespaces = deps.namespaces;
@@ -93,7 +89,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
     this.#prepare = deps.prepare;
     this.#proposals = deps.proposals;
     this.#tracking = deps.tracking;
-    this.#readTransactionTimestamp = deps.readTransactionTimestamp;
+    this.#now = deps.now;
   }
 
   async approveTransaction(id: string): Promise<TransactionApprovalResult> {
@@ -132,7 +128,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
 
     this.#proposalStore.failProposal({
       id,
-      updatedAt: this.#readTransactionTimestamp(),
+      updatedAt: this.#now(),
       patch: {
         error: cancellation.error,
         userRejected: cancellation.userRejected,
@@ -283,12 +279,10 @@ export class TransactionExecutionService implements TransactionApprovalExecutor,
         };
         this.#submissionService.recordPersistenceFailure(id, failure);
         this.#proposalStore.delete(id);
-        this.#reviewSessions.clear(id);
         return;
       }
 
       this.#proposalStore.clearProposalAfterRecordPersisted(id);
-      this.#reviewSessions.clear(id);
 
       const { previous, next } = this.#recordView.commitRecordView(durable);
       this.#tracking.handleTransition(previous, next);

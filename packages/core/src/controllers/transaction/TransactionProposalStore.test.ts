@@ -137,13 +137,12 @@ describe("TransactionProposalStore", () => {
       },
       prepared: { gas: "0x5208" },
     });
-    expect(view).not.toHaveProperty("review");
     expect(view).not.toHaveProperty("submitted");
     expect(view).not.toHaveProperty("receipt");
     expect(view).not.toHaveProperty("replacedId");
   });
 
-  it("increments draft revision and clears prepared state when replacing the draft request", () => {
+  it("keeps prepare state aligned with the current draft revision", () => {
     const store = createStore();
 
     store.createPendingProposal({
@@ -157,36 +156,68 @@ describe("TransactionProposalStore", () => {
         chainRef: "eip155:1",
         payload: { to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", gas: "0x5208" },
       },
-      prepared: { fee: { maxFeePerGas: "0x1" } },
       createdAt: 1,
       updatedAt: 1,
     });
 
-    const next = store.replacePendingDraftRequest({
-      id: "33333333-3333-4333-8333-333333333333",
-      request: {
-        namespace: "eip155",
-        chainRef: "eip155:1",
-        payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc", gas: "0x5300" },
-      },
+    const preparing = store.getOrStartPrepare({ id: "33333333-3333-4333-8333-333333333333", updatedAt: 2 });
+    expect(preparing).toMatchObject({
+      status: "preparing",
       updatedAt: 2,
     });
 
-    expect(next?.request).toEqual({
-      namespace: "eip155",
-      chainRef: "eip155:1",
-      payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc", gas: "0x5300" },
+    const blocked = store.settlePrepareBlocked({
+      id: "33333333-3333-4333-8333-333333333333",
+      expectedDraftRevision: 0,
+      sessionToken: preparing?.sessionToken ?? "",
+      updatedAt: 3,
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+        message: "Insufficient funds.",
+      },
+      reviewPreparedSnapshot: { gas: "0x5208" },
     });
-    expect(next?.prepared).toBeNull();
-    expect(store.peek("33333333-3333-4333-8333-333333333333")?.draftRevision).toBe(1);
-    expect(store.peek("33333333-3333-4333-8333-333333333333")?.preparedAtDraftRevision).toBeNull();
+    expect(blocked?.prepared).toBeNull();
+    expect(store.getReviewState("33333333-3333-4333-8333-333333333333")).toMatchObject({
+      status: "blocked",
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+      },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
+
+    const restarted = store.restartPrepare({
+      id: "33333333-3333-4333-8333-333333333333",
+      updatedAt: 4,
+    });
+    const ready = store.settlePrepareReady({
+      id: "33333333-3333-4333-8333-333333333333",
+      expectedDraftRevision: 0,
+      sessionToken: restarted?.sessionToken ?? "",
+      updatedAt: 5,
+      executionPrepared: { gas: "0x5300" },
+      reviewPreparedSnapshot: { gas: "0x5300" },
+    });
+    expect(ready).toMatchObject({
+      prepared: { gas: "0x5300" },
+      updatedAt: 5,
+    });
+    expect(store.getReviewState("33333333-3333-4333-8333-333333333333")).toMatchObject({
+      status: "ready",
+      reviewPreparedSnapshot: { gas: "0x5300" },
+    });
+    expect(store.getPreparedForExecution("33333333-3333-4333-8333-333333333333")).toEqual({
+      gas: "0x5300",
+    });
   });
 
-  it("accepts prepared writes and lifecycle moves only when the expected revision or state still matches", () => {
+  it("drops stale prepare settlements and invalidates prepare on approval terminal events except user approve", () => {
     const store = createStore();
+    const id = "99999999-9999-4999-8999-999999999999";
 
     store.createPendingProposal({
-      id: "44444444-4444-4444-8444-444444444444",
+      id,
+      approvalId: "approval-9",
       namespace: "eip155",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
@@ -200,43 +231,71 @@ describe("TransactionProposalStore", () => {
       updatedAt: 1,
     });
 
-    expect(store.commitPrepared("44444444-4444-4444-8444-444444444444", 0, { gas: "0x5208" })).toMatchObject({
-      prepared: { gas: "0x5208" },
-    });
-    expect(store.peek("44444444-4444-4444-8444-444444444444")?.preparedAtDraftRevision).toBe(0);
-
-    expect(
-      store.replacePendingDraftRequest({
-        id: "44444444-4444-4444-8444-444444444444",
-        request: {
-          namespace: "eip155",
-          chainRef: "eip155:1",
-          payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
-        },
-        updatedAt: 2,
-      }),
-    ).toMatchObject({
+    const preparing = store.getOrStartPrepare({ id, updatedAt: 2 });
+    store.replacePendingDraftRequest({
+      id,
       request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
         payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
       },
-      prepared: null,
+      updatedAt: 3,
     });
-    expect(store.peek("44444444-4444-4444-8444-444444444444")?.draftRevision).toBe(1);
-    expect(store.peek("44444444-4444-4444-8444-444444444444")?.preparedAtDraftRevision).toBeNull();
 
-    expect(store.commitPrepared("44444444-4444-4444-8444-444444444444", 0, { gas: "0x5300" })).toBeNull();
     expect(
-      store.approvePendingProposal({
-        id: "44444444-4444-4444-8444-444444444444",
-        updatedAt: 3,
+      store.settlePrepareReady({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: preparing?.sessionToken ?? "",
+        updatedAt: 4,
+        executionPrepared: { gas: "0x5208" },
+        reviewPreparedSnapshot: { gas: "0x5208" },
       }),
+    ).toBeNull();
+
+    const current = store.getOrStartPrepare({ id, updatedAt: 5 });
+    expect(
+      store.invalidatePrepareFromApproval(
+        {
+          approvalId: "approval-9",
+          status: "cancelled",
+          terminalReason: "locked",
+          subject: { kind: "transaction", transactionId: id },
+        },
+        6,
+      ),
     ).toMatchObject({
-      status: "approved",
+      status: "invalidated",
+      invalidatedBy: "locked",
+      error: {
+        reason: "approval.locked",
+      },
     });
-    expect(store.approvePendingProposal({ id: "44444444-4444-4444-8444-444444444444", updatedAt: 4 })).toBeNull();
-    expect(store.clearProposalAfterRecordPersisted("44444444-4444-4444-8444-444444444444")).toMatchObject({
-      status: "approved",
-    });
+    expect(
+      store.settlePrepareFailed({
+        id,
+        expectedDraftRevision: 1,
+        sessionToken: current?.sessionToken ?? "",
+        updatedAt: 7,
+        error: {
+          reason: "transaction.prepare_failed",
+          message: "stale",
+        },
+        reviewPreparedSnapshot: null,
+      }),
+    ).toBeNull();
+
+    expect(
+      store.invalidatePrepareFromApproval(
+        {
+          approvalId: "approval-9",
+          status: "approved",
+          terminalReason: "user_approve",
+          subject: { kind: "transaction", transactionId: id },
+        },
+        8,
+      ),
+    ).toBeNull();
   });
 
   it("only lists approved proposals as executable recovery work", () => {

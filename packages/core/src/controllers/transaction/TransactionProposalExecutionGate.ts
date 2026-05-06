@@ -1,11 +1,9 @@
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionApprovalResult, TransactionProposalExecutionGate } from "./types.js";
 
 type CreateTransactionProposalExecutionGateDeps = {
   proposalStore: TransactionProposalStore;
-  reviewSessions: TransactionReviewSessionStore;
-  readTransactionTimestamp: () => number;
+  now: () => number;
 };
 
 export const createTransactionProposalExecutionGate = (
@@ -34,14 +32,14 @@ export const createTransactionProposalExecutionGate = (
         };
       }
 
-      const reviewState = deps.reviewSessions.get(id);
+      const reviewState = deps.proposalStore.getReviewState(id);
       if (!reviewState) {
         return {
           status: "failed",
           reason: "prepare_not_ready",
           transaction: existing,
           message: "Transaction preparation is not ready yet.",
-          data: { transactionId: id, prepareState: "missing_review_session" },
+          data: { transactionId: id, prepareState: "missing_review" },
         };
       }
 
@@ -81,7 +79,7 @@ export const createTransactionProposalExecutionGate = (
         };
       }
 
-      if (!deps.proposalStore.hasCurrentPrepared(id)) {
+      if (!deps.proposalStore.getPreparedForExecution(id)) {
         return {
           status: "failed",
           reason: "prepare_not_ready",
@@ -93,7 +91,7 @@ export const createTransactionProposalExecutionGate = (
 
       const updated = deps.proposalStore.approvePendingProposal({
         id,
-        updatedAt: deps.readTransactionTimestamp(),
+        updatedAt: deps.now(),
       });
       if (!updated) {
         return {

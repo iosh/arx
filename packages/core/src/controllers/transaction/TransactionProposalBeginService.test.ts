@@ -6,7 +6,6 @@ import {
   createNamespacesStub,
   createPrepareStub,
   createProposalStore,
-  createReviewSessionStore,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -19,7 +18,6 @@ const createBeginService = (params?: {
   chainRef?: string;
   from?: string;
   proposalStore?: ReturnType<typeof createProposalStore>;
-  reviewStore?: ReturnType<typeof createReviewSessionStore>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
     create: (...args: never[]) => unknown;
@@ -29,7 +27,6 @@ const createBeginService = (params?: {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
   const proposalStore = params?.proposalStore ?? createProposalStore();
-  const reviewStore = params?.reviewStore ?? createReviewSessionStore();
   const namespaces = params?.namespaces ?? createNamespacesStub();
   const prepare = params?.prepare ?? createPrepareStub();
   const createApproval =
@@ -41,25 +38,26 @@ const createBeginService = (params?: {
 
   return new TransactionProposalBeginService({
     proposalStore,
-    reviewSessions: reviewStore,
     accountCodecs,
     accounts: createAccountControllerStub({ chainRef, from }),
     approvals: { create: createApproval as never },
     namespaces: namespaces as never,
     prepare: prepare as never,
-    readTransactionTimestamp: () => 1,
+    now: () => 1,
   });
 };
 
 describe("TransactionProposalBeginService", () => {
   it("creates a proposal, attaches approval, and queues prepare", async () => {
     const chainRef = DEFAULT_CHAIN_REF;
+    const proposalStore = createProposalStore();
     const queuePrepare = vi.fn();
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,
       settled: Promise.resolve(undefined),
     }));
     const service = createBeginService({
+      proposalStore,
       approvals: { create: createApproval as never },
       prepare: createPrepareStub({ queuePrepare }),
     });
@@ -92,5 +90,9 @@ describe("TransactionProposalBeginService", () => {
     });
     expect(createApproval).toHaveBeenCalledTimes(1);
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+      status: "preparing",
+      updatedAt: 1,
+    });
   });
 });

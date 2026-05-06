@@ -3,7 +3,6 @@ import {
   createNamespacesStub,
   createPrepareStub,
   createProposalStore,
-  createReviewSessionStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -15,11 +14,9 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewSessionStore();
     const queuePrepare = vi.fn();
     const service = new TransactionProposalDraftService({
       proposalStore,
-      reviewSessions: reviewStore,
       namespaces: createNamespacesStub(
         () =>
           ({
@@ -36,7 +33,7 @@ describe("TransactionProposalDraftService", () => {
           }) as never,
       ),
       prepare: createPrepareStub({ queuePrepare }),
-      readTransactionTimestamp: () => 1,
+      now: () => 1,
     });
 
     createTransactionProposal(proposalStore, {
@@ -64,5 +61,10 @@ describe("TransactionProposalDraftService", () => {
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+      status: "preparing",
+      updatedAt: 1,
+    });
+    expect(proposalStore.get(REQUEST_ID)?.prepared).toBeNull();
   });
 });

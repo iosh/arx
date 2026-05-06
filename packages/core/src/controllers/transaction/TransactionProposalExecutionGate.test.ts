@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createProposalStore,
-  createReviewSessionStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -11,33 +10,28 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { createTransactionProposalExecutionGate } from "./TransactionProposalExecutionGate.js";
 
-const createExecutionGate = (params?: {
-  proposalStore?: ReturnType<typeof createProposalStore>;
-  reviewStore?: ReturnType<typeof createReviewSessionStore>;
-}) => {
+const createExecutionGate = (params?: { proposalStore?: ReturnType<typeof createProposalStore> }) => {
   const proposalStore = params?.proposalStore ?? createProposalStore();
-  const reviewStore = params?.reviewStore ?? createReviewSessionStore();
   const executionGate = createTransactionProposalExecutionGate({
     proposalStore,
-    reviewSessions: reviewStore,
-    readTransactionTimestamp: () => 1,
+    now: () => 1,
   });
 
   return {
     executionGate,
     proposalStore,
-    reviewStore,
   };
 };
 
 describe("TransactionProposalExecutionGate", () => {
   it("approves only ready prepared proposals for execution", () => {
-    const { executionGate, proposalStore, reviewStore } = createExecutionGate();
+    const { executionGate, proposalStore } = createExecutionGate();
     createTransactionProposal(proposalStore, {
       status: "pending",
     });
-    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
-    markReviewReady(proposalStore, reviewStore, REQUEST_ID);
+    markReviewReady(proposalStore, REQUEST_ID, {
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
 
     expect(executionGate.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "approved",
@@ -45,29 +39,28 @@ describe("TransactionProposalExecutionGate", () => {
     });
   });
 
-  it("rejects execution approval when the review session is missing even if prepared params exist", () => {
+  it("rejects execution approval when the review state is missing", () => {
     const { executionGate, proposalStore } = createExecutionGate();
     createTransactionProposal(proposalStore, {
       status: "pending",
     });
-    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
 
     expect(executionGate.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "failed",
       reason: "prepare_not_ready",
       data: {
         transactionId: REQUEST_ID,
-        prepareState: "missing_review_session",
+        prepareState: "missing_review",
       },
     });
   });
 
   it("rejects execution approval when prepared params do not belong to the current draft", () => {
-    const { executionGate, proposalStore, reviewStore } = createExecutionGate();
+    const { executionGate, proposalStore } = createExecutionGate();
     createTransactionProposal(proposalStore, {
       status: "pending",
     });
-    proposalStore.commitPrepared(REQUEST_ID, 0, { gas: "0x5208" });
+    const session = proposalStore.getOrStartPrepare({ id: REQUEST_ID, updatedAt: 1 });
     proposalStore.replacePendingDraftRequest({
       id: REQUEST_ID,
       request: {
@@ -81,8 +74,14 @@ describe("TransactionProposalExecutionGate", () => {
       },
       updatedAt: 2,
     });
-    proposalStore.patch(REQUEST_ID, { prepared: { gas: "0x5208" } });
-    markReviewReady(proposalStore, reviewStore, REQUEST_ID);
+    proposalStore.settlePrepareReady({
+      id: REQUEST_ID,
+      expectedDraftRevision: 0,
+      sessionToken: session?.sessionToken ?? "",
+      updatedAt: 3,
+      executionPrepared: { gas: "0x5208" },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
 
     expect(executionGate.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -95,12 +94,12 @@ describe("TransactionProposalExecutionGate", () => {
   });
 
   it("blocks execution approval when review is not ready", () => {
-    const { executionGate, proposalStore, reviewStore } = createExecutionGate();
+    const { executionGate, proposalStore } = createExecutionGate();
     createTransactionProposal(proposalStore, {
       prepared: null,
       status: "pending",
     });
-    reviewStore.beginPrepareSession({ id: REQUEST_ID, draftRevision: 0, updatedAt: 1 });
+    proposalStore.getOrStartPrepare({ id: REQUEST_ID, updatedAt: 1 });
 
     expect(executionGate.approveForExecution(REQUEST_ID)).toMatchObject({
       status: "failed",

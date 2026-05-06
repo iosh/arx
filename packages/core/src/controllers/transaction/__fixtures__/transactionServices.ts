@@ -10,7 +10,6 @@ import type { NamespaceTransactions } from "../../../transactions/namespace/Name
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
-import { TransactionReviewSessionStore } from "../TransactionReviewSessionStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
 
@@ -80,8 +79,6 @@ export const createProposalStore = () =>
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
-
-export const createReviewSessionStore = () => new TransactionReviewSessionStore();
 
 export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
   toAccountKeyFromAddress({
@@ -275,25 +272,32 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
-  reviewStore: TransactionReviewSessionStore,
   transactionId: string,
-  input?: { updatedAt?: number; reviewPreparedSnapshot?: TransactionProposalMeta["prepared"] },
+  input?: {
+    updatedAt?: number;
+    executionPrepared?: NonNullable<TransactionProposalMeta["prepared"]>;
+    reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
+  },
 ) => {
   const updatedAt = input?.updatedAt ?? 1;
   const current = proposalStore.peek(transactionId);
   if (!current) {
     throw new Error(`Proposal ${transactionId} not found`);
   }
-  const session = reviewStore.beginPrepareSession({
+  const session = proposalStore.getOrStartPrepare({
     id: transactionId,
-    draftRevision: current.draftRevision,
     updatedAt,
   });
-  reviewStore.markReviewReady({
+  if (!session) {
+    throw new Error(`Proposal ${transactionId} could not start review`);
+  }
+  const executionPrepared = input?.executionPrepared ?? {};
+  proposalStore.settlePrepareReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
     sessionToken: session.sessionToken,
     updatedAt,
-    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? {},
+    executionPrepared,
+    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
   });
 };

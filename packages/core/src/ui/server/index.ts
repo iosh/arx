@@ -16,6 +16,7 @@ export type {
   UiRuntimeAccess,
   UiRuntimeDispatchResult,
   UiServerExtension,
+  UiTransactionsAccess,
 } from "./types.js";
 export type {
   UiCreateWalletFromMnemonicParams,

@@ -4,16 +4,19 @@ import {
   toAccountKeyFromAddress,
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
+import type { BeginTransactionApprovalOptions, TransactionStateChange } from "@arx/core/controllers";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
 import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
+import type { RequestContext } from "@arx/core/rpc";
 import { createRpcRegistry, type HandlerControllers } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
 import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
+import type { NamespaceTransactionDraftEdit, TransactionRequest } from "@arx/core/transactions";
 import {
   UI_CHANNEL,
   UI_EVENT_APPROVALS_CHANGED,
@@ -737,7 +740,11 @@ const createUiAccessForTest = (input: {
             .buildUiPermissionsSnapshot as never,
         },
         transactions: {
-          beginTransactionApproval: (request, requestContext, transactionOptions) =>
+          beginTransactionApproval: (
+            request: TransactionRequest,
+            requestContext: RequestContext,
+            transactionOptions: BeginTransactionApprovalOptions,
+          ) =>
             input.transactionsAccess?.beginTransactionApproval
               ? input.transactionsAccess.beginTransactionApproval(request, requestContext, transactionOptions)
               : input.controllers.transactionProposalBegin.beginTransactionApproval(
@@ -745,15 +752,15 @@ const createUiAccessForTest = (input: {
                   requestContext,
                   transactionOptions,
                 ),
-          rerunPrepare: (transactionId) =>
+          rerunPrepare: (transactionId: string) =>
             input.transactionsAccess?.rerunPrepare
               ? input.transactionsAccess.rerunPrepare(transactionId)
               : input.controllers.transactionProposalDraft.rerunPrepare(transactionId),
-          applyDraftEdit: (draft) =>
+          applyDraftEdit: (draft: { transactionId: string; edit: NamespaceTransactionDraftEdit; mode?: string }) =>
             input.transactionsAccess?.applyDraftEdit
               ? input.transactionsAccess.applyDraftEdit(draft)
               : input.controllers.transactionProposalDraft.applyDraftEdit(draft),
-          onStateChanged: (listener) =>
+          onStateChanged: (listener: (change: TransactionStateChange) => void) =>
             input.transactionsAccess?.onStateChanged ? input.transactionsAccess.onStateChanged(listener) : () => {},
         } as never,
         chains: {

@@ -11,7 +11,6 @@ import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { BeginTransactionApprovalOptions, TransactionApprovalRequestHandoff } from "./types.js";
 import {
   coerceTransactionError,
@@ -21,34 +20,31 @@ import {
 
 type TransactionProposalBeginServiceDeps = {
   proposalStore: TransactionProposalStore;
-  reviewSessions: TransactionReviewSessionStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
   prepare: Pick<TransactionPrepareManager, "queuePrepare">;
-  readTransactionTimestamp: () => number;
+  now: () => number;
 };
 
 export class TransactionProposalBeginService {
   #proposalStore: TransactionProposalStore;
-  #reviewSessions: TransactionReviewSessionStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
   #prepare: Pick<TransactionPrepareManager, "queuePrepare">;
-  #readTransactionTimestamp: () => number;
+  #now: () => number;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewSessions = deps.reviewSessions;
     this.#accountCodecs = deps.accountCodecs;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
-    this.#readTransactionTimestamp = deps.readTransactionTimestamp;
+    this.#now = deps.now;
   }
 
   async beginTransactionApproval(
@@ -104,7 +100,7 @@ export class TransactionProposalBeginService {
 
     const id = crypto.randomUUID();
     const approvalId = crypto.randomUUID();
-    const timestamp = this.#readTransactionTimestamp();
+    const timestamp = this.#now();
 
     const proposalMeta = this.#proposalStore.createPendingProposal({
       id,
@@ -123,9 +119,8 @@ export class TransactionProposalBeginService {
       chainRef: request.chainRef,
       origin: requestContext.origin,
     };
-    this.#reviewSessions.reuseOrBeginPrepareSession({
+    this.#proposalStore.getOrStartPrepare({
       id,
-      draftRevision: 0,
       updatedAt: timestamp,
     });
 
@@ -135,7 +130,7 @@ export class TransactionProposalBeginService {
         ? options.requestBinding.attachBlockingApproval(
             ({ approvalId: reservedApprovalId, createdAt }) =>
               requestApproval(
-                { approvals: this.#approvals, now: this.#readTransactionTimestamp },
+                { approvals: this.#approvals, now: this.#now },
                 {
                   kind: ApprovalKinds.SendTransaction,
                   requestContext,
@@ -154,7 +149,7 @@ export class TransactionProposalBeginService {
             },
           )
         : requestApproval(
-            { approvals: this.#approvals, now: this.#readTransactionTimestamp },
+            { approvals: this.#approvals, now: this.#now },
             {
               kind: ApprovalKinds.SendTransaction,
               requestContext,
@@ -190,7 +185,7 @@ export class TransactionProposalBeginService {
 
     this.#proposalStore.failProposal({
       id,
-      updatedAt: this.#readTransactionTimestamp(),
+      updatedAt: this.#now(),
       patch: {
         error: coerceTransactionError(reason) ?? null,
         userRejected: false,

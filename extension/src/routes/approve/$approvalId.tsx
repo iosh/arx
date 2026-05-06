@@ -1,5 +1,7 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { AccountSelectionApprovalRoutePage, SimpleApprovalRoutePage } from "@/ui/approvals";
+import { readApprovalDetailForRoute } from "@/ui/approvals/detailRoute";
 import { useUiApprovalDetail } from "@/ui/hooks/useUiApprovals";
 import { requireVaultInitialized } from "@/ui/lib/routeGuards";
 import { ROUTES } from "@/ui/lib/routes";
@@ -18,10 +20,26 @@ export const Route = createFileRoute("/approve/$approvalId")({
 });
 
 function ApproveByIdPage() {
+  const router = useRouter();
   const { approvalId } = Route.useParams();
   const { detail: initialDetail } = Route.useLoaderData();
-  const { detail } = useUiApprovalDetail(approvalId);
-  const approval = detail ?? initialDetail;
+  const { detail: currentDetail } = useUiApprovalDetail(approvalId);
+  const approval = readApprovalDetailForRoute({
+    initialDetail,
+    currentDetail,
+  });
+
+  useEffect(() => {
+    if (approval !== null) {
+      return;
+    }
+
+    void router.navigate({ to: ROUTES.APPROVALS, replace: true });
+  }, [approval, router]);
+
+  if (!approval) {
+    return null;
+  }
 
   switch (approval.kind) {
     case "requestAccounts":

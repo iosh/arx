@@ -3,31 +3,27 @@ import type { NamespaceTransactionDraftEdit, TransactionRequest } from "../../tr
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionProposalMeta } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type TransactionProposalDraftServiceDeps = {
   proposalStore: TransactionProposalStore;
-  reviewSessions: TransactionReviewSessionStore;
   namespaces: NamespaceTransactions;
   prepare: Pick<TransactionPrepareManager, "queuePrepare">;
-  readTransactionTimestamp: () => number;
+  now: () => number;
 };
 
 export class TransactionProposalDraftService {
   #proposalStore: TransactionProposalStore;
-  #reviewSessions: TransactionReviewSessionStore;
   #namespaces: NamespaceTransactions;
   #prepare: Pick<TransactionPrepareManager, "queuePrepare">;
-  #readTransactionTimestamp: () => number;
+  #now: () => number;
 
   constructor(deps: TransactionProposalDraftServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewSessions = deps.reviewSessions;
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
-    this.#readTransactionTimestamp = deps.readTransactionTimestamp;
+    this.#now = deps.now;
   }
 
   async rerunPrepare(transactionId: string): Promise<void> {
@@ -36,10 +32,9 @@ export class TransactionProposalDraftService {
       return;
     }
 
-    this.#reviewSessions.reuseOrBeginPrepareSession({
+    this.#proposalStore.restartPrepare({
       id: transactionId,
-      draftRevision: proposal.draftRevision,
-      updatedAt: this.#readTransactionTimestamp(),
+      updatedAt: this.#now(),
     });
     this.#prepare.queuePrepare(transactionId);
   }
@@ -82,7 +77,7 @@ export class TransactionProposalDraftService {
     const edited = this.#proposalStore.replacePendingDraftRequest({
       id: meta.id,
       request: structuredClone(nextRequest),
-      updatedAt: this.#readTransactionTimestamp(),
+      updatedAt: this.#now(),
     });
     if (!edited) {
       throw new Error("Transaction draft can only be edited before approval.");

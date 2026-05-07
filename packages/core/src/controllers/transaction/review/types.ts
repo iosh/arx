@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { NamespaceTransactionReview } from "../../../transactions/review.js";
 import { NamespaceTransactionReviewSchema } from "../../../transactions/review.js";
-import type { TransactionPrepared } from "../../../transactions/types.js";
 
 export const TransactionReviewErrorSchema = z.strictObject({
   reason: z.string().min(1),
@@ -46,15 +45,4 @@ export type SendTransactionApprovalReview = {
   updatedAt: number;
   namespaceReview: NamespaceTransactionReview | null;
   prepare: TransactionReviewPrepare;
-};
-
-export type TransactionReviewRuntimeStatus = TransactionReviewPrepare["state"] | "invalidated";
-export type TransactionProposalReviewState = {
-  sessionToken: string;
-  status: TransactionReviewRuntimeStatus;
-  updatedAt: number;
-  reviewPreparedSnapshot: TransactionPrepared | null;
-  error: TransactionReviewError | null;
-  blocker: TransactionReviewBlocker | null;
-  invalidatedBy?: string | undefined;
 };

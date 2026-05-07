@@ -15,26 +15,17 @@ import {
   DEFAULT_FROM,
   DEFAULT_SUBMITTED,
   DEFAULT_TO,
+  markReviewReady,
   REQUEST_CONTEXT,
   REQUEST_ID,
   toRecord,
 } from "./__fixtures__/transactionServices.js";
+import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
-import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
+import { TransactionRecordService } from "./TransactionRecordService.js";
+import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
-import type { TransactionApprovalResult, TransactionProposalMeta, TransactionRecordView } from "./types.js";
-
-const createProposalExecutionGateStub = (params?: {
-  approveForExecution?: (id: string) => TransactionApprovalResult;
-}) =>
-  ({
-    approveForExecution:
-      params?.approveForExecution ??
-      vi.fn(() => ({
-        status: "approved",
-        transactionId: REQUEST_ID,
-      })),
-  }) as never;
+import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
 const createTrackingStub = (params?: {
   stop?: (id: string) => void;
@@ -53,7 +44,6 @@ const createExecutionService = (params?: {
   service?: ReturnType<typeof createTransactionsServiceStub>;
   prepare?: ReturnType<typeof createPrepareStub>;
   recordView?: ReturnType<typeof createRecordViewStub>;
-  proposals?: ReturnType<typeof createProposalExecutionGateStub>;
   tracking?: ReturnType<typeof createTrackingStub>;
   messenger?: Messenger;
 }) => {
@@ -80,26 +70,34 @@ const createExecutionService = (params?: {
     });
   const tracking = params?.tracking ?? createTrackingStub();
   const messenger = params?.messenger ?? new Messenger();
-  const submissionService = new TransactionSubmissionService({
+  const submissionService = new TransactionSubmissionStore({
     recordView,
     stateLimit: 50,
   });
-  const execution = new TransactionExecutionService({
-    messenger: messenger.scope({ publish: TRANSACTION_TOPICS }),
+  const recordService = new TransactionRecordService({
     proposalStore,
     recordView,
     accountCodecs,
-    namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
     service,
-    submissionService,
-    prepare: prepare as never,
-    proposals: params?.proposals ?? createProposalExecutionGateStub(),
-    tracking,
+    submission: submissionService,
+    tracking: tracking as never,
+  });
+  const execution = new TransactionExecutionService({
+    proposalStore,
+    pipeline: new TransactionExecutionPipeline({
+      messenger: messenger.scope({ publish: TRANSACTION_TOPICS }),
+      proposalStore,
+      namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
+      submission: submissionService,
+      records: recordService,
+      now: () => 1,
+    }),
     now: () => 1,
   });
 
   return {
     execution,
+    recordService,
     proposalStore,
     recordView,
     service,
@@ -147,43 +145,35 @@ const createRecordView = (input: {
 describe("TransactionExecutionService", () => {
   it("enqueues approved proposals for execution", async () => {
     const proposalStore = createProposalStore();
-    createApprovedTransactionProposal(proposalStore);
-    const approveForExecution = vi.fn(() => ({
-      status: "approved" as const,
-      transactionId: REQUEST_ID,
-    }));
+    createTransactionProposal(proposalStore, {
+      status: "pending",
+    });
+    markReviewReady(proposalStore, REQUEST_ID, {
+      executionPrepared: { gas: "0x5208" },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
     const { execution } = createExecutionService({
       proposalStore,
-      proposals: createProposalExecutionGateStub({ approveForExecution }),
     });
-    const processTransaction = vi.fn(async () => {});
-    const processSpy = vi.spyOn(execution, "processTransaction").mockImplementation(processTransaction);
+    const executeApprovedTransaction = vi.fn(async () => {});
+    const processSpy = vi.spyOn(execution, "executeApprovedTransaction").mockImplementation(executeApprovedTransaction);
 
     await expect(execution.approveTransaction(REQUEST_ID)).resolves.toMatchObject({
       status: "approved",
     });
     await Promise.resolve();
 
-    expect(approveForExecution).toHaveBeenCalledWith(REQUEST_ID);
     expect(processSpy).toHaveBeenCalledWith(REQUEST_ID);
     processSpy.mockRestore();
   });
 
   it("does not enqueue failed proposal approvals", async () => {
-    const approveForExecution = vi.fn(() => ({
-      status: "failed" as const,
-      reason: "prepare_not_ready" as const,
-      message: "Transaction preparation is not ready yet.",
-      data: { transactionId: REQUEST_ID },
-    }));
-    const { execution } = createExecutionService({
-      proposals: createProposalExecutionGateStub({ approveForExecution }),
-    });
-    const processSpy = vi.spyOn(execution, "processTransaction").mockResolvedValue(undefined);
+    const { execution } = createExecutionService();
+    const processSpy = vi.spyOn(execution, "executeApprovedTransaction").mockResolvedValue(undefined);
 
     await expect(execution.approveTransaction(REQUEST_ID)).resolves.toMatchObject({
       status: "failed",
-      reason: "prepare_not_ready",
+      reason: "not_found",
     });
     await Promise.resolve();
 
@@ -197,7 +187,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
@@ -233,16 +223,17 @@ describe("TransactionExecutionService", () => {
 
   it("cancels a queued execution before processing starts", async () => {
     const proposalStore = createProposalStore();
-    createApprovedTransactionProposal(proposalStore);
-    const approveForExecution = vi.fn(() => ({
-      status: "approved" as const,
-      transactionId: REQUEST_ID,
-    }));
+    createTransactionProposal(proposalStore, {
+      status: "pending",
+    });
+    markReviewReady(proposalStore, REQUEST_ID, {
+      executionPrepared: { gas: "0x5208" },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
     const { execution } = createExecutionService({
       proposalStore,
-      proposals: createProposalExecutionGateStub({ approveForExecution }),
     });
-    const processSpy = vi.spyOn(execution, "processTransaction").mockResolvedValue(undefined);
+    const processSpy = vi.spyOn(execution, "executeApprovedTransaction").mockResolvedValue(undefined);
 
     const approved = execution.approveTransaction(REQUEST_ID);
     await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
@@ -361,7 +352,6 @@ describe("TransactionExecutionService", () => {
       tracking: createTrackingStub({
         handleTransition,
       }),
-      proposals: createProposalExecutionGateStub(),
     });
 
     createApprovedTransactionProposal(proposalStore, {
@@ -381,7 +371,7 @@ describe("TransactionExecutionService", () => {
       },
     });
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(signTransaction).toHaveBeenCalledTimes(1);
     expect(broadcastTransaction).toHaveBeenCalledTimes(1);
@@ -419,7 +409,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(createSubmitted).not.toHaveBeenCalled();
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
@@ -449,7 +439,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(broadcastTransaction).not.toHaveBeenCalled();
     expect(createSubmitted).not.toHaveBeenCalled();
@@ -471,7 +461,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     await expect(submissionService.waitForSubmissionOutcome(REQUEST_ID)).resolves.toMatchObject({
@@ -517,7 +507,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    const processing = execution.processTransaction(REQUEST_ID);
+    const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
 
     await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
@@ -562,7 +552,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    const processing = execution.processTransaction(REQUEST_ID);
+    const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
 
     await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
@@ -617,7 +607,7 @@ describe("TransactionExecutionService", () => {
       void execution.rejectTransaction(id, new Error("User cancelled too late"));
     });
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(createSubmitted).toHaveBeenCalledTimes(1);
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
@@ -662,7 +652,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    const processing = execution.processTransaction(REQUEST_ID);
+    const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
@@ -718,7 +708,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    const processing = execution.processTransaction(REQUEST_ID);
+    const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await persistenceStartedPromise;
 
     await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled after submission"));
@@ -730,82 +720,17 @@ describe("TransactionExecutionService", () => {
     expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
   });
 
-  it("re-enqueues approved proposals when resuming pending work", async () => {
-    const broadcastMeta = createRecordView({
-      id: "durable-tx",
-      status: "broadcast",
-    });
-    const processTransaction = vi.fn(async () => {});
-    const commitRecordView = vi.fn((record: TransactionRecord) => ({
-      next: {
-        kind: "record",
-        id: record.id,
-        namespace: "eip155",
-        chainRef: record.chainRef,
-        origin: record.origin,
-        from: DEFAULT_FROM,
-        status: record.status,
-        submitted: record.submitted,
-        receipt: record.receipt ?? null,
-        replacedId: record.replacedId ?? null,
-        createdAt: record.createdAt,
-        updatedAt: record.updatedAt,
-      } satisfies TransactionRecordView,
-    }));
-    const resumeBroadcast = vi.fn();
-    const list = vi
-      .fn<(params?: unknown) => Promise<TransactionRecord[]>>()
-      .mockResolvedValueOnce([
-        {
-          id: broadcastMeta.id,
-          chainRef: broadcastMeta.chainRef,
-          origin: broadcastMeta.origin,
-          fromAccountKey: accountCodecs.toAccountKeyFromAddress({
-            chainRef: broadcastMeta.chainRef,
-            address: broadcastMeta.from ?? DEFAULT_FROM,
-          }),
-          status: broadcastMeta.status,
-          submitted: broadcastMeta.submitted,
-          createdAt: broadcastMeta.createdAt,
-          updatedAt: broadcastMeta.updatedAt,
-        },
-      ])
-      .mockResolvedValueOnce([]);
-    const recordView = createRecordViewStub({
-      commitRecordView,
-    });
-    const { execution, proposalStore } = createExecutionService({
-      service: createTransactionsServiceStub({
-        list: list as never,
-      }),
-      tracking: createTrackingStub({
-        handleTransition: vi.fn(),
-        resumeBroadcast,
-      }),
-      recordView,
-    });
-
+  it("re-enqueues approved proposals when resuming approved proposals", async () => {
+    const { execution, proposalStore } = createExecutionService();
     createApprovedTransactionProposal(proposalStore);
-    const processSpy = vi.spyOn(execution, "processTransaction").mockImplementation(processTransaction);
+    const executeApprovedTransaction = vi.fn(async () => {});
+    const processSpy = vi.spyOn(execution, "executeApprovedTransaction").mockImplementation(executeApprovedTransaction);
 
-    await execution.resumePending();
+    await execution.resumeApprovedProposals();
     await Promise.resolve();
 
     expect(processSpy).toHaveBeenCalledWith(REQUEST_ID);
     processSpy.mockRestore();
-    expect(list).toHaveBeenCalledTimes(2);
-    expect(commitRecordView).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "durable-tx",
-        status: "broadcast",
-      }),
-    );
-    expect(resumeBroadcast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "durable-tx",
-        status: "broadcast",
-      }),
-    );
   });
 
   it("fails proposals when signing is interrupted by lock", async () => {
@@ -826,7 +751,7 @@ describe("TransactionExecutionService", () => {
     });
     createApprovedTransactionProposal(proposalStore);
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
     expect(proposalStore.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
@@ -840,30 +765,20 @@ describe("TransactionExecutionService", () => {
     expect(broadcastTransaction).not.toHaveBeenCalled();
   });
 
-  it("prepares for execution when an approved transaction is missing prepared params", async () => {
+  it("fails approved transactions that are missing prepared params", async () => {
     const proposalStore = createProposalStore();
     createTransactionProposal(proposalStore, {
-      prepared: null,
-      status: "approved",
+      status: "pending",
     });
-    const prepareTransactionForExecution = vi.fn(async () => {
-      const session = proposalStore.getOrStartPrepare({ id: REQUEST_ID, updatedAt: 2 });
-      proposalStore.settlePrepareReady({
-        id: REQUEST_ID,
-        expectedDraftRevision: proposalStore.peek(REQUEST_ID)?.draftRevision ?? 0,
-        sessionToken: session?.sessionToken ?? "",
-        updatedAt: 3,
-        executionPrepared: { gas: "0x5208" },
-        reviewPreparedSnapshot: { gas: "0x5208" },
-      });
-      return proposalStore.get(REQUEST_ID) ?? null;
-    });
+    const state = proposalStore.peek(REQUEST_ID);
+    if (!state) {
+      throw new Error("Proposal not found");
+    }
+    state.phase = "approved";
+    state.prepared = null;
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const { execution } = createExecutionService({
       proposalStore,
-      prepare: createPrepareStub({
-        prepareTransactionForExecution,
-      }),
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: signTransaction as never,
@@ -871,9 +786,14 @@ describe("TransactionExecutionService", () => {
       ),
     });
 
-    await execution.processTransaction(REQUEST_ID);
+    await execution.executeApprovedTransaction(REQUEST_ID);
 
-    expect(prepareTransactionForExecution).toHaveBeenCalledWith(REQUEST_ID);
-    expect(signTransaction).toHaveBeenCalledWith(expect.anything(), { gas: "0x5208" }, { signal: expect.anything() });
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
+      status: "failed",
+      error: {
+        message: "Approved transaction is missing prepared execution parameters.",
+      },
+    });
   });
 });

@@ -83,6 +83,18 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   userRejected: boolean;
 };
 
+export type TransactionReviewRuntimeStatus = "preparing" | "ready" | "blocked" | "failed" | "invalidated";
+
+export type TransactionProposalReviewState = {
+  sessionToken: string;
+  status: TransactionReviewRuntimeStatus;
+  updatedAt: number;
+  reviewPreparedSnapshot: TransactionPrepared | null;
+  error: import("./review/types.js").TransactionReviewError | null;
+  blocker: import("./review/types.js").TransactionReviewBlocker | null;
+  invalidatedBy?: string | undefined;
+};
+
 export type TransactionProposalSnapshot = {
   kind: "proposal";
   id: string;
@@ -242,12 +254,8 @@ export type TransactionApprovalExecutor = {
   rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
 };
 
-export type TransactionProposalExecutionGate = {
-  approveForExecution(id: string): TransactionApprovalResult;
-};
-
-export type TransactionBroadcastRecovery = {
-  resumePending(): Promise<void>;
+export type TransactionRecovery = {
+  resumeTransactions(): Promise<void>;
 };
 
 export type TransactionStateChangeEvents = {
@@ -258,6 +266,11 @@ export type TransactionProposalReader = {
   getProposalView(id: string): TransactionProposalView | undefined;
 };
 
+export type TransactionProposalRuntimeReader = {
+  getProposalView(id: string): TransactionProposalSnapshot | undefined;
+  getReviewState(id: string): TransactionProposalReviewState | null;
+};
+
 export type TransactionRecordReader = {
   getRecordView(id: string): TransactionRecordView | undefined;
 };
@@ -266,7 +279,7 @@ export type TransactionRuntime = Readonly<{
   proposal: TransactionProposalCommandSet;
   providerCommands: ProviderTransactionApprovalCommands;
   execution: TransactionApprovalExecutor;
-  recovery: TransactionBroadcastRecovery;
+  recovery: TransactionRecovery;
   submission: TransactionSubmissionTracker;
   stateChanges: TransactionStateChangeEvents;
   review: TransactionApprovalReviewReader;

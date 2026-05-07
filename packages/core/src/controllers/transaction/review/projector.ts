@@ -1,5 +1,6 @@
 import type { NamespaceTransactionReview } from "../../../transactions/review.js";
-import type { SendTransactionApprovalReview, TransactionProposalReviewState } from "./types.js";
+import type { TransactionProposalReviewState } from "../types.js";
+import type { SendTransactionApprovalReview } from "./types.js";
 
 export const buildSendTransactionApprovalReview = (args: {
   updatedAt: number;

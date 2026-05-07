@@ -5,7 +5,7 @@ import type { TransactionApprovalReviewReader } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type CreateTransactionApprovalReviewReaderDeps = {
-  proposalStore: TransactionProposalStore;
+  proposalStore: Pick<TransactionProposalStore, "get" | "getReviewState">;
   namespaces: NamespaceTransactions;
 };
 

@@ -240,7 +240,7 @@ export class InMemoryApprovalController implements ApprovalController {
   }
 
   async resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult> {
-    const entry = this.#pending.get(input.approvalId);
+    const entry = this.#takePendingApproval(input.approvalId);
     if (!entry) {
       throw new Error(`Approval ${input.approvalId} not found`);
     }
@@ -264,9 +264,6 @@ export class InMemoryApprovalController implements ApprovalController {
         }
       }
 
-      this.#pending.delete(input.approvalId);
-      this.#clearTimeout(input.approvalId);
-      this.#finalizeLocal(input.approvalId);
       entry.reject(error);
 
       this.#publishFinished({
@@ -289,10 +286,6 @@ export class InMemoryApprovalController implements ApprovalController {
 
       const value = await executor.approve(entry.record, input.decision);
 
-      this.#pending.delete(input.approvalId);
-      this.#clearTimeout(input.approvalId);
-      this.#finalizeLocal(input.approvalId);
-
       this.#publishFinished({
         approvalId: input.approvalId,
         status: "approved",
@@ -306,10 +299,6 @@ export class InMemoryApprovalController implements ApprovalController {
       return { approvalId: input.approvalId, status: "approved", terminalReason: "user_approve", value };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-
-      this.#pending.delete(input.approvalId);
-      this.#clearTimeout(input.approvalId);
-      this.#finalizeLocal(input.approvalId);
 
       this.#publishFinished({
         approvalId: input.approvalId,
@@ -326,10 +315,8 @@ export class InMemoryApprovalController implements ApprovalController {
   }
 
   async cancel(input: { approvalId: string; reason: ApprovalTerminalReason; error?: Error }): Promise<void> {
-    const entry = this.#pending.get(input.approvalId);
+    const entry = this.#takePendingApproval(input.approvalId);
     if (!entry) {
-      this.#clearTimeout(input.approvalId);
-      this.#finalizeLocal(input.approvalId);
       return;
     }
 
@@ -349,10 +336,6 @@ export class InMemoryApprovalController implements ApprovalController {
         this.#logger?.("approvals: cancel cleanup failed", cleanupError);
       }
     }
-
-    this.#pending.delete(input.approvalId);
-    this.#clearTimeout(input.approvalId);
-    this.#finalizeLocal(input.approvalId);
 
     try {
       entry.reject(error);
@@ -487,6 +470,18 @@ export class InMemoryApprovalController implements ApprovalController {
     if (!timeout) return;
     clearTimeout(timeout);
     this.#timeouts.delete(approvalId);
+  }
+
+  #takePendingApproval(approvalId: string): PendingApproval | null {
+    const entry = this.#pending.get(approvalId);
+    if (!entry) {
+      return null;
+    }
+
+    this.#pending.delete(approvalId);
+    this.#clearTimeout(approvalId);
+    this.#finalizeLocal(approvalId);
+    return entry;
   }
 
   #recordMeta(record?: ApprovalRecord) {

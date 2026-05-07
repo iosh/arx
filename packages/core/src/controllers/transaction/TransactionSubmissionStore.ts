@@ -7,7 +7,7 @@ import type {
 } from "./types.js";
 import { TransactionSubmissionError } from "./types.js";
 
-type TransactionSubmissionServiceOptions = {
+type TransactionSubmissionStoreOptions = {
   recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   stateLimit: number;
 };
@@ -21,13 +21,13 @@ type SubmissionOutcome =
   | { state: "submitted"; resolution: TransactionSubmissionResolution }
   | { state: "failed"; failure: TransactionSubmissionFailure };
 
-export class TransactionSubmissionService implements TransactionSubmissionTracker {
+export class TransactionSubmissionStore implements TransactionSubmissionTracker {
   #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   #outcomes = new Map<string, SubmissionOutcome>();
   #waiters = new Map<string, Set<SubmissionWaiter>>();
   #stateLimit: number;
 
-  constructor(options: TransactionSubmissionServiceOptions) {
+  constructor(options: TransactionSubmissionStoreOptions) {
     this.#recordView = options.recordView;
     this.#stateLimit = options.stateLimit;
   }

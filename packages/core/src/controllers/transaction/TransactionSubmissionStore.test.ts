@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createRecordViewStub, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
-import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
+import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 
-describe("TransactionSubmissionService", () => {
+describe("TransactionSubmissionStore", () => {
   it("resolves waiters after broadcast submission is recorded", async () => {
-    const submissionService = new TransactionSubmissionService({
+    const submissionService = new TransactionSubmissionStore({
       recordView: createRecordViewStub(),
       stateLimit: 10,
     });
@@ -20,7 +20,7 @@ describe("TransactionSubmissionService", () => {
   });
 
   it("rejects waiters after a pre-broadcast failure is recorded", async () => {
-    const submissionService = new TransactionSubmissionService({
+    const submissionService = new TransactionSubmissionStore({
       recordView: createRecordViewStub(),
       stateLimit: 10,
     });
@@ -47,7 +47,7 @@ describe("TransactionSubmissionService", () => {
   });
 
   it("replays cached submission outcomes to later waiters", async () => {
-    const submissionService = new TransactionSubmissionService({
+    const submissionService = new TransactionSubmissionStore({
       recordView: createRecordViewStub(),
       stateLimit: 10,
     });
@@ -62,7 +62,7 @@ describe("TransactionSubmissionService", () => {
   });
 
   it("attaches persistence failure metadata to a submitted outcome", async () => {
-    const submissionService = new TransactionSubmissionService({
+    const submissionService = new TransactionSubmissionStore({
       recordView: createRecordViewStub(),
       stateLimit: 10,
     });

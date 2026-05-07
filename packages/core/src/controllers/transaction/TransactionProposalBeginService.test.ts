@@ -6,6 +6,7 @@ import {
   createNamespacesStub,
   createPrepareStub,
   createProposalStore,
+  createProposalStores,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -50,7 +51,7 @@ const createBeginService = (params?: {
 describe("TransactionProposalBeginService", () => {
   it("creates a proposal, attaches approval, and queues prepare", async () => {
     const chainRef = DEFAULT_CHAIN_REF;
-    const proposalStore = createProposalStore();
+    const { proposalStore } = createProposalStores();
     const queuePrepare = vi.fn();
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,

@@ -2,7 +2,6 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionProposalMeta } from "./types.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
@@ -86,18 +85,11 @@ export class TransactionPrepareManager {
     });
   }
 
-  async prepareTransactionForExecution(id: string): Promise<TransactionProposalMeta | null> {
-    return await this.#runPrepareUntilCurrent(id, { source: "execution" });
+  async #prepareTransactionInBackground(id: string): Promise<void> {
+    await this.#runPrepareUntilCurrent(id);
   }
 
-  async #prepareTransactionInBackground(id: string): Promise<TransactionProposalMeta | null> {
-    return await this.#runPrepareUntilCurrent(id, { source: "background" });
-  }
-
-  async #runPrepareUntilCurrent(
-    id: string,
-    opts: { source: "background" | "execution" },
-  ): Promise<TransactionProposalMeta | null> {
+  async #runPrepareUntilCurrent(id: string): Promise<void> {
     while (true) {
       const existing = this.#prepareInFlight.get(id);
       let settledDraftRevision: number;
@@ -106,13 +98,13 @@ export class TransactionPrepareManager {
         await existing.promise;
       } else {
         const initial = this.#proposalStore.peek(id);
-        if (!initial) return null;
+        if (!initial) return;
         if (this.#hasCurrentPrepared(id) || !canPrepareProposal(initial)) {
-          return this.#proposalStore.get(id) ?? null;
+          return;
         }
         settledDraftRevision = initial.draftRevision;
 
-        const run = this.#prepareAndPersistInternal(id, opts);
+        const run = this.#prepareAndPersistInternal(id);
         const tracked = run
           .then(() => undefined)
           .finally(() => {
@@ -128,34 +120,31 @@ export class TransactionPrepareManager {
 
       const latest = this.#proposalStore.peek(id);
       if (!latest || this.#hasCurrentPrepared(id) || !canPrepareProposal(latest)) {
-        return latest ? (this.#proposalStore.get(id) ?? null) : null;
+        return;
       }
       if (latest.draftRevision === settledDraftRevision) {
-        return this.#proposalStore.get(id) ?? null;
+        return;
       }
     }
   }
 
-  async #prepareAndPersistInternal(
-    id: string,
-    opts: { source: "background" | "execution" },
-  ): Promise<TransactionProposalMeta | null> {
+  async #prepareAndPersistInternal(id: string): Promise<void> {
     const timeoutMs = this.#namespaceProposalPrepareTimeoutMs;
 
     const state = this.#proposalStore.peek(id);
-    if (!state) return null;
+    if (!state) return;
 
     const expectedDraftRevision = state.draftRevision;
     const meta = this.#proposalStore.get(id);
-    if (!meta) return null;
+    if (!meta) return;
 
     if (this.#hasCurrentPrepared(id)) {
-      return meta;
+      return;
     }
 
     // No need to prepare once a tx is no longer eligible for enrichment.
     if (!canPrepareProposal(state)) {
-      return meta;
+      return;
     }
 
     const startedAt = this.#now();
@@ -164,7 +153,7 @@ export class TransactionPrepareManager {
       updatedAt: startedAt,
     });
     if (!session) {
-      return this.#proposalStore.get(id) ?? null;
+      return;
     }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
@@ -181,8 +170,8 @@ export class TransactionPrepareManager {
         },
         reviewPreparedSnapshot: null,
       });
-      if (!next) return this.#proposalStore.get(id) ?? null;
-      return next;
+      if (!next) return;
+      return;
     }
 
     try {
@@ -193,7 +182,7 @@ export class TransactionPrepareManager {
         value: namespaceTransaction.proposal?.prepare,
       });
       const runPrepare = async () => await this.#withTimeout(prepare(context), timeoutMs);
-      const result = opts.source === "background" ? await this.#withPrepareSlot(runPrepare) : await runPrepare();
+      const result = await this.#withPrepareSlot(runPrepare);
 
       const reviewPreparedSnapshot = result.prepared ?? null;
       const settledAt = this.#now();
@@ -207,8 +196,8 @@ export class TransactionPrepareManager {
           executionPrepared: result.prepared,
           reviewPreparedSnapshot,
         });
-        if (!next) return this.#proposalStore.get(id) ?? null;
-        return next;
+        if (!next) return;
+        return;
       }
 
       if (result.status === "blocked") {
@@ -220,8 +209,8 @@ export class TransactionPrepareManager {
           blocker: result.blocker,
           reviewPreparedSnapshot,
         });
-        if (!next) return this.#proposalStore.get(id) ?? null;
-        return next;
+        if (!next) return;
+        return;
       }
 
       const next = this.#proposalStore.settlePrepareFailed({
@@ -232,8 +221,8 @@ export class TransactionPrepareManager {
         error: result.error,
         reviewPreparedSnapshot,
       });
-      if (!next) return this.#proposalStore.get(id) ?? null;
-      return next;
+      if (!next) return;
+      return;
     } catch (error) {
       const next = this.#proposalStore.settlePrepareFailed({
         id,
@@ -243,8 +232,8 @@ export class TransactionPrepareManager {
         error: toPrepareReviewError(error),
         reviewPreparedSnapshot: null,
       });
-      if (!next) return this.#proposalStore.get(id) ?? null;
-      return next;
+      if (!next) return;
+      return;
     }
   }
 

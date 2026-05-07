@@ -11,9 +11,9 @@ import type {
   ProviderTransactionApprovalCommands,
   TransactionApprovalExecutor,
   TransactionApprovalReviewReader,
-  TransactionBroadcastRecovery,
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
+  TransactionRecovery,
 } from "../../controllers/transaction/types.js";
 import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
 import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
@@ -33,7 +33,7 @@ export type HandlerControllers = {
   transactionProposalDraft: TransactionProposalDraftCommands;
   providerTransactionCommands: ProviderTransactionApprovalCommands;
   transactionExecution: TransactionApprovalExecutor;
-  transactionRecovery: TransactionBroadcastRecovery;
+  transactionRecovery: TransactionRecovery;
   transactionReview: TransactionApprovalReviewReader;
   supportedChains?: SupportedChainsController;
   chainAddressCodecs: ChainAddressCodecRegistry;

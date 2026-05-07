@@ -74,11 +74,55 @@ export const createNamespaceTransactionStub = (
     : { tracking: createReceiptTrackingStub() }),
 });
 
-export const createProposalStore = () =>
-  new TransactionProposalStore({
+export const createProposalStores = () => {
+  const proposalStore = new TransactionProposalStore({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
+
+  return {
+    proposalStore,
+  };
+};
+
+export const createProposalStore = () => createProposalStores().proposalStore;
+
+const makeProposalReadyForApproval = (
+  proposalStore: TransactionProposalStore,
+  transactionId: string,
+  input?: {
+    updatedAt?: number;
+    executionPrepared?: NonNullable<TransactionProposalMeta["prepared"]>;
+    reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
+  },
+) => {
+  const updatedAt = input?.updatedAt ?? 1;
+  const current = proposalStore.peek(transactionId);
+  if (!current) {
+    throw new Error(`Proposal ${transactionId} not found`);
+  }
+
+  const session = proposalStore.getOrStartPrepare({
+    id: transactionId,
+    updatedAt,
+  });
+  if (!session) {
+    throw new Error(`Proposal ${transactionId} could not start review`);
+  }
+
+  const executionPrepared = input?.executionPrepared ?? {};
+  const settled = proposalStore.settlePrepareReady({
+    id: transactionId,
+    expectedDraftRevision: current.draftRevision,
+    sessionToken: session.sessionToken,
+    updatedAt,
+    executionPrepared,
+    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
+  });
+  if (!settled) {
+    throw new Error(`Proposal ${transactionId} could not settle ready review`);
+  }
+};
 
 export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
   toAccountKeyFromAddress({
@@ -147,7 +191,16 @@ export const createTransactionProposal = (
   const id = created.id;
   const updatedAt = input?.updatedAt ?? 1;
   if (requestedPhase === "approved") {
-    return proposalStore.approvePendingProposal({ id, updatedAt }) ?? created;
+    makeProposalReadyForApproval(proposalStore, id, {
+      updatedAt,
+      executionPrepared: input?.prepared ?? {},
+      reviewPreparedSnapshot: input?.prepared ?? {},
+    });
+    const approved = proposalStore.approveReadyProposal({ id, updatedAt });
+    if (approved.status !== "approved") {
+      throw new Error(`Proposal ${id} could not be approved`);
+    }
+    return proposalStore.get(id) ?? created;
   }
   if (requestedPhase === "failed") {
     return (
@@ -279,25 +332,5 @@ export const markReviewReady = (
     reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
   },
 ) => {
-  const updatedAt = input?.updatedAt ?? 1;
-  const current = proposalStore.peek(transactionId);
-  if (!current) {
-    throw new Error(`Proposal ${transactionId} not found`);
-  }
-  const session = proposalStore.getOrStartPrepare({
-    id: transactionId,
-    updatedAt,
-  });
-  if (!session) {
-    throw new Error(`Proposal ${transactionId} could not start review`);
-  }
-  const executionPrepared = input?.executionPrepared ?? {};
-  proposalStore.settlePrepareReady({
-    id: transactionId,
-    expectedDraftRevision: current.draftRevision,
-    sessionToken: session.sessionToken,
-    updatedAt,
-    executionPrepared,
-    reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
-  });
+  makeProposalReadyForApproval(proposalStore, transactionId, input);
 };

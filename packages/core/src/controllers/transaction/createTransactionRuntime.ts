@@ -6,17 +6,19 @@ import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
+import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import { TransactionProposalBeginService } from "./TransactionProposalBeginService.js";
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
-import { createTransactionProposalExecutionGate } from "./TransactionProposalExecutionGate.js";
 import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
+import { TransactionRecordService } from "./TransactionRecordService.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
+import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
 import { TransactionStateChangePublisher } from "./TransactionStateChangePublisher.js";
-import { TransactionSubmissionService } from "./TransactionSubmissionService.js";
+import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
 type TransactionClock = () => number;
@@ -68,7 +70,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     logger,
   });
 
-  const submission = new TransactionSubmissionService({
+  const submission = new TransactionSubmissionStore({
     recordView,
     stateLimit,
   });
@@ -78,6 +80,15 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     namespaces: options.namespaces,
     service: options.service,
     ...(options.tracker ? { tracker: options.tracker } : {}),
+  });
+
+  const records = new TransactionRecordService({
+    proposalStore,
+    recordView,
+    accountCodecs: options.accountCodecs,
+    service: options.service,
+    submission,
+    tracking,
   });
 
   const prepare = new TransactionPrepareManager({
@@ -111,23 +122,24 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     proposalStore,
     review,
   });
-  const proposalExecution = createTransactionProposalExecutionGate({
+  const executionPipeline = new TransactionExecutionPipeline({
+    messenger: options.messenger,
     proposalStore,
+    namespaces: options.namespaces,
+    submission,
+    records,
     now,
   });
 
   const execution = new TransactionExecutionService({
-    messenger: options.messenger,
     proposalStore,
-    recordView,
-    accountCodecs: options.accountCodecs,
-    namespaces: options.namespaces,
-    service: options.service,
-    submissionService: submission,
-    prepare,
-    proposals: proposalExecution,
-    tracking,
+    pipeline: executionPipeline,
     now,
+  });
+
+  const recovery = createTransactionRecoveryService({
+    execution,
+    records,
   });
 
   const stateChanges = new TransactionStateChangePublisher({
@@ -152,8 +164,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     begin: proposalBegin,
     execution,
     submission,
-    proposals: proposalReader,
-    records: recordView,
   });
 
   return {
@@ -163,7 +173,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     },
     providerCommands,
     execution,
-    recovery: execution,
+    recovery,
     submission,
     stateChanges,
     review,

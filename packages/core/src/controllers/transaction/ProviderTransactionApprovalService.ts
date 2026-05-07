@@ -1,14 +1,11 @@
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
-import { isProposalTerminal, isTransactionRecordTerminal } from "./status.js";
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
   TransactionApprovalExecutor,
   TransactionApprovalHandoff,
   TransactionProposalBeginCommands,
-  TransactionProposalReader,
-  TransactionRecordReader,
   TransactionSubmissionTracker,
 } from "./types.js";
 
@@ -22,23 +19,17 @@ type ProviderTransactionApprovalServiceOptions = {
   begin: TransactionProposalBeginCommands;
   execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
   submission: Pick<TransactionSubmissionTracker, "waitForSubmissionOutcome">;
-  proposals: Pick<TransactionProposalReader, "getProposalView">;
-  records: Pick<TransactionRecordReader, "getRecordView">;
 };
 
 export class ProviderTransactionApprovalService implements ProviderTransactionApprovalCommands {
   #begin: TransactionProposalBeginCommands;
   #execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
   #submission: Pick<TransactionSubmissionTracker, "waitForSubmissionOutcome">;
-  #proposals: Pick<TransactionProposalReader, "getProposalView">;
-  #records: Pick<TransactionRecordReader, "getRecordView">;
 
   constructor(options: ProviderTransactionApprovalServiceOptions) {
     this.#begin = options.begin;
     this.#execution = options.execution;
     this.#submission = options.submission;
-    this.#proposals = options.proposals;
-    this.#records = options.records;
   }
 
   async beginTransactionApproval(
@@ -71,26 +62,8 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
       cleanupAbortBinding = () => {};
     };
 
-    const tryCleanupFromTerminalState = () => {
-      const proposal = this.#proposals.getProposalView(handoff.transactionId);
-      if (!proposal) {
-        cleanup();
-        return;
-      }
-      if (isProposalTerminal(proposal)) {
-        cleanup();
-        return;
-      }
-
-      const record = this.#records.getRecordView(handoff.transactionId);
-      if (record && isTransactionRecordTerminal(record)) {
-        cleanup();
-      }
-    };
-
     if (abortSignal.aborted) {
       cancelBeforeBroadcast();
-      tryCleanupFromTerminalState();
     } else {
       abortSignal.addEventListener("abort", cancelBeforeBroadcast, { once: true });
       cleanupAbortBinding = () => {

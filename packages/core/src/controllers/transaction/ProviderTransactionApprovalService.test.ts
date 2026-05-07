@@ -1,0 +1,116 @@
+import { describe, expect, it, vi } from "vitest";
+import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
+import type {
+  BeginTransactionApprovalOptions,
+  TransactionApprovalRequestHandoff,
+  TransactionSubmissionResolution,
+} from "./types.js";
+
+const TRANSACTION_ID = "11111111-1111-4111-8111-111111111111";
+const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
+
+const REQUEST = {
+  namespace: "eip155",
+  chainRef: "eip155:1",
+  payload: {
+    from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    value: "0x0",
+    data: "0x",
+  },
+} as const;
+
+const REQUEST_CONTEXT = {
+  transport: "provider" as const,
+  origin: "https://dapp.example",
+  portId: "port-1",
+  sessionId: "session-1",
+  requestId: "request-1",
+};
+
+const buildHandoff = (): TransactionApprovalRequestHandoff => ({
+  transactionId: TRANSACTION_ID,
+  approvalId: APPROVAL_ID,
+});
+
+const buildSubmissionResolution = (): TransactionSubmissionResolution => ({
+  submitted: {
+    hash: "0xdeadbeef",
+    chainId: "0x1",
+    from: REQUEST.payload.from,
+    nonce: "0x1",
+  },
+});
+
+describe("ProviderTransactionApprovalService", () => {
+  it("rejects immediately when request binding is already aborted", async () => {
+    const begin = vi.fn(async () => buildHandoff());
+    const rejectTransaction = vi.fn(async () => {});
+    const waitForSubmissionOutcome = vi.fn(async () => buildSubmissionResolution());
+
+    const service = new ProviderTransactionApprovalService({
+      begin: { beginTransactionApproval: begin },
+      execution: { rejectTransaction },
+      submission: { waitForSubmissionOutcome },
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    const handoff = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
+      from: REQUEST.payload.from,
+      requestBinding: {
+        id: "binding-1",
+        signal: controller.signal,
+        attachBlockingApproval: vi.fn(),
+      },
+    });
+
+    expect(rejectTransaction).toHaveBeenCalledTimes(1);
+    expect(rejectTransaction).toHaveBeenCalledWith(
+      TRANSACTION_ID,
+      expect.objectContaining({
+        name: "TransportDisconnectedError",
+        code: 4900,
+      }),
+    );
+
+    await handoff.waitForProviderCompletion();
+    expect(waitForSubmissionOutcome).toHaveBeenCalledWith(TRANSACTION_ID);
+  });
+
+  it("removes the abort listener after provider completion settles", async () => {
+    const begin = vi.fn(async () => buildHandoff());
+    const rejectTransaction = vi.fn(async () => {});
+    const resolution = buildSubmissionResolution();
+    const waitForSubmissionOutcome = vi.fn(async () => resolution);
+
+    const service = new ProviderTransactionApprovalService({
+      begin: { beginTransactionApproval: begin },
+      execution: { rejectTransaction },
+      submission: { waitForSubmissionOutcome },
+    });
+
+    const controller = new AbortController();
+    const addEventListener = vi.spyOn(controller.signal, "addEventListener");
+    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
+
+    const handoff = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
+      from: REQUEST.payload.from,
+      requestBinding: {
+        id: "binding-2",
+        signal: controller.signal,
+        attachBlockingApproval: vi.fn(),
+      } satisfies BeginTransactionApprovalOptions["requestBinding"],
+    });
+
+    const settled = await handoff.waitForProviderCompletion();
+
+    expect(settled).toEqual(resolution);
+    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true });
+    expect(removeEventListener).toHaveBeenCalledWith("abort", expect.any(Function));
+
+    controller.abort();
+    expect(rejectTransaction).not.toHaveBeenCalled();
+  });
+});

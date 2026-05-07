@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createNamespacesStub,
   createPrepareStub,
-  createProposalStore,
+  createProposalStores,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -13,7 +13,7 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
-    const proposalStore = createProposalStore();
+    const { proposalStore } = createProposalStores();
     const queuePrepare = vi.fn();
     const service = new TransactionProposalDraftService({
       proposalStore,

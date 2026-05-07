@@ -138,6 +138,39 @@ describe("InMemoryApprovalController", () => {
     }
   });
 
+  it("prevents duplicate approve execution while approval settlement is in flight", async () => {
+    const messenger = new Messenger();
+    const value = ["0xabc"];
+    const approve = vi.fn(async () => {
+      await Promise.resolve();
+      return value;
+    });
+    const controller = new InMemoryApprovalController({
+      messenger: messenger.scope({ publish: APPROVAL_TOPICS }),
+      getExecutor: () => ({
+        approve,
+        reject: vi.fn(async () => {}),
+        cancel: vi.fn(async () => {}),
+      }),
+    });
+
+    const request = createRequest({ approvalId: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd" });
+    const handle = controller.create(request, requester);
+
+    const first = controller.resolve({ approvalId: request.approvalId, action: "approve" });
+    const second = controller.resolve({ approvalId: request.approvalId, action: "approve" });
+
+    await expect(first).resolves.toEqual({
+      approvalId: request.approvalId,
+      status: "approved",
+      terminalReason: "user_approve",
+      value,
+    });
+    await expect(second).rejects.toThrow(`Approval ${request.approvalId} not found`);
+    await expect(handle.settled).resolves.toEqual(value);
+    expect(approve).toHaveBeenCalledTimes(1);
+  });
+
   it("cancelByScope() rejects matching approvals and removes them from state", async () => {
     const messenger = new Messenger();
     const controller = new InMemoryApprovalController({ messenger: messenger.scope({ publish: APPROVAL_TOPICS }) });

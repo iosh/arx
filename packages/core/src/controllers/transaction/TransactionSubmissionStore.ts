@@ -1,4 +1,3 @@
-import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type {
   TransactionSubmissionFailure,
   TransactionSubmissionPersistenceFailure,
@@ -8,7 +7,6 @@ import type {
 import { TransactionSubmissionError } from "./types.js";
 
 type TransactionSubmissionStoreOptions = {
-  recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   stateLimit: number;
 };
 
@@ -22,13 +20,11 @@ type SubmissionOutcome =
   | { state: "failed"; failure: TransactionSubmissionFailure };
 
 export class TransactionSubmissionStore implements TransactionSubmissionTracker {
-  #recordView: Pick<TransactionRecordViewStore, "getView" | "getOrLoadView">;
   #outcomes = new Map<string, SubmissionOutcome>();
   #waiters = new Map<string, Set<SubmissionWaiter>>();
   #stateLimit: number;
 
   constructor(options: TransactionSubmissionStoreOptions) {
-    this.#recordView = options.recordView;
     this.#stateLimit = options.stateLimit;
   }
 
@@ -68,15 +64,6 @@ export class TransactionSubmissionStore implements TransactionSubmissionTracker 
     const cached = this.#outcomes.get(id);
     if (cached) {
       return this.#readOutcomeOrThrow(cached);
-    }
-
-    const durable = this.#recordView.getView(id) ?? (await this.#recordView.getOrLoadView(id));
-    if (durable) {
-      const resolution = {
-        submitted: structuredClone(durable.submitted),
-      };
-      this.recordSubmitted(id, resolution);
-      return structuredClone(resolution);
     }
 
     return await new Promise<TransactionSubmissionResolution>((resolve, reject) => {

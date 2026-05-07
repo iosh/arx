@@ -143,11 +143,16 @@ export type NamespaceTransactionTracking<TNamespace extends string = string> = {
   deriveReplacementKey?(context: TransactionTrackingContext<TNamespace>): TransactionReplacementKey | null;
 };
 
+export type NamespaceTransactionRecord<TNamespace extends string = string> = {
+  parseSubmitted(submitted: TransactionSubmitted<TNamespace>): TransactionSubmitted<TNamespace>;
+};
+
 export type NamespaceTransaction<TNamespace extends string = string> = {
   request?: NamespaceTransactionRequest<TNamespace>;
   proposal?: NamespaceTransactionProposal<TNamespace>;
   execution?: NamespaceTransactionExecution<TNamespace>;
   tracking?: NamespaceTransactionTracking<TNamespace>;
+  record?: NamespaceTransactionRecord<TNamespace>;
 };
 
 export type AnyNamespaceTransaction = NamespaceTransaction<string>;

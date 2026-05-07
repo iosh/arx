@@ -71,13 +71,13 @@ const createExecutionService = (params?: {
   const tracking = params?.tracking ?? createTrackingStub();
   const messenger = params?.messenger ?? new Messenger();
   const submissionService = new TransactionSubmissionStore({
-    recordView,
     stateLimit: 50,
   });
   const recordService = new TransactionRecordService({
     proposalStore,
     recordView,
     accountCodecs,
+    namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
     service,
     submission: submissionService,
     tracking: tracking as never,

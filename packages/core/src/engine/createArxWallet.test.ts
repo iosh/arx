@@ -684,11 +684,12 @@ describe("createArxWallet", () => {
       await flushAsync();
 
       expect(fetchReceipt).toHaveBeenCalledTimes(1);
-      expect(
-        await runtime.transactions.submission.waitForSubmissionOutcome("44444444-4444-4444-8444-444444444444"),
-      ).toMatchObject({
-        submitted: {
-          hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      expect(runtime.transactions.records.getRecordView("44444444-4444-4444-8444-444444444444")).toMatchObject({
+        id: "44444444-4444-4444-8444-444444444444",
+        status: "confirmed",
+        receipt: {
+          status: "0x1",
+          blockNumber: "0x10",
         },
       });
     } finally {

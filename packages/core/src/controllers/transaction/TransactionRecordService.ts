@@ -1,6 +1,9 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
-import type { Eip155SubmittedTransaction, TransactionError, TransactionSubmitted } from "../../transactions/types.js";
+import type { TransactionRecord } from "../../storage/records.js";
+import { TransactionSubmittedSchema } from "../../storage/schemas.js";
+import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionError, TransactionSubmitted } from "../../transactions/types.js";
 import { isTransactionRecordTerminal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
@@ -13,26 +16,25 @@ type TransactionRecordServiceDeps = {
   proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
+  namespaces: Pick<NamespaceTransactions, "get">;
   service: TransactionsService;
   submission: Pick<TransactionSubmissionStore, "recordPersistenceFailure">;
   tracking: TransactionReceiptTracking;
 };
 
-const requireDurableSubmittedShape = (params: {
-  namespace: string;
+const parseDurableSubmitted = (params: {
   submitted: TransactionSubmitted;
-}): Eip155SubmittedTransaction => {
-  if (params.namespace === "eip155") {
-    return params.submitted as Eip155SubmittedTransaction;
-  }
-
-  throw new Error(`No durable transaction submission schema registered for namespace "${params.namespace}"`);
+  namespaceTransaction: ReturnType<NamespaceTransactions["get"]>;
+}): TransactionRecord["submitted"] => {
+  const normalizedSubmitted = params.namespaceTransaction?.record?.parseSubmitted(structuredClone(params.submitted));
+  return TransactionSubmittedSchema.parse(normalizedSubmitted ?? params.submitted);
 };
 
 export class TransactionRecordService {
   #proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
+  #namespaces: Pick<NamespaceTransactions, "get">;
   #service: TransactionsService;
   #submission: Pick<TransactionSubmissionStore, "recordPersistenceFailure">;
   #tracking: TransactionReceiptTracking;
@@ -41,15 +43,17 @@ export class TransactionRecordService {
     this.#proposalStore = deps.proposalStore;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
+    this.#namespaces = deps.namespaces;
     this.#service = deps.service;
     this.#submission = deps.submission;
     this.#tracking = deps.tracking;
   }
 
   async persistBroadcastRecord(meta: TransactionProposalMeta, submitted: TransactionSubmitted): Promise<void> {
-    const durableSubmitted = requireDurableSubmittedShape({
-      namespace: meta.namespace,
-      submitted: structuredClone(submitted),
+    const namespaceTransaction = this.#namespaces.get(meta.namespace);
+    const durableSubmitted = parseDurableSubmitted({
+      submitted,
+      namespaceTransaction,
     });
 
     try {
@@ -67,7 +71,7 @@ export class TransactionRecordService {
           address: meta.from,
         }),
         status: "broadcast",
-        submitted: durableSubmitted,
+        submitted: structuredClone(durableSubmitted),
       });
 
       this.#proposalStore.clearProposalAfterRecordPersisted(meta.id);

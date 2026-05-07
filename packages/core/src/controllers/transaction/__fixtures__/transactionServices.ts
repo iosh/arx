@@ -49,6 +49,7 @@ export const createNamespaceTransactionStub = (
     applyDraftEdit: (...args: never[]) => unknown;
     sign: (...args: never[]) => unknown;
     broadcast: (...args: never[]) => unknown;
+    parseSubmitted: (...args: never[]) => unknown;
     tracking: unknown;
   }>,
 ): NamespaceTransaction => ({
@@ -68,6 +69,9 @@ export const createNamespaceTransactionStub = (
       vi.fn(async () => ({
         submitted: DEFAULT_SUBMITTED,
       })),
+  },
+  record: {
+    parseSubmitted: (overrides?.parseSubmitted as never) ?? vi.fn((submitted) => submitted),
   },
   ...(overrides?.tracking !== undefined
     ? { tracking: overrides.tracking as never }

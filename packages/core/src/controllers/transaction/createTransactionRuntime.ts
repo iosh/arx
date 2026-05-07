@@ -71,7 +71,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   const submission = new TransactionSubmissionStore({
-    recordView,
     stateLimit,
   });
 
@@ -86,6 +85,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     proposalStore,
     recordView,
     accountCodecs: options.accountCodecs,
+    namespaces: options.namespaces,
     service: options.service,
     submission,
     tracking,

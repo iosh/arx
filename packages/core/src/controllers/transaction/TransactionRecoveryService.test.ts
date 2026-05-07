@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
+  createNamespacesStub,
   createRecordViewStub,
   createTransactionsServiceStub,
   DEFAULT_CHAIN_REF,
@@ -61,6 +62,7 @@ describe("createTransactionRecoveryService", () => {
       },
       recordView,
       accountCodecs,
+      namespaces: createNamespacesStub() as never,
       service: createTransactionsServiceStub({
         list: list as never,
       }),

@@ -124,5 +124,10 @@ export const createEip155Transaction = (deps: AdapterDeps): NamespaceTransaction
         });
       },
     },
+    record: {
+      parseSubmitted(submitted: Eip155SubmittedTransaction) {
+        return submitted;
+      },
+    },
   };
 };

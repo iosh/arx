@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createRecordViewStub, DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
+import { DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 
 describe("TransactionSubmissionStore", () => {
   it("resolves waiters after broadcast submission is recorded", async () => {
     const submissionService = new TransactionSubmissionStore({
-      recordView: createRecordViewStub(),
       stateLimit: 10,
     });
 
@@ -21,7 +20,6 @@ describe("TransactionSubmissionStore", () => {
 
   it("rejects waiters after a pre-broadcast failure is recorded", async () => {
     const submissionService = new TransactionSubmissionStore({
-      recordView: createRecordViewStub(),
       stateLimit: 10,
     });
 
@@ -48,7 +46,6 @@ describe("TransactionSubmissionStore", () => {
 
   it("replays cached submission outcomes to later waiters", async () => {
     const submissionService = new TransactionSubmissionStore({
-      recordView: createRecordViewStub(),
       stateLimit: 10,
     });
 
@@ -63,7 +60,6 @@ describe("TransactionSubmissionStore", () => {
 
   it("attaches persistence failure metadata to a submitted outcome", async () => {
     const submissionService = new TransactionSubmissionStore({
-      recordView: createRecordViewStub(),
       stateLimit: 10,
     });
 
@@ -87,5 +83,32 @@ describe("TransactionSubmissionStore", () => {
         },
       },
     });
+  });
+
+  it("keeps waiting when no submission outcome was recorded", async () => {
+    const submissionService = new TransactionSubmissionStore({
+      stateLimit: 10,
+    });
+
+    let settled = false;
+    const pending = submissionService.waitForSubmissionOutcome("tx-5").then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await Promise.resolve();
+
+    expect(settled).toBe(false);
+
+    submissionService.recordSubmitted("tx-5", {
+      submitted: DEFAULT_SUBMITTED,
+    });
+
+    await pending;
+    expect(settled).toBe(true);
   });
 });

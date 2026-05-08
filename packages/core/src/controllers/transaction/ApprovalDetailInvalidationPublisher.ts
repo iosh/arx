@@ -1,30 +1,33 @@
 import type { ApprovalController } from "../approval/types.js";
-import { TRANSACTION_STATE_CHANGED, type TransactionMessenger } from "./topics.js";
-import type { TransactionStateChange, TransactionStateChangeEvents } from "./types.js";
+import {
+  TRANSACTION_APPROVAL_DETAIL_INVALIDATED,
+  type TransactionMessenger,
+} from "./topics.js";
+import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } from "./types.js";
 
-type TransactionStateChangePublisherOptions = {
+type Options = {
   messenger: TransactionMessenger;
   approvals: Pick<ApprovalController, "listPendingIdsBySubject">;
 };
 
-export class TransactionStateChangePublisher implements TransactionStateChangeEvents {
+export class ApprovalDetailInvalidationPublisher implements ApprovalDetailInvalidationEvents {
   #messenger: TransactionMessenger;
   #approvals: Pick<ApprovalController, "listPendingIdsBySubject">;
   #pendingTransactionIds = new Set<string>();
   #pendingApprovalIds = new Set<string>();
   #flushScheduled = false;
 
-  constructor(options: TransactionStateChangePublisherOptions) {
+  constructor(options: Options) {
     this.#messenger = options.messenger;
     this.#approvals = options.approvals;
   }
 
-  onStateChanged(handler: (change: TransactionStateChange) => void): () => void {
-    return this.#messenger.subscribe(TRANSACTION_STATE_CHANGED, handler);
+  onChanged(handler: (change: ApprovalDetailInvalidation) => void): () => void {
+    return this.#messenger.subscribe(TRANSACTION_APPROVAL_DETAIL_INVALIDATED, handler);
   }
 
-  enqueue(change: { transactionIds: string[]; approvalIds?: string[] }): void {
-    for (const transactionId of change.transactionIds) {
+  enqueue(change: { transactionIds?: string[]; approvalIds?: string[] }): void {
+    for (const transactionId of change.transactionIds ?? []) {
       this.#pendingTransactionIds.add(transactionId);
     }
     for (const approvalId of change.approvalIds ?? []) {
@@ -54,8 +57,11 @@ export class TransactionStateChangePublisher implements TransactionStateChangeEv
       }
     }
 
-    this.#messenger.publish(TRANSACTION_STATE_CHANGED, {
-      transactionIds,
+    if (approvalIds.size === 0) {
+      return;
+    }
+
+    this.#messenger.publish(TRANSACTION_APPROVAL_DETAIL_INVALIDATED, {
       approvalIds: [...approvalIds],
     });
   }

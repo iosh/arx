@@ -209,7 +209,7 @@ const createWalletUiDeps = (
             transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
           rerunPrepare: (transactionId) => transactions.proposal.draft.rerunPrepare(transactionId),
           applyDraftEdit: (input) => transactions.proposal.draft.applyDraftEdit(input),
-          onStateChanged: (listener) => transactions.stateChanges.onStateChanged(listener),
+          onChanged: (listener) => transactions.approvalDetailInvalidations.onChanged(listener),
         },
         chains: {
           buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),

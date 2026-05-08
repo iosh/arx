@@ -4,7 +4,10 @@ import {
   toAccountKeyFromAddress,
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
-import type { BeginTransactionApprovalOptions, TransactionStateChange } from "@arx/core/controllers";
+import type {
+  ApprovalDetailInvalidation,
+  BeginTransactionApprovalOptions,
+} from "@arx/core/controllers";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
 import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
@@ -760,8 +763,8 @@ const createUiAccessForTest = (input: {
             input.transactionsAccess?.applyDraftEdit
               ? input.transactionsAccess.applyDraftEdit(draft)
               : input.controllers.transactionProposalDraft.applyDraftEdit(draft),
-          onStateChanged: (listener: (change: TransactionStateChange) => void) =>
-            input.transactionsAccess?.onStateChanged ? input.transactionsAccess.onStateChanged(listener) : () => {},
+          onChanged: (listener: (change: ApprovalDetailInvalidation) => void) =>
+            input.transactionsAccess?.onChanged ? input.transactionsAccess.onChanged(listener) : () => {},
         } as never,
         chains: {
           ...(input.chainViewsOverride ?? controllerViews.chainViews),

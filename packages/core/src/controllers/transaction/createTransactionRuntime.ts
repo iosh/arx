@@ -17,7 +17,7 @@ import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
 import { TransactionRecordService } from "./TransactionRecordService.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
-import { TransactionStateChangePublisher } from "./TransactionStateChangePublisher.js";
+import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
@@ -142,21 +142,18 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     records,
   });
 
-  const stateChanges = new TransactionStateChangePublisher({
+  const approvalDetailInvalidations = new ApprovalDetailInvalidationPublisher({
     messenger: options.messenger,
     approvals: options.approvals,
   });
 
-  proposalStore.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
-  recordView.onChanged((transactionIds) => stateChanges.enqueue({ transactionIds }));
+  proposalStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
+  recordView.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
 
   options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
     proposalStore.invalidatePrepareFromApproval(event, now());
     if (event.subject?.kind === "transaction") {
-      stateChanges.enqueue({
-        transactionIds: [event.subject.transactionId],
-        approvalIds: [event.approvalId],
-      });
+      approvalDetailInvalidations.enqueue({ approvalIds: [event.approvalId] });
     }
   });
 
@@ -175,7 +172,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     execution,
     recovery,
     submission,
-    stateChanges,
+    approvalDetailInvalidations,
     review,
     proposals: proposalReader,
     records: recordView,

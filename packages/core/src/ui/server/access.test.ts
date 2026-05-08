@@ -42,7 +42,7 @@ const createUiAccess = () =>
             }) as never,
           rerunPrepare: async () => {},
           applyDraftEdit: async () => {},
-          onStateChanged: (handler: (change: { transactionIds: string[]; approvalIds: string[] }) => void) => {
+          onChanged: (handler: (change: { approvalIds: string[] }) => void) => {
             transactionHandlers.add(handler);
             return () => transactionHandlers.delete(handler);
           },
@@ -121,7 +121,7 @@ const createUiAccess = () =>
 const approvalFinishedHandlers = new Set<
   (event: { approvalId: string; subject?: { kind: "transaction"; transactionId: string } }) => void
 >();
-const transactionHandlers = new Set<(change: { transactionIds: string[]; approvalIds: string[] }) => void>();
+const transactionHandlers = new Set<(change: { approvalIds: string[] }) => void>();
 
 describe("createUiRuntimeAccess", () => {
   it("emits approval detail changed from transaction invalidation without duplicating it on approval finish", () => {
@@ -136,7 +136,7 @@ describe("createUiRuntimeAccess", () => {
     approvalFinishedHandlers.forEach((handler) =>
       handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } }),
     );
-    transactionHandlers.forEach((handler) => handler({ transactionIds: ["tx-1"], approvalIds: ["approval-1"] }));
+    transactionHandlers.forEach((handler) => handler({ approvalIds: ["approval-1"] }));
 
     unsubscribe();
 

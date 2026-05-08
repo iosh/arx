@@ -111,7 +111,7 @@ const createUiEventSubscription = ({ server }: CreateUiRuntimeAccessOptions): Ui
           emitApprovalDetailChanged(event.approvalId);
         }
       }),
-      server.access.transactions.onStateChanged((change) => {
+      server.access.transactions.onChanged((change) => {
         for (const approvalId of new Set(change.approvalIds)) {
           emitApprovalDetailChanged(approvalId);
         }

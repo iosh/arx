@@ -195,7 +195,7 @@ const createHandlersForRuntime = (
           runtime.transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
         rerunPrepare: (transactionId) => runtime.transactions.proposal.draft.rerunPrepare(transactionId),
         applyDraftEdit: (input) => runtime.transactions.proposal.draft.applyDraftEdit(input),
-        onStateChanged: (listener) => runtime.transactions.stateChanges.onStateChanged(listener),
+        onChanged: (listener) => runtime.transactions.approvalDetailInvalidations.onChanged(listener),
       },
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(

@@ -34,8 +34,7 @@ export type TransactionRecordStatusChange = {
 
 export type TransactionStatusChange = TransactionProposalPhaseChange | TransactionRecordStatusChange;
 
-export type TransactionStateChange = {
-  transactionIds: string[];
+export type ApprovalDetailInvalidation = {
   approvalIds: string[];
 };
 
@@ -258,8 +257,8 @@ export type TransactionRecovery = {
   resumeTransactions(): Promise<void>;
 };
 
-export type TransactionStateChangeEvents = {
-  onStateChanged(handler: (change: TransactionStateChange) => void): () => void;
+export type ApprovalDetailInvalidationEvents = {
+  onChanged(handler: (change: ApprovalDetailInvalidation) => void): () => void;
 };
 
 export type TransactionProposalReader = {
@@ -281,7 +280,7 @@ export type TransactionRuntime = Readonly<{
   execution: TransactionApprovalExecutor;
   recovery: TransactionRecovery;
   submission: TransactionSubmissionTracker;
-  stateChanges: TransactionStateChangeEvents;
+  approvalDetailInvalidations: ApprovalDetailInvalidationEvents;
   review: TransactionApprovalReviewReader;
   proposals: TransactionProposalReader;
   records: TransactionRecordReader;

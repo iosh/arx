@@ -3,9 +3,9 @@ import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { PermissionsEvents } from "../../controllers/permission/types.js";
 import type {
+  ApprovalDetailInvalidationEvents,
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
-  TransactionStateChangeEvents,
 } from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
@@ -89,7 +89,7 @@ export type UiTransactionsWriteAccess = Pick<
   "beginTransactionApproval" | "rerunPrepare" | "applyDraftEdit"
 >;
 
-export type UiTransactionsEventsAccess = Pick<TransactionStateChangeEvents, "onStateChanged">;
+export type UiTransactionsEventsAccess = Pick<ApprovalDetailInvalidationEvents, "onChanged">;
 
 export type UiTransactionsAccess = UiTransactionsWriteAccess & UiTransactionsEventsAccess;
 

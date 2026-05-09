@@ -221,7 +221,10 @@ export const createTransactionProposal = (
   return created;
 };
 
-export const toRecord = (meta: TransactionProposalMeta): TransactionRecord => ({
+export const toRecord = (
+  meta: TransactionProposalMeta,
+  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
+): TransactionRecord => ({
   id: meta.id,
   chainRef: meta.chainRef,
   origin: meta.origin,
@@ -235,8 +238,9 @@ export const toRecord = (meta: TransactionProposalMeta): TransactionRecord => ({
       ? meta.status
       : "failed",
   submitted: meta.submitted ?? DEFAULT_SUBMITTED,
-  ...(meta.receipt !== undefined && meta.receipt !== null ? { receipt: meta.receipt } : {}),
-  ...(meta.replacedId !== undefined && meta.replacedId !== null ? { replacedId: meta.replacedId } : {}),
+  ...(patch?.receipt !== undefined ? { receipt: patch.receipt } : {}),
+  ...(patch?.replacedId !== undefined ? { replacedId: patch.replacedId } : {}),
+  ...(patch?.replacementIdentity !== undefined ? { replacementIdentity: patch.replacementIdentity } : {}),
   createdAt: meta.createdAt,
   updatedAt: meta.updatedAt,
 });
@@ -245,34 +249,48 @@ export const createTransactionsServiceStub = (
   overrides?: Partial<{
     get: TransactionsService["get"];
     list: TransactionsService["list"];
+    findByReplacementIdentity: TransactionsService["findByReplacementIdentity"];
     createSubmitted: TransactionsService["createSubmitted"];
     transition: TransactionsService["transition"];
     subscribeChanged: TransactionsService["subscribeChanged"];
     patchIfStatus: TransactionsService["patchIfStatus"];
     remove: TransactionsService["remove"];
   }>,
-): TransactionsService => ({
-  get: overrides?.get ?? vi.fn(async () => null),
-  list: overrides?.list ?? vi.fn(async () => []),
-  createSubmitted:
-    overrides?.createSubmitted ??
-    vi.fn(async (input) => ({
-      id: input.id ?? crypto.randomUUID(),
-      chainRef: input.chainRef,
-      origin: input.origin,
-      fromAccountKey: input.fromAccountKey,
-      status: input.status,
-      submitted: input.submitted,
-      ...(input.receipt !== undefined ? { receipt: input.receipt } : {}),
-      ...(input.replacedId !== undefined ? { replacedId: input.replacedId } : {}),
-      createdAt: input.createdAt ?? 1,
-      updatedAt: input.createdAt ?? 1,
-    })),
-  transition: overrides?.transition ?? vi.fn(async () => null),
-  subscribeChanged: overrides?.subscribeChanged ?? vi.fn(() => () => {}),
-  patchIfStatus: overrides?.patchIfStatus ?? vi.fn(async () => null),
-  remove: overrides?.remove ?? vi.fn(async () => {}),
-});
+): TransactionsService => {
+  const list = overrides?.list ?? vi.fn(async () => []);
+
+  return {
+    get: overrides?.get ?? vi.fn(async () => null),
+    list,
+    findByReplacementIdentity:
+      overrides?.findByReplacementIdentity ??
+      vi.fn(async (identity) => {
+        const records = await list({ replacementIdentity: identity });
+        return records.filter(
+          (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(identity),
+        );
+      }),
+    createSubmitted:
+      overrides?.createSubmitted ??
+      vi.fn(async (input) => ({
+        id: input.id ?? crypto.randomUUID(),
+        chainRef: input.chainRef,
+        origin: input.origin,
+        fromAccountKey: input.fromAccountKey,
+        status: input.status,
+        submitted: input.submitted,
+        ...(input.receipt !== undefined ? { receipt: input.receipt } : {}),
+        ...(input.replacedId !== undefined ? { replacedId: input.replacedId } : {}),
+        ...(input.replacementIdentity !== undefined ? { replacementIdentity: input.replacementIdentity } : {}),
+        createdAt: input.createdAt ?? 1,
+        updatedAt: input.createdAt ?? 1,
+      })),
+    transition: overrides?.transition ?? vi.fn(async () => null),
+    subscribeChanged: overrides?.subscribeChanged ?? vi.fn(() => () => {}),
+    patchIfStatus: overrides?.patchIfStatus ?? vi.fn(async () => null),
+    remove: overrides?.remove ?? vi.fn(async () => {}),
+  };
+};
 
 export const createRecordViewStub = (params?: {
   from?: string;

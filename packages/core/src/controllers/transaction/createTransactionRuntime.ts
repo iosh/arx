@@ -4,6 +4,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
+import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
@@ -13,11 +14,9 @@ import { TransactionProposalBeginService } from "./TransactionProposalBeginServi
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
 import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
 import { TransactionProposalStore } from "./TransactionProposalStore.js";
-import { TransactionReceiptTracking } from "./TransactionReceiptTracking.js";
-import { TransactionRecordService } from "./TransactionRecordService.js";
+import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
-import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
@@ -74,21 +73,14 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     stateLimit,
   });
 
-  const tracking = new TransactionReceiptTracking({
-    recordView,
-    namespaces: options.namespaces,
-    service: options.service,
-    ...(options.tracker ? { tracker: options.tracker } : {}),
-  });
-
-  const records = new TransactionRecordService({
+  const records = new TransactionRecordRuntime({
     proposalStore,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
     service: options.service,
     submission,
-    tracking,
+    ...(options.tracker ? { tracker: options.tracker } : {}),
   });
 
   const prepare = new TransactionPrepareManager({

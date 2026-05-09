@@ -119,4 +119,20 @@ describe("TransactionRecordSchema", () => {
       ),
     ).toThrow(/submitted/i);
   });
+
+  it("accepts records with a durable replacement identity", () => {
+    const parsed = TransactionRecordSchema.parse(
+      createTransactionRecord({
+        replacementIdentity: {
+          scope: "eip155.nonce",
+          value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+        },
+      }),
+    );
+
+    expect(parsed.replacementIdentity).toEqual({
+      scope: "eip155.nonce",
+      value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+    });
+  });
 });

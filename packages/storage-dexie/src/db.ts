@@ -13,6 +13,9 @@ import type { VaultMetaEntity } from "./types.js";
 
 export const DB_SCHEMA_VERSION = 1;
 
+const TRANSACTIONS_SCHEMA =
+  "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [replacementIdentity.scope+replacementIdentity.value]";
+
 type CustomChainRow = CustomChainRecord;
 type CustomRpcRow = CustomRpcRecord;
 type KeyringMetaRow = KeyringMetaRecord;
@@ -39,8 +42,7 @@ export class ArxStorageDatabase extends Dexie {
       networkSelection: "&id",
       accounts: "&accountKey, namespace, keyringId",
       permissions: "[origin+namespace], origin",
-      transactions:
-        "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id]",
+      transactions: TRANSACTIONS_SCHEMA,
 
       vaultMeta: "&id",
 

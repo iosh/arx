@@ -9,7 +9,7 @@ export type TransactionsChangedPayload =
       kind: "patch";
       id: TransactionRecord["id"];
       status: TransactionStatus;
-      keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedId">>;
+      keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
     }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
@@ -37,6 +37,7 @@ export type CreateSubmittedTransactionParams = {
   status: TransactionRecord["status"];
   receipt?: TransactionRecord["receipt"] | undefined;
   replacedId?: TransactionRecord["replacedId"] | undefined;
+  replacementIdentity?: TransactionRecord["replacementIdentity"] | undefined;
   /**
    * Optional caller-provided createdAt for deterministic timestamps in tests.
    * When provided, updatedAt is initialized to the same value.
@@ -48,7 +49,7 @@ export type TransitionTransactionParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId">>;
+  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
 };
 
 export type ListTransactionsCursor = {
@@ -59,6 +60,7 @@ export type ListTransactionsCursor = {
 export type ListTransactionsParams = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
+  replacementIdentity?: TransactionRecord["replacementIdentity"];
   limit?: number;
   before?: ListTransactionsCursor;
 };
@@ -66,7 +68,7 @@ export type ListTransactionsParams = {
 export type PatchTransactionParams = {
   id: TransactionRecord["id"];
   expectedStatus: TransactionStatus;
-  patch: Partial<Pick<TransactionRecord, "receipt" | "replacedId">>;
+  patch: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
 };
 
 export type TransactionsService = {
@@ -74,6 +76,9 @@ export type TransactionsService = {
 
   get(id: TransactionRecord["id"]): Promise<TransactionRecord | null>;
   list(params?: ListTransactionsParams): Promise<TransactionRecord[]>;
+  findByReplacementIdentity(
+    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
+  ): Promise<TransactionRecord[]>;
 
   createSubmitted(params: CreateSubmittedTransactionParams): Promise<TransactionRecord>;
 

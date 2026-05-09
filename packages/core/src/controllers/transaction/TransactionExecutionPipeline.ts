@@ -4,7 +4,7 @@ import { requireNamespaceTransactionOperation } from "../../transactions/namespa
 import type { TransactionError } from "../../transactions/types.js";
 import { canStartProposalExecution, isProposalTerminal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionRecordService } from "./TransactionRecordService.js";
+import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import {
@@ -28,7 +28,7 @@ type TransactionExecutionPipelineDeps = {
   proposalStore: TransactionProposalStore;
   namespaces: NamespaceTransactions;
   submission: Pick<TransactionSubmissionStore, "recordSubmitted" | "recordPersistenceFailure" | "recordFailure">;
-  records: Pick<TransactionRecordService, "persistBroadcastRecord" | "failRecord">;
+  records: Pick<TransactionRecordRuntime, "persistBroadcastRecord" | "failRecord">;
   now: () => number;
 };
 
@@ -47,7 +47,7 @@ export class TransactionExecutionPipeline {
   #proposalStore: TransactionProposalStore;
   #namespaces: NamespaceTransactions;
   #submission: Pick<TransactionSubmissionStore, "recordSubmitted" | "recordPersistenceFailure" | "recordFailure">;
-  #records: Pick<TransactionRecordService, "persistBroadcastRecord" | "failRecord">;
+  #records: Pick<TransactionRecordRuntime, "persistBroadcastRecord" | "failRecord">;
   #now: () => number;
 
   constructor(deps: TransactionExecutionPipelineDeps) {

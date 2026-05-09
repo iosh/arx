@@ -33,6 +33,9 @@ const createService = (records: TransactionRecord[] = []): TransactionsService =
     subscribeChanged: vi.fn(() => () => {}),
     get: vi.fn(async (id: string) => records.find((record) => record.id === id) ?? null),
     list: vi.fn(async () => records),
+    findByReplacementIdentity: vi.fn(async (identity) =>
+      records.filter((record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(identity)),
+    ),
     createSubmitted: vi.fn(),
     transition: vi.fn(),
     patchIfStatus: vi.fn(),

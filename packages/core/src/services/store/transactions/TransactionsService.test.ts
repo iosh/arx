@@ -14,12 +14,18 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
     async list(query) {
       const chainRef = query?.chainRef;
       const status = query?.status;
+      const replacementIdentity = query?.replacementIdentity;
       const limit = query?.limit ?? 100;
       const before = query?.before;
 
       let all = [...store.values()];
       if (chainRef) all = all.filter((record) => record.chainRef === chainRef);
       if (status) all = all.filter((record) => record.status === status);
+      if (replacementIdentity !== undefined) {
+        all = all.filter(
+          (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(replacementIdentity),
+        );
+      }
       all.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
       if (before !== undefined) {
         all = all.filter(
@@ -30,6 +36,9 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
       }
 
       return all.slice(0, limit);
+    },
+    async findByReplacementIdentity(identity) {
+      return await port.list({ replacementIdentity: identity });
     },
     async create(record) {
       const checked = TransactionRecordSchema.parse(record);
@@ -327,6 +336,49 @@ describe("TransactionsService", () => {
     });
   });
 
+  it("findByReplacementIdentity() returns matching records newest-first", async () => {
+    const replacementIdentity = {
+      scope: "eip155.nonce",
+      value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+    } as const;
+    const { port } = createInMemoryPort([
+      createSubmittedRecord({
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "broadcast",
+        replacementIdentity,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        submitted: {
+          hash: "0xaaaa",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
+      }),
+      createSubmittedRecord({
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        status: "confirmed",
+        replacementIdentity,
+        createdAt: 2_000,
+        updatedAt: 2_000,
+        submitted: {
+          hash: "0xbbbb",
+          chainId: "0x1",
+          from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          nonce: "0x7",
+        },
+      }),
+    ]);
+    const service = createTransactionsService({ port, now: () => 2_000 });
+
+    const records = await service.findByReplacementIdentity(replacementIdentity);
+
+    expect(records.map((record) => record.id)).toEqual([
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    ]);
+  });
+
   it("transition() returns null when port.updateIfStatus() fails (no changed event)", async () => {
     const { store } = createInMemoryPort();
 
@@ -335,6 +387,9 @@ describe("TransactionsService", () => {
         return store.get(id) ?? null;
       },
       async list() {
+        return [];
+      },
+      async findByReplacementIdentity() {
         return [];
       },
       async create(record) {

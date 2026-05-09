@@ -22,20 +22,23 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
-import { TransactionRecordService } from "./TransactionRecordService.js";
+import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 
 const createTrackingStub = (params?: {
+  start?: (id: string, context: unknown) => void;
+  resume?: (id: string, context: unknown) => void;
   stop?: (id: string) => void;
-  handleTransition?: (previous: TransactionRecordView | undefined, next: TransactionRecordView) => void;
-  resumeBroadcast?: (record: TransactionRecordView) => void;
+  isTracking?: (id: string) => boolean;
 }) =>
   ({
+    start: params?.start ?? vi.fn(),
+    resume: params?.resume ?? vi.fn(),
     stop: params?.stop ?? vi.fn(),
-    handleTransition: params?.handleTransition ?? vi.fn(),
-    resumeBroadcast: params?.resumeBroadcast ?? vi.fn(),
+    isTracking: params?.isTracking ?? vi.fn(() => false),
+    pending: vi.fn(() => 0),
   }) as never;
 
 const createExecutionService = (params?: {
@@ -73,14 +76,14 @@ const createExecutionService = (params?: {
   const submissionService = new TransactionSubmissionStore({
     stateLimit: 50,
   });
-  const recordService = new TransactionRecordService({
+  const recordService = new TransactionRecordRuntime({
     proposalStore,
     recordView,
     accountCodecs,
     namespaces: (params?.namespaces ?? createNamespacesStub()) as never,
     service,
     submission: submissionService,
-    tracking: tracking as never,
+    tracker: tracking as never,
   });
   const execution = new TransactionExecutionService({
     proposalStore,
@@ -275,7 +278,7 @@ describe("TransactionExecutionService", () => {
       };
     });
     const stop = vi.fn();
-    const handleTransition = vi.fn();
+    const resume = vi.fn();
     const { execution } = createExecutionService({
       service: createTransactionsServiceStub({
         get: vi.fn(async () =>
@@ -304,14 +307,14 @@ describe("TransactionExecutionService", () => {
       }),
       tracking: createTrackingStub({
         stop,
-        handleTransition,
+        resume,
       }),
     });
 
     await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
 
     expect(stop).not.toHaveBeenCalled();
-    expect(handleTransition).not.toHaveBeenCalled();
+    expect(resume).not.toHaveBeenCalled();
   });
 
   it("creates a durable record only after broadcast succeeds", async () => {
@@ -336,7 +339,7 @@ describe("TransactionExecutionService", () => {
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
-    const handleTransition = vi.fn();
+    const start = vi.fn();
     const recordView = createRecordViewStub();
     const { execution, proposalStore } = createExecutionService({
       namespaces: createNamespacesStub(() =>
@@ -350,7 +353,7 @@ describe("TransactionExecutionService", () => {
       }),
       recordView,
       tracking: createTrackingStub({
-        handleTransition,
+        start,
       }),
     });
 
@@ -389,7 +392,7 @@ describe("TransactionExecutionService", () => {
     );
     expect(proposalStore.get(REQUEST_ID)).toBeUndefined();
     expect(recordView.commitRecordView).toHaveBeenCalledTimes(1);
-    expect(handleTransition).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(1);
   });
 
   it("does not create a durable record when broadcast fails", async () => {

@@ -276,6 +276,15 @@ export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 export const TransactionStatusSchema = z.enum(["broadcast", "confirmed", "failed", "replaced"]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
 
+export const TransactionReplacementIdentitySchema = z
+  .strictObject({
+    scope: z.string().min(1),
+    value: z.string().min(1),
+  })
+  .nullable()
+  .optional();
+export type TransactionReplacementIdentity = z.infer<typeof TransactionReplacementIdentitySchema>;
+
 const TransactionRecordBaseSchema = z.strictObject({
   id: z.uuid(),
   chainRef: chainRefSchema,
@@ -283,6 +292,7 @@ const TransactionRecordBaseSchema = z.strictObject({
   fromAccountKey: AccountKeySchema,
   status: TransactionStatusSchema,
   replacedId: z.uuid().nullable().optional(),
+  replacementIdentity: TransactionReplacementIdentitySchema,
   createdAt: epochMillisecondsSchema,
   updatedAt: epochMillisecondsSchema,
 });

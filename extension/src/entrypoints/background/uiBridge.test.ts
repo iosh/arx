@@ -4,10 +4,7 @@ import {
   toAccountKeyFromAddress,
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
-import type {
-  ApprovalDetailInvalidation,
-  BeginTransactionApprovalOptions,
-} from "@arx/core/controllers";
+import type { ApprovalDetailInvalidation, BeginTransactionApprovalOptions } from "@arx/core/controllers";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
 import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";

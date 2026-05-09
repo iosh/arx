@@ -3,6 +3,7 @@ import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
   createNamespacesStub,
+  createReceiptTrackingStub,
   createRecordViewStub,
   createTransactionsServiceStub,
   DEFAULT_CHAIN_REF,
@@ -10,7 +11,7 @@ import {
   DEFAULT_SUBMITTED,
   REQUEST_CONTEXT,
 } from "./__fixtures__/transactionServices.js";
-import { TransactionRecordService } from "./TransactionRecordService.js";
+import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
 
 describe("createTransactionRecoveryService", () => {
@@ -32,7 +33,13 @@ describe("createTransactionRecoveryService", () => {
         updatedAt: record.updatedAt,
       },
     }));
-    const resumeBroadcast = vi.fn();
+    const tracker = {
+      start: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+      isTracking: vi.fn(() => false),
+      pending: vi.fn(() => 0),
+    };
     const recordView = createRecordViewStub({
       commitRecordView,
     });
@@ -55,7 +62,7 @@ describe("createTransactionRecoveryService", () => {
       ])
       .mockResolvedValueOnce([]);
 
-    const records = new TransactionRecordService({
+    const records = new TransactionRecordRuntime({
       proposalStore: {
         clearProposalAfterRecordPersisted: vi.fn(),
         delete: vi.fn(),
@@ -69,11 +76,7 @@ describe("createTransactionRecoveryService", () => {
       submission: {
         recordPersistenceFailure: vi.fn(),
       },
-      tracking: {
-        handleTransition: vi.fn(),
-        resumeBroadcast,
-        stop: vi.fn(),
-      } as never,
+      tracker: tracker as never,
     });
     const recovery = createTransactionRecoveryService({
       execution: { resumeApprovedProposals },
@@ -90,11 +93,6 @@ describe("createTransactionRecoveryService", () => {
         status: "broadcast",
       }),
     );
-    expect(resumeBroadcast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "durable-tx",
-        status: "broadcast",
-      }),
-    );
+    expect(tracker.resume).toHaveBeenCalledTimes(1);
   });
 });

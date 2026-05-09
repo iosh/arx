@@ -48,12 +48,23 @@ export const createTransactionsService = ({
     const records = await port.list({
       ...(params?.chainRef !== undefined ? { chainRef: params.chainRef } : {}),
       ...(params?.status !== undefined ? { status: params.status } : {}),
+      ...(params?.replacementIdentity !== undefined ? { replacementIdentity: params.replacementIdentity } : {}),
       ...(params?.limit !== undefined ? { limit: params.limit } : {}),
       ...(params?.before !== undefined ? { before: params.before } : {}),
     });
 
     const parsed = records.flatMap((r) => {
       const out = TransactionRecordSchema.safeParse(r);
+      return out.success ? [out.data] : [];
+    });
+    parsed.sort(compareTransactionsNewestFirst);
+    return parsed;
+  };
+
+  const findByReplacementIdentity = async (identity: NonNullable<TransactionRecord["replacementIdentity"]>) => {
+    const records = await port.findByReplacementIdentity(identity);
+    const parsed = records.flatMap((record) => {
+      const out = TransactionRecordSchema.safeParse(record);
       return out.success ? [out.data] : [];
     });
     parsed.sort(compareTransactionsNewestFirst);
@@ -72,6 +83,7 @@ export const createTransactionsService = ({
       submitted: structuredClone(params.submitted),
       receipt: params.receipt !== undefined ? structuredClone(params.receipt) : undefined,
       replacedId: params.replacedId,
+      replacementIdentity: params.replacementIdentity,
       createdAt: ts,
       updatedAt: ts,
     });
@@ -184,7 +196,7 @@ export const createTransactionsService = ({
       kind: "patch",
       id: checked.id,
       status: checked.status,
-      keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedId">>,
+      keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
     });
     return checked;
   };
@@ -199,6 +211,7 @@ export const createTransactionsService = ({
 
     get,
     list,
+    findByReplacementIdentity,
     createSubmitted,
     transition,
     patchIfStatus,

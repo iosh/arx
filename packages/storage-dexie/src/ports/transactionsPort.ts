@@ -19,6 +19,7 @@ export class DexieTransactionsPort implements TransactionsPort {
   async list(query?: {
     chainRef?: string;
     status?: TransactionRecord["status"];
+    replacementIdentity?: TransactionRecord["replacementIdentity"];
     limit?: number;
     before?: {
       createdAt: number;
@@ -30,8 +31,15 @@ export class DexieTransactionsPort implements TransactionsPort {
     const limit = query?.limit ?? 100;
     const chainRef = query?.chainRef;
     const status = query?.status;
+    const replacementIdentity = query?.replacementIdentity;
     const before = query?.before;
     const candidateRows = await (() => {
+      if (replacementIdentity !== undefined && replacementIdentity !== null) {
+        return this.table
+          .where("[replacementIdentity.scope+replacementIdentity.value]")
+          .equals([replacementIdentity.scope, replacementIdentity.value])
+          .toArray();
+      }
       if (chainRef !== undefined) {
         return this.table.where("chainRef").equals(chainRef).toArray();
       }
@@ -50,6 +58,12 @@ export class DexieTransactionsPort implements TransactionsPort {
       if (chainRef !== undefined && parsed.chainRef !== chainRef) continue;
       if (status !== undefined && parsed.status !== status) continue;
       if (
+        replacementIdentity !== undefined &&
+        JSON.stringify(parsed.replacementIdentity ?? null) !== JSON.stringify(replacementIdentity)
+      ) {
+        continue;
+      }
+      if (
         before !== undefined &&
         !(
           parsed.createdAt < before.createdAt ||
@@ -64,6 +78,27 @@ export class DexieTransactionsPort implements TransactionsPort {
 
     records.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
     return records.slice(0, limit);
+  }
+
+  async findByReplacementIdentity(
+    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
+  ): Promise<TransactionRecord[]> {
+    await this.ctx.ready;
+    const rows = await this.table
+      .where("[replacementIdentity.scope+replacementIdentity.value]")
+      .equals([identity.scope, identity.value])
+      .toArray();
+
+    const records = await Promise.all(
+      rows.map(async (row) => {
+        const id = typeof (row as { id?: unknown }).id === "string" ? row.id : undefined;
+        return await this.parseRow(row, id);
+      }),
+    );
+
+    return records
+      .flatMap((record) => (record ? [record] : []))
+      .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
   }
 
   async create(record: TransactionRecord): Promise<void> {

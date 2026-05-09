@@ -1,8 +1,5 @@
 import type { ApprovalController } from "../approval/types.js";
-import {
-  TRANSACTION_APPROVAL_DETAIL_INVALIDATED,
-  type TransactionMessenger,
-} from "./topics.js";
+import { TRANSACTION_APPROVAL_DETAIL_INVALIDATED, type TransactionMessenger } from "./topics.js";
 import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } from "./types.js";
 
 type Options = {

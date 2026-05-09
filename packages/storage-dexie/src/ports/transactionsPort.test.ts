@@ -179,6 +179,49 @@ describe("DexieTransactionsPort", () => {
     expect(secondPage.map((record) => record.id)).toEqual([r1.id]);
   });
 
+  it("findByReplacementIdentity() uses the durable replacement identity relation", async () => {
+    const storage = createDexieStorage({ databaseName: DB_NAME });
+    const port = storage.ports.transactions;
+    const replacementIdentity = {
+      scope: "eip155.nonce",
+      value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
+    } as const;
+
+    const broadcast = createRecord({
+      id: "10101010-1010-4010-8010-101010101010",
+      replacementIdentity,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const confirmed = createRecord({
+      id: "20202020-2020-4020-8020-202020202020",
+      status: "confirmed",
+      replacementIdentity,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const unrelated = createRecord({
+      id: "30303030-3030-4030-8030-303030303030",
+      status: "confirmed",
+      replacementIdentity: {
+        scope: "eip155.nonce",
+        value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x8",
+      },
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    });
+
+    await port.create(broadcast);
+    await port.create(confirmed);
+    await port.create(unrelated);
+
+    const listed = await port.list({ replacementIdentity });
+    expect(listed.map((record) => record.id)).toEqual([confirmed.id, broadcast.id]);
+
+    const records = await port.findByReplacementIdentity(replacementIdentity);
+    expect(records.map((record) => record.id)).toEqual([confirmed.id, broadcast.id]);
+  });
+
   it("allows multiple rows with the same submitted hash", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;

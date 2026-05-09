@@ -142,6 +142,7 @@ export class MemoryTransactionsPort implements TransactionsPort {
   async list(query?: {
     chainRef?: string;
     status?: TransactionRecord["status"];
+    replacementIdentity?: TransactionRecord["replacementIdentity"];
     limit?: number;
     before?: {
       createdAt: number;
@@ -150,12 +151,18 @@ export class MemoryTransactionsPort implements TransactionsPort {
   }): Promise<TransactionRecord[]> {
     const chainRef = query?.chainRef;
     const status = query?.status;
+    const replacementIdentity = query?.replacementIdentity;
     const limit = query?.limit ?? 100;
     const before = query?.before;
 
     let all = Array.from(this.#records.values());
     if (chainRef !== undefined) all = all.filter((r) => r.chainRef === chainRef);
     if (status !== undefined) all = all.filter((r) => r.status === status);
+    if (replacementIdentity !== undefined) {
+      all = all.filter(
+        (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(replacementIdentity),
+      );
+    }
     all.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
     if (before !== undefined) {
       all = all.filter(
@@ -165,6 +172,12 @@ export class MemoryTransactionsPort implements TransactionsPort {
     }
 
     return all.slice(0, limit).map((r) => clone(r));
+  }
+
+  async findByReplacementIdentity(
+    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
+  ): Promise<TransactionRecord[]> {
+    return await this.list({ replacementIdentity: identity });
   }
 
   async create(record: TransactionRecord): Promise<void> {

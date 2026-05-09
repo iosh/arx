@@ -523,6 +523,19 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       expect(stored).toMatchObject({
         status: "replaced",
         replacedId: second.transactionId,
+        replacementIdentity: {
+          scope: "eip155.nonce",
+          value: `${chain.chainRef}:${fromAddress.toLowerCase()}:0x7`,
+        },
+      });
+
+      const replacementStored = await context.transactionsPort.get(second.transactionId);
+      expect(replacementStored).toMatchObject({
+        status: "confirmed",
+        replacementIdentity: {
+          scope: "eip155.nonce",
+          value: `${chain.chainRef}:${fromAddress.toLowerCase()}:0x7`,
+        },
       });
     } finally {
       unsubscribeAutoApproval();
@@ -683,7 +696,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     }
   });
 
-  it("marks a broadcast transaction as failed when receipt polling exceeds max attempts", async () => {
+  it("stops receipt polling without rewriting the durable status when receipt polling exceeds max attempts", async () => {
     const chain = createChainMetadata({
       chainRef: "eip155:1",
       chainId: "0x1",
@@ -749,13 +762,18 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       expect(fetchReceipt).toHaveBeenCalledTimes(20);
 
-      const failedView = context.runtime.transactions.records.getRecordView(handoff.transactionId);
-      expect(failedView).toMatchObject({
-        status: "failed",
+      const broadcastView = context.runtime.transactions.records.getRecordView(handoff.transactionId);
+      expect(broadcastView).toMatchObject({
+        status: "broadcast",
       });
 
       const stored = await context.transactionsPort.get(handoff.transactionId);
-      expect(stored?.status).toBe("failed");
+      expect(stored?.status).toBe("broadcast");
+
+      await vi.advanceTimersByTimeAsync(TEST_RECEIPT_MAX_DELAY);
+      await flushAsync();
+
+      expect(fetchReceipt).toHaveBeenCalledTimes(20);
     } finally {
       unsubscribeAutoApproval();
       context.destroy();

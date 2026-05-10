@@ -3,6 +3,7 @@ import {
   createNamespacesStub,
   createPrepareStub,
   createProposalStores,
+  createReviewStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -13,10 +14,11 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
-    const { proposalStore } = createProposalStores();
+    const { proposalStore, reviewStore } = createProposalStores();
     const queuePrepare = vi.fn();
     const service = new TransactionProposalDraftService({
       proposalStore,
+      reviewStore,
       namespaces: createNamespacesStub(
         () =>
           ({
@@ -36,7 +38,7 @@ describe("TransactionProposalDraftService", () => {
       now: () => 1,
     });
 
-    createTransactionProposal(proposalStore, {
+    createTransactionProposal(proposalStore, reviewStore, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,
@@ -61,7 +63,7 @@ describe("TransactionProposalDraftService", () => {
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "preparing",
       updatedAt: 1,
     });

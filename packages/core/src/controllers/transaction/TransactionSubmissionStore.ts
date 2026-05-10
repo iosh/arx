@@ -28,7 +28,11 @@ export class TransactionSubmissionStore implements TransactionSubmissionTracker 
     this.#stateLimit = options.stateLimit;
   }
 
-  recordSubmitted(id: string, resolution: TransactionSubmissionResolution): void {
+  recordBroadcastAccepted(id: string, resolution: TransactionSubmissionResolution): void {
+    if (this.#outcomes.has(id)) {
+      return;
+    }
+
     this.#cacheOutcome(id, {
       state: "submitted",
       resolution: structuredClone(resolution),
@@ -36,16 +40,26 @@ export class TransactionSubmissionStore implements TransactionSubmissionTracker 
     this.#flushWaiters(id);
   }
 
-  recordPersistenceFailure(id: string, failure: TransactionSubmissionPersistenceFailure): void {
+  recordPersisted(id: string): void {
     const current = this.#outcomes.get(id);
-    if (current?.state !== "submitted") {
+    if (!current || current.state !== "submitted") {
       return;
     }
+
+    this.#cacheOutcome(id, current);
+  }
+
+  recordPersistenceFailure(id: string, failure: TransactionSubmissionPersistenceFailure): void {
+    const current = this.#outcomes.get(id);
+    const submitted =
+      current?.state === "submitted"
+        ? structuredClone(current.resolution.submitted)
+        : structuredClone(failure.submitted);
 
     this.#cacheOutcome(id, {
       state: "submitted",
       resolution: {
-        ...structuredClone(current.resolution),
+        submitted,
         persistenceFailure: structuredClone(failure),
       },
     });

@@ -10,6 +10,7 @@ import type { NamespaceTransactions } from "../../../transactions/namespace/Name
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
+import { TransactionReviewSessionStore } from "../TransactionReviewSessionStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
 
@@ -83,16 +84,20 @@ export const createProposalStores = () => {
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
+  const reviewStore = new TransactionReviewSessionStore();
 
   return {
     proposalStore,
+    reviewStore,
   };
 };
 
 export const createProposalStore = () => createProposalStores().proposalStore;
+export const createReviewStore = () => createProposalStores().reviewStore;
 
 const makeProposalReadyForApproval = (
   proposalStore: TransactionProposalStore,
+  reviewStore: TransactionReviewSessionStore,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -106,26 +111,29 @@ const makeProposalReadyForApproval = (
     throw new Error(`Proposal ${transactionId} not found`);
   }
 
-  const session = proposalStore.getOrStartPrepare({
+  const session = reviewStore.getOrStartPrepare({
     id: transactionId,
+    draftRevision: current.draftRevision,
     updatedAt,
   });
-  if (!session) {
-    throw new Error(`Proposal ${transactionId} could not start review`);
-  }
 
   const executionPrepared = input?.executionPrepared ?? {};
-  const settled = proposalStore.settlePrepareReady({
+  const settled = reviewStore.settlePrepareReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
     sessionToken: session.sessionToken,
     updatedAt,
-    executionPrepared,
     reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
   });
   if (!settled) {
     throw new Error(`Proposal ${transactionId} could not settle ready review`);
   }
+  proposalStore.updatePreparedForDraft({
+    id: transactionId,
+    expectedDraftRevision: current.draftRevision,
+    updatedAt,
+    prepared: executionPrepared,
+  });
 };
 
 export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
@@ -157,6 +165,7 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
+  reviewStore: TransactionReviewSessionStore,
   input?: Partial<TransactionProposalMeta> & {
     status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
@@ -195,13 +204,13 @@ export const createTransactionProposal = (
   const id = created.id;
   const updatedAt = input?.updatedAt ?? 1;
   if (requestedPhase === "approved") {
-    makeProposalReadyForApproval(proposalStore, id, {
+    makeProposalReadyForApproval(proposalStore, reviewStore, id, {
       updatedAt,
       executionPrepared: input?.prepared ?? {},
       reviewPreparedSnapshot: input?.prepared ?? {},
     });
-    const approved = proposalStore.approveReadyProposal({ id, updatedAt });
-    if (approved.status !== "approved") {
+    const approved = proposalStore.approvePendingProposal({ id, updatedAt });
+    if (!approved) {
       throw new Error(`Proposal ${id} could not be approved`);
     }
     return proposalStore.get(id) ?? created;
@@ -250,10 +259,10 @@ export const createTransactionsServiceStub = (
     get: TransactionsService["get"];
     list: TransactionsService["list"];
     findByReplacementIdentity: TransactionsService["findByReplacementIdentity"];
-    createSubmitted: TransactionsService["createSubmitted"];
-    transition: TransactionsService["transition"];
+    createBroadcastRecord: TransactionsService["createBroadcastRecord"];
+    updateRecordStatus: TransactionsService["updateRecordStatus"];
     subscribeChanged: TransactionsService["subscribeChanged"];
-    patchIfStatus: TransactionsService["patchIfStatus"];
+    linkRecord: TransactionsService["linkRecord"];
     remove: TransactionsService["remove"];
   }>,
 ): TransactionsService => {
@@ -270,14 +279,14 @@ export const createTransactionsServiceStub = (
           (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(identity),
         );
       }),
-    createSubmitted:
-      overrides?.createSubmitted ??
+    createBroadcastRecord:
+      overrides?.createBroadcastRecord ??
       vi.fn(async (input) => ({
         id: input.id ?? crypto.randomUUID(),
         chainRef: input.chainRef,
         origin: input.origin,
         fromAccountKey: input.fromAccountKey,
-        status: input.status,
+        status: "broadcast",
         submitted: input.submitted,
         ...(input.receipt !== undefined ? { receipt: input.receipt } : {}),
         ...(input.replacedId !== undefined ? { replacedId: input.replacedId } : {}),
@@ -285,9 +294,9 @@ export const createTransactionsServiceStub = (
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       })),
-    transition: overrides?.transition ?? vi.fn(async () => null),
+    updateRecordStatus: overrides?.updateRecordStatus ?? vi.fn(async () => null),
     subscribeChanged: overrides?.subscribeChanged ?? vi.fn(() => () => {}),
-    patchIfStatus: overrides?.patchIfStatus ?? vi.fn(async () => null),
+    linkRecord: overrides?.linkRecord ?? vi.fn(async () => null),
     remove: overrides?.remove ?? vi.fn(async () => {}),
   };
 };
@@ -347,6 +356,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
+  reviewStore: TransactionReviewSessionStore,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -354,5 +364,5 @@ export const markReviewReady = (
     reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
   },
 ) => {
-  makeProposalReadyForApproval(proposalStore, transactionId, input);
+  makeProposalReadyForApproval(proposalStore, reviewStore, transactionId, input);
 };

@@ -4,12 +4,12 @@ import { createSignal } from "../_shared/signal.js";
 import type { TransactionsPort } from "./port.js";
 import { assertTransactionStatusTransition } from "./stateMachine.js";
 import type {
-  CreateSubmittedTransactionParams,
+  CreateBroadcastRecordParams,
+  LinkRecordParams,
   ListTransactionsParams,
-  PatchTransactionParams,
   TransactionsChangedPayload,
   TransactionsService,
-  TransitionTransactionParams,
+  UpdateRecordStatusParams,
 } from "./types.js";
 import { TransactionRecordConflictError } from "./types.js";
 
@@ -18,7 +18,7 @@ export type CreateTransactionsServiceOptions = {
   now?: () => number;
 };
 
-const createSubmittedTransactionIdConflictError = (id: TransactionRecord["id"]): TransactionRecordConflictError => {
+const createBroadcastRecordIdConflictError = (id: TransactionRecord["id"]): TransactionRecordConflictError => {
   return new TransactionRecordConflictError({ kind: "id", id });
 };
 
@@ -71,7 +71,7 @@ export const createTransactionsService = ({
     return parsed;
   };
 
-  const createSubmitted = async (params: CreateSubmittedTransactionParams) => {
+  const createBroadcastRecord = async (params: CreateBroadcastRecordParams) => {
     const ts = params.createdAt ?? now();
 
     const recordInput = compactUndefined({
@@ -79,7 +79,7 @@ export const createTransactionsService = ({
       chainRef: params.chainRef,
       origin: params.origin,
       fromAccountKey: params.fromAccountKey,
-      status: params.status,
+      status: "broadcast",
       submitted: structuredClone(params.submitted),
       receipt: params.receipt !== undefined ? structuredClone(params.receipt) : undefined,
       replacedId: params.replacedId,
@@ -95,7 +95,7 @@ export const createTransactionsService = ({
       if (matchesSubmittedPayload(parsedExisting, record)) {
         return parsedExisting;
       }
-      throw createSubmittedTransactionIdConflictError(record.id);
+      throw createBroadcastRecordIdConflictError(record.id);
     }
 
     try {
@@ -107,16 +107,16 @@ export const createTransactionsService = ({
         if (matchesSubmittedPayload(parsedRetryExisting, record)) {
           return parsedRetryExisting;
         }
-        throw createSubmittedTransactionIdConflictError(record.id);
+        throw createBroadcastRecordIdConflictError(record.id);
       }
 
       throw error;
     }
-    changed.emit({ kind: "createSubmitted", id: record.id });
+    changed.emit({ kind: "recordCreated", id: record.id, status: record.status });
     return record;
   };
 
-  const transition = async (params: TransitionTransactionParams) => {
+  const updateRecordStatus = async (params: UpdateRecordStatusParams) => {
     const existing = await port.get(params.id);
     if (!existing) return null;
 
@@ -152,7 +152,7 @@ export const createTransactionsService = ({
     if (!updated) return null;
 
     changed.emit({
-      kind: "transition",
+      kind: "recordStatusUpdated",
       id: checked.id,
       fromStatus: params.fromStatus,
       toStatus: params.toStatus,
@@ -160,7 +160,7 @@ export const createTransactionsService = ({
     return checked;
   };
 
-  const patchIfStatus = async (params: PatchTransactionParams) => {
+  const linkRecord = async (params: LinkRecordParams) => {
     const existing = await port.get(params.id);
     if (!existing) return null;
 
@@ -193,7 +193,7 @@ export const createTransactionsService = ({
     if (!updated) return null;
 
     changed.emit({
-      kind: "patch",
+      kind: "recordLinked",
       id: checked.id,
       status: checked.status,
       keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
@@ -212,9 +212,9 @@ export const createTransactionsService = ({
     get,
     list,
     findByReplacementIdentity,
-    createSubmitted,
-    transition,
-    patchIfStatus,
+    createBroadcastRecord,
+    updateRecordStatus,
+    linkRecord,
     remove,
   };
 };

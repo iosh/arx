@@ -1,57 +1,13 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { TransactionError, TransactionPrepared, TransactionRequest } from "../../transactions/types.js";
-import type { ApprovalFinishedEvent } from "../approval/types.js";
-import type { TransactionReviewBlocker, TransactionReviewError } from "./review/types.js";
 import { canPrepareProposal } from "./status.js";
 import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
 import type {
-  TransactionApprovalResult,
   TransactionProposalMeta,
   TransactionProposalPhase,
   TransactionProposalPhaseChange,
-  TransactionProposalReviewState,
   TransactionProposalSnapshot,
 } from "./types.js";
-
-type TransactionReviewSession = {
-  draftRevision: number;
-  sessionToken: string;
-  updatedAt: number;
-};
-
-type TransactionReviewPreparingState = TransactionReviewSession & {
-  status: "preparing";
-};
-
-type TransactionReviewReadyState = TransactionReviewSession & {
-  status: "ready";
-  reviewPreparedSnapshot: TransactionPrepared | null;
-};
-
-type TransactionReviewBlockedState = TransactionReviewSession & {
-  status: "blocked";
-  blocker: TransactionReviewBlocker;
-  reviewPreparedSnapshot: TransactionPrepared | null;
-};
-
-type TransactionReviewFailedState = TransactionReviewSession & {
-  status: "failed";
-  error: TransactionReviewError;
-  reviewPreparedSnapshot: TransactionPrepared | null;
-};
-
-type TransactionReviewInvalidatedState = TransactionReviewSession & {
-  status: "invalidated";
-  error: TransactionReviewError;
-  invalidatedBy: string;
-};
-
-type TransactionReviewState =
-  | TransactionReviewPreparingState
-  | TransactionReviewReadyState
-  | TransactionReviewBlockedState
-  | TransactionReviewFailedState
-  | TransactionReviewInvalidatedState;
 
 type TransactionProposalState = {
   id: string;
@@ -103,72 +59,6 @@ type TransactionProposalUpdate = Partial<
 
 const readExecutionPrepared = (state: TransactionProposalState): TransactionPrepared | null => state.prepared;
 
-const createReviewSession = (input: { draftRevision: number; updatedAt: number }): TransactionReviewSession => ({
-  draftRevision: input.draftRevision,
-  sessionToken: crypto.randomUUID(),
-  updatedAt: input.updatedAt,
-});
-
-const toPublicReviewState = (session: TransactionReviewState | null): TransactionProposalReviewState | null => {
-  if (!session) {
-    return null;
-  }
-
-  switch (session.status) {
-    case "preparing":
-      return {
-        sessionToken: session.sessionToken,
-        status: "preparing",
-        updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: null,
-        blocker: null,
-        error: null,
-      };
-    case "ready":
-      return {
-        sessionToken: session.sessionToken,
-        status: "ready",
-        updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
-        blocker: null,
-        error: null,
-      };
-    case "blocked":
-      return {
-        sessionToken: session.sessionToken,
-        status: "blocked",
-        updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
-        blocker: structuredClone(session.blocker),
-        error: null,
-      };
-    case "failed":
-      return {
-        sessionToken: session.sessionToken,
-        status: "failed",
-        updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: structuredClone(session.reviewPreparedSnapshot),
-        blocker: null,
-        error: structuredClone(session.error),
-      };
-    case "invalidated":
-      return {
-        sessionToken: session.sessionToken,
-        status: "invalidated",
-        updatedAt: session.updatedAt,
-        reviewPreparedSnapshot: null,
-        blocker: null,
-        error: structuredClone(session.error),
-        invalidatedBy: session.invalidatedBy,
-      };
-  }
-};
-
-const buildPreparingState = (draftRevision: number, updatedAt: number): TransactionReviewPreparingState => ({
-  ...createReviewSession({ draftRevision, updatedAt }),
-  status: "preparing",
-});
-
 const buildTransactionProposalState = (input: TransactionProposalInit): TransactionProposalState => ({
   id: input.id,
   approvalId: input.approvalId ?? input.id,
@@ -213,7 +103,6 @@ export class TransactionProposalStore {
   #messenger: TransactionMessenger;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #records = new Map<string, TransactionProposalState>();
-  #reviewStates = new Map<string, TransactionReviewState>();
   #changeListeners = new Set<(transactionIds: string[]) => void>();
 
   constructor({ messenger, accountCodecs }: Options) {
@@ -242,10 +131,6 @@ export class TransactionProposalStore {
     return this.#records.get(id);
   }
 
-  getReviewState(id: string): TransactionProposalReviewState | null {
-    return toPublicReviewState(this.#reviewStates.get(id) ?? null);
-  }
-
   replacePendingDraftRequest(input: {
     id: string;
     request: TransactionRequest;
@@ -267,159 +152,19 @@ export class TransactionProposalStore {
     return this.#toMeta(next);
   }
 
-  getOrStartPrepare(input: { id: string; updatedAt: number }): TransactionProposalReviewState | null {
-    const current = this.#records.get(input.id);
-    if (!current || !canPrepareProposal(current)) {
-      return null;
-    }
-
-    const before = this.getReviewState(input.id);
-    const active = this.#reviewStates.get(input.id);
-    const nextState =
-      active && active.draftRevision === current.draftRevision && active.status !== "invalidated"
-        ? active
-        : buildPreparingState(current.draftRevision, input.updatedAt);
-    this.#reviewStates.set(input.id, nextState);
-    const next = toPublicReviewState(nextState);
-    if (next && this.#didReviewStateChange(before, next)) {
-      this.#notifyChanged([input.id]);
-    }
-    return next;
-  }
-
-  restartPrepare(input: { id: string; updatedAt: number }): TransactionProposalReviewState | null {
-    const current = this.#records.get(input.id);
-    if (!current || !canPrepareProposal(current)) {
-      return null;
-    }
-
-    const nextState = buildPreparingState(current.draftRevision, input.updatedAt);
-    this.#reviewStates.set(input.id, nextState);
-    const next = toPublicReviewState(nextState);
-    if (next) {
-      this.#notifyChanged([input.id]);
-    }
-    return next;
-  }
-
-  settlePrepareReady(input: {
+  updatePreparedForDraft(input: {
     id: string;
     expectedDraftRevision: number;
-    sessionToken: string;
     updatedAt: number;
-    executionPrepared: TransactionPrepared;
-    reviewPreparedSnapshot: TransactionPrepared | null;
+    prepared: TransactionPrepared | null;
   }): TransactionProposalMeta | null {
     const current = this.#records.get(input.id);
     if (!current || current.draftRevision !== input.expectedDraftRevision || !canPrepareProposal(current)) {
       return null;
     }
 
-    const review = this.#reviewStates.get(input.id);
-    if (
-      !review ||
-      review.draftRevision !== input.expectedDraftRevision ||
-      review.sessionToken !== input.sessionToken ||
-      review.status === "invalidated"
-    ) {
-      return null;
-    }
-
-    const settled: TransactionReviewReadyState = {
-      draftRevision: review.draftRevision,
-      sessionToken: review.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "ready",
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
-    };
-    this.#reviewStates.set(input.id, settled);
-
     const updated = applyTransactionProposalUpdate(current, {
-      prepared: input.executionPrepared,
-      updatedAt: input.updatedAt,
-    });
-    this.#records.set(input.id, updated);
-    this.#notifyChanged([input.id]);
-    return this.#toMeta(updated);
-  }
-
-  settlePrepareBlocked(input: {
-    id: string;
-    expectedDraftRevision: number;
-    sessionToken: string;
-    updatedAt: number;
-    blocker: TransactionReviewBlocker;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-  }): TransactionProposalMeta | null {
-    const current = this.#records.get(input.id);
-    if (!current || current.draftRevision !== input.expectedDraftRevision || !canPrepareProposal(current)) {
-      return null;
-    }
-
-    const review = this.#reviewStates.get(input.id);
-    if (
-      !review ||
-      review.draftRevision !== input.expectedDraftRevision ||
-      review.sessionToken !== input.sessionToken ||
-      review.status === "invalidated"
-    ) {
-      return null;
-    }
-
-    const settled: TransactionReviewBlockedState = {
-      draftRevision: review.draftRevision,
-      sessionToken: review.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "blocked",
-      blocker: structuredClone(input.blocker),
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
-    };
-    this.#reviewStates.set(input.id, settled);
-
-    const updated = applyTransactionProposalUpdate(current, {
-      prepared: null,
-      updatedAt: input.updatedAt,
-    });
-    this.#records.set(input.id, updated);
-    this.#notifyChanged([input.id]);
-    return this.#toMeta(updated);
-  }
-
-  settlePrepareFailed(input: {
-    id: string;
-    expectedDraftRevision: number;
-    sessionToken: string;
-    updatedAt: number;
-    error: TransactionReviewError;
-    reviewPreparedSnapshot: TransactionPrepared | null;
-  }): TransactionProposalMeta | null {
-    const current = this.#records.get(input.id);
-    if (!current || current.draftRevision !== input.expectedDraftRevision || !canPrepareProposal(current)) {
-      return null;
-    }
-
-    const review = this.#reviewStates.get(input.id);
-    if (
-      !review ||
-      review.draftRevision !== input.expectedDraftRevision ||
-      review.sessionToken !== input.sessionToken ||
-      review.status === "invalidated"
-    ) {
-      return null;
-    }
-
-    const settled: TransactionReviewFailedState = {
-      draftRevision: review.draftRevision,
-      sessionToken: review.sessionToken,
-      updatedAt: input.updatedAt,
-      status: "failed",
-      error: structuredClone(input.error),
-      reviewPreparedSnapshot: structuredClone(input.reviewPreparedSnapshot),
-    };
-    this.#reviewStates.set(input.id, settled);
-
-    const updated = applyTransactionProposalUpdate(current, {
-      prepared: null,
+      prepared: input.prepared,
       updatedAt: input.updatedAt,
     });
     this.#records.set(input.id, updated);
@@ -432,157 +177,13 @@ export class TransactionProposalStore {
     return current ? readExecutionPrepared(current) : null;
   }
 
-  approveReadyProposal(input: { id: string; updatedAt: number }): TransactionApprovalResult {
-    const existing = this.getView(input.id) ?? null;
-    if (!existing) {
-      return {
-        status: "failed",
-        reason: "not_found",
-        message: "Transaction not found.",
-        data: { transactionId: input.id },
-      };
-    }
-
-    const current = this.#records.get(input.id);
-    if (!current || current.phase !== "pending") {
-      return {
-        status: "failed",
-        reason: "not_pending",
-        transaction: existing,
-        message: "Transaction is no longer pending approval.",
-        data: { transactionId: input.id, phase: current?.phase ?? existing.phase },
-      };
-    }
-
-    const review = this.#reviewStates.get(input.id);
-    if (!review) {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: input.id, prepareState: "missing_review" },
-      };
-    }
-
-    if (review.draftRevision !== current.draftRevision) {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: input.id, prepareState: "stale_review" },
-      };
-    }
-
-    if (review.status === "preparing") {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: input.id, prepareState: review.status },
-      };
-    }
-
-    if (review.status === "blocked") {
-      return {
-        status: "failed",
-        reason: "prepare_blocked",
-        transaction: existing,
-        message: review.blocker?.message ?? "Transaction is blocked.",
-        data: {
-          transactionId: input.id,
-          ...(review.blocker ? { blocker: review.blocker } : {}),
-        },
-      };
-    }
-
-    if (review.status === "failed" || review.status === "invalidated") {
-      return {
-        status: "failed",
-        reason: "prepare_failed",
-        transaction: existing,
-        message: review.error?.message ?? "Transaction preparation failed.",
-        data: {
-          transactionId: input.id,
-          ...(review.error ? { error: review.error } : {}),
-        },
-      };
-    }
-
-    if (!this.getPreparedForExecution(input.id)) {
-      return {
-        status: "failed",
-        reason: "prepare_failed",
-        transaction: existing,
-        message: "Transaction prepared snapshot is missing.",
-        data: {
-          transactionId: input.id,
-          prepareState: "ready_without_prepared",
-        },
-      };
-    }
-
-    const updated = this.#moveProposal({
+  approvePendingProposal(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
+    return this.#moveProposal({
       id: input.id,
       expected: "pending",
       next: "approved",
       updatedAt: input.updatedAt,
     });
-    if (!updated) {
-      return {
-        status: "failed",
-        reason: "not_pending",
-        transaction: this.getView(input.id) ?? existing,
-        message: "Transaction is no longer pending approval.",
-        data: { transactionId: input.id },
-      };
-    }
-
-    return { status: "approved", transactionId: input.id };
-  }
-
-  invalidatePrepareFromApproval(
-    event: ApprovalFinishedEvent<unknown>,
-    updatedAt: number,
-  ): TransactionProposalReviewState | null {
-    if (event.subject?.kind !== "transaction" || event.terminalReason === "user_approve") {
-      return null;
-    }
-
-    const review = this.#reviewStates.get(event.subject.transactionId);
-    if (!review) {
-      return null;
-    }
-
-    const nextState: TransactionReviewInvalidatedState = {
-      draftRevision: review.draftRevision,
-      sessionToken: review.sessionToken,
-      updatedAt,
-      status: "invalidated",
-      error: {
-        reason: `approval.${event.terminalReason}`,
-        message: event.error?.message ?? "Approval is no longer active.",
-        ...(event.error ? { data: event.error } : {}),
-      },
-      invalidatedBy: event.terminalReason,
-    };
-    this.#reviewStates.set(event.subject.transactionId, nextState);
-
-    const current = this.#records.get(event.subject.transactionId);
-    if (!current) {
-      this.#notifyChanged([event.subject.transactionId]);
-      return toPublicReviewState(nextState);
-    }
-
-    const updated = applyTransactionProposalUpdate(current, {
-      prepared: null,
-      updatedAt,
-    });
-    this.#records.set(current.id, updated);
-    this.#notifyChanged([current.id]);
-    return toPublicReviewState(nextState);
   }
 
   failProposal(input: {
@@ -600,7 +201,6 @@ export class TransactionProposalStore {
   }
 
   delete(id: string): boolean {
-    this.#reviewStates.delete(id);
     const deleted = this.#records.delete(id);
     if (deleted) {
       this.#notifyChanged([id]);
@@ -620,7 +220,6 @@ export class TransactionProposalStore {
       return null;
     }
 
-    this.#reviewStates.delete(id);
     this.#records.delete(id);
     this.#notifyChanged([id]);
     return this.#toMeta(current);
@@ -745,20 +344,5 @@ export class TransactionProposalStore {
     for (const handler of this.#changeListeners) {
       handler(transactionIds);
     }
-  }
-
-  #didReviewStateChange(
-    previous: TransactionProposalReviewState | null,
-    next: TransactionProposalReviewState | null,
-  ): boolean {
-    if (!previous || !next) {
-      return previous !== next;
-    }
-
-    return (
-      previous.sessionToken !== next.sessionToken ||
-      previous.status !== next.status ||
-      previous.updatedAt !== next.updatedAt
-    );
   }
 }

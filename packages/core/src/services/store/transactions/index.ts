@@ -2,11 +2,11 @@ export type { TransactionsPort } from "./port.js";
 export { createTransactionsService } from "./TransactionsService.js";
 
 export type {
-  CreateSubmittedTransactionParams,
+  CreateBroadcastRecordParams,
+  LinkRecordParams,
   ListTransactionsParams,
-  PatchTransactionParams,
   TransactionRecordConflictError,
   TransactionsChangedPayload,
   TransactionsService,
-  TransitionTransactionParams,
+  UpdateRecordStatusParams,
 } from "./types.js";

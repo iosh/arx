@@ -2,6 +2,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
@@ -37,7 +38,11 @@ const toPrepareReviewError = (error: unknown) => {
 };
 
 type Options = {
-  proposalStore: TransactionProposalStore;
+  proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "getPreparedForExecution" | "updatePreparedForDraft">;
+  reviewStore: Pick<
+    TransactionReviewSessionStore,
+    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
+  >;
   namespaces: NamespaceTransactions;
   logger?: (message: string, data?: unknown) => void;
   namespaceProposalPrepareTimeoutMs?: number;
@@ -46,7 +51,11 @@ type Options = {
 };
 
 export class TransactionPrepareManager {
-  #proposalStore: TransactionProposalStore;
+  #proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "getPreparedForExecution" | "updatePreparedForDraft">;
+  #reviewStore: Pick<
+    TransactionReviewSessionStore,
+    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
+  >;
   #namespaces: NamespaceTransactions;
   #logger: (message: string, data?: unknown) => void;
   #namespaceProposalPrepareTimeoutMs: number;
@@ -64,6 +73,7 @@ export class TransactionPrepareManager {
 
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
+    this.#reviewStore = options.reviewStore;
     this.#namespaces = options.namespaces;
     this.#logger = options.logger ?? (() => {});
     this.#namespaceProposalPrepareTimeoutMs =
@@ -148,17 +158,15 @@ export class TransactionPrepareManager {
     }
 
     const startedAt = this.#now();
-    const session = this.#proposalStore.getOrStartPrepare({
+    const session = this.#reviewStore.getOrStartPrepare({
       id,
+      draftRevision: expectedDraftRevision,
       updatedAt: startedAt,
     });
-    if (!session) {
-      return;
-    }
 
     const namespaceTransaction = this.#namespaces.get(meta.namespace);
     if (!namespaceTransaction) {
-      const next = this.#proposalStore.settlePrepareFailed({
+      const review = this.#reviewStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
@@ -170,7 +178,13 @@ export class TransactionPrepareManager {
         },
         reviewPreparedSnapshot: null,
       });
-      if (!next) return;
+      if (!review) return;
+      this.#proposalStore.updatePreparedForDraft({
+        id,
+        expectedDraftRevision,
+        updatedAt: this.#now(),
+        prepared: null,
+      });
       return;
     }
 
@@ -188,20 +202,25 @@ export class TransactionPrepareManager {
       const settledAt = this.#now();
 
       if (result.status === "ready") {
-        const next = this.#proposalStore.settlePrepareReady({
+        const review = this.#reviewStore.settlePrepareReady({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
           updatedAt: settledAt,
-          executionPrepared: result.prepared,
           reviewPreparedSnapshot,
         });
-        if (!next) return;
+        if (!review) return;
+        this.#proposalStore.updatePreparedForDraft({
+          id,
+          expectedDraftRevision,
+          updatedAt: settledAt,
+          prepared: result.prepared,
+        });
         return;
       }
 
       if (result.status === "blocked") {
-        const next = this.#proposalStore.settlePrepareBlocked({
+        const review = this.#reviewStore.settlePrepareBlocked({
           id,
           expectedDraftRevision,
           sessionToken: session.sessionToken,
@@ -209,11 +228,17 @@ export class TransactionPrepareManager {
           blocker: result.blocker,
           reviewPreparedSnapshot,
         });
-        if (!next) return;
+        if (!review) return;
+        this.#proposalStore.updatePreparedForDraft({
+          id,
+          expectedDraftRevision,
+          updatedAt: settledAt,
+          prepared: null,
+        });
         return;
       }
 
-      const next = this.#proposalStore.settlePrepareFailed({
+      const review = this.#reviewStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
@@ -221,10 +246,16 @@ export class TransactionPrepareManager {
         error: result.error,
         reviewPreparedSnapshot,
       });
-      if (!next) return;
+      if (!review) return;
+      this.#proposalStore.updatePreparedForDraft({
+        id,
+        expectedDraftRevision,
+        updatedAt: settledAt,
+        prepared: null,
+      });
       return;
     } catch (error) {
-      const next = this.#proposalStore.settlePrepareFailed({
+      const review = this.#reviewStore.settlePrepareFailed({
         id,
         expectedDraftRevision,
         sessionToken: session.sessionToken,
@@ -232,7 +263,13 @@ export class TransactionPrepareManager {
         error: toPrepareReviewError(error),
         reviewPreparedSnapshot: null,
       });
-      if (!next) return;
+      if (!review) return;
+      this.#proposalStore.updatePreparedForDraft({
+        id,
+        expectedDraftRevision,
+        updatedAt: this.#now(),
+        prepared: null,
+      });
       return;
     }
   }

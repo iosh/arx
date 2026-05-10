@@ -64,7 +64,7 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
   return { port, store };
 };
 
-const createSubmittedRecord = (
+const createStoredRecord = (
   overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status" | "submitted">,
 ): TransactionRecord =>
   TransactionRecordSchema.parse({
@@ -80,7 +80,7 @@ const createSubmittedRecord = (
   });
 
 describe("TransactionsService", () => {
-  it("createSubmitted() writes a durable submitted record and emits changed once", async () => {
+  it("createBroadcastRecord() writes a durable broadcast record and emits changed once", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
@@ -89,12 +89,11 @@ describe("TransactionsService", () => {
       changed += 1;
     });
 
-    const created = await service.createSubmitted({
+    const created = await service.createBroadcastRecord({
       id: "11111111-1111-4111-8111-111111111111",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
       submitted: {
         hash: "0x1111",
         chainId: "0x1",
@@ -115,17 +114,16 @@ describe("TransactionsService", () => {
     expect(changed).toBe(1);
   });
 
-  it("createSubmitted() rejects submitted payloads that do not match the active namespace schema", async () => {
+  it("createBroadcastRecord() rejects submitted payloads that do not match the active namespace schema", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
     await expect(
-      service.createSubmitted({
+      service.createBroadcastRecord({
         id: "22222222-2222-4222-8222-222222222222",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
         fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        status: "broadcast",
         submitted: {
           txHash: "request-1",
           memo: "delegate",
@@ -134,9 +132,9 @@ describe("TransactionsService", () => {
     ).rejects.toThrow(/submitted/i);
   });
 
-  it("createSubmitted() returns the existing record for repeated submissions with the same id and submitted payload", async () => {
+  it("createBroadcastRecord() returns the existing record for repeated submissions with the same id and submitted payload", async () => {
     const { port } = createInMemoryPort([
-      createSubmittedRecord({
+      createStoredRecord({
         id: "33333333-3333-4333-8333-333333333333",
         status: "broadcast",
         submitted: {
@@ -150,12 +148,11 @@ describe("TransactionsService", () => {
     const service = createTransactionsService({ port, now: () => 2_000 });
 
     await expect(
-      service.createSubmitted({
+      service.createBroadcastRecord({
         id: "33333333-3333-4333-8333-333333333333",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
         fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        status: "broadcast",
         submitted: {
           hash: "0x3333",
           chainId: "0x1",
@@ -171,9 +168,9 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("createSubmitted() rejects conflicting repeated submissions for the same id", async () => {
+  it("createBroadcastRecord() rejects conflicting repeated submissions for the same id", async () => {
     const { port } = createInMemoryPort([
-      createSubmittedRecord({
+      createStoredRecord({
         id: "44444444-4444-4444-8444-444444444444",
         status: "broadcast",
         submitted: {
@@ -187,12 +184,11 @@ describe("TransactionsService", () => {
     const service = createTransactionsService({ port, now: () => 2_000 });
 
     await expect(
-      service.createSubmitted({
+      service.createBroadcastRecord({
         id: "44444444-4444-4444-8444-444444444444",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
         fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        status: "broadcast",
         submitted: {
           hash: "0xbbbb",
           chainId: "0x1",
@@ -206,15 +202,14 @@ describe("TransactionsService", () => {
     } satisfies Partial<TransactionRecordConflictError>);
   });
 
-  it("transition() throws on invalid status transitions", async () => {
+  it("updateRecordStatus() throws on invalid status transitions", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
-    const tx = await service.createSubmitted({
+    const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
       submitted: {
         hash: "0x7777",
         chainId: "0x1",
@@ -224,7 +219,7 @@ describe("TransactionsService", () => {
     });
 
     await expect(
-      service.transition({
+      service.updateRecordStatus({
         id: tx.id,
         fromStatus: "broadcast",
         toStatus: "broadcast",
@@ -232,15 +227,14 @@ describe("TransactionsService", () => {
     ).rejects.toThrow(/Invalid transaction status transition/);
   });
 
-  it("transition() returns null on CAS mismatch (no changed event)", async () => {
+  it("updateRecordStatus() returns null on CAS mismatch (no changed event)", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 1_000 });
 
-    const tx = await service.createSubmitted({
+    const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
       submitted: {
         hash: "0x8888",
         chainId: "0x1",
@@ -254,7 +248,7 @@ describe("TransactionsService", () => {
       changed += 1;
     });
 
-    const out = await service.transition({
+    const out = await service.updateRecordStatus({
       id: tx.id,
       fromStatus: "confirmed",
       toStatus: "failed",
@@ -264,15 +258,14 @@ describe("TransactionsService", () => {
     expect(changed).toBe(0);
   });
 
-  it("transition() supports broadcast -> confirmed updates with receipt", async () => {
+  it("updateRecordStatus() supports broadcast -> confirmed updates with receipt", async () => {
     const { port } = createInMemoryPort();
     const service = createTransactionsService({ port, now: () => 2_000 });
 
-    const tx = await service.createSubmitted({
+    const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
       submitted: {
         hash: "0x9999",
         chainId: "0x1",
@@ -281,7 +274,7 @@ describe("TransactionsService", () => {
       },
     });
 
-    const updated = await service.transition({
+    const updated = await service.updateRecordStatus({
       id: tx.id,
       fromStatus: "broadcast",
       toStatus: "confirmed",
@@ -307,9 +300,9 @@ describe("TransactionsService", () => {
     });
   });
 
-  it("patchIfStatus() patches replacement relation without changing status", async () => {
+  it("linkRecord() patches replacement relation without changing status", async () => {
     const { port } = createInMemoryPort([
-      createSubmittedRecord({
+      createStoredRecord({
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         status: "replaced",
         submitted: {
@@ -322,7 +315,7 @@ describe("TransactionsService", () => {
     ]);
     const service = createTransactionsService({ port, now: () => 2_000 });
 
-    const updated = await service.patchIfStatus({
+    const updated = await service.linkRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       expectedStatus: "replaced",
       patch: { replacedId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
@@ -342,7 +335,7 @@ describe("TransactionsService", () => {
       value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     } as const;
     const { port } = createInMemoryPort([
-      createSubmittedRecord({
+      createStoredRecord({
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         status: "broadcast",
         replacementIdentity,
@@ -355,7 +348,7 @@ describe("TransactionsService", () => {
           nonce: "0x7",
         },
       }),
-      createSubmittedRecord({
+      createStoredRecord({
         id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         status: "confirmed",
         replacementIdentity,
@@ -379,7 +372,7 @@ describe("TransactionsService", () => {
     ]);
   });
 
-  it("transition() returns null when port.updateIfStatus() fails (no changed event)", async () => {
+  it("updateRecordStatus() returns null when port.updateIfStatus() fails (no changed event)", async () => {
     const { store } = createInMemoryPort();
 
     const basePort: TransactionsPort = {
@@ -407,11 +400,10 @@ describe("TransactionsService", () => {
 
     const service = createTransactionsService({ port: basePort, now: () => 1_000 });
 
-    const tx = await service.createSubmitted({
+    const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
       fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      status: "broadcast",
       submitted: {
         hash: "0x1212",
         chainId: "0x1",
@@ -425,7 +417,7 @@ describe("TransactionsService", () => {
       changed += 1;
     });
 
-    const out = await service.transition({
+    const out = await service.updateRecordStatus({
       id: tx.id,
       fromStatus: "broadcast",
       toStatus: "failed",
@@ -437,7 +429,7 @@ describe("TransactionsService", () => {
 
   it("remove() deletes the record and emits changed", async () => {
     const { port, store } = createInMemoryPort([
-      createSubmittedRecord({
+      createStoredRecord({
         id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         status: "broadcast",
         submitted: {

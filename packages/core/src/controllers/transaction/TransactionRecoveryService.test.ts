@@ -74,6 +74,7 @@ describe("createTransactionRecoveryService", () => {
         list: list as never,
       }),
       submission: {
+        recordPersisted: vi.fn(),
         recordPersistenceFailure: vi.fn(),
       },
       tracker: tracker as never,

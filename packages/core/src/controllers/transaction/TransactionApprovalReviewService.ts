@@ -1,11 +1,13 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { buildSendTransactionApprovalReview } from "./review/projector.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionApprovalReviewReader } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type CreateTransactionApprovalReviewReaderDeps = {
-  proposalStore: Pick<TransactionProposalStore, "get" | "getReviewState">;
+  proposalStore: Pick<TransactionProposalStore, "get">;
+  reviewStore: Pick<TransactionReviewSessionStore, "getReviewState">;
   namespaces: NamespaceTransactions;
 };
 
@@ -19,7 +21,7 @@ export const createTransactionApprovalReviewReader = (
         throw new Error(`Transaction ${transactionId} is missing an active proposal.`);
       }
 
-      const reviewState = deps.proposalStore.getReviewState(transactionId);
+      const reviewState = deps.reviewStore.getReviewState(transactionId);
       if (!reviewState) {
         throw new Error(`Transaction ${transactionId} is missing an active review state.`);
       }

@@ -10,6 +10,7 @@ import { createTransactionApprovalReviewReader } from "./TransactionApprovalRevi
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 import { TransactionProposalBeginService } from "./TransactionProposalBeginService.js";
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
 import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
@@ -17,6 +18,7 @@ import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
+import { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
@@ -60,6 +62,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     messenger: options.messenger,
     accountCodecs: options.accountCodecs,
   });
+  const reviewStore = new TransactionReviewSessionStore();
 
   const recordView = new TransactionRecordViewStore({
     messenger: options.messenger,
@@ -75,6 +78,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const records = new TransactionRecordRuntime({
     proposalStore,
+    reviewStore,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
@@ -85,6 +89,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const prepare = new TransactionPrepareManager({
     proposalStore,
+    reviewStore,
     namespaces: options.namespaces,
     logger,
     now,
@@ -92,11 +97,13 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const review = createTransactionApprovalReviewReader({
     proposalStore,
+    reviewStore,
     namespaces: options.namespaces,
   });
 
   const proposalBegin = new TransactionProposalBeginService({
     proposalStore,
+    reviewStore,
     accountCodecs: options.accountCodecs,
     accounts: options.accounts,
     approvals: options.approvals,
@@ -106,6 +113,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
   const proposalDraft = new TransactionProposalDraftService({
     proposalStore,
+    reviewStore,
     namespaces: options.namespaces,
     prepare,
     now,
@@ -113,6 +121,11 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   const proposalReader = createTransactionProposalReader({
     proposalStore,
     review,
+  });
+  const proposalApprovals = new TransactionProposalApprovalService({
+    proposalStore,
+    reviewStore,
+    now,
   });
   const executionPipeline = new TransactionExecutionPipeline({
     messenger: options.messenger,
@@ -124,6 +137,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   const execution = new TransactionExecutionService({
+    proposalApprovals,
     proposalStore,
     pipeline: executionPipeline,
     now,
@@ -140,10 +154,22 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   proposalStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
+  reviewStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
   recordView.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
 
   options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
-    proposalStore.invalidatePrepareFromApproval(event, now());
+    const invalidated = reviewStore.invalidatePrepareFromApproval(event, now());
+    if (invalidated && event.subject?.kind === "transaction") {
+      const proposal = proposalStore.peek(event.subject.transactionId);
+      if (proposal) {
+        proposalStore.updatePreparedForDraft({
+          id: event.subject.transactionId,
+          expectedDraftRevision: proposal.draftRevision,
+          updatedAt: now(),
+          prepared: null,
+        });
+      }
+    }
     if (event.subject?.kind === "transaction") {
       approvalDetailInvalidations.enqueue({ approvalIds: [event.approvalId] });
     }

@@ -1,10 +1,12 @@
 import type { TransactionError } from "../../transactions/types.js";
 import type { TransactionExecutionAttemptPhase, TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
+import type { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionApprovalExecutor, TransactionApprovalResult } from "./types.js";
 
 type TransactionExecutionServiceDeps = {
-  proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek" | "approveReadyProposal">;
+  proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;
+  proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek">;
   pipeline: Pick<TransactionExecutionPipeline, "executeApprovedTransaction" | "rejectTransaction">;
   now: () => number;
 };
@@ -15,7 +17,8 @@ type TransactionExecutionAttemptState = {
 };
 
 export class TransactionExecutionService implements TransactionApprovalExecutor {
-  #proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek" | "approveReadyProposal">;
+  #proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;
+  #proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek">;
   #pipeline: Pick<TransactionExecutionPipeline, "executeApprovedTransaction" | "rejectTransaction">;
   #now: () => number;
 
@@ -26,16 +29,14 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
   #attempts = new Map<string, TransactionExecutionAttemptState>();
 
   constructor(deps: TransactionExecutionServiceDeps) {
+    this.#proposalApprovals = deps.proposalApprovals;
     this.#proposalStore = deps.proposalStore;
     this.#pipeline = deps.pipeline;
     this.#now = deps.now;
   }
 
   async approveTransaction(id: string): Promise<TransactionApprovalResult> {
-    const result = this.#proposalStore.approveReadyProposal({
-      id,
-      updatedAt: this.#now(),
-    });
+    const result = this.#proposalApprovals.approvePendingProposal(id);
     if (result.status === "failed") {
       return result;
     }

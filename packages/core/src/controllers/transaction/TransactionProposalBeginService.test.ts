@@ -7,6 +7,7 @@ import {
   createPrepareStub,
   createProposalStore,
   createProposalStores,
+  createReviewStore,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -19,6 +20,7 @@ const createBeginService = (params?: {
   chainRef?: string;
   from?: string;
   proposalStore?: ReturnType<typeof createProposalStore>;
+  reviewStore?: ReturnType<typeof createReviewStore>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
     create: (...args: never[]) => unknown;
@@ -28,6 +30,7 @@ const createBeginService = (params?: {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
   const proposalStore = params?.proposalStore ?? createProposalStore();
+  const reviewStore = params?.reviewStore ?? createReviewStore();
   const namespaces = params?.namespaces ?? createNamespacesStub();
   const prepare = params?.prepare ?? createPrepareStub();
   const createApproval =
@@ -39,6 +42,7 @@ const createBeginService = (params?: {
 
   return new TransactionProposalBeginService({
     proposalStore,
+    reviewStore,
     accountCodecs,
     accounts: createAccountControllerStub({ chainRef, from }),
     approvals: { create: createApproval as never },
@@ -51,7 +55,7 @@ const createBeginService = (params?: {
 describe("TransactionProposalBeginService", () => {
   it("creates a proposal, attaches approval, and queues prepare", async () => {
     const chainRef = DEFAULT_CHAIN_REF;
-    const { proposalStore } = createProposalStores();
+    const { proposalStore, reviewStore } = createProposalStores();
     const queuePrepare = vi.fn();
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,
@@ -59,6 +63,7 @@ describe("TransactionProposalBeginService", () => {
     }));
     const service = createBeginService({
       proposalStore,
+      reviewStore,
       approvals: { create: createApproval as never },
       prepare: createPrepareStub({ queuePrepare }),
     });
@@ -91,7 +96,7 @@ describe("TransactionProposalBeginService", () => {
     });
     expect(createApproval).toHaveBeenCalledTimes(1);
     expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "preparing",
       updatedAt: 1,
     });

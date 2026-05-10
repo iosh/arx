@@ -3,10 +3,15 @@ import type { TransactionRecord, TransactionStatus } from "../../../storage/reco
 import type { Unsubscribe } from "../_shared/signal.js";
 
 export type TransactionsChangedPayload =
-  | { kind: "createSubmitted"; id: TransactionRecord["id"] }
-  | { kind: "transition"; id: TransactionRecord["id"]; fromStatus: TransactionStatus; toStatus: TransactionStatus }
+  | { kind: "recordCreated"; id: TransactionRecord["id"]; status: TransactionStatus }
   | {
-      kind: "patch";
+      kind: "recordStatusUpdated";
+      id: TransactionRecord["id"];
+      fromStatus: TransactionStatus;
+      toStatus: TransactionStatus;
+    }
+  | {
+      kind: "recordLinked";
       id: TransactionRecord["id"];
       status: TransactionStatus;
       keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
@@ -24,7 +29,7 @@ export class TransactionRecordConflictError extends Error {
   }
 }
 
-export type CreateSubmittedTransactionParams = {
+export type CreateBroadcastRecordParams = {
   /**
    * Optional caller-provided id to keep controller-level ids stable.
    * Must be a UUID when provided.
@@ -34,7 +39,6 @@ export type CreateSubmittedTransactionParams = {
   origin: TransactionRecord["origin"];
   fromAccountKey: TransactionRecord["fromAccountKey"];
   submitted: TransactionRecord["submitted"];
-  status: TransactionRecord["status"];
   receipt?: TransactionRecord["receipt"] | undefined;
   replacedId?: TransactionRecord["replacedId"] | undefined;
   replacementIdentity?: TransactionRecord["replacementIdentity"] | undefined;
@@ -45,7 +49,7 @@ export type CreateSubmittedTransactionParams = {
   createdAt?: number;
 };
 
-export type TransitionTransactionParams = {
+export type UpdateRecordStatusParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
@@ -65,7 +69,7 @@ export type ListTransactionsParams = {
   before?: ListTransactionsCursor;
 };
 
-export type PatchTransactionParams = {
+export type LinkRecordParams = {
   id: TransactionRecord["id"];
   expectedStatus: TransactionStatus;
   patch: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
@@ -80,11 +84,11 @@ export type TransactionsService = {
     identity: NonNullable<TransactionRecord["replacementIdentity"]>,
   ): Promise<TransactionRecord[]>;
 
-  createSubmitted(params: CreateSubmittedTransactionParams): Promise<TransactionRecord>;
+  createBroadcastRecord(params: CreateBroadcastRecordParams): Promise<TransactionRecord>;
 
-  transition(params: TransitionTransactionParams): Promise<TransactionRecord | null>;
+  updateRecordStatus(params: UpdateRecordStatusParams): Promise<TransactionRecord | null>;
 
-  patchIfStatus(params: PatchTransactionParams): Promise<TransactionRecord | null>;
+  linkRecord(params: LinkRecordParams): Promise<TransactionRecord | null>;
 
   remove(id: TransactionRecord["id"]): Promise<void>;
 };

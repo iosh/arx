@@ -3,13 +3,13 @@ import { DEFAULT_SUBMITTED } from "./__fixtures__/transactionServices.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 
 describe("TransactionSubmissionStore", () => {
-  it("resolves waiters after broadcast submission is recorded", async () => {
+  it("resolves waiters as soon as broadcast is accepted", async () => {
     const submissionService = new TransactionSubmissionStore({
       stateLimit: 10,
     });
 
     const pending = submissionService.waitForSubmissionOutcome("tx-1");
-    submissionService.recordSubmitted("tx-1", {
+    submissionService.recordBroadcastAccepted("tx-1", {
       submitted: DEFAULT_SUBMITTED,
     });
 
@@ -49,7 +49,7 @@ describe("TransactionSubmissionStore", () => {
       stateLimit: 10,
     });
 
-    submissionService.recordSubmitted("tx-3", {
+    submissionService.recordBroadcastAccepted("tx-3", {
       submitted: DEFAULT_SUBMITTED,
     });
 
@@ -63,7 +63,7 @@ describe("TransactionSubmissionStore", () => {
       stateLimit: 10,
     });
 
-    submissionService.recordSubmitted("tx-4", {
+    submissionService.recordBroadcastAccepted("tx-4", {
       submitted: DEFAULT_SUBMITTED,
     });
     submissionService.recordPersistenceFailure("tx-4", {
@@ -104,11 +104,44 @@ describe("TransactionSubmissionStore", () => {
 
     expect(settled).toBe(false);
 
-    submissionService.recordSubmitted("tx-5", {
+    submissionService.recordBroadcastAccepted("tx-5", {
       submitted: DEFAULT_SUBMITTED,
     });
 
     await pending;
     expect(settled).toBe(true);
+  });
+
+  it("adds persistence failure metadata for later readers after an earlier success resolution", async () => {
+    const submissionService = new TransactionSubmissionStore({
+      stateLimit: 10,
+    });
+
+    await expect(
+      (async () => {
+        submissionService.recordBroadcastAccepted("tx-6", {
+          submitted: DEFAULT_SUBMITTED,
+        });
+        return await submissionService.waitForSubmissionOutcome("tx-6");
+      })(),
+    ).resolves.toEqual({
+      submitted: DEFAULT_SUBMITTED,
+    });
+
+    submissionService.recordPersistenceFailure("tx-6", {
+      transactionId: "tx-6",
+      error: {
+        name: "TransactionPersistenceError",
+        message: "Transaction was broadcast but could not be persisted locally.",
+      },
+      submitted: DEFAULT_SUBMITTED,
+    });
+
+    await expect(submissionService.waitForSubmissionOutcome("tx-6")).resolves.toMatchObject({
+      submitted: DEFAULT_SUBMITTED,
+      persistenceFailure: {
+        transactionId: "tx-6",
+      },
+    });
   });
 });

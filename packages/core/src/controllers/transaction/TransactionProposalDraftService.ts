@@ -3,11 +3,13 @@ import type { NamespaceTransactionDraftEdit, TransactionRequest } from "../../tr
 import { isProposalTerminal } from "./status.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionProposalMeta } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type TransactionProposalDraftServiceDeps = {
   proposalStore: TransactionProposalStore;
+  reviewStore: Pick<TransactionReviewSessionStore, "restartPrepare">;
   namespaces: NamespaceTransactions;
   prepare: Pick<TransactionPrepareManager, "queuePrepare">;
   now: () => number;
@@ -15,12 +17,14 @@ type TransactionProposalDraftServiceDeps = {
 
 export class TransactionProposalDraftService {
   #proposalStore: TransactionProposalStore;
+  #reviewStore: Pick<TransactionReviewSessionStore, "restartPrepare">;
   #namespaces: NamespaceTransactions;
   #prepare: Pick<TransactionPrepareManager, "queuePrepare">;
   #now: () => number;
 
   constructor(deps: TransactionProposalDraftServiceDeps) {
     this.#proposalStore = deps.proposalStore;
+    this.#reviewStore = deps.reviewStore;
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
     this.#now = deps.now;
@@ -32,8 +36,9 @@ export class TransactionProposalDraftService {
       return;
     }
 
-    this.#proposalStore.restartPrepare({
+    this.#reviewStore.restartPrepare({
       id: transactionId,
+      draftRevision: proposal.draftRevision,
       updatedAt: this.#now(),
     });
     this.#prepare.queuePrepare(transactionId);

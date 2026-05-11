@@ -1,65 +1,20 @@
-import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
+import type { TransactionPrepareExecutionService } from "./TransactionPrepareExecutionService.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
-import { buildPrepareContext } from "./utils.js";
 
-const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
-class TransactionPrepareTimeoutError extends Error {
-  constructor() {
-    super("Transaction preparation timed out.");
-    this.name = "TransactionPrepareTimeoutError";
-  }
-}
-
-const toPrepareReviewError = (error: unknown) => {
-  if (error instanceof TransactionPrepareTimeoutError) {
-    return {
-      reason: "transaction.prepare_timeout",
-      message: error.message,
-    } as const;
-  }
-
-  if (error instanceof Error) {
-    return {
-      reason: "transaction.prepare_failed",
-      message: error.message,
-      data: { name: error.name },
-    } as const;
-  }
-
-  return {
-    reason: "transaction.prepare_failed",
-    message: String(error),
-  } as const;
-};
-
 type Options = {
-  proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "getPreparedForExecution" | "updatePreparedForDraft">;
-  reviewStore: Pick<
-    TransactionReviewSessionStore,
-    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
-  >;
-  namespaces: NamespaceTransactions;
+  proposalStore: Pick<TransactionProposalStore, "peek" | "getPreparedForExecution">;
+  execution: Pick<TransactionPrepareExecutionService, "prepareCurrentDraft">;
   logger?: (message: string, data?: unknown) => void;
-  namespaceProposalPrepareTimeoutMs?: number;
   backgroundConcurrency?: number;
-  now?: () => number;
 };
 
 export class TransactionPrepareManager {
-  #proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "getPreparedForExecution" | "updatePreparedForDraft">;
-  #reviewStore: Pick<
-    TransactionReviewSessionStore,
-    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
-  >;
-  #namespaces: NamespaceTransactions;
+  #proposalStore: Pick<TransactionProposalStore, "peek" | "getPreparedForExecution">;
+  #execution: Pick<TransactionPrepareExecutionService, "prepareCurrentDraft">;
   #logger: (message: string, data?: unknown) => void;
-  #namespaceProposalPrepareTimeoutMs: number;
-  #now: () => number;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
 
@@ -67,18 +22,10 @@ export class TransactionPrepareManager {
   #prepareConcurrencyInUse = 0;
   #prepareConcurrencyWaiters: Array<() => void> = [];
 
-  #hasCurrentPrepared(id: string): boolean {
-    return this.#proposalStore.getPreparedForExecution(id) !== null;
-  }
-
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
-    this.#reviewStore = options.reviewStore;
-    this.#namespaces = options.namespaces;
+    this.#execution = options.execution;
     this.#logger = options.logger ?? (() => {});
-    this.#namespaceProposalPrepareTimeoutMs =
-      options.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
-    this.#now = options.now ?? Date.now;
     this.#prepareConcurrencyLimit = Math.max(
       1,
       options.backgroundConcurrency ?? DEFAULT_BACKGROUND_PREPARE_CONCURRENCY,
@@ -87,7 +34,6 @@ export class TransactionPrepareManager {
 
   queuePrepare(id: string) {
     void this.#prepareTransactionInBackground(id).catch((error) => {
-      // Best-effort background preparation; failures are surfaced via review state.
       this.#logger("transactions: prepare failed", {
         id,
         error: error instanceof Error ? error.message : String(error),
@@ -114,7 +60,9 @@ export class TransactionPrepareManager {
         }
         settledDraftRevision = initial.draftRevision;
 
-        const run = this.#prepareAndPersistInternal(id);
+        const run = this.#withPrepareSlot(async () => {
+          await this.#execution.prepareCurrentDraft(id);
+        });
         const tracked = run
           .then(() => undefined)
           .finally(() => {
@@ -138,145 +86,12 @@ export class TransactionPrepareManager {
     }
   }
 
-  async #prepareAndPersistInternal(id: string): Promise<void> {
-    const timeoutMs = this.#namespaceProposalPrepareTimeoutMs;
-
-    const state = this.#proposalStore.peek(id);
-    if (!state) return;
-
-    const expectedDraftRevision = state.draftRevision;
-    const meta = this.#proposalStore.get(id);
-    if (!meta) return;
-
-    if (this.#hasCurrentPrepared(id)) {
-      return;
-    }
-
-    // No need to prepare once a tx is no longer eligible for enrichment.
-    if (!canPrepareProposal(state)) {
-      return;
-    }
-
-    const startedAt = this.#now();
-    const session = this.#reviewStore.getOrStartPrepare({
-      id,
-      draftRevision: expectedDraftRevision,
-      updatedAt: startedAt,
-    });
-
-    const namespaceTransaction = this.#namespaces.get(meta.namespace);
-    if (!namespaceTransaction) {
-      const review = this.#reviewStore.settlePrepareFailed({
-        id,
-        expectedDraftRevision,
-        sessionToken: session.sessionToken,
-        updatedAt: this.#now(),
-        error: {
-          reason: "transaction.adapter_missing",
-          message: `No namespace transaction registered for namespace ${meta.namespace}`,
-          data: { namespace: meta.namespace },
-        },
-        reviewPreparedSnapshot: null,
-      });
-      if (!review) return;
-      this.#proposalStore.updatePreparedForDraft({
-        id,
-        expectedDraftRevision,
-        updatedAt: this.#now(),
-        prepared: null,
-      });
-      return;
-    }
-
-    try {
-      const context = buildPrepareContext(meta);
-      const prepare = requireNamespaceTransactionOperation({
-        namespace: meta.namespace,
-        operation: "proposal.prepare",
-        value: namespaceTransaction.proposal?.prepare,
-      });
-      const runPrepare = async () => await this.#withTimeout(prepare(context), timeoutMs);
-      const result = await this.#withPrepareSlot(runPrepare);
-
-      const reviewPreparedSnapshot = result.prepared ?? null;
-      const settledAt = this.#now();
-
-      if (result.status === "ready") {
-        const review = this.#reviewStore.settlePrepareReady({
-          id,
-          expectedDraftRevision,
-          sessionToken: session.sessionToken,
-          updatedAt: settledAt,
-          reviewPreparedSnapshot,
-        });
-        if (!review) return;
-        this.#proposalStore.updatePreparedForDraft({
-          id,
-          expectedDraftRevision,
-          updatedAt: settledAt,
-          prepared: result.prepared,
-        });
-        return;
-      }
-
-      if (result.status === "blocked") {
-        const review = this.#reviewStore.settlePrepareBlocked({
-          id,
-          expectedDraftRevision,
-          sessionToken: session.sessionToken,
-          updatedAt: settledAt,
-          blocker: result.blocker,
-          reviewPreparedSnapshot,
-        });
-        if (!review) return;
-        this.#proposalStore.updatePreparedForDraft({
-          id,
-          expectedDraftRevision,
-          updatedAt: settledAt,
-          prepared: null,
-        });
-        return;
-      }
-
-      const review = this.#reviewStore.settlePrepareFailed({
-        id,
-        expectedDraftRevision,
-        sessionToken: session.sessionToken,
-        updatedAt: settledAt,
-        error: result.error,
-        reviewPreparedSnapshot,
-      });
-      if (!review) return;
-      this.#proposalStore.updatePreparedForDraft({
-        id,
-        expectedDraftRevision,
-        updatedAt: settledAt,
-        prepared: null,
-      });
-      return;
-    } catch (error) {
-      const review = this.#reviewStore.settlePrepareFailed({
-        id,
-        expectedDraftRevision,
-        sessionToken: session.sessionToken,
-        updatedAt: this.#now(),
-        error: toPrepareReviewError(error),
-        reviewPreparedSnapshot: null,
-      });
-      if (!review) return;
-      this.#proposalStore.updatePreparedForDraft({
-        id,
-        expectedDraftRevision,
-        updatedAt: this.#now(),
-        prepared: null,
-      });
-      return;
-    }
+  #hasCurrentPrepared(id: string): boolean {
+    return this.#proposalStore.getPreparedForExecution(id) !== null;
   }
 
   async #withPrepareSlot<T>(fn: () => Promise<T>): Promise<T> {
     if (this.#prepareConcurrencyInUse >= this.#prepareConcurrencyLimit) {
-      // Wait for a slot to be handed off by a releasing task.
       await new Promise<void>((resolve) => {
         this.#prepareConcurrencyWaiters.push(resolve);
       });
@@ -288,27 +103,10 @@ export class TransactionPrepareManager {
     } finally {
       const waiter = this.#prepareConcurrencyWaiters.shift();
       if (waiter) {
-        // Hand off the slot directly to the next waiter (keep inUse unchanged).
         waiter();
       } else {
         this.#prepareConcurrencyInUse = Math.max(0, this.#prepareConcurrencyInUse - 1);
       }
-    }
-  }
-
-  async #withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const timeout = new Promise<never>((_, reject) => {
-      // Simple timeout guard for slow/unresponsive RPC nodes.
-      timer = setTimeout(() => {
-        reject(new TransactionPrepareTimeoutError());
-      }, timeoutMs);
-    });
-
-    try {
-      return await Promise.race([promise, timeout]);
-    } finally {
-      if (timer) clearTimeout(timer);
     }
   }
 }

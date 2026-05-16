@@ -249,4 +249,218 @@ describe("TransactionProposalStore", () => {
     expect(store.getView(id)).toBeUndefined();
     expect(store.listExecutableProposalIds()).toEqual([]);
   });
+
+  it("starts and restarts prepare sessions for the current draft revision", () => {
+    const store = createStore();
+    const id = "88888888-8888-4888-8888-888888888888";
+
+    store.createPendingProposal({
+      id,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const preparing = store.getOrStartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    expect(preparing).toMatchObject({
+      status: "preparing",
+      updatedAt: 1,
+    });
+
+    const restarted = store.restartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 2,
+    });
+    expect(restarted).toMatchObject({
+      status: "preparing",
+      updatedAt: 2,
+    });
+    expect(restarted?.sessionToken).not.toBe(preparing?.sessionToken);
+  });
+
+  it("settles blocked and ready prepare states on the active session", () => {
+    const store = createStore();
+    const id = "99999999-9999-4999-8999-999999999999";
+
+    store.createPendingProposal({
+      id,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const preparing = store.getOrStartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!preparing) {
+      throw new Error("Prepare session not started");
+    }
+
+    expect(
+      store.settlePrepareBlocked({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: preparing.sessionToken,
+        updatedAt: 2,
+        blocker: {
+          reason: "transaction.prepare.insufficient_funds",
+          message: "Insufficient funds.",
+        },
+        reviewPreparedSnapshot: { gas: "0x5208" },
+      }),
+    ).toMatchObject({
+      status: "blocked",
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+      },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
+    expect(store.getPreparedForExecution(id)).toBeNull();
+
+    const restarted = store.restartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 3,
+    });
+    if (!restarted) {
+      throw new Error("Prepare session not restarted");
+    }
+
+    expect(
+      store.settlePrepareReady({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: restarted.sessionToken,
+        updatedAt: 4,
+        executionPrepared: { gas: "0x5300" },
+        reviewPreparedSnapshot: { gas: "0x5300" },
+      }),
+    ).toMatchObject({
+      status: "ready",
+      reviewPreparedSnapshot: { gas: "0x5300" },
+    });
+    expect(store.getPreparedForExecution(id)).toEqual({ gas: "0x5300" });
+  });
+
+  it("drops stale settlements and invalidates active prepare state from approval terminal events", () => {
+    const store = createStore();
+    const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    store.createPendingProposal({
+      id,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const initial = store.getOrStartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!initial) {
+      throw new Error("Prepare session not started");
+    }
+
+    store.replacePendingDraftRequest({
+      id,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: { value: "0x1" },
+      },
+      updatedAt: 2,
+    });
+
+    expect(
+      store.settlePrepareReady({
+        id,
+        expectedDraftRevision: 0,
+        sessionToken: initial.sessionToken,
+        updatedAt: 3,
+        executionPrepared: { gas: "0x5208" },
+        reviewPreparedSnapshot: { gas: "0x5208" },
+      }),
+    ).toBeNull();
+
+    const current = store.getReviewState(id);
+    expect(current).toMatchObject({
+      status: "preparing",
+    });
+
+    expect(
+      store.invalidatePrepareFromApproval(
+        {
+          approvalId: "approval-3",
+          status: "cancelled",
+          terminalReason: "locked",
+          subject: { kind: "transaction", transactionId: id },
+        },
+        4,
+      ),
+    ).toMatchObject({
+      status: "invalidated",
+      invalidatedBy: "locked",
+      error: {
+        reason: "approval.locked",
+      },
+    });
+
+    expect(
+      store.settlePrepareFailed({
+        id,
+        expectedDraftRevision: 1,
+        sessionToken: current?.sessionToken ?? "",
+        updatedAt: 5,
+        error: {
+          reason: "transaction.prepare_failed",
+          message: "stale",
+        },
+        reviewPreparedSnapshot: null,
+      }),
+    ).toBeNull();
+
+    expect(
+      store.invalidatePrepareFromApproval(
+        {
+          approvalId: "approval-3",
+          status: "approved",
+          terminalReason: "user_approve",
+          subject: { kind: "transaction", transactionId: id },
+        },
+        6,
+      ),
+    ).toBeNull();
+  });
 });

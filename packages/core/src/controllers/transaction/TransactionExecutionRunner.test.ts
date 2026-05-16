@@ -4,7 +4,6 @@ import {
   createNamespacesStub,
   createNamespaceTransactionStub,
   createProposalStore,
-  createReviewStore,
   createTransactionProposal,
   DEFAULT_SUBMITTED,
   REQUEST_ID,
@@ -16,8 +15,7 @@ describe("TransactionExecutionRunner", () => {
   it("publishes broadcast/submitted events and persists the durable record after broadcast acceptance", async () => {
     const messenger = new Messenger().scope({ publish: TRANSACTION_TOPICS });
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, {
       status: "approved",
       prepared: { gas: "0x5208" },
     });

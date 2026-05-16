@@ -1,18 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionError } from "../../transactions/types.js";
-import {
-  createProposalStore,
-  createReviewStore,
-  createTransactionProposal,
-  REQUEST_ID,
-} from "./__fixtures__/transactionServices.js";
+import { createProposalStore, createTransactionProposal, REQUEST_ID } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionFailureService } from "./TransactionExecutionFailureService.js";
 
 describe("TransactionExecutionFailureService", () => {
   it("fails an active proposal and records submission failure before durable persistence", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, {
       status: "approved",
       prepared: {},
     });

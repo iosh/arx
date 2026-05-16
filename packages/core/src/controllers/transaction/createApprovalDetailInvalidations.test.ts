@@ -3,7 +3,7 @@ import { Messenger } from "../../messenger/Messenger.js";
 import {
   APPROVAL_ID,
   accountCodecs,
-  createProposalStores,
+  createProposalStore,
   createTransactionProposal,
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
@@ -33,20 +33,23 @@ const createRecordViewStore = () =>
 describe("createApprovalDetailInvalidations", () => {
   it("invalidates review state and clears prepared execution params when a transaction approval finishes terminally", async () => {
     const messenger = new Messenger();
-    const { proposalStore, reviewStore } = createProposalStores();
+    const proposalStore = createProposalStore();
     const recordView = createRecordViewStore();
     const onFinished = vi.fn<(event: unknown) => void>();
 
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, {
       status: "pending",
       prepared: { gas: "0x5208" },
     });
-    const review = reviewStore.getOrStartPrepare({
+    const review = proposalStore.getOrStartPrepare({
       id: REQUEST_ID,
       draftRevision: 0,
       updatedAt: 1,
     });
-    reviewStore.settlePrepareReady({
+    if (!review) {
+      throw new Error("Prepare session not started");
+    }
+    proposalStore.settlePrepareReady({
       id: REQUEST_ID,
       expectedDraftRevision: 0,
       sessionToken: review.sessionToken,
@@ -76,7 +79,7 @@ describe("createApprovalDetailInvalidations", () => {
       subject: { kind: "transaction", transactionId: REQUEST_ID },
     });
 
-    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "invalidated",
       invalidatedBy: "locked",
     });
@@ -85,7 +88,7 @@ describe("createApprovalDetailInvalidations", () => {
 
   it("publishes approval invalidations for proposal and review changes", async () => {
     const messenger = new Messenger();
-    const { proposalStore, reviewStore } = createProposalStores();
+    const proposalStore = createProposalStore();
     const recordView = createRecordViewStore();
     const invalidations: Array<{ approvalIds: string[] }> = [];
 
@@ -102,7 +105,7 @@ describe("createApprovalDetailInvalidations", () => {
       invalidations.push(change);
     });
 
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, {
       status: "pending",
     });
 

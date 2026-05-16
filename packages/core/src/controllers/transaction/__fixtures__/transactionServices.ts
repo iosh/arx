@@ -78,25 +78,14 @@ export const createNamespaceTransactionStub = (
     : { tracking: createReceiptTrackingStub() }),
 });
 
-export const createProposalStores = () => {
-  const proposalStore = new TransactionProposalStore({
+export const createProposalStore = () =>
+  new TransactionProposalStore({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
-  const reviewStore = proposalStore;
-
-  return {
-    proposalStore,
-    reviewStore,
-  };
-};
-
-export const createProposalStore = () => createProposalStores().proposalStore;
-export const createReviewStore = () => createProposalStores().reviewStore;
 
 const makeProposalReadyForApproval = (
   proposalStore: TransactionProposalStore,
-  _reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -162,7 +151,6 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
-  reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   input?: Partial<TransactionProposalMeta> & {
     status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
@@ -201,7 +189,7 @@ export const createTransactionProposal = (
   const id = created.id;
   const updatedAt = input?.updatedAt ?? 1;
   if (requestedPhase === "approved") {
-    makeProposalReadyForApproval(proposalStore, reviewStore, id, {
+    makeProposalReadyForApproval(proposalStore, id, {
       updatedAt,
       executionPrepared: input?.prepared ?? {},
       reviewPreparedSnapshot: input?.prepared ?? {},
@@ -355,7 +343,6 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
-  reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -363,5 +350,5 @@ export const markReviewReady = (
     reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
   },
 ) => {
-  makeProposalReadyForApproval(proposalStore, reviewStore, transactionId, input);
+  makeProposalReadyForApproval(proposalStore, transactionId, input);
 };

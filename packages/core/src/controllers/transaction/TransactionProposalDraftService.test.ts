@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createNamespacesStub,
   createPrepareStub,
-  createProposalStores,
+  createProposalStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -13,13 +13,13 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
-    const { proposalStore, reviewStore } = createProposalStores();
+    const proposalStore = createProposalStore();
     const rerunPrepare = vi.fn(() => {
       const proposal = proposalStore.peek(REQUEST_ID);
       if (!proposal) {
         throw new Error("Proposal missing");
       }
-      reviewStore.restartPrepare({
+      proposalStore.restartPrepare({
         id: REQUEST_ID,
         draftRevision: proposal.draftRevision,
         updatedAt: 1,
@@ -46,7 +46,7 @@ describe("TransactionProposalDraftService", () => {
       now: () => 1,
     });
 
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,
@@ -71,7 +71,7 @@ describe("TransactionProposalDraftService", () => {
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });
-    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "preparing",
       updatedAt: 1,
     });

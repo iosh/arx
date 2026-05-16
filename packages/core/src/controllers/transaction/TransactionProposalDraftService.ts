@@ -1,7 +1,7 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransactionDraftEdit, TransactionRequest } from "../../transactions/types.js";
 import { isProposalTerminal } from "./status.js";
-import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import type { TransactionPrepare } from "./TransactionPrepare.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionProposalMeta } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
@@ -9,14 +9,14 @@ import { buildProposalStateContext } from "./utils.js";
 type TransactionProposalDraftServiceDeps = {
   proposalStore: TransactionProposalStore;
   namespaces: NamespaceTransactions;
-  prepare: Pick<TransactionPrepareManager, "rerunPrepare">;
+  prepare: Pick<TransactionPrepare, "rerun">;
   now: () => number;
 };
 
 export class TransactionProposalDraftService {
   #proposalStore: TransactionProposalStore;
   #namespaces: NamespaceTransactions;
-  #prepare: Pick<TransactionPrepareManager, "rerunPrepare">;
+  #prepare: Pick<TransactionPrepare, "rerun">;
   #now: () => number;
 
   constructor(deps: TransactionProposalDraftServiceDeps) {
@@ -32,7 +32,7 @@ export class TransactionProposalDraftService {
       return;
     }
 
-    this.#prepare.rerunPrepare(transactionId);
+    this.#prepare.rerun(transactionId);
   }
 
   async applyDraftEdit(input: {

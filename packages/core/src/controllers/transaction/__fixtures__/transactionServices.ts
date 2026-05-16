@@ -320,15 +320,15 @@ export const createRecordViewStub = (params?: {
 };
 
 export const createPrepareStub = (overrides?: {
-  queuePrepare?: (id: string) => void;
-  rerunPrepare?: (id: string) => void;
-  discardPrepare?: (id: string) => void;
-  prepareTransactionForExecution?: (id: string) => Promise<TransactionProposalMeta | null>;
+  queue?: (id: string) => void;
+  rerun?: (id: string) => void;
+  discard?: (id: string) => void;
+  prepareCurrentDraft?: (id: string) => Promise<void>;
 }) => ({
-  queuePrepare: overrides?.queuePrepare ?? vi.fn(),
-  rerunPrepare: overrides?.rerunPrepare ?? vi.fn(),
-  discardPrepare: overrides?.discardPrepare ?? vi.fn(),
-  prepareTransactionForExecution: overrides?.prepareTransactionForExecution ?? vi.fn(async () => null),
+  queue: overrides?.queue ?? vi.fn(),
+  rerun: overrides?.rerun ?? vi.fn(),
+  discard: overrides?.discard ?? vi.fn(),
+  prepareCurrentDraft: overrides?.prepareCurrentDraft ?? vi.fn(async () => {}),
 });
 
 export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<NamespaceTransactions, "get"> => ({

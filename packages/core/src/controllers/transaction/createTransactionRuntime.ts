@@ -9,8 +9,7 @@ import { ProviderTransactionApprovalService } from "./ProviderTransactionApprova
 import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
-import { TransactionPrepareExecutionService } from "./TransactionPrepareExecutionService.js";
-import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import { TransactionPrepare } from "./TransactionPrepare.js";
 import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 import { TransactionProposalBeginService } from "./TransactionProposalBeginService.js";
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
@@ -85,15 +84,9 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     ...(options.tracker ? { tracker: options.tracker } : {}),
   });
 
-  const prepareExecution = new TransactionPrepareExecutionService({
+  const prepare = new TransactionPrepare({
     proposalStore,
     namespaces: options.namespaces,
-    now,
-  });
-
-  const prepare = new TransactionPrepareManager({
-    proposalStore,
-    execution: prepareExecution,
     now,
     logger,
   });

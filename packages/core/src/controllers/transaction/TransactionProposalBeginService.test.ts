@@ -51,7 +51,7 @@ describe("TransactionProposalBeginService", () => {
   it("creates a proposal, attaches approval, and queues prepare", async () => {
     const chainRef = DEFAULT_CHAIN_REF;
     const proposalStore = createProposalStore();
-    const queuePrepare = vi.fn();
+    const queue = vi.fn();
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,
       settled: Promise.resolve(undefined),
@@ -59,7 +59,7 @@ describe("TransactionProposalBeginService", () => {
     const service = createBeginService({
       proposalStore,
       approvals: { create: createApproval as never },
-      prepare: createPrepareStub({ queuePrepare }),
+      prepare: createPrepareStub({ queue }),
     });
 
     const randomUuidSpy = vi
@@ -89,6 +89,6 @@ describe("TransactionProposalBeginService", () => {
       approvalId: APPROVAL_ID,
     });
     expect(createApproval).toHaveBeenCalledTimes(1);
-    expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(queue).toHaveBeenCalledWith(REQUEST_ID);
   });
 });

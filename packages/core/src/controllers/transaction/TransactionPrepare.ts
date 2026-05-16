@@ -4,6 +4,7 @@ import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { buildPrepareContext } from "./utils.js";
 
+const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
 
 class TransactionPrepareTimeoutError extends Error {
@@ -35,14 +36,26 @@ const toPrepareReviewError = (error: unknown) => {
   } as const;
 };
 
-type TransactionPrepareExecutionServiceDeps = {
-  proposalStore: Pick<
-    TransactionProposalStore,
-    "peek" | "get" | "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
-  >;
+type TransactionPrepareState = Pick<
+  TransactionProposalStore,
+  | "peek"
+  | "get"
+  | "getPreparedForExecution"
+  | "getOrStartPrepare"
+  | "restartPrepare"
+  | "settlePrepareReady"
+  | "settlePrepareBlocked"
+  | "settlePrepareFailed"
+  | "clearPrepareState"
+>;
+
+type TransactionPrepareDeps = {
+  proposalStore: TransactionPrepareState;
   namespaces: Pick<NamespaceTransactions, "get">;
+  now: () => number;
+  logger?: (message: string, data?: unknown) => void;
+  backgroundConcurrency?: number;
   namespaceProposalPrepareTimeoutMs?: number;
-  now?: () => number;
 };
 
 type PrepareAttempt = {
@@ -72,21 +85,61 @@ type PrepareOutcome =
       reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
     };
 
-export class TransactionPrepareExecutionService {
-  #proposalStore: Pick<
-    TransactionProposalStore,
-    "peek" | "get" | "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
-  >;
+export class TransactionPrepare {
+  #proposalStore: TransactionPrepareState;
   #namespaces: Pick<NamespaceTransactions, "get">;
-  #namespaceProposalPrepareTimeoutMs: number;
   #now: () => number;
+  #logger: (message: string, data?: unknown) => void;
+  #namespaceProposalPrepareTimeoutMs: number;
 
-  constructor(deps: TransactionPrepareExecutionServiceDeps) {
+  #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
+  #prepareConcurrencyLimit: number;
+  #prepareConcurrencyInUse = 0;
+  #prepareConcurrencyWaiters: Array<() => void> = [];
+
+  constructor(deps: TransactionPrepareDeps) {
     this.#proposalStore = deps.proposalStore;
     this.#namespaces = deps.namespaces;
+    this.#now = deps.now;
+    this.#logger = deps.logger ?? (() => {});
+    this.#prepareConcurrencyLimit = Math.max(1, deps.backgroundConcurrency ?? DEFAULT_BACKGROUND_PREPARE_CONCURRENCY);
     this.#namespaceProposalPrepareTimeoutMs =
       deps.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
-    this.#now = deps.now ?? Date.now;
+  }
+
+  queue(id: string) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || this.#hasCurrentPrepared(id) || !canPrepareProposal(proposal)) {
+      return;
+    }
+
+    this.#proposalStore.getOrStartPrepare({
+      id,
+      draftRevision: proposal.draftRevision,
+      updatedAt: this.#now(),
+    });
+    this.#queuePrepareInBackground(id);
+  }
+
+  rerun(id: string) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || !canPrepareProposal(proposal)) {
+      return;
+    }
+
+    this.#proposalStore.restartPrepare({
+      id,
+      draftRevision: proposal.draftRevision,
+      updatedAt: this.#now(),
+    });
+    this.#queuePrepareInBackground(id);
+  }
+
+  discard(id: string) {
+    this.#proposalStore.clearPrepareState({
+      id,
+      updatedAt: this.#now(),
+    });
   }
 
   async prepareCurrentDraft(id: string): Promise<void> {
@@ -97,6 +150,66 @@ export class TransactionPrepareExecutionService {
 
     const outcome = await this.#resolvePrepareOutcome(attempt);
     this.#applyPrepareOutcome(attempt, outcome);
+  }
+
+  #queuePrepareInBackground(id: string) {
+    void this.#prepareTransactionInBackground(id).catch((error) => {
+      this.#logger("transactions: prepare failed", {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  async #prepareTransactionInBackground(id: string): Promise<void> {
+    await this.#runPrepareUntilCurrent(id);
+  }
+
+  async #runPrepareUntilCurrent(id: string): Promise<void> {
+    while (true) {
+      const existing = this.#prepareInFlight.get(id);
+      let settledDraftRevision: number;
+      if (existing) {
+        settledDraftRevision = existing.draftRevision;
+        await existing.promise;
+      } else {
+        const initial = this.#proposalStore.peek(id);
+        if (!initial) {
+          return;
+        }
+        if (this.#hasCurrentPrepared(id) || !canPrepareProposal(initial)) {
+          return;
+        }
+        settledDraftRevision = initial.draftRevision;
+
+        const run = this.#withPrepareSlot(async () => {
+          await this.prepareCurrentDraft(id);
+        });
+        const tracked = run
+          .then(() => undefined)
+          .finally(() => {
+            this.#prepareInFlight.delete(id);
+          });
+
+        this.#prepareInFlight.set(id, {
+          draftRevision: initial.draftRevision,
+          promise: tracked,
+        });
+        await tracked;
+      }
+
+      const latest = this.#proposalStore.peek(id);
+      if (!latest || this.#hasCurrentPrepared(id) || !canPrepareProposal(latest)) {
+        return;
+      }
+      if (latest.draftRevision === settledDraftRevision) {
+        return;
+      }
+    }
+  }
+
+  #hasCurrentPrepared(id: string): boolean {
+    return this.#proposalStore.getPreparedForExecution(id) !== null;
   }
 
   #startPrepareAttempt(id: string): PrepareAttempt | null {
@@ -195,7 +308,7 @@ export class TransactionPrepareExecutionService {
 
     switch (outcome.status) {
       case "ready": {
-        const review = this.#proposalStore.settlePrepareReady({
+        this.#proposalStore.settlePrepareReady({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -203,13 +316,10 @@ export class TransactionPrepareExecutionService {
           executionPrepared: outcome.prepared,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
-        if (!review) {
-          return;
-        }
         return;
       }
       case "blocked": {
-        const review = this.#proposalStore.settlePrepareBlocked({
+        this.#proposalStore.settlePrepareBlocked({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -217,13 +327,10 @@ export class TransactionPrepareExecutionService {
           blocker: outcome.blocker,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
-        if (!review) {
-          return;
-        }
         return;
       }
       case "failed": {
-        const review = this.#proposalStore.settlePrepareFailed({
+        this.#proposalStore.settlePrepareFailed({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -231,10 +338,27 @@ export class TransactionPrepareExecutionService {
           error: outcome.error,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
-        if (!review) {
-          return;
-        }
         return;
+      }
+    }
+  }
+
+  async #withPrepareSlot<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.#prepareConcurrencyInUse >= this.#prepareConcurrencyLimit) {
+      await new Promise<void>((resolve) => {
+        this.#prepareConcurrencyWaiters.push(resolve);
+      });
+    } else {
+      this.#prepareConcurrencyInUse += 1;
+    }
+    try {
+      return await fn();
+    } finally {
+      const waiter = this.#prepareConcurrencyWaiters.shift();
+      if (waiter) {
+        waiter();
+      } else {
+        this.#prepareConcurrencyInUse = Math.max(0, this.#prepareConcurrencyInUse - 1);
       }
     }
   }

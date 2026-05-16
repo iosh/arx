@@ -9,7 +9,7 @@ import type { TransactionValidationContext } from "../../transactions/namespace/
 import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
-import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
+import type { TransactionPrepare } from "./TransactionPrepare.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { BeginTransactionApprovalOptions, TransactionApprovalRequestHandoff } from "./types.js";
 import {
@@ -24,7 +24,7 @@ type TransactionProposalBeginServiceDeps = {
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
-  prepare: Pick<TransactionPrepareManager, "queuePrepare" | "discardPrepare">;
+  prepare: Pick<TransactionPrepare, "queue" | "discard">;
   now: () => number;
 };
 
@@ -34,7 +34,7 @@ export class TransactionProposalBeginService {
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
-  #prepare: Pick<TransactionPrepareManager, "queuePrepare" | "discardPrepare">;
+  #prepare: Pick<TransactionPrepare, "queue" | "discard">;
   #now: () => number;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
@@ -120,7 +120,7 @@ export class TransactionProposalBeginService {
       origin: requestContext.origin,
     };
 
-    this.#prepare.queuePrepare(id);
+    this.#prepare.queue(id);
 
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
@@ -186,7 +186,7 @@ export class TransactionProposalBeginService {
       error: coerceTransactionError(reason) ?? null,
       userRejected: false,
     });
-    this.#prepare.discardPrepare(id);
+    this.#prepare.discard(id);
   }
 
   #requireOwnedFromAccount(params: {

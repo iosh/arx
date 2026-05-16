@@ -14,7 +14,7 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
     const proposalStore = createProposalStore();
-    const rerunPrepare = vi.fn(() => {
+    const rerun = vi.fn(() => {
       const proposal = proposalStore.peek(REQUEST_ID);
       if (!proposal) {
         throw new Error("Proposal missing");
@@ -42,7 +42,7 @@ describe("TransactionProposalDraftService", () => {
             },
           }) as never,
       ),
-      prepare: createPrepareStub({ rerunPrepare }),
+      prepare: createPrepareStub({ rerun }),
       now: () => 1,
     });
 
@@ -67,7 +67,7 @@ describe("TransactionProposalDraftService", () => {
       },
     });
 
-    expect(rerunPrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(rerun).toHaveBeenCalledWith(REQUEST_ID);
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });

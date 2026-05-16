@@ -70,7 +70,7 @@ const createExecutionService = (params?: {
   const prepare =
     params?.prepare ??
     createPrepareStub({
-      prepareTransactionForExecution: vi.fn(async (id: string) => proposalStore.get(id) ?? null),
+      prepareCurrentDraft: vi.fn(async () => {}),
     });
   const tracking = params?.tracking ?? createTrackingStub();
   const messenger = params?.messenger ?? new Messenger();

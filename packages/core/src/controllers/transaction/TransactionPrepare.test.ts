@@ -63,16 +63,20 @@ describe("TransactionPrepare", () => {
             }
 
             if (run === 1) {
-              proposalStore.replacePendingDraftRequest({
-                id: REQUEST_ID,
-                request: {
-                  namespace: "eip155",
-                  chainRef: "eip155:10",
-                  payload: {
-                    to: "0xcccccccccccccccccccccccccccccccccccccccc",
+              expect(
+                proposalStore.replacePendingDraftRequest({
+                  id: REQUEST_ID,
+                  request: {
+                    namespace: "eip155",
+                    chainRef: "eip155:10",
+                    payload: {
+                      to: "0xcccccccccccccccccccccccccccccccccccccccc",
+                    },
                   },
-                },
-                updatedAt: 2,
+                  updatedAt: 2,
+                }),
+              ).toMatchObject({
+                status: "updated",
               });
             }
 

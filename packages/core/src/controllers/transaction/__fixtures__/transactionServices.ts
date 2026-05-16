@@ -201,14 +201,16 @@ export const createTransactionProposal = (
     return proposalStore.get(id) ?? created;
   }
   if (requestedPhase === "failed") {
-    return (
-      proposalStore.failProposal({
-        id,
-        updatedAt,
-        error: input?.error ?? null,
-        userRejected: input?.userRejected ?? false,
-      }) ?? created
-    );
+    const failed = proposalStore.failProposal({
+      id,
+      updatedAt,
+      error: input?.error ?? null,
+      userRejected: input?.userRejected ?? false,
+    });
+    if (failed.status !== "failed") {
+      throw new Error(`Proposal ${id} could not be failed`);
+    }
+    return failed.proposal;
   }
   return created;
 };

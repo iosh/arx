@@ -1,9 +1,7 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { NamespaceTransactionDraftEdit, TransactionRequest } from "../../transactions/types.js";
-import { isProposalTerminal } from "./status.js";
+import type { NamespaceTransactionDraftEdit } from "../../transactions/types.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionProposalMeta } from "./types.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type TransactionProposalDraftServiceDeps = {
@@ -27,8 +25,8 @@ export class TransactionProposalDraftService {
   }
 
   async rerunPrepare(transactionId: string): Promise<void> {
-    const proposal = this.#proposalStore.peek(transactionId);
-    if (!proposal || isProposalTerminal(proposal)) {
+    const proposal = this.#proposalStore.get(transactionId);
+    if (!proposal || proposal.status !== "pending") {
       return;
     }
 
@@ -41,11 +39,10 @@ export class TransactionProposalDraftService {
     mode?: string;
   }): Promise<void> {
     const meta = this.#proposalStore.get(input.transactionId);
-    const proposal = this.#proposalStore.peek(input.transactionId);
-    if (!meta || !proposal || isProposalTerminal(proposal)) {
+    if (!meta || meta.status === "failed") {
       return;
     }
-    if (proposal.phase !== "pending") {
+    if (meta.status !== "pending") {
       throw new Error("Transaction draft can only be edited before approval.");
     }
 
@@ -59,13 +56,9 @@ export class TransactionProposalDraftService {
       );
     }
 
-    const request = this.#requireRuntimeRequest(meta);
     const nextRequest = namespaceTransaction.proposal.applyDraftEdit({
       ...buildProposalStateContext(meta),
-      request: structuredClone({
-        ...request,
-        chainRef: request.chainRef,
-      }),
+      request: structuredClone(meta.request),
       edit: input.edit,
       ...(input.mode ? { mode: input.mode } : {}),
     });
@@ -75,14 +68,10 @@ export class TransactionProposalDraftService {
       request: structuredClone(nextRequest),
       updatedAt: this.#now(),
     });
-    if (!edited) {
+    if (edited.status !== "updated") {
       throw new Error("Transaction draft can only be edited before approval.");
     }
 
-    await this.rerunPrepare(meta.id);
-  }
-
-  #requireRuntimeRequest(meta: TransactionProposalMeta): TransactionRequest {
-    return meta.request;
+    this.#prepare.rerun(meta.id);
   }
 }

@@ -6,7 +6,7 @@ import type { AccountAddress, AccountController, OwnedAccountView } from "../../
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
-import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
+import type { TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
@@ -24,7 +24,7 @@ type TransactionProposalBeginServiceDeps = {
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
-  prepare: Pick<TransactionPrepare, "queue" | "discard">;
+  prepare: Pick<TransactionPrepare, "queue">;
   now: () => number;
 };
 
@@ -34,7 +34,7 @@ export class TransactionProposalBeginService {
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
-  #prepare: Pick<TransactionPrepare, "queue" | "discard">;
+  #prepare: Pick<TransactionPrepare, "queue">;
   #now: () => number;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
@@ -161,8 +161,16 @@ export class TransactionProposalBeginService {
             },
           );
     } catch (error) {
-      const rejectionError = error instanceof Error ? error : new Error(String(error));
-      this.#failProposal(proposalMeta.id, rejectionError);
+      const approvalError = error instanceof Error ? error : new Error(String(error));
+      const failed = this.#proposalStore.failProposal({
+        id: proposalMeta.id,
+        updatedAt: this.#now(),
+        error: coerceTransactionError(approvalError) ?? null,
+        userRejected: false,
+      });
+      if (failed.status !== "failed") {
+        throw new Error(`Failed to mark proposal ${proposalMeta.id} as failed after approval creation error.`);
+      }
       throw error;
     }
 
@@ -172,21 +180,6 @@ export class TransactionProposalBeginService {
       transactionId: proposalMeta.id,
       approvalId: approvalHandle.approvalId,
     };
-  }
-
-  #failProposal(id: string, reason?: Error | TransactionError): void {
-    const proposal = this.#proposalStore.peek(id);
-    if (!proposal || proposal.phase === "failed") {
-      return;
-    }
-
-    this.#proposalStore.failProposal({
-      id,
-      updatedAt: this.#now(),
-      error: coerceTransactionError(reason) ?? null,
-      userRejected: false,
-    });
-    this.#prepare.discard(id);
   }
 
   #requireOwnedFromAccount(params: {

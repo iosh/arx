@@ -94,6 +94,32 @@ type SettlePrepareInput = {
   updatedAt: number;
 };
 
+type ReplacePendingDraftRequestResult =
+  | {
+      status: "updated";
+      proposal: TransactionProposalMeta;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_pending";
+      phase: TransactionProposalPhase;
+    };
+
+type FailProposalResult =
+  | {
+      status: "failed";
+      proposal: TransactionProposalMeta;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_active";
+      phase: TransactionProposalPhase;
+    };
+
 type Options = {
   messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
@@ -292,9 +318,17 @@ export class TransactionProposalStore {
     id: string;
     request: TransactionRequest;
     updatedAt: number;
-  }): TransactionProposalMeta | null {
+  }): ReplacePendingDraftRequestResult {
     const current = this.#records.get(input.id);
-    if (!current || current.phase !== "pending") return null;
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (current.phase !== "pending") {
+      return {
+        status: "not_pending",
+        phase: current.phase,
+      };
+    }
 
     const nextDraftRevision = current.draftRevision + 1;
     const next = applyTransactionProposalUpdate(current, {
@@ -308,7 +342,10 @@ export class TransactionProposalStore {
 
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return this.#toMeta(next);
+    return {
+      status: "updated",
+      proposal: this.#toMeta(next),
+    };
   }
 
   updatePreparedForDraft(input: {
@@ -544,19 +581,34 @@ export class TransactionProposalStore {
     updatedAt: number;
     error: import("../../transactions/types.js").TransactionError | null;
     userRejected: boolean;
-  }): TransactionProposalMeta | null {
-    return this.#moveProposal({
-      id: input.id,
-      expected: ["pending", "approved"],
-      next: "failed",
+  }): FailProposalResult {
+    const current = this.#records.get(input.id);
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (current.phase !== "pending" && current.phase !== "approved") {
+      return {
+        status: "not_active",
+        phase: current.phase,
+      };
+    }
+
+    const next = applyTransactionProposalUpdate(current, {
       updatedAt: input.updatedAt,
-      patch: {
-        error: input.error,
-        userRejected: input.userRejected,
-        prepared: null,
-        review: null,
-      },
+      error: input.error,
+      userRejected: input.userRejected,
+      prepared: null,
+      review: null,
     });
+    next.phase = "failed";
+
+    this.#records.set(input.id, next);
+    this.#emitStatusChange(current, next);
+    this.#notifyChanged([input.id]);
+    return {
+      status: "failed",
+      proposal: this.#toMeta(next),
+    };
   }
 
   delete(id: string): boolean {

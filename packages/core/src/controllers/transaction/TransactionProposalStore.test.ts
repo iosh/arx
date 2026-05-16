@@ -123,13 +123,126 @@ describe("TransactionProposalStore", () => {
     });
 
     expect(next).toMatchObject({
-      request: {
-        payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
+      status: "updated",
+      proposal: {
+        request: {
+          payload: { to: "0xcccccccccccccccccccccccccccccccccccccccc" },
+        },
+        prepared: null,
+        updatedAt: 2,
       },
-      prepared: null,
-      updatedAt: 2,
     });
     expect(store.peek("33333333-3333-4333-8333-333333333333")?.draftRevision).toBe(1);
+  });
+
+  it("returns explicit replace-draft outcomes for missing and non-pending proposals", () => {
+    const store = createStore();
+
+    expect(
+      store.replacePendingDraftRequest({
+        id: "missing",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {},
+        },
+        updatedAt: 1,
+      }),
+    ).toEqual({ status: "not_found" });
+
+    store.createPendingProposal({
+      id: "approved-proposal",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    store.updatePreparedForDraft({
+      id: "approved-proposal",
+      expectedDraftRevision: 0,
+      updatedAt: 1,
+      prepared: {},
+    });
+    store.approvePendingProposal({ id: "approved-proposal", updatedAt: 1 });
+
+    expect(
+      store.replacePendingDraftRequest({
+        id: "approved-proposal",
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: {},
+        },
+        updatedAt: 2,
+      }),
+    ).toEqual({
+      status: "not_pending",
+      phase: "approved",
+    });
+  });
+
+  it("returns explicit fail outcomes for missing, inactive, and active proposals", () => {
+    const store = createStore();
+
+    expect(
+      store.failProposal({
+        id: "missing",
+        updatedAt: 1,
+        error: null,
+        userRejected: false,
+      }),
+    ).toEqual({ status: "not_found" });
+
+    store.createPendingProposal({
+      id: "failed-proposal",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(
+      store.failProposal({
+        id: "failed-proposal",
+        updatedAt: 2,
+        error: { name: "Error", message: "boom" },
+        userRejected: false,
+      }),
+    ).toMatchObject({
+      status: "failed",
+      proposal: {
+        id: "failed-proposal",
+        status: "failed",
+        error: {
+          message: "boom",
+        },
+      },
+    });
+
+    expect(
+      store.failProposal({
+        id: "failed-proposal",
+        updatedAt: 3,
+        error: { name: "Error", message: "late" },
+        userRejected: false,
+      }),
+    ).toEqual({
+      status: "not_active",
+      phase: "failed",
+    });
   });
 
   it("updates prepared params only for the matching draft revision", () => {

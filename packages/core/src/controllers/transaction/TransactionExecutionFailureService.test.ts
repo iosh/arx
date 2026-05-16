@@ -67,4 +67,38 @@ describe("TransactionExecutionFailureService", () => {
     expect(recordSubmissionFailure).not.toHaveBeenCalled();
     expect(recordFailure).toHaveBeenCalledWith("missing", reason);
   });
+
+  it("falls through to durable record failure once the proposal is already terminal", async () => {
+    const proposalStore = createProposalStore();
+    createTransactionProposal(proposalStore, {
+      status: "failed",
+      error: {
+        name: "Error",
+        message: "already failed",
+      },
+    });
+
+    const recordFailure = vi.fn(async () => {});
+    const recordSubmissionFailure = vi.fn();
+    const reason: TransactionError = {
+      name: "Error",
+      message: "Late failure",
+    };
+
+    const service = new TransactionExecutionFailureService({
+      proposalStore,
+      submission: {
+        recordFailure: recordSubmissionFailure,
+      },
+      records: {
+        failRecord: recordFailure,
+      },
+      now: () => 2,
+    });
+
+    await service.finalizeExecutionFailure(REQUEST_ID, reason);
+
+    expect(recordSubmissionFailure).not.toHaveBeenCalled();
+    expect(recordFailure).toHaveBeenCalledWith(REQUEST_ID, reason);
+  });
 });

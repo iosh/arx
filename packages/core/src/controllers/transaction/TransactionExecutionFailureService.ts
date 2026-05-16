@@ -1,19 +1,18 @@
 import type { TransactionError } from "../../transactions/types.js";
-import { isProposalTerminal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { coerceTransactionError, isUserRejectedError } from "./utils.js";
 
 type TransactionExecutionFailureServiceDeps = {
-  proposalStore: Pick<TransactionProposalStore, "peek" | "failProposal">;
+  proposalStore: Pick<TransactionProposalStore, "failProposal">;
   submission: Pick<TransactionSubmissionStore, "recordFailure">;
   records: Pick<TransactionRecordRuntime, "failRecord">;
   now: () => number;
 };
 
 export class TransactionExecutionFailureService {
-  #proposalStore: Pick<TransactionProposalStore, "peek" | "failProposal">;
+  #proposalStore: Pick<TransactionProposalStore, "failProposal">;
   #submission: Pick<TransactionSubmissionStore, "recordFailure">;
   #records: Pick<TransactionRecordRuntime, "failRecord">;
   #now: () => number;
@@ -49,17 +48,16 @@ export class TransactionExecutionFailureService {
       userRejected: boolean;
     },
   ): boolean {
-    const proposal = this.#proposalStore.peek(id);
-    if (!proposal || isProposalTerminal(proposal)) {
-      return false;
-    }
-
-    this.#proposalStore.failProposal({
+    const failed = this.#proposalStore.failProposal({
       id,
       updatedAt: this.#now(),
       error: cancellation.error,
       userRejected: cancellation.userRejected,
     });
+    if (failed.status !== "failed") {
+      return false;
+    }
+
     this.#submission.recordFailure(id, {
       transactionId: id,
       error: cancellation.error,

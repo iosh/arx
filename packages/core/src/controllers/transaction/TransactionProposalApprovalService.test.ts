@@ -91,18 +91,22 @@ describe("TransactionProposalApprovalService", () => {
     if (!session) {
       throw new Error("Prepare session not started");
     }
-    proposalStore.replacePendingDraftRequest({
-      id: REQUEST_ID,
-      request: {
-        namespace: "eip155",
-        chainRef: DEFAULT_CHAIN_REF,
-        payload: {
-          from: DEFAULT_FROM,
-          to: DEFAULT_TO,
-          value: "0x1",
+    expect(
+      proposalStore.replacePendingDraftRequest({
+        id: REQUEST_ID,
+        request: {
+          namespace: "eip155",
+          chainRef: DEFAULT_CHAIN_REF,
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x1",
+          },
         },
-      },
-      updatedAt: 2,
+        updatedAt: 2,
+      }),
+    ).toMatchObject({
+      status: "updated",
     });
 
     expect(

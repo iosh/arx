@@ -1,6 +1,6 @@
 import { ArxReasons, arxError, isArxError } from "@arx/errors";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155BroadcasterContract, Eip155PrepareContext } from "./types.js";
+import type { Eip155BroadcasterContract } from "./types.js";
 
 const HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 

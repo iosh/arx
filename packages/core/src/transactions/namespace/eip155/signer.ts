@@ -10,7 +10,6 @@ import { eip155Codec } from "../../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../../chains/caip.js";
 import type { AccountSigningService } from "../../../services/runtime/accountSigning.js";
 import type { Eip155PreparedTransaction } from "../../types.js";
-import type { SignedTransactionPayload } from "../types.js";
 import type { Eip155SignContext, Eip155SignerContract } from "./types.js";
 
 const textEncoder = new TextEncoder();

@@ -133,10 +133,12 @@ describe("createUiRuntimeAccess", () => {
       events.push({ event: event.event, payload: event.payload });
     });
 
-    approvalFinishedHandlers.forEach((handler) =>
-      handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } }),
-    );
-    transactionHandlers.forEach((handler) => handler({ approvalIds: ["approval-1"] }));
+    approvalFinishedHandlers.forEach((handler) => {
+      handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } });
+    });
+    transactionHandlers.forEach((handler) => {
+      handler({ approvalIds: ["approval-1"] });
+    });
 
     unsubscribe();
 

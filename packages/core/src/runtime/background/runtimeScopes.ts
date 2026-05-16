@@ -219,8 +219,6 @@ export const createRuntimeSessionScope = ({
     accountsService: accountsStore,
     settingsService,
     permissionsPort: storePorts.permissions,
-    transactionsService,
-    networkSelection,
     networkPlan: bootstrapScope.networkPlan,
     options: bootstrapScope.controllerOptions,
   });

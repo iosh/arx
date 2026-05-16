@@ -1,4 +1,4 @@
-import type { AnyNamespaceTransaction, NamespaceTransaction } from "./types.js";
+import type { AnyNamespaceTransaction } from "./types.js";
 
 export class NamespaceTransactions {
   #transactionByNamespace: ReadonlyMap<string, AnyNamespaceTransaction>;

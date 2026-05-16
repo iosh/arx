@@ -28,7 +28,6 @@ import type { TransactionRuntime } from "../../controllers/transaction/types.js"
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
@@ -113,8 +112,6 @@ export const initControllers = ({
   accountsService,
   settingsService,
   permissionsPort,
-  transactionsService,
-  networkSelection,
   networkPlan,
   options,
 }: {
@@ -123,8 +120,6 @@ export const initControllers = ({
   accountsService: AccountsService;
   settingsService: SettingsService;
   permissionsPort: PermissionsPort;
-  transactionsService: TransactionsService;
-  networkSelection: Pick<NetworkSelectionService, "getSelectedChainRef">;
   networkPlan: RuntimeNetworkPlan;
   options: ControllerLayerOptions;
 }): ControllersInitResult => {

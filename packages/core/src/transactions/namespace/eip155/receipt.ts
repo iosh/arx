@@ -1,7 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Hex from "ox/Hex";
 import type { Eip155RpcClient } from "../../../rpc/namespaceClients/eip155.js";
-import type { Eip155SubmittedTransaction, Eip155TransactionReceipt } from "../../types.js";
+import type { Eip155TransactionReceipt } from "../../types.js";
 import type { ReceiptResolution, ReplacementResolution } from "../types.js";
 import type { Eip155TrackingContext } from "./types.js";
 

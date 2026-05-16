@@ -854,7 +854,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const approvalId = "33333333-3333-4333-8333-333333333333";
     const beginTransactionApproval = vi
       .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
-      .mockImplementation(async (request) => ({
+      .mockImplementation(async (_request) => ({
         transactionId: approvalId,
         approvalId,
       }));
@@ -984,7 +984,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
 
     const beginTransactionApproval = vi
       .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
-      .mockImplementation(async (request, requester) => ({
+      .mockImplementation(async (_request, requester) => ({
         transactionId: requester.sessionId,
         approvalId: requester.sessionId,
       }));

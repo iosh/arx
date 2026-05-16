@@ -45,7 +45,6 @@ import type {
 import type { NamespaceRuntimeManifest } from "../namespaces/types.js";
 import type { JsonRpcError, JsonRpcResponse } from "../rpc/index.js";
 import type { RpcNamespaceModule } from "../rpc/namespaces/types.js";
-import type { RequestContext } from "../rpc/requestContext.js";
 import type {
   ConfirmNewMnemonicParams,
   ImportMnemonicParams,

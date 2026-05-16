@@ -3,7 +3,6 @@ import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
   createNamespacesStub,
-  createReceiptTrackingStub,
   createRecordViewStub,
   createTransactionsServiceStub,
   DEFAULT_CHAIN_REF,

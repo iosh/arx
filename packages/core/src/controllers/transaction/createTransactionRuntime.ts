@@ -3,8 +3,8 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";
-import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
-import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
+import type { ApprovalController } from "../approval/types.js";
+import { createApprovalDetailInvalidations } from "./createApprovalDetailInvalidations.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import { createTransactionApprovalReviewReader } from "./TransactionApprovalReviewService.js";
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
@@ -154,31 +154,13 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     records,
   });
 
-  const approvalDetailInvalidations = new ApprovalDetailInvalidationPublisher({
+  const approvalDetailInvalidations = createApprovalDetailInvalidations({
     messenger: options.messenger,
     approvals: options.approvals,
-  });
-
-  proposalStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
-  reviewStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
-  recordView.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
-
-  options.approvals.onFinished((event: ApprovalFinishedEvent<unknown>) => {
-    const invalidated = reviewStore.invalidatePrepareFromApproval(event, now());
-    if (invalidated && event.subject?.kind === "transaction") {
-      const proposal = proposalStore.peek(event.subject.transactionId);
-      if (proposal) {
-        proposalStore.updatePreparedForDraft({
-          id: event.subject.transactionId,
-          expectedDraftRevision: proposal.draftRevision,
-          updatedAt: now(),
-          prepared: null,
-        });
-      }
-    }
-    if (event.subject?.kind === "transaction") {
-      approvalDetailInvalidations.enqueue({ approvalIds: [event.approvalId] });
-    }
+    proposalStore,
+    reviewStore,
+    recordView,
+    now,
   });
 
   const providerCommands: ProviderTransactionApprovalCommands = new ProviderTransactionApprovalService({

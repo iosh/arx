@@ -5,15 +5,23 @@ import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
 
 type Options = {
-  proposalStore: Pick<TransactionProposalStore, "peek" | "getPreparedForExecution">;
+  proposalStore: Pick<
+    TransactionProposalStore,
+    "peek" | "getPreparedForExecution" | "getOrStartPrepare" | "restartPrepare" | "clearPrepareState"
+  >;
   execution: Pick<TransactionPrepareExecutionService, "prepareCurrentDraft">;
+  now: () => number;
   logger?: (message: string, data?: unknown) => void;
   backgroundConcurrency?: number;
 };
 
 export class TransactionPrepareManager {
-  #proposalStore: Pick<TransactionProposalStore, "peek" | "getPreparedForExecution">;
+  #proposalStore: Pick<
+    TransactionProposalStore,
+    "peek" | "getPreparedForExecution" | "getOrStartPrepare" | "restartPrepare" | "clearPrepareState"
+  >;
   #execution: Pick<TransactionPrepareExecutionService, "prepareCurrentDraft">;
+  #now: () => number;
   #logger: (message: string, data?: unknown) => void;
 
   #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
@@ -25,6 +33,7 @@ export class TransactionPrepareManager {
   constructor(options: Options) {
     this.#proposalStore = options.proposalStore;
     this.#execution = options.execution;
+    this.#now = options.now;
     this.#logger = options.logger ?? (() => {});
     this.#prepareConcurrencyLimit = Math.max(
       1,
@@ -33,6 +42,41 @@ export class TransactionPrepareManager {
   }
 
   queuePrepare(id: string) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || this.#hasCurrentPrepared(id) || !canPrepareProposal(proposal)) {
+      return;
+    }
+
+    this.#proposalStore.getOrStartPrepare({
+      id,
+      draftRevision: proposal.draftRevision,
+      updatedAt: this.#now(),
+    });
+    this.#queuePrepareInBackground(id);
+  }
+
+  rerunPrepare(id: string) {
+    const proposal = this.#proposalStore.peek(id);
+    if (!proposal || !canPrepareProposal(proposal)) {
+      return;
+    }
+
+    this.#proposalStore.restartPrepare({
+      id,
+      draftRevision: proposal.draftRevision,
+      updatedAt: this.#now(),
+    });
+    this.#queuePrepareInBackground(id);
+  }
+
+  discardPrepare(id: string) {
+    this.#proposalStore.clearPrepareState({
+      id,
+      updatedAt: this.#now(),
+    });
+  }
+
+  #queuePrepareInBackground(id: string) {
     void this.#prepareTransactionInBackground(id).catch((error) => {
       this.#logger("transactions: prepare failed", {
         id,

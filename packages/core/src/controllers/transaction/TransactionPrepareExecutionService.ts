@@ -2,7 +2,6 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS = 20_000;
@@ -37,10 +36,9 @@ const toPrepareReviewError = (error: unknown) => {
 };
 
 type TransactionPrepareExecutionServiceDeps = {
-  proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "updatePreparedForDraft">;
-  reviewStore: Pick<
-    TransactionReviewSessionStore,
-    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
+  proposalStore: Pick<
+    TransactionProposalStore,
+    "peek" | "get" | "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
   >;
   namespaces: Pick<NamespaceTransactions, "get">;
   namespaceProposalPrepareTimeoutMs?: number;
@@ -64,21 +62,20 @@ type PrepareOutcome =
   | {
       status: "blocked";
       updatedAt: number;
-      blocker: NonNullable<Parameters<TransactionReviewSessionStore["settlePrepareBlocked"]>[0]["blocker"]>;
+      blocker: NonNullable<Parameters<TransactionProposalStore["settlePrepareBlocked"]>[0]["blocker"]>;
       reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
     }
   | {
       status: "failed";
       updatedAt: number;
-      error: NonNullable<Parameters<TransactionReviewSessionStore["settlePrepareFailed"]>[0]["error"]>;
+      error: NonNullable<Parameters<TransactionProposalStore["settlePrepareFailed"]>[0]["error"]>;
       reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
     };
 
 export class TransactionPrepareExecutionService {
-  #proposalStore: Pick<TransactionProposalStore, "peek" | "get" | "updatePreparedForDraft">;
-  #reviewStore: Pick<
-    TransactionReviewSessionStore,
-    "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
+  #proposalStore: Pick<
+    TransactionProposalStore,
+    "peek" | "get" | "getOrStartPrepare" | "settlePrepareReady" | "settlePrepareBlocked" | "settlePrepareFailed"
   >;
   #namespaces: Pick<NamespaceTransactions, "get">;
   #namespaceProposalPrepareTimeoutMs: number;
@@ -86,7 +83,6 @@ export class TransactionPrepareExecutionService {
 
   constructor(deps: TransactionPrepareExecutionServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewStore = deps.reviewStore;
     this.#namespaces = deps.namespaces;
     this.#namespaceProposalPrepareTimeoutMs =
       deps.namespaceProposalPrepareTimeoutMs ?? DEFAULT_NAMESPACE_PROPOSAL_PREPARE_TIMEOUT_MS;
@@ -114,11 +110,14 @@ export class TransactionPrepareExecutionService {
       return null;
     }
 
-    const session = this.#reviewStore.getOrStartPrepare({
+    const session = this.#proposalStore.getOrStartPrepare({
       id,
       draftRevision: state.draftRevision,
       updatedAt: this.#now(),
     });
+    if (!session) {
+      return null;
+    }
 
     return {
       id,
@@ -196,26 +195,21 @@ export class TransactionPrepareExecutionService {
 
     switch (outcome.status) {
       case "ready": {
-        const review = this.#reviewStore.settlePrepareReady({
+        const review = this.#proposalStore.settlePrepareReady({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
+          executionPrepared: outcome.prepared,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
         if (!review) {
           return;
         }
-        this.#proposalStore.updatePreparedForDraft({
-          id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
-          updatedAt: outcome.updatedAt,
-          prepared: outcome.prepared,
-        });
         return;
       }
       case "blocked": {
-        const review = this.#reviewStore.settlePrepareBlocked({
+        const review = this.#proposalStore.settlePrepareBlocked({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -226,16 +220,10 @@ export class TransactionPrepareExecutionService {
         if (!review) {
           return;
         }
-        this.#proposalStore.updatePreparedForDraft({
-          id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
-          updatedAt: outcome.updatedAt,
-          prepared: null,
-        });
         return;
       }
       case "failed": {
-        const review = this.#reviewStore.settlePrepareFailed({
+        const review = this.#proposalStore.settlePrepareFailed({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -246,12 +234,6 @@ export class TransactionPrepareExecutionService {
         if (!review) {
           return;
         }
-        this.#proposalStore.updatePreparedForDraft({
-          id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
-          updatedAt: outcome.updatedAt,
-          prepared: null,
-        });
         return;
       }
     }

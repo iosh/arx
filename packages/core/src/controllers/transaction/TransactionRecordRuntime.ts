@@ -6,14 +6,12 @@ import type { TransactionError, TransactionSubmitted } from "../../transactions/
 import { TransactionPersistenceRuntime } from "./TransactionPersistenceRuntime.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TransactionTrackingRuntime } from "./TransactionTrackingRuntime.js";
 import type { TransactionProposalMeta, TransactionRecordStatus, TransactionRecordView } from "./types.js";
 
 type TransactionRecordRuntimeDeps = {
   proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
-  reviewStore: Pick<TransactionReviewSessionStore, "delete">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
@@ -39,7 +37,6 @@ export class TransactionRecordRuntime {
     });
     this.#persistence = new TransactionPersistenceRuntime({
       proposalStore: deps.proposalStore,
-      reviewStore: deps.reviewStore,
       recordView: deps.recordView,
       accountCodecs: deps.accountCodecs,
       namespaces: deps.namespaces,

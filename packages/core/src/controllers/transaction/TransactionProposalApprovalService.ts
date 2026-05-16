@@ -1,27 +1,33 @@
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionApprovalResult } from "./types.js";
 
 type TransactionProposalApprovalServiceDeps = {
   proposalStore: Pick<
     TransactionProposalStore,
-    "getView" | "getPreparedForExecution" | "peek" | "approvePendingProposal"
+    | "getView"
+    | "getPreparedForExecution"
+    | "peek"
+    | "approvePendingProposal"
+    | "getReviewState"
+    | "matchesDraftRevision"
   >;
-  reviewStore: Pick<TransactionReviewSessionStore, "getReviewState" | "matchesDraftRevision">;
   now: () => number;
 };
 
 export class TransactionProposalApprovalService {
   #proposalStore: Pick<
     TransactionProposalStore,
-    "getView" | "getPreparedForExecution" | "peek" | "approvePendingProposal"
+    | "getView"
+    | "getPreparedForExecution"
+    | "peek"
+    | "approvePendingProposal"
+    | "getReviewState"
+    | "matchesDraftRevision"
   >;
-  #reviewStore: Pick<TransactionReviewSessionStore, "getReviewState" | "matchesDraftRevision">;
   #now: () => number;
 
   constructor(deps: TransactionProposalApprovalServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewStore = deps.reviewStore;
     this.#now = deps.now;
   }
 
@@ -48,18 +54,18 @@ export class TransactionProposalApprovalService {
       };
     }
 
-    const review = this.#reviewStore.getReviewState(id);
+    const review = this.#proposalStore.getReviewState(id);
     if (!review) {
       return {
         status: "failed",
         reason: "prepare_not_ready",
         transaction: existing,
         message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: "missing_review" },
+        data: { transactionId: id, prepareState: "missing_prepare" },
       };
     }
 
-    if (!this.#reviewStore.matchesDraftRevision(id, current.draftRevision)) {
+    if (!this.#proposalStore.matchesDraftRevision(id, current.draftRevision)) {
       return {
         status: "failed",
         reason: "prepare_not_ready",
@@ -105,17 +111,9 @@ export class TransactionProposalApprovalService {
       };
     }
 
-    if (!this.#proposalStore.getPreparedForExecution(id)) {
-      return {
-        status: "failed",
-        reason: "prepare_failed",
-        transaction: existing,
-        message: "Transaction prepared snapshot is missing.",
-        data: {
-          transactionId: id,
-          prepareState: "ready_without_prepared",
-        },
-      };
+    const prepared = this.#proposalStore.getPreparedForExecution(id);
+    if (!prepared) {
+      throw new Error(`Transaction ${id} reached ready prepare state without execution prepared params.`);
     }
 
     const approved = this.#proposalStore.approvePendingProposal({ id, updatedAt });

@@ -3,7 +3,6 @@ import {
   createNamespacesStub,
   createPrepareStub,
   createProposalStores,
-  createReviewStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -15,10 +14,19 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
     const { proposalStore, reviewStore } = createProposalStores();
-    const queuePrepare = vi.fn();
+    const rerunPrepare = vi.fn(() => {
+      const proposal = proposalStore.peek(REQUEST_ID);
+      if (!proposal) {
+        throw new Error("Proposal missing");
+      }
+      reviewStore.restartPrepare({
+        id: REQUEST_ID,
+        draftRevision: proposal.draftRevision,
+        updatedAt: 1,
+      });
+    });
     const service = new TransactionProposalDraftService({
       proposalStore,
-      reviewStore,
       namespaces: createNamespacesStub(
         () =>
           ({
@@ -34,7 +42,7 @@ describe("TransactionProposalDraftService", () => {
             },
           }) as never,
       ),
-      prepare: createPrepareStub({ queuePrepare }),
+      prepare: createPrepareStub({ rerunPrepare }),
       now: () => 1,
     });
 
@@ -59,7 +67,7 @@ describe("TransactionProposalDraftService", () => {
       },
     });
 
-    expect(queuePrepare).toHaveBeenCalledWith(REQUEST_ID);
+    expect(rerunPrepare).toHaveBeenCalledWith(REQUEST_ID);
     expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });

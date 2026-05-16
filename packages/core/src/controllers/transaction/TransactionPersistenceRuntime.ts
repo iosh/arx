@@ -6,14 +6,12 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { TransactionSubmitted } from "../../transactions/types.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 import { createTransactionPersistenceError } from "./utils.js";
 
 type TransactionPersistenceRuntimeDeps = {
   proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
-  reviewStore: Pick<TransactionReviewSessionStore, "delete">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
@@ -42,7 +40,6 @@ const toStoredReplacementIdentity = (
 
 export class TransactionPersistenceRuntime {
   #proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
-  #reviewStore: Pick<TransactionReviewSessionStore, "delete">;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: Pick<NamespaceTransactions, "get">;
@@ -52,7 +49,6 @@ export class TransactionPersistenceRuntime {
 
   constructor(deps: TransactionPersistenceRuntimeDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewStore = deps.reviewStore;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#namespaces = deps.namespaces;
@@ -96,7 +92,6 @@ export class TransactionPersistenceRuntime {
       });
 
       this.#proposalStore.clearProposalAfterRecordPersisted(meta.id);
-      this.#reviewStore.delete(meta.id);
       const committed = this.#recordView.commitRecordView(durable);
       this.#submission.recordPersisted(meta.id);
       this.#startTracking(committed.next);
@@ -112,7 +107,6 @@ export class TransactionPersistenceRuntime {
         submitted: structuredClone(submitted),
       });
       this.#proposalStore.delete(meta.id);
-      this.#reviewStore.delete(meta.id);
     }
   }
 

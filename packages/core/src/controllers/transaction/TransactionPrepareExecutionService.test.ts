@@ -3,7 +3,6 @@ import {
   createNamespacesStub,
   createNamespaceTransactionStub,
   createProposalStore,
-  createReviewStore,
   createTransactionProposal,
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
@@ -12,14 +11,12 @@ import { TransactionPrepareExecutionService } from "./TransactionPrepareExecutio
 describe("TransactionPrepareExecutionService", () => {
   it("writes ready prepare results back into review and proposal state", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, proposalStore, {
       status: "pending",
     });
 
     const service = new TransactionPrepareExecutionService({
       proposalStore,
-      reviewStore,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => ({
@@ -33,7 +30,7 @@ describe("TransactionPrepareExecutionService", () => {
 
     await service.prepareCurrentDraft(REQUEST_ID);
 
-    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "ready",
       reviewPreparedSnapshot: { gas: "0x5208" },
     });
@@ -44,14 +41,12 @@ describe("TransactionPrepareExecutionService", () => {
 
   it("records failed prepare outcomes without leaving prepared execution params behind", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, proposalStore, {
       status: "pending",
     });
 
     const service = new TransactionPrepareExecutionService({
       proposalStore,
-      reviewStore,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => ({
@@ -69,7 +64,7 @@ describe("TransactionPrepareExecutionService", () => {
 
     await service.prepareCurrentDraft(REQUEST_ID);
 
-    expect(reviewStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
       status: "failed",
       error: {
         message: "RPC unavailable",

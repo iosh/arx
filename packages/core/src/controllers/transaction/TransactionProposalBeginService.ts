@@ -11,7 +11,6 @@ import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 import type { TransactionProposalStore } from "./TransactionProposalStore.js";
-import type { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import type { BeginTransactionApprovalOptions, TransactionApprovalRequestHandoff } from "./types.js";
 import {
   coerceTransactionError,
@@ -21,28 +20,25 @@ import {
 
 type TransactionProposalBeginServiceDeps = {
   proposalStore: TransactionProposalStore;
-  reviewStore: Pick<TransactionReviewSessionStore, "getOrStartPrepare" | "delete">;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
   namespaces: NamespaceTransactions;
-  prepare: Pick<TransactionPrepareManager, "queuePrepare">;
+  prepare: Pick<TransactionPrepareManager, "queuePrepare" | "discardPrepare">;
   now: () => number;
 };
 
 export class TransactionProposalBeginService {
   #proposalStore: TransactionProposalStore;
-  #reviewStore: Pick<TransactionReviewSessionStore, "getOrStartPrepare" | "delete">;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
   #namespaces: NamespaceTransactions;
-  #prepare: Pick<TransactionPrepareManager, "queuePrepare">;
+  #prepare: Pick<TransactionPrepareManager, "queuePrepare" | "discardPrepare">;
   #now: () => number;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
     this.#proposalStore = deps.proposalStore;
-    this.#reviewStore = deps.reviewStore;
     this.#accountCodecs = deps.accountCodecs;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
@@ -123,11 +119,8 @@ export class TransactionProposalBeginService {
       chainRef: request.chainRef,
       origin: requestContext.origin,
     };
-    this.#reviewStore.getOrStartPrepare({
-      id,
-      draftRevision: 0,
-      updatedAt: timestamp,
-    });
+
+    this.#prepare.queuePrepare(id);
 
     let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
@@ -174,7 +167,6 @@ export class TransactionProposalBeginService {
     }
 
     void approvalHandle.settled.catch(() => undefined);
-    this.#prepare.queuePrepare(id);
 
     return {
       transactionId: proposalMeta.id,
@@ -191,12 +183,10 @@ export class TransactionProposalBeginService {
     this.#proposalStore.failProposal({
       id,
       updatedAt: this.#now(),
-      patch: {
-        error: coerceTransactionError(reason) ?? null,
-        userRejected: false,
-      },
+      error: coerceTransactionError(reason) ?? null,
+      userRejected: false,
     });
-    this.#reviewStore.delete(id);
+    this.#prepare.discardPrepare(id);
   }
 
   #requireOwnedFromAccount(params: {

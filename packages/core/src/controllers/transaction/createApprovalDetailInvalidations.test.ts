@@ -51,6 +51,7 @@ describe("createApprovalDetailInvalidations", () => {
       expectedDraftRevision: 0,
       sessionToken: review.sessionToken,
       updatedAt: 2,
+      executionPrepared: { gas: "0x5208" },
       reviewPreparedSnapshot: { gas: "0x5208" },
     });
 
@@ -64,7 +65,6 @@ describe("createApprovalDetailInvalidations", () => {
         listPendingIdsBySubject: vi.fn(() => [APPROVAL_ID]),
       },
       proposalStore,
-      reviewStore,
       recordView,
       now: () => 3,
     });
@@ -96,7 +96,6 @@ describe("createApprovalDetailInvalidations", () => {
         listPendingIdsBySubject: vi.fn(() => [APPROVAL_ID]),
       },
       proposalStore,
-      reviewStore,
       recordView,
       now: () => 1,
     }).onChanged((change) => {

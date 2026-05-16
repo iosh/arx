@@ -10,7 +10,6 @@ import type { NamespaceTransactions } from "../../../transactions/namespace/Name
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
 import { TransactionProposalStore } from "../TransactionProposalStore.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
-import { TransactionReviewSessionStore } from "../TransactionReviewSessionStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
 
@@ -84,7 +83,7 @@ export const createProposalStores = () => {
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
-  const reviewStore = new TransactionReviewSessionStore();
+  const reviewStore = proposalStore;
 
   return {
     proposalStore,
@@ -97,7 +96,7 @@ export const createReviewStore = () => createProposalStores().reviewStore;
 
 const makeProposalReadyForApproval = (
   proposalStore: TransactionProposalStore,
-  reviewStore: TransactionReviewSessionStore,
+  _reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -111,29 +110,27 @@ const makeProposalReadyForApproval = (
     throw new Error(`Proposal ${transactionId} not found`);
   }
 
-  const session = reviewStore.getOrStartPrepare({
+  const session = proposalStore.getOrStartPrepare({
     id: transactionId,
     draftRevision: current.draftRevision,
     updatedAt,
   });
+  if (!session) {
+    throw new Error(`Proposal ${transactionId} could not start prepare session`);
+  }
 
   const executionPrepared = input?.executionPrepared ?? {};
-  const settled = reviewStore.settlePrepareReady({
+  const settled = proposalStore.settlePrepareReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
     sessionToken: session.sessionToken,
     updatedAt,
+    executionPrepared,
     reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
   });
   if (!settled) {
     throw new Error(`Proposal ${transactionId} could not settle ready review`);
   }
-  proposalStore.updatePreparedForDraft({
-    id: transactionId,
-    expectedDraftRevision: current.draftRevision,
-    updatedAt,
-    prepared: executionPrepared,
-  });
 };
 
 export const createDefaultAccountKey = (params?: { chainRef?: string; from?: string }) =>
@@ -165,7 +162,7 @@ export const createAccountControllerStub = (params?: {
 
 export const createTransactionProposal = (
   proposalStore: TransactionProposalStore,
-  reviewStore: TransactionReviewSessionStore,
+  reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   input?: Partial<TransactionProposalMeta> & {
     status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
@@ -220,10 +217,8 @@ export const createTransactionProposal = (
       proposalStore.failProposal({
         id,
         updatedAt,
-        patch: {
-          error: input?.error ?? undefined,
-          userRejected: input?.userRejected ?? undefined,
-        },
+        error: input?.error ?? null,
+        userRejected: input?.userRejected ?? false,
       }) ?? created
     );
   }
@@ -338,9 +333,13 @@ export const createRecordViewStub = (params?: {
 
 export const createPrepareStub = (overrides?: {
   queuePrepare?: (id: string) => void;
+  rerunPrepare?: (id: string) => void;
+  discardPrepare?: (id: string) => void;
   prepareTransactionForExecution?: (id: string) => Promise<TransactionProposalMeta | null>;
 }) => ({
   queuePrepare: overrides?.queuePrepare ?? vi.fn(),
+  rerunPrepare: overrides?.rerunPrepare ?? vi.fn(),
+  discardPrepare: overrides?.discardPrepare ?? vi.fn(),
   prepareTransactionForExecution: overrides?.prepareTransactionForExecution ?? vi.fn(async () => null),
 });
 
@@ -356,7 +355,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 
 export const markReviewReady = (
   proposalStore: TransactionProposalStore,
-  reviewStore: TransactionReviewSessionStore,
+  reviewStore: Pick<TransactionProposalStore, "getOrStartPrepare" | "settlePrepareReady">,
   transactionId: string,
   input?: {
     updatedAt?: number;

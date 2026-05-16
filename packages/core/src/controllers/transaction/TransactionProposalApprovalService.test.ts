@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createProposalStore,
-  createReviewStore,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -11,19 +10,15 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 
-const createApprovalService = (params?: {
-  proposalStore?: ReturnType<typeof createProposalStore>;
-  reviewStore?: ReturnType<typeof createReviewStore>;
-}) => {
+const createApprovalService = (params?: { proposalStore?: ReturnType<typeof createProposalStore> }) => {
   const proposalStore = params?.proposalStore ?? createProposalStore();
-  const reviewStore = params?.reviewStore ?? createReviewStore();
+  const reviewStore = proposalStore;
 
   return {
     proposalStore,
     reviewStore,
     service: new TransactionProposalApprovalService({
       proposalStore,
-      reviewStore,
       now: () => 1,
     }),
   };
@@ -51,13 +46,8 @@ describe("TransactionProposalApprovalService", () => {
       expectedDraftRevision: current.draftRevision,
       sessionToken: session.sessionToken,
       updatedAt: 1,
+      executionPrepared: { gas: "0x5208" },
       reviewPreparedSnapshot: { gas: "0x5208" },
-    });
-    proposalStore.updatePreparedForDraft({
-      id: REQUEST_ID,
-      expectedDraftRevision: current.draftRevision,
-      updatedAt: 1,
-      prepared: { gas: "0x5208" },
     });
 
     expect(service.approvePendingProposal(REQUEST_ID)).toEqual({
@@ -70,7 +60,7 @@ describe("TransactionProposalApprovalService", () => {
     });
   });
 
-  it("fails when the review state is missing", () => {
+  it("fails while prepare is still in progress", () => {
     const { service, proposalStore, reviewStore } = createApprovalService();
     createTransactionProposal(proposalStore, reviewStore, { status: "pending" });
 
@@ -79,7 +69,7 @@ describe("TransactionProposalApprovalService", () => {
       reason: "prepare_not_ready",
       data: {
         transactionId: REQUEST_ID,
-        prepareState: "missing_review",
+        prepareState: "preparing",
       },
     });
   });
@@ -117,24 +107,23 @@ describe("TransactionProposalApprovalService", () => {
         expectedDraftRevision: current.draftRevision,
         sessionToken: session.sessionToken,
         updatedAt: 3,
+        executionPrepared: { gas: "0x5208" },
         reviewPreparedSnapshot: { gas: "0x5208" },
       }),
-    ).toMatchObject({
-      status: "ready",
-    });
+    ).toBeNull();
 
     expect(service.approvePendingProposal(REQUEST_ID)).toMatchObject({
       status: "failed",
       reason: "prepare_not_ready",
       data: {
         transactionId: REQUEST_ID,
-        prepareState: "stale_review",
+        prepareState: "preparing",
       },
     });
     expect(proposalStore.get(REQUEST_ID)?.status).toBe("pending");
   });
 
-  it("fails when review is blocked, failed, or ready without execution prepared params", () => {
+  it("fails when review is blocked or failed", () => {
     const blocked = createApprovalService();
     createTransactionProposal(blocked.proposalStore, blocked.reviewStore, { id: "tx-blocked", status: "pending" });
     const blockedProposal = blocked.proposalStore.peek("tx-blocked");
@@ -185,36 +174,6 @@ describe("TransactionProposalApprovalService", () => {
     expect(failed.service.approvePendingProposal("tx-failed")).toMatchObject({
       status: "failed",
       reason: "prepare_failed",
-    });
-
-    const readyWithoutPrepared = createApprovalService();
-    createTransactionProposal(readyWithoutPrepared.proposalStore, readyWithoutPrepared.reviewStore, {
-      id: "tx-ready-without-prepared",
-      status: "pending",
-    });
-    const readyProposal = readyWithoutPrepared.proposalStore.peek("tx-ready-without-prepared");
-    if (!readyProposal) throw new Error("Proposal not found");
-    const readySession = readyWithoutPrepared.reviewStore.getOrStartPrepare({
-      id: "tx-ready-without-prepared",
-      draftRevision: readyProposal.draftRevision,
-      updatedAt: 1,
-    });
-    readyWithoutPrepared.reviewStore.settlePrepareReady({
-      id: "tx-ready-without-prepared",
-      expectedDraftRevision: readyProposal.draftRevision,
-      sessionToken: readySession.sessionToken,
-      updatedAt: 1,
-      reviewPreparedSnapshot: { gas: "0x5208" },
-    });
-
-    expect(readyWithoutPrepared.service.approvePendingProposal("tx-ready-without-prepared")).toMatchObject({
-      status: "failed",
-      reason: "prepare_failed",
-      message: "Transaction prepared snapshot is missing.",
-      data: {
-        transactionId: "tx-ready-without-prepared",
-        prepareState: "ready_without_prepared",
-      },
     });
   });
 

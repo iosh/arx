@@ -19,7 +19,6 @@ import { TransactionProposalStore } from "./TransactionProposalStore.js";
 import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
-import { TransactionReviewSessionStore } from "./TransactionReviewSessionStore.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
@@ -63,7 +62,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     messenger: options.messenger,
     accountCodecs: options.accountCodecs,
   });
-  const reviewStore = new TransactionReviewSessionStore();
 
   const recordView = new TransactionRecordViewStore({
     messenger: options.messenger,
@@ -79,7 +77,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const records = new TransactionRecordRuntime({
     proposalStore,
-    reviewStore,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
@@ -90,7 +87,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const prepareExecution = new TransactionPrepareExecutionService({
     proposalStore,
-    reviewStore,
     namespaces: options.namespaces,
     now,
   });
@@ -98,18 +94,17 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   const prepare = new TransactionPrepareManager({
     proposalStore,
     execution: prepareExecution,
+    now,
     logger,
   });
 
   const review = createTransactionApprovalReviewReader({
     proposalStore,
-    reviewStore,
     namespaces: options.namespaces,
   });
 
   const proposalBegin = new TransactionProposalBeginService({
     proposalStore,
-    reviewStore,
     accountCodecs: options.accountCodecs,
     accounts: options.accounts,
     approvals: options.approvals,
@@ -119,7 +114,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
   const proposalDraft = new TransactionProposalDraftService({
     proposalStore,
-    reviewStore,
     namespaces: options.namespaces,
     prepare,
     now,
@@ -130,7 +124,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
   const proposalApprovals = new TransactionProposalApprovalService({
     proposalStore,
-    reviewStore,
     now,
   });
   const executionPipeline = new TransactionExecutionPipeline({
@@ -158,7 +151,6 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     messenger: options.messenger,
     approvals: options.approvals,
     proposalStore,
-    reviewStore,
     recordView,
     now,
   });

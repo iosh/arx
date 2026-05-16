@@ -57,10 +57,8 @@ export class TransactionExecutionFailureService {
     this.#proposalStore.failProposal({
       id,
       updatedAt: this.#now(),
-      patch: {
-        error: cancellation.error,
-        userRejected: cancellation.userRejected,
-      },
+      error: cancellation.error,
+      userRejected: cancellation.userRejected,
     });
     this.#submission.recordFailure(id, {
       transactionId: id,

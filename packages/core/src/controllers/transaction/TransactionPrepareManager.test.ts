@@ -1,17 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createProposalStore,
-  createReviewStore,
-  createTransactionProposal,
-  REQUEST_ID,
-} from "./__fixtures__/transactionServices.js";
+import { createProposalStore, createTransactionProposal, REQUEST_ID } from "./__fixtures__/transactionServices.js";
 import { TransactionPrepareManager } from "./TransactionPrepareManager.js";
 
 describe("TransactionPrepareManager", () => {
   it("deduplicates concurrent prepare requests for the same draft revision", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, proposalStore, {
       status: "pending",
     });
 
@@ -32,6 +26,7 @@ describe("TransactionPrepareManager", () => {
     const manager = new TransactionPrepareManager({
       proposalStore,
       execution: { prepareCurrentDraft },
+      now: () => 1,
     });
 
     manager.queuePrepare(REQUEST_ID);
@@ -43,8 +38,7 @@ describe("TransactionPrepareManager", () => {
 
   it("reruns prepare when the draft revision changes while a prepare was in flight", async () => {
     const proposalStore = createProposalStore();
-    const reviewStore = createReviewStore();
-    createTransactionProposal(proposalStore, reviewStore, {
+    createTransactionProposal(proposalStore, proposalStore, {
       status: "pending",
     });
 
@@ -81,6 +75,7 @@ describe("TransactionPrepareManager", () => {
     const manager = new TransactionPrepareManager({
       proposalStore,
       execution: { prepareCurrentDraft },
+      now: () => 1,
     });
 
     manager.queuePrepare(REQUEST_ID);
@@ -88,5 +83,33 @@ describe("TransactionPrepareManager", () => {
     expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toEqual({
       gas: "0x5300",
     });
+  });
+
+  it("restarts the review session before rerunning prepare", async () => {
+    const proposalStore = createProposalStore();
+    createTransactionProposal(proposalStore, proposalStore, {
+      status: "pending",
+    });
+
+    const initial = proposalStore.getOrStartPrepare({
+      id: REQUEST_ID,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    const prepareCurrentDraft = vi.fn(async () => {});
+
+    const manager = new TransactionPrepareManager({
+      proposalStore,
+      execution: { prepareCurrentDraft },
+      now: () => 2,
+    });
+
+    manager.rerunPrepare(REQUEST_ID);
+
+    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+      status: "preparing",
+      updatedAt: 2,
+    });
+    expect(proposalStore.getReviewState(REQUEST_ID)?.sessionToken).not.toBe(initial?.sessionToken);
   });
 });

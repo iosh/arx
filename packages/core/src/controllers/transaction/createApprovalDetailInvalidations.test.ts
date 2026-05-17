@@ -3,7 +3,7 @@ import { Messenger } from "../../messenger/Messenger.js";
 import {
   APPROVAL_ID,
   accountCodecs,
-  createProposalStore,
+  createProposalRuntime,
   createTransactionProposal,
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
@@ -33,15 +33,15 @@ const createRecordViewStore = () =>
 describe("createApprovalDetailInvalidations", () => {
   it("invalidates review state and clears prepared execution params when a transaction approval finishes terminally", async () => {
     const messenger = new Messenger();
-    const proposalStore = createProposalStore();
+    const proposalRuntime = createProposalRuntime();
     const recordView = createRecordViewStore();
     const onFinished = vi.fn<(event: unknown) => void>();
 
-    createTransactionProposal(proposalStore, {
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
       prepared: { gas: "0x5208" },
     });
-    const review = proposalStore.getOrStartPrepare({
+    const review = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
       draftRevision: 0,
       updatedAt: 1,
@@ -49,7 +49,7 @@ describe("createApprovalDetailInvalidations", () => {
     if (!review) {
       throw new Error("Prepare session not started");
     }
-    proposalStore.settlePrepareReady({
+    proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
       expectedDraftRevision: 0,
       sessionToken: review.sessionToken,
@@ -67,7 +67,7 @@ describe("createApprovalDetailInvalidations", () => {
         },
         listPendingIdsBySubject: vi.fn(() => [APPROVAL_ID]),
       },
-      proposalStore,
+      proposalRuntime,
       recordView,
       now: () => 3,
     });
@@ -79,16 +79,16 @@ describe("createApprovalDetailInvalidations", () => {
       subject: { kind: "transaction", transactionId: REQUEST_ID },
     });
 
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "invalidated",
       invalidatedBy: "locked",
     });
-    expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toBeNull();
+    expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toBeNull();
   });
 
   it("publishes approval invalidations for proposal and review changes", async () => {
     const messenger = new Messenger();
-    const proposalStore = createProposalStore();
+    const proposalRuntime = createProposalRuntime();
     const recordView = createRecordViewStore();
     const invalidations: Array<{ approvalIds: string[] }> = [];
 
@@ -98,14 +98,14 @@ describe("createApprovalDetailInvalidations", () => {
         onFinished: () => () => {},
         listPendingIdsBySubject: vi.fn(() => [APPROVAL_ID]),
       },
-      proposalStore,
+      proposalRuntime,
       recordView,
       now: () => 1,
     }).onChanged((change) => {
       invalidations.push(change);
     });
 
-    createTransactionProposal(proposalStore, {
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 

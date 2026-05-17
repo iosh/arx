@@ -3,7 +3,7 @@ import { Messenger } from "../../messenger/Messenger.js";
 import {
   createNamespacesStub,
   createNamespaceTransactionStub,
-  createProposalStore,
+  createProposalRuntime,
   createTransactionProposal,
   DEFAULT_SUBMITTED,
   REQUEST_ID,
@@ -14,8 +14,8 @@ import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, TRANSACTION_TOPIC
 describe("TransactionExecutionRunner", () => {
   it("publishes broadcast/submitted events and persists the durable record after broadcast acceptance", async () => {
     const messenger = new Messenger().scope({ publish: TRANSACTION_TOPICS });
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "approved",
       prepared: { gas: "0x5208" },
     });
@@ -32,7 +32,7 @@ describe("TransactionExecutionRunner", () => {
 
     const runner = new TransactionExecutionRunner({
       messenger,
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           sign: vi.fn(async () => ({ raw: "0x1111" })) as never,

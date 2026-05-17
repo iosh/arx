@@ -2,7 +2,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canStartProposalExecution } from "./status.js";
 import type { TransactionExecutionAttemptPhase } from "./TransactionExecutionPipeline.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
@@ -22,7 +22,7 @@ type ExecuteApprovedTransactionOptions = {
 
 type TransactionExecutionRunnerDeps = {
   messenger: TransactionMessenger;
-  proposalStore: Pick<TransactionProposalStore, "get" | "peek">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "get" | "peek">;
   namespaces: NamespaceTransactions;
   submission: Pick<TransactionSubmissionStore, "recordBroadcastAccepted">;
   records: Pick<TransactionRecordRuntime, "persistBroadcastRecord">;
@@ -33,14 +33,14 @@ const createMissingPreparedExecutionError = () =>
 
 export class TransactionExecutionRunner {
   #messenger: TransactionMessenger;
-  #proposalStore: Pick<TransactionProposalStore, "get" | "peek">;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "get" | "peek">;
   #namespaces: NamespaceTransactions;
   #submission: Pick<TransactionSubmissionStore, "recordBroadcastAccepted">;
   #records: Pick<TransactionRecordRuntime, "persistBroadcastRecord">;
 
   constructor(deps: TransactionExecutionRunnerDeps) {
     this.#messenger = deps.messenger;
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#namespaces = deps.namespaces;
     this.#submission = deps.submission;
     this.#records = deps.records;
@@ -50,8 +50,8 @@ export class TransactionExecutionRunner {
     const setAttemptPhase = options?.setAttemptPhase ?? (() => {});
     const canContinue = options?.canContinue ?? (() => true);
 
-    const meta = this.#proposalStore.get(id);
-    const proposal = this.#proposalStore.peek(id);
+    const meta = this.#proposalRuntime.get(id);
+    const proposal = this.#proposalRuntime.peek(id);
     if (!meta || !proposal || !canStartProposalExecution(proposal)) {
       return;
     }

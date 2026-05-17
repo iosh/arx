@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionError } from "../../transactions/types.js";
-import { createProposalStore, createTransactionProposal, REQUEST_ID } from "./__fixtures__/transactionServices.js";
+import { createProposalRuntime, createTransactionProposal, REQUEST_ID } from "./__fixtures__/transactionServices.js";
 import { TransactionExecutionFailureService } from "./TransactionExecutionFailureService.js";
 
 describe("TransactionExecutionFailureService", () => {
   it("fails an active proposal and records submission failure before durable persistence", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "approved",
       prepared: {},
     });
@@ -14,7 +14,7 @@ describe("TransactionExecutionFailureService", () => {
     const recordFailure = vi.fn(async () => {});
     const recordSubmissionFailure = vi.fn();
     const service = new TransactionExecutionFailureService({
-      proposalStore,
+      proposalRuntime,
       submission: {
         recordFailure: recordSubmissionFailure,
       },
@@ -26,7 +26,7 @@ describe("TransactionExecutionFailureService", () => {
 
     await service.finalizeExecutionFailure(REQUEST_ID, new Error("User cancelled"));
 
-    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       status: "failed",
       error: {
         message: "User cancelled",
@@ -43,7 +43,7 @@ describe("TransactionExecutionFailureService", () => {
   });
 
   it("falls through to durable record failure once the proposal is no longer active", async () => {
-    const proposalStore = createProposalStore();
+    const proposalRuntime = createProposalRuntime();
     const recordFailure = vi.fn(async () => {});
     const recordSubmissionFailure = vi.fn();
     const reason: TransactionError = {
@@ -52,7 +52,7 @@ describe("TransactionExecutionFailureService", () => {
     };
 
     const service = new TransactionExecutionFailureService({
-      proposalStore,
+      proposalRuntime,
       submission: {
         recordFailure: recordSubmissionFailure,
       },
@@ -69,8 +69,8 @@ describe("TransactionExecutionFailureService", () => {
   });
 
   it("falls through to durable record failure once the proposal is already terminal", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "failed",
       error: {
         name: "Error",
@@ -86,7 +86,7 @@ describe("TransactionExecutionFailureService", () => {
     };
 
     const service = new TransactionExecutionFailureService({
-      proposalStore,
+      proposalRuntime,
       submission: {
         recordFailure: recordSubmissionFailure,
       },

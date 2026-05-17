@@ -1,12 +1,12 @@
 import type { TransactionError } from "../../transactions/types.js";
 import type { TransactionExecutionAttemptPhase, TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import type { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionApprovalExecutor, TransactionApprovalResult } from "./types.js";
 
 type TransactionExecutionServiceDeps = {
   proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;
-  proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "listExecutableProposalIds" | "peek">;
   pipeline: Pick<TransactionExecutionPipeline, "executeApprovedTransaction" | "rejectTransaction">;
   now: () => number;
 };
@@ -18,7 +18,7 @@ type TransactionExecutionAttemptState = {
 
 export class TransactionExecutionService implements TransactionApprovalExecutor {
   #proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;
-  #proposalStore: Pick<TransactionProposalStore, "listExecutableProposalIds" | "peek">;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "listExecutableProposalIds" | "peek">;
   #pipeline: Pick<TransactionExecutionPipeline, "executeApprovedTransaction" | "rejectTransaction">;
   #now: () => number;
 
@@ -30,7 +30,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
 
   constructor(deps: TransactionExecutionServiceDeps) {
     this.#proposalApprovals = deps.proposalApprovals;
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#pipeline = deps.pipeline;
     this.#now = deps.now;
   }
@@ -72,7 +72,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
   }
 
   async resumeApprovedProposals(): Promise<void> {
-    for (const proposalId of this.#proposalStore.listExecutableProposalIds()) {
+    for (const proposalId of this.#proposalRuntime.listExecutableProposalIds()) {
       this.#enqueue(proposalId);
     }
   }
@@ -127,7 +127,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
   }
 
   #canContinueAttempt(id: string): boolean {
-    const proposal = this.#proposalStore.peek(id);
+    const proposal = this.#proposalRuntime.peek(id);
     return proposal?.phase === "approved";
   }
 

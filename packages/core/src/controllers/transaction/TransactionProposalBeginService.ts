@@ -10,7 +10,7 @@ import type { TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { BeginTransactionApprovalOptions, TransactionApprovalRequestHandoff } from "./types.js";
 import {
   coerceTransactionError,
@@ -19,7 +19,7 @@ import {
 } from "./utils.js";
 
 type TransactionProposalBeginServiceDeps = {
-  proposalStore: TransactionProposalStore;
+  proposalRuntime: TransactionProposalRuntime;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
   approvals: Pick<ApprovalController, "create">;
@@ -29,7 +29,7 @@ type TransactionProposalBeginServiceDeps = {
 };
 
 export class TransactionProposalBeginService {
-  #proposalStore: TransactionProposalStore;
+  #proposalRuntime: TransactionProposalRuntime;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
   #approvals: Pick<ApprovalController, "create">;
@@ -38,7 +38,7 @@ export class TransactionProposalBeginService {
   #now: () => number;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#accountCodecs = deps.accountCodecs;
     this.#accounts = deps.accounts;
     this.#approvals = deps.approvals;
@@ -102,7 +102,7 @@ export class TransactionProposalBeginService {
     const approvalId = crypto.randomUUID();
     const timestamp = this.#now();
 
-    const proposalMeta = this.#proposalStore.createPendingProposal({
+    const proposalMeta = this.#proposalRuntime.createPendingProposal({
       id,
       approvalId,
       createdAt: timestamp,
@@ -162,7 +162,7 @@ export class TransactionProposalBeginService {
           );
     } catch (error) {
       const approvalError = error instanceof Error ? error : new Error(String(error));
-      const failed = this.#proposalStore.failProposal({
+      const failed = this.#proposalRuntime.failProposal({
         id: proposalMeta.id,
         updatedAt: this.#now(),
         error: coerceTransactionError(approvalError) ?? null,

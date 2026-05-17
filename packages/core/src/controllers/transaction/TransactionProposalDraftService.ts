@@ -1,31 +1,31 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransactionDraftEdit } from "../../transactions/types.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import { buildProposalStateContext } from "./utils.js";
 
 type TransactionProposalDraftServiceDeps = {
-  proposalStore: TransactionProposalStore;
+  proposalRuntime: TransactionProposalRuntime;
   namespaces: NamespaceTransactions;
   prepare: Pick<TransactionPrepare, "rerun">;
   now: () => number;
 };
 
 export class TransactionProposalDraftService {
-  #proposalStore: TransactionProposalStore;
+  #proposalRuntime: TransactionProposalRuntime;
   #namespaces: NamespaceTransactions;
   #prepare: Pick<TransactionPrepare, "rerun">;
   #now: () => number;
 
   constructor(deps: TransactionProposalDraftServiceDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
     this.#now = deps.now;
   }
 
   async rerunPrepare(transactionId: string): Promise<void> {
-    const proposal = this.#proposalStore.get(transactionId);
+    const proposal = this.#proposalRuntime.get(transactionId);
     if (!proposal || proposal.status !== "pending") {
       return;
     }
@@ -38,7 +38,7 @@ export class TransactionProposalDraftService {
     edit: NamespaceTransactionDraftEdit;
     mode?: string;
   }): Promise<void> {
-    const meta = this.#proposalStore.get(input.transactionId);
+    const meta = this.#proposalRuntime.get(input.transactionId);
     if (!meta || meta.status === "failed") {
       return;
     }
@@ -63,7 +63,7 @@ export class TransactionProposalDraftService {
       ...(input.mode ? { mode: input.mode } : {}),
     });
 
-    const edited = this.#proposalStore.replacePendingDraftRequest({
+    const edited = this.#proposalRuntime.replacePendingDraftRequest({
       id: meta.id,
       request: structuredClone(nextRequest),
       updatedAt: this.#now(),

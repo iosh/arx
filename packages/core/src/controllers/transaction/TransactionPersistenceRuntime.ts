@@ -4,14 +4,14 @@ import type { TransactionRecord, TransactionReplacementIdentity } from "../../st
 import { TransactionSubmittedSchema } from "../../storage/schemas.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionSubmitted } from "../../transactions/types.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
 import { createTransactionPersistenceError } from "./utils.js";
 
 type TransactionPersistenceRuntimeDeps = {
-  proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
@@ -39,7 +39,7 @@ const toStoredReplacementIdentity = (
 };
 
 export class TransactionPersistenceRuntime {
-  #proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: Pick<NamespaceTransactions, "get">;
@@ -48,7 +48,7 @@ export class TransactionPersistenceRuntime {
   #startTracking: (record: TransactionRecordView, options?: { resume?: boolean }) => void;
 
   constructor(deps: TransactionPersistenceRuntimeDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#recordView = deps.recordView;
     this.#accountCodecs = deps.accountCodecs;
     this.#namespaces = deps.namespaces;
@@ -91,7 +91,7 @@ export class TransactionPersistenceRuntime {
         replacementIdentity,
       });
 
-      this.#proposalStore.clearProposalAfterRecordPersisted(meta.id);
+      this.#proposalRuntime.clearProposalAfterRecordPersisted(meta.id);
       const committed = this.#recordView.commitRecordView(durable);
       this.#submission.recordPersisted(meta.id);
       this.#startTracking(committed.next);
@@ -106,7 +106,7 @@ export class TransactionPersistenceRuntime {
         }),
         submitted: structuredClone(submitted),
       });
-      this.#proposalStore.delete(meta.id);
+      this.#proposalRuntime.delete(meta.id);
     }
   }
 

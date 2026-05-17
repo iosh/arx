@@ -3,7 +3,7 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { TransactionError } from "../../transactions/types.js";
 import { TransactionExecutionFailureService } from "./TransactionExecutionFailureService.js";
 import { TransactionExecutionRunner } from "./TransactionExecutionRunner.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionMessenger } from "./topics.js";
@@ -17,7 +17,7 @@ export type TransactionExecutionAttemptPhase =
 
 type TransactionExecutionPipelineDeps = {
   messenger: TransactionMessenger;
-  proposalStore: TransactionProposalStore;
+  proposalRuntime: TransactionProposalRuntime;
   namespaces: NamespaceTransactions;
   submission: Pick<TransactionSubmissionStore, "recordBroadcastAccepted" | "recordFailure">;
   records: Pick<TransactionRecordRuntime, "persistBroadcastRecord" | "failRecord">;
@@ -38,13 +38,13 @@ export class TransactionExecutionPipeline {
   constructor(deps: TransactionExecutionPipelineDeps) {
     this.#runner = new TransactionExecutionRunner({
       messenger: deps.messenger,
-      proposalStore: deps.proposalStore,
+      proposalRuntime: deps.proposalRuntime,
       namespaces: deps.namespaces,
       submission: deps.submission,
       records: deps.records,
     });
     this.#failure = new TransactionExecutionFailureService({
-      proposalStore: deps.proposalStore,
+      proposalRuntime: deps.proposalRuntime,
       submission: deps.submission,
       records: deps.records,
       now: deps.now,

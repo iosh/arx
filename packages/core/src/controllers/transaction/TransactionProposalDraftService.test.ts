@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createNamespacesStub,
   createPrepareStub,
-  createProposalStore,
+  createProposalRuntime,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -13,20 +13,20 @@ import { TransactionProposalDraftService } from "./TransactionProposalDraftServi
 
 describe("TransactionProposalDraftService", () => {
   it("applies a draft edit and queues prepare again", async () => {
-    const proposalStore = createProposalStore();
+    const proposalRuntime = createProposalRuntime();
     const rerun = vi.fn(() => {
-      const proposal = proposalStore.peek(REQUEST_ID);
+      const proposal = proposalRuntime.peek(REQUEST_ID);
       if (!proposal) {
         throw new Error("Proposal missing");
       }
-      proposalStore.restartPrepare({
+      proposalRuntime.restartPrepare({
         id: REQUEST_ID,
         draftRevision: proposal.draftRevision,
         updatedAt: 1,
       });
     });
     const service = new TransactionProposalDraftService({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(
         () =>
           ({
@@ -46,7 +46,7 @@ describe("TransactionProposalDraftService", () => {
       now: () => 1,
     });
 
-    createTransactionProposal(proposalStore, {
+    createTransactionProposal(proposalRuntime, {
       request: {
         namespace: "eip155",
         chainRef: DEFAULT_CHAIN_REF,
@@ -68,13 +68,13 @@ describe("TransactionProposalDraftService", () => {
     });
 
     expect(rerun).toHaveBeenCalledWith(REQUEST_ID);
-    expect(proposalStore.get(REQUEST_ID)?.request?.payload).toMatchObject({
+    expect(proposalRuntime.get(REQUEST_ID)?.request?.payload).toMatchObject({
       to: "0xcccccccccccccccccccccccccccccccccccccccc",
     });
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "preparing",
       updatedAt: 1,
     });
-    expect(proposalStore.get(REQUEST_ID)?.prepared).toBeNull();
+    expect(proposalRuntime.get(REQUEST_ID)?.prepared).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
 import { canPrepareProposal } from "./status.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import { buildPrepareContext } from "./utils.js";
 
 const DEFAULT_BACKGROUND_PREPARE_CONCURRENCY = 2;
@@ -37,7 +37,7 @@ const toPrepareReviewError = (error: unknown) => {
 };
 
 type TransactionPrepareState = Pick<
-  TransactionProposalStore,
+  TransactionProposalRuntime,
   | "peek"
   | "get"
   | "getPreparedForExecution"
@@ -50,7 +50,7 @@ type TransactionPrepareState = Pick<
 >;
 
 type TransactionPrepareDeps = {
-  proposalStore: TransactionPrepareState;
+  proposalRuntime: TransactionPrepareState;
   namespaces: Pick<NamespaceTransactions, "get">;
   now: () => number;
   logger?: (message: string, data?: unknown) => void;
@@ -60,7 +60,7 @@ type TransactionPrepareDeps = {
 
 type PrepareAttempt = {
   id: string;
-  meta: NonNullable<ReturnType<TransactionProposalStore["get"]>>;
+  meta: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>;
   expectedDraftRevision: number;
   sessionToken: string;
 };
@@ -69,24 +69,24 @@ type PrepareOutcome =
   | {
       status: "ready";
       updatedAt: number;
-      prepared: NonNullable<NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
+      prepared: NonNullable<NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"]>;
+      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
     }
   | {
       status: "blocked";
       updatedAt: number;
-      blocker: NonNullable<Parameters<TransactionProposalStore["settlePrepareBlocked"]>[0]["blocker"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
+      blocker: NonNullable<Parameters<TransactionProposalRuntime["settlePrepareBlocked"]>[0]["blocker"]>;
+      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
     }
   | {
       status: "failed";
       updatedAt: number;
-      error: NonNullable<Parameters<TransactionProposalStore["settlePrepareFailed"]>[0]["error"]>;
-      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalStore["get"]>>["prepared"];
+      error: NonNullable<Parameters<TransactionProposalRuntime["settlePrepareFailed"]>[0]["error"]>;
+      reviewPreparedSnapshot: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>["prepared"];
     };
 
 export class TransactionPrepare {
-  #proposalStore: TransactionPrepareState;
+  #proposalRuntime: TransactionPrepareState;
   #namespaces: Pick<NamespaceTransactions, "get">;
   #now: () => number;
   #logger: (message: string, data?: unknown) => void;
@@ -98,7 +98,7 @@ export class TransactionPrepare {
   #prepareConcurrencyWaiters: Array<() => void> = [];
 
   constructor(deps: TransactionPrepareDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#namespaces = deps.namespaces;
     this.#now = deps.now;
     this.#logger = deps.logger ?? (() => {});
@@ -108,12 +108,12 @@ export class TransactionPrepare {
   }
 
   queue(id: string) {
-    const proposal = this.#proposalStore.peek(id);
+    const proposal = this.#proposalRuntime.peek(id);
     if (!proposal || this.#hasCurrentPrepared(id) || !canPrepareProposal(proposal)) {
       return;
     }
 
-    this.#proposalStore.getOrStartPrepare({
+    this.#proposalRuntime.getOrStartPrepare({
       id,
       draftRevision: proposal.draftRevision,
       updatedAt: this.#now(),
@@ -122,12 +122,12 @@ export class TransactionPrepare {
   }
 
   rerun(id: string) {
-    const proposal = this.#proposalStore.peek(id);
+    const proposal = this.#proposalRuntime.peek(id);
     if (!proposal || !canPrepareProposal(proposal)) {
       return;
     }
 
-    this.#proposalStore.restartPrepare({
+    this.#proposalRuntime.restartPrepare({
       id,
       draftRevision: proposal.draftRevision,
       updatedAt: this.#now(),
@@ -136,7 +136,7 @@ export class TransactionPrepare {
   }
 
   discard(id: string) {
-    this.#proposalStore.clearPrepareState({
+    this.#proposalRuntime.clearPrepareState({
       id,
       updatedAt: this.#now(),
     });
@@ -173,7 +173,7 @@ export class TransactionPrepare {
         settledDraftRevision = existing.draftRevision;
         await existing.promise;
       } else {
-        const initial = this.#proposalStore.peek(id);
+        const initial = this.#proposalRuntime.peek(id);
         if (!initial) {
           return;
         }
@@ -198,7 +198,7 @@ export class TransactionPrepare {
         await tracked;
       }
 
-      const latest = this.#proposalStore.peek(id);
+      const latest = this.#proposalRuntime.peek(id);
       if (!latest || this.#hasCurrentPrepared(id) || !canPrepareProposal(latest)) {
         return;
       }
@@ -209,21 +209,21 @@ export class TransactionPrepare {
   }
 
   #hasCurrentPrepared(id: string): boolean {
-    return this.#proposalStore.getPreparedForExecution(id) !== null;
+    return this.#proposalRuntime.getPreparedForExecution(id) !== null;
   }
 
   #startPrepareAttempt(id: string): PrepareAttempt | null {
-    const state = this.#proposalStore.peek(id);
+    const state = this.#proposalRuntime.peek(id);
     if (!state || !canPrepareProposal(state) || state.prepared !== null) {
       return null;
     }
 
-    const meta = this.#proposalStore.get(id);
+    const meta = this.#proposalRuntime.get(id);
     if (!meta) {
       return null;
     }
 
-    const session = this.#proposalStore.getOrStartPrepare({
+    const session = this.#proposalRuntime.getOrStartPrepare({
       id,
       draftRevision: state.draftRevision,
       updatedAt: this.#now(),
@@ -301,14 +301,14 @@ export class TransactionPrepare {
   }
 
   #applyPrepareOutcome(attempt: PrepareAttempt, outcome: PrepareOutcome): void {
-    const current = this.#proposalStore.peek(attempt.id);
+    const current = this.#proposalRuntime.peek(attempt.id);
     if (!current || current.draftRevision !== attempt.expectedDraftRevision || !canPrepareProposal(current)) {
       return;
     }
 
     switch (outcome.status) {
       case "ready": {
-        this.#proposalStore.settlePrepareReady({
+        this.#proposalRuntime.settlePrepareReady({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -319,7 +319,7 @@ export class TransactionPrepare {
         return;
       }
       case "blocked": {
-        this.#proposalStore.settlePrepareBlocked({
+        this.#proposalRuntime.settlePrepareBlocked({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -330,7 +330,7 @@ export class TransactionPrepare {
         return;
       }
       case "failed": {
-        this.#proposalStore.settlePrepareFailed({
+        this.#proposalRuntime.settlePrepareFailed({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,

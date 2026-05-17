@@ -62,7 +62,7 @@ describe("createTransactionRecoveryService", () => {
       .mockResolvedValueOnce([]);
 
     const records = new TransactionRecordRuntime({
-      proposalStore: {
+      proposalRuntime: {
         clearProposalAfterRecordPersisted: vi.fn(),
         delete: vi.fn(),
       },

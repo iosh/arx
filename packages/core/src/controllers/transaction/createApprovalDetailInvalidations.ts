@@ -1,6 +1,6 @@
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
 import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionMessenger } from "./topics.js";
 import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } from "./types.js";
@@ -8,14 +8,14 @@ import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } fro
 type CreateApprovalDetailInvalidationsDeps = {
   messenger: TransactionMessenger;
   approvals: Pick<ApprovalController, "onFinished" | "listPendingIdsBySubject">;
-  proposalStore: Pick<TransactionProposalStore, "onChanged" | "invalidatePrepareFromApproval">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "onChanged" | "invalidatePrepareFromApproval">;
   recordView: Pick<TransactionRecordViewStore, "onChanged">;
   now: () => number;
 };
 
 const handleApprovalFinished = (params: {
   event: ApprovalFinishedEvent<unknown>;
-  proposalStore: Pick<TransactionProposalStore, "invalidatePrepareFromApproval">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "invalidatePrepareFromApproval">;
   approvalDetailInvalidations: ApprovalDetailInvalidationPublisher;
   now: () => number;
 }) => {
@@ -26,7 +26,7 @@ const handleApprovalFinished = (params: {
   }
 
   const updatedAt = params.now();
-  params.proposalStore.invalidatePrepareFromApproval(event, updatedAt);
+  params.proposalRuntime.invalidatePrepareFromApproval(event, updatedAt);
 
   params.approvalDetailInvalidations.enqueue({ approvalIds: [event.approvalId] });
 };
@@ -39,12 +39,12 @@ export const createApprovalDetailInvalidations = (
     approvals: deps.approvals,
   });
 
-  deps.proposalStore.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
+  deps.proposalRuntime.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
   deps.recordView.onChanged((transactionIds) => approvalDetailInvalidations.enqueue({ transactionIds }));
   deps.approvals.onFinished((event) =>
     handleApprovalFinished({
       event,
-      proposalStore: deps.proposalStore,
+      proposalRuntime: deps.proposalRuntime,
       approvalDetailInvalidations,
       now: deps.now,
     }),

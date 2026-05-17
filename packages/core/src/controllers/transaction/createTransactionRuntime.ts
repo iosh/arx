@@ -14,7 +14,7 @@ import { TransactionProposalApprovalService } from "./TransactionProposalApprova
 import { TransactionProposalBeginService } from "./TransactionProposalBeginService.js";
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
 import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
-import { TransactionProposalStore } from "./TransactionProposalStore.js";
+import { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
@@ -57,7 +57,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   const stateLimit = options.stateLimit ?? 200;
   const logger = options.logger ?? (() => {});
 
-  const proposalStore = new TransactionProposalStore({
+  const proposalRuntime = new TransactionProposalRuntime({
     messenger: options.messenger,
     accountCodecs: options.accountCodecs,
   });
@@ -75,7 +75,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   const records = new TransactionRecordRuntime({
-    proposalStore,
+    proposalRuntime,
     recordView,
     accountCodecs: options.accountCodecs,
     namespaces: options.namespaces,
@@ -85,19 +85,19 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   const prepare = new TransactionPrepare({
-    proposalStore,
+    proposalRuntime,
     namespaces: options.namespaces,
     now,
     logger,
   });
 
   const review = createTransactionApprovalReviewReader({
-    proposalStore,
+    proposalRuntime,
     namespaces: options.namespaces,
   });
 
   const proposalBegin = new TransactionProposalBeginService({
-    proposalStore,
+    proposalRuntime,
     accountCodecs: options.accountCodecs,
     accounts: options.accounts,
     approvals: options.approvals,
@@ -106,22 +106,22 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     now,
   });
   const proposalDraft = new TransactionProposalDraftService({
-    proposalStore,
+    proposalRuntime,
     namespaces: options.namespaces,
     prepare,
     now,
   });
   const proposalReader = createTransactionProposalReader({
-    proposalStore,
+    proposalRuntime,
     review,
   });
   const proposalApprovals = new TransactionProposalApprovalService({
-    proposalStore,
+    proposalRuntime,
     now,
   });
   const executionPipeline = new TransactionExecutionPipeline({
     messenger: options.messenger,
-    proposalStore,
+    proposalRuntime,
     namespaces: options.namespaces,
     submission,
     records,
@@ -130,7 +130,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
 
   const execution = new TransactionExecutionService({
     proposalApprovals,
-    proposalStore,
+    proposalRuntime,
     pipeline: executionPipeline,
     now,
   });
@@ -143,7 +143,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   const approvalDetailInvalidations = createApprovalDetailInvalidations({
     messenger: options.messenger,
     approvals: options.approvals,
-    proposalStore,
+    proposalRuntime,
     recordView,
     now,
   });

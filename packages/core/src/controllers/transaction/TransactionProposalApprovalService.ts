@@ -1,132 +1,73 @@
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionApprovalResult } from "./types.js";
 
 type TransactionProposalApprovalServiceDeps = {
-  proposalStore: Pick<
-    TransactionProposalStore,
-    | "getView"
-    | "getPreparedForExecution"
-    | "peek"
-    | "approvePendingProposal"
-    | "getReviewState"
-    | "matchesDraftRevision"
-  >;
+  proposalRuntime: Pick<TransactionProposalRuntime, "getView" | "approvePendingProposal">;
   now: () => number;
 };
 
 export class TransactionProposalApprovalService {
-  #proposalStore: Pick<
-    TransactionProposalStore,
-    | "getView"
-    | "getPreparedForExecution"
-    | "peek"
-    | "approvePendingProposal"
-    | "getReviewState"
-    | "matchesDraftRevision"
-  >;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "getView" | "approvePendingProposal">;
   #now: () => number;
 
   constructor(deps: TransactionProposalApprovalServiceDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#now = deps.now;
   }
 
   approvePendingProposal(id: string): TransactionApprovalResult {
     const updatedAt = this.#now();
-    const existing = this.#proposalStore.getView(id) ?? null;
-    if (!existing) {
-      return {
-        status: "failed",
-        reason: "not_found",
-        message: "Transaction not found.",
-        data: { transactionId: id },
-      };
+    const existing = this.#proposalRuntime.getView(id) ?? null;
+    const approved = this.#proposalRuntime.approvePendingProposal({ id, updatedAt });
+    switch (approved.status) {
+      case "approved":
+        return { status: "approved", transactionId: id };
+      case "not_found":
+        return {
+          status: "failed",
+          reason: "not_found",
+          message: "Transaction not found.",
+          data: { transactionId: id },
+        };
+      case "not_pending":
+        return {
+          status: "failed",
+          reason: "not_pending",
+          transaction: existing ?? undefined,
+          message: "Transaction is no longer pending approval.",
+          data: { transactionId: id, phase: approved.phase },
+        };
+      case "prepare_not_ready":
+        return {
+          status: "failed",
+          reason: "prepare_not_ready",
+          transaction: existing ?? undefined,
+          message: "Transaction preparation is not ready yet.",
+          data: { transactionId: id, prepareState: approved.prepareState },
+        };
+      case "prepare_blocked":
+        return {
+          status: "failed",
+          reason: "prepare_blocked",
+          transaction: existing ?? undefined,
+          message: approved.blocker.message,
+          data: {
+            transactionId: id,
+            blocker: approved.blocker,
+          },
+        };
+      case "prepare_failed":
+        return {
+          status: "failed",
+          reason: "prepare_failed",
+          transaction: existing ?? undefined,
+          message: approved.error.message,
+          data: {
+            transactionId: id,
+            error: approved.error,
+            prepareState: approved.prepareState,
+          },
+        };
     }
-
-    const current = this.#proposalStore.peek(id);
-    if (!current || current.phase !== "pending") {
-      return {
-        status: "failed",
-        reason: "not_pending",
-        transaction: existing,
-        message: "Transaction is no longer pending approval.",
-        data: { transactionId: id, phase: current?.phase ?? existing.phase },
-      };
-    }
-
-    const review = this.#proposalStore.getReviewState(id);
-    if (!review) {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: "missing_prepare" },
-      };
-    }
-
-    if (!this.#proposalStore.matchesDraftRevision(id, current.draftRevision)) {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: "stale_review" },
-      };
-    }
-
-    if (review.status === "preparing") {
-      return {
-        status: "failed",
-        reason: "prepare_not_ready",
-        transaction: existing,
-        message: "Transaction preparation is not ready yet.",
-        data: { transactionId: id, prepareState: review.status },
-      };
-    }
-
-    if (review.status === "blocked") {
-      return {
-        status: "failed",
-        reason: "prepare_blocked",
-        transaction: existing,
-        message: review.blocker?.message ?? "Transaction is blocked.",
-        data: {
-          transactionId: id,
-          ...(review.blocker ? { blocker: review.blocker } : {}),
-        },
-      };
-    }
-
-    if (review.status === "failed" || review.status === "invalidated") {
-      return {
-        status: "failed",
-        reason: "prepare_failed",
-        transaction: existing,
-        message: review.error?.message ?? "Transaction preparation failed.",
-        data: {
-          transactionId: id,
-          ...(review.error ? { error: review.error } : {}),
-        },
-      };
-    }
-
-    const prepared = this.#proposalStore.getPreparedForExecution(id);
-    if (!prepared) {
-      throw new Error(`Transaction ${id} reached ready prepare state without execution prepared params.`);
-    }
-
-    const approved = this.#proposalStore.approvePendingProposal({ id, updatedAt });
-    if (!approved) {
-      return {
-        status: "failed",
-        reason: "not_pending",
-        transaction: this.#proposalStore.getView(id) ?? existing,
-        message: "Transaction is no longer pending approval.",
-        data: { transactionId: id },
-      };
-    }
-
-    return { status: "approved", transactionId: id };
   }
 }

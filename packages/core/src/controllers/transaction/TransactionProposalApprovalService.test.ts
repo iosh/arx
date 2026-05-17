@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  createProposalStore,
+  createProposalRuntime,
   createTransactionProposal,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
@@ -10,13 +10,13 @@ import {
 } from "./__fixtures__/transactionServices.js";
 import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 
-const createApprovalService = (params?: { proposalStore?: ReturnType<typeof createProposalStore> }) => {
-  const proposalStore = params?.proposalStore ?? createProposalStore();
+const createApprovalService = (params?: { proposalRuntime?: ReturnType<typeof createProposalRuntime> }) => {
+  const proposalRuntime = params?.proposalRuntime ?? createProposalRuntime();
 
   return {
-    proposalStore,
+    proposalRuntime,
     service: new TransactionProposalApprovalService({
-      proposalStore,
+      proposalRuntime,
       now: () => 1,
     }),
   };
@@ -24,17 +24,17 @@ const createApprovalService = (params?: { proposalStore?: ReturnType<typeof crea
 
 describe("TransactionProposalApprovalService", () => {
   it("approves only ready proposals with current prepared params", () => {
-    const { service, proposalStore } = createApprovalService();
+    const { service, proposalRuntime } = createApprovalService();
 
-    createTransactionProposal(proposalStore, {
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
-    const current = proposalStore.peek(REQUEST_ID);
+    const current = proposalRuntime.peek(REQUEST_ID);
     if (!current) {
       throw new Error("Proposal not found");
     }
 
-    const session = proposalStore.getOrStartPrepare({
+    const session = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
       draftRevision: current.draftRevision,
       updatedAt: 1,
@@ -42,7 +42,7 @@ describe("TransactionProposalApprovalService", () => {
     if (!session) {
       throw new Error("Prepare session not started");
     }
-    proposalStore.settlePrepareReady({
+    proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
       expectedDraftRevision: current.draftRevision,
       sessionToken: session.sessionToken,
@@ -55,15 +55,15 @@ describe("TransactionProposalApprovalService", () => {
       status: "approved",
       transactionId: REQUEST_ID,
     });
-    expect(proposalStore.get(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       status: "approved",
       prepared: { gas: "0x5208" },
     });
   });
 
   it("fails while prepare is still in progress", () => {
-    const { service, proposalStore } = createApprovalService();
-    createTransactionProposal(proposalStore, { status: "pending" });
+    const { service, proposalRuntime } = createApprovalService();
+    createTransactionProposal(proposalRuntime, { status: "pending" });
 
     expect(service.approvePendingProposal(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -76,14 +76,14 @@ describe("TransactionProposalApprovalService", () => {
   });
 
   it("fails when the current draft revision no longer matches the review", () => {
-    const { service, proposalStore } = createApprovalService();
-    createTransactionProposal(proposalStore, { status: "pending" });
+    const { service, proposalRuntime } = createApprovalService();
+    createTransactionProposal(proposalRuntime, { status: "pending" });
 
-    const current = proposalStore.peek(REQUEST_ID);
+    const current = proposalRuntime.peek(REQUEST_ID);
     if (!current) {
       throw new Error("Proposal not found");
     }
-    const session = proposalStore.getOrStartPrepare({
+    const session = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
       draftRevision: current.draftRevision,
       updatedAt: 1,
@@ -92,7 +92,7 @@ describe("TransactionProposalApprovalService", () => {
       throw new Error("Prepare session not started");
     }
     expect(
-      proposalStore.replacePendingDraftRequest({
+      proposalRuntime.replacePendingDraftRequest({
         id: REQUEST_ID,
         request: {
           namespace: "eip155",
@@ -110,7 +110,7 @@ describe("TransactionProposalApprovalService", () => {
     });
 
     expect(
-      proposalStore.settlePrepareReady({
+      proposalRuntime.settlePrepareReady({
         id: REQUEST_ID,
         expectedDraftRevision: current.draftRevision,
         sessionToken: session.sessionToken,
@@ -128,15 +128,15 @@ describe("TransactionProposalApprovalService", () => {
         prepareState: "preparing",
       },
     });
-    expect(proposalStore.get(REQUEST_ID)?.status).toBe("pending");
+    expect(proposalRuntime.get(REQUEST_ID)?.status).toBe("pending");
   });
 
   it("fails when review is blocked or failed", () => {
     const blocked = createApprovalService();
-    createTransactionProposal(blocked.proposalStore, { id: "tx-blocked", status: "pending" });
-    const blockedProposal = blocked.proposalStore.peek("tx-blocked");
+    createTransactionProposal(blocked.proposalRuntime, { id: "tx-blocked", status: "pending" });
+    const blockedProposal = blocked.proposalRuntime.peek("tx-blocked");
     if (!blockedProposal) throw new Error("Proposal not found");
-    const blockedSession = blocked.proposalStore.getOrStartPrepare({
+    const blockedSession = blocked.proposalRuntime.getOrStartPrepare({
       id: "tx-blocked",
       draftRevision: blockedProposal.draftRevision,
       updatedAt: 1,
@@ -144,7 +144,7 @@ describe("TransactionProposalApprovalService", () => {
     if (!blockedSession) {
       throw new Error("Prepare session not started");
     }
-    blocked.proposalStore.settlePrepareBlocked({
+    blocked.proposalRuntime.settlePrepareBlocked({
       id: "tx-blocked",
       expectedDraftRevision: blockedProposal.draftRevision,
       sessionToken: blockedSession.sessionToken,
@@ -162,10 +162,10 @@ describe("TransactionProposalApprovalService", () => {
     });
 
     const failed = createApprovalService();
-    createTransactionProposal(failed.proposalStore, { id: "tx-failed", status: "pending" });
-    const failedProposal = failed.proposalStore.peek("tx-failed");
+    createTransactionProposal(failed.proposalRuntime, { id: "tx-failed", status: "pending" });
+    const failedProposal = failed.proposalRuntime.peek("tx-failed");
     if (!failedProposal) throw new Error("Proposal not found");
-    const failedSession = failed.proposalStore.getOrStartPrepare({
+    const failedSession = failed.proposalRuntime.getOrStartPrepare({
       id: "tx-failed",
       draftRevision: failedProposal.draftRevision,
       updatedAt: 1,
@@ -173,7 +173,7 @@ describe("TransactionProposalApprovalService", () => {
     if (!failedSession) {
       throw new Error("Prepare session not started");
     }
-    failed.proposalStore.settlePrepareFailed({
+    failed.proposalRuntime.settlePrepareFailed({
       id: "tx-failed",
       expectedDraftRevision: failedProposal.draftRevision,
       sessionToken: failedSession.sessionToken,
@@ -200,7 +200,7 @@ describe("TransactionProposalApprovalService", () => {
     });
 
     const approved = createApprovalService();
-    createTransactionProposal(approved.proposalStore, {
+    createTransactionProposal(approved.proposalRuntime, {
       id: "tx-approved",
       status: "approved",
       request: {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createNamespacesStub,
   createNamespaceTransactionStub,
-  createProposalStore,
+  createProposalRuntime,
   createTransactionProposal,
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
@@ -10,8 +10,8 @@ import { TransactionPrepare } from "./TransactionPrepare.js";
 
 describe("TransactionPrepare", () => {
   it("deduplicates concurrent prepare requests for the same draft revision", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 
@@ -20,7 +20,7 @@ describe("TransactionPrepare", () => {
       release = resolve;
     });
     const prepare = new TransactionPrepare({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => {
@@ -41,30 +41,30 @@ describe("TransactionPrepare", () => {
     prepare.queue(REQUEST_ID);
     await vi.waitFor(() => expect(prepareSpy).toHaveBeenCalledTimes(1));
     release?.();
-    await vi.waitFor(() => expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toEqual({ gas: "0x5208" }));
+    await vi.waitFor(() => expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toEqual({ gas: "0x5208" }));
   });
 
   it("reruns prepare when the draft revision changes while a prepare was in flight", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 
     let run = 0;
     const prepare = new TransactionPrepare({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => {
             run += 1;
-            const current = proposalStore.peek(REQUEST_ID);
+            const current = proposalRuntime.peek(REQUEST_ID);
             if (!current) {
               throw new Error("Proposal missing");
             }
 
             if (run === 1) {
               expect(
-                proposalStore.replacePendingDraftRequest({
+                proposalRuntime.replacePendingDraftRequest({
                   id: REQUEST_ID,
                   request: {
                     namespace: "eip155",
@@ -94,45 +94,45 @@ describe("TransactionPrepare", () => {
 
     prepare.queue(REQUEST_ID);
     await vi.waitFor(() => expect(prepareSpy).toHaveBeenCalledTimes(2));
-    expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toEqual({
+    expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toEqual({
       gas: "0x5300",
     });
   });
 
   it("restarts the review session before rerunning prepare", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 
-    const initial = proposalStore.getOrStartPrepare({
+    const initial = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
       draftRevision: 0,
       updatedAt: 1,
     });
     const prepare = new TransactionPrepare({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(),
       now: () => 2,
     });
 
     prepare.rerun(REQUEST_ID);
 
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "preparing",
       updatedAt: 2,
     });
-    expect(proposalStore.getReviewState(REQUEST_ID)?.sessionToken).not.toBe(initial?.sessionToken);
+    expect(proposalRuntime.getReviewState(REQUEST_ID)?.sessionToken).not.toBe(initial?.sessionToken);
   });
 
   it("writes ready prepare results back into review and proposal state", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 
     const prepare = new TransactionPrepare({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => ({
@@ -146,23 +146,23 @@ describe("TransactionPrepare", () => {
 
     await prepare.prepareCurrentDraft(REQUEST_ID);
 
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "ready",
       reviewPreparedSnapshot: { gas: "0x5208" },
     });
-    expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toEqual({
+    expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toEqual({
       gas: "0x5208",
     });
   });
 
   it("records failed prepare outcomes without leaving prepared execution params behind", async () => {
-    const proposalStore = createProposalStore();
-    createTransactionProposal(proposalStore, {
+    const proposalRuntime = createProposalRuntime();
+    createTransactionProposal(proposalRuntime, {
       status: "pending",
     });
 
     const prepare = new TransactionPrepare({
-      proposalStore,
+      proposalRuntime,
       namespaces: createNamespacesStub(() =>
         createNamespaceTransactionStub({
           prepare: vi.fn(async () => ({
@@ -180,12 +180,12 @@ describe("TransactionPrepare", () => {
 
     await prepare.prepareCurrentDraft(REQUEST_ID);
 
-    expect(proposalStore.getReviewState(REQUEST_ID)).toMatchObject({
+    expect(proposalRuntime.getReviewState(REQUEST_ID)).toMatchObject({
       status: "failed",
       error: {
         message: "RPC unavailable",
       },
     });
-    expect(proposalStore.getPreparedForExecution(REQUEST_ID)).toBeNull();
+    expect(proposalRuntime.getPreparedForExecution(REQUEST_ID)).toBeNull();
   });
 });

@@ -4,14 +4,14 @@ import type { NamespaceTransactions } from "../../transactions/namespace/Namespa
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { TransactionError, TransactionSubmitted } from "../../transactions/types.js";
 import { TransactionPersistenceRuntime } from "./TransactionPersistenceRuntime.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TransactionTrackingRuntime } from "./TransactionTrackingRuntime.js";
 import type { TransactionProposalMeta, TransactionRecordStatus, TransactionRecordView } from "./types.js";
 
 type TransactionRecordRuntimeDeps = {
-  proposalStore: Pick<TransactionProposalStore, "clearProposalAfterRecordPersisted" | "delete">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
@@ -36,7 +36,7 @@ export class TransactionRecordRuntime {
       ...(deps.tracker ? { tracker: deps.tracker } : {}),
     });
     this.#persistence = new TransactionPersistenceRuntime({
-      proposalStore: deps.proposalStore,
+      proposalRuntime: deps.proposalRuntime,
       recordView: deps.recordView,
       accountCodecs: deps.accountCodecs,
       namespaces: deps.namespaces,

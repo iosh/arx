@@ -1,24 +1,24 @@
 import type { TransactionError } from "../../transactions/types.js";
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { coerceTransactionError, isUserRejectedError } from "./utils.js";
 
 type TransactionExecutionFailureServiceDeps = {
-  proposalStore: Pick<TransactionProposalStore, "failProposal">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "failProposal">;
   submission: Pick<TransactionSubmissionStore, "recordFailure">;
   records: Pick<TransactionRecordRuntime, "failRecord">;
   now: () => number;
 };
 
 export class TransactionExecutionFailureService {
-  #proposalStore: Pick<TransactionProposalStore, "failProposal">;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "failProposal">;
   #submission: Pick<TransactionSubmissionStore, "recordFailure">;
   #records: Pick<TransactionRecordRuntime, "failRecord">;
   #now: () => number;
 
   constructor(deps: TransactionExecutionFailureServiceDeps) {
-    this.#proposalStore = deps.proposalStore;
+    this.#proposalRuntime = deps.proposalRuntime;
     this.#submission = deps.submission;
     this.#records = deps.records;
     this.#now = deps.now;
@@ -48,7 +48,7 @@ export class TransactionExecutionFailureService {
       userRejected: boolean;
     },
   ): boolean {
-    const failed = this.#proposalStore.failProposal({
+    const failed = this.#proposalRuntime.failProposal({
       id,
       updatedAt: this.#now(),
       error: cancellation.error,

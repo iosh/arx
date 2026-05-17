@@ -1,8 +1,8 @@
-import type { TransactionProposalStore } from "./TransactionProposalStore.js";
+import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionApprovalReviewReader, TransactionProposalReader } from "./types.js";
 
 type CreateTransactionProposalReaderDeps = {
-  proposalStore: TransactionProposalStore;
+  proposalRuntime: TransactionProposalRuntime;
   review: TransactionApprovalReviewReader;
 };
 
@@ -11,7 +11,7 @@ export const createTransactionProposalReader = (
 ): TransactionProposalReader => {
   return {
     getProposalView(id: string) {
-      const proposal = deps.proposalStore.getView(id);
+      const proposal = deps.proposalRuntime.getView(id);
       if (!proposal) {
         return undefined;
       }

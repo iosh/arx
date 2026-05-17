@@ -120,6 +120,33 @@ type FailProposalResult =
       phase: TransactionProposalPhase;
     };
 
+type ApprovePendingProposalResult =
+  | {
+      status: "approved";
+      proposal: TransactionProposalMeta;
+      prepared: TransactionPrepared;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_pending";
+      phase: TransactionProposalPhase;
+    }
+  | {
+      status: "prepare_not_ready";
+      prepareState: "missing_review" | "stale_review" | "preparing";
+    }
+  | {
+      status: "prepare_blocked";
+      blocker: TransactionReviewBlocker;
+    }
+  | {
+      status: "prepare_failed";
+      prepareState: "failed" | "invalidated";
+      error: TransactionReviewError;
+    };
+
 type Options = {
   messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
@@ -282,7 +309,7 @@ const applyTransactionProposalUpdate = (
   return next;
 };
 
-export class TransactionProposalStore {
+export class TransactionProposalRuntime {
   #messenger: TransactionMessenger;
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #records = new Map<string, TransactionProposalState>();
@@ -567,13 +594,77 @@ export class TransactionProposalStore {
     return this.#toMeta(next);
   }
 
-  approvePendingProposal(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
-    return this.#moveProposal({
-      id: input.id,
-      expected: "pending",
-      next: "approved",
+  approvePendingProposal(input: { id: string; updatedAt: number }): ApprovePendingProposalResult {
+    const current = this.#records.get(input.id);
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (current.phase !== "pending") {
+      return {
+        status: "not_pending",
+        phase: current.phase,
+      };
+    }
+
+    const review = current.review;
+    if (!review) {
+      return {
+        status: "prepare_not_ready",
+        prepareState: "missing_review",
+      };
+    }
+    if (review.draftRevision !== current.draftRevision) {
+      return {
+        status: "prepare_not_ready",
+        prepareState: "stale_review",
+      };
+    }
+
+    switch (review.status) {
+      case "preparing":
+        return {
+          status: "prepare_not_ready",
+          prepareState: "preparing",
+        };
+      case "blocked":
+        return {
+          status: "prepare_blocked",
+          blocker: structuredClone(review.blocker),
+        };
+      case "failed":
+        return {
+          status: "prepare_failed",
+          prepareState: "failed",
+          error: structuredClone(review.error),
+        };
+      case "invalidated":
+        return {
+          status: "prepare_failed",
+          prepareState: "invalidated",
+          error: structuredClone(review.error),
+        };
+      case "ready":
+        break;
+    }
+
+    if (current.prepared === null) {
+      throw new Error(`Transaction ${input.id} reached ready prepare state without execution prepared params.`);
+    }
+    const prepared = structuredClone(current.prepared);
+
+    const next = applyTransactionProposalUpdate(current, {
       updatedAt: input.updatedAt,
     });
+    next.phase = "approved";
+
+    this.#records.set(input.id, next);
+    this.#emitStatusChange(current, next);
+    this.#notifyChanged([input.id]);
+    return {
+      status: "approved",
+      proposal: this.#toMeta(next),
+      prepared,
+    };
   }
 
   failProposal(input: {
@@ -711,33 +802,6 @@ export class TransactionProposalStore {
       proposal,
     };
     this.#messenger.publish(TRANSACTION_STATUS_CHANGED, payload);
-  }
-
-  #moveProposal(input: {
-    id: string;
-    expected: TransactionProposalPhase | readonly TransactionProposalPhase[];
-    next: TransactionProposalPhase;
-    updatedAt: number;
-    patch?: Partial<Pick<TransactionProposalState, "error" | "userRejected" | "prepared" | "review">> | undefined;
-  }): TransactionProposalMeta | null {
-    const current = this.#records.get(input.id);
-    if (!current) return null;
-
-    const expected = Array.isArray(input.expected) ? input.expected : [input.expected];
-    if (!expected.includes(current.phase)) {
-      return null;
-    }
-
-    const next = applyTransactionProposalUpdate(current, {
-      updatedAt: input.updatedAt,
-      ...(input.patch ?? {}),
-    });
-    next.phase = input.next;
-
-    this.#records.set(input.id, next);
-    this.#emitStatusChange(current, next);
-    this.#notifyChanged([input.id]);
-    return this.#toMeta(next);
   }
 
   #requireActiveReview(input: SettlePrepareInput): {

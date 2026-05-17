@@ -8,7 +8,7 @@ import type { TransactionRecord } from "../../../storage/records.js";
 import { buildEip155ApprovalReview } from "../../../transactions/namespace/eip155/approvalReview.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
-import { TransactionProposalStore } from "../TransactionProposalStore.js";
+import { TransactionProposalRuntime } from "../TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
@@ -78,14 +78,14 @@ export const createNamespaceTransactionStub = (
     : { tracking: createReceiptTrackingStub() }),
 });
 
-export const createProposalStore = () =>
-  new TransactionProposalStore({
+export const createProposalRuntime = () =>
+  new TransactionProposalRuntime({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs,
   });
 
 const makeProposalReadyForApproval = (
-  proposalStore: TransactionProposalStore,
+  proposalRuntime: TransactionProposalRuntime,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -94,12 +94,12 @@ const makeProposalReadyForApproval = (
   },
 ) => {
   const updatedAt = input?.updatedAt ?? 1;
-  const current = proposalStore.peek(transactionId);
+  const current = proposalRuntime.peek(transactionId);
   if (!current) {
     throw new Error(`Proposal ${transactionId} not found`);
   }
 
-  const session = proposalStore.getOrStartPrepare({
+  const session = proposalRuntime.getOrStartPrepare({
     id: transactionId,
     draftRevision: current.draftRevision,
     updatedAt,
@@ -109,7 +109,7 @@ const makeProposalReadyForApproval = (
   }
 
   const executionPrepared = input?.executionPrepared ?? {};
-  const settled = proposalStore.settlePrepareReady({
+  const settled = proposalRuntime.settlePrepareReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
     sessionToken: session.sessionToken,
@@ -150,7 +150,7 @@ export const createAccountControllerStub = (params?: {
 };
 
 export const createTransactionProposal = (
-  proposalStore: TransactionProposalStore,
+  proposalRuntime: TransactionProposalRuntime,
   input?: Partial<TransactionProposalMeta> & {
     status?: "pending" | "approved" | "failed" | undefined;
     draftRevision?: number;
@@ -160,7 +160,7 @@ export const createTransactionProposal = (
   const chainRef = input?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = input?.from ?? DEFAULT_FROM;
   const requestedPhase = input?.status ?? "pending";
-  const created = proposalStore.createPendingProposal({
+  const created = proposalRuntime.createPendingProposal({
     id: input?.id ?? REQUEST_ID,
     namespace: input?.namespace ?? "eip155",
     chainRef,
@@ -189,19 +189,19 @@ export const createTransactionProposal = (
   const id = created.id;
   const updatedAt = input?.updatedAt ?? 1;
   if (requestedPhase === "approved") {
-    makeProposalReadyForApproval(proposalStore, id, {
+    makeProposalReadyForApproval(proposalRuntime, id, {
       updatedAt,
       executionPrepared: input?.prepared ?? {},
       reviewPreparedSnapshot: input?.prepared ?? {},
     });
-    const approved = proposalStore.approvePendingProposal({ id, updatedAt });
+    const approved = proposalRuntime.approvePendingProposal({ id, updatedAt });
     if (!approved) {
       throw new Error(`Proposal ${id} could not be approved`);
     }
-    return proposalStore.get(id) ?? created;
+    return proposalRuntime.get(id) ?? created;
   }
   if (requestedPhase === "failed") {
-    const failed = proposalStore.failProposal({
+    const failed = proposalRuntime.failProposal({
       id,
       updatedAt,
       error: input?.error ?? null,
@@ -344,7 +344,7 @@ export const createNamespacesStub = (get?: NamespaceTransactions["get"]): Pick<N
 });
 
 export const markReviewReady = (
-  proposalStore: TransactionProposalStore,
+  proposalRuntime: TransactionProposalRuntime,
   transactionId: string,
   input?: {
     updatedAt?: number;
@@ -352,5 +352,5 @@ export const markReviewReady = (
     reviewPreparedSnapshot?: TransactionProposalMeta["prepared"];
   },
 ) => {
-  makeProposalReadyForApproval(proposalStore, transactionId, input);
+  makeProposalReadyForApproval(proposalRuntime, transactionId, input);
 };

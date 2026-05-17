@@ -5,7 +5,7 @@ import {
   createAccountControllerStub,
   createNamespacesStub,
   createPrepareStub,
-  createProposalStore,
+  createProposalRuntime,
   DEFAULT_CHAIN_REF,
   DEFAULT_FROM,
   DEFAULT_TO,
@@ -17,7 +17,7 @@ import { TransactionProposalBeginService } from "./TransactionProposalBeginServi
 const createBeginService = (params?: {
   chainRef?: string;
   from?: string;
-  proposalStore?: ReturnType<typeof createProposalStore>;
+  proposalRuntime?: ReturnType<typeof createProposalRuntime>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
     create: (...args: never[]) => unknown;
@@ -26,7 +26,7 @@ const createBeginService = (params?: {
 }) => {
   const chainRef = params?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = params?.from ?? DEFAULT_FROM;
-  const proposalStore = params?.proposalStore ?? createProposalStore();
+  const proposalRuntime = params?.proposalRuntime ?? createProposalRuntime();
   const namespaces = params?.namespaces ?? createNamespacesStub();
   const prepare = params?.prepare ?? createPrepareStub();
   const createApproval =
@@ -37,7 +37,7 @@ const createBeginService = (params?: {
     }));
 
   return new TransactionProposalBeginService({
-    proposalStore,
+    proposalRuntime,
     accountCodecs,
     accounts: createAccountControllerStub({ chainRef, from }),
     approvals: { create: createApproval as never },
@@ -50,14 +50,14 @@ const createBeginService = (params?: {
 describe("TransactionProposalBeginService", () => {
   it("creates a proposal, attaches approval, and queues prepare", async () => {
     const chainRef = DEFAULT_CHAIN_REF;
-    const proposalStore = createProposalStore();
+    const proposalRuntime = createProposalRuntime();
     const queue = vi.fn();
     const createApproval = vi.fn(() => ({
       approvalId: APPROVAL_ID,
       settled: Promise.resolve(undefined),
     }));
     const service = createBeginService({
-      proposalStore,
+      proposalRuntime,
       approvals: { create: createApproval as never },
       prepare: createPrepareStub({ queue }),
     });

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
-import { TransactionProposalStore } from "./TransactionProposalStore.js";
+import { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import { TRANSACTION_TOPICS } from "./topics.js";
 
 const createStore = () =>
-  new TransactionProposalStore({
+  new TransactionProposalRuntime({
     messenger: new Messenger().scope({ publish: TRANSACTION_TOPICS }),
     accountCodecs: {
       toCanonicalAddressFromAccountKey: () => "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13,7 +13,7 @@ const createStore = () =>
 
 const accountKey = "test-account-key";
 
-describe("TransactionProposalStore", () => {
+describe("TransactionProposalRuntime", () => {
   it("defensively copies created state so caller mutations do not leak into proposal state", () => {
     const store = createStore();
     const request = {
@@ -170,7 +170,25 @@ describe("TransactionProposalStore", () => {
       updatedAt: 1,
       prepared: {},
     });
-    store.approvePendingProposal({ id: "approved-proposal", updatedAt: 1 });
+    const approvedReview = store.getOrStartPrepare({
+      id: "approved-proposal",
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!approvedReview) {
+      throw new Error("Prepare session not started");
+    }
+    store.settlePrepareReady({
+      id: "approved-proposal",
+      expectedDraftRevision: 0,
+      sessionToken: approvedReview.sessionToken,
+      updatedAt: 1,
+      executionPrepared: {},
+      reviewPreparedSnapshot: {},
+    });
+    expect(store.approvePendingProposal({ id: "approved-proposal", updatedAt: 1 })).toMatchObject({
+      status: "approved",
+    });
 
     expect(
       store.replacePendingDraftRequest({
@@ -310,7 +328,29 @@ describe("TransactionProposalStore", () => {
       updatedAt: 1,
       prepared: {},
     });
-    store.approvePendingProposal({ id: "55555555-5555-4555-8555-555555555555", updatedAt: 1 });
+    const readyReview = store.getOrStartPrepare({
+      id: "55555555-5555-4555-8555-555555555555",
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!readyReview) {
+      throw new Error("Prepare session not started");
+    }
+    store.settlePrepareReady({
+      id: "55555555-5555-4555-8555-555555555555",
+      expectedDraftRevision: 0,
+      sessionToken: readyReview.sessionToken,
+      updatedAt: 1,
+      executionPrepared: {},
+      reviewPreparedSnapshot: {},
+    });
+    expect(store.approvePendingProposal({ id: "55555555-5555-4555-8555-555555555555", updatedAt: 1 })).toMatchObject({
+      status: "approved",
+      proposal: {
+        status: "approved",
+      },
+      prepared: {},
+    });
 
     store.createPendingProposal({
       id: "66666666-6666-4666-8666-666666666666",
@@ -328,6 +368,159 @@ describe("TransactionProposalStore", () => {
     });
 
     expect(store.listExecutableProposalIds()).toEqual(["55555555-5555-4555-8555-555555555555"]);
+  });
+
+  it("returns explicit approve outcomes for missing, non-pending, and prepare-gate failures", () => {
+    const store = createStore();
+
+    expect(store.approvePendingProposal({ id: "missing", updatedAt: 1 })).toEqual({
+      status: "not_found",
+    });
+
+    store.createPendingProposal({
+      id: "preparing-proposal",
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(store.approvePendingProposal({ id: "preparing-proposal", updatedAt: 2 })).toEqual({
+      status: "prepare_not_ready",
+      prepareState: "preparing",
+    });
+
+    const staleId = "stale-proposal";
+    store.createPendingProposal({
+      id: staleId,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const staleSession = store.getOrStartPrepare({
+      id: staleId,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!staleSession) {
+      throw new Error("Prepare session not started");
+    }
+    expect(
+      store.replacePendingDraftRequest({
+        id: staleId,
+        request: {
+          namespace: "eip155",
+          chainRef: "eip155:1",
+          payload: { value: "0x1" },
+        },
+        updatedAt: 2,
+      }),
+    ).toMatchObject({
+      status: "updated",
+    });
+    expect(store.approvePendingProposal({ id: staleId, updatedAt: 3 })).toEqual({
+      status: "prepare_not_ready",
+      prepareState: "preparing",
+    });
+
+    const blockedId = "blocked-proposal";
+    store.createPendingProposal({
+      id: blockedId,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const blockedSession = store.getOrStartPrepare({
+      id: blockedId,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!blockedSession) {
+      throw new Error("Prepare session not started");
+    }
+    store.settlePrepareBlocked({
+      id: blockedId,
+      expectedDraftRevision: 0,
+      sessionToken: blockedSession.sessionToken,
+      updatedAt: 2,
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+        message: "Insufficient funds.",
+      },
+      reviewPreparedSnapshot: { gas: "0x5208" },
+    });
+    expect(store.approvePendingProposal({ id: blockedId, updatedAt: 3 })).toEqual({
+      status: "prepare_blocked",
+      blocker: {
+        reason: "transaction.prepare.insufficient_funds",
+        message: "Insufficient funds.",
+      },
+    });
+
+    const failedId = "failed-prepare-proposal";
+    store.createPendingProposal({
+      id: failedId,
+      namespace: "eip155",
+      chainRef: "eip155:1",
+      origin: "https://dapp.example",
+      fromAccountKey: accountKey,
+      request: {
+        namespace: "eip155",
+        chainRef: "eip155:1",
+        payload: {},
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const failedSession = store.getOrStartPrepare({
+      id: failedId,
+      draftRevision: 0,
+      updatedAt: 1,
+    });
+    if (!failedSession) {
+      throw new Error("Prepare session not started");
+    }
+    store.settlePrepareFailed({
+      id: failedId,
+      expectedDraftRevision: 0,
+      sessionToken: failedSession.sessionToken,
+      updatedAt: 2,
+      error: {
+        reason: "transaction.prepare_failed",
+        message: "RPC unavailable",
+      },
+      reviewPreparedSnapshot: null,
+    });
+    expect(store.approvePendingProposal({ id: failedId, updatedAt: 3 })).toEqual({
+      status: "prepare_failed",
+      prepareState: "failed",
+      error: {
+        reason: "transaction.prepare_failed",
+        message: "RPC unavailable",
+      },
+    });
   });
 
   it("clears approved proposals after durable record handoff", () => {
@@ -354,7 +547,25 @@ describe("TransactionProposalStore", () => {
       updatedAt: 2,
       prepared: {},
     });
-    store.approvePendingProposal({ id, updatedAt: 2 });
+    const readyReview = store.getOrStartPrepare({
+      id,
+      draftRevision: 0,
+      updatedAt: 2,
+    });
+    if (!readyReview) {
+      throw new Error("Prepare session not started");
+    }
+    store.settlePrepareReady({
+      id,
+      expectedDraftRevision: 0,
+      sessionToken: readyReview.sessionToken,
+      updatedAt: 2,
+      executionPrepared: {},
+      reviewPreparedSnapshot: {},
+    });
+    expect(store.approvePendingProposal({ id, updatedAt: 2 })).toMatchObject({
+      status: "approved",
+    });
 
     expect(store.clearProposalAfterRecordPersisted(id)).toMatchObject({
       status: "approved",

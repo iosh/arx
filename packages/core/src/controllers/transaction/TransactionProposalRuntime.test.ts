@@ -175,13 +175,13 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!approvedReview) {
+    if (approvedReview.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     store.settlePrepareReady({
       id: "approved-proposal",
       expectedDraftRevision: 0,
-      sessionToken: approvedReview.sessionToken,
+      sessionToken: approvedReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
       reviewPreparedSnapshot: {},
@@ -289,7 +289,10 @@ describe("TransactionProposalRuntime", () => {
         updatedAt: 2,
         prepared: { gas: "0x5208" },
       }),
-    ).toBeNull();
+    ).toEqual({
+      status: "stale",
+      draftRevision: 0,
+    });
 
     expect(
       store.updatePreparedForDraft({
@@ -299,8 +302,11 @@ describe("TransactionProposalRuntime", () => {
         prepared: { gas: "0x5208" },
       }),
     ).toMatchObject({
-      prepared: { gas: "0x5208" },
-      updatedAt: 3,
+      status: "updated",
+      proposal: {
+        prepared: { gas: "0x5208" },
+        updatedAt: 3,
+      },
     });
     expect(store.getPreparedForExecution(id)).toEqual({ gas: "0x5208" });
   });
@@ -333,13 +339,13 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!readyReview) {
+    if (readyReview.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     store.settlePrepareReady({
       id: "55555555-5555-4555-8555-555555555555",
       expectedDraftRevision: 0,
-      sessionToken: readyReview.sessionToken,
+      sessionToken: readyReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
       reviewPreparedSnapshot: {},
@@ -416,7 +422,7 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!staleSession) {
+    if (staleSession.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     expect(
@@ -457,13 +463,13 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!blockedSession) {
+    if (blockedSession.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     store.settlePrepareBlocked({
       id: blockedId,
       expectedDraftRevision: 0,
-      sessionToken: blockedSession.sessionToken,
+      sessionToken: blockedSession.review.sessionToken,
       updatedAt: 2,
       blocker: {
         reason: "transaction.prepare.insufficient_funds",
@@ -499,13 +505,13 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!failedSession) {
+    if (failedSession.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     store.settlePrepareFailed({
       id: failedId,
       expectedDraftRevision: 0,
-      sessionToken: failedSession.sessionToken,
+      sessionToken: failedSession.review.sessionToken,
       updatedAt: 2,
       error: {
         reason: "transaction.prepare_failed",
@@ -552,13 +558,13 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 2,
     });
-    if (!readyReview) {
+    if (readyReview.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     store.settlePrepareReady({
       id,
       expectedDraftRevision: 0,
-      sessionToken: readyReview.sessionToken,
+      sessionToken: readyReview.review.sessionToken,
       updatedAt: 2,
       executionPrepared: {},
       reviewPreparedSnapshot: {},
@@ -568,7 +574,10 @@ describe("TransactionProposalRuntime", () => {
     });
 
     expect(store.clearProposalAfterRecordPersisted(id)).toMatchObject({
-      status: "approved",
+      status: "cleared",
+      proposal: {
+        status: "approved",
+      },
     });
     expect(store.getView(id)).toBeUndefined();
     expect(store.listExecutableProposalIds()).toEqual([]);
@@ -599,8 +608,11 @@ describe("TransactionProposalRuntime", () => {
       updatedAt: 1,
     });
     expect(preparing).toMatchObject({
-      status: "preparing",
-      updatedAt: 1,
+      status: "opened",
+      review: {
+        status: "preparing",
+        updatedAt: 1,
+      },
     });
 
     const restarted = store.restartPrepare({
@@ -609,10 +621,16 @@ describe("TransactionProposalRuntime", () => {
       updatedAt: 2,
     });
     expect(restarted).toMatchObject({
-      status: "preparing",
-      updatedAt: 2,
+      status: "restarted",
+      review: {
+        status: "preparing",
+        updatedAt: 2,
+      },
     });
-    expect(restarted?.sessionToken).not.toBe(preparing?.sessionToken);
+    if (preparing.status !== "opened" || restarted.status !== "restarted") {
+      throw new Error("Prepare session not available");
+    }
+    expect(restarted.review.sessionToken).not.toBe(preparing.review.sessionToken);
   });
 
   it("settles blocked and ready prepare states on the active session", () => {
@@ -639,7 +657,7 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!preparing) {
+    if (preparing.status !== "opened") {
       throw new Error("Prepare session not started");
     }
 
@@ -647,7 +665,7 @@ describe("TransactionProposalRuntime", () => {
       store.settlePrepareBlocked({
         id,
         expectedDraftRevision: 0,
-        sessionToken: preparing.sessionToken,
+        sessionToken: preparing.review.sessionToken,
         updatedAt: 2,
         blocker: {
           reason: "transaction.prepare.insufficient_funds",
@@ -656,11 +674,14 @@ describe("TransactionProposalRuntime", () => {
         reviewPreparedSnapshot: { gas: "0x5208" },
       }),
     ).toMatchObject({
-      status: "blocked",
-      blocker: {
-        reason: "transaction.prepare.insufficient_funds",
+      status: "settled",
+      review: {
+        status: "blocked",
+        blocker: {
+          reason: "transaction.prepare.insufficient_funds",
+        },
+        reviewPreparedSnapshot: { gas: "0x5208" },
       },
-      reviewPreparedSnapshot: { gas: "0x5208" },
     });
     expect(store.getPreparedForExecution(id)).toBeNull();
 
@@ -669,7 +690,7 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 3,
     });
-    if (!restarted) {
+    if (restarted.status !== "restarted") {
       throw new Error("Prepare session not restarted");
     }
 
@@ -677,14 +698,17 @@ describe("TransactionProposalRuntime", () => {
       store.settlePrepareReady({
         id,
         expectedDraftRevision: 0,
-        sessionToken: restarted.sessionToken,
+        sessionToken: restarted.review.sessionToken,
         updatedAt: 4,
         executionPrepared: { gas: "0x5300" },
         reviewPreparedSnapshot: { gas: "0x5300" },
       }),
     ).toMatchObject({
-      status: "ready",
-      reviewPreparedSnapshot: { gas: "0x5300" },
+      status: "settled",
+      review: {
+        status: "ready",
+        reviewPreparedSnapshot: { gas: "0x5300" },
+      },
     });
     expect(store.getPreparedForExecution(id)).toEqual({ gas: "0x5300" });
   });
@@ -713,7 +737,7 @@ describe("TransactionProposalRuntime", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!initial) {
+    if (initial.status !== "opened") {
       throw new Error("Prepare session not started");
     }
 
@@ -731,12 +755,16 @@ describe("TransactionProposalRuntime", () => {
       store.settlePrepareReady({
         id,
         expectedDraftRevision: 0,
-        sessionToken: initial.sessionToken,
+        sessionToken: initial.review.sessionToken,
         updatedAt: 3,
         executionPrepared: { gas: "0x5208" },
         reviewPreparedSnapshot: { gas: "0x5208" },
       }),
-    ).toBeNull();
+    ).toEqual({
+      status: "stale",
+      draftRevision: 1,
+      sessionToken: expect.any(String),
+    });
 
     const current = store.getReviewState(id);
     expect(current).toMatchObject({
@@ -773,7 +801,10 @@ describe("TransactionProposalRuntime", () => {
         },
         reviewPreparedSnapshot: null,
       }),
-    ).toBeNull();
+    ).toEqual({
+      status: "invalidated",
+      invalidatedBy: "locked",
+    });
 
     expect(
       store.invalidatePrepareFromApproval(

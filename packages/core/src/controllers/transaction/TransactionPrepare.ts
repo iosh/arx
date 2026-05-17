@@ -228,7 +228,7 @@ export class TransactionPrepare {
       draftRevision: state.draftRevision,
       updatedAt: this.#now(),
     });
-    if (!session) {
+    if (session.status !== "opened") {
       return null;
     }
 
@@ -236,7 +236,7 @@ export class TransactionPrepare {
       id,
       meta,
       expectedDraftRevision: state.draftRevision,
-      sessionToken: session.sessionToken,
+      sessionToken: session.review.sessionToken,
     };
   }
 
@@ -308,7 +308,7 @@ export class TransactionPrepare {
 
     switch (outcome.status) {
       case "ready": {
-        this.#proposalRuntime.settlePrepareReady({
+        const settled = this.#proposalRuntime.settlePrepareReady({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -316,10 +316,13 @@ export class TransactionPrepare {
           executionPrepared: outcome.prepared,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
+        if (settled.status === "settled") {
+          return;
+        }
         return;
       }
       case "blocked": {
-        this.#proposalRuntime.settlePrepareBlocked({
+        const settled = this.#proposalRuntime.settlePrepareBlocked({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -327,10 +330,13 @@ export class TransactionPrepare {
           blocker: outcome.blocker,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
+        if (settled.status === "settled") {
+          return;
+        }
         return;
       }
       case "failed": {
-        this.#proposalRuntime.settlePrepareFailed({
+        const settled = this.#proposalRuntime.settlePrepareFailed({
           id: attempt.id,
           expectedDraftRevision: attempt.expectedDraftRevision,
           sessionToken: attempt.sessionToken,
@@ -338,6 +344,9 @@ export class TransactionPrepare {
           error: outcome.error,
           reviewPreparedSnapshot: outcome.reviewPreparedSnapshot,
         });
+        if (settled.status === "settled") {
+          return;
+        }
         return;
       }
     }

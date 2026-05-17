@@ -104,7 +104,7 @@ const makeProposalReadyForApproval = (
     draftRevision: current.draftRevision,
     updatedAt,
   });
-  if (!session) {
+  if (session.status !== "opened") {
     throw new Error(`Proposal ${transactionId} could not start prepare session`);
   }
 
@@ -112,12 +112,12 @@ const makeProposalReadyForApproval = (
   const settled = proposalRuntime.settlePrepareReady({
     id: transactionId,
     expectedDraftRevision: current.draftRevision,
-    sessionToken: session.sessionToken,
+    sessionToken: session.review.sessionToken,
     updatedAt,
     executionPrepared,
     reviewPreparedSnapshot: input?.reviewPreparedSnapshot ?? executionPrepared,
   });
-  if (!settled) {
+  if (settled.status !== "settled") {
     throw new Error(`Proposal ${transactionId} could not settle ready review`);
   }
 };
@@ -195,7 +195,7 @@ export const createTransactionProposal = (
       reviewPreparedSnapshot: input?.prepared ?? {},
     });
     const approved = proposalRuntime.approvePendingProposal({ id, updatedAt });
-    if (!approved) {
+    if (approved.status !== "approved") {
       throw new Error(`Proposal ${id} could not be approved`);
     }
     return proposalRuntime.get(id) ?? created;

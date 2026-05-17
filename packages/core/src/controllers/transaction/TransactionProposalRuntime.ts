@@ -147,6 +147,89 @@ type ApprovePendingProposalResult =
       error: TransactionReviewError;
     };
 
+type UpdatePreparedForDraftResult =
+  | {
+      status: "updated";
+      proposal: TransactionProposalMeta;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "stale";
+      draftRevision: number;
+    }
+  | {
+      status: "not_preparable";
+      phase: TransactionProposalPhase;
+    };
+
+type OpenPrepareResult =
+  | {
+      status: "opened";
+      review: TransactionProposalReviewState;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_preparable";
+      phase: TransactionProposalPhase;
+    };
+
+type RestartPrepareResult =
+  | {
+      status: "restarted";
+      review: TransactionProposalReviewState;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_preparable";
+      phase: TransactionProposalPhase;
+    };
+
+type SettlePrepareResult =
+  | {
+      status: "settled";
+      review: TransactionProposalReviewState;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "stale";
+      draftRevision: number;
+      sessionToken: string;
+    }
+  | {
+      status: "invalidated";
+      invalidatedBy: string;
+    };
+
+type ClearPrepareStateResult =
+  | {
+      status: "cleared";
+      proposal: TransactionProposalMeta;
+    }
+  | {
+      status: "not_found";
+    };
+
+type ClearProposalAfterRecordPersistedResult =
+  | {
+      status: "cleared";
+      proposal: TransactionProposalMeta;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "not_approved";
+      phase: TransactionProposalPhase;
+    };
+
 type Options = {
   messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
@@ -380,10 +463,22 @@ export class TransactionProposalRuntime {
     expectedDraftRevision: number;
     updatedAt: number;
     prepared: TransactionPrepared | null;
-  }): TransactionProposalMeta | null {
+  }): UpdatePreparedForDraftResult {
     const current = this.#records.get(input.id);
-    if (!current || current.draftRevision !== input.expectedDraftRevision || !canPrepareProposal(current)) {
-      return null;
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (current.draftRevision !== input.expectedDraftRevision) {
+      return {
+        status: "stale",
+        draftRevision: current.draftRevision,
+      };
+    }
+    if (!canPrepareProposal(current)) {
+      return {
+        status: "not_preparable",
+        phase: current.phase,
+      };
     }
 
     const updated = applyTransactionProposalUpdate(current, {
@@ -392,7 +487,10 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, updated);
     this.#notifyChanged([input.id]);
-    return this.#toMeta(updated);
+    return {
+      status: "updated",
+      proposal: this.#toMeta(updated),
+    };
   }
 
   getPreparedForExecution(id: string): TransactionPrepared | null {
@@ -408,10 +506,16 @@ export class TransactionProposalRuntime {
     return this.#records.get(id)?.review?.draftRevision === draftRevision;
   }
 
-  getOrStartPrepare(input: StartPrepareInput): TransactionProposalReviewState | null {
+  getOrStartPrepare(input: StartPrepareInput): OpenPrepareResult {
     const current = this.#records.get(input.id);
-    if (!current || !canPrepareProposal(current)) {
-      return null;
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (!canPrepareProposal(current)) {
+      return {
+        status: "not_preparable",
+        phase: current.phase,
+      };
     }
 
     const previous = toPublicReviewState(current.review);
@@ -430,17 +534,29 @@ export class TransactionProposalRuntime {
 
     this.#records.set(input.id, next);
     const publicReview = toPublicReviewState(next.review);
+    if (!publicReview) {
+      throw new Error(`Transaction ${input.id} opened prepare session without review state.`);
+    }
     if (this.#didReviewStateChange(previous, publicReview)) {
       this.#notifyChanged([input.id]);
     }
 
-    return publicReview;
+    return {
+      status: "opened",
+      review: publicReview,
+    };
   }
 
-  restartPrepare(input: StartPrepareInput): TransactionProposalReviewState | null {
+  restartPrepare(input: StartPrepareInput): RestartPrepareResult {
     const current = this.#records.get(input.id);
-    if (!current || !canPrepareProposal(current)) {
-      return null;
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (!canPrepareProposal(current)) {
+      return {
+        status: "not_preparable",
+        phase: current.phase,
+      };
     }
 
     const next = applyTransactionProposalUpdate(current, {
@@ -450,7 +566,14 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return toPublicReviewState(next.review);
+    const review = toPublicReviewState(next.review);
+    if (!review) {
+      throw new Error(`Transaction ${input.id} restarted prepare session without review state.`);
+    }
+    return {
+      status: "restarted",
+      review,
+    };
   }
 
   settlePrepareReady(
@@ -458,10 +581,10 @@ export class TransactionProposalRuntime {
       executionPrepared: TransactionPrepared;
       reviewPreparedSnapshot: TransactionPrepared | null;
     },
-  ): TransactionProposalReviewState | null {
+  ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
     if (!current) {
-      return null;
+      return this.#rejectPrepareSettlement(input);
     }
 
     const review: TransactionProposalReadyState = {
@@ -479,7 +602,14 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return toPublicReviewState(review);
+    const publicReview = toPublicReviewState(review);
+    if (!publicReview) {
+      throw new Error(`Transaction ${input.id} settled ready prepare state without review view.`);
+    }
+    return {
+      status: "settled",
+      review: publicReview,
+    };
   }
 
   settlePrepareBlocked(
@@ -487,10 +617,10 @@ export class TransactionProposalRuntime {
       blocker: TransactionReviewBlocker;
       reviewPreparedSnapshot: TransactionPrepared | null;
     },
-  ): TransactionProposalReviewState | null {
+  ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
     if (!current) {
-      return null;
+      return this.#rejectPrepareSettlement(input);
     }
 
     const review: TransactionProposalBlockedState = {
@@ -509,7 +639,14 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return toPublicReviewState(review);
+    const publicReview = toPublicReviewState(review);
+    if (!publicReview) {
+      throw new Error(`Transaction ${input.id} settled blocked prepare state without review view.`);
+    }
+    return {
+      status: "settled",
+      review: publicReview,
+    };
   }
 
   settlePrepareFailed(
@@ -517,10 +654,10 @@ export class TransactionProposalRuntime {
       error: TransactionReviewError;
       reviewPreparedSnapshot: TransactionPrepared | null;
     },
-  ): TransactionProposalReviewState | null {
+  ): SettlePrepareResult {
     const current = this.#requireActiveReview(input);
     if (!current) {
-      return null;
+      return this.#rejectPrepareSettlement(input);
     }
 
     const review: TransactionProposalFailedPrepareState = {
@@ -539,7 +676,14 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return toPublicReviewState(review);
+    const publicReview = toPublicReviewState(review);
+    if (!publicReview) {
+      throw new Error(`Transaction ${input.id} settled failed prepare state without review view.`);
+    }
+    return {
+      status: "settled",
+      review: publicReview,
+    };
   }
 
   invalidatePrepareFromApproval(
@@ -578,10 +722,10 @@ export class TransactionProposalRuntime {
     return toPublicReviewState(review);
   }
 
-  clearPrepareState(input: { id: string; updatedAt: number }): TransactionProposalMeta | null {
+  clearPrepareState(input: { id: string; updatedAt: number }): ClearPrepareStateResult {
     const current = this.#records.get(input.id);
     if (!current) {
-      return null;
+      return { status: "not_found" };
     }
 
     const next = applyTransactionProposalUpdate(current, {
@@ -591,7 +735,10 @@ export class TransactionProposalRuntime {
     });
     this.#records.set(input.id, next);
     this.#notifyChanged([input.id]);
-    return this.#toMeta(next);
+    return {
+      status: "cleared",
+      proposal: this.#toMeta(next),
+    };
   }
 
   approvePendingProposal(input: { id: string; updatedAt: number }): ApprovePendingProposalResult {
@@ -716,15 +863,24 @@ export class TransactionProposalRuntime {
       .map((record) => record.id);
   }
 
-  clearProposalAfterRecordPersisted(id: string): TransactionProposalMeta | null {
+  clearProposalAfterRecordPersisted(id: string): ClearProposalAfterRecordPersistedResult {
     const current = this.#records.get(id);
-    if (!current || current.phase !== "approved") {
-      return null;
+    if (!current) {
+      return { status: "not_found" };
+    }
+    if (current.phase !== "approved") {
+      return {
+        status: "not_approved",
+        phase: current.phase,
+      };
     }
 
     this.#records.delete(id);
     this.#notifyChanged([id]);
-    return this.#toMeta(current);
+    return {
+      status: "cleared",
+      proposal: this.#toMeta(current),
+    };
   }
 
   #toMeta(state: TransactionProposalState): TransactionProposalMeta {
@@ -821,6 +977,43 @@ export class TransactionProposalRuntime {
     }
 
     return { proposal, review };
+  }
+
+  #rejectPrepareSettlement(input: SettlePrepareInput): SettlePrepareResult {
+    const proposal = this.#records.get(input.id);
+    if (!proposal) {
+      return { status: "not_found" };
+    }
+
+    const review = proposal.review;
+    if (!review || review.draftRevision !== input.expectedDraftRevision) {
+      return {
+        status: "stale",
+        draftRevision: proposal.draftRevision,
+        sessionToken: review?.sessionToken ?? "",
+      };
+    }
+
+    if (review.status === "invalidated") {
+      return {
+        status: "invalidated",
+        invalidatedBy: review.invalidatedBy,
+      };
+    }
+
+    if (review.sessionToken !== input.sessionToken) {
+      return {
+        status: "stale",
+        draftRevision: review.draftRevision,
+        sessionToken: review.sessionToken,
+      };
+    }
+
+    return {
+      status: "stale",
+      draftRevision: review.draftRevision,
+      sessionToken: review.sessionToken,
+    };
   }
 
   onChanged(handler: (transactionIds: string[]) => void): () => void {

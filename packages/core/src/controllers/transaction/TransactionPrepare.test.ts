@@ -110,6 +110,9 @@ describe("TransactionPrepare", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
+    if (initial.status !== "opened") {
+      throw new Error("Prepare session not started");
+    }
     const prepare = new TransactionPrepare({
       proposalRuntime,
       namespaces: createNamespacesStub(),
@@ -122,7 +125,7 @@ describe("TransactionPrepare", () => {
       status: "preparing",
       updatedAt: 2,
     });
-    expect(proposalRuntime.getReviewState(REQUEST_ID)?.sessionToken).not.toBe(initial?.sessionToken);
+    expect(proposalRuntime.getReviewState(REQUEST_ID)?.sessionToken).not.toBe(initial.review.sessionToken);
   });
 
   it("writes ready prepare results back into review and proposal state", async () => {

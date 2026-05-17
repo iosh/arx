@@ -46,13 +46,13 @@ describe("createApprovalDetailInvalidations", () => {
       draftRevision: 0,
       updatedAt: 1,
     });
-    if (!review) {
+    if (review.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
       expectedDraftRevision: 0,
-      sessionToken: review.sessionToken,
+      sessionToken: review.review.sessionToken,
       updatedAt: 2,
       executionPrepared: { gas: "0x5208" },
       reviewPreparedSnapshot: { gas: "0x5208" },

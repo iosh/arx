@@ -39,13 +39,13 @@ describe("TransactionProposalApprovalService", () => {
       draftRevision: current.draftRevision,
       updatedAt: 1,
     });
-    if (!session) {
+    if (session.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
       expectedDraftRevision: current.draftRevision,
-      sessionToken: session.sessionToken,
+      sessionToken: session.review.sessionToken,
       updatedAt: 1,
       executionPrepared: { gas: "0x5208" },
       reviewPreparedSnapshot: { gas: "0x5208" },
@@ -88,7 +88,7 @@ describe("TransactionProposalApprovalService", () => {
       draftRevision: current.draftRevision,
       updatedAt: 1,
     });
-    if (!session) {
+    if (session.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     expect(
@@ -118,7 +118,11 @@ describe("TransactionProposalApprovalService", () => {
         executionPrepared: { gas: "0x5208" },
         reviewPreparedSnapshot: { gas: "0x5208" },
       }),
-    ).toBeNull();
+    ).toEqual({
+      status: "stale",
+      draftRevision: 1,
+      sessionToken: expect.any(String),
+    });
 
     expect(service.approvePendingProposal(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -141,13 +145,13 @@ describe("TransactionProposalApprovalService", () => {
       draftRevision: blockedProposal.draftRevision,
       updatedAt: 1,
     });
-    if (!blockedSession) {
+    if (blockedSession.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     blocked.proposalRuntime.settlePrepareBlocked({
       id: "tx-blocked",
       expectedDraftRevision: blockedProposal.draftRevision,
-      sessionToken: blockedSession.sessionToken,
+      sessionToken: blockedSession.review.sessionToken,
       updatedAt: 1,
       blocker: {
         reason: "transaction.prepare.insufficient_funds",
@@ -170,13 +174,13 @@ describe("TransactionProposalApprovalService", () => {
       draftRevision: failedProposal.draftRevision,
       updatedAt: 1,
     });
-    if (!failedSession) {
+    if (failedSession.status !== "opened") {
       throw new Error("Prepare session not started");
     }
     failed.proposalRuntime.settlePrepareFailed({
       id: "tx-failed",
       expectedDraftRevision: failedProposal.draftRevision,
-      sessionToken: failedSession.sessionToken,
+      sessionToken: failedSession.review.sessionToken,
       updatedAt: 1,
       error: {
         reason: "transaction.prepare_failed",

@@ -91,7 +91,12 @@ export class TransactionPersistenceRuntime {
         replacementIdentity,
       });
 
-      this.#proposalRuntime.clearProposalAfterRecordPersisted(meta.id);
+      const cleared = this.#proposalRuntime.clearProposalAfterRecordPersisted(meta.id);
+      if (cleared.status !== "cleared") {
+        throw new Error(
+          `Failed to clear approved proposal ${meta.id} after durable record persistence: ${cleared.status}`,
+        );
+      }
       const committed = this.#recordView.commitRecordView(durable);
       this.#submission.recordPersisted(meta.id);
       this.#startTracking(committed.next);

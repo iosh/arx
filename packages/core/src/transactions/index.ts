@@ -1,3 +1,23 @@
+export type {
+  TransactionApprovalFailureReason,
+  TransactionApprovalResult,
+  TransactionBeginHandoff,
+  TransactionBeginOptions,
+  TransactionCommands,
+  TransactionEvents,
+  TransactionFacade,
+  TransactionQueries,
+  TransactionRecovery,
+  TransactionSubmissionPersistenceFailure,
+  TransactionSubmissionResolution,
+  TransactionSubmissionTracker,
+} from "./facade/index.js";
+export type {
+  TransactionIntent,
+  TransactionIntentAccount,
+  TransactionIntentContext,
+  TransactionIntentSource,
+} from "./intent/index.js";
 export type { Eip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export { createEip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export type { Eip155PrepareTransaction } from "./namespace/eip155/prepareTransaction.js";
@@ -26,6 +46,24 @@ export type {
   TransactionTrackingContext,
   TransactionValidationContext,
 } from "./namespace/types.js";
+export type { TransactionExecutionAttemptPhase } from "./orchestration/index.js";
+export type {
+  TransactionApprovalPreview,
+  TransactionProposal,
+  TransactionProposalLifecycle,
+  TransactionProposalLifecycleStatus,
+  TransactionProposalPrepare,
+  TransactionProposalPrepareStatus,
+  TransactionProposalTerminationReason,
+  TransactionProposalView,
+  TransactionReviewBlocker,
+  TransactionReviewError,
+} from "./proposal/index.js";
+export type {
+  TransactionRecord,
+  TransactionRecordStatus,
+  TransactionRecordView,
+} from "./record/index.js";
 export type { Eip155TransactionReview, NamespaceTransactionReview } from "./review.js";
 export type {
   Eip155PreparedTransaction,

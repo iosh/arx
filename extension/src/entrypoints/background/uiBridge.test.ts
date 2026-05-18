@@ -4,19 +4,17 @@ import {
   toAccountKeyFromAddress,
   toCanonicalAddressFromAccountKey,
 } from "@arx/core/accounts";
-import type { ApprovalDetailInvalidation, BeginTransactionApprovalOptions } from "@arx/core/controllers";
+import type { PermissionsState } from "@arx/core/controllers";
 import { ApprovalKinds } from "@arx/core/controllers/approval";
 import type { UnlockLockedPayload, UnlockReason, UnlockUnlockedPayload } from "@arx/core/controllers/unlock";
 import { ArxReasons, arxError, createSurfaceErrorEncoder } from "@arx/core/errors";
 import { EvmHdKeyring, EvmPrivateKeyKeyring } from "@arx/core/keyring";
 import { eip155NamespaceManifest, registerRpcModulesFromManifests } from "@arx/core/namespaces";
-import type { RequestContext } from "@arx/core/rpc";
 import { createRpcRegistry, type HandlerControllers } from "@arx/core/rpc";
 import type { BackgroundSessionServices } from "@arx/core/runtime";
 import { KeyringService } from "@arx/core/runtime";
 import { createKeyringExportService, createSessionStatusService } from "@arx/core/services";
 import type { AccountKey, AccountRecord, KeyringMetaRecord } from "@arx/core/storage";
-import type { NamespaceTransactionDraftEdit, TransactionRequest } from "@arx/core/transactions";
 import {
   UI_CHANNEL,
   UI_EVENT_APPROVALS_CHANGED,
@@ -521,12 +519,14 @@ const createApprovalsController = () => {
 const createControllers = () => {
   const accounts = createAccountsController();
   const approvals = createApprovalsController();
-  const permissionListeners = new Set<(state: unknown) => void>();
+  const permissionListeners = new Set<(state: PermissionsState) => void>();
   const permissions = {
     getState: () => ({ origins: {} }),
-    onStateChanged: (fn: (state: unknown) => void) => {
+    onStateChanged: (fn: (state: PermissionsState) => void) => {
       permissionListeners.add(fn);
-      return () => permissionListeners.delete(fn);
+      return () => {
+        permissionListeners.delete(fn);
+      };
     },
   };
   const networkListeners = new Set<() => void>();
@@ -545,21 +545,26 @@ const createControllers = () => {
       return CHAIN;
     },
   };
-  const transactionProposalBegin = {
-    beginTransactionApproval: vi.fn(async () => ({
-      transactionId: "approval-id",
-      approvalId: "approval-id",
-    })),
-  };
-  const transactionProposalDraft = {
-    rerunPrepare: vi.fn(async () => {}),
-    applyDraftEdit: vi.fn(async () => {}),
-  };
+  const transactionAccess = {
+    commands: {
+      createProposal: vi.fn(async () => ({ transactionId: "approval-id" })),
+      requestApproval: vi.fn(async () => ({ approvalId: "approval-id" })),
+      editRequest: vi.fn(async () => {}),
+      recomputePrepare: vi.fn(async () => {}),
+      approve: vi.fn(async () => ({ status: "approved" as const, transactionId: "approval-id" })),
+      reject: vi.fn(async () => {}),
+    },
+    events: {
+      onProposalChanged: vi.fn(() => () => {}),
+      onRecordChanged: vi.fn(() => () => {}),
+      onApprovalDetailInvalidated: vi.fn(() => () => {}),
+    },
+  } satisfies UiTransactionsAccess;
   const providerTransactionCommands = {
     beginTransactionApproval: vi.fn(async () => ({
       transactionId: "approval-id",
       approvalId: "approval-id",
-      waitForProviderCompletion: async () => ({
+      waitForSubmission: async () => ({
         submitted: {
           hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
           chainId: CHAIN.chainId,
@@ -614,8 +619,7 @@ const createControllers = () => {
     approvals,
     permissions,
     network,
-    transactionProposalBegin,
-    transactionProposalDraft,
+    transactionAccess,
     providerTransactionCommands,
     transactionExecution,
     transactionRecovery,
@@ -623,11 +627,13 @@ const createControllers = () => {
     signers,
     chainViews,
     permissionViews,
-  } as unknown as HandlerControllers;
+  };
 };
 
+type UiBridgeTestControllers = ReturnType<typeof createControllers>;
+
 const createUiAccessForTest = (input: {
-  controllers: HandlerControllers;
+  controllers: UiBridgeTestControllers;
   session: BackgroundSessionServices & { persistVaultMeta?: () => Promise<void> };
   keyring: KeyringService;
   platform: ReturnType<typeof createUiPlatform>;
@@ -659,10 +665,7 @@ const createUiAccessForTest = (input: {
   };
   installSurfaceActivationExtension?: boolean;
 }) => {
-  const controllerViews = input.controllers as unknown as {
-    chainViews: Record<string, unknown>;
-    permissionViews: { buildUiPermissionsSnapshot: () => unknown };
-  };
+  const controllerViews = input.controllers;
   const sessionStatus = createSessionStatusService({
     unlock: input.session.unlock,
     vault: input.session.vault,
@@ -682,6 +685,10 @@ const createUiAccessForTest = (input: {
     keyring: input.keyring,
     keyringExport,
   });
+  const transactionsAccess = {
+    commands: input.transactionsAccess?.commands ?? input.controllers.transactionAccess.commands,
+    events: input.transactionsAccess?.events ?? input.controllers.transactionAccess.events,
+  } satisfies UiTransactionsAccess;
   const activationEntries = input.activationEntries ?? {
     ...input.platform,
     getEntryLaunchContext: ({ environment }: { environment: "popup" | "notification" | "onboarding" }) => ({
@@ -739,30 +746,7 @@ const createUiAccessForTest = (input: {
           buildUiPermissionsSnapshot: (input.permissionViewsOverride ?? controllerViews.permissionViews)
             .buildUiPermissionsSnapshot as never,
         },
-        transactions: {
-          beginTransactionApproval: (
-            request: TransactionRequest,
-            requestContext: RequestContext,
-            transactionOptions: BeginTransactionApprovalOptions,
-          ) =>
-            input.transactionsAccess?.beginTransactionApproval
-              ? input.transactionsAccess.beginTransactionApproval(request, requestContext, transactionOptions)
-              : input.controllers.transactionProposalBegin.beginTransactionApproval(
-                  request,
-                  requestContext,
-                  transactionOptions,
-                ),
-          rerunPrepare: (transactionId: string) =>
-            input.transactionsAccess?.rerunPrepare
-              ? input.transactionsAccess.rerunPrepare(transactionId)
-              : input.controllers.transactionProposalDraft.rerunPrepare(transactionId),
-          applyDraftEdit: (draft: { transactionId: string; edit: NamespaceTransactionDraftEdit; mode?: string }) =>
-            input.transactionsAccess?.applyDraftEdit
-              ? input.transactionsAccess.applyDraftEdit(draft)
-              : input.controllers.transactionProposalDraft.applyDraftEdit(draft),
-          onChanged: (listener: (change: ApprovalDetailInvalidation) => void) =>
-            input.transactionsAccess?.onChanged ? input.transactionsAccess.onChanged(listener) : () => {},
-        } as never,
+        transactions: transactionsAccess as never,
         chains: {
           ...(input.chainViewsOverride ?? controllerViews.chainViews),
           selectWalletChain: input.selectWalletChain ?? vi.fn(async () => {}),
@@ -887,7 +871,7 @@ const buildBridge = (opts?: {
     ...createControllers(),
     accounts: accountsController,
     approvals: approvalsController,
-  } as unknown as HandlerControllers;
+  };
 
   const session = {
     onStateChanged: (listener: () => void) => unlock.onStateChanged(() => listener()),
@@ -952,6 +936,7 @@ const buildBridge = (opts?: {
     uiOrigin: new URL(browserApi.runtime.getURL("")).origin,
     installSurfaceActivationExtension: opts?.installSurfaceActivationExtension,
     networkSelection,
+    transactionsAccess: controllers.transactionAccess,
     subscribeAttentionStateChanged: (listener) => {
       attentionStateHandlers.add(listener);
       return () => attentionStateHandlers.delete(listener);
@@ -1287,7 +1272,7 @@ describe("uiBridge", () => {
         return () => attentionStateHandlers.delete(listener);
       },
       chainViewsOverride: {
-        ...(controllers as unknown as { chainViews: Record<string, unknown> }).chainViews,
+        ...controllers.chainViews,
         getSelectedNamespace: () => CHAIN.namespace,
         getSelectedChainView: () => {
           if (snapshotBroken) {

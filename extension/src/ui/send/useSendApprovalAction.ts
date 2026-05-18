@@ -5,9 +5,7 @@ import { uiClient } from "@/ui/lib/uiBridgeClient";
 
 export type SendApprovalInput = Parameters<typeof uiClient.transactions.requestSendTransactionApproval>[0];
 
-/**
- * Owns the send page's submission state and approval handoff behavior.
- */
+/** Owns the send page's submission state and approval navigation flow. */
 export function useSendApprovalAction() {
   const router = useRouter();
   const [pending, setPending] = useState(false);

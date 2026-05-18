@@ -173,10 +173,19 @@ export type ApprovalResolveResult<T = unknown> =
       terminalReason: "user_reject";
     };
 
+export type PendingApprovalSettlement =
+  | {
+      kind: "handle";
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  | {
+      kind: "internal";
+    };
+
 export type PendingApproval<K extends ApprovalKind = ApprovalKind> = {
   record: ApprovalRecord<K>;
-  resolve: (value: unknown) => void;
-  reject: (error: Error) => void;
+  settlement: PendingApprovalSettlement;
 };
 
 export type ApprovalController = {
@@ -184,6 +193,7 @@ export type ApprovalController = {
   get(approvalId: string): ApprovalRecord | undefined;
   getSubject(approvalId: string): ApprovalSubject | undefined;
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K>;
+  createPending<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void;
   onStateChanged(handler: (state: ApprovalState) => void): () => void;
   onCreated(handler: (event: ApprovalCreatedEvent) => void): () => void;
   onFinished(handler: (event: ApprovalFinishedEvent<unknown>) => void): () => void;

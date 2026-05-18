@@ -4,6 +4,7 @@ import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import {
   accountCodecs,
+  createDefaultAccountKey,
   createNamespacesStub,
   createNamespaceTransactionStub,
   createPrepareStub,
@@ -141,9 +142,11 @@ const createRecordView = (input: {
     chainRef: DEFAULT_CHAIN_REF,
     origin: REQUEST_CONTEXT.origin,
     from: DEFAULT_FROM,
+    fromAccountKey: createDefaultAccountKey(),
     status: input.status,
     submitted: input.submitted ?? DEFAULT_SUBMITTED,
     receipt: input.receipt ?? null,
+    replacementIdentity: null,
     replacedId: input.replacedId ?? null,
     createdAt: 1,
     updatedAt: input.updatedAt ?? 1,

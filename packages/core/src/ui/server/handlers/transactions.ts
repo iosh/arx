@@ -1,6 +1,7 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import * as Value from "ox/Value";
 import type { RequestContext } from "../../../rpc/requestContext.js";
+import type { TransactionIntent } from "../../../transactions/intent/index.js";
 import type { TransactionRequest } from "../../../transactions/types.js";
 import type {
   UiAccountsAccess,
@@ -82,21 +83,34 @@ export const createTransactionsHandlers = (deps: {
         to,
         valueWei: wei,
       });
+      const intent: TransactionIntent = {
+        namespace: chain.namespace,
+        chainRef: resolvedChainRef,
+        account: {
+          accountKey: activeAccount.accountKey,
+          accountAddress: activeAccount.canonicalAddress,
+        },
+        request,
+      };
 
-      const handoff = await deps.transactions.beginTransactionApproval(request, requestContext, {
-        from: activeAccount.canonicalAddress,
+      const proposal = await deps.transactions.commands.createProposal(intent, {
+        requestContext,
       });
 
-      return { approvalId: handoff.approvalId };
+      const approval = await deps.transactions.commands.requestApproval(proposal.transactionId, {
+        requestContext,
+      });
+
+      return { approvalId: approval.approvalId };
     },
     "ui.transactions.rerunPrepare": async ({ transactionId }) => {
       assertUnlocked(deps.session);
-      await deps.transactions.rerunPrepare(transactionId);
+      await deps.transactions.commands.recomputePrepare(transactionId);
       return null;
     },
     "ui.transactions.applyDraftEdit": async ({ transactionId, edit, mode }) => {
       assertUnlocked(deps.session);
-      await deps.transactions.applyDraftEdit({
+      await deps.transactions.commands.editRequest({
         transactionId,
         edit,
         ...(mode ? { mode } : {}),

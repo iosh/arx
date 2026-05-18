@@ -15,7 +15,7 @@ type Options = {
 };
 
 /**
- * Durable record-backed read model:
+ * Store-backed record read model:
  * - bounded LRU cache for synchronous reads (getView())
  * - coalesced best-effort sync on store change
  * - emits transaction:statusChanged
@@ -75,6 +75,10 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
     // Specific reads warm the cache but do not synthesize lifecycle events.
     this.#upsert(view);
     return structuredClone(view);
+  }
+
+  async getOrLoadRecordView(id: string): Promise<TransactionRecordView | null> {
+    return await this.getOrLoadView(id);
   }
 
   /**
@@ -207,9 +211,11 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
       chainRef: record.chainRef,
       origin: record.origin,
       from: this.#safeFromAccountKeyToAddress(record),
+      fromAccountKey: record.fromAccountKey,
       status: record.status,
       submitted: structuredClone(record.submitted),
       receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
+      replacementIdentity: structuredClone(record.replacementIdentity ?? null),
       replacedId: record.replacedId ?? null,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

@@ -3,6 +3,7 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { TransactionRecord, TransactionReplacementIdentity } from "../../storage/records.js";
 import { TransactionSubmittedSchema } from "../../storage/schemas.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionReplacementKey } from "../../transactions/namespace/types.js";
 import type { TransactionSubmitted } from "../../transactions/types.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
@@ -29,7 +30,7 @@ const parseDurableSubmitted = (params: {
 };
 
 const toStoredReplacementIdentity = (
-  replacementKey: import("../../transactions/namespace/types.js").TransactionReplacementKey | null,
+  replacementKey: TransactionReplacementKey | null,
 ): TransactionReplacementIdentity => {
   if (!replacementKey) return null;
   return {

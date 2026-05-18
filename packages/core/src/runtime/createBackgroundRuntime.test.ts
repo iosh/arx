@@ -191,11 +191,8 @@ const createHandlersForRuntime = (
         ),
       },
       transactions: {
-        beginTransactionApproval: (request, requestContext, transactionOptions) =>
-          runtime.transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
-        rerunPrepare: (transactionId) => runtime.transactions.proposal.draft.rerunPrepare(transactionId),
-        applyDraftEdit: (input) => runtime.transactions.proposal.draft.applyDraftEdit(input),
-        onChanged: (listener) => runtime.transactions.approvalDetailInvalidations.onChanged(listener),
+        commands: runtime.transactions.access.commands,
+        events: runtime.transactions.access.events,
       },
       chains: {
         buildWalletNetworksSnapshot: runtime.services.chainViews.buildWalletNetworksSnapshot.bind(
@@ -852,12 +849,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     const from = await createActiveAccount(runtime);
 
     const approvalId = "33333333-3333-4333-8333-333333333333";
-    const beginTransactionApproval = vi
-      .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
-      .mockImplementation(async (_request) => ({
-        transactionId: approvalId,
-        approvalId,
-      }));
+    const createProposal = vi.spyOn(runtime.transactions.access.commands, "createProposal").mockResolvedValue({
+      transactionId: approvalId,
+    });
+    const requestApproval = vi.spyOn(runtime.transactions.access.commands, "requestApproval").mockResolvedValue({
+      approvalId,
+    });
 
     const handlers = createHandlersForRuntime(runtime);
 
@@ -874,23 +871,44 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       valueWei: 10_000_000_000_000_000n,
     });
     expect(result).toEqual({ approvalId });
-    expect(beginTransactionApproval).toHaveBeenCalledWith(
+    expect(createProposal).toHaveBeenCalledWith(
       {
         namespace: "eip155",
         chainRef: MAINNET_CHAIN.chainRef,
-        payload: {
-          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          value: "0x2386f26fc10000",
+        account: {
+          accountKey: expect.any(String),
+          accountAddress: from,
+        },
+        request: {
+          namespace: "eip155",
+          chainRef: MAINNET_CHAIN.chainRef,
+          payload: {
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            value: "0x2386f26fc10000",
+          },
         },
       },
       expect.objectContaining({
-        transport: "ui",
-        portId: "ui",
-        sessionId: "11111111-1111-4111-8111-111111111111",
-        requestId: expect.any(String),
-        origin: "chrome-extension://arx",
+        requestContext: expect.objectContaining({
+          transport: "ui",
+          portId: "ui",
+          sessionId: "11111111-1111-4111-8111-111111111111",
+          requestId: expect.any(String),
+          origin: "chrome-extension://arx",
+        }),
       }),
-      { from },
+    );
+    expect(requestApproval).toHaveBeenCalledWith(
+      approvalId,
+      expect.objectContaining({
+        requestContext: expect.objectContaining({
+          transport: "ui",
+          portId: "ui",
+          sessionId: "11111111-1111-4111-8111-111111111111",
+          requestId: expect.any(String),
+          origin: "chrome-extension://arx",
+        }),
+      }),
     );
 
     runtime.lifecycle.shutdown();
@@ -982,12 +1000,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    const beginTransactionApproval = vi
-      .spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval")
-      .mockImplementation(async (_request, requester) => ({
-        transactionId: requester.sessionId,
-        approvalId: requester.sessionId,
-      }));
+    const createProposal = vi.spyOn(runtime.transactions.access.commands, "createProposal").mockResolvedValue({
+      transactionId: "11111111-1111-4111-8111-111111111111",
+    });
+    const requestApproval = vi.spyOn(runtime.transactions.access.commands, "requestApproval").mockResolvedValue({
+      approvalId: "11111111-1111-4111-8111-111111111111",
+    });
 
     const platform = {
       openOnboardingTab: async () => ({ activationPath: "create" as const }),
@@ -1036,11 +1054,12 @@ describe("createBackgroundRuntime (no snapshots)", () => {
       },
     });
 
-    expect(beginTransactionApproval).toHaveBeenCalledTimes(3);
+    expect(createProposal).toHaveBeenCalledTimes(3);
+    expect(requestApproval).toHaveBeenCalledTimes(3);
 
-    const firstSurfaceId = beginTransactionApproval.mock.calls[0]?.[1].sessionId;
-    const repeatedSurfaceId = beginTransactionApproval.mock.calls[1]?.[1].sessionId;
-    const secondSurfaceId = beginTransactionApproval.mock.calls[2]?.[1].sessionId;
+    const firstSurfaceId = createProposal.mock.calls[0]?.[1].requestContext?.sessionId;
+    const repeatedSurfaceId = createProposal.mock.calls[1]?.[1].requestContext?.sessionId;
+    const secondSurfaceId = createProposal.mock.calls[2]?.[1].requestContext?.sessionId;
 
     expect(firstSurfaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(repeatedSurfaceId).toBe(firstSurfaceId);
@@ -1061,7 +1080,7 @@ describe("createBackgroundRuntime (no snapshots)", () => {
     await initializeUnlockedSession(runtime);
     await createActiveAccount(runtime);
 
-    vi.spyOn(runtime.transactions.proposal.begin, "beginTransactionApproval").mockRejectedValue(
+    vi.spyOn(runtime.transactions.access.commands, "createProposal").mockRejectedValue(
       new Error("create approval failed"),
     );
 

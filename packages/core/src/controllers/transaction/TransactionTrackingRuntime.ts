@@ -1,7 +1,11 @@
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { ReceiptResolution, ReplacementResolution } from "../../transactions/namespace/types.js";
+import type {
+  ReceiptResolution,
+  ReplacementResolution,
+  TransactionReplacementKey,
+} from "../../transactions/namespace/types.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import { createReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { TransactionError } from "../../transactions/types.js";
@@ -18,7 +22,7 @@ type TransactionTrackingRuntimeDeps = {
 };
 
 const toStoredReplacementIdentity = (
-  replacementKey: import("../../transactions/namespace/types.js").TransactionReplacementKey | null,
+  replacementKey: TransactionReplacementKey | null,
 ): NonNullable<TransactionRecord["replacementIdentity"]> | null => {
   if (!replacementKey) return null;
   return {

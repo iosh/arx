@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
-import type { ApprovalHandle, ApprovalKind, ApprovalTerminalReason } from "../../controllers/approval/types.js";
+import type { ApprovalKind, ApprovalTerminalReason } from "../../controllers/approval/types.js";
 
 export type ProviderRuntimeRequestScope = {
   transport: "provider";
@@ -35,10 +35,10 @@ export type ProviderRequestHandle = {
   id: string;
   providerNamespace: string;
   signal: AbortSignal;
-  attachBlockingApproval<K extends ApprovalKind>(
-    createApproval: (reservation: BlockingApprovalReservation) => ApprovalHandle<K>,
+  attachBlockingApproval<T extends { approvalId: string }>(
+    createApproval: (reservation: BlockingApprovalReservation) => T,
     reservation?: Partial<BlockingApprovalReservation>,
-  ): ApprovalHandle<K>;
+  ): T;
   fulfill(): boolean;
   reject(): boolean;
   cancel(reason: ProviderRequestCancellationReason): Promise<boolean>;
@@ -177,7 +177,10 @@ export const createProviderRequests = ({
       id,
       providerNamespace: currentRecord.providerNamespace,
       signal: abortController.signal,
-      attachBlockingApproval: (createApproval, reservationInput) => {
+      attachBlockingApproval: <T extends { approvalId: string }>(
+        createApproval: (reservation: BlockingApprovalReservation) => T,
+        reservationInput?: Partial<BlockingApprovalReservation>,
+      ) => {
         if (terminalState) {
           throw createTerminalRequestError(currentRecord, terminalState);
         }
@@ -203,11 +206,11 @@ export const createProviderRequests = ({
         records.set(id, currentRecord);
 
         try {
-          const approvalHandle = createApproval(reservation);
-          if (approvalHandle.approvalId !== reservation.approvalId) {
+          const approvalRef = createApproval(reservation);
+          if (approvalRef.approvalId !== reservation.approvalId) {
             throw new Error(`Provider request "${id}" created a mismatched blocking approval handle.`);
           }
-          return approvalHandle;
+          return approvalRef;
         } catch (error) {
           const currentLiveRecord = records.get(id);
           if (currentLiveRecord?.blockingApprovalId === reservation.approvalId) {

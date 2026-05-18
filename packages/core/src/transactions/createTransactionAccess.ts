@@ -1,0 +1,399 @@
+import { getChainRefNamespace } from "../chains/caip.js";
+import type { ApprovalController } from "../controllers/approval/types.js";
+import type { SendTransactionApprovalReview } from "../controllers/transaction/review/types.js";
+import type {
+  ApprovalDetailInvalidationEvents,
+  TransactionRecordView as ControllerTransactionRecordView,
+  TransactionApprovalExecutor,
+  TransactionProposalBeginCommands,
+  TransactionProposalDraftCommands,
+  TransactionProposalReader,
+  TransactionProposalReviewState,
+  TransactionProposalRuntimeReader,
+  TransactionRecordReader,
+  TransactionRecovery,
+  TransactionSubmissionTracker,
+} from "../controllers/transaction/types.js";
+import type { RequestContext } from "../rpc/requestContext.js";
+import type {
+  TransactionAccess,
+  TransactionCreateProposalResult,
+  TransactionRequestApprovalResult,
+  TransactionSubmissionResolution,
+} from "./access.js";
+import type { TransactionIntent } from "./intent/index.js";
+import type {
+  TransactionApprovalPreview,
+  TransactionProposal,
+  TransactionProposalLifecycle,
+  TransactionProposalPrepare,
+  TransactionProposalTerminationReason,
+  TransactionProposalView,
+} from "./proposal/index.js";
+import type { TransactionRecordView } from "./record/index.js";
+import type { TransactionError, TransactionPrepared, TransactionRequest } from "./types.js";
+
+const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
+
+type CreateTransactionAccessDeps = {
+  proposalBegin: TransactionProposalBeginCommands;
+  proposalDraft: TransactionProposalDraftCommands;
+  execution: TransactionApprovalExecutor;
+  recovery: TransactionRecovery;
+  submission: TransactionSubmissionTracker;
+  proposalRuntime: TransactionProposalRuntimeReader;
+  proposalReader: TransactionProposalReader;
+  recordView: TransactionRecordReader;
+  approvalDetailInvalidations: ApprovalDetailInvalidationEvents;
+  approvals: Pick<ApprovalController, "cancel" | "onFinished">;
+  logger?: (message: string, data?: unknown) => void;
+};
+
+const createInternalRequestContext = (): RequestContext => ({
+  transport: "ui",
+  origin: INTERNAL_TRANSACTION_ORIGIN,
+  portId: "transactions",
+  sessionId: crypto.randomUUID(),
+  requestId: crypto.randomUUID(),
+});
+
+const deriveRequestedAddress = (request: TransactionRequest): string | undefined => {
+  const candidate = (request.payload as { from?: unknown } | undefined)?.from;
+  return typeof candidate === "string" ? candidate : undefined;
+};
+
+const assertIntentMatchesRequest = (intent: TransactionIntent): void => {
+  if (intent.namespace !== intent.request.namespace) {
+    throw new Error(
+      `Transaction intent namespace mismatch: intent=${intent.namespace} request=${intent.request.namespace}`,
+    );
+  }
+
+  if (intent.chainRef !== intent.request.chainRef) {
+    throw new Error(
+      `Transaction intent chainRef mismatch: intent=${intent.chainRef} request=${intent.request.chainRef}`,
+    );
+  }
+};
+
+const requireProposalAccountAddress = (input: { transactionId: string; accountAddress: string | null }): string => {
+  if (input.accountAddress) {
+    return input.accountAddress;
+  }
+
+  throw new Error(`Transaction proposal ${input.transactionId} is missing a canonical account address.`);
+};
+
+const mapTerminationReason = (input: {
+  userRejected: boolean;
+  error: { name?: string | undefined } | null;
+}): TransactionProposalTerminationReason => {
+  if (input.userRejected) {
+    return "user_rejected";
+  }
+  if (input.error?.name === "TransportDisconnectedError") {
+    return "approval_cancelled";
+  }
+  return "execution_failed";
+};
+
+const mapLifecycle = (input: {
+  phase: "pending" | "approved" | "failed";
+  userRejected: boolean;
+  error: TransactionError | null;
+  createdAt: number;
+  updatedAt: number;
+}): TransactionProposalLifecycle => {
+  if (input.phase === "pending") {
+    return {
+      status: "active",
+      createdAt: input.createdAt,
+      updatedAt: input.updatedAt,
+    };
+  }
+
+  if (input.phase === "approved") {
+    return {
+      status: "approved",
+      createdAt: input.createdAt,
+      updatedAt: input.updatedAt,
+    };
+  }
+
+  return {
+    status: "terminated",
+    terminationReason: mapTerminationReason({
+      userRejected: input.userRejected,
+      error: input.error,
+    }),
+    error: input.error,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  };
+};
+
+const mapPrepare = (input: {
+  draftRevision: number;
+  prepared: TransactionPrepared | null;
+  review: TransactionProposalReviewState | null;
+}): TransactionProposalPrepare => {
+  if (!input.review) {
+    return {
+      requestRevision: input.draftRevision,
+      sessionToken: null,
+      status: "idle",
+      prepared: input.prepared,
+      reviewSnapshot: null,
+    };
+  }
+
+  return {
+    requestRevision: input.draftRevision,
+    sessionToken: input.review.sessionToken,
+    status: input.review.status,
+    prepared: input.prepared,
+    reviewSnapshot: input.review.reviewPreparedSnapshot,
+    ...(input.review.blocker ? { blocker: input.review.blocker } : {}),
+    ...(input.review.error ? { error: input.review.error } : {}),
+    ...(input.review.invalidatedBy ? { invalidatedBy: input.review.invalidatedBy } : {}),
+  };
+};
+
+const mapPreview = (input: SendTransactionApprovalReview): TransactionApprovalPreview => ({
+  updatedAt: input.updatedAt,
+  namespaceReview: input.namespaceReview,
+  prepare:
+    input.prepare.state === "blocked"
+      ? { state: "blocked", blocker: input.prepare.blocker }
+      : input.prepare.state === "failed"
+        ? { state: "failed", error: input.prepare.error }
+        : { state: input.prepare.state },
+});
+
+const mapProposal = (deps: {
+  runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>;
+}): TransactionProposal => {
+  const { runtimeView } = deps;
+  const requestedAddress = deriveRequestedAddress(runtimeView.request);
+
+  return {
+    id: runtimeView.id,
+    approvalId: runtimeView.approvalId,
+    intent: {
+      namespace: runtimeView.namespace,
+      chainRef: runtimeView.chainRef,
+      account: {
+        accountKey: runtimeView.fromAccountKey,
+        accountAddress: requireProposalAccountAddress({
+          transactionId: runtimeView.id,
+          accountAddress: runtimeView.from,
+        }),
+        ...(requestedAddress ? { requestedAddress } : {}),
+      },
+      request: runtimeView.request,
+    },
+    lifecycle: mapLifecycle({
+      phase: runtimeView.status,
+      userRejected: runtimeView.userRejected,
+      error: runtimeView.error,
+      createdAt: runtimeView.createdAt,
+      updatedAt: runtimeView.updatedAt,
+    }),
+    prepare: mapPrepare({
+      draftRevision: runtimeView.draftRevision,
+      prepared: runtimeView.prepared,
+      review: runtimeView.review,
+    }),
+  };
+};
+
+const mapProposalView = (deps: {
+  runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>;
+  proposalView: NonNullable<ReturnType<TransactionProposalReader["getProposalView"]>>;
+}): TransactionProposalView => ({
+  ...mapProposal({ runtimeView: deps.runtimeView }),
+  preview: mapPreview(deps.proposalView.review),
+});
+
+const mapRecordView = (record: ControllerTransactionRecordView): TransactionRecordView => ({
+  id: record.id,
+  namespace: getChainRefNamespace(record.chainRef),
+  chainRef: record.chainRef,
+  origin: record.origin,
+  accountKey: record.fromAccountKey,
+  status: record.status,
+  submitted: structuredClone(record.submitted),
+  receipt: structuredClone(record.receipt),
+  replacementKey: structuredClone(record.replacementIdentity ?? null),
+  replacedByRecordId: record.replacedId,
+  createdAt: record.createdAt,
+  updatedAt: record.updatedAt,
+});
+
+const bindApprovalAbort = (params: {
+  transactionId: string;
+  approvalId: string;
+  abortSignal: AbortSignal;
+  approvals: Pick<ApprovalController, "cancel" | "onFinished">;
+  execution: Pick<TransactionApprovalExecutor, "rejectTransaction">;
+}) => {
+  let didCleanUp = false;
+  let unsubscribeFinished = () => {};
+
+  const cleanUp = () => {
+    if (didCleanUp) {
+      return;
+    }
+    didCleanUp = true;
+    params.abortSignal.removeEventListener("abort", cancelBeforeBroadcast);
+    unsubscribeFinished();
+    unsubscribeFinished = () => {};
+  };
+
+  const cancelBeforeBroadcast = () => {
+    cleanUp();
+    void params.approvals.cancel({
+      approvalId: params.approvalId,
+      reason: "session_lost",
+    });
+    void params.execution.rejectTransaction(params.transactionId, {
+      name: "TransportDisconnectedError",
+      message: "Transport disconnected.",
+      code: 4900,
+    });
+  };
+
+  unsubscribeFinished = params.approvals.onFinished((event) => {
+    if (event.approvalId === params.approvalId) {
+      cleanUp();
+    }
+  });
+
+  if (params.abortSignal.aborted) {
+    cancelBeforeBroadcast();
+    return;
+  }
+
+  params.abortSignal.addEventListener("abort", cancelBeforeBroadcast, { once: true });
+};
+
+export const createTransactionAccess = (deps: CreateTransactionAccessDeps): TransactionAccess => {
+  const logger = deps.logger ?? (() => {});
+
+  return {
+    commands: {
+      async createProposal(intent, options): Promise<TransactionCreateProposalResult> {
+        assertIntentMatchesRequest(intent);
+        const requestContext = options?.requestContext ?? createInternalRequestContext();
+        const proposalMeta = deps.proposalBegin.createProposal(
+          intent.request,
+          requestContext,
+          intent.account.accountAddress,
+        );
+        return {
+          transactionId: proposalMeta.id,
+        };
+      },
+      async requestApproval(transactionId, options): Promise<TransactionRequestApprovalResult> {
+        const proposalMeta = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
+        if (!proposalMeta) {
+          throw new Error(`Transaction proposal ${transactionId} not found.`);
+        }
+        if (proposalMeta.status !== "pending") {
+          throw new Error(`Transaction proposal ${transactionId} is no longer pending approval.`);
+        }
+
+        const approvalId = deps.proposalBegin.requestApproval(proposalMeta, options.requestContext, null);
+        if (options.requestScope?.abortSignal) {
+          bindApprovalAbort({
+            transactionId,
+            approvalId,
+            abortSignal: options.requestScope.abortSignal,
+            approvals: deps.approvals,
+            execution: deps.execution,
+          });
+        }
+
+        return {
+          approvalId,
+        };
+      },
+      async editRequest(input) {
+        await deps.proposalDraft.applyDraftEdit(input);
+      },
+      async recomputePrepare(transactionId) {
+        await deps.proposalDraft.rerunPrepare(transactionId);
+      },
+      async approve(transactionId) {
+        const result = await deps.execution.approveTransaction(transactionId);
+        if (result.status === "approved") {
+          return result;
+        }
+
+        const runtimeView = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
+        if (!runtimeView) {
+          return {
+            status: "failed",
+            reason: result.reason,
+            message: result.message,
+            ...(result.data !== undefined ? { data: result.data } : {}),
+          };
+        }
+
+        return {
+          status: "failed",
+          reason: result.reason,
+          transaction: mapProposal({ runtimeView }),
+          message: result.message,
+          ...(result.data !== undefined ? { data: result.data } : {}),
+        };
+      },
+      async reject(transactionId, reason) {
+        await deps.execution.rejectTransaction(transactionId, reason);
+      },
+    },
+    queries: {
+      getProposalView(transactionId) {
+        const runtimeView = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
+        const proposalView = deps.proposalReader.getProposalView(transactionId);
+        if (!runtimeView || !proposalView) {
+          return undefined;
+        }
+
+        return mapProposalView({
+          runtimeView,
+          proposalView,
+        });
+      },
+      getRecordView(transactionId) {
+        const record = deps.recordView.getRecordView(transactionId);
+        return record ? mapRecordView(record) : undefined;
+      },
+    },
+    submission: {
+      async waitForOutcome(transactionId): Promise<TransactionSubmissionResolution> {
+        const resolution = await deps.submission.waitForSubmissionOutcome(transactionId);
+        return {
+          submitted: resolution.submitted,
+          ...(resolution.persistenceFailure ? { persistenceFailure: resolution.persistenceFailure } : {}),
+        };
+      },
+    },
+    recovery: {
+      async resume() {
+        await deps.recovery.resumeTransactions();
+      },
+    },
+    events: {
+      onProposalChanged(handler) {
+        return deps.proposalRuntime.onChanged(handler);
+      },
+      onRecordChanged(handler) {
+        return deps.recordView.onChanged(handler);
+      },
+      onApprovalDetailInvalidated(handler) {
+        return deps.approvalDetailInvalidations.onChanged((change) => handler(change.approvalIds));
+      },
+    },
+  };
+};

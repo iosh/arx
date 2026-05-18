@@ -7,11 +7,16 @@ import type { RequestContext } from "../../rpc/requestContext.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
 import type { TransactionRequest } from "../../transactions/types.js";
-import type { ApprovalController, ApprovalHandle } from "../approval/types.js";
+import type { ApprovalController, ApprovalCreateParams } from "../approval/types.js";
 import { ApprovalKinds } from "../approval/types.js";
 import type { TransactionPrepare } from "./TransactionPrepare.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { BeginTransactionApprovalOptions, TransactionApprovalRequestHandoff } from "./types.js";
+import type {
+  BeginTransactionApprovalOptions,
+  TransactionApprovalRequestRef,
+  TransactionProposalMeta,
+  TransactionRequestBinding,
+} from "./types.js";
 import {
   coerceTransactionError,
   createMissingNamespaceTransactionError,
@@ -22,20 +27,22 @@ type TransactionProposalBeginServiceDeps = {
   proposalRuntime: TransactionProposalRuntime;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "create">;
+  approvals: Pick<ApprovalController, "create" | "createPending">;
   namespaces: NamespaceTransactions;
   prepare: Pick<TransactionPrepare, "queue">;
   now: () => number;
+  logger?: (message: string, data?: unknown) => void;
 };
 
 export class TransactionProposalBeginService {
   #proposalRuntime: TransactionProposalRuntime;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #accounts: Pick<AccountController, "listOwnedForNamespace">;
-  #approvals: Pick<ApprovalController, "create">;
+  #approvals: Pick<ApprovalController, "create" | "createPending">;
   #namespaces: NamespaceTransactions;
   #prepare: Pick<TransactionPrepare, "queue">;
   #now: () => number;
+  #logger: (message: string, data?: unknown) => void;
 
   constructor(deps: TransactionProposalBeginServiceDeps) {
     this.#proposalRuntime = deps.proposalRuntime;
@@ -45,13 +52,28 @@ export class TransactionProposalBeginService {
     this.#namespaces = deps.namespaces;
     this.#prepare = deps.prepare;
     this.#now = deps.now;
+    this.#logger = deps.logger ?? (() => {});
   }
 
   async beginTransactionApproval(
     request: TransactionRequest,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalRequestHandoff> {
+  ): Promise<TransactionApprovalRequestRef> {
+    const proposalMeta = this.createProposal(request, requestContext, options.from);
+    const approvalId = this.requestApproval(proposalMeta, requestContext, options.requestBinding ?? null);
+
+    return {
+      transactionId: proposalMeta.id,
+      approvalId,
+    };
+  }
+
+  createProposal(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    fromAddress: AccountAddress,
+  ): TransactionProposalMeta {
     const derived = parseChainRef(request.chainRef);
     if (request.namespace !== derived.namespace) {
       throw new Error(`Transaction namespace mismatch: request=${request.namespace} chainRef=${request.chainRef}`);
@@ -67,7 +89,7 @@ export class TransactionProposalBeginService {
 
     const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({
       chainRef: request.chainRef,
-      address: options.from,
+      address: fromAddress,
     });
     const derivedRequestCandidate =
       namespaceTransaction.request?.deriveForChain?.(request, request.chainRef) ?? request;
@@ -86,7 +108,7 @@ export class TransactionProposalBeginService {
     const ownedAccount = this.#requireOwnedFromAccount({
       namespace: derived.namespace,
       chainRef: request.chainRef,
-      fromAddress: options.from,
+      fromAddress,
       fromAccountKey,
     });
     const validationContext: TransactionValidationContext = {
@@ -98,13 +120,10 @@ export class TransactionProposalBeginService {
     };
     namespaceTransaction.request?.validateRequest?.(validationContext);
 
-    const id = crypto.randomUUID();
-    const approvalId = crypto.randomUUID();
     const timestamp = this.#now();
-
     const proposalMeta = this.#proposalRuntime.createPendingProposal({
-      id,
-      approvalId,
+      id: crypto.randomUUID(),
+      approvalId: crypto.randomUUID(),
       createdAt: timestamp,
       namespace: derived.namespace,
       chainRef: request.chainRef,
@@ -114,52 +133,57 @@ export class TransactionProposalBeginService {
       updatedAt: timestamp,
     });
 
-    const approvalRequest = {
-      transactionId: proposalMeta.id,
-      chainRef: request.chainRef,
+    this.#prepare.queue(proposalMeta.id);
+    return proposalMeta;
+  }
+
+  requestApproval(
+    proposalMeta: TransactionProposalMeta,
+    requestContext: RequestContext,
+    requestBinding?: TransactionRequestBinding | null,
+  ): string {
+    const createApprovalParams = (
+      approvalId: string,
+      createdAt: number,
+    ): ApprovalCreateParams<typeof ApprovalKinds.SendTransaction> => ({
+      approvalId,
+      kind: ApprovalKinds.SendTransaction,
       origin: requestContext.origin,
-    };
+      namespace: proposalMeta.namespace,
+      chainRef: proposalMeta.chainRef,
+      createdAt,
+      request: {
+        transactionId: proposalMeta.id,
+        chainRef: proposalMeta.chainRef,
+        origin: requestContext.origin,
+      },
+      subject: {
+        kind: "transaction",
+        transactionId: proposalMeta.id,
+      },
+    });
 
-    this.#prepare.queue(id);
-
-    let approvalHandle: ApprovalHandle<typeof ApprovalKinds.SendTransaction>;
     try {
-      approvalHandle = options?.requestBinding
-        ? options.requestBinding.attachBlockingApproval(
-            ({ approvalId: reservedApprovalId, createdAt }) =>
-              requestApproval(
-                { approvals: this.#approvals, now: this.#now },
-                {
-                  kind: ApprovalKinds.SendTransaction,
-                  requestContext,
-                  approvalId: reservedApprovalId,
-                  createdAt,
-                  request: approvalRequest,
-                  subject: {
-                    kind: "transaction",
-                    transactionId: proposalMeta.id,
-                  },
-                },
-              ),
-            {
-              approvalId,
-              createdAt: proposalMeta.createdAt,
-            },
-          )
-        : requestApproval(
-            { approvals: this.#approvals, now: this.#now },
-            {
-              kind: ApprovalKinds.SendTransaction,
-              requestContext,
-              approvalId,
-              createdAt: proposalMeta.createdAt,
-              request: approvalRequest,
-              subject: {
-                kind: "transaction",
-                transactionId: proposalMeta.id,
-              },
-            },
-          );
+      if (requestBinding) {
+        return requestBinding.attachBlockingApproval(
+          ({ approvalId: reservedApprovalId, createdAt }) => {
+            this.#approvals.createPending(createApprovalParams(reservedApprovalId, createdAt), requestContext);
+            return {
+              approvalId: reservedApprovalId,
+            };
+          },
+          {
+            approvalId: proposalMeta.approvalId,
+            createdAt: proposalMeta.createdAt,
+          },
+        ).approvalId;
+      }
+
+      this.#approvals.createPending(
+        createApprovalParams(proposalMeta.approvalId, proposalMeta.createdAt),
+        requestContext,
+      );
+      return proposalMeta.approvalId;
     } catch (error) {
       const approvalError = error instanceof Error ? error : new Error(String(error));
       const failed = this.#proposalRuntime.failProposal({
@@ -173,13 +197,6 @@ export class TransactionProposalBeginService {
       }
       throw error;
     }
-
-    void approvalHandle.settled.catch(() => undefined);
-
-    return {
-      transactionId: proposalMeta.id,
-      approvalId: approvalHandle.approvalId,
-    };
   }
 
   #requireOwnedFromAccount(params: {

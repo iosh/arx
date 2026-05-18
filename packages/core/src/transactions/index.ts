@@ -1,22 +1,24 @@
 export type {
+  TransactionAccess,
   TransactionApprovalFailureReason,
   TransactionApprovalResult,
-  TransactionBeginHandoff,
-  TransactionBeginOptions,
   TransactionCommands,
+  TransactionCreateProposalOptions,
+  TransactionCreateProposalResult,
   TransactionEvents,
-  TransactionFacade,
   TransactionQueries,
   TransactionRecovery,
+  TransactionRequestApprovalOptions,
+  TransactionRequestApprovalResult,
+  TransactionRequestScope,
   TransactionSubmissionPersistenceFailure,
   TransactionSubmissionResolution,
   TransactionSubmissionTracker,
-} from "./facade/index.js";
+} from "./access.js";
+export { createTransactionAccess } from "./createTransactionAccess.js";
 export type {
   TransactionIntent,
   TransactionIntentAccount,
-  TransactionIntentContext,
-  TransactionIntentSource,
 } from "./intent/index.js";
 export type { Eip155Broadcaster } from "./namespace/eip155/broadcaster.js";
 export { createEip155Broadcaster } from "./namespace/eip155/broadcaster.js";

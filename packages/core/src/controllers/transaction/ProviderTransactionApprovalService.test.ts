@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import type {
   BeginTransactionApprovalOptions,
-  TransactionApprovalRequestHandoff,
+  TransactionApprovalRequestRef,
   TransactionSubmissionResolution,
 } from "./types.js";
 
@@ -28,7 +28,7 @@ const REQUEST_CONTEXT = {
   requestId: "request-1",
 };
 
-const buildHandoff = (): TransactionApprovalRequestHandoff => ({
+const buildApprovalRequestRef = (): TransactionApprovalRequestRef => ({
   transactionId: TRANSACTION_ID,
   approvalId: APPROVAL_ID,
 });
@@ -44,7 +44,7 @@ const buildSubmissionResolution = (): TransactionSubmissionResolution => ({
 
 describe("ProviderTransactionApprovalService", () => {
   it("rejects immediately when request binding is already aborted", async () => {
-    const begin = vi.fn(async () => buildHandoff());
+    const begin = vi.fn(async () => buildApprovalRequestRef());
     const rejectTransaction = vi.fn(async () => {});
     const waitForSubmissionOutcome = vi.fn(async () => buildSubmissionResolution());
 
@@ -57,11 +57,10 @@ describe("ProviderTransactionApprovalService", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const handoff = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
+    const submission = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
       from: REQUEST.payload.from,
       requestBinding: {
-        id: "binding-1",
-        signal: controller.signal,
+        abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),
       },
     });
@@ -75,12 +74,12 @@ describe("ProviderTransactionApprovalService", () => {
       }),
     );
 
-    await handoff.waitForProviderCompletion();
+    await submission.waitForSubmission();
     expect(waitForSubmissionOutcome).toHaveBeenCalledWith(TRANSACTION_ID);
   });
 
-  it("removes the abort listener after provider completion settles", async () => {
-    const begin = vi.fn(async () => buildHandoff());
+  it("removes the abort listener after submission settles", async () => {
+    const begin = vi.fn(async () => buildApprovalRequestRef());
     const rejectTransaction = vi.fn(async () => {});
     const resolution = buildSubmissionResolution();
     const waitForSubmissionOutcome = vi.fn(async () => resolution);
@@ -95,16 +94,15 @@ describe("ProviderTransactionApprovalService", () => {
     const addEventListener = vi.spyOn(controller.signal, "addEventListener");
     const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
 
-    const handoff = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
+    const submission = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
       from: REQUEST.payload.from,
       requestBinding: {
-        id: "binding-2",
-        signal: controller.signal,
+        abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),
       } satisfies BeginTransactionApprovalOptions["requestBinding"],
     });
 
-    const settled = await handoff.waitForProviderCompletion();
+    const settled = await submission.waitForSubmission();
 
     expect(settled).toEqual(resolution);
     expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true });

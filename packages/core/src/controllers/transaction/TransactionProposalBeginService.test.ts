@@ -20,7 +20,7 @@ const createBeginService = (params?: {
   proposalRuntime?: ReturnType<typeof createProposalRuntime>;
   namespaces?: ReturnType<typeof createNamespacesStub>;
   approvals?: {
-    create: (...args: never[]) => unknown;
+    createPending: (...args: never[]) => unknown;
   };
   prepare?: ReturnType<typeof createPrepareStub>;
 }) => {
@@ -29,18 +29,13 @@ const createBeginService = (params?: {
   const proposalRuntime = params?.proposalRuntime ?? createProposalRuntime();
   const namespaces = params?.namespaces ?? createNamespacesStub();
   const prepare = params?.prepare ?? createPrepareStub();
-  const createApproval =
-    params?.approvals?.create ??
-    vi.fn(() => ({
-      approvalId: APPROVAL_ID,
-      settled: Promise.resolve(undefined),
-    }));
+  const createPendingApproval = params?.approvals?.createPending ?? vi.fn();
 
   return new TransactionProposalBeginService({
     proposalRuntime,
     accountCodecs,
     accounts: createAccountControllerStub({ chainRef, from }),
-    approvals: { create: createApproval as never },
+    approvals: { create: vi.fn() as never, createPending: createPendingApproval as never },
     namespaces: namespaces as never,
     prepare: prepare as never,
     now: () => 1,
@@ -52,13 +47,10 @@ describe("TransactionProposalBeginService", () => {
     const chainRef = DEFAULT_CHAIN_REF;
     const proposalRuntime = createProposalRuntime();
     const queue = vi.fn();
-    const createApproval = vi.fn(() => ({
-      approvalId: APPROVAL_ID,
-      settled: Promise.resolve(undefined),
-    }));
+    const createPendingApproval = vi.fn();
     const service = createBeginService({
       proposalRuntime,
-      approvals: { create: createApproval as never },
+      approvals: { createPending: createPendingApproval as never },
       prepare: createPrepareStub({ queue }),
     });
 
@@ -67,7 +59,7 @@ describe("TransactionProposalBeginService", () => {
       .mockReturnValueOnce(REQUEST_ID)
       .mockReturnValueOnce(APPROVAL_ID);
 
-    const handoff = await service.beginTransactionApproval(
+    const approvalRef = await service.beginTransactionApproval(
       {
         namespace: "eip155",
         chainRef,
@@ -84,11 +76,11 @@ describe("TransactionProposalBeginService", () => {
 
     randomUuidSpy.mockRestore();
 
-    expect(handoff).toEqual({
+    expect(approvalRef).toEqual({
       transactionId: REQUEST_ID,
       approvalId: APPROVAL_ID,
     });
-    expect(createApproval).toHaveBeenCalledTimes(1);
+    expect(createPendingApproval).toHaveBeenCalledTimes(1);
     expect(queue).toHaveBeenCalledWith(REQUEST_ID);
   });
 });

@@ -2,16 +2,12 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { AccountController } from "../../controllers/account/types.js";
 import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { PermissionsEvents } from "../../controllers/permission/types.js";
-import type {
-  ApprovalDetailInvalidationEvents,
-  TransactionProposalBeginCommands,
-  TransactionProposalDraftCommands,
-} from "../../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../../namespaces/index.js";
 import type { AttentionService } from "../../services/runtime/attention/index.js";
 import type { ChainActivationService } from "../../services/runtime/chainActivation/types.js";
 import type { ChainViewsService } from "../../services/runtime/chainViews/types.js";
 import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
+import type { TransactionAccess } from "../../transactions/access.js";
 import type { UiError, UiEventEnvelope, UiPortEnvelope } from "../protocol/envelopes.js";
 import type { UiMethodName, UiMethodParams, UiMethodResult } from "../protocol/index.js";
 import type { ApprovalDetail, ApprovalListEntry } from "../protocol/models/approvals.js";
@@ -84,14 +80,7 @@ export type UiApprovalEventsAccess = {
 
 export type UiPermissionsAccess = Pick<PermissionViewsService, "buildUiPermissionsSnapshot">;
 
-export type UiTransactionsWriteAccess = Pick<
-  TransactionProposalBeginCommands & TransactionProposalDraftCommands,
-  "beginTransactionApproval" | "rerunPrepare" | "applyDraftEdit"
->;
-
-export type UiTransactionsEventsAccess = Pick<ApprovalDetailInvalidationEvents, "onChanged">;
-
-export type UiTransactionsAccess = UiTransactionsWriteAccess & UiTransactionsEventsAccess;
+export type UiTransactionsAccess = Pick<TransactionAccess, "commands" | "events">;
 
 export type UiChainsAccess = Pick<ChainActivationService, "selectWalletChain"> &
   Pick<

@@ -205,11 +205,8 @@ const createWalletUiDeps = (
           buildUiPermissionsSnapshot: () => runtime.services.permissionViews.buildUiPermissionsSnapshot(),
         },
         transactions: {
-          beginTransactionApproval: (request, requestContext, transactionOptions) =>
-            transactions.proposal.begin.beginTransactionApproval(request, requestContext, transactionOptions),
-          rerunPrepare: (transactionId) => transactions.proposal.draft.rerunPrepare(transactionId),
-          applyDraftEdit: (input) => transactions.proposal.draft.applyDraftEdit(input),
-          onChanged: (listener) => transactions.approvalDetailInvalidations.onChanged(listener),
+          commands: transactions.access.commands,
+          events: transactions.access.events,
         },
         chains: {
           buildWalletNetworksSnapshot: () => runtime.services.chainViews.buildWalletNetworksSnapshot(),

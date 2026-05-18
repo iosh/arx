@@ -18,6 +18,7 @@ import type {
   ApprovalSubject,
   ApprovalTerminalReason,
   PendingApproval,
+  PendingApprovalSettlement,
 } from "./types.js";
 import {
   cloneCreatedEvent,
@@ -204,6 +205,26 @@ export class InMemoryApprovalController implements ApprovalController {
   }
 
   create<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): ApprovalHandle<K> {
+    const deferred = createDeferred<ApprovalResultByKind[K]>();
+    const record = this.#enqueuePendingApproval(request, requester, {
+      kind: "handle",
+      resolve: deferred.resolve as (value: unknown) => void,
+      reject: deferred.reject,
+    });
+    return { approvalId: record.approvalId, settled: deferred.promise };
+  }
+
+  createPending<K extends ApprovalKind>(request: ApprovalCreateParams<K>, requester: ApprovalRequester): void {
+    this.#enqueuePendingApproval(request, requester, {
+      kind: "internal",
+    });
+  }
+
+  #enqueuePendingApproval<K extends ApprovalKind>(
+    request: ApprovalCreateParams<K>,
+    requester: ApprovalRequester,
+    settlement: PendingApprovalSettlement,
+  ): ApprovalRecord<K> {
     if (!requester) throw new Error("Approval requester is required");
     assertApprovalContext(request);
 
@@ -217,11 +238,9 @@ export class InMemoryApprovalController implements ApprovalController {
       throw new Error(`Duplicate approval id "${record.approvalId}"`);
     }
 
-    const deferred = createDeferred<ApprovalResultByKind[K]>();
     this.#pending.set(record.approvalId, {
       record,
-      resolve: deferred.resolve as (value: unknown) => void,
-      reject: deferred.reject,
+      settlement,
     });
 
     this.#timeouts.set(
@@ -236,7 +255,7 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#enqueue(record);
     this.#publishCreated({ record });
 
-    return { approvalId: record.approvalId, settled: deferred.promise };
+    return record;
   }
 
   async resolve(input: ApprovalResolveInput): Promise<ApprovalResolveResult> {
@@ -264,7 +283,7 @@ export class InMemoryApprovalController implements ApprovalController {
         }
       }
 
-      entry.reject(error);
+      this.#rejectPendingApproval(entry, error);
 
       this.#publishFinished({
         approvalId: input.approvalId,
@@ -295,7 +314,7 @@ export class InMemoryApprovalController implements ApprovalController {
         value,
       });
 
-      entry.resolve(value);
+      this.#resolvePendingApproval(entry, value);
       return { approvalId: input.approvalId, status: "approved", terminalReason: "user_approve", value };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -309,7 +328,7 @@ export class InMemoryApprovalController implements ApprovalController {
         error: toSimpleError(err),
       });
 
-      entry.reject(err);
+      this.#rejectPendingApproval(entry, err);
       throw err;
     }
   }
@@ -337,11 +356,7 @@ export class InMemoryApprovalController implements ApprovalController {
       }
     }
 
-    try {
-      entry.reject(error);
-    } catch (rejectError) {
-      this.#logger?.("approvals: failed to reject cancelled approval", rejectError);
-    }
+    this.#rejectPendingApproval(entry, error);
 
     this.#publishFinished({
       approvalId: input.approvalId,
@@ -482,6 +497,26 @@ export class InMemoryApprovalController implements ApprovalController {
     this.#clearTimeout(approvalId);
     this.#finalizeLocal(approvalId);
     return entry;
+  }
+
+  #resolvePendingApproval(entry: PendingApproval, value: unknown): void {
+    if (entry.settlement.kind !== "handle") {
+      return;
+    }
+
+    entry.settlement.resolve(value);
+  }
+
+  #rejectPendingApproval(entry: PendingApproval, error: Error): void {
+    if (entry.settlement.kind !== "handle") {
+      return;
+    }
+
+    try {
+      entry.settlement.reject(error);
+    } catch (rejectError) {
+      this.#logger?.("approvals: failed to reject approval handle", rejectError);
+    }
   }
 
   #recordMeta(record?: ApprovalRecord) {

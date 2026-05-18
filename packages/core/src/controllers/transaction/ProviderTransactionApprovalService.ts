@@ -3,8 +3,8 @@ import type { TransactionError, TransactionRequest } from "../../transactions/ty
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
+  ProviderTransactionSubmission,
   TransactionApprovalExecutor,
-  TransactionApprovalHandoff,
   TransactionProposalBeginCommands,
   TransactionSubmissionTracker,
 } from "./types.js";
@@ -36,19 +36,19 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     request: TransactionRequest,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
-  ): Promise<TransactionApprovalHandoff> {
-    const handoff = await this.#begin.beginTransactionApproval(request, requestContext, options);
-    const abortSignal = options.requestBinding?.signal ?? null;
+  ): Promise<ProviderTransactionSubmission> {
+    const submission = await this.#begin.beginTransactionApproval(request, requestContext, options);
+    const abortSignal = options.requestBinding?.abortSignal ?? null;
 
     if (!abortSignal) {
       return {
-        ...handoff,
-        waitForProviderCompletion: () => this.#submission.waitForSubmissionOutcome(handoff.transactionId),
+        ...submission,
+        waitForSubmission: () => this.#submission.waitForSubmissionOutcome(submission.transactionId),
       };
     }
 
     const cancelBeforeBroadcast = () => {
-      void this.#execution.rejectTransaction(handoff.transactionId, createTransactionTransportDisconnectedError());
+      void this.#execution.rejectTransaction(submission.transactionId, createTransactionTransportDisconnectedError());
     };
 
     let cleanupAbortBinding = () => {};
@@ -72,10 +72,10 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     }
 
     return {
-      ...handoff,
-      waitForProviderCompletion: async () => {
+      ...submission,
+      waitForSubmission: async () => {
         try {
-          return await this.#submission.waitForSubmissionOutcome(handoff.transactionId);
+          return await this.#submission.waitForSubmissionOutcome(submission.transactionId);
         } finally {
           cleanup();
         }

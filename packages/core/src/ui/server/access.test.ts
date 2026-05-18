@@ -35,16 +35,24 @@ const createUiAccess = () =>
           buildUiPermissionsSnapshot: () => ({ origins: [] }),
         },
         transactions: {
-          beginTransactionApproval: async () =>
-            ({
+          commands: {
+            createProposal: async () => ({ transactionId: "tx-1" }),
+            requestApproval: async () => ({ approvalId: "approval-1" }),
+            editRequest: async () => {},
+            recomputePrepare: async () => {},
+            approve: async () => ({
+              status: "approved",
               transactionId: "tx-1",
-              approvalId: "approval-1",
-            }) as never,
-          rerunPrepare: async () => {},
-          applyDraftEdit: async () => {},
-          onChanged: (handler: (change: { approvalIds: string[] }) => void) => {
-            transactionHandlers.add(handler);
-            return () => transactionHandlers.delete(handler);
+            }),
+            reject: async () => {},
+          },
+          events: {
+            onApprovalDetailInvalidated: (handler: (approvalIds: string[]) => void) => {
+              transactionHandlers.add(handler);
+              return () => transactionHandlers.delete(handler);
+            },
+            onProposalChanged: () => () => {},
+            onRecordChanged: () => () => {},
           },
         },
         chains: {
@@ -121,7 +129,7 @@ const createUiAccess = () =>
 const approvalFinishedHandlers = new Set<
   (event: { approvalId: string; subject?: { kind: "transaction"; transactionId: string } }) => void
 >();
-const transactionHandlers = new Set<(change: { approvalIds: string[] }) => void>();
+const transactionHandlers = new Set<(approvalIds: string[]) => void>();
 
 describe("createUiRuntimeAccess", () => {
   it("emits approval detail changed from transaction invalidation without duplicating it on approval finish", () => {
@@ -137,7 +145,7 @@ describe("createUiRuntimeAccess", () => {
       handler({ approvalId: "approval-1", subject: { kind: "transaction", transactionId: "tx-1" } });
     });
     transactionHandlers.forEach((handler) => {
-      handler({ approvalIds: ["approval-1"] });
+      handler(["approval-1"]);
     });
 
     unsubscribe();

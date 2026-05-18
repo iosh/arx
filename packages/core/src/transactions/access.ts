@@ -1,18 +1,30 @@
-import type { TransactionIntent } from "../intent/index.js";
-import type { TransactionProposal, TransactionProposalView } from "../proposal/index.js";
-import type { TransactionRecordView } from "../record/index.js";
-import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "../types.js";
+import type { RequestContext } from "../rpc/requestContext.js";
+import type { TransactionIntent } from "./intent/index.js";
+import type { TransactionProposal, TransactionProposalView } from "./proposal/index.js";
+import type { TransactionRecordView } from "./record/index.js";
+import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "./types.js";
 
-export type TransactionBeginOptions = {
-  /** Optional caller binding for request-scoped approval lifetime. */
-  requestBinding?: {
-    signal?: AbortSignal | null;
-  };
+export type TransactionRequestScope = {
+  /** Caller-owned lifetime that can cancel approval before broadcast. */
+  abortSignal?: AbortSignal | null;
 };
 
-/** Identifiers allocated during proposal creation. */
-export type TransactionBeginHandoff = {
+export type TransactionCreateProposalOptions = {
+  requestContext?: RequestContext;
+};
+
+export type TransactionRequestApprovalOptions = {
+  requestContext: RequestContext;
+  requestScope?: TransactionRequestScope;
+};
+
+/** Identifier allocated during proposal creation. */
+export type TransactionCreateProposalResult = {
   transactionId: string;
+};
+
+/** Identifier allocated during approval request creation. */
+export type TransactionRequestApprovalResult = {
   approvalId: string;
 };
 
@@ -57,7 +69,14 @@ export type TransactionRecovery = {
 };
 
 export type TransactionCommands = {
-  begin(intent: TransactionIntent, options?: TransactionBeginOptions): Promise<TransactionBeginHandoff>;
+  createProposal(
+    intent: TransactionIntent,
+    options?: TransactionCreateProposalOptions,
+  ): Promise<TransactionCreateProposalResult>;
+  requestApproval(
+    transactionId: string,
+    options: TransactionRequestApprovalOptions,
+  ): Promise<TransactionRequestApprovalResult>;
   editRequest(input: { transactionId: string; edit: NamespaceTransactionDraftEdit; mode?: string }): Promise<void>;
   recomputePrepare(transactionId: string): Promise<void>;
   approve(transactionId: string): Promise<TransactionApprovalResult>;
@@ -67,7 +86,7 @@ export type TransactionCommands = {
 export type TransactionQueries = {
   /** Proposal read model for approval and transaction detail surfaces. */
   getProposalView(transactionId: string): TransactionProposalView | undefined;
-  /** Durable post-broadcast read model. */
+  /** Post-broadcast transaction read model. */
   getRecordView(transactionId: string): TransactionRecordView | undefined;
 };
 
@@ -77,7 +96,7 @@ export type TransactionEvents = {
   onApprovalDetailInvalidated(handler: (approvalIds: string[]) => void): () => void;
 };
 
-export type TransactionFacade = {
+export type TransactionAccess = {
   commands: TransactionCommands;
   queries: TransactionQueries;
   /** Submission outcome tracking after approval. */

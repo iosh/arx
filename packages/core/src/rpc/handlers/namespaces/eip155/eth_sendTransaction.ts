@@ -51,20 +51,27 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
     try {
       const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
       const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
-      const handoff = await controllers.providerTransactionCommands.beginTransactionApproval(prepared, requestContext, {
-        from,
-        requestBinding: providerRequestHandle,
-      });
-      const submission = await handoff.waitForProviderCompletion();
-      const submitted = submission.submitted as { hash?: unknown };
+      const submission = await controllers.providerTransactionCommands.beginTransactionApproval(
+        prepared,
+        requestContext,
+        {
+          from,
+          requestBinding: {
+            abortSignal: providerRequestHandle.signal,
+            attachBlockingApproval: providerRequestHandle.attachBlockingApproval,
+          },
+        },
+      );
+      const settled = await submission.waitForSubmission();
+      const submitted = settled.submitted as { hash?: unknown };
       const hash = typeof submitted?.hash === "string" ? submitted.hash : null;
       if (!hash) {
         throw arxError({
           reason: ArxReasons.RpcInternal,
           message: "EIP-155 transaction submission did not return a transaction hash.",
           data: {
-            id: handoff.transactionId,
-            submitted: submission.submitted,
+            id: submission.transactionId,
+            submitted: settled.submitted,
           },
         });
       }

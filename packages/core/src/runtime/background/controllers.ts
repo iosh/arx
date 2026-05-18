@@ -96,7 +96,9 @@ export const createTransactionRuntimeForControllers = (params: {
       listOwnedForNamespace: (input) => params.accounts.listOwnedForNamespace(input),
     },
     approvals: {
-      create: (request, requester) => params.approvals.create(request, requester),
+      create: (...args) => params.approvals.create(...args),
+      createPending: (...args) => params.approvals.createPending(...args),
+      cancel: (input) => params.approvals.cancel(input),
       onFinished: (handler) => params.approvals.onFinished(handler),
       listPendingIdsBySubject: (subject) => params.approvals.listPendingIdsBySubject(subject),
     },

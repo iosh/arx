@@ -290,6 +290,7 @@ export const createRecordViewStub = (params?: {
   from?: string;
   getView?: TransactionRecordViewStore["getView"];
   getOrLoadView?: TransactionRecordViewStore["getOrLoadView"];
+  getOrLoadRecordView?: TransactionRecordViewStore["getOrLoadRecordView"];
   commitRecordView?: TransactionRecordViewStore["commitRecordView"];
   requestSync?: TransactionRecordViewStore["requestSync"];
 }): TransactionRecordViewStore => {
@@ -304,9 +305,11 @@ export const createRecordViewStub = (params?: {
         chainRef: record.chainRef,
         origin: record.origin,
         from,
+        fromAccountKey: record.fromAccountKey,
         status: record.status,
         submitted: record.submitted,
         receipt: record.receipt ?? null,
+        replacementIdentity: record.replacementIdentity ?? null,
         replacedId: record.replacedId ?? null,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
@@ -316,6 +319,7 @@ export const createRecordViewStub = (params?: {
   return {
     getView: params?.getView ?? vi.fn(() => undefined),
     getOrLoadView: params?.getOrLoadView ?? vi.fn(async () => null),
+    getOrLoadRecordView: params?.getOrLoadRecordView ?? vi.fn(async () => null),
     commitRecordView,
     requestSync: params?.requestSync ?? vi.fn(),
   } as TransactionRecordViewStore;

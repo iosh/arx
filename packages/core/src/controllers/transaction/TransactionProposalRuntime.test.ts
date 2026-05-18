@@ -529,7 +529,7 @@ describe("TransactionProposalRuntime", () => {
     });
   });
 
-  it("clears approved proposals after durable record handoff", () => {
+  it("clears approved proposals after stored record persistence", () => {
     const store = createStore();
     const id = "77777777-7777-4777-8777-777777777777";
 

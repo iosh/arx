@@ -575,31 +575,53 @@ describe("createArxWallet", () => {
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
 
-      const handoff = await runtime.transactions.proposal.begin.beginTransactionApproval(
+      const proposal = await runtime.transactions.access.commands.createProposal(
         {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
-          payload: {
-            from: ACCOUNT_ADDRESS,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
+          account: {
+            accountKey: runtime.controllers.accounts.getActiveAccountForNamespace({
+              namespace: EIP155_NAMESPACE,
+              chainRef: EIP155_CHAIN_REF,
+            })!.accountKey,
+            accountAddress: ACCOUNT_ADDRESS,
+          },
+          request: {
+            namespace: EIP155_NAMESPACE,
+            chainRef: EIP155_CHAIN_REF,
+            payload: {
+              from: ACCOUNT_ADDRESS,
+              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              value: "0x0",
+              data: "0x",
+            },
           },
         },
         {
+          requestContext: {
+            transport: "provider",
+            origin: ORIGIN,
+            portId: PROVIDER_PORT_ID,
+            sessionId: PROVIDER_SESSION_ID,
+            requestId: "request-1",
+          },
+        },
+      );
+      const approval = await runtime.transactions.access.commands.requestApproval(proposal.transactionId, {
+        requestContext: {
           transport: "provider",
           origin: ORIGIN,
           portId: PROVIDER_PORT_ID,
           sessionId: PROVIDER_SESSION_ID,
           requestId: "request-1",
         },
-        { from: ACCOUNT_ADDRESS },
-      );
-      transactionId = handoff.transactionId;
+      });
+      transactionId = proposal.transactionId;
 
-      expect(runtime.transactions.review.getTransactionApprovalReview(handoff.transactionId)).toMatchObject({
+      expect(runtime.transactions.review.getTransactionApprovalReview(proposal.transactionId)).toMatchObject({
         prepare: { state: "preparing" },
       });
+      expect(approval.approvalId).toBeDefined();
       expect(await transactionsPort.list()).toEqual([]);
     } finally {
       await runtime.shutdown();
@@ -632,6 +654,76 @@ describe("createArxWallet", () => {
       expect(broadcastTransaction).toHaveBeenCalledTimes(0);
     } finally {
       await reopened.shutdown();
+    }
+  });
+
+  it("rejects transaction intent whose declared chain does not match the request", async () => {
+    const runtime = await createWalletRuntime({
+      accountsPort: createSeededAccountsPort(),
+      permissionsPort: createSeededPermissionsPort(),
+      transactionsPort: new MemoryTransactionsPort(),
+      modules: [
+        createWalletModuleWithNamespaceTransaction({
+          prepareTransaction: vi.fn(async () => ({ status: "ready", prepared: { ready: true } })),
+          signTransaction: vi.fn(async () => ({
+            raw: "0x1111",
+            hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+          })),
+          broadcastTransaction: vi.fn(async (ctx) => ({
+            submitted: {
+              hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+              chainId: "0x1",
+              from: ctx.from,
+            },
+          })),
+          tracking: {
+            fetchReceipt: vi.fn(async () => null),
+          },
+        }),
+      ],
+    });
+
+    try {
+      const { wallet } = runtime;
+      await wallet.session.createVault({ password: PASSWORD });
+      await wallet.session.unlock({ password: PASSWORD });
+
+      await expect(
+        runtime.transactions.access.commands.createProposal(
+          {
+            namespace: EIP155_NAMESPACE,
+            chainRef: "eip155:10",
+            account: {
+              accountKey: runtime.controllers.accounts.getActiveAccountForNamespace({
+                namespace: EIP155_NAMESPACE,
+                chainRef: EIP155_CHAIN_REF,
+              })!.accountKey,
+              accountAddress: ACCOUNT_ADDRESS,
+            },
+            request: {
+              namespace: EIP155_NAMESPACE,
+              chainRef: EIP155_CHAIN_REF,
+              payload: {
+                from: ACCOUNT_ADDRESS,
+                to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                value: "0x0",
+                data: "0x",
+              },
+            },
+          },
+          {
+            requestContext: {
+              transport: "provider",
+              origin: ORIGIN,
+              portId: PROVIDER_PORT_ID,
+              sessionId: PROVIDER_SESSION_ID,
+              requestId: "request-intent-mismatch",
+            },
+          },
+        ),
+      ).rejects.toThrow(/Transaction intent chainRef mismatch/i);
+    } finally {
+      await runtime.shutdown();
     }
   });
 

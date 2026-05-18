@@ -1,5 +1,7 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
+import type { TransactionAccess } from "../../transactions/access.js";
+import { createTransactionAccess } from "../../transactions/createTransactionAccess.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";
@@ -19,6 +21,7 @@ import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
+import type { TransactionMessenger } from "./topics.js";
 import type { ProviderTransactionApprovalCommands, TransactionRuntime } from "./types.js";
 
 type TransactionClock = () => number;
@@ -39,10 +42,10 @@ const createTransactionClock = (readSystemTime: () => number): TransactionClock 
 };
 
 export type CreateTransactionRuntimeOptions = {
-  messenger: import("./topics.js").TransactionMessenger;
+  messenger: TransactionMessenger;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress" | "toCanonicalAddressFromAccountKey">;
   accounts: Pick<AccountController, "listOwnedForNamespace">;
-  approvals: Pick<ApprovalController, "create" | "onFinished" | "listPendingIdsBySubject">;
+  approvals: Pick<ApprovalController, "create" | "createPending" | "cancel" | "onFinished" | "listPendingIdsBySubject">;
   namespaces: NamespaceTransactions;
   service: TransactionsService;
   now?: () => number;
@@ -104,6 +107,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     namespaces: options.namespaces,
     prepare,
     now,
+    logger,
   });
   const proposalDraft = new TransactionProposalDraftService({
     proposalRuntime,
@@ -148,13 +152,35 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
     now,
   });
 
+  const proposalRuntimeReader = {
+    getProposalStateSnapshot: (id: string) => proposalRuntime.getStateSnapshot(id),
+    getView: (id: string) => proposalRuntime.getView(id),
+    getReviewState: (id: string) => proposalRuntime.getReviewState(id),
+    onChanged: (handler: (transactionIds: string[]) => void) => proposalRuntime.onChanged(handler),
+  };
+
   const providerCommands: ProviderTransactionApprovalCommands = new ProviderTransactionApprovalService({
     begin: proposalBegin,
     execution,
     submission,
   });
 
+  const access: TransactionAccess = createTransactionAccess({
+    proposalBegin,
+    proposalDraft,
+    execution,
+    recovery,
+    submission,
+    proposalRuntime: proposalRuntimeReader,
+    proposalReader,
+    recordView,
+    approvalDetailInvalidations,
+    approvals: options.approvals,
+    logger,
+  });
+
   return {
+    access,
     proposal: {
       begin: proposalBegin,
       draft: proposalDraft,

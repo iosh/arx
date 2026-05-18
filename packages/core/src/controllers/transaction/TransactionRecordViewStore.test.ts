@@ -76,8 +76,10 @@ describe("TransactionRecordViewStore", () => {
       id: record.id,
       namespace: "eip155",
       chainRef,
+      fromAccountKey: record.fromAccountKey,
       status: "broadcast",
       submitted: record.submitted,
+      replacementIdentity: null,
     });
     expect(view).not.toHaveProperty("request");
     expect(view).not.toHaveProperty("prepared");

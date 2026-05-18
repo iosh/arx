@@ -34,7 +34,6 @@ describe("createProviderRequests", () => {
 
     targetHandle.attachBlockingApproval(({ approvalId }) => ({
       approvalId,
-      settled: new Promise<never>(() => {}),
     }));
 
     await expect(providerRequests.cancelScope(REQUEST_SCOPE, "session_lost")).resolves.toBe(1);
@@ -149,7 +148,6 @@ describe("createProviderRequests", () => {
 
       return {
         approvalId,
-        settled: new Promise<never>(() => {}),
       };
     });
 

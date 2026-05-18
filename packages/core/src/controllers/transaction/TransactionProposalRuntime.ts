@@ -1,5 +1,5 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { TransactionPrepared, TransactionRequest } from "../../transactions/types.js";
+import type { TransactionError, TransactionPrepared, TransactionRequest } from "../../transactions/types.js";
 import type { ApprovalFinishedEvent } from "../approval/types.js";
 import type { TransactionReviewBlocker, TransactionReviewError } from "./review/types.js";
 import { canPrepareProposal } from "./status.js";
@@ -10,6 +10,7 @@ import type {
   TransactionProposalPhaseChange,
   TransactionProposalReviewState,
   TransactionProposalSnapshot,
+  TransactionProposalStateSnapshot,
 } from "./types.js";
 
 type TransactionProposalPrepareSession = {
@@ -63,7 +64,7 @@ type TransactionProposalState = {
   prepared: TransactionPrepared | null;
   review: TransactionProposalPrepareState | null;
   phase: TransactionProposalPhase;
-  error: import("../../transactions/types.js").TransactionError | null;
+  error: TransactionError | null;
   userRejected: boolean;
   draftRevision: number;
   createdAt: number;
@@ -76,7 +77,7 @@ type TransactionProposalInit = Omit<
 > & {
   approvalId?: string | undefined;
   prepared?: TransactionPrepared | null | undefined;
-  error?: import("../../transactions/types.js").TransactionError | null | undefined;
+  error?: TransactionError | null | undefined;
   userRejected?: boolean | undefined;
   draftRevision?: number | undefined;
 };
@@ -413,6 +414,11 @@ export class TransactionProposalRuntime {
   get(id: string): TransactionProposalMeta | undefined {
     const state = this.#records.get(id);
     return state ? this.#toMeta(state) : undefined;
+  }
+
+  getStateSnapshot(id: string): TransactionProposalStateSnapshot | undefined {
+    const state = this.#records.get(id);
+    return state ? this.#toStateSnapshot(state) : undefined;
   }
 
   getView(id: string): TransactionProposalSnapshot | undefined {
@@ -817,7 +823,7 @@ export class TransactionProposalRuntime {
   failProposal(input: {
     id: string;
     updatedAt: number;
-    error: import("../../transactions/types.js").TransactionError | null;
+    error: TransactionError | null;
     userRejected: boolean;
   }): FailProposalResult {
     const current = this.#records.get(input.id);
@@ -893,6 +899,7 @@ export class TransactionProposalRuntime {
 
     return structuredClone({
       id: state.id,
+      approvalId: state.approvalId,
       namespace: state.namespace,
       chainRef: state.chainRef,
       origin: state.origin,
@@ -905,6 +912,15 @@ export class TransactionProposalRuntime {
       createdAt: state.createdAt,
       updatedAt: state.updatedAt,
     });
+  }
+
+  #toStateSnapshot(state: TransactionProposalState): TransactionProposalStateSnapshot {
+    return {
+      ...this.#toMeta(state),
+      fromAccountKey: state.fromAccountKey,
+      review: toPublicReviewState(state.review),
+      draftRevision: state.draftRevision,
+    };
   }
 
   #buildProposalView(state: TransactionProposalState): TransactionProposalSnapshot | undefined {

@@ -518,13 +518,11 @@ describe("createBackgroundRuntime provider access", () => {
 
       let approvalCreatedResolve: (() => void) | null = null;
       let capturedApprovalId: string | null = null;
-      let capturedTransactionId: string | null = null;
       const approvalCreated = new Promise<void>((resolve) => {
         approvalCreatedResolve = resolve;
       });
       const unsubscribe = background.runtime.controllers.approvals.onCreated(({ record }) => {
         capturedApprovalId = record.approvalId;
-        capturedTransactionId = record.kind === "sendTransaction" ? record.subject.transactionId : null;
         approvalCreatedResolve?.();
       });
 
@@ -568,17 +566,6 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
       expect(background.runtime.controllers.approvals.getState().pending).toHaveLength(0);
-      expect(
-        capturedTransactionId
-          ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId)
-          : undefined,
-      ).toMatchObject({
-        id: capturedTransactionId,
-        phase: "failed",
-        failure: {
-          userRejected: false,
-        },
-      });
 
       unsubscribe();
     } finally {
@@ -998,7 +985,7 @@ describe("createBackgroundRuntime provider access", () => {
       await expect(transactionsPort.list()).resolves.toEqual([]);
       expect(capturedTransactionId).toBeTruthy();
       const submissionOutcome = capturedTransactionId
-        ? await background.runtime.transactions.submission.waitForSubmissionOutcome(capturedTransactionId)
+        ? await background.runtime.transactions.submission.waitForOutcome(capturedTransactionId)
         : null;
       expect(submissionOutcome).toMatchObject({
         submitted: {

@@ -1,8 +1,20 @@
+import type {
+  BeginTransactionApprovalOptions,
+  ProviderTransactionSubmission,
+  TransactionApprovalReviewReader,
+  TransactionProposalReader,
+  TransactionRecordReader,
+} from "../controllers/transaction/types.js";
 import type { RequestContext } from "../rpc/requestContext.js";
 import type { TransactionIntent } from "./intent/index.js";
 import type { TransactionProposal, TransactionProposalView } from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
-import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "./types.js";
+import type {
+  NamespaceTransactionDraftEdit,
+  TransactionError,
+  TransactionRequest,
+  TransactionSubmitted,
+} from "./types.js";
 
 export type TransactionRequestScope = {
   /** Caller-owned lifetime that can cancel approval before broadcast. */
@@ -103,4 +115,22 @@ export type TransactionAccess = {
   submission: TransactionSubmissionTracker;
   recovery: TransactionRecovery;
   events: TransactionEvents;
+};
+
+export type ProviderTransactionSubmissionCommands = {
+  beginTransactionApproval(
+    request: TransactionRequest,
+    requestContext: RequestContext,
+    options: BeginTransactionApprovalOptions,
+  ): Promise<ProviderTransactionSubmission>;
+};
+
+export type TransactionPublicRuntime = {
+  access: TransactionAccess;
+  provider: ProviderTransactionSubmissionCommands;
+  submission: TransactionSubmissionTracker;
+  recovery: TransactionRecovery;
+  review: TransactionApprovalReviewReader;
+  proposals: TransactionProposalReader;
+  records: TransactionRecordReader;
 };

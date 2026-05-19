@@ -1,4 +1,5 @@
 export type {
+  ProviderTransactionSubmissionCommands,
   TransactionAccess,
   TransactionApprovalFailureReason,
   TransactionApprovalResult,
@@ -6,6 +7,7 @@ export type {
   TransactionCreateProposalOptions,
   TransactionCreateProposalResult,
   TransactionEvents,
+  TransactionPublicRuntime,
   TransactionQueries,
   TransactionRecovery,
   TransactionRequestApprovalOptions,

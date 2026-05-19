@@ -14,7 +14,7 @@ import type {
   TransactionRequest,
   TransactionSubmitted,
 } from "../../transactions/types.js";
-import type { ApprovalKind, ApprovalKinds } from "../approval/types.js";
+import type { ApprovalKind } from "../approval/types.js";
 import type {
   SendTransactionApprovalReview,
   TransactionReviewBlocker,
@@ -62,7 +62,7 @@ export type TransactionApprovalReservation = {
 
 export type TransactionRequestBinding = {
   abortSignal?: AbortSignal | null;
-  attachBlockingApproval<K extends ApprovalKind>(
+  attachBlockingApproval<_K extends ApprovalKind>(
     createApproval: (reservation: TransactionApprovalReservation) => { approvalId: string },
     reservation?: Partial<TransactionApprovalReservation>,
   ): { approvalId: string };

@@ -1,6 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import { requestApproval } from "../../approvals/creation.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountAddress, AccountController, OwnedAccountView } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";

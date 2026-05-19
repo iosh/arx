@@ -574,16 +574,20 @@ describe("createArxWallet", () => {
       const { wallet } = runtime;
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
+      const activeAccount = runtime.controllers.accounts.getActiveAccountForNamespace({
+        namespace: EIP155_NAMESPACE,
+        chainRef: EIP155_CHAIN_REF,
+      });
+      if (!activeAccount) {
+        throw new Error("Expected an active account for the seeded EIP-155 namespace.");
+      }
 
       const proposal = await runtime.transactions.access.commands.createProposal(
         {
           namespace: EIP155_NAMESPACE,
           chainRef: EIP155_CHAIN_REF,
           account: {
-            accountKey: runtime.controllers.accounts.getActiveAccountForNamespace({
-              namespace: EIP155_NAMESPACE,
-              chainRef: EIP155_CHAIN_REF,
-            })!.accountKey,
+            accountKey: activeAccount.accountKey,
             accountAddress: ACCOUNT_ADDRESS,
           },
           request: {
@@ -687,6 +691,13 @@ describe("createArxWallet", () => {
       const { wallet } = runtime;
       await wallet.session.createVault({ password: PASSWORD });
       await wallet.session.unlock({ password: PASSWORD });
+      const activeAccount = runtime.controllers.accounts.getActiveAccountForNamespace({
+        namespace: EIP155_NAMESPACE,
+        chainRef: EIP155_CHAIN_REF,
+      });
+      if (!activeAccount) {
+        throw new Error("Expected an active account for the seeded EIP-155 namespace.");
+      }
 
       await expect(
         runtime.transactions.access.commands.createProposal(
@@ -694,10 +705,7 @@ describe("createArxWallet", () => {
             namespace: EIP155_NAMESPACE,
             chainRef: "eip155:10",
             account: {
-              accountKey: runtime.controllers.accounts.getActiveAccountForNamespace({
-                namespace: EIP155_NAMESPACE,
-                chainRef: EIP155_CHAIN_REF,
-              })!.accountKey,
+              accountKey: activeAccount.accountKey,
               accountAddress: ACCOUNT_ADDRESS,
             },
             request: {

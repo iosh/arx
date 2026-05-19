@@ -142,7 +142,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       statusEvents.push(payload);
     });
     try {
-      const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -156,7 +156,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      const submission = await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+      const submission = await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -264,7 +264,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
       const submissionIds = await Promise.all(
         fromAddresses.map(async (from, index) => {
-          const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+          const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
             {
               namespace: chain.namespace,
               chainRef: chain.chainRef,
@@ -278,7 +278,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
             makeRequestContext("https://dapp.example"),
             { from },
           );
-          await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+          await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
           return handoff.transactionId;
         }),
       );
@@ -355,7 +355,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -369,7 +369,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
@@ -468,7 +468,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
-      const first = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const first = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -482,10 +482,10 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(first.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(first.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
-      const second = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const second = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -500,7 +500,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(second.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(second.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(2));
 
       await vi.advanceTimersByTimeAsync(TEST_RECEIPT_POLL_INTERVAL);
@@ -587,7 +587,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -601,7 +601,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
@@ -669,7 +669,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     try {
       await expect(
-        context.runtime.transactions.providerCommands.beginTransactionApproval(
+        context.runtime.transactions.provider.beginTransactionApproval(
           {
             namespace: chain.namespace,
             chainRef: chain.chainRef,
@@ -736,7 +736,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -750,7 +750,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
       await flushAsync();
 
@@ -824,7 +824,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
 
     try {
-      const handoff = await context.runtime.transactions.providerCommands.beginTransactionApproval(
+      const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
         {
           namespace: chain.namespace,
           chainRef: chain.chainRef,
@@ -838,7 +838,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         makeRequestContext("https://dapp.example"),
         { from: fromAddress },
       );
-      await context.runtime.transactions.submission.waitForSubmissionOutcome(handoff.transactionId);
+      await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
       await vi.waitFor(() => expect(prepareTransaction).toHaveBeenCalledTimes(1));
       await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));

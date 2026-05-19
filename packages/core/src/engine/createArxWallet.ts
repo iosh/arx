@@ -1,5 +1,4 @@
 import { createApprovalExecutor, createApprovalFlowRegistry } from "../approvals/index.js";
-import type { TransactionRuntime } from "../controllers/transaction/types.js";
 import { createSurfaceErrorEncoder, type SurfaceErrorEncoder } from "../errors/index.js";
 import type { ViolationMode } from "../messenger/Messenger.js";
 import {
@@ -31,6 +30,7 @@ import { createProviderRuntimeAccess } from "../runtime/provider/createProviderR
 import { createProviderRequests } from "../runtime/provider/providerRequests.js";
 import type { ProviderRuntimeAccess } from "../runtime/provider/types.js";
 import { ATTENTION_STATE_CHANGED } from "../services/runtime/attention/index.js";
+import type { TransactionPublicRuntime } from "../transactions/index.js";
 import type { UiError } from "../ui/protocol/envelopes.js";
 import type { ApprovalDetail } from "../ui/protocol/models/approvals.js";
 import { createUiContract, createUiRuntimeAccess } from "../ui/server/access.js";
@@ -84,7 +84,7 @@ type WalletRuntimeServices = Readonly<{
 type ArxWalletRuntimeCore = Readonly<{
   bus: RuntimeBootstrapScope["bus"];
   controllers: HandlerControllers;
-  transactions: TransactionRuntime;
+  transactions: TransactionPublicRuntime;
   services: WalletRuntimeServices;
   surfaceErrors: SurfaceErrorEncoder;
 }>;
@@ -113,7 +113,7 @@ type ArxWalletRuntime = Readonly<{
   shutdown(): Promise<void>;
   bus: RuntimeBootstrapScope["bus"];
   controllers: HandlerControllers;
-  transactions: TransactionRuntime;
+  transactions: TransactionPublicRuntime;
   services: WalletRuntimeServices;
   lifecycle: RuntimeLifecycle;
   rpc: Readonly<{
@@ -538,10 +538,21 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     keyringExport: sessionScope.keyringExport,
     keyring: sessionScope.keyringService,
   };
+  const publicTransactions: TransactionPublicRuntime = {
+    access: runtimeSupportScope.transactionRuntime.access,
+    provider: runtimeSupportScope.transactionRuntime.providerCommands,
+    submission: runtimeSupportScope.transactionRuntime.access.submission,
+    recovery: {
+      resume: () => runtimeSupportScope.transactionRuntime.recovery.resumeTransactions(),
+    },
+    review: runtimeSupportScope.transactionRuntime.review,
+    proposals: runtimeSupportScope.transactionRuntime.proposals,
+    records: runtimeSupportScope.transactionRuntime.records,
+  };
   const runtimeCore: ArxWalletRuntimeCore = {
     bus: bootstrapScope.bus,
     controllers,
-    transactions: runtimeSupportScope.transactionRuntime,
+    transactions: publicTransactions,
     services,
     surfaceErrors: surfaceErrorEncoder,
   };
@@ -605,7 +616,7 @@ export const assembleArxWalletRuntime = (input: CreateArxWalletRuntimeInput): Ar
     shutdown,
     bus: bootstrapScope.bus,
     controllers,
-    transactions: runtimeSupportScope.transactionRuntime,
+    transactions: publicTransactions,
     services,
     lifecycle,
     rpc: {

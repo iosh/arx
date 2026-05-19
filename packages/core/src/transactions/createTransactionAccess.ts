@@ -278,8 +278,6 @@ const bindApprovalAbort = (params: {
 };
 
 export const createTransactionAccess = (deps: CreateTransactionAccessDeps): TransactionAccess => {
-  const logger = deps.logger ?? (() => {});
-
   return {
     commands: {
       async createProposal(intent, options): Promise<TransactionCreateProposalResult> {

@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import type { JsonRpcParams, JsonRpcRequest } from "@metamask/utils";
-import type { ApprovalKind, ApprovalTerminalReason } from "../../controllers/approval/types.js";
+import type { ApprovalTerminalReason } from "../../controllers/approval/types.js";
 
 export type ProviderRuntimeRequestScope = {
   transport: "provider";

@@ -2,7 +2,11 @@ import type { TransactionError } from "../../transactions/types.js";
 import type { TransactionExecutionAttemptPhase, TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import type { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { TransactionApprovalExecutor, TransactionApprovalResult } from "./types.js";
+import type {
+  TransactionApprovalExecutor,
+  TransactionApprovalResult,
+  TransactionProposalTerminationReason,
+} from "./types.js";
 
 type TransactionExecutionServiceDeps = {
   proposalApprovals: Pick<TransactionProposalApprovalService, "approvePendingProposal">;
@@ -45,19 +49,23 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
     return result;
   }
 
-  async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
-    this.#removeFromQueue(id);
-    const attempt = this.#attempts.get(id) ?? null;
+  async rejectTransaction(input: {
+    id: string;
+    reason?: Error | TransactionError;
+    terminationReason: TransactionProposalTerminationReason;
+  }): Promise<void> {
+    this.#removeFromQueue(input.id);
+    const attempt = this.#attempts.get(input.id) ?? null;
     if (attempt) {
       if (attempt.phase === "signing") {
-        attempt.signAbortController?.abort(reason);
+        attempt.signAbortController?.abort(input.reason);
       }
       if (this.#isIrreversibleAttempt(attempt.phase)) {
         return;
       }
     }
 
-    await this.#pipeline.rejectTransaction(id, reason);
+    await this.#pipeline.rejectTransaction(input);
   }
 
   async executeApprovedTransaction(id: string): Promise<void> {
@@ -128,7 +136,7 @@ export class TransactionExecutionService implements TransactionApprovalExecutor 
 
   #canContinueAttempt(id: string): boolean {
     const proposal = this.#proposalRuntime.peek(id);
-    return proposal?.phase === "approved";
+    return proposal?.status === "approved";
   }
 
   #setAttemptPhase(

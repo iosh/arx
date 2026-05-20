@@ -21,7 +21,7 @@ describe("TransactionProposalDraftService", () => {
       }
       proposalRuntime.restartPrepare({
         id: REQUEST_ID,
-        draftRevision: proposal.draftRevision,
+        requestRevision: proposal.prepare.requestRevision,
         updatedAt: 1,
       });
     });
@@ -56,7 +56,7 @@ describe("TransactionProposalDraftService", () => {
           value: "0x0",
         },
       },
-      status: "pending",
+      status: "active",
     });
 
     await service.applyDraftEdit({

@@ -14,22 +14,27 @@ import type {
   TransactionRequest,
   TransactionSubmitted,
 } from "../../transactions/types.js";
-import type { ApprovalKind } from "../approval/types.js";
 import type {
   SendTransactionApprovalReview,
   TransactionReviewBlocker,
   TransactionReviewError,
 } from "./review/types.js";
 
-export type TransactionProposalPhase = "pending" | "approved" | "failed";
 export type TransactionRecordStatus = StorageTransactionStatus;
+export type TransactionProposalStatus = "active" | "approved" | "terminated";
+export type TransactionProposalPrepareStatus = "preparing" | "ready" | "blocked" | "failed" | "invalidated";
+export type TransactionProposalTerminationReason =
+  | "user_rejected"
+  | "approval_cancelled"
+  | "execution_failed"
+  | "internal_error";
 
-export type TransactionProposalPhaseChange = {
-  kind: "proposal_phase";
+export type TransactionProposalStatusChange = {
+  kind: "proposal_status";
   id: string;
-  previousPhase: TransactionProposalPhase;
-  nextPhase: TransactionProposalPhase;
-  proposal: TransactionProposalSnapshot;
+  previousStatus: TransactionProposalStatus;
+  nextStatus: TransactionProposalStatus;
+  proposal: ControllerTransactionProposalSnapshot;
 };
 
 export type TransactionRecordStatusChange = {
@@ -40,7 +45,7 @@ export type TransactionRecordStatusChange = {
   record: TransactionRecordView;
 };
 
-export type TransactionStatusChange = TransactionProposalPhaseChange | TransactionRecordStatusChange;
+export type TransactionStatusChange = TransactionProposalStatusChange | TransactionRecordStatusChange;
 
 export type ApprovalDetailInvalidation = {
   approvalIds: string[];
@@ -62,10 +67,10 @@ export type TransactionApprovalReservation = {
 
 export type TransactionRequestBinding = {
   abortSignal?: AbortSignal | null;
-  attachBlockingApproval<_K extends ApprovalKind>(
-    createApproval: (reservation: TransactionApprovalReservation) => { approvalId: string },
+  attachBlockingApproval<T>(
+    createApproval: (reservation: TransactionApprovalReservation) => T,
     reservation?: Partial<TransactionApprovalReservation>,
-  ): { approvalId: string };
+  ): T & TransactionApprovalReservation;
 };
 
 type TransactionMetaBase = {
@@ -73,7 +78,7 @@ type TransactionMetaBase = {
   namespace: string;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
+  from: AccountAddress;
   createdAt: number;
   updatedAt: number;
 };
@@ -82,18 +87,44 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   approvalId: string;
   request: TransactionRequest;
   prepared: TransactionPrepared | null;
-  status: TransactionProposalPhase;
+  status: TransactionProposalStatus;
+  termination?: TransactionProposalTerminationSnapshot | undefined;
   submitted?: never;
   receipt?: never;
   replacedId?: never;
+};
+
+export type TransactionProposalTerminationSnapshot = {
+  reason: TransactionProposalTerminationReason;
   error: TransactionError | null;
   userRejected: boolean;
 };
 
-export type TransactionProposalStateSnapshot = TransactionProposalMeta & {
+export type TransactionProposalPrepareSnapshot = {
+  requestRevision: number;
+  sessionToken: string;
+  status: TransactionProposalPrepareStatus;
+  prepared: TransactionPrepared | null;
+  reviewSnapshot: TransactionPrepared | null;
+  blocker?: TransactionReviewBlocker | undefined;
+  error?: TransactionReviewError | undefined;
+  invalidatedBy?: string | undefined;
+};
+
+export type TransactionProposalStateSnapshot = {
+  id: string;
+  approvalId: string;
+  namespace: string;
+  chainRef: ChainRef;
+  origin: string;
+  from: AccountAddress;
+  request: TransactionRequest;
   fromAccountKey: string;
-  review: TransactionProposalReviewState | null;
-  draftRevision: number;
+  status: TransactionProposalStatus;
+  termination?: TransactionProposalTerminationSnapshot | undefined;
+  createdAt: number;
+  updatedAt: number;
+  prepare: TransactionProposalPrepareSnapshot;
 };
 
 export type TransactionReviewRuntimeStatus = "preparing" | "ready" | "blocked" | "failed" | "invalidated";
@@ -108,27 +139,24 @@ export type TransactionProposalReviewState = {
   invalidatedBy?: string | undefined;
 };
 
-export type TransactionProposalSnapshot = {
+export type ControllerTransactionProposalSnapshot = {
   kind: "proposal";
   id: string;
   approvalId: string;
   namespace: string;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
-  currentRequest: TransactionRequest;
+  from: AccountAddress;
+  request: TransactionRequest;
   prepared: TransactionPrepared | null;
-  phase: TransactionProposalPhase;
-  failure: {
-    error: TransactionError | null;
-    userRejected: boolean;
-  } | null;
+  status: TransactionProposalStatus;
+  termination?: TransactionProposalTerminationSnapshot | undefined;
   createdAt: number;
   updatedAt: number;
 };
 
-export type TransactionProposalView = TransactionProposalSnapshot & {
-  review: SendTransactionApprovalReview;
+export type ControllerTransactionProposalView = ControllerTransactionProposalSnapshot & {
+  review?: SendTransactionApprovalReview | undefined;
 };
 
 export type TransactionRecordView = {
@@ -175,7 +203,7 @@ export type TransactionApprovalResult =
   | {
       status: "failed";
       reason: TransactionApprovalFailureReason;
-      transaction?: TransactionProposalSnapshot | undefined;
+      transaction?: ControllerTransactionProposalSnapshot | undefined;
       message: string;
       data?: unknown;
     };
@@ -199,6 +227,7 @@ export type TransactionSubmissionPersistenceFailure = {
 export type TransactionSubmissionFailure = {
   transactionId: string;
   error: TransactionError | null;
+  terminationReason: TransactionProposalTerminationReason;
   userRejected: boolean;
   message: string;
 };
@@ -276,7 +305,11 @@ export type TransactionSubmissionTracker = {
 
 export type TransactionApprovalExecutor = {
   approveTransaction(id: string): Promise<TransactionApprovalResult>;
-  rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void>;
+  rejectTransaction(input: {
+    id: string;
+    reason?: Error | TransactionError;
+    terminationReason: TransactionProposalTerminationReason;
+  }): Promise<void>;
 };
 
 export type TransactionRecovery = {
@@ -288,12 +321,12 @@ export type ApprovalDetailInvalidationEvents = {
 };
 
 export type TransactionProposalReader = {
-  getProposalView(id: string): TransactionProposalView | undefined;
+  getProposalView(id: string): ControllerTransactionProposalView | undefined;
 };
 
 export type TransactionProposalRuntimeReader = {
   getProposalStateSnapshot(id: string): TransactionProposalStateSnapshot | undefined;
-  getView(id: string): TransactionProposalSnapshot | undefined;
+  getView(id: string): ControllerTransactionProposalSnapshot | undefined;
   getReviewState(id: string): TransactionProposalReviewState | null;
   onChanged(handler: (transactionIds: string[]) => void): () => void;
 };

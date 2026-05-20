@@ -7,8 +7,8 @@ import type {
   TransactionApprovalExecutor,
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
+  TransactionProposalMeta,
   TransactionProposalReader,
-  TransactionProposalReviewState,
   TransactionProposalRuntimeReader,
   TransactionRecordReader,
   TransactionRecovery,
@@ -22,16 +22,9 @@ import type {
   TransactionSubmissionResolution,
 } from "./access.js";
 import type { TransactionIntent } from "./intent/index.js";
-import type {
-  TransactionApprovalPreview,
-  TransactionProposal,
-  TransactionProposalLifecycle,
-  TransactionProposalPrepare,
-  TransactionProposalTerminationReason,
-  TransactionProposalView,
-} from "./proposal/index.js";
+import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
-import type { TransactionError, TransactionPrepared, TransactionRequest } from "./types.js";
+import type { TransactionRequest } from "./types.js";
 
 const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
 
@@ -76,89 +69,6 @@ const assertIntentMatchesRequest = (intent: TransactionIntent): void => {
   }
 };
 
-const requireProposalAccountAddress = (input: { transactionId: string; accountAddress: string | null }): string => {
-  if (input.accountAddress) {
-    return input.accountAddress;
-  }
-
-  throw new Error(`Transaction proposal ${input.transactionId} is missing a canonical account address.`);
-};
-
-const mapTerminationReason = (input: {
-  userRejected: boolean;
-  error: { name?: string | undefined } | null;
-}): TransactionProposalTerminationReason => {
-  if (input.userRejected) {
-    return "user_rejected";
-  }
-  if (input.error?.name === "TransportDisconnectedError") {
-    return "approval_cancelled";
-  }
-  return "execution_failed";
-};
-
-const mapLifecycle = (input: {
-  phase: "pending" | "approved" | "failed";
-  userRejected: boolean;
-  error: TransactionError | null;
-  createdAt: number;
-  updatedAt: number;
-}): TransactionProposalLifecycle => {
-  if (input.phase === "pending") {
-    return {
-      status: "active",
-      createdAt: input.createdAt,
-      updatedAt: input.updatedAt,
-    };
-  }
-
-  if (input.phase === "approved") {
-    return {
-      status: "approved",
-      createdAt: input.createdAt,
-      updatedAt: input.updatedAt,
-    };
-  }
-
-  return {
-    status: "terminated",
-    terminationReason: mapTerminationReason({
-      userRejected: input.userRejected,
-      error: input.error,
-    }),
-    error: input.error,
-    createdAt: input.createdAt,
-    updatedAt: input.updatedAt,
-  };
-};
-
-const mapPrepare = (input: {
-  draftRevision: number;
-  prepared: TransactionPrepared | null;
-  review: TransactionProposalReviewState | null;
-}): TransactionProposalPrepare => {
-  if (!input.review) {
-    return {
-      requestRevision: input.draftRevision,
-      sessionToken: null,
-      status: "idle",
-      prepared: input.prepared,
-      reviewSnapshot: null,
-    };
-  }
-
-  return {
-    requestRevision: input.draftRevision,
-    sessionToken: input.review.sessionToken,
-    status: input.review.status,
-    prepared: input.prepared,
-    reviewSnapshot: input.review.reviewPreparedSnapshot,
-    ...(input.review.blocker ? { blocker: input.review.blocker } : {}),
-    ...(input.review.error ? { error: input.review.error } : {}),
-    ...(input.review.invalidatedBy ? { invalidatedBy: input.review.invalidatedBy } : {}),
-  };
-};
-
 const mapPreview = (input: SendTransactionApprovalReview): TransactionApprovalPreview => ({
   updatedAt: input.updatedAt,
   namespaceReview: input.namespaceReview,
@@ -184,36 +94,58 @@ const mapProposal = (deps: {
       chainRef: runtimeView.chainRef,
       account: {
         accountKey: runtimeView.fromAccountKey,
-        accountAddress: requireProposalAccountAddress({
-          transactionId: runtimeView.id,
-          accountAddress: runtimeView.from,
-        }),
+        accountAddress: runtimeView.from,
         ...(requestedAddress ? { requestedAddress } : {}),
       },
       request: runtimeView.request,
     },
-    lifecycle: mapLifecycle({
-      phase: runtimeView.status,
-      userRejected: runtimeView.userRejected,
-      error: runtimeView.error,
-      createdAt: runtimeView.createdAt,
-      updatedAt: runtimeView.updatedAt,
-    }),
-    prepare: mapPrepare({
-      draftRevision: runtimeView.draftRevision,
-      prepared: runtimeView.prepared,
-      review: runtimeView.review,
-    }),
+    status: runtimeView.status,
+    ...(runtimeView.termination ? { termination: structuredClone(runtimeView.termination) } : {}),
+    createdAt: runtimeView.createdAt,
+    updatedAt: runtimeView.updatedAt,
+    prepare: {
+      requestRevision: runtimeView.prepare.requestRevision,
+      sessionToken: runtimeView.prepare.sessionToken,
+      status: runtimeView.prepare.status,
+      prepared: structuredClone(runtimeView.prepare.prepared),
+      reviewSnapshot: structuredClone(runtimeView.prepare.reviewSnapshot),
+      ...(runtimeView.prepare.blocker ? { blocker: structuredClone(runtimeView.prepare.blocker) } : {}),
+      ...(runtimeView.prepare.error ? { error: structuredClone(runtimeView.prepare.error) } : {}),
+      ...(runtimeView.prepare.invalidatedBy ? { invalidatedBy: runtimeView.prepare.invalidatedBy } : {}),
+    },
+  };
+};
+
+const toControllerProposalMeta = (
+  runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>,
+): TransactionProposalMeta => {
+  return {
+    id: runtimeView.id,
+    approvalId: runtimeView.approvalId,
+    namespace: runtimeView.namespace,
+    chainRef: runtimeView.chainRef,
+    origin: runtimeView.origin,
+    from: runtimeView.from,
+    request: structuredClone(runtimeView.request),
+    prepared: structuredClone(runtimeView.prepare.prepared),
+    status: runtimeView.status,
+    ...(runtimeView.termination ? { termination: structuredClone(runtimeView.termination) } : {}),
+    createdAt: runtimeView.createdAt,
+    updatedAt: runtimeView.updatedAt,
   };
 };
 
 const mapProposalView = (deps: {
   runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>;
   proposalView: NonNullable<ReturnType<TransactionProposalReader["getProposalView"]>>;
-}): TransactionProposalView => ({
-  ...mapProposal({ runtimeView: deps.runtimeView }),
-  preview: mapPreview(deps.proposalView.review),
-});
+}): TransactionProposalView => {
+  const preview = deps.proposalView.review ? mapPreview(deps.proposalView.review) : undefined;
+
+  return {
+    ...mapProposal({ runtimeView: deps.runtimeView }),
+    ...(preview ? { preview } : {}),
+  };
+};
 
 const mapRecordView = (record: ControllerTransactionRecordView): TransactionRecordView => ({
   id: record.id,
@@ -256,23 +188,27 @@ const bindApprovalAbort = (params: {
       approvalId: params.approvalId,
       reason: "session_lost",
     });
-    void params.execution.rejectTransaction(params.transactionId, {
-      name: "TransportDisconnectedError",
-      message: "Transport disconnected.",
-      code: 4900,
+    void params.execution.rejectTransaction({
+      id: params.transactionId,
+      terminationReason: "approval_cancelled",
+      reason: {
+        name: "TransportDisconnectedError",
+        message: "Transport disconnected.",
+        code: 4900,
+      },
     });
   };
+
+  if (params.abortSignal.aborted) {
+    cancelBeforeBroadcast();
+    return;
+  }
 
   unsubscribeFinished = params.approvals.onFinished((event) => {
     if (event.approvalId === params.approvalId) {
       cleanUp();
     }
   });
-
-  if (params.abortSignal.aborted) {
-    cancelBeforeBroadcast();
-    return;
-  }
 
   params.abortSignal.addEventListener("abort", cancelBeforeBroadcast, { once: true });
 };
@@ -293,15 +229,19 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
         };
       },
       async requestApproval(transactionId, options): Promise<TransactionRequestApprovalResult> {
-        const proposalMeta = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
-        if (!proposalMeta) {
+        const runtimeView = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
+        if (!runtimeView) {
           throw new Error(`Transaction proposal ${transactionId} not found.`);
         }
-        if (proposalMeta.status !== "pending") {
+        if (runtimeView.status !== "active") {
           throw new Error(`Transaction proposal ${transactionId} is no longer pending approval.`);
         }
 
-        const approvalId = deps.proposalBegin.requestApproval(proposalMeta, options.requestContext, null);
+        const approvalId = deps.proposalBegin.requestApproval(
+          toControllerProposalMeta(runtimeView),
+          options.requestContext,
+          null,
+        );
         if (options.requestScope?.abortSignal) {
           bindApprovalAbort({
             transactionId,
@@ -346,8 +286,12 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
           ...(result.data !== undefined ? { data: result.data } : {}),
         };
       },
-      async reject(transactionId, reason) {
-        await deps.execution.rejectTransaction(transactionId, reason);
+      async reject(input) {
+        await deps.execution.rejectTransaction({
+          id: input.transactionId,
+          ...(input.reason ? { reason: input.reason } : {}),
+          terminationReason: input.terminationReason,
+        });
       },
     },
     queries: {

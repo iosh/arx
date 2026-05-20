@@ -83,8 +83,8 @@ const toStatusTimeline = (events: TransactionStatusChange[], id: string) =>
   events
     .filter((event) => event.id === id)
     .map((event) =>
-      event.kind === "proposal_phase"
-        ? [`proposal:${event.previousPhase}`, `proposal:${event.nextPhase}`]
+      event.kind === "proposal_status"
+        ? [`proposal:${event.previousStatus}`, `proposal:${event.nextStatus}`]
         : [`record:${event.previousStatus ?? "created"}`, `record:${event.nextStatus}`],
     );
 
@@ -176,7 +176,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const timeline = toStatusTimeline(statusEvents, handoff.transactionId);
 
       expect(timeline).toEqual([
-        ["proposal:pending", "proposal:approved"],
+        ["proposal:active", "proposal:approved"],
         ["record:created", "record:broadcast"],
         ["record:broadcast", "record:confirmed"],
       ]);
@@ -298,7 +298,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
         const timeline = toStatusTimeline(statusEvents, id);
 
         expect(timeline).toEqual([
-          ["proposal:pending", "proposal:approved"],
+          ["proposal:active", "proposal:approved"],
           ["record:created", "record:broadcast"],
         ]);
       });

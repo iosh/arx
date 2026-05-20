@@ -12,7 +12,7 @@ describe("TransactionPrepare", () => {
   it("deduplicates concurrent prepare requests for the same draft revision", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     let release: (() => void) | null = null;
@@ -47,7 +47,7 @@ describe("TransactionPrepare", () => {
   it("reruns prepare when the draft revision changes while a prepare was in flight", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     let run = 0;
@@ -102,12 +102,12 @@ describe("TransactionPrepare", () => {
   it("restarts the review session before rerunning prepare", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     const initial = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (initial.status !== "opened") {
@@ -131,7 +131,7 @@ describe("TransactionPrepare", () => {
   it("writes ready prepare results back into review and proposal state", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     const prepare = new TransactionPrepare({
@@ -161,7 +161,7 @@ describe("TransactionPrepare", () => {
   it("records failed prepare outcomes without leaving prepared execution params behind", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     const prepare = new TransactionPrepare({

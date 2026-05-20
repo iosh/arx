@@ -38,12 +38,12 @@ describe("createApprovalDetailInvalidations", () => {
     const onFinished = vi.fn<(event: unknown) => void>();
 
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
       prepared: { gas: "0x5208" },
     });
     const review = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (review.status !== "opened") {
@@ -51,7 +51,7 @@ describe("createApprovalDetailInvalidations", () => {
     }
     proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: review.review.sessionToken,
       updatedAt: 2,
       executionPrepared: { gas: "0x5208" },
@@ -106,7 +106,7 @@ describe("createApprovalDetailInvalidations", () => {
     });
 
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
 
     await Promise.resolve();

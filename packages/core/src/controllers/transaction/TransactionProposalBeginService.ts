@@ -165,11 +165,9 @@ export class TransactionProposalBeginService {
     try {
       if (requestBinding) {
         return requestBinding.attachBlockingApproval(
-          ({ approvalId: reservedApprovalId, createdAt }) => {
-            this.#approvals.createPending(createApprovalParams(reservedApprovalId, createdAt), requestContext);
-            return {
-              approvalId: reservedApprovalId,
-            };
+          ({ approvalId, createdAt }) => {
+            this.#approvals.createPending(createApprovalParams(approvalId, createdAt), requestContext);
+            return {};
           },
           {
             approvalId: proposalMeta.approvalId,
@@ -189,7 +187,7 @@ export class TransactionProposalBeginService {
         id: proposalMeta.id,
         updatedAt: this.#now(),
         error: coerceTransactionError(approvalError) ?? null,
-        userRejected: false,
+        terminationReason: "internal_error",
       });
       if (failed.status !== "failed") {
         throw new Error(`Failed to mark proposal ${proposalMeta.id} as failed after approval creation error.`);

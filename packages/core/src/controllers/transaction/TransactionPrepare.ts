@@ -46,7 +46,6 @@ type TransactionPrepareState = Pick<
   | "settlePrepareReady"
   | "settlePrepareBlocked"
   | "settlePrepareFailed"
-  | "clearPrepareState"
 >;
 
 type TransactionPrepareDeps = {
@@ -61,7 +60,7 @@ type TransactionPrepareDeps = {
 type PrepareAttempt = {
   id: string;
   meta: NonNullable<ReturnType<TransactionProposalRuntime["get"]>>;
-  expectedDraftRevision: number;
+  expectedRequestRevision: number;
   sessionToken: string;
 };
 
@@ -92,7 +91,7 @@ export class TransactionPrepare {
   #logger: (message: string, data?: unknown) => void;
   #namespaceProposalPrepareTimeoutMs: number;
 
-  #prepareInFlight: Map<string, { draftRevision: number; promise: Promise<void> }> = new Map();
+  #prepareInFlight: Map<string, { requestRevision: number; promise: Promise<void> }> = new Map();
   #prepareConcurrencyLimit: number;
   #prepareConcurrencyInUse = 0;
   #prepareConcurrencyWaiters: Array<() => void> = [];
@@ -115,7 +114,7 @@ export class TransactionPrepare {
 
     this.#proposalRuntime.getOrStartPrepare({
       id,
-      draftRevision: proposal.draftRevision,
+      requestRevision: proposal.prepare.requestRevision,
       updatedAt: this.#now(),
     });
     this.#queuePrepareInBackground(id);
@@ -129,17 +128,10 @@ export class TransactionPrepare {
 
     this.#proposalRuntime.restartPrepare({
       id,
-      draftRevision: proposal.draftRevision,
+      requestRevision: proposal.prepare.requestRevision,
       updatedAt: this.#now(),
     });
     this.#queuePrepareInBackground(id);
-  }
-
-  discard(id: string) {
-    this.#proposalRuntime.clearPrepareState({
-      id,
-      updatedAt: this.#now(),
-    });
   }
 
   async prepareCurrentDraft(id: string): Promise<void> {
@@ -168,9 +160,9 @@ export class TransactionPrepare {
   async #runPrepareUntilCurrent(id: string): Promise<void> {
     while (true) {
       const existing = this.#prepareInFlight.get(id);
-      let settledDraftRevision: number;
+      let settledRequestRevision: number;
       if (existing) {
-        settledDraftRevision = existing.draftRevision;
+        settledRequestRevision = existing.requestRevision;
         await existing.promise;
       } else {
         const initial = this.#proposalRuntime.peek(id);
@@ -180,7 +172,7 @@ export class TransactionPrepare {
         if (this.#hasCurrentPrepared(id) || !canPrepareProposal(initial)) {
           return;
         }
-        settledDraftRevision = initial.draftRevision;
+        settledRequestRevision = initial.prepare.requestRevision;
 
         const run = this.#withPrepareSlot(async () => {
           await this.prepareCurrentDraft(id);
@@ -192,7 +184,7 @@ export class TransactionPrepare {
           });
 
         this.#prepareInFlight.set(id, {
-          draftRevision: initial.draftRevision,
+          requestRevision: initial.prepare.requestRevision,
           promise: tracked,
         });
         await tracked;
@@ -202,7 +194,7 @@ export class TransactionPrepare {
       if (!latest || this.#hasCurrentPrepared(id) || !canPrepareProposal(latest)) {
         return;
       }
-      if (latest.draftRevision === settledDraftRevision) {
+      if (latest.prepare.requestRevision === settledRequestRevision) {
         return;
       }
     }
@@ -214,7 +206,7 @@ export class TransactionPrepare {
 
   #startPrepareAttempt(id: string): PrepareAttempt | null {
     const state = this.#proposalRuntime.peek(id);
-    if (!state || !canPrepareProposal(state) || state.prepared !== null) {
+    if (!state || !canPrepareProposal(state) || state.prepare.prepared !== null) {
       return null;
     }
 
@@ -225,7 +217,7 @@ export class TransactionPrepare {
 
     const session = this.#proposalRuntime.getOrStartPrepare({
       id,
-      draftRevision: state.draftRevision,
+      requestRevision: state.prepare.requestRevision,
       updatedAt: this.#now(),
     });
     if (session.status !== "opened") {
@@ -235,7 +227,7 @@ export class TransactionPrepare {
     return {
       id,
       meta,
-      expectedDraftRevision: state.draftRevision,
+      expectedRequestRevision: state.prepare.requestRevision,
       sessionToken: session.review.sessionToken,
     };
   }
@@ -302,7 +294,11 @@ export class TransactionPrepare {
 
   #applyPrepareOutcome(attempt: PrepareAttempt, outcome: PrepareOutcome): void {
     const current = this.#proposalRuntime.peek(attempt.id);
-    if (!current || current.draftRevision !== attempt.expectedDraftRevision || !canPrepareProposal(current)) {
+    if (
+      !current ||
+      current.prepare.requestRevision !== attempt.expectedRequestRevision ||
+      !canPrepareProposal(current)
+    ) {
       return;
     }
 
@@ -310,7 +306,7 @@ export class TransactionPrepare {
       case "ready": {
         const settled = this.#proposalRuntime.settlePrepareReady({
           id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
+          expectedRequestRevision: attempt.expectedRequestRevision,
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           executionPrepared: outcome.prepared,
@@ -324,7 +320,7 @@ export class TransactionPrepare {
       case "blocked": {
         const settled = this.#proposalRuntime.settlePrepareBlocked({
           id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
+          expectedRequestRevision: attempt.expectedRequestRevision,
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           blocker: outcome.blocker,
@@ -338,7 +334,7 @@ export class TransactionPrepare {
       case "failed": {
         const settled = this.#proposalRuntime.settlePrepareFailed({
           id: attempt.id,
-          expectedDraftRevision: attempt.expectedDraftRevision,
+          expectedRequestRevision: attempt.expectedRequestRevision,
           sessionToken: attempt.sessionToken,
           updatedAt: outcome.updatedAt,
           error: outcome.error,

@@ -153,7 +153,7 @@ export const createTransactionRuntime = (options: CreateTransactionRuntimeOption
   });
 
   const proposalRuntimeReader = {
-    getProposalStateSnapshot: (id: string) => proposalRuntime.getStateSnapshot(id),
+    getProposalStateSnapshot: (id: string) => proposalRuntime.getProposalStateSnapshot(id),
     getView: (id: string) => proposalRuntime.getView(id),
     getReviewState: (id: string) => proposalRuntime.getReviewState(id),
     onChanged: (handler: (transactionIds: string[]) => void) => proposalRuntime.onChanged(handler),

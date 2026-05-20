@@ -7,6 +7,8 @@ import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionMessenger } from "./topics.js";
+import type { TransactionProposalTerminationReason } from "./types.js";
+import { deriveExecutionTerminationReason } from "./utils.js";
 
 export type TransactionExecutionAttemptPhase =
   | "queued"
@@ -56,18 +58,28 @@ export class TransactionExecutionPipeline {
       await this.#runner.executeApprovedTransaction(id, options);
     } catch (error) {
       if (error && isArxError(error) && error.reason === ArxReasons.SessionLocked) {
-        await this.#failure.finalizeExecutionFailure(id, error);
+        await this.#failure.finalizeExecutionFailure({
+          id,
+          reason: error,
+          terminationReason: "execution_failed",
+        });
         return;
       }
 
-      await this.#failure.finalizeExecutionFailure(
+      const transactionError = error instanceof Error ? error : new Error("Transaction processing failed");
+      await this.#failure.finalizeExecutionFailure({
         id,
-        error instanceof Error ? error : new Error("Transaction processing failed"),
-      );
+        reason: transactionError,
+        terminationReason: deriveExecutionTerminationReason(error),
+      });
     }
   }
 
-  async rejectTransaction(id: string, reason?: Error | TransactionError): Promise<void> {
-    await this.#failure.finalizeExecutionFailure(id, reason);
+  async rejectTransaction(input: {
+    id: string;
+    reason?: Error | TransactionError;
+    terminationReason: TransactionProposalTerminationReason;
+  }): Promise<void> {
+    await this.#failure.finalizeExecutionFailure(input);
   }
 }

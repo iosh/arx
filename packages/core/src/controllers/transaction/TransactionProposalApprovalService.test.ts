@@ -27,7 +27,7 @@ describe("TransactionProposalApprovalService", () => {
     const { service, proposalRuntime } = createApprovalService();
 
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
     const current = proposalRuntime.peek(REQUEST_ID);
     if (!current) {
@@ -36,7 +36,7 @@ describe("TransactionProposalApprovalService", () => {
 
     const session = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
-      draftRevision: current.draftRevision,
+      requestRevision: current.prepare.requestRevision,
       updatedAt: 1,
     });
     if (session.status !== "opened") {
@@ -44,7 +44,7 @@ describe("TransactionProposalApprovalService", () => {
     }
     proposalRuntime.settlePrepareReady({
       id: REQUEST_ID,
-      expectedDraftRevision: current.draftRevision,
+      expectedRequestRevision: current.prepare.requestRevision,
       sessionToken: session.review.sessionToken,
       updatedAt: 1,
       executionPrepared: { gas: "0x5208" },
@@ -63,7 +63,7 @@ describe("TransactionProposalApprovalService", () => {
 
   it("fails while prepare is still in progress", () => {
     const { service, proposalRuntime } = createApprovalService();
-    createTransactionProposal(proposalRuntime, { status: "pending" });
+    createTransactionProposal(proposalRuntime, { status: "active" });
 
     expect(service.approvePendingProposal(REQUEST_ID)).toMatchObject({
       status: "failed",
@@ -77,7 +77,7 @@ describe("TransactionProposalApprovalService", () => {
 
   it("fails when the current draft revision no longer matches the review", () => {
     const { service, proposalRuntime } = createApprovalService();
-    createTransactionProposal(proposalRuntime, { status: "pending" });
+    createTransactionProposal(proposalRuntime, { status: "active" });
 
     const current = proposalRuntime.peek(REQUEST_ID);
     if (!current) {
@@ -85,7 +85,7 @@ describe("TransactionProposalApprovalService", () => {
     }
     const session = proposalRuntime.getOrStartPrepare({
       id: REQUEST_ID,
-      draftRevision: current.draftRevision,
+      requestRevision: current.prepare.requestRevision,
       updatedAt: 1,
     });
     if (session.status !== "opened") {
@@ -112,7 +112,7 @@ describe("TransactionProposalApprovalService", () => {
     expect(
       proposalRuntime.settlePrepareReady({
         id: REQUEST_ID,
-        expectedDraftRevision: current.draftRevision,
+        expectedRequestRevision: current.prepare.requestRevision,
         sessionToken: session.sessionToken,
         updatedAt: 3,
         executionPrepared: { gas: "0x5208" },
@@ -120,7 +120,7 @@ describe("TransactionProposalApprovalService", () => {
       }),
     ).toEqual({
       status: "stale",
-      draftRevision: 1,
+      requestRevision: 1,
       sessionToken: expect.any(String),
     });
 
@@ -132,17 +132,17 @@ describe("TransactionProposalApprovalService", () => {
         prepareState: "preparing",
       },
     });
-    expect(proposalRuntime.get(REQUEST_ID)?.status).toBe("pending");
+    expect(proposalRuntime.get(REQUEST_ID)?.status).toBe("active");
   });
 
   it("fails when review is blocked or failed", () => {
     const blocked = createApprovalService();
-    createTransactionProposal(blocked.proposalRuntime, { id: "tx-blocked", status: "pending" });
+    createTransactionProposal(blocked.proposalRuntime, { id: "tx-blocked", status: "active" });
     const blockedProposal = blocked.proposalRuntime.peek("tx-blocked");
     if (!blockedProposal) throw new Error("Proposal not found");
     const blockedSession = blocked.proposalRuntime.getOrStartPrepare({
       id: "tx-blocked",
-      draftRevision: blockedProposal.draftRevision,
+      requestRevision: blockedProposal.prepare.requestRevision,
       updatedAt: 1,
     });
     if (blockedSession.status !== "opened") {
@@ -150,7 +150,7 @@ describe("TransactionProposalApprovalService", () => {
     }
     blocked.proposalRuntime.settlePrepareBlocked({
       id: "tx-blocked",
-      expectedDraftRevision: blockedProposal.draftRevision,
+      expectedRequestRevision: blockedProposal.prepare.requestRevision,
       sessionToken: blockedSession.review.sessionToken,
       updatedAt: 1,
       blocker: {
@@ -166,12 +166,12 @@ describe("TransactionProposalApprovalService", () => {
     });
 
     const failed = createApprovalService();
-    createTransactionProposal(failed.proposalRuntime, { id: "tx-failed", status: "pending" });
+    createTransactionProposal(failed.proposalRuntime, { id: "tx-failed", status: "active" });
     const failedProposal = failed.proposalRuntime.peek("tx-failed");
     if (!failedProposal) throw new Error("Proposal not found");
     const failedSession = failed.proposalRuntime.getOrStartPrepare({
       id: "tx-failed",
-      draftRevision: failedProposal.draftRevision,
+      requestRevision: failedProposal.prepare.requestRevision,
       updatedAt: 1,
     });
     if (failedSession.status !== "opened") {
@@ -179,7 +179,7 @@ describe("TransactionProposalApprovalService", () => {
     }
     failed.proposalRuntime.settlePrepareFailed({
       id: "tx-failed",
-      expectedDraftRevision: failedProposal.draftRevision,
+      expectedRequestRevision: failedProposal.prepare.requestRevision,
       sessionToken: failedSession.review.sessionToken,
       updatedAt: 1,
       error: {
@@ -225,7 +225,7 @@ describe("TransactionProposalApprovalService", () => {
       reason: "not_pending",
       data: {
         transactionId: "tx-approved",
-        phase: "approved",
+        status: "approved",
       },
     });
   });

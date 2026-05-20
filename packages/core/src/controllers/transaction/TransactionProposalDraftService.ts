@@ -26,7 +26,7 @@ export class TransactionProposalDraftService {
 
   async rerunPrepare(transactionId: string): Promise<void> {
     const proposal = this.#proposalRuntime.get(transactionId);
-    if (!proposal || proposal.status !== "pending") {
+    if (!proposal || proposal.status !== "active") {
       return;
     }
 
@@ -39,10 +39,10 @@ export class TransactionProposalDraftService {
     mode?: string;
   }): Promise<void> {
     const meta = this.#proposalRuntime.get(input.transactionId);
-    if (!meta || meta.status === "failed") {
+    if (!meta || meta.status === "terminated") {
       return;
     }
-    if (meta.status !== "pending") {
+    if (meta.status !== "active") {
       throw new Error("Transaction draft can only be edited before approval.");
     }
 

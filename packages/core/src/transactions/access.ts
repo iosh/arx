@@ -7,7 +7,11 @@ import type {
 } from "../controllers/transaction/types.js";
 import type { RequestContext } from "../rpc/requestContext.js";
 import type { TransactionIntent } from "./intent/index.js";
-import type { TransactionProposal, TransactionProposalView } from "./proposal/index.js";
+import type {
+  TransactionProposal,
+  TransactionProposalTerminationReason,
+  TransactionProposalView,
+} from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
 import type {
   NamespaceTransactionDraftEdit,
@@ -92,7 +96,11 @@ export type TransactionCommands = {
   editRequest(input: { transactionId: string; edit: NamespaceTransactionDraftEdit; mode?: string }): Promise<void>;
   recomputePrepare(transactionId: string): Promise<void>;
   approve(transactionId: string): Promise<TransactionApprovalResult>;
-  reject(transactionId: string, reason?: Error | TransactionError): Promise<void>;
+  reject(input: {
+    transactionId: string;
+    reason?: Error | TransactionError;
+    terminationReason: TransactionProposalTerminationReason;
+  }): Promise<void>;
 };
 
 export type TransactionQueries = {

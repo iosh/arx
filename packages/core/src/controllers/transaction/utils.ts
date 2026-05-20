@@ -8,7 +8,7 @@ import type {
   TransactionTrackingContext,
 } from "../../transactions/namespace/types.js";
 import type { TransactionError, TransactionSubmitted } from "../../transactions/types.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
+import type { TransactionProposalMeta, TransactionProposalTerminationReason, TransactionRecordView } from "./types.js";
 
 export const createMissingNamespaceTransactionError = (namespace: string): Error => {
   const error = new Error(`No namespace transaction registered for namespace ${namespace}`);
@@ -86,6 +86,20 @@ export const coerceTransactionError = (reason?: Error | TransactionError | undef
 export const isUserRejectedError = (reason: unknown, coerced?: TransactionError): boolean => {
   const rejected = isArxError(reason) && reason.reason === ArxReasons.ApprovalRejected;
   return rejected || coerced?.code === 4001 || coerced?.name === "TransactionRejectedError";
+};
+
+export const deriveExecutionTerminationReason = (reason: unknown): TransactionProposalTerminationReason => {
+  const error = coerceTransactionError(
+    reason && (reason instanceof Error || (typeof reason === "object" && "name" in reason && "message" in reason))
+      ? (reason as Error | TransactionError)
+      : undefined,
+  );
+
+  if (isUserRejectedError(reason, error)) {
+    return "user_rejected";
+  }
+
+  return "execution_failed";
 };
 
 export const buildProposalStateContext = (meta: TransactionProposalMeta): TransactionProposalStateContext => ({

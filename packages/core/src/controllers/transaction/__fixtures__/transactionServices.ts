@@ -4,14 +4,14 @@ import { createAccountCodecRegistry, eip155Codec } from "../../../accounts/addre
 import type { AccountController } from "../../../controllers/account/types.js";
 import { Messenger } from "../../../messenger/Messenger.js";
 import type { TransactionsService } from "../../../services/store/transactions/types.js";
-import type { TransactionRecord } from "../../../storage/records.js";
+import type { TransactionStatus as StorageTransactionStatus, TransactionRecord } from "../../../storage/records.js";
 import { buildEip155ApprovalReview } from "../../../transactions/namespace/eip155/approvalReview.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
 import { TransactionProposalRuntime } from "../TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "../types.js";
+import type { TransactionProposalMeta, TransactionProposalTerminationReason, TransactionRecordView } from "../types.js";
 
 export const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
 export const APPROVAL_ID = "22222222-2222-4222-8222-222222222222";
@@ -101,7 +101,7 @@ const makeProposalReadyForApproval = (
 
   const session = proposalRuntime.getOrStartPrepare({
     id: transactionId,
-    draftRevision: current.draftRevision,
+    requestRevision: current.prepare.requestRevision,
     updatedAt,
   });
   if (session.status !== "opened") {
@@ -111,7 +111,7 @@ const makeProposalReadyForApproval = (
   const executionPrepared = input?.executionPrepared ?? {};
   const settled = proposalRuntime.settlePrepareReady({
     id: transactionId,
-    expectedDraftRevision: current.draftRevision,
+    expectedRequestRevision: current.prepare.requestRevision,
     sessionToken: session.review.sessionToken,
     updatedAt,
     executionPrepared,
@@ -152,14 +152,16 @@ export const createAccountControllerStub = (params?: {
 export const createTransactionProposal = (
   proposalRuntime: TransactionProposalRuntime,
   input?: Partial<TransactionProposalMeta> & {
-    status?: "pending" | "approved" | "failed" | undefined;
-    draftRevision?: number;
+    status?: "active" | "approved" | "terminated" | undefined;
+    requestRevision?: number;
     fromAccountKey?: string;
+    terminationReason?: TransactionProposalTerminationReason;
+    error?: { name: string; message: string; code?: number; data?: unknown } | null;
   },
 ): TransactionProposalMeta => {
   const chainRef = input?.chainRef ?? DEFAULT_CHAIN_REF;
   const from = input?.from ?? DEFAULT_FROM;
-  const requestedPhase = input?.status ?? "pending";
+  const requestedStatus = input?.status ?? "active";
   const created = proposalRuntime.createPendingProposal({
     id: input?.id ?? REQUEST_ID,
     namespace: input?.namespace ?? "eip155",
@@ -177,18 +179,16 @@ export const createTransactionProposal = (
       },
     },
     prepared: input?.prepared ?? undefined,
-    error: input?.error ?? undefined,
-    userRejected: input?.userRejected ?? undefined,
-    draftRevision: input?.draftRevision ?? undefined,
+    requestRevision: input?.requestRevision ?? undefined,
     createdAt: input?.createdAt ?? 1,
     updatedAt: input?.updatedAt ?? 1,
   });
 
-  if (requestedPhase === "pending") return created;
+  if (requestedStatus === "active") return created;
 
   const id = created.id;
   const updatedAt = input?.updatedAt ?? 1;
-  if (requestedPhase === "approved") {
+  if (requestedStatus === "approved") {
     makeProposalReadyForApproval(proposalRuntime, id, {
       updatedAt,
       executionPrepared: input?.prepared ?? {},
@@ -200,12 +200,12 @@ export const createTransactionProposal = (
     }
     return proposalRuntime.get(id) ?? created;
   }
-  if (requestedPhase === "failed") {
+  if (requestedStatus === "terminated") {
     const failed = proposalRuntime.failProposal({
       id,
       updatedAt,
       error: input?.error ?? null,
-      userRejected: input?.userRejected ?? false,
+      terminationReason: input?.terminationReason ?? "execution_failed",
     });
     if (failed.status !== "failed") {
       throw new Error(`Proposal ${id} could not be failed`);
@@ -217,6 +217,7 @@ export const createTransactionProposal = (
 
 export const toRecord = (
   meta: TransactionProposalMeta,
+  status: StorageTransactionStatus = "broadcast",
   patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
 ): TransactionRecord => ({
   id: meta.id,
@@ -224,14 +225,11 @@ export const toRecord = (
   origin: meta.origin,
   fromAccountKey: toAccountKeyFromAddress({
     chainRef: meta.chainRef,
-    address: meta.from ?? (meta.request?.payload as { from?: string } | undefined)?.from ?? "",
+    address: meta.from,
     accountCodecs,
   }),
-  status:
-    meta.status === "broadcast" || meta.status === "confirmed" || meta.status === "failed" || meta.status === "replaced"
-      ? meta.status
-      : "failed",
-  submitted: meta.submitted ?? DEFAULT_SUBMITTED,
+  status,
+  submitted: DEFAULT_SUBMITTED,
   ...(patch?.receipt !== undefined ? { receipt: patch.receipt } : {}),
   ...(patch?.replacedId !== undefined ? { replacedId: patch.replacedId } : {}),
   ...(patch?.replacementIdentity !== undefined ? { replacementIdentity: patch.replacementIdentity } : {}),

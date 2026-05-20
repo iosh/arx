@@ -1,7 +1,7 @@
-import type { TransactionProposalPhase, TransactionRecordStatus } from "./types.js";
+import type { TransactionProposalStatus, TransactionRecordStatus } from "./types.js";
 
 type TransactionProposalStateRef = {
-  phase: TransactionProposalPhase;
+  status: TransactionProposalStatus;
 };
 
 type TransactionRecordStateRef = {
@@ -9,15 +9,15 @@ type TransactionRecordStateRef = {
 };
 
 export const isProposalTerminal = (proposal: TransactionProposalStateRef): boolean => {
-  return proposal.phase === "failed";
+  return proposal.status === "terminated";
 };
 
 export const canStartProposalExecution = (proposal: TransactionProposalStateRef): boolean => {
-  return proposal.phase === "approved";
+  return proposal.status === "approved";
 };
 
 export const canPrepareProposal = (proposal: TransactionProposalStateRef): boolean => {
-  return proposal.phase === "pending" || proposal.phase === "approved";
+  return proposal.status === "active" || proposal.status === "approved";
 };
 
 export const isTransactionRecordTerminal = (record: TransactionRecordStateRef): boolean => {

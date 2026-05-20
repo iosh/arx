@@ -35,7 +35,7 @@ export class TransactionProposalApprovalService {
           reason: "not_pending",
           transaction: existing ?? undefined,
           message: "Transaction is no longer pending approval.",
-          data: { transactionId: id, phase: approved.phase },
+          data: { transactionId: id, status: approved.statusValue },
         };
       case "prepare_not_ready":
         return {

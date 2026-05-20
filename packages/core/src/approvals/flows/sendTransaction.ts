@@ -42,9 +42,17 @@ export const sendTransactionApprovalFlow: ApprovalFlow<typeof ApprovalKinds.Send
     return null;
   },
   async onReject(record, input, deps) {
-    await deps.transactions.rejectTransaction(requireTransactionSubject(record).transactionId, input.error);
+    await deps.transactions.rejectTransaction({
+      id: requireTransactionSubject(record).transactionId,
+      reason: input.error,
+      terminationReason: "user_rejected",
+    });
   },
   async onCancel(record, _reason, error, deps) {
-    await deps.transactions.rejectTransaction(requireTransactionSubject(record).transactionId, error);
+    await deps.transactions.rejectTransaction({
+      id: requireTransactionSubject(record).transactionId,
+      reason: error,
+      terminationReason: "approval_cancelled",
+    });
   },
 };

@@ -48,7 +48,11 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
     }
 
     const cancelBeforeBroadcast = () => {
-      void this.#execution.rejectTransaction(submission.transactionId, createTransactionTransportDisconnectedError());
+      void this.#execution.rejectTransaction({
+        id: submission.transactionId,
+        reason: createTransactionTransportDisconnectedError(),
+        terminationReason: "approval_cancelled",
+      });
     };
 
     let cleanupAbortBinding = () => {};

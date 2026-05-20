@@ -24,12 +24,20 @@ describe("TransactionExecutionFailureService", () => {
       now: () => 2,
     });
 
-    await service.finalizeExecutionFailure(REQUEST_ID, new Error("User cancelled"));
+    await service.finalizeExecutionFailure({
+      id: REQUEST_ID,
+      reason: new Error("User cancelled"),
+      terminationReason: "execution_failed",
+    });
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
-      status: "failed",
-      error: {
-        message: "User cancelled",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        error: {
+          message: "User cancelled",
+        },
+        userRejected: false,
       },
     });
     expect(recordSubmissionFailure).toHaveBeenCalledWith(
@@ -62,7 +70,11 @@ describe("TransactionExecutionFailureService", () => {
       now: () => 1,
     });
 
-    await service.finalizeExecutionFailure("missing", reason);
+    await service.finalizeExecutionFailure({
+      id: "missing",
+      reason,
+      terminationReason: "execution_failed",
+    });
 
     expect(recordSubmissionFailure).not.toHaveBeenCalled();
     expect(recordFailure).toHaveBeenCalledWith("missing", reason);
@@ -71,11 +83,12 @@ describe("TransactionExecutionFailureService", () => {
   it("falls through to durable record failure once the proposal is already terminal", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "failed",
+      status: "terminated",
       error: {
         name: "Error",
         message: "already failed",
       },
+      terminationReason: "execution_failed",
     });
 
     const recordFailure = vi.fn(async () => {});
@@ -96,7 +109,11 @@ describe("TransactionExecutionFailureService", () => {
       now: () => 2,
     });
 
-    await service.finalizeExecutionFailure(REQUEST_ID, reason);
+    await service.finalizeExecutionFailure({
+      id: REQUEST_ID,
+      reason,
+      terminationReason: "execution_failed",
+    });
 
     expect(recordSubmissionFailure).not.toHaveBeenCalled();
     expect(recordFailure).toHaveBeenCalledWith(REQUEST_ID, reason);

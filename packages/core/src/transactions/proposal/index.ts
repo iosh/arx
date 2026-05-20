@@ -14,32 +14,27 @@ export type TransactionReviewError = {
   data?: unknown;
 };
 
-/** Overall proposal lifetime, separate from prepare progress. */
-export type TransactionProposalLifecycleStatus = "active" | "approved" | "terminated";
+export type TransactionProposalStatus = "active" | "approved" | "terminated";
 
 /** Prepare pipeline progress for the current request revision. */
-export type TransactionProposalPrepareStatus = "idle" | "preparing" | "ready" | "blocked" | "failed" | "invalidated";
+export type TransactionProposalPrepareStatus = "preparing" | "ready" | "blocked" | "failed" | "invalidated";
 
 export type TransactionProposalTerminationReason =
   | "user_rejected"
   | "approval_cancelled"
-  | "prepare_failed"
   | "execution_failed"
   | "internal_error";
 
-export type TransactionProposalLifecycle = {
-  status: TransactionProposalLifecycleStatus;
-  terminationReason?: TransactionProposalTerminationReason;
-  /** Terminal failure attached to the proposal lifecycle. */
-  error?: TransactionError | null;
-  createdAt: number;
-  updatedAt: number;
+export type TransactionProposalTermination = {
+  reason: TransactionProposalTerminationReason;
+  error: TransactionError | null;
+  userRejected: boolean;
 };
 
 export type TransactionProposalPrepare = {
   /** Monotonic request version for stale-result rejection. */
   requestRevision: number;
-  sessionToken: string | null;
+  sessionToken: string;
   status: TransactionProposalPrepareStatus;
   prepared: TransactionPrepared | null;
   /** Prepared snapshot used by approval preview projection. */
@@ -64,11 +59,15 @@ export type TransactionProposal = {
   id: string;
   approvalId: string;
   intent: TransactionIntent;
-  lifecycle: TransactionProposalLifecycle;
+  status: TransactionProposalStatus;
+  termination?: TransactionProposalTermination;
+  createdAt: number;
+  updatedAt: number;
   prepare: TransactionProposalPrepare;
 };
 
 /** Proposal read model exposed outside transaction orchestration. */
 export type TransactionProposalView = TransactionProposal & {
-  preview: TransactionApprovalPreview;
+  /** Present while approval review state is available. */
+  preview?: TransactionApprovalPreview;
 };

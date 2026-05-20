@@ -54,10 +54,10 @@ export type { TransactionExecutionAttemptPhase } from "./orchestration/index.js"
 export type {
   TransactionApprovalPreview,
   TransactionProposal,
-  TransactionProposalLifecycle,
-  TransactionProposalLifecycleStatus,
   TransactionProposalPrepare,
   TransactionProposalPrepareStatus,
+  TransactionProposalStatus,
+  TransactionProposalTermination,
   TransactionProposalTerminationReason,
   TransactionProposalView,
   TransactionReviewBlocker,

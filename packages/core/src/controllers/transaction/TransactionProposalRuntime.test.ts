@@ -35,7 +35,6 @@ describe("TransactionProposalRuntime", () => {
       fromAccountKey: accountKey,
       request,
       prepared,
-      error,
       createdAt: 1,
       updatedAt: 1,
     });
@@ -50,7 +49,7 @@ describe("TransactionProposalRuntime", () => {
       gas: "0x5208",
     });
     expect(meta?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
-    expect(meta?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
+    expect(meta?.termination).toBeUndefined();
   });
 
   it("returns detached meta snapshots so consumer mutations do not write back", () => {
@@ -70,7 +69,6 @@ describe("TransactionProposalRuntime", () => {
         },
       },
       prepared: { fee: { maxFeePerGas: "0x1" } },
-      error: { name: "Error", message: "boom", data: { code: "E_FAIL" } },
       createdAt: 1,
       updatedAt: 1,
     });
@@ -81,9 +79,6 @@ describe("TransactionProposalRuntime", () => {
     if (created.prepared) {
       (created.prepared as { fee: { maxFeePerGas: string } }).fee.maxFeePerGas = "0x9";
     }
-    if (created.error?.data && typeof created.error.data === "object") {
-      (created.error.data as { code: string }).code = "E_CHANGED";
-    }
 
     const reloaded = store.get("22222222-2222-4222-8222-222222222222");
     expect(reloaded?.request?.payload).toEqual({
@@ -91,7 +86,7 @@ describe("TransactionProposalRuntime", () => {
       gas: "0x5208",
     });
     expect(reloaded?.prepared).toEqual({ fee: { maxFeePerGas: "0x1" } });
-    expect(reloaded?.error).toEqual({ name: "Error", message: "boom", data: { code: "E_FAIL" } });
+    expect(reloaded?.termination).toBeUndefined();
   });
 
   it("replaces pending drafts by bumping revision and clearing prepared state", () => {
@@ -132,7 +127,7 @@ describe("TransactionProposalRuntime", () => {
         updatedAt: 2,
       },
     });
-    expect(store.peek("33333333-3333-4333-8333-333333333333")?.draftRevision).toBe(1);
+    expect(store.peek("33333333-3333-4333-8333-333333333333")?.prepare.requestRevision).toBe(1);
   });
 
   it("returns explicit replace-draft outcomes for missing and non-pending proposals", () => {
@@ -166,13 +161,13 @@ describe("TransactionProposalRuntime", () => {
     });
     store.updatePreparedForDraft({
       id: "approved-proposal",
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       updatedAt: 1,
       prepared: {},
     });
     const approvedReview = store.getOrStartPrepare({
       id: "approved-proposal",
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (approvedReview.status !== "opened") {
@@ -180,7 +175,7 @@ describe("TransactionProposalRuntime", () => {
     }
     store.settlePrepareReady({
       id: "approved-proposal",
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: approvedReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
@@ -202,7 +197,7 @@ describe("TransactionProposalRuntime", () => {
       }),
     ).toEqual({
       status: "not_pending",
-      phase: "approved",
+      statusValue: "approved",
     });
   });
 
@@ -214,7 +209,7 @@ describe("TransactionProposalRuntime", () => {
         id: "missing",
         updatedAt: 1,
         error: null,
-        userRejected: false,
+        terminationReason: "execution_failed",
       }),
     ).toEqual({ status: "not_found" });
 
@@ -237,15 +232,20 @@ describe("TransactionProposalRuntime", () => {
         id: "failed-proposal",
         updatedAt: 2,
         error: { name: "Error", message: "boom" },
-        userRejected: false,
+        terminationReason: "execution_failed",
       }),
     ).toMatchObject({
       status: "failed",
       proposal: {
         id: "failed-proposal",
-        status: "failed",
-        error: {
-          message: "boom",
+        status: "terminated",
+        termination: {
+          reason: "execution_failed",
+          userRejected: false,
+          error: {
+            name: "Error",
+            message: "boom",
+          },
         },
       },
     });
@@ -255,11 +255,11 @@ describe("TransactionProposalRuntime", () => {
         id: "failed-proposal",
         updatedAt: 3,
         error: { name: "Error", message: "late" },
-        userRejected: false,
+        terminationReason: "execution_failed",
       }),
     ).toEqual({
       status: "not_active",
-      phase: "failed",
+      statusValue: "terminated",
     });
   });
 
@@ -285,19 +285,19 @@ describe("TransactionProposalRuntime", () => {
     expect(
       store.updatePreparedForDraft({
         id,
-        expectedDraftRevision: 1,
+        expectedRequestRevision: 1,
         updatedAt: 2,
         prepared: { gas: "0x5208" },
       }),
     ).toEqual({
       status: "stale",
-      draftRevision: 0,
+      requestRevision: 0,
     });
 
     expect(
       store.updatePreparedForDraft({
         id,
-        expectedDraftRevision: 0,
+        expectedRequestRevision: 0,
         updatedAt: 3,
         prepared: { gas: "0x5208" },
       }),
@@ -330,13 +330,13 @@ describe("TransactionProposalRuntime", () => {
     });
     store.updatePreparedForDraft({
       id: "55555555-5555-4555-8555-555555555555",
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       updatedAt: 1,
       prepared: {},
     });
     const readyReview = store.getOrStartPrepare({
       id: "55555555-5555-4555-8555-555555555555",
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (readyReview.status !== "opened") {
@@ -344,7 +344,7 @@ describe("TransactionProposalRuntime", () => {
     }
     store.settlePrepareReady({
       id: "55555555-5555-4555-8555-555555555555",
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: readyReview.review.sessionToken,
       updatedAt: 1,
       executionPrepared: {},
@@ -419,7 +419,7 @@ describe("TransactionProposalRuntime", () => {
     });
     const staleSession = store.getOrStartPrepare({
       id: staleId,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (staleSession.status !== "opened") {
@@ -460,7 +460,7 @@ describe("TransactionProposalRuntime", () => {
     });
     const blockedSession = store.getOrStartPrepare({
       id: blockedId,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (blockedSession.status !== "opened") {
@@ -468,7 +468,7 @@ describe("TransactionProposalRuntime", () => {
     }
     store.settlePrepareBlocked({
       id: blockedId,
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: blockedSession.review.sessionToken,
       updatedAt: 2,
       blocker: {
@@ -502,7 +502,7 @@ describe("TransactionProposalRuntime", () => {
     });
     const failedSession = store.getOrStartPrepare({
       id: failedId,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (failedSession.status !== "opened") {
@@ -510,7 +510,7 @@ describe("TransactionProposalRuntime", () => {
     }
     store.settlePrepareFailed({
       id: failedId,
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: failedSession.review.sessionToken,
       updatedAt: 2,
       error: {
@@ -549,13 +549,13 @@ describe("TransactionProposalRuntime", () => {
     });
     store.updatePreparedForDraft({
       id,
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       updatedAt: 2,
       prepared: {},
     });
     const readyReview = store.getOrStartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 2,
     });
     if (readyReview.status !== "opened") {
@@ -563,7 +563,7 @@ describe("TransactionProposalRuntime", () => {
     }
     store.settlePrepareReady({
       id,
-      expectedDraftRevision: 0,
+      expectedRequestRevision: 0,
       sessionToken: readyReview.review.sessionToken,
       updatedAt: 2,
       executionPrepared: {},
@@ -604,7 +604,7 @@ describe("TransactionProposalRuntime", () => {
 
     const preparing = store.getOrStartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     expect(preparing).toMatchObject({
@@ -617,7 +617,7 @@ describe("TransactionProposalRuntime", () => {
 
     const restarted = store.restartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 2,
     });
     expect(restarted).toMatchObject({
@@ -654,7 +654,7 @@ describe("TransactionProposalRuntime", () => {
 
     const preparing = store.getOrStartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (preparing.status !== "opened") {
@@ -664,7 +664,7 @@ describe("TransactionProposalRuntime", () => {
     expect(
       store.settlePrepareBlocked({
         id,
-        expectedDraftRevision: 0,
+        expectedRequestRevision: 0,
         sessionToken: preparing.review.sessionToken,
         updatedAt: 2,
         blocker: {
@@ -687,7 +687,7 @@ describe("TransactionProposalRuntime", () => {
 
     const restarted = store.restartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 3,
     });
     if (restarted.status !== "restarted") {
@@ -697,7 +697,7 @@ describe("TransactionProposalRuntime", () => {
     expect(
       store.settlePrepareReady({
         id,
-        expectedDraftRevision: 0,
+        expectedRequestRevision: 0,
         sessionToken: restarted.review.sessionToken,
         updatedAt: 4,
         executionPrepared: { gas: "0x5300" },
@@ -734,7 +734,7 @@ describe("TransactionProposalRuntime", () => {
 
     const initial = store.getOrStartPrepare({
       id,
-      draftRevision: 0,
+      requestRevision: 0,
       updatedAt: 1,
     });
     if (initial.status !== "opened") {
@@ -754,7 +754,7 @@ describe("TransactionProposalRuntime", () => {
     expect(
       store.settlePrepareReady({
         id,
-        expectedDraftRevision: 0,
+        expectedRequestRevision: 0,
         sessionToken: initial.review.sessionToken,
         updatedAt: 3,
         executionPrepared: { gas: "0x5208" },
@@ -762,7 +762,7 @@ describe("TransactionProposalRuntime", () => {
       }),
     ).toEqual({
       status: "stale",
-      draftRevision: 1,
+      requestRevision: 1,
       sessionToken: expect.any(String),
     });
 
@@ -792,7 +792,7 @@ describe("TransactionProposalRuntime", () => {
     expect(
       store.settlePrepareFailed({
         id,
-        expectedDraftRevision: 1,
+        expectedRequestRevision: 1,
         sessionToken: current?.sessionToken ?? "",
         updatedAt: 5,
         error: {

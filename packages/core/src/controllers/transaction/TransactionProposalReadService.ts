@@ -2,7 +2,7 @@ import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js
 import type { TransactionApprovalReviewReader, TransactionProposalReader } from "./types.js";
 
 type CreateTransactionProposalReaderDeps = {
-  proposalRuntime: TransactionProposalRuntime;
+  proposalRuntime: Pick<TransactionProposalRuntime, "getView" | "getReviewState">;
   review: TransactionApprovalReviewReader;
 };
 
@@ -16,9 +16,11 @@ export const createTransactionProposalReader = (
         return undefined;
       }
 
+      const reviewState = deps.proposalRuntime.getReviewState(id);
+
       return {
         ...proposal,
-        review: deps.review.getTransactionApprovalReview(id),
+        ...(reviewState ? { review: deps.review.getTransactionApprovalReview(id) } : {}),
       };
     },
   };

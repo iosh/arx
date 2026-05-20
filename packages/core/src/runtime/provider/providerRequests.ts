@@ -35,10 +35,10 @@ export type ProviderRequestHandle = {
   id: string;
   providerNamespace: string;
   signal: AbortSignal;
-  attachBlockingApproval<T extends { approvalId: string }>(
+  attachBlockingApproval<T>(
     createApproval: (reservation: BlockingApprovalReservation) => T,
     reservation?: Partial<BlockingApprovalReservation>,
-  ): T;
+  ): T & BlockingApprovalReservation;
   fulfill(): boolean;
   reject(): boolean;
   cancel(reason: ProviderRequestCancellationReason): Promise<boolean>;
@@ -177,10 +177,10 @@ export const createProviderRequests = ({
       id,
       providerNamespace: currentRecord.providerNamespace,
       signal: abortController.signal,
-      attachBlockingApproval: <T extends { approvalId: string }>(
+      attachBlockingApproval: <T>(
         createApproval: (reservation: BlockingApprovalReservation) => T,
         reservationInput?: Partial<BlockingApprovalReservation>,
-      ) => {
+      ): T & BlockingApprovalReservation => {
         if (terminalState) {
           throw createTerminalRequestError(currentRecord, terminalState);
         }
@@ -206,11 +206,11 @@ export const createProviderRequests = ({
         records.set(id, currentRecord);
 
         try {
-          const approvalRef = createApproval(reservation);
-          if (approvalRef.approvalId !== reservation.approvalId) {
-            throw new Error(`Provider request "${id}" created a mismatched blocking approval handle.`);
-          }
-          return approvalRef;
+          return {
+            ...createApproval(reservation),
+            approvalId: reservation.approvalId,
+            createdAt: reservation.createdAt,
+          };
         } catch (error) {
           const currentLiveRecord = records.get(id);
           if (currentLiveRecord?.blockingApprovalId === reservation.approvalId) {
@@ -267,13 +267,19 @@ export const createProviderRequests = ({
       }
 
       const results = await Promise.allSettled(ids.map((id) => handles.get(id)?.cancel(reason) ?? false));
-      const firstRejected = results.find((result) => result.status === "rejected");
+      const rejectionReasons = results
+        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .map((result) => result.reason);
       const cancelledCount = results.reduce((count, result) => {
         return result.status === "fulfilled" && result.value ? count + 1 : count;
       }, 0);
 
-      if (firstRejected?.status === "rejected") {
-        throw firstRejected.reason;
+      if (rejectionReasons.length === 1) {
+        throw rejectionReasons[0];
+      }
+
+      if (rejectionReasons.length > 1) {
+        throw new AggregateError(rejectionReasons, "Failed to cancel one or more provider requests.");
       }
 
       return cancelledCount;

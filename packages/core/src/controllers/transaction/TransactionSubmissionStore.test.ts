@@ -31,6 +31,7 @@ describe("TransactionSubmissionStore", () => {
         message: "User rejected transaction",
         code: 4001,
       },
+      terminationReason: "user_rejected",
       userRejected: true,
       message: "User rejected transaction",
     });

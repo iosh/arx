@@ -2,7 +2,8 @@ import type { TransactionError } from "../../transactions/types.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
-import { coerceTransactionError, isUserRejectedError } from "./utils.js";
+import type { TransactionProposalTerminationReason } from "./types.js";
+import { coerceTransactionError } from "./utils.js";
 
 type TransactionExecutionFailureServiceDeps = {
   proposalRuntime: Pick<TransactionProposalRuntime, "failProposal">;
@@ -24,35 +25,44 @@ export class TransactionExecutionFailureService {
     this.#now = deps.now;
   }
 
-  async finalizeExecutionFailure(id: string, reason?: Error | TransactionError): Promise<void> {
-    const cancellation = this.#buildCancellationState(reason);
-    if (this.#failActiveProposal(id, cancellation)) {
+  async finalizeExecutionFailure(input: {
+    id: string;
+    reason?: Error | TransactionError;
+    terminationReason: TransactionProposalTerminationReason;
+  }): Promise<void> {
+    const failure = this.#buildFailureState(input.reason, input.terminationReason);
+    if (this.#failActiveProposal(input.id, failure)) {
       return;
     }
 
-    await this.#records.failRecord(id, reason);
+    await this.#records.failRecord(input.id, input.reason);
   }
 
-  #buildCancellationState(reason?: Error | TransactionError) {
+  #buildFailureState(
+    reason: Error | TransactionError | undefined,
+    terminationReason: TransactionProposalTerminationReason,
+  ) {
     const error = coerceTransactionError(reason) ?? null;
     return {
       error,
-      userRejected: isUserRejectedError(reason, error ?? undefined),
+      terminationReason,
+      userRejected: terminationReason === "user_rejected",
     };
   }
 
   #failActiveProposal(
     id: string,
-    cancellation: {
+    failure: {
       error: TransactionError | null;
+      terminationReason: TransactionProposalTerminationReason;
       userRejected: boolean;
     },
   ): boolean {
     const failed = this.#proposalRuntime.failProposal({
       id,
       updatedAt: this.#now(),
-      error: cancellation.error,
-      userRejected: cancellation.userRejected,
+      error: failure.error,
+      terminationReason: failure.terminationReason,
     });
     if (failed.status !== "failed") {
       return false;
@@ -60,9 +70,10 @@ export class TransactionExecutionFailureService {
 
     this.#submission.recordFailure(id, {
       transactionId: id,
-      error: cancellation.error,
-      userRejected: cancellation.userRejected,
-      message: cancellation.error?.message ?? "Transaction submission failed",
+      error: failure.error,
+      terminationReason: failure.terminationReason,
+      userRejected: failure.userRejected,
+      message: failure.error?.message ?? "Transaction submission failed",
     });
     return true;
   }

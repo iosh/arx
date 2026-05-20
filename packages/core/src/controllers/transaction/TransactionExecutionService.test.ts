@@ -157,7 +157,7 @@ describe("TransactionExecutionService", () => {
   it("enqueues approved proposals for execution", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
     markReviewReady(proposalRuntime, REQUEST_ID, {
       executionPrepared: { gas: "0x5208" },
@@ -202,10 +202,14 @@ describe("TransactionExecutionService", () => {
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      error: {
-        name: "NamespaceTransactionMissingError",
-        message: "No namespace transaction registered for namespace eip155",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        error: {
+          name: "NamespaceTransactionMissingError",
+          message: "No namespace transaction registered for namespace eip155",
+        },
+        userRejected: false,
       },
     });
   });
@@ -218,16 +222,23 @@ describe("TransactionExecutionService", () => {
     });
 
     const rejectionError = Object.assign(new Error("User rejected transaction"), { code: 4001 });
-    await execution.rejectTransaction(REQUEST_ID, rejectionError);
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: rejectionError,
+      terminationReason: "user_rejected",
+    });
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      userRejected: true,
-      error: {
-        name: "Error",
-        message: "User rejected transaction",
-        code: 4001,
+      status: "terminated",
+      termination: {
+        reason: "user_rejected",
+        userRejected: true,
+        error: {
+          name: "Error",
+          message: "User rejected transaction",
+          code: 4001,
+        },
       },
     });
   });
@@ -235,7 +246,7 @@ describe("TransactionExecutionService", () => {
   it("cancels a queued execution before processing starts", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
     markReviewReady(proposalRuntime, REQUEST_ID, {
       executionPrepared: { gas: "0x5208" },
@@ -247,7 +258,11 @@ describe("TransactionExecutionService", () => {
     const processSpy = vi.spyOn(execution, "executeApprovedTransaction").mockResolvedValue(undefined);
 
     const approved = execution.approveTransaction(REQUEST_ID);
-    await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("Transport disconnected."),
+      terminationReason: "approval_cancelled",
+    });
     await expect(approved).resolves.toMatchObject({
       status: "approved",
     });
@@ -256,10 +271,13 @@ describe("TransactionExecutionService", () => {
     expect(processSpy).not.toHaveBeenCalled();
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      userRejected: false,
-      error: {
-        message: "Transport disconnected.",
+      status: "terminated",
+      termination: {
+        reason: "approval_cancelled",
+        userRejected: false,
+        error: {
+          message: "Transport disconnected.",
+        },
       },
     });
 
@@ -290,24 +308,25 @@ describe("TransactionExecutionService", () => {
     const { execution } = createExecutionService({
       service: createTransactionsServiceStub({
         get: vi.fn(async () =>
-          toRecord({
-            id: durableMeta.id,
-            namespace: durableMeta.namespace,
-            chainRef: durableMeta.chainRef,
-            origin: durableMeta.origin,
-            from: durableMeta.from,
-            request: {
-              namespace: "eip155",
+          toRecord(
+            {
+              id: durableMeta.id,
+              namespace: durableMeta.namespace,
               chainRef: durableMeta.chainRef,
-              payload: { from: durableMeta.from, to: DEFAULT_TO, value: "0x0" },
+              origin: durableMeta.origin,
+              from: durableMeta.from,
+              request: {
+                namespace: "eip155",
+                chainRef: durableMeta.chainRef,
+                payload: { from: durableMeta.from, to: DEFAULT_TO, value: "0x0" },
+              },
+              prepared: null,
+              status: "approved",
+              createdAt: durableMeta.createdAt,
+              updatedAt: durableMeta.updatedAt,
             },
-            prepared: null,
-            status: "approved",
-            error: null,
-            userRejected: false,
-            createdAt: durableMeta.createdAt,
-            updatedAt: durableMeta.updatedAt,
-          }),
+            "broadcast",
+          ),
         ),
       }),
       recordView: createRecordViewStub({
@@ -319,7 +338,11 @@ describe("TransactionExecutionService", () => {
       }),
     });
 
-    await execution.rejectTransaction(REQUEST_ID, new Error("Transport disconnected."));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("Transport disconnected."),
+      terminationReason: "approval_cancelled",
+    });
 
     expect(stop).not.toHaveBeenCalled();
     expect(resume).not.toHaveBeenCalled();
@@ -423,9 +446,46 @@ describe("TransactionExecutionService", () => {
 
     expect(createBroadcastRecord).not.toHaveBeenCalled();
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
-      status: "failed",
-      error: {
-        message: "RPC unavailable",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        error: {
+          message: "RPC unavailable",
+        },
+        userRejected: false,
+      },
+    });
+  });
+
+  it("classifies broadcast-stage user rejection as user_rejected", async () => {
+    const broadcastError = Object.assign(new Error("User rejected"), { code: 4001 });
+    const createBroadcastRecord = vi.fn();
+    const { execution, proposalRuntime } = createExecutionService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          broadcast: vi.fn(async () => {
+            throw broadcastError;
+          }) as never,
+        }),
+      ),
+      service: createTransactionsServiceStub({
+        createBroadcastRecord: createBroadcastRecord as never,
+      }),
+    });
+    createApprovedTransactionProposal(proposalRuntime);
+
+    await execution.executeApprovedTransaction(REQUEST_ID);
+
+    expect(createBroadcastRecord).not.toHaveBeenCalled();
+    expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
+      status: "terminated",
+      termination: {
+        reason: "user_rejected",
+        error: {
+          message: "User rejected",
+          code: 4001,
+        },
+        userRejected: true,
       },
     });
   });
@@ -454,9 +514,49 @@ describe("TransactionExecutionService", () => {
     expect(broadcastTransaction).not.toHaveBeenCalled();
     expect(createBroadcastRecord).not.toHaveBeenCalled();
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
-      status: "failed",
-      error: {
-        message: "Signer failed",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        error: {
+          message: "Signer failed",
+        },
+        userRejected: false,
+      },
+    });
+  });
+
+  it("classifies signing-stage user rejection as user_rejected", async () => {
+    const signError = Object.assign(new Error("User rejected"), { code: 4001 });
+    const createBroadcastRecord = vi.fn();
+    const broadcastTransaction = vi.fn();
+    const { execution, proposalRuntime } = createExecutionService({
+      namespaces: createNamespacesStub(() =>
+        createNamespaceTransactionStub({
+          sign: vi.fn(async () => {
+            throw signError;
+          }) as never,
+          broadcast: broadcastTransaction as never,
+        }),
+      ),
+      service: createTransactionsServiceStub({
+        createBroadcastRecord: createBroadcastRecord as never,
+      }),
+    });
+    createApprovedTransactionProposal(proposalRuntime);
+
+    await execution.executeApprovedTransaction(REQUEST_ID);
+
+    expect(broadcastTransaction).not.toHaveBeenCalled();
+    expect(createBroadcastRecord).not.toHaveBeenCalled();
+    expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
+      status: "terminated",
+      termination: {
+        reason: "user_rejected",
+        error: {
+          message: "User rejected",
+          code: 4001,
+        },
+        userRejected: true,
       },
     });
   });
@@ -520,15 +620,23 @@ describe("TransactionExecutionService", () => {
     const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
 
-    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("User cancelled before submission"),
+      terminationReason: "approval_cancelled",
+    });
     releaseSign?.();
     await processing;
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      error: {
-        message: "User cancelled before submission",
+      status: "terminated",
+      termination: {
+        reason: "approval_cancelled",
+        error: {
+          message: "User cancelled before submission",
+        },
+        userRejected: false,
       },
     });
     expect(broadcastTransaction).not.toHaveBeenCalled();
@@ -565,7 +673,11 @@ describe("TransactionExecutionService", () => {
     const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
 
-    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled before submission"));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("User cancelled before submission"),
+      terminationReason: "approval_cancelled",
+    });
     expect(observedSignal?.aborted).toBe(true);
 
     releaseSign?.();
@@ -573,9 +685,13 @@ describe("TransactionExecutionService", () => {
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      error: {
-        message: "User cancelled before submission",
+      status: "terminated",
+      termination: {
+        reason: "approval_cancelled",
+        error: {
+          message: "User cancelled before submission",
+        },
+        userRejected: false,
       },
     });
     expect(broadcastTransaction).not.toHaveBeenCalled();
@@ -614,7 +730,11 @@ describe("TransactionExecutionService", () => {
     createApprovedTransactionProposal(proposalRuntime);
 
     messenger.subscribe(TRANSACTION_BROADCAST_STARTED, ({ id }) => {
-      void execution.rejectTransaction(id, new Error("User cancelled too late"));
+      void execution.rejectTransaction({
+        id,
+        reason: new Error("User cancelled too late"),
+        terminationReason: "approval_cancelled",
+      });
     });
 
     await execution.executeApprovedTransaction(REQUEST_ID);
@@ -666,7 +786,11 @@ describe("TransactionExecutionService", () => {
     await vi.waitFor(() => expect(signTransaction).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
-    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled too late"));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("User cancelled too late"),
+      terminationReason: "approval_cancelled",
+    });
     releaseBroadcast?.();
     await processing;
 
@@ -721,7 +845,11 @@ describe("TransactionExecutionService", () => {
     const processing = execution.executeApprovedTransaction(REQUEST_ID);
     await persistenceStartedPromise;
 
-    await execution.rejectTransaction(REQUEST_ID, new Error("User cancelled after submission"));
+    await execution.rejectTransaction({
+      id: REQUEST_ID,
+      reason: new Error("User cancelled after submission"),
+      terminationReason: "approval_cancelled",
+    });
     releasePersistence?.();
     await processing;
 
@@ -765,11 +893,14 @@ describe("TransactionExecutionService", () => {
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
       id: REQUEST_ID,
-      status: "failed",
-      userRejected: false,
-      error: {
-        name: "ArxError",
-        message: "Wallet is locked.",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        userRejected: false,
+        error: {
+          name: "ArxError",
+          message: "Wallet is locked.",
+        },
       },
     });
     expect(broadcastTransaction).not.toHaveBeenCalled();
@@ -778,14 +909,20 @@ describe("TransactionExecutionService", () => {
   it("fails approved transactions that are missing prepared params", async () => {
     const proposalRuntime = createProposalRuntime();
     createTransactionProposal(proposalRuntime, {
-      status: "pending",
+      status: "active",
     });
     const state = proposalRuntime.peek(REQUEST_ID);
     if (!state) {
       throw new Error("Proposal not found");
     }
-    state.phase = "approved";
-    state.prepared = null;
+    state.status = "approved";
+    state.prepare = {
+      requestRevision: state.prepare.requestRevision,
+      sessionToken: "broken-session",
+      updatedAt: state.updatedAt,
+      status: "preparing",
+      prepared: null,
+    };
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const { execution } = createExecutionService({
       proposalRuntime,
@@ -800,9 +937,13 @@ describe("TransactionExecutionService", () => {
 
     expect(signTransaction).not.toHaveBeenCalled();
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
-      status: "failed",
-      error: {
-        message: "Approved transaction is missing prepared execution parameters.",
+      status: "terminated",
+      termination: {
+        reason: "execution_failed",
+        error: {
+          message: "Approved transaction is missing prepared execution parameters.",
+        },
+        userRejected: false,
       },
     });
   });

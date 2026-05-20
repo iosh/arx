@@ -1,4 +1,5 @@
 import type { ChainRef } from "../../chains/ids.js";
+import type { AccountAddress } from "../../controllers/account/types.js";
 import type { TransactionReplacementKey } from "../namespace/types.js";
 import type { TransactionReceipt, TransactionSubmitted } from "../types.js";
 
@@ -22,4 +23,6 @@ export type TransactionRecord = {
   updatedAt: number;
 };
 
-export type TransactionRecordView = TransactionRecord;
+export type TransactionRecordView = TransactionRecord & {
+  accountAddress: AccountAddress;
+};

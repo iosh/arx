@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
+import { TransactionRecordViewStore } from "../../transactions/record/TransactionRecordViewStore.js";
 import {
   APPROVAL_ID,
   accountCodecs,
@@ -8,7 +9,6 @@ import {
   REQUEST_ID,
 } from "./__fixtures__/transactionServices.js";
 import { createApprovalDetailInvalidations } from "./createApprovalDetailInvalidations.js";
-import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "./topics.js";
 
 const createRecordViewStore = () =>
@@ -17,7 +17,7 @@ const createRecordViewStore = () =>
     service: {
       get: vi.fn(async () => null),
       list: vi.fn(async () => []),
-      findByReplacementIdentity: vi.fn(async () => []),
+      findByReplacementKey: vi.fn(async () => []),
       createBroadcastRecord: vi.fn(async () => {
         throw new Error("not implemented");
       }),

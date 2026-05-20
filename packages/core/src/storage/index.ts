@@ -17,6 +17,7 @@ export type {
   PermissionRecord,
   SettingsRecord,
   TransactionRecord,
+  TransactionReplacementKey,
   TransactionStatus as StorageTransactionStatus,
 } from "./records.js";
 export {
@@ -30,6 +31,7 @@ export {
   PermissionRecordSchema,
   SettingsRecordSchema,
   TransactionRecordSchema,
+  TransactionReplacementKeySchema,
   TransactionStatusSchema,
 } from "./records.js";
 

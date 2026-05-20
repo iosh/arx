@@ -276,23 +276,23 @@ export type PermissionRecord = z.infer<typeof PermissionRecordSchema>;
 export const TransactionStatusSchema = z.enum(["broadcast", "confirmed", "failed", "replaced"]);
 export type TransactionStatus = z.infer<typeof TransactionStatusSchema>;
 
-export const TransactionReplacementIdentitySchema = z
+export const TransactionReplacementKeySchema = z
   .strictObject({
     scope: z.string().min(1),
     value: z.string().min(1),
   })
-  .nullable()
-  .optional();
-export type TransactionReplacementIdentity = z.infer<typeof TransactionReplacementIdentitySchema>;
+  .nullable();
+export type TransactionReplacementKey = z.infer<typeof TransactionReplacementKeySchema>;
 
 const TransactionRecordBaseSchema = z.strictObject({
   id: z.uuid(),
+  namespace: z.string().min(1),
   chainRef: chainRefSchema,
   origin: originStringSchema,
-  fromAccountKey: AccountKeySchema,
+  accountKey: AccountKeySchema,
   status: TransactionStatusSchema,
-  replacedId: z.uuid().nullable().optional(),
-  replacementIdentity: TransactionReplacementIdentitySchema,
+  replacedByRecordId: z.uuid().nullable(),
+  replacementKey: TransactionReplacementKeySchema,
   createdAt: epochMillisecondsSchema,
   updatedAt: epochMillisecondsSchema,
 });
@@ -300,22 +300,30 @@ const TransactionRecordBaseSchema = z.strictObject({
 const Eip155TransactionRecordSchema = TransactionRecordBaseSchema.extend({
   chainRef: z.string().regex(/^eip155:/),
   submitted: Eip155SubmittedTransactionSchema,
-  receipt: Eip155TransactionReceiptSchema.optional(),
+  receipt: Eip155TransactionReceiptSchema.nullable(),
 });
 
 const TransactionRecordEnvelopeSchema = TransactionRecordBaseSchema.extend({
   submitted: TransactionSubmittedSchema,
-  receipt: TransactionReceiptSchema.optional(),
+  receipt: TransactionReceiptSchema.nullable(),
 });
 
 export const TransactionRecordSchema = TransactionRecordEnvelopeSchema.superRefine((value, ctx) => {
-  const accountNamespace = value.fromAccountKey.split(":", 1)[0];
+  const accountNamespace = value.accountKey.split(":", 1)[0];
   const chainNamespace = getChainRefNamespace(value.chainRef);
+  if (value.namespace !== chainNamespace) {
+    ctx.addIssue({
+      code: "custom",
+      message: "namespace must match chainRef namespace",
+      path: ["namespace"],
+    });
+  }
+
   if (accountNamespace !== chainNamespace) {
     ctx.addIssue({
       code: "custom",
-      message: "fromAccountKey must belong to the same namespace as chainRef",
-      path: ["fromAccountKey"],
+      message: "accountKey must belong to the same namespace as chainRef",
+      path: ["accountKey"],
     });
   }
 

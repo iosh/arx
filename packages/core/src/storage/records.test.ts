@@ -4,9 +4,10 @@ import { NetworkSelectionRecordSchema, TransactionRecordSchema } from "./records
 
 const createTransactionRecord = (overrides: Partial<TransactionRecord> = {}) => ({
   id: "11111111-1111-4111-8111-111111111111",
+  namespace: "eip155",
   chainRef: "eip155:1",
   origin: "https://dapp.example",
-  fromAccountKey: "eip155:aa",
+  accountKey: "eip155:aa",
   status: "broadcast" as const,
   submitted: {
     hash: "0x1111",
@@ -14,6 +15,9 @@ const createTransactionRecord = (overrides: Partial<TransactionRecord> = {}) => 
     from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     nonce: "0x7",
   },
+  receipt: null,
+  replacementKey: null,
+  replacedByRecordId: null,
   createdAt: 0,
   updatedAt: 0,
   ...overrides,
@@ -90,7 +94,8 @@ describe("TransactionRecordSchema", () => {
       TransactionRecordSchema.parse(
         createTransactionRecord({
           chainRef: "cosmos:cosmoshub-4",
-          fromAccountKey: "eip155:aa",
+          namespace: "cosmos",
+          accountKey: "eip155:aa",
         }),
       ),
     ).toThrow(/namespace/i);
@@ -120,17 +125,17 @@ describe("TransactionRecordSchema", () => {
     ).toThrow(/submitted/i);
   });
 
-  it("accepts records with a durable replacement identity", () => {
+  it("accepts records with a durable replacement key", () => {
     const parsed = TransactionRecordSchema.parse(
       createTransactionRecord({
-        replacementIdentity: {
+        replacementKey: {
           scope: "eip155.nonce",
           value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
         },
       }),
     );
 
-    expect(parsed.replacementIdentity).toEqual({
+    expect(parsed.replacementKey).toEqual({
       scope: "eip155.nonce",
       value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     });

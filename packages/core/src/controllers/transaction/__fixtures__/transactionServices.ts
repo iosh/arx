@@ -8,8 +8,8 @@ import type { TransactionStatus as StorageTransactionStatus, TransactionRecord }
 import { buildEip155ApprovalReview } from "../../../transactions/namespace/eip155/approvalReview.js";
 import type { NamespaceTransactions } from "../../../transactions/namespace/NamespaceTransactions.js";
 import type { NamespaceTransaction } from "../../../transactions/namespace/types.js";
+import type { TransactionRecordViewStore } from "../../../transactions/record/TransactionRecordViewStore.js";
 import { TransactionProposalRuntime } from "../TransactionProposalRuntime.js";
-import type { TransactionRecordViewStore } from "../TransactionRecordViewStore.js";
 import { TRANSACTION_TOPICS } from "../topics.js";
 import type { TransactionProposalMeta, TransactionProposalTerminationReason, TransactionRecordView } from "../types.js";
 
@@ -216,23 +216,24 @@ export const createTransactionProposal = (
 };
 
 export const toRecord = (
-  meta: TransactionProposalMeta,
+  meta: Pick<TransactionProposalMeta, "id" | "namespace" | "chainRef" | "origin" | "from" | "createdAt" | "updatedAt">,
   status: StorageTransactionStatus = "broadcast",
-  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
+  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>,
 ): TransactionRecord => ({
   id: meta.id,
+  namespace: meta.namespace,
   chainRef: meta.chainRef,
   origin: meta.origin,
-  fromAccountKey: toAccountKeyFromAddress({
+  accountKey: toAccountKeyFromAddress({
     chainRef: meta.chainRef,
     address: meta.from,
     accountCodecs,
   }),
   status,
   submitted: DEFAULT_SUBMITTED,
-  ...(patch?.receipt !== undefined ? { receipt: patch.receipt } : {}),
-  ...(patch?.replacedId !== undefined ? { replacedId: patch.replacedId } : {}),
-  ...(patch?.replacementIdentity !== undefined ? { replacementIdentity: patch.replacementIdentity } : {}),
+  receipt: patch?.receipt ?? null,
+  replacementKey: patch?.replacementKey ?? null,
+  replacedByRecordId: patch?.replacedByRecordId ?? null,
   createdAt: meta.createdAt,
   updatedAt: meta.updatedAt,
 });
@@ -241,7 +242,7 @@ export const createTransactionsServiceStub = (
   overrides?: Partial<{
     get: TransactionsService["get"];
     list: TransactionsService["list"];
-    findByReplacementIdentity: TransactionsService["findByReplacementIdentity"];
+    findByReplacementKey: TransactionsService["findByReplacementKey"];
     createBroadcastRecord: TransactionsService["createBroadcastRecord"];
     updateRecordStatus: TransactionsService["updateRecordStatus"];
     subscribeChanged: TransactionsService["subscribeChanged"];
@@ -254,26 +255,25 @@ export const createTransactionsServiceStub = (
   return {
     get: overrides?.get ?? vi.fn(async () => null),
     list,
-    findByReplacementIdentity:
-      overrides?.findByReplacementIdentity ??
-      vi.fn(async (identity) => {
-        const records = await list({ replacementIdentity: identity });
-        return records.filter(
-          (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(identity),
-        );
+    findByReplacementKey:
+      overrides?.findByReplacementKey ??
+      vi.fn(async (key) => {
+        const records = await list({ replacementKey: key });
+        return records.filter((record) => JSON.stringify(record.replacementKey) === JSON.stringify(key));
       }),
     createBroadcastRecord:
       overrides?.createBroadcastRecord ??
       vi.fn(async (input) => ({
         id: input.id ?? crypto.randomUUID(),
+        namespace: input.chainRef.split(":", 1)[0] ?? "",
         chainRef: input.chainRef,
         origin: input.origin,
-        fromAccountKey: input.fromAccountKey,
-        status: "broadcast",
+        accountKey: input.accountKey,
+        status: "broadcast" as const,
         submitted: input.submitted,
-        ...(input.receipt !== undefined ? { receipt: input.receipt } : {}),
-        ...(input.replacedId !== undefined ? { replacedId: input.replacedId } : {}),
-        ...(input.replacementIdentity !== undefined ? { replacementIdentity: input.replacementIdentity } : {}),
+        receipt: input.receipt ?? null,
+        replacementKey: input.replacementKey ?? null,
+        replacedByRecordId: input.replacedByRecordId ?? null,
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       })),
@@ -299,16 +299,16 @@ export const createRecordViewStub = (params?: {
       next: {
         kind: "record",
         id: record.id,
-        namespace: record.chainRef.split(":", 1)[0] ?? "",
+        namespace: record.namespace,
         chainRef: record.chainRef,
         origin: record.origin,
-        from,
-        fromAccountKey: record.fromAccountKey,
+        accountAddress: from,
+        accountKey: record.accountKey,
         status: record.status,
         submitted: record.submitted,
-        receipt: record.receipt ?? null,
-        replacementIdentity: record.replacementIdentity ?? null,
-        replacedId: record.replacedId ?? null,
+        receipt: record.receipt,
+        replacementKey: record.replacementKey,
+        replacedByRecordId: record.replacedByRecordId,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       } satisfies TransactionRecordView,

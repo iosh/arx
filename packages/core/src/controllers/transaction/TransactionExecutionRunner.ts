@@ -1,9 +1,9 @@
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import { requireNamespaceTransactionOperation } from "../../transactions/namespace/operations.js";
+import type { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import { canStartProposalExecution } from "./status.js";
 import type { TransactionExecutionAttemptPhase } from "./TransactionExecutionPipeline.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_SUBMITTED, type TransactionMessenger } from "./topics.js";
 import {

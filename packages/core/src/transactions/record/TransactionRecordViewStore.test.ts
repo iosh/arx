@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
+import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
+import type { TransactionStatusChange } from "../../controllers/transaction/types.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "./topics.js";
-import type { TransactionStatusChange } from "./types.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);
 const chainRef = "eip155:1";
@@ -13,9 +13,10 @@ const from = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const createRecord = (overrides?: Partial<TransactionRecord>): TransactionRecord => ({
   id: "11111111-1111-4111-8111-111111111111",
+  namespace: "eip155",
   chainRef,
   origin: "https://dapp.example",
-  fromAccountKey: accountCodecs.toAccountKeyFromAddress({ chainRef, address: from }),
+  accountKey: accountCodecs.toAccountKeyFromAddress({ chainRef, address: from }),
   status: "broadcast",
   submitted: {
     hash: "0x1234",
@@ -23,6 +24,9 @@ const createRecord = (overrides?: Partial<TransactionRecord>): TransactionRecord
     from,
     nonce: "0x7",
   },
+  receipt: null,
+  replacementKey: null,
+  replacedByRecordId: null,
   createdAt: 1,
   updatedAt: 1,
   ...overrides,
@@ -33,8 +37,8 @@ const createService = (records: TransactionRecord[] = []): TransactionsService =
     subscribeChanged: vi.fn(() => () => {}),
     get: vi.fn(async (id: string) => records.find((record) => record.id === id) ?? null),
     list: vi.fn(async () => records),
-    findByReplacementIdentity: vi.fn(async (identity) =>
-      records.filter((record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(identity)),
+    findByReplacementKey: vi.fn(async (key) =>
+      records.filter((record) => JSON.stringify(record.replacementKey) === JSON.stringify(key)),
     ),
     createBroadcastRecord: vi.fn(),
     updateRecordStatus: vi.fn(),
@@ -76,10 +80,11 @@ describe("TransactionRecordViewStore", () => {
       id: record.id,
       namespace: "eip155",
       chainRef,
-      fromAccountKey: record.fromAccountKey,
+      accountAddress: from,
+      accountKey: record.accountKey,
       status: "broadcast",
       submitted: record.submitted,
-      replacementIdentity: null,
+      replacementKey: null,
     });
     expect(view).not.toHaveProperty("request");
     expect(view).not.toHaveProperty("prepared");

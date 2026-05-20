@@ -1,4 +1,3 @@
-import { getChainRefNamespace } from "../chains/caip.js";
 import type { ApprovalController } from "../controllers/approval/types.js";
 import type { SendTransactionApprovalReview } from "../controllers/transaction/review/types.js";
 import type {
@@ -149,15 +148,16 @@ const mapProposalView = (deps: {
 
 const mapRecordView = (record: ControllerTransactionRecordView): TransactionRecordView => ({
   id: record.id,
-  namespace: getChainRefNamespace(record.chainRef),
+  namespace: record.namespace,
   chainRef: record.chainRef,
   origin: record.origin,
-  accountKey: record.fromAccountKey,
+  accountKey: record.accountKey,
+  accountAddress: record.accountAddress,
   status: record.status,
   submitted: structuredClone(record.submitted),
   receipt: structuredClone(record.receipt),
-  replacementKey: structuredClone(record.replacementIdentity ?? null),
-  replacedByRecordId: record.replacedId,
+  replacementKey: structuredClone(record.replacementKey),
+  replacedByRecordId: record.replacedByRecordId,
   createdAt: record.createdAt,
   updatedAt: record.updatedAt,
 });

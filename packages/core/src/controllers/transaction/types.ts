@@ -3,7 +3,7 @@ import type { AccountAddress } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type {
   TransactionStatus as StorageTransactionStatus,
-  TransactionReplacementIdentity,
+  TransactionReplacementKey,
 } from "../../storage/records.js";
 import type { TransactionAccess } from "../../transactions/access.js";
 import type {
@@ -91,7 +91,7 @@ export type TransactionProposalMeta = TransactionMetaBase & {
   termination?: TransactionProposalTerminationSnapshot | undefined;
   submitted?: never;
   receipt?: never;
-  replacedId?: never;
+  replacedByRecordId?: never;
 };
 
 export type TransactionProposalTerminationSnapshot = {
@@ -165,13 +165,13 @@ export type TransactionRecordView = {
   namespace: string;
   chainRef: ChainRef;
   origin: string;
-  from: AccountAddress | null;
-  fromAccountKey: string;
+  accountAddress: AccountAddress;
+  accountKey: string;
   status: TransactionRecordStatus;
   submitted: TransactionSubmitted;
   receipt: TransactionReceipt | null;
-  replacementIdentity: TransactionReplacementIdentity;
-  replacedId: string | null;
+  replacementKey: TransactionReplacementKey;
+  replacedByRecordId: string | null;
   createdAt: number;
   updatedAt: number;
 };

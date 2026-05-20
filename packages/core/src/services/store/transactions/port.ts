@@ -5,7 +5,7 @@ import type { ListTransactionsCursor } from "./types.js";
 export type ListTransactionsQuery = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
-  replacementIdentity?: TransactionRecord["replacementIdentity"];
+  replacementKey?: TransactionRecord["replacementKey"];
   limit?: number;
   before?: ListTransactionsCursor;
 };
@@ -14,9 +14,7 @@ export interface TransactionsPort {
 
   list(query?: ListTransactionsQuery): Promise<TransactionRecord[]>;
 
-  findByReplacementIdentity(
-    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
-  ): Promise<TransactionRecord[]>;
+  findByReplacementKey(key: NonNullable<TransactionRecord["replacementKey"]>): Promise<TransactionRecord[]>;
 
   // Inserts a new transaction row. Duplicate ids must fail instead of overwriting.
   create(record: TransactionRecord): Promise<void>;

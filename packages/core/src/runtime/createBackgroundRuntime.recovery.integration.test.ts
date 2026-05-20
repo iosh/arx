@@ -56,9 +56,10 @@ describe("createBackgroundRuntime (recovery integration)", () => {
     const txId = "11111111-1111-4111-8111-111111111111";
     const seed: TransactionRecord = {
       id: txId,
+      namespace: chain.namespace,
       chainRef: chain.chainRef,
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       status: "broadcast",
       submitted: {
         hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -66,6 +67,9 @@ describe("createBackgroundRuntime (recovery integration)", () => {
         from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         nonce: "0x7",
       },
+      receipt: null,
+      replacementKey: null,
+      replacedByRecordId: null,
       createdAt: 1_000,
       updatedAt: 1_000,
     };

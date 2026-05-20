@@ -1,6 +1,6 @@
+import type { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import type { TransactionError } from "../../transactions/types.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionProposalTerminationReason } from "./types.js";
 import { coerceTransactionError } from "./utils.js";

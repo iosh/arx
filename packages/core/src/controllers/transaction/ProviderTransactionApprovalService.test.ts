@@ -66,13 +66,14 @@ describe("ProviderTransactionApprovalService", () => {
     });
 
     expect(rejectTransaction).toHaveBeenCalledTimes(1);
-    expect(rejectTransaction).toHaveBeenCalledWith(
-      TRANSACTION_ID,
-      expect.objectContaining({
+    expect(rejectTransaction).toHaveBeenCalledWith({
+      id: TRANSACTION_ID,
+      reason: expect.objectContaining({
         name: "TransportDisconnectedError",
         code: 4900,
       }),
-    );
+      terminationReason: "approval_cancelled",
+    });
 
     await submission.waitForSubmission();
     expect(waitForSubmissionOutcome).toHaveBeenCalledWith(TRANSACTION_ID);

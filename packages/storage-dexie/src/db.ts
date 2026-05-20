@@ -14,7 +14,7 @@ import type { VaultMetaEntity } from "./types.js";
 export const DB_SCHEMA_VERSION = 1;
 
 const TRANSACTIONS_SCHEMA =
-  "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [replacementIdentity.scope+replacementIdentity.value]";
+  "&id, status, chainRef, createdAt, updatedAt, [createdAt+id], [chainRef+createdAt], [chainRef+createdAt+id], [status+createdAt], [status+createdAt+id], [replacementKey.scope+replacementKey.value]";
 
 type CustomChainRow = CustomChainRecord;
 type CustomRpcRow = CustomRpcRecord;

@@ -2,6 +2,7 @@ import { ArxReasons, arxError } from "@arx/errors";
 import { describe, expect, it, vi } from "vitest";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionRecord } from "../../storage/records.js";
+import { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import {
   accountCodecs,
   createDefaultAccountKey,
@@ -24,7 +25,6 @@ import {
 import { TransactionExecutionPipeline } from "./TransactionExecutionPipeline.js";
 import { TransactionExecutionService } from "./TransactionExecutionService.js";
 import { TransactionProposalApprovalService } from "./TransactionProposalApprovalService.js";
-import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import { TRANSACTION_BROADCAST_STARTED, TRANSACTION_TOPICS } from "./topics.js";
 import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
@@ -59,11 +59,15 @@ const createExecutionService = (params?: {
     createTransactionsServiceStub({
       createBroadcastRecord: vi.fn(async (input) => ({
         id: input.id ?? REQUEST_ID,
+        namespace: "eip155",
         chainRef: input.chainRef,
         origin: input.origin,
-        fromAccountKey: input.fromAccountKey,
+        accountKey: input.accountKey,
         status: "broadcast" as const,
         submitted: input.submitted,
+        receipt: null,
+        replacementKey: null,
+        replacedByRecordId: null,
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       })),
@@ -132,7 +136,7 @@ const createRecordView = (input: {
   status: TransactionRecordView["status"];
   submitted?: TransactionRecordView["submitted"];
   receipt?: TransactionRecordView["receipt"];
-  replacedId?: TransactionRecordView["replacedId"];
+  replacedByRecordId?: TransactionRecordView["replacedByRecordId"];
   updatedAt?: number;
 }): TransactionRecordView => {
   return {
@@ -141,13 +145,13 @@ const createRecordView = (input: {
     namespace: "eip155",
     chainRef: DEFAULT_CHAIN_REF,
     origin: REQUEST_CONTEXT.origin,
-    from: DEFAULT_FROM,
-    fromAccountKey: createDefaultAccountKey(),
+    accountAddress: DEFAULT_FROM,
+    accountKey: createDefaultAccountKey(),
     status: input.status,
     submitted: input.submitted ?? DEFAULT_SUBMITTED,
     receipt: input.receipt ?? null,
-    replacementIdentity: null,
-    replacedId: input.replacedId ?? null,
+    replacementKey: null,
+    replacedByRecordId: input.replacedByRecordId ?? null,
     createdAt: 1,
     updatedAt: input.updatedAt ?? 1,
   };
@@ -314,14 +318,7 @@ describe("TransactionExecutionService", () => {
               namespace: durableMeta.namespace,
               chainRef: durableMeta.chainRef,
               origin: durableMeta.origin,
-              from: durableMeta.from,
-              request: {
-                namespace: "eip155",
-                chainRef: durableMeta.chainRef,
-                payload: { from: durableMeta.from, to: DEFAULT_TO, value: "0x0" },
-              },
-              prepared: null,
-              status: "approved",
+              from: durableMeta.accountAddress,
               createdAt: durableMeta.createdAt,
               updatedAt: durableMeta.updatedAt,
             },
@@ -362,11 +359,15 @@ describe("TransactionExecutionService", () => {
     }));
     const createBroadcastRecord = vi.fn(async (input) => ({
       id: input.id ?? REQUEST_ID,
+      namespace: "eip155",
       chainRef: input.chainRef,
       origin: input.origin,
-      fromAccountKey: input.fromAccountKey,
+      accountKey: input.accountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
+      receipt: null,
+      replacementKey: null,
+      replacedByRecordId: null,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -595,10 +596,7 @@ describe("TransactionExecutionService", () => {
   });
 
   it("does not revive a rejected proposal after async signing resolves", async () => {
-    let releaseSign: (() => void) | null = null;
-    const signStarted = new Promise<void>((resolve) => {
-      releaseSign = resolve;
-    });
+    const { promise: signStarted, resolve: releaseSign } = Promise.withResolvers<void>();
     const signTransaction = vi.fn(async () => {
       await signStarted;
       return { raw: "0x1111" };
@@ -625,7 +623,7 @@ describe("TransactionExecutionService", () => {
       reason: new Error("User cancelled before submission"),
       terminationReason: "approval_cancelled",
     });
-    releaseSign?.();
+    releaseSign();
     await processing;
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
@@ -644,10 +642,7 @@ describe("TransactionExecutionService", () => {
 
   it("aborts an in-flight signing attempt when external cancellation arrives", async () => {
     let observedSignal: AbortSignal | null = null;
-    let releaseSign: (() => void) | null = null;
-    const signBlocked = new Promise<void>((resolve) => {
-      releaseSign = resolve;
-    });
+    const { promise: signBlocked, resolve: releaseSign } = Promise.withResolvers<void>();
     const signTransaction = vi.fn(async (_context, _prepared, options?: { signal?: AbortSignal }) => {
       observedSignal = options?.signal ?? null;
       await signBlocked;
@@ -678,9 +673,9 @@ describe("TransactionExecutionService", () => {
       reason: new Error("User cancelled before submission"),
       terminationReason: "approval_cancelled",
     });
-    expect(observedSignal?.aborted).toBe(true);
+    expect((observedSignal as unknown as AbortSignal).aborted).toBe(true);
 
-    releaseSign?.();
+    releaseSign();
     await processing;
 
     expect(proposalRuntime.get(REQUEST_ID)).toMatchObject({
@@ -705,11 +700,15 @@ describe("TransactionExecutionService", () => {
     }));
     const createBroadcastRecord = vi.fn(async (input) => ({
       id: input.id ?? REQUEST_ID,
+      namespace: "eip155",
       chainRef: input.chainRef,
       origin: input.origin,
-      fromAccountKey: input.fromAccountKey,
+      accountKey: input.accountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
+      receipt: null,
+      replacementKey: null,
+      replacedByRecordId: null,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -745,10 +744,7 @@ describe("TransactionExecutionService", () => {
   });
 
   it("keeps the broadcast result when rejection races after broadcast has started", async () => {
-    let releaseBroadcast: (() => void) | null = null;
-    const broadcastStarted = new Promise<void>((resolve) => {
-      releaseBroadcast = resolve;
-    });
+    const { promise: broadcastStarted, resolve: releaseBroadcast } = Promise.withResolvers<void>();
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const broadcastTransaction = vi.fn(async () => {
       await broadcastStarted;
@@ -758,11 +754,15 @@ describe("TransactionExecutionService", () => {
     });
     const createBroadcastRecord = vi.fn(async (input) => ({
       id: input.id ?? REQUEST_ID,
+      namespace: "eip155",
       chainRef: input.chainRef,
       origin: input.origin,
-      fromAccountKey: input.fromAccountKey,
+      accountKey: input.accountKey,
       status: "broadcast" as const,
       submitted: input.submitted,
+      receipt: null,
+      replacementKey: null,
+      replacedByRecordId: null,
       createdAt: input.createdAt ?? 1,
       updatedAt: input.createdAt ?? 1,
     }));
@@ -791,7 +791,7 @@ describe("TransactionExecutionService", () => {
       reason: new Error("User cancelled too late"),
       terminationReason: "approval_cancelled",
     });
-    releaseBroadcast?.();
+    releaseBroadcast();
     await processing;
 
     expect(createBroadcastRecord).toHaveBeenCalledTimes(1);
@@ -800,28 +800,26 @@ describe("TransactionExecutionService", () => {
   });
 
   it("keeps the broadcast result when rejection races during durable persistence", async () => {
-    let releasePersistence: (() => void) | null = null;
-    let persistenceStarted: (() => void) | null = null;
-    const persistenceStartedPromise = new Promise<void>((resolve) => {
-      persistenceStarted = resolve;
-    });
-    const persistenceBlocked = new Promise<void>((resolve) => {
-      releasePersistence = resolve;
-    });
+    const { promise: persistenceStartedPromise, resolve: persistenceStarted } = Promise.withResolvers<void>();
+    const { promise: persistenceBlocked, resolve: releasePersistence } = Promise.withResolvers<void>();
     const signTransaction = vi.fn(async () => ({ raw: "0x1111" }));
     const broadcastTransaction = vi.fn(async () => ({
       submitted: DEFAULT_SUBMITTED,
     }));
     const createBroadcastRecord = vi.fn(async (input) => {
-      persistenceStarted?.();
+      persistenceStarted();
       await persistenceBlocked;
       return {
         id: input.id ?? REQUEST_ID,
+        namespace: "eip155",
         chainRef: input.chainRef,
         origin: input.origin,
-        fromAccountKey: input.fromAccountKey,
+        accountKey: input.accountKey,
         status: "broadcast" as const,
         submitted: input.submitted,
+        receipt: null,
+        replacementKey: null,
+        replacedByRecordId: null,
         createdAt: input.createdAt ?? 1,
         updatedAt: input.createdAt ?? 1,
       };
@@ -850,7 +848,7 @@ describe("TransactionExecutionService", () => {
       reason: new Error("User cancelled after submission"),
       terminationReason: "approval_cancelled",
     });
-    releasePersistence?.();
+    releasePersistence();
     await processing;
 
     expect(createBroadcastRecord).toHaveBeenCalledTimes(1);

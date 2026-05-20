@@ -84,7 +84,7 @@ export type ReceiptResolution<TNamespace extends string = string> =
   | { status: "failed"; receipt: TransactionReceipt<TNamespace> };
 
 export type ReplacementResolution = {
-  replacedId?: string | null;
+  replacedByRecordId?: string | null;
   status: "replaced";
 };
 

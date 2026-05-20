@@ -1,10 +1,13 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import { getChainRefNamespace } from "../../chains/caip.js";
+import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "../../controllers/transaction/topics.js";
+import type {
+  TransactionRecordReader,
+  TransactionRecordStatusChange,
+  TransactionRecordView,
+} from "../../controllers/transaction/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { TransactionReceipt } from "../../transactions/types.js";
-import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "./topics.js";
-import type { TransactionRecordReader, TransactionRecordStatusChange, TransactionRecordView } from "./types.js";
 
 type Options = {
   messenger: TransactionMessenger;
@@ -26,7 +29,6 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
   #accountCodecs: Pick<AccountCodecRegistry, "toCanonicalAddressFromAccountKey">;
   #stateLimit: number;
   #logger: (message: string, data?: unknown) => void;
-  #fromDecodeLogged: Set<string> = new Set();
 
   #records: Map<string, TransactionRecordView> = new Map();
   #changeListeners = new Set<(transactionIds: string[]) => void>();
@@ -159,7 +161,6 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
       const oldest = this.#records.keys().next().value as string | undefined;
       if (!oldest) break;
       this.#records.delete(oldest);
-      this.#fromDecodeLogged.delete(oldest);
     }
 
     this.#notifyChanged([view.id]);
@@ -186,20 +187,14 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
     }
   }
 
-  #safeFromAccountKeyToAddress(record: TransactionRecord): string | null {
+  #deriveAccountAddress(record: TransactionRecord): string {
     try {
-      return this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: record.fromAccountKey });
+      return this.#accountCodecs.toCanonicalAddressFromAccountKey({ accountKey: record.accountKey });
     } catch (error) {
-      if (!this.#fromDecodeLogged.has(record.id)) {
-        this.#fromDecodeLogged.add(record.id);
-        this.#logger("transactions:record-view failed to derive from address", {
-          id: record.id,
-          chainRef: record.chainRef,
-          fromAccountKey: record.fromAccountKey,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-      return null;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Transaction record ${record.id} has an invalid accountKey ${record.accountKey}: ${message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -207,16 +202,16 @@ export class TransactionRecordViewStore implements TransactionRecordReader {
     return {
       kind: "record",
       id: record.id,
-      namespace: getChainRefNamespace(record.chainRef),
+      namespace: record.namespace,
       chainRef: record.chainRef,
       origin: record.origin,
-      from: this.#safeFromAccountKeyToAddress(record),
-      fromAccountKey: record.fromAccountKey,
+      accountAddress: this.#deriveAccountAddress(record),
+      accountKey: record.accountKey,
       status: record.status,
       submitted: structuredClone(record.submitted),
       receipt: structuredClone((record.receipt ?? null) as TransactionReceipt | null),
-      replacementIdentity: structuredClone(record.replacementIdentity ?? null),
-      replacedId: record.replacedId ?? null,
+      replacementKey: structuredClone(record.replacementKey),
+      replacedByRecordId: record.replacedByRecordId,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };

@@ -14,7 +14,7 @@ export type TransactionsChangedPayload =
       kind: "recordLinked";
       id: TransactionRecord["id"];
       status: TransactionStatus;
-      keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
+      keys: Array<keyof Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>;
     }
   | { kind: "remove"; id: TransactionRecord["id"] };
 
@@ -37,11 +37,11 @@ export type CreateBroadcastRecordParams = {
   id?: TransactionRecord["id"];
   chainRef: ChainRef;
   origin: TransactionRecord["origin"];
-  fromAccountKey: TransactionRecord["fromAccountKey"];
+  accountKey: TransactionRecord["accountKey"];
   submitted: TransactionRecord["submitted"];
   receipt?: TransactionRecord["receipt"] | undefined;
-  replacedId?: TransactionRecord["replacedId"] | undefined;
-  replacementIdentity?: TransactionRecord["replacementIdentity"] | undefined;
+  replacedByRecordId?: TransactionRecord["replacedByRecordId"] | undefined;
+  replacementKey?: TransactionRecord["replacementKey"] | undefined;
   /**
    * Optional caller-provided createdAt for deterministic timestamps in tests.
    * When provided, updatedAt is initialized to the same value.
@@ -53,7 +53,7 @@ export type UpdateRecordStatusParams = {
   id: TransactionRecord["id"];
   fromStatus: TransactionStatus;
   toStatus: TransactionStatus;
-  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
+  patch?: Partial<Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>;
 };
 
 export type ListTransactionsCursor = {
@@ -64,7 +64,7 @@ export type ListTransactionsCursor = {
 export type ListTransactionsParams = {
   chainRef?: ChainRef;
   status?: TransactionStatus;
-  replacementIdentity?: TransactionRecord["replacementIdentity"];
+  replacementKey?: TransactionRecord["replacementKey"];
   limit?: number;
   before?: ListTransactionsCursor;
 };
@@ -72,7 +72,7 @@ export type ListTransactionsParams = {
 export type LinkRecordParams = {
   id: TransactionRecord["id"];
   expectedStatus: TransactionStatus;
-  patch: Partial<Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>;
+  patch: Partial<Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>;
 };
 
 export type TransactionsService = {
@@ -80,9 +80,7 @@ export type TransactionsService = {
 
   get(id: TransactionRecord["id"]): Promise<TransactionRecord | null>;
   list(params?: ListTransactionsParams): Promise<TransactionRecord[]>;
-  findByReplacementIdentity(
-    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
-  ): Promise<TransactionRecord[]>;
+  findByReplacementKey(key: NonNullable<TransactionRecord["replacementKey"]>): Promise<TransactionRecord[]>;
 
   createBroadcastRecord(params: CreateBroadcastRecordParams): Promise<TransactionRecord>;
 

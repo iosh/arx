@@ -1,15 +1,18 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
+import type { TransactionProposalRuntime } from "../../controllers/transaction/TransactionProposalRuntime.js";
+import type { TransactionSubmissionStore } from "../../controllers/transaction/TransactionSubmissionStore.js";
+import type { TransactionProposalMeta, TransactionRecordView } from "../../controllers/transaction/types.js";
+import { createTransactionPersistenceError } from "../../controllers/transaction/utils.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
-import type { TransactionRecord, TransactionReplacementIdentity } from "../../storage/records.js";
+import type {
+  TransactionReplacementKey as DurableTransactionReplacementKey,
+  TransactionRecord,
+} from "../../storage/records.js";
 import { TransactionSubmittedSchema } from "../../storage/schemas.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { TransactionReplacementKey } from "../../transactions/namespace/types.js";
+import type { TransactionReplacementKey as NamespaceTransactionReplacementKey } from "../../transactions/namespace/types.js";
 import type { TransactionSubmitted } from "../../transactions/types.js";
-import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "./types.js";
-import { createTransactionPersistenceError } from "./utils.js";
 
 type TransactionPersistenceRuntimeDeps = {
   proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
@@ -29,9 +32,9 @@ const parseDurableSubmitted = (params: {
   return TransactionSubmittedSchema.parse(parsedSubmitted ?? params.submitted);
 };
 
-const toStoredReplacementIdentity = (
-  replacementKey: TransactionReplacementKey | null,
-): TransactionReplacementIdentity => {
+const toDurableReplacementKey = (
+  replacementKey: NamespaceTransactionReplacementKey | null,
+): DurableTransactionReplacementKey => {
   if (!replacementKey) return null;
   return {
     scope: replacementKey.scope,
@@ -70,7 +73,7 @@ export class TransactionPersistenceRuntime {
         throw new Error(`Transaction ${meta.id} is missing a from address.`);
       }
 
-      const replacementIdentity = this.#deriveReplacementIdentity({
+      const replacementKey = this.#deriveReplacementKey({
         namespace: meta.namespace,
         chainRef: meta.chainRef,
         origin: meta.origin,
@@ -84,12 +87,12 @@ export class TransactionPersistenceRuntime {
         createdAt: meta.createdAt,
         chainRef: meta.chainRef,
         origin: meta.origin,
-        fromAccountKey: this.#accountCodecs.toAccountKeyFromAddress({
+        accountKey: this.#accountCodecs.toAccountKeyFromAddress({
           chainRef: meta.chainRef,
           address: meta.from,
         }),
         submitted: structuredClone(durableSubmitted),
-        replacementIdentity,
+        replacementKey,
       });
 
       const cleared = this.#proposalRuntime.clearProposalAfterRecordPersisted(meta.id);
@@ -121,14 +124,14 @@ export class TransactionPersistenceRuntime {
     this.#startTracking(committed.next, { resume: true });
   }
 
-  #deriveReplacementIdentity(input: {
+  #deriveReplacementKey(input: {
     namespace: string;
     chainRef: string;
     origin: string;
     from: string;
     id: string;
     submitted: TransactionRecord["submitted"];
-  }): TransactionReplacementIdentity {
+  }): DurableTransactionReplacementKey {
     const namespaceTransaction = this.#namespaces.get(input.namespace);
     if (!namespaceTransaction?.tracking?.deriveReplacementKey) return null;
 
@@ -140,6 +143,6 @@ export class TransactionPersistenceRuntime {
       from: input.from,
       submitted: structuredClone(input.submitted),
     });
-    return toStoredReplacementIdentity(replacementKey);
+    return toDurableReplacementKey(replacementKey);
   }
 }

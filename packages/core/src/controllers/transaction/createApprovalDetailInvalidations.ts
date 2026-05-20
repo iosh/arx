@@ -1,7 +1,7 @@
+import type { TransactionRecordViewStore } from "../../transactions/record/TransactionRecordViewStore.js";
 import type { ApprovalController, ApprovalFinishedEvent } from "../approval/types.js";
 import { ApprovalDetailInvalidationPublisher } from "./ApprovalDetailInvalidationPublisher.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import type { TransactionMessenger } from "./topics.js";
 import type { ApprovalDetailInvalidation, ApprovalDetailInvalidationEvents } from "./types.js";
 

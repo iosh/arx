@@ -1,3 +1,4 @@
+import { getChainRefNamespace } from "../../../chains/caip.js";
 import { type TransactionRecord, TransactionRecordSchema } from "../../../storage/records.js";
 import { compactUndefined } from "../_shared/compactUndefined.js";
 import { createSignal } from "../_shared/signal.js";
@@ -48,7 +49,7 @@ export const createTransactionsService = ({
     const records = await port.list({
       ...(params?.chainRef !== undefined ? { chainRef: params.chainRef } : {}),
       ...(params?.status !== undefined ? { status: params.status } : {}),
-      ...(params?.replacementIdentity !== undefined ? { replacementIdentity: params.replacementIdentity } : {}),
+      ...(params?.replacementKey !== undefined ? { replacementKey: params.replacementKey } : {}),
       ...(params?.limit !== undefined ? { limit: params.limit } : {}),
       ...(params?.before !== undefined ? { before: params.before } : {}),
     });
@@ -61,8 +62,8 @@ export const createTransactionsService = ({
     return parsed;
   };
 
-  const findByReplacementIdentity = async (identity: NonNullable<TransactionRecord["replacementIdentity"]>) => {
-    const records = await port.findByReplacementIdentity(identity);
+  const findByReplacementKey = async (replacementKey: NonNullable<TransactionRecord["replacementKey"]>) => {
+    const records = await port.findByReplacementKey(replacementKey);
     const parsed = records.flatMap((record) => {
       const out = TransactionRecordSchema.safeParse(record);
       return out.success ? [out.data] : [];
@@ -76,14 +77,15 @@ export const createTransactionsService = ({
 
     const recordInput = compactUndefined({
       id: params.id ?? crypto.randomUUID(),
+      namespace: getChainRefNamespace(params.chainRef),
       chainRef: params.chainRef,
       origin: params.origin,
-      fromAccountKey: params.fromAccountKey,
+      accountKey: params.accountKey,
       status: "broadcast",
       submitted: structuredClone(params.submitted),
-      receipt: params.receipt !== undefined ? structuredClone(params.receipt) : undefined,
-      replacedId: params.replacedId,
-      replacementIdentity: params.replacementIdentity,
+      receipt: params.receipt !== undefined ? structuredClone(params.receipt) : null,
+      replacedByRecordId: params.replacedByRecordId ?? null,
+      replacementKey: params.replacementKey ?? null,
       createdAt: ts,
       updatedAt: ts,
     });
@@ -196,7 +198,7 @@ export const createTransactionsService = ({
       kind: "recordLinked",
       id: checked.id,
       status: checked.status,
-      keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedId" | "replacementIdentity">>,
+      keys: keys as Array<keyof Pick<TransactionRecord, "receipt" | "replacedByRecordId" | "replacementKey">>,
     });
     return checked;
   };
@@ -211,7 +213,7 @@ export const createTransactionsService = ({
 
     get,
     list,
-    findByReplacementIdentity,
+    findByReplacementKey,
     createBroadcastRecord,
     updateRecordStatus,
     linkRecord,

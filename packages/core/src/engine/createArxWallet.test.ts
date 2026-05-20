@@ -146,9 +146,10 @@ const createTransactionRecord = (
   overrides: Partial<TransactionRecord> & Pick<TransactionRecord, "id" | "status">,
 ): TransactionRecord => ({
   id: overrides.id,
+  namespace: "eip155",
   chainRef: EIP155_CHAIN_REF,
   origin: ORIGIN,
-  fromAccountKey: ACCOUNT_KEY,
+  accountKey: ACCOUNT_KEY,
   status: overrides.status,
   submitted: {
     hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
@@ -156,6 +157,9 @@ const createTransactionRecord = (
     from: ACCOUNT_ADDRESS,
     nonce: "0x7",
   },
+  receipt: null,
+  replacementKey: null,
+  replacedByRecordId: null,
   createdAt: 1_000,
   updatedAt: 1_000,
   ...overrides,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionRecord } from "../../storage/records.js";
+import { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import {
   accountCodecs,
   createNamespacesStub,
@@ -10,7 +11,6 @@ import {
   DEFAULT_SUBMITTED,
   REQUEST_CONTEXT,
 } from "./__fixtures__/transactionServices.js";
-import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
 
 describe("createTransactionRecoveryService", () => {
@@ -23,13 +23,13 @@ describe("createTransactionRecoveryService", () => {
         namespace: "eip155",
         chainRef: record.chainRef,
         origin: record.origin,
-        from: DEFAULT_FROM,
-        fromAccountKey: record.fromAccountKey,
+        accountAddress: DEFAULT_FROM,
+        accountKey: record.accountKey,
         status: record.status,
         submitted: record.submitted,
-        receipt: record.receipt ?? null,
-        replacementIdentity: record.replacementIdentity ?? null,
-        replacedId: record.replacedId ?? null,
+        receipt: record.receipt,
+        replacementKey: record.replacementKey,
+        replacedByRecordId: record.replacedByRecordId,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       },
@@ -49,14 +49,18 @@ describe("createTransactionRecoveryService", () => {
       .mockResolvedValueOnce([
         {
           id: "durable-tx",
+          namespace: "eip155",
           chainRef: DEFAULT_CHAIN_REF,
           origin: REQUEST_CONTEXT.origin,
-          fromAccountKey: accountCodecs.toAccountKeyFromAddress({
+          accountKey: accountCodecs.toAccountKeyFromAddress({
             chainRef: DEFAULT_CHAIN_REF,
             address: DEFAULT_FROM,
           }),
           status: "broadcast",
           submitted: DEFAULT_SUBMITTED,
+          receipt: null,
+          replacementKey: null,
+          replacedByRecordId: null,
           createdAt: 1,
           updatedAt: 1,
         },

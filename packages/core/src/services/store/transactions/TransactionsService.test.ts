@@ -14,17 +14,15 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
     async list(query) {
       const chainRef = query?.chainRef;
       const status = query?.status;
-      const replacementIdentity = query?.replacementIdentity;
+      const replacementKey = query?.replacementKey;
       const limit = query?.limit ?? 100;
       const before = query?.before;
 
       let all = [...store.values()];
       if (chainRef) all = all.filter((record) => record.chainRef === chainRef);
       if (status) all = all.filter((record) => record.status === status);
-      if (replacementIdentity !== undefined) {
-        all = all.filter(
-          (record) => JSON.stringify(record.replacementIdentity ?? null) === JSON.stringify(replacementIdentity),
-        );
+      if (replacementKey !== undefined) {
+        all = all.filter((record) => JSON.stringify(record.replacementKey ?? null) === JSON.stringify(replacementKey));
       }
       all.sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
       if (before !== undefined) {
@@ -37,8 +35,8 @@ const createInMemoryPort = (seed: TransactionRecord[] = []) => {
 
       return all.slice(0, limit);
     },
-    async findByReplacementIdentity(identity) {
-      return await port.list({ replacementIdentity: identity });
+    async findByReplacementKey(key) {
+      return await port.list({ replacementKey: key });
     },
     async create(record) {
       const checked = TransactionRecordSchema.parse(record);
@@ -69,11 +67,15 @@ const createStoredRecord = (
 ): TransactionRecord =>
   TransactionRecordSchema.parse({
     id: overrides.id,
+    namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
-    fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: overrides.status,
     submitted: overrides.submitted,
+    receipt: null,
+    replacementKey: null,
+    replacedByRecordId: null,
     createdAt: 1_000,
     updatedAt: 1_000,
     ...overrides,
@@ -93,7 +95,7 @@ describe("TransactionsService", () => {
       id: "11111111-1111-4111-8111-111111111111",
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       submitted: {
         hash: "0x1111",
         chainId: "0x1",
@@ -123,7 +125,7 @@ describe("TransactionsService", () => {
         id: "22222222-2222-4222-8222-222222222222",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
-        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         submitted: {
           txHash: "request-1",
           memo: "delegate",
@@ -152,7 +154,7 @@ describe("TransactionsService", () => {
         id: "33333333-3333-4333-8333-333333333333",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
-        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         submitted: {
           hash: "0x3333",
           chainId: "0x1",
@@ -188,7 +190,7 @@ describe("TransactionsService", () => {
         id: "44444444-4444-4444-8444-444444444444",
         chainRef: "eip155:1",
         origin: "https://dapp.example",
-        fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         submitted: {
           hash: "0xbbbb",
           chainId: "0x1",
@@ -209,7 +211,7 @@ describe("TransactionsService", () => {
     const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       submitted: {
         hash: "0x7777",
         chainId: "0x1",
@@ -234,7 +236,7 @@ describe("TransactionsService", () => {
     const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       submitted: {
         hash: "0x8888",
         chainId: "0x1",
@@ -265,7 +267,7 @@ describe("TransactionsService", () => {
     const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       submitted: {
         hash: "0x9999",
         chainId: "0x1",
@@ -318,19 +320,19 @@ describe("TransactionsService", () => {
     const updated = await service.linkRecord({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       expectedStatus: "replaced",
-      patch: { replacedId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      patch: { replacedByRecordId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
     });
 
     expect(updated).toMatchObject({
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       status: "replaced",
-      replacedId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      replacedByRecordId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       updatedAt: 2_000,
     });
   });
 
-  it("findByReplacementIdentity() returns matching records newest-first", async () => {
-    const replacementIdentity = {
+  it("findByReplacementKey() returns matching records newest-first", async () => {
+    const replacementKey = {
       scope: "eip155.nonce",
       value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     } as const;
@@ -338,7 +340,7 @@ describe("TransactionsService", () => {
       createStoredRecord({
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         status: "broadcast",
-        replacementIdentity,
+        replacementKey,
         createdAt: 1_000,
         updatedAt: 1_000,
         submitted: {
@@ -351,7 +353,7 @@ describe("TransactionsService", () => {
       createStoredRecord({
         id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         status: "confirmed",
-        replacementIdentity,
+        replacementKey,
         createdAt: 2_000,
         updatedAt: 2_000,
         submitted: {
@@ -364,7 +366,7 @@ describe("TransactionsService", () => {
     ]);
     const service = createTransactionsService({ port, now: () => 2_000 });
 
-    const records = await service.findByReplacementIdentity(replacementIdentity);
+    const records = await service.findByReplacementKey(replacementKey);
 
     expect(records.map((record) => record.id)).toEqual([
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -382,7 +384,7 @@ describe("TransactionsService", () => {
       async list() {
         return [];
       },
-      async findByReplacementIdentity() {
+      async findByReplacementKey() {
         return [];
       },
       async create(record) {
@@ -403,7 +405,7 @@ describe("TransactionsService", () => {
     const tx = await service.createBroadcastRecord({
       chainRef: "eip155:1",
       origin: "https://dapp.example",
-      fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       submitted: {
         hash: "0x1212",
         chainId: "0x1",

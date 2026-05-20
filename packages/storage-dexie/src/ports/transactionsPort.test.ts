@@ -14,9 +14,10 @@ let warnSpy: ReturnType<typeof vi.spyOn>;
 const createRecord = (overrides: Partial<TransactionRecord> & { id: string }) =>
   TransactionRecordSchema.parse({
     id: overrides.id,
+    namespace: "eip155",
     chainRef: "eip155:1",
     origin: "https://dapp.example",
-    fromAccountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     status: "broadcast",
     submitted: {
       hash: "0x1111",
@@ -24,6 +25,9 @@ const createRecord = (overrides: Partial<TransactionRecord> & { id: string }) =>
       from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       nonce: "0x7",
     },
+    receipt: null,
+    replacementKey: null,
+    replacedByRecordId: null,
     createdAt: 1000,
     updatedAt: 1000,
     ...overrides,
@@ -179,31 +183,31 @@ describe("DexieTransactionsPort", () => {
     expect(secondPage.map((record) => record.id)).toEqual([r1.id]);
   });
 
-  it("findByReplacementIdentity() uses the durable replacement identity relation", async () => {
+  it("findByReplacementKey() uses the durable replacement identity relation", async () => {
     const storage = createDexieStorage({ databaseName: DB_NAME });
     const port = storage.ports.transactions;
-    const replacementIdentity = {
+    const replacementKey = {
       scope: "eip155.nonce",
       value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x7",
     } as const;
 
     const broadcast = createRecord({
       id: "10101010-1010-4010-8010-101010101010",
-      replacementIdentity,
+      replacementKey,
       createdAt: 1_000,
       updatedAt: 1_000,
     });
     const confirmed = createRecord({
       id: "20202020-2020-4020-8020-202020202020",
       status: "confirmed",
-      replacementIdentity,
+      replacementKey,
       createdAt: 2_000,
       updatedAt: 2_000,
     });
     const unrelated = createRecord({
       id: "30303030-3030-4030-8030-303030303030",
       status: "confirmed",
-      replacementIdentity: {
+      replacementKey: {
         scope: "eip155.nonce",
         value: "eip155:1:0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0x8",
       },
@@ -215,10 +219,10 @@ describe("DexieTransactionsPort", () => {
     await port.create(confirmed);
     await port.create(unrelated);
 
-    const listed = await port.list({ replacementIdentity });
+    const listed = await port.list({ replacementKey });
     expect(listed.map((record) => record.id)).toEqual([confirmed.id, broadcast.id]);
 
-    const records = await port.findByReplacementIdentity(replacementIdentity);
+    const records = await port.findByReplacementKey(replacementKey);
     expect(records.map((record) => record.id)).toEqual([confirmed.id, broadcast.id]);
   });
 

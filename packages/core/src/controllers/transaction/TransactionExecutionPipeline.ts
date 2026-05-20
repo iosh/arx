@@ -1,10 +1,10 @@
 import { ArxReasons, isArxError } from "@arx/errors";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import type { TransactionError } from "../../transactions/types.js";
 import { TransactionExecutionFailureService } from "./TransactionExecutionFailureService.js";
 import { TransactionExecutionRunner } from "./TransactionExecutionRunner.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
 import type { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionMessenger } from "./topics.js";
 import type { TransactionProposalTerminationReason } from "./types.js";

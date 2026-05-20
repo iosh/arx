@@ -3,6 +3,8 @@ import type { TransactionsService } from "../../services/store/transactions/type
 import type { TransactionAccess } from "../../transactions/access.js";
 import { createTransactionAccess } from "../../transactions/createTransactionAccess.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
+import { TransactionRecordViewStore } from "../../transactions/record/TransactionRecordViewStore.js";
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { AccountController } from "../account/types.js";
 import type { ApprovalController } from "../approval/types.js";
@@ -17,8 +19,6 @@ import { TransactionProposalBeginService } from "./TransactionProposalBeginServi
 import { TransactionProposalDraftService } from "./TransactionProposalDraftService.js";
 import { createTransactionProposalReader } from "./TransactionProposalReadService.js";
 import { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
-import { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
-import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { createTransactionRecoveryService } from "./TransactionRecoveryService.js";
 import { TransactionSubmissionStore } from "./TransactionSubmissionStore.js";
 import type { TransactionMessenger } from "./topics.js";

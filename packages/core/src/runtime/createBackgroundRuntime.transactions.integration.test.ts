@@ -516,14 +516,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const replaced = context.runtime.transactions.records.getRecordView(first.transactionId);
       expect(replaced).toMatchObject({
         status: "replaced",
-        replacedId: second.transactionId,
+        replacedByRecordId: second.transactionId,
       });
 
       const stored = await context.transactionsPort.get(first.transactionId);
       expect(stored).toMatchObject({
         status: "replaced",
-        replacedId: second.transactionId,
-        replacementIdentity: {
+        replacedByRecordId: second.transactionId,
+        replacementKey: {
           scope: "eip155.nonce",
           value: `${chain.chainRef}:${fromAddress.toLowerCase()}:0x7`,
         },
@@ -532,7 +532,7 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const replacementStored = await context.transactionsPort.get(second.transactionId);
       expect(replacementStored).toMatchObject({
         status: "confirmed",
-        replacementIdentity: {
+        replacementKey: {
           scope: "eip155.nonce",
           value: `${chain.chainRef}:${fromAddress.toLowerCase()}:0x7`,
         },

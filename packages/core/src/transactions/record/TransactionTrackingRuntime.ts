@@ -1,3 +1,10 @@
+import { isTransactionRecordTerminal } from "../../controllers/transaction/status.js";
+import type { TransactionRecordStatus, TransactionRecordView } from "../../controllers/transaction/types.js";
+import {
+  buildTrackingContext,
+  coerceTransactionError,
+  isUserRejectedError,
+} from "../../controllers/transaction/utils.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
@@ -9,10 +16,7 @@ import type {
 import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import { createReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
 import type { TransactionError } from "../../transactions/types.js";
-import { isTransactionRecordTerminal } from "./status.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
-import type { TransactionRecordStatus, TransactionRecordView } from "./types.js";
-import { buildTrackingContext, coerceTransactionError, isUserRejectedError } from "./utils.js";
 
 type TransactionTrackingRuntimeDeps = {
   recordView: TransactionRecordViewStore;
@@ -21,9 +25,9 @@ type TransactionTrackingRuntimeDeps = {
   tracker?: ReceiptTracker;
 };
 
-const toStoredReplacementIdentity = (
+const toDurableReplacementKey = (
   replacementKey: TransactionReplacementKey | null,
-): NonNullable<TransactionRecord["replacementIdentity"]> | null => {
+): NonNullable<TransactionRecord["replacementKey"]> | null => {
   if (!replacementKey) return null;
   return {
     scope: replacementKey.scope,
@@ -167,18 +171,18 @@ export class TransactionTrackingRuntime {
     const trackingView = view ?? this.#recordView.commitRecordView(record).next;
     const namespaceTransaction = this.#namespaces.get(trackingView.namespace);
     const trackingContext = buildTrackingContext(trackingView);
-    let replacedId = resolution.replacedId;
-    if (replacedId === undefined && namespaceTransaction?.tracking?.deriveReplacementKey) {
-      const replacementIdentity = toStoredReplacementIdentity(
+    let replacedByRecordId = resolution.replacedByRecordId;
+    if (replacedByRecordId === undefined && namespaceTransaction?.tracking?.deriveReplacementKey) {
+      const replacementKey = toDurableReplacementKey(
         namespaceTransaction.tracking.deriveReplacementKey(trackingContext),
       );
-      if (replacementIdentity) {
+      if (replacementKey) {
         const confirmedReplacement = await this.#findConfirmedReplacementCandidate({
-          replacedId: record.id,
-          replacementIdentity,
+          replacedRecordId: record.id,
+          replacementKey,
         });
         if (confirmedReplacement) {
-          replacedId = confirmedReplacement.id;
+          replacedByRecordId = confirmedReplacement.id;
         }
       }
     }
@@ -188,7 +192,7 @@ export class TransactionTrackingRuntime {
       fromStatus: "broadcast",
       toStatus: "replaced",
       patch: {
-        ...(replacedId !== undefined ? { replacedId } : {}),
+        ...(replacedByRecordId !== undefined ? { replacedByRecordId } : {}),
       },
     });
   }
@@ -227,26 +231,26 @@ export class TransactionTrackingRuntime {
   }
 
   async #linkConfirmedReplacement(confirmed: TransactionRecord): Promise<void> {
-    const replacementIdentity = confirmed.replacementIdentity ?? null;
-    if (!replacementIdentity) return;
+    const replacementKey = confirmed.replacementKey;
+    if (!replacementKey) return;
 
-    for (const candidate of await this.#service.findByReplacementIdentity(replacementIdentity)) {
+    for (const candidate of await this.#service.findByReplacementKey(replacementKey)) {
       if (candidate.id === confirmed.id) continue;
       if (candidate.status === "broadcast") {
         await this.#transitionRecord({
           id: candidate.id,
           fromStatus: "broadcast",
           toStatus: "replaced",
-          patch: { replacedId: confirmed.id },
+          patch: { replacedByRecordId: confirmed.id },
         });
         continue;
       }
-      if (candidate.status !== "replaced" || candidate.replacedId) continue;
+      if (candidate.status !== "replaced" || candidate.replacedByRecordId) continue;
 
       const patched = await this.#service.linkRecord({
         id: candidate.id,
         expectedStatus: "replaced",
-        patch: { replacedId: confirmed.id },
+        patch: { replacedByRecordId: confirmed.id },
       });
       if (patched) {
         this.#recordView.commitRecordView(patched);
@@ -255,12 +259,12 @@ export class TransactionTrackingRuntime {
   }
 
   async #findConfirmedReplacementCandidate(params: {
-    replacedId: string;
-    replacementIdentity: NonNullable<TransactionRecord["replacementIdentity"]>;
+    replacedRecordId: string;
+    replacementKey: NonNullable<TransactionRecord["replacementKey"]>;
   }) {
-    const candidates = await this.#service.findByReplacementIdentity(params.replacementIdentity);
+    const candidates = await this.#service.findByReplacementKey(params.replacementKey);
     for (const record of candidates) {
-      if (record.id === params.replacedId || record.status !== "confirmed") continue;
+      if (record.id === params.replacedRecordId || record.status !== "confirmed") continue;
       return record;
     }
 

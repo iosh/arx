@@ -127,7 +127,7 @@ export const buildRecordContext = (record: TransactionRecordView): TransactionRe
   namespace: record.namespace,
   chainRef: record.chainRef,
   origin: record.origin,
-  from: record.from,
+  from: record.accountAddress,
 });
 
 export const buildTrackingContext = (record: TransactionRecordView): TransactionTrackingContext => ({

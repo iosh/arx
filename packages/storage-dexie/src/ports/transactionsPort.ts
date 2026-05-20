@@ -19,7 +19,7 @@ export class DexieTransactionsPort implements TransactionsPort {
   async list(query?: {
     chainRef?: string;
     status?: TransactionRecord["status"];
-    replacementIdentity?: TransactionRecord["replacementIdentity"];
+    replacementKey?: TransactionRecord["replacementKey"];
     limit?: number;
     before?: {
       createdAt: number;
@@ -31,13 +31,13 @@ export class DexieTransactionsPort implements TransactionsPort {
     const limit = query?.limit ?? 100;
     const chainRef = query?.chainRef;
     const status = query?.status;
-    const replacementIdentity = query?.replacementIdentity;
+    const replacementKey = query?.replacementKey;
     const before = query?.before;
     const candidateRows = await (() => {
-      if (replacementIdentity !== undefined && replacementIdentity !== null) {
+      if (replacementKey !== undefined && replacementKey !== null) {
         return this.table
-          .where("[replacementIdentity.scope+replacementIdentity.value]")
-          .equals([replacementIdentity.scope, replacementIdentity.value])
+          .where("[replacementKey.scope+replacementKey.value]")
+          .equals([replacementKey.scope, replacementKey.value])
           .toArray();
       }
       if (chainRef !== undefined) {
@@ -58,8 +58,8 @@ export class DexieTransactionsPort implements TransactionsPort {
       if (chainRef !== undefined && parsed.chainRef !== chainRef) continue;
       if (status !== undefined && parsed.status !== status) continue;
       if (
-        replacementIdentity !== undefined &&
-        JSON.stringify(parsed.replacementIdentity ?? null) !== JSON.stringify(replacementIdentity)
+        replacementKey !== undefined &&
+        JSON.stringify(parsed.replacementKey ?? null) !== JSON.stringify(replacementKey)
       ) {
         continue;
       }
@@ -80,13 +80,11 @@ export class DexieTransactionsPort implements TransactionsPort {
     return records.slice(0, limit);
   }
 
-  async findByReplacementIdentity(
-    identity: NonNullable<TransactionRecord["replacementIdentity"]>,
-  ): Promise<TransactionRecord[]> {
+  async findByReplacementKey(key: NonNullable<TransactionRecord["replacementKey"]>): Promise<TransactionRecord[]> {
     await this.ctx.ready;
     const rows = await this.table
-      .where("[replacementIdentity.scope+replacementIdentity.value]")
-      .equals([identity.scope, identity.value])
+      .where("[replacementKey.scope+replacementKey.value]")
+      .equals([key.scope, key.value])
       .toArray();
 
     const records = await Promise.all(

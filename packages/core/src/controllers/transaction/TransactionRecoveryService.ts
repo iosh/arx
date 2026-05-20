@@ -1,4 +1,4 @@
-import type { TransactionRecordRuntime } from "./TransactionRecordRuntime.js";
+import type { TransactionRecordRuntime } from "../../transactions/record/TransactionRecordRuntime.js";
 import type { TransactionRecovery } from "./types.js";
 
 type TransactionRecoveryServiceDeps = {

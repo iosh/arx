@@ -2,12 +2,12 @@ import type { TransactionApprovalResult } from "../runtime.js";
 import type { TransactionProposalRuntime } from "./TransactionProposalRuntime.js";
 
 type TransactionProposalApprovalServiceDeps = {
-  proposalRuntime: Pick<TransactionProposalRuntime, "getView" | "approvePendingProposal">;
+  proposalRuntime: Pick<TransactionProposalRuntime, "getProposalSnapshot" | "approvePendingProposal">;
   now: () => number;
 };
 
 export class TransactionProposalApprovalService {
-  #proposalRuntime: Pick<TransactionProposalRuntime, "getView" | "approvePendingProposal">;
+  #proposalRuntime: Pick<TransactionProposalRuntime, "getProposalSnapshot" | "approvePendingProposal">;
   #now: () => number;
 
   constructor(deps: TransactionProposalApprovalServiceDeps) {
@@ -17,7 +17,7 @@ export class TransactionProposalApprovalService {
 
   approvePendingProposal(id: string): TransactionApprovalResult {
     const updatedAt = this.#now();
-    const existing = this.#proposalRuntime.getView(id) ?? null;
+    const existing = this.#proposalRuntime.getProposalSnapshot(id) ?? null;
     const approved = this.#proposalRuntime.approvePendingProposal({ id, updatedAt });
     switch (approved.status) {
       case "approved":

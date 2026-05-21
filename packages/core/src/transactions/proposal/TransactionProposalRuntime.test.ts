@@ -579,7 +579,7 @@ describe("TransactionProposalRuntime", () => {
         status: "approved",
       },
     });
-    expect(store.getView(id)).toBeUndefined();
+    expect(store.getProposalSnapshot(id)).toBeUndefined();
     expect(store.listExecutableProposalIds()).toEqual([]);
   });
 

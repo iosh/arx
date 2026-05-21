@@ -3,9 +3,9 @@ import type { ApprovalFinishedEvent } from "../../controllers/approval/types.js"
 import type { TransactionProposalStatus, TransactionProposalTermination } from "../proposal/index.js";
 import type { TransactionReviewBlocker, TransactionReviewError } from "../review/types.js";
 import type {
-  ControllerTransactionProposalSnapshot,
   TransactionProposalMeta,
   TransactionProposalPrepareSnapshot,
+  TransactionProposalSnapshot,
   TransactionProposalReviewState,
   TransactionProposalStateSnapshot,
   TransactionProposalStatusChange,
@@ -398,7 +398,7 @@ export class TransactionProposalRuntime {
     return state ? this.#toStateSnapshot(state) : undefined;
   }
 
-  getView(id: string): ControllerTransactionProposalSnapshot | undefined {
+  getProposalSnapshot(id: string): TransactionProposalSnapshot | undefined {
     const state = this.#records.get(id);
     return state ? this.#buildProposalView(state) : undefined;
   }
@@ -924,7 +924,7 @@ export class TransactionProposalRuntime {
     };
   }
 
-  #buildProposalView(state: TransactionProposalState): ControllerTransactionProposalSnapshot {
+  #buildProposalView(state: TransactionProposalState): TransactionProposalSnapshot {
     const from = this.#requireFromAddress(state);
     return structuredClone({
       kind: "proposal",

@@ -11,7 +11,6 @@ import type { TransactionRecordView } from "./record/index.js";
 import type { SendTransactionApprovalReview } from "./review/types.js";
 import type {
   ApprovalDetailInvalidationEvents,
-  TransactionRecordView as ControllerTransactionRecordView,
   TransactionApprovalExecutor,
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
@@ -19,6 +18,7 @@ import type {
   TransactionProposalReader,
   TransactionProposalRuntimeReader,
   TransactionRecordReader,
+  TransactionRecordView as RuntimeTransactionRecordView,
   TransactionRecoveryRuntime,
   TransactionSubmissionTracker,
 } from "./runtime.js";
@@ -93,7 +93,7 @@ const mapProposal = (deps: {
   };
 };
 
-const toControllerProposalMeta = (
+const toProposalMeta = (
   runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>,
 ): TransactionProposalMeta => {
   return {
@@ -114,7 +114,7 @@ const toControllerProposalMeta = (
 
 const mapProposalView = (deps: {
   runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>;
-  proposalView: NonNullable<ReturnType<TransactionProposalReader["getProposalView"]>>;
+  proposalView: NonNullable<ReturnType<TransactionProposalReader["getProposalReviewView"]>>;
 }): TransactionProposalView => {
   const preview = deps.proposalView.review ? mapPreview(deps.proposalView.review) : undefined;
 
@@ -124,7 +124,7 @@ const mapProposalView = (deps: {
   };
 };
 
-const mapRecordView = (record: ControllerTransactionRecordView): TransactionRecordView => ({
+const mapRecordView = (record: RuntimeTransactionRecordView): TransactionRecordView => ({
   kind: "record",
   id: record.id,
   namespace: record.namespace,
@@ -212,7 +212,7 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
         }
 
         const approvalId = deps.proposalBegin.requestApproval(
-          toControllerProposalMeta(runtimeView),
+          toProposalMeta(runtimeView),
           options.requestContext,
           null,
         );
@@ -271,7 +271,7 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
     queries: {
       getProposalView(transactionId) {
         const runtimeView = deps.proposalRuntime.getProposalStateSnapshot(transactionId);
-        const proposalView = deps.proposalReader.getProposalView(transactionId);
+        const proposalView = deps.proposalReader.getProposalReviewView(transactionId);
         if (!runtimeView || !proposalView) {
           return undefined;
         }

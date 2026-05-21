@@ -998,7 +998,9 @@ describe("createBackgroundRuntime provider access", () => {
         },
       });
       expect(
-        capturedTransactionId ? background.runtime.transactions.proposals.getProposalView(capturedTransactionId) : null,
+        capturedTransactionId
+          ? background.runtime.transactions.proposals.getProposalReviewView(capturedTransactionId)
+          : null,
       ).toBeUndefined();
     } finally {
       releaseBroadcast?.();

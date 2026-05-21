@@ -24,7 +24,7 @@ export type TransactionProposalStatusChange = {
   id: string;
   previousStatus: TransactionProposalStatus;
   nextStatus: TransactionProposalStatus;
-  proposal: ControllerTransactionProposalSnapshot;
+  proposal: TransactionProposalSnapshot;
 };
 
 export type TransactionRecordStatusChange = {
@@ -125,7 +125,7 @@ export type TransactionProposalReviewState = {
   invalidatedBy?: string | undefined;
 };
 
-export type ControllerTransactionProposalSnapshot = {
+export type TransactionProposalSnapshot = {
   kind: "proposal";
   id: string;
   approvalId: string;
@@ -142,7 +142,7 @@ export type ControllerTransactionProposalSnapshot = {
   updatedAt: number;
 };
 
-export type ControllerTransactionProposalView = ControllerTransactionProposalSnapshot & {
+export type TransactionProposalReviewView = TransactionProposalSnapshot & {
   review?: SendTransactionApprovalReview | undefined;
 };
 
@@ -169,7 +169,7 @@ export type TransactionApprovalResult =
   | {
       status: "failed";
       reason: TransactionApprovalFailureReason;
-      transaction?: ControllerTransactionProposalSnapshot | undefined;
+      transaction?: TransactionProposalSnapshot | undefined;
       message: string;
       data?: unknown;
     };
@@ -282,12 +282,12 @@ export type ApprovalDetailInvalidationEvents = {
 };
 
 export type TransactionProposalReader = {
-  getProposalView(id: string): ControllerTransactionProposalView | undefined;
+  getProposalReviewView(id: string): TransactionProposalReviewView | undefined;
 };
 
 export type TransactionProposalRuntimeReader = {
   getProposalStateSnapshot(id: string): TransactionProposalStateSnapshot | undefined;
-  getView(id: string): ControllerTransactionProposalSnapshot | undefined;
+  getProposalSnapshot(id: string): TransactionProposalSnapshot | undefined;
   getReviewState(id: string): TransactionProposalReviewState | null;
   onChanged(handler: (transactionIds: string[]) => void): () => void;
 };

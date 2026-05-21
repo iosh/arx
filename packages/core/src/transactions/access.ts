@@ -1,10 +1,3 @@
-import type {
-  BeginTransactionApprovalOptions,
-  ProviderTransactionSubmission,
-  TransactionApprovalReviewReader,
-  TransactionProposalReader,
-  TransactionRecordReader,
-} from "../controllers/transaction/types.js";
 import type { RequestContext } from "../rpc/requestContext.js";
 import type { TransactionIntent } from "./intent/index.js";
 import type {
@@ -13,6 +6,13 @@ import type {
   TransactionProposalView,
 } from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
+import type {
+  BeginTransactionApprovalOptions,
+  ProviderTransactionSubmission,
+  TransactionApprovalReviewReader,
+  TransactionProposalReader,
+  TransactionRecordReader,
+} from "./runtime.js";
 import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "./types.js";
 
 export type TransactionRequestScope = {

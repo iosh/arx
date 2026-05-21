@@ -7,18 +7,18 @@ import type { ApprovalController } from "../../controllers/approval/types.js";
 import type { NetworkController } from "../../controllers/network/types.js";
 import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "../../controllers/permission/types.js";
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
+import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
+import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
+import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
+import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
 import type {
   ProviderTransactionApprovalCommands,
   TransactionApprovalExecutor,
   TransactionApprovalReviewReader,
   TransactionProposalBeginCommands,
   TransactionProposalDraftCommands,
-  TransactionRecovery,
-} from "../../controllers/transaction/types.js";
-import type { NamespaceSignerRegistry } from "../../namespaces/types.js";
-import type { ProviderRequestHandle } from "../../runtime/provider/providerRequests.js";
-import type { PermissionViewsService } from "../../services/runtime/permissionViews/types.js";
-import type { NetworkSelectionService } from "../../services/store/networkSelection/types.js";
+  TransactionRecoveryRuntime,
+} from "../../transactions/runtime.js";
 import type { RequestContext } from "../requestContext.js";
 import type { RpcRequestKind } from "../requestKind.js";
 import { NoParamsSchema } from "./params.js";
@@ -33,7 +33,7 @@ export type HandlerControllers = {
   transactionProposalDraft: TransactionProposalDraftCommands;
   providerTransactionCommands: ProviderTransactionApprovalCommands;
   transactionExecution: TransactionApprovalExecutor;
-  transactionRecovery: TransactionRecovery;
+  transactionRecovery: TransactionRecoveryRuntime;
   transactionReview: TransactionApprovalReviewReader;
   supportedChains?: SupportedChainsController;
   chainAddressCodecs: ChainAddressCodecRegistry;

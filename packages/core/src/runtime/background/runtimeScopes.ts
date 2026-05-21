@@ -1,6 +1,5 @@
 import type { ApprovalExecutor } from "../../approvals/types.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
-import type { TransactionRuntime } from "../../controllers/transaction/types.js";
 import { Messenger, type ViolationMode } from "../../messenger/Messenger.js";
 import {
   materializeNamespaceRuntimeSupport,
@@ -31,6 +30,7 @@ import type { SettingsPort } from "../../services/store/settings/port.js";
 import type { TransactionsPort } from "../../services/store/transactions/port.js";
 import type { VaultMetaPort } from "../../storage/index.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionRuntime } from "../../transactions/runtime.js";
 import type { KeyringService } from "../keyring/KeyringService.js";
 import {
   type ControllerLayerOptions,

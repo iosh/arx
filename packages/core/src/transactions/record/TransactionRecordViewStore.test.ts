@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAccountCodecRegistry, eip155Codec } from "../../accounts/addressing/codec.js";
-import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
-import type { TransactionStatusChange } from "../../controllers/transaction/types.js";
 import { Messenger } from "../../messenger/Messenger.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
+import type { TransactionStatusChange } from "../../transactions/runtime.js";
+import { TRANSACTION_STATUS_CHANGED, TRANSACTION_TOPICS } from "../../transactions/topics.js";
 import { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 
 const accountCodecs = createAccountCodecRegistry([eip155Codec]);

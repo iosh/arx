@@ -8,9 +8,9 @@ import type {
 } from "../controllers/approval/types.js";
 import type { PermissionsWriter } from "../controllers/permission/types.js";
 import type { SupportedChainsController } from "../controllers/supportedChains/types.js";
-import type { TransactionApprovalExecutor } from "../controllers/transaction/types.js";
 import type { NamespaceRuntimeBindingsRegistry } from "../namespaces/index.js";
 import type { ChainActivationService } from "../services/runtime/chainActivation/types.js";
+import type { TransactionApprovalExecutor } from "../transactions/runtime.js";
 
 export type ApprovalFlowDeps = {
   accounts: Pick<AccountController, "getActiveAccountForNamespace" | "listOwnedForNamespace">;

@@ -1,5 +1,5 @@
 import { ArxReasons, arxError } from "@arx/errors";
-import { isTransactionSubmissionError } from "../../../../controllers/index.js";
+import { isTransactionSubmissionError } from "../../../../transactions/runtime.js";
 import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";

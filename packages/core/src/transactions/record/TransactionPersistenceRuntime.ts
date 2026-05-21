@@ -1,26 +1,41 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { TransactionProposalRuntime } from "../../controllers/transaction/TransactionProposalRuntime.js";
-import type { TransactionSubmissionStore } from "../../controllers/transaction/TransactionSubmissionStore.js";
-import type { TransactionProposalMeta, TransactionRecordView } from "../../controllers/transaction/types.js";
-import { createTransactionPersistenceError } from "../../controllers/transaction/utils.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type {
   TransactionReplacementKey as DurableTransactionReplacementKey,
   TransactionRecord,
 } from "../../storage/records.js";
 import { TransactionSubmittedSchema } from "../../storage/schemas.js";
-import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { TransactionReplacementKey as NamespaceTransactionReplacementKey } from "../../transactions/namespace/types.js";
-import type { TransactionSubmitted } from "../../transactions/types.js";
+import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
+import type { TransactionReplacementKey as NamespaceTransactionReplacementKey } from "../namespace/types.js";
+import type { TransactionProposalMeta, TransactionRecordView } from "../runtime.js";
+import type { TransactionError, TransactionSubmitted } from "../types.js";
+import { createTransactionPersistenceError } from "../utils.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 
+type ProposalPersistenceBridge = {
+  clearProposalAfterRecordPersisted(id: string): { status: "cleared" | "not_found" | "not_approved" };
+  delete(id: string): void;
+};
+
+type SubmissionPersistenceBridge = {
+  recordPersisted(id: string): void;
+  recordPersistenceFailure(
+    id: string,
+    failure: {
+      transactionId: string;
+      error: TransactionError;
+      submitted: TransactionSubmitted;
+    },
+  ): void;
+};
+
 type TransactionPersistenceRuntimeDeps = {
-  proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
+  proposalRuntime: ProposalPersistenceBridge;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
   service: TransactionsService;
-  submission: Pick<TransactionSubmissionStore, "recordPersisted" | "recordPersistenceFailure">;
+  submission: SubmissionPersistenceBridge;
   startTracking(record: TransactionRecordView, options?: { resume?: boolean }): void;
 };
 
@@ -43,12 +58,12 @@ const toDurableReplacementKey = (
 };
 
 export class TransactionPersistenceRuntime {
-  #proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
+  #proposalRuntime: ProposalPersistenceBridge;
   #recordView: TransactionRecordViewStore;
   #accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   #namespaces: Pick<NamespaceTransactions, "get">;
   #service: TransactionsService;
-  #submission: Pick<TransactionSubmissionStore, "recordPersisted" | "recordPersistenceFailure">;
+  #submission: SubmissionPersistenceBridge;
   #startTracking: (record: TransactionRecordView, options?: { resume?: boolean }) => void;
 
   constructor(deps: TransactionPersistenceRuntimeDeps) {

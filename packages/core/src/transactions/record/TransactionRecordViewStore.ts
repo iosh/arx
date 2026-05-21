@@ -1,13 +1,9 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "../../controllers/transaction/topics.js";
-import type {
-  TransactionRecordReader,
-  TransactionRecordStatusChange,
-  TransactionRecordView,
-} from "../../controllers/transaction/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
-import type { TransactionReceipt } from "../../transactions/types.js";
+import type { TransactionRecordReader, TransactionRecordStatusChange, TransactionRecordView } from "../runtime.js";
+import { TRANSACTION_STATUS_CHANGED, type TransactionMessenger } from "../topics.js";
+import type { TransactionReceipt } from "../types.js";
 
 type Options = {
   messenger: TransactionMessenger;

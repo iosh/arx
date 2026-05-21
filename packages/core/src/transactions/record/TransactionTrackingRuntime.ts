@@ -1,21 +1,13 @@
-import { isTransactionRecordTerminal } from "../../controllers/transaction/status.js";
-import type { TransactionRecordStatus, TransactionRecordView } from "../../controllers/transaction/types.js";
-import {
-  buildTrackingContext,
-  coerceTransactionError,
-  isUserRejectedError,
-} from "../../controllers/transaction/utils.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
 import type { TransactionRecord } from "../../storage/records.js";
-import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type {
-  ReceiptResolution,
-  ReplacementResolution,
-  TransactionReplacementKey,
-} from "../../transactions/namespace/types.js";
-import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import { createReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import type { TransactionError } from "../../transactions/types.js";
+import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
+import type { ReceiptResolution, ReplacementResolution, TransactionReplacementKey } from "../namespace/types.js";
+import type { TransactionRecordStatus, TransactionRecordView } from "../runtime.js";
+import { isTransactionRecordTerminal } from "../status.js";
+import type { ReceiptTracker } from "../tracker/ReceiptTracker.js";
+import { createReceiptTracker } from "../tracker/ReceiptTracker.js";
+import type { TransactionError } from "../types.js";
+import { buildTrackingContext, coerceTransactionError, isUserRejectedError } from "../utils.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 
 type TransactionTrackingRuntimeDeps = {

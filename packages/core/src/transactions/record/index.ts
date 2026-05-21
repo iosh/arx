@@ -25,4 +25,5 @@ export type TransactionRecord = {
 
 export type TransactionRecordView = TransactionRecord & {
   accountAddress: AccountAddress;
+  kind: "record";
 };

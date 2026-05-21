@@ -22,16 +22,16 @@ import type { PermissionsEvents, PermissionsReader, PermissionsWriter } from "..
 import { InMemorySupportedChainsController } from "../../controllers/supportedChains/SupportedChainsController.js";
 import { SUPPORTED_CHAINS_TOPICS } from "../../controllers/supportedChains/topics.js";
 import type { SupportedChainsController } from "../../controllers/supportedChains/types.js";
-import { createTransactionRuntime } from "../../controllers/transaction/createTransactionRuntime.js";
-import { TRANSACTION_TOPICS } from "../../controllers/transaction/topics.js";
-import type { TransactionRuntime } from "../../controllers/transaction/types.js";
 import type { Messenger } from "../../messenger/Messenger.js";
 import type { AccountsService } from "../../services/store/accounts/types.js";
 import type { CustomChainsPort } from "../../services/store/customChains/port.js";
 import type { PermissionsPort } from "../../services/store/permissions/port.js";
 import type { SettingsService } from "../../services/store/settings/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
+import { createTransactionRuntime } from "../../transactions/createTransactionRuntime.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
+import type { TransactionRuntime } from "../../transactions/runtime.js";
+import { TRANSACTION_TOPICS } from "../../transactions/topics.js";
 import { DEFAULT_STRATEGY } from "./constants.js";
 import type { RuntimeNetworkPlan } from "./networkDefaults.js";
 

@@ -4,7 +4,6 @@ import type { ChainNamespace } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
 import type { AccountKey } from "../../storage/records.js";
 import type { RequestPermissionsApprovalPayload, RequestPermissionsApprovalResult } from "../permission/types.js";
-import type { SendTransactionApprovalSubjectRequest } from "../transaction/types.js";
 import { type ApprovalKind, ApprovalKinds, type ApprovalType, ApprovalTypes } from "./constants.js";
 
 export { getApprovalKind, getApprovalType } from "./constants.js";
@@ -36,6 +35,12 @@ export type ApprovalQueueItem = {
   createdAt: number;
 };
 
+export type SendTransactionApprovalRequest = {
+  transactionId: string;
+  chainRef: ChainRef;
+  origin: string;
+};
+
 export type ApprovalRequestByKind = {
   [ApprovalKinds.RequestAccounts]: {
     chainRef: ChainRef;
@@ -52,7 +57,7 @@ export type ApprovalRequestByKind = {
     from: string;
     typedData: string;
   };
-  [ApprovalKinds.SendTransaction]: SendTransactionApprovalSubjectRequest;
+  [ApprovalKinds.SendTransaction]: SendTransactionApprovalRequest;
   [ApprovalKinds.SwitchChain]: { chainRef: ChainRef };
   [ApprovalKinds.AddChain]: { metadata: ChainMetadata; isUpdate: boolean };
 };

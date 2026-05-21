@@ -6,7 +6,6 @@ import { eip155AddressCodec } from "../../chains/eip155/addressCodec.js";
 import type { ChainRef } from "../../chains/ids.js";
 import type { ChainMetadata } from "../../chains/metadata.js";
 import { ChainAddressCodecRegistry } from "../../chains/registry.js";
-import { TRANSACTION_APPROVAL_DETAIL_INVALIDATED } from "../../controllers/transaction/topics.js";
 import { eip155NamespaceManifest } from "../../namespaces/eip155/manifest.js";
 import type { RpcInvocationContext } from "../../rpc/index.js";
 import type { AccountsPort } from "../../services/store/accounts/port.js";
@@ -37,6 +36,7 @@ import {
   PermissionRecordSchema,
   TransactionRecordSchema,
 } from "../../storage/records.js";
+import { TRANSACTION_APPROVAL_DETAIL_INVALIDATED } from "../../transactions/topics.js";
 import { vaultErrors } from "../../vault/errors.js";
 import type { VaultEnvelope, VaultService } from "../../vault/types.js";
 import type { BackgroundRpcEnvHooks } from "../background/rpcEngineAssembly.js";

@@ -1,9 +1,9 @@
-import type { TransactionRecovery } from "../../controllers/transaction/types.js";
 import type { UnlockController } from "../../controllers/unlock/types.js";
 import type { TransactionsService } from "../../services/store/transactions/types.js";
+import type { TransactionRecoveryRuntime } from "../../transactions/runtime.js";
 
 export type TransactionsLifecycleOptions = {
-  controller: TransactionRecovery;
+  controller: TransactionRecoveryRuntime;
   service: Pick<TransactionsService, "list">;
   unlock: Pick<UnlockController, "onUnlocked" | "isUnlocked">;
   logger?: (message: string, error?: unknown) => void;

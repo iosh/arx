@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
-import type { TransactionStatusChange } from "../controllers/index.js";
-import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
 import type { TransactionIntent } from "../transactions/intent/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
@@ -10,6 +8,8 @@ import type {
   NamespaceTransactionProposal,
   NamespaceTransactionTracking,
 } from "../transactions/namespace/types.js";
+import type { TransactionStatusChange } from "../transactions/runtime.js";
+import { TRANSACTION_STATUS_CHANGED } from "../transactions/topics.js";
 import {
   createChainMetadata,
   flushAsync,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalKinds, type ApprovalQueueItem, type ApprovalRecord } from "../../../controllers/approval/types.js";
-import type { SendTransactionApprovalReview } from "../../../controllers/transaction/review/types.js";
+import type { SendTransactionApprovalReview } from "../../../transactions/review/types.js";
 import { createApprovalReadService } from "./readService.js";
 
 const CHAIN_VIEWS = {

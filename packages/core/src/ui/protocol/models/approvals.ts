@@ -2,11 +2,11 @@ import { z } from "zod";
 import { ApprovalAccountSelectionDecisionSchema } from "../../../approvals/decision.js";
 import { ChainRefSchema } from "../../../chains/ids.js";
 import { type ApprovalKind, ApprovalKinds } from "../../../controllers/approval/types.js";
+import { AccountKeySchema } from "../../../storage/records.js";
 import {
   type SendTransactionApprovalReview,
   SendTransactionApprovalReviewSchema,
-} from "../../../controllers/transaction/review/types.js";
-import { AccountKeySchema } from "../../../storage/records.js";
+} from "../../../transactions/review/types.js";
 
 const APPROVAL_KIND_VALUES = [
   ApprovalKinds.RequestAccounts,

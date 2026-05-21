@@ -1,26 +1,37 @@
 import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
-import type { TransactionProposalRuntime } from "../../controllers/transaction/TransactionProposalRuntime.js";
-import type { TransactionSubmissionStore } from "../../controllers/transaction/TransactionSubmissionStore.js";
-import type {
-  TransactionProposalMeta,
-  TransactionRecordStatus,
-  TransactionRecordView,
-} from "../../controllers/transaction/types.js";
 import type { ListTransactionsCursor, TransactionsService } from "../../services/store/transactions/types.js";
-import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
-import type { ReceiptTracker } from "../../transactions/tracker/ReceiptTracker.js";
-import type { TransactionError, TransactionSubmitted } from "../../transactions/types.js";
+import type { NamespaceTransactions } from "../namespace/NamespaceTransactions.js";
+import type { TransactionProposalMeta, TransactionRecordStatus, TransactionRecordView } from "../runtime.js";
+import type { ReceiptTracker } from "../tracker/ReceiptTracker.js";
+import type { TransactionError, TransactionSubmitted } from "../types.js";
 import { TransactionPersistenceRuntime } from "./TransactionPersistenceRuntime.js";
 import type { TransactionRecordViewStore } from "./TransactionRecordViewStore.js";
 import { TransactionTrackingRuntime } from "./TransactionTrackingRuntime.js";
 
+type ProposalRecordBridge = {
+  clearProposalAfterRecordPersisted(id: string): { status: "cleared" | "not_found" | "not_approved" };
+  delete(id: string): void;
+};
+
+type SubmissionOutcomeBridge = {
+  recordPersisted(id: string): void;
+  recordPersistenceFailure(
+    id: string,
+    failure: {
+      transactionId: string;
+      error: TransactionError;
+      submitted: TransactionSubmitted;
+    },
+  ): void;
+};
+
 type TransactionRecordRuntimeDeps = {
-  proposalRuntime: Pick<TransactionProposalRuntime, "clearProposalAfterRecordPersisted" | "delete">;
+  proposalRuntime: ProposalRecordBridge;
   recordView: TransactionRecordViewStore;
   accountCodecs: Pick<AccountCodecRegistry, "toAccountKeyFromAddress">;
   namespaces: Pick<NamespaceTransactions, "get">;
   service: TransactionsService;
-  submission: Pick<TransactionSubmissionStore, "recordPersisted" | "recordPersistenceFailure">;
+  submission: SubmissionOutcomeBridge;
   tracker?: ReceiptTracker;
 };
 

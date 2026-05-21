@@ -1,6 +1,6 @@
 import { ArxReasons, arxError } from "@arx/errors";
 import { ApprovalKinds } from "../../controllers/approval/types.js";
-import type { TransactionApprovalFailureReason } from "../../controllers/transaction/types.js";
+import type { TransactionApprovalFailureReason } from "../../transactions/access.js";
 import { parseNoDecision } from "../shared.js";
 import type { ApprovalFlow } from "../types.js";
 

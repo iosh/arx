@@ -6,9 +6,9 @@ import {
   type ApprovalRecord,
   type ApprovalSubject,
 } from "../../../controllers/approval/types.js";
-import type { TransactionApprovalReviewReader } from "../../../controllers/transaction/types.js";
 import type { WalletAccounts } from "../../../engine/types.js";
 import type { ChainViewsService } from "../../../services/runtime/chainViews/types.js";
+import type { TransactionApprovalReviewReader } from "../../../transactions/runtime.js";
 import type {
   ApprovalDetail,
   ApprovalListEntry,

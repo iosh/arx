@@ -1,5 +1,14 @@
 import type { ApprovalController } from "../controllers/approval/types.js";
-import type { SendTransactionApprovalReview } from "../controllers/transaction/review/types.js";
+import type { RequestContext } from "../rpc/requestContext.js";
+import type {
+  TransactionAccess,
+  TransactionCreateProposalResult,
+  TransactionRequestApprovalResult,
+  TransactionSubmissionResolution,
+} from "./access.js";
+import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
+import type { TransactionRecordView } from "./record/index.js";
+import type { SendTransactionApprovalReview } from "./review/types.js";
 import type {
   ApprovalDetailInvalidationEvents,
   TransactionRecordView as ControllerTransactionRecordView,
@@ -10,18 +19,9 @@ import type {
   TransactionProposalReader,
   TransactionProposalRuntimeReader,
   TransactionRecordReader,
-  TransactionRecovery,
+  TransactionRecoveryRuntime,
   TransactionSubmissionTracker,
-} from "../controllers/transaction/types.js";
-import type { RequestContext } from "../rpc/requestContext.js";
-import type {
-  TransactionAccess,
-  TransactionCreateProposalResult,
-  TransactionRequestApprovalResult,
-  TransactionSubmissionResolution,
-} from "./access.js";
-import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
-import type { TransactionRecordView } from "./record/index.js";
+} from "./runtime.js";
 
 const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
 
@@ -29,7 +29,7 @@ type CreateTransactionAccessDeps = {
   proposalBegin: TransactionProposalBeginCommands;
   proposalDraft: TransactionProposalDraftCommands;
   execution: TransactionApprovalExecutor;
-  recovery: TransactionRecovery;
+  recovery: TransactionRecoveryRuntime;
   submission: TransactionSubmissionTracker;
   proposalRuntime: TransactionProposalRuntimeReader;
   proposalReader: TransactionProposalReader;
@@ -125,6 +125,7 @@ const mapProposalView = (deps: {
 };
 
 const mapRecordView = (record: ControllerTransactionRecordView): TransactionRecordView => ({
+  kind: "record",
   id: record.id,
   namespace: record.namespace,
   chainRef: record.chainRef,

@@ -52,7 +52,7 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext, invocation }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext, invocation }) => {
     const { message } = prepared;
     const chainRef = invocation.chainRef;
     try {
@@ -63,7 +63,7 @@ export const personalSignDefinition = defineEip155AuthorizedAccountApprovalMetho
         kind: ApprovalKinds.SignMessage,
         request: {
           chainRef,
-          from,
+          from: account.canonicalAddress,
           message,
         },
       }).settled;

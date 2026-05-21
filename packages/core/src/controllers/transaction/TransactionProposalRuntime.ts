@@ -68,6 +68,7 @@ type TransactionProposalState = {
   chainRef: string;
   origin: string;
   fromAccountKey: string;
+  requestedAddress: string | null;
   request: TransactionRequest;
   status: "active" | "approved" | "terminated";
   termination: TransactionProposalTerminationSnapshot | null;
@@ -76,10 +77,14 @@ type TransactionProposalState = {
   prepare: TransactionProposalPrepareState;
 };
 
-type TransactionProposalInit = Omit<TransactionProposalState, "approvalId" | "status" | "termination" | "prepare"> & {
+type TransactionProposalInit = Omit<
+  TransactionProposalState,
+  "approvalId" | "status" | "termination" | "prepare" | "requestedAddress"
+> & {
   approvalId?: string | undefined;
   prepared?: TransactionPrepared | null | undefined;
   requestRevision?: number | undefined;
+  requestedAddress?: string | null | undefined;
   createdAt: number;
   updatedAt: number;
 };
@@ -330,6 +335,7 @@ const buildTransactionProposalState = (input: TransactionProposalInit): Transact
     chainRef: input.chainRef,
     origin: input.origin,
     fromAccountKey: input.fromAccountKey,
+    requestedAddress: input.requestedAddress ?? null,
     request: structuredClone(input.request),
     status: "active",
     termination: null,
@@ -359,6 +365,7 @@ const applyTransactionProposalUpdate = (
     ...(update.createdAt !== undefined ? { createdAt: update.createdAt } : {}),
     ...(update.updatedAt !== undefined ? { updatedAt: update.updatedAt } : {}),
     ...(update.prepare ? { prepare: structuredClone(update.prepare) } : {}),
+    ...(update.requestedAddress !== undefined ? { requestedAddress: update.requestedAddress } : {}),
   };
 
   return next;
@@ -837,6 +844,7 @@ export class TransactionProposalRuntime {
       chainRef: state.chainRef,
       origin: state.origin,
       from,
+      ...(state.requestedAddress ? { requestedAddress: state.requestedAddress } : {}),
       request: state.request,
       prepared: readExecutionPrepared(state),
       status: state.status,
@@ -906,6 +914,7 @@ export class TransactionProposalRuntime {
       chainRef: state.chainRef,
       origin: state.origin,
       from,
+      ...(state.requestedAddress ? { requestedAddress: state.requestedAddress } : {}),
       request: structuredClone(state.request),
       fromAccountKey: state.fromAccountKey,
       status: state.status,
@@ -926,6 +935,7 @@ export class TransactionProposalRuntime {
       chainRef: state.chainRef,
       origin: state.origin,
       from,
+      ...(state.requestedAddress ? { requestedAddress: state.requestedAddress } : {}),
       request: state.request,
       prepared: readExecutionPrepared(state),
       status: state.status,

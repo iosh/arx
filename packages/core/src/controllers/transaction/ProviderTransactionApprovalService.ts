@@ -1,5 +1,6 @@
 import type { RequestContext } from "../../rpc/requestContext.js";
-import type { TransactionError, TransactionRequest } from "../../transactions/types.js";
+import type { TransactionIntent } from "../../transactions/intent/index.js";
+import type { TransactionError } from "../../transactions/types.js";
 import type {
   BeginTransactionApprovalOptions,
   ProviderTransactionApprovalCommands,
@@ -33,11 +34,11 @@ export class ProviderTransactionApprovalService implements ProviderTransactionAp
   }
 
   async beginTransactionApproval(
-    request: TransactionRequest,
+    intent: TransactionIntent,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<ProviderTransactionSubmission> {
-    const submission = await this.#begin.beginTransactionApproval(request, requestContext, options);
+    const submission = await this.#begin.beginTransactionApproval(intent, requestContext, options);
     const abortSignal = options.requestBinding?.abortSignal ?? null;
 
     if (!abortSignal) {

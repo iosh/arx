@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toAccountKeyFromAddress } from "../accounts/addressing/accountKey.js";
 import type { TransactionStatusChange } from "../controllers/index.js";
 import { TRANSACTION_STATUS_CHANGED } from "../controllers/transaction/topics.js";
+import type { TransactionIntent } from "../transactions/intent/index.js";
 import { NamespaceTransactions } from "../transactions/namespace/NamespaceTransactions.js";
 import type {
   NamespaceTransaction,
@@ -36,6 +37,37 @@ const buildEip155Submitted = (params: {
   chainId: params.chainId ?? "0x1",
   from: params.from,
   nonce: (typeof params.prepared?.nonce === "string" ? params.prepared.nonce : "0x7") as `0x${string}`,
+});
+
+const buildProviderIntent = (params: {
+  chainRef: string;
+  from: string;
+  to: string;
+  accountCodecs: Parameters<typeof toAccountKeyFromAddress>[0]["accountCodecs"];
+  payload?: Record<string, unknown>;
+}): TransactionIntent => ({
+  namespace: "eip155",
+  chainRef: params.chainRef,
+  account: {
+    accountKey: toAccountKeyFromAddress({
+      chainRef: params.chainRef,
+      address: params.from,
+      accountCodecs: params.accountCodecs,
+    }),
+    accountAddress: params.from,
+    requestedAddress: params.from,
+  },
+  request: {
+    namespace: "eip155",
+    chainRef: params.chainRef,
+    payload: {
+      from: params.from,
+      to: params.to,
+      value: "0x0",
+      data: "0x",
+      ...(params.payload ?? {}),
+    },
+  },
 });
 
 const createNamespaceTransactionMock = (params: {
@@ -143,18 +175,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     });
     try {
       const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       const submission = await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
@@ -265,18 +293,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
       const submissionIds = await Promise.all(
         fromAddresses.map(async (from, index) => {
           const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-            {
-              namespace: chain.namespace,
+            buildProviderIntent({
               chainRef: chain.chainRef,
-              payload: {
-                from,
-                to: toAddresses[index],
-                value: "0x0",
-                data: "0x",
-              },
-            },
+              from,
+              to: toAddresses[index],
+              accountCodecs: context.runtime.services.accountCodecs,
+            }),
             makeRequestContext("https://dapp.example"),
-            { from },
+            {},
           );
           await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
           return handoff.transactionId;
@@ -356,18 +380,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
       const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
@@ -469,36 +489,30 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     const unsubscribeAutoApproval = context.enableAutoApproval();
     try {
       const first = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(first.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(1));
 
       const second = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
+          from: fromAddress,
+          to: "0xcccccccccccccccccccccccccccccccccccccccc",
+          accountCodecs: context.runtime.services.accountCodecs,
           payload: {
-            from: fromAddress,
-            to: "0xcccccccccccccccccccccccccccccccccccccccc",
-            value: "0x0",
-            data: "0x",
             nonce: "0x7",
           },
-        },
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(second.transactionId);
       await vi.waitFor(() => expect(broadcastTransaction).toHaveBeenCalledTimes(2));
@@ -588,18 +602,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     try {
       const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
@@ -670,18 +680,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
     try {
       await expect(
         context.runtime.transactions.provider.beginTransactionApproval(
-          {
-            namespace: chain.namespace,
+          buildProviderIntent({
             chainRef: chain.chainRef,
-            payload: {
-              from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              value: "0x0",
-              data: "0x",
-            },
-          },
+            from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            accountCodecs: context.runtime.services.accountCodecs,
+          }),
           makeRequestContext("https://dapp.example"),
-          { from: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+          {},
         ),
       ).rejects.toMatchObject({
         reason: "ChainNotSupported",
@@ -737,18 +743,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     try {
       const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 
@@ -825,18 +827,14 @@ describe("createBackgroundRuntime (transactions integration)", () => {
 
     try {
       const handoff = await context.runtime.transactions.provider.beginTransactionApproval(
-        {
-          namespace: chain.namespace,
+        buildProviderIntent({
           chainRef: chain.chainRef,
-          payload: {
-            from: fromAddress,
-            to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            value: "0x0",
-            data: "0x",
-          },
-        },
+          from: fromAddress,
+          to: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          accountCodecs: context.runtime.services.accountCodecs,
+        }),
         makeRequestContext("https://dapp.example"),
-        { from: fromAddress },
+        {},
       );
       await context.runtime.transactions.submission.waitForOutcome(handoff.transactionId);
 

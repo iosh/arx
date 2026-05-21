@@ -3,7 +3,11 @@ import { requestApproval } from "../../../../approvals/creation.js";
 import type { ChainRef } from "../../../../chains/ids.js";
 import type { ChainAddressCodecRegistry } from "../../../../chains/registry.js";
 import type { ApprovalKinds, ApprovalRequest } from "../../../../controllers/approval/types.js";
-import type { PermissionViewsService } from "../../../../services/runtime/permissionViews/types.js";
+import type {
+  PermissionViewsService,
+  PermittedAccountView,
+} from "../../../../services/runtime/permissionViews/types.js";
+import type { Eip155TransactionRequest, TransactionIntent } from "../../../../transactions/index.js";
 import {
   ApprovalRequirements,
   AuthorizationRequirements,
@@ -90,15 +94,13 @@ export const assertPermittedEip155Account = (args: {
   chainRef: ChainRef;
   address: string;
   controllers: PermittedAccountDeps;
-}): string => {
+}) => {
   const { origin, method, chainRef, address, controllers } = args;
 
   const canonical = controllers.chainAddressCodecs.toCanonicalAddress({ chainRef, value: address }).canonical;
-  const permitted = controllers.permissionViews
-    .listPermittedAccounts(origin, { chainRef })
-    .map((account) => account.canonicalAddress);
+  const permittedAccounts = controllers.permissionViews.listPermittedAccounts(origin, { chainRef });
 
-  if (permitted.length === 0) {
+  if (permittedAccounts.length === 0) {
     throw arxError({
       reason: ArxReasons.PermissionNotConnected,
       message: `Origin "${origin}" is not connected`,
@@ -106,7 +108,8 @@ export const assertPermittedEip155Account = (args: {
     });
   }
 
-  if (!permitted.includes(canonical)) {
+  const account = permittedAccounts.find((entry) => entry.canonicalAddress === canonical);
+  if (!account) {
     throw arxError({
       reason: ArxReasons.PermissionDenied,
       message: `Account is not permitted for origin "${origin}"`,
@@ -114,7 +117,28 @@ export const assertPermittedEip155Account = (args: {
     });
   }
 
-  return canonical;
+  return account;
+};
+
+export const buildEip155TransactionIntent = (args: {
+  origin: string;
+  method: string;
+  chainRef: ChainRef;
+  request: Eip155TransactionRequest;
+  account: PermittedAccountView;
+}) => {
+  const requestedAddress = args.request.payload.from;
+
+  return {
+    namespace: "eip155" as const,
+    chainRef: args.chainRef,
+    account: {
+      accountKey: args.account.accountKey,
+      accountAddress: args.account.canonicalAddress,
+      ...(requestedAddress ? { requestedAddress } : {}),
+    },
+    request: args.request,
+  } satisfies TransactionIntent;
 };
 
 type MethodExecutionContext<P> = Parameters<MethodHandler<P>>[0];
@@ -164,7 +188,7 @@ type Eip155AuthorizedAccountApprovalMethodDefinition<P, Prepared> = Omit<
     context: MethodExecutionContext<P>,
   ) => AuthorizedEip155ExecutionPlan<Prepared> | Promise<AuthorizedEip155ExecutionPlan<Prepared>>;
   executeAuthorizedRequest: (
-    context: MethodExecutionContext<P> & { from: string; prepared: Prepared },
+    context: MethodExecutionContext<P> & { account: PermittedAccountView; prepared: Prepared },
   ) => ReturnType<MethodHandler<P>>;
 };
 
@@ -183,7 +207,7 @@ export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
       const { address, prepared } = executionPlan;
       const chainRef = context.invocation.chainRef;
 
-      const from = assertPermittedEip155Account({
+      const account = assertPermittedEip155Account({
         origin: context.origin,
         method: context.request.method,
         chainRef,
@@ -196,7 +220,7 @@ export const defineEip155AuthorizedAccountApprovalMethod = <P, Prepared>(
 
       return executeAuthorizedRequest({
         ...context,
-        from,
+        account,
         prepared,
       });
     },

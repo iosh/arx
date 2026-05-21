@@ -20,10 +20,8 @@ import type {
   TransactionRequestApprovalResult,
   TransactionSubmissionResolution,
 } from "./access.js";
-import type { TransactionIntent } from "./intent/index.js";
 import type { TransactionApprovalPreview, TransactionProposal, TransactionProposalView } from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
-import type { TransactionRequest } from "./types.js";
 
 const INTERNAL_TRANSACTION_ORIGIN = "https://wallet.arx.internal";
 
@@ -49,25 +47,6 @@ const createInternalRequestContext = (): RequestContext => ({
   requestId: crypto.randomUUID(),
 });
 
-const deriveRequestedAddress = (request: TransactionRequest): string | undefined => {
-  const candidate = (request.payload as { from?: unknown } | undefined)?.from;
-  return typeof candidate === "string" ? candidate : undefined;
-};
-
-const assertIntentMatchesRequest = (intent: TransactionIntent): void => {
-  if (intent.namespace !== intent.request.namespace) {
-    throw new Error(
-      `Transaction intent namespace mismatch: intent=${intent.namespace} request=${intent.request.namespace}`,
-    );
-  }
-
-  if (intent.chainRef !== intent.request.chainRef) {
-    throw new Error(
-      `Transaction intent chainRef mismatch: intent=${intent.chainRef} request=${intent.request.chainRef}`,
-    );
-  }
-};
-
 const mapPreview = (input: SendTransactionApprovalReview): TransactionApprovalPreview => ({
   updatedAt: input.updatedAt,
   namespaceReview: input.namespaceReview,
@@ -83,7 +62,6 @@ const mapProposal = (deps: {
   runtimeView: NonNullable<ReturnType<TransactionProposalRuntimeReader["getProposalStateSnapshot"]>>;
 }): TransactionProposal => {
   const { runtimeView } = deps;
-  const requestedAddress = deriveRequestedAddress(runtimeView.request);
 
   return {
     id: runtimeView.id,
@@ -94,7 +72,7 @@ const mapProposal = (deps: {
       account: {
         accountKey: runtimeView.fromAccountKey,
         accountAddress: runtimeView.from,
-        ...(requestedAddress ? { requestedAddress } : {}),
+        ...(runtimeView.requestedAddress ? { requestedAddress: runtimeView.requestedAddress } : {}),
       },
       request: runtimeView.request,
     },
@@ -217,13 +195,8 @@ export const createTransactionAccess = (deps: CreateTransactionAccessDeps): Tran
   return {
     commands: {
       async createProposal(intent, options): Promise<TransactionCreateProposalResult> {
-        assertIntentMatchesRequest(intent);
         const requestContext = options?.requestContext ?? createInternalRequestContext();
-        const proposalMeta = deps.proposalBegin.createProposal(
-          intent.request,
-          requestContext,
-          intent.account.accountAddress,
-        );
+        const proposalMeta = deps.proposalBegin.createProposal(intent, requestContext);
         return {
           transactionId: proposalMeta.id,
         };

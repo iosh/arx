@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { TransactionIntent } from "../../transactions/intent/index.js";
 import {
   APPROVAL_ID,
   accountCodecs,
@@ -63,15 +64,27 @@ describe("TransactionProposalBeginService", () => {
       {
         namespace: "eip155",
         chainRef,
-        payload: {
-          from: DEFAULT_FROM,
-          to: DEFAULT_TO,
-          value: "0x0",
-          data: "0x",
+        account: {
+          accountKey: accountCodecs.toAccountKeyFromAddress({
+            chainRef,
+            address: DEFAULT_FROM,
+          }),
+          accountAddress: DEFAULT_FROM,
+          requestedAddress: DEFAULT_FROM,
         },
-      },
+        request: {
+          namespace: "eip155",
+          chainRef,
+          payload: {
+            from: DEFAULT_FROM,
+            to: DEFAULT_TO,
+            value: "0x0",
+            data: "0x",
+          },
+        },
+      } satisfies TransactionIntent,
       REQUEST_CONTEXT,
-      { from: DEFAULT_FROM },
+      {},
     );
 
     randomUuidSpy.mockRestore();

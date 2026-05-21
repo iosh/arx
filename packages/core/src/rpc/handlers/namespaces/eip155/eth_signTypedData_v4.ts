@@ -23,7 +23,7 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
       },
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext, invocation }) => {
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext, invocation }) => {
     const { typedData } = prepared;
     const chainRef = invocation.chainRef;
     try {
@@ -34,7 +34,7 @@ export const ethSignTypedDataV4Definition = defineEip155AuthorizedAccountApprova
         kind: ApprovalKinds.SignTypedData,
         request: {
           chainRef,
-          from,
+          from: account.canonicalAddress,
           typedData,
         },
       }).settled;

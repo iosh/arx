@@ -4,6 +4,7 @@ import { RpcRequestKinds } from "../../../requestKind.js";
 import { lockedQueue } from "../../locked.js";
 import { isDomainError, isRpcError, toParamsArray } from "../utils.js";
 import {
+  buildEip155TransactionIntent,
   defineEip155AuthorizedAccountApprovalMethod,
   requireProviderRequestHandle,
   requireRequestContext,
@@ -46,16 +47,21 @@ export const ethSendTransactionDefinition = defineEip155AuthorizedAccountApprova
       prepared: txRequest,
     };
   },
-  executeAuthorizedRequest: async ({ origin, prepared, from, controllers, rpcContext }) => {
-    prepared.payload.from = from;
+  executeAuthorizedRequest: async ({ origin, prepared, account, controllers, rpcContext }) => {
     try {
       const requestContext = requireRequestContext(rpcContext, "eth_sendTransaction");
       const providerRequestHandle = requireProviderRequestHandle(rpcContext, "eth_sendTransaction");
+      const intent = buildEip155TransactionIntent({
+        origin,
+        method: "eth_sendTransaction",
+        chainRef: prepared.chainRef,
+        request: prepared,
+        account,
+      });
       const submission = await controllers.providerTransactionCommands.beginTransactionApproval(
-        prepared,
+        intent,
         requestContext,
         {
-          from,
           requestBinding: {
             abortSignal: providerRequestHandle.signal,
             attachBlockingApproval: providerRequestHandle.attachBlockingApproval,

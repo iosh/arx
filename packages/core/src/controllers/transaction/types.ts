@@ -6,6 +6,7 @@ import type {
   TransactionReplacementKey,
 } from "../../storage/records.js";
 import type { TransactionAccess } from "../../transactions/access.js";
+import type { TransactionIntent } from "../../transactions/intent/index.js";
 import type {
   NamespaceTransactionDraftEdit,
   TransactionError,
@@ -79,6 +80,7 @@ type TransactionMetaBase = {
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress;
+  requestedAddress?: string | undefined;
   createdAt: number;
   updatedAt: number;
 };
@@ -118,6 +120,7 @@ export type TransactionProposalStateSnapshot = {
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress;
+  requestedAddress?: string | undefined;
   request: TransactionRequest;
   fromAccountKey: string;
   status: TransactionProposalStatus;
@@ -147,6 +150,7 @@ export type ControllerTransactionProposalSnapshot = {
   chainRef: ChainRef;
   origin: string;
   from: AccountAddress;
+  requestedAddress?: string | undefined;
   request: TransactionRequest;
   prepared: TransactionPrepared | null;
   status: TransactionProposalStatus;
@@ -209,7 +213,6 @@ export type TransactionApprovalResult =
     };
 
 export type BeginTransactionApprovalOptions = {
-  from: AccountAddress;
   requestBinding?: TransactionRequestBinding | null;
 };
 
@@ -264,18 +267,14 @@ export type TransactionApprovalReviewReader = {
 };
 
 export type TransactionProposalBeginCommands = {
-  createProposal(
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    fromAddress: AccountAddress,
-  ): TransactionProposalMeta;
+  createProposal(intent: TransactionIntent, requestContext: RequestContext): TransactionProposalMeta;
   requestApproval(
     proposalMeta: TransactionProposalMeta,
     requestContext: RequestContext,
     requestBinding?: TransactionRequestBinding | null,
   ): string;
   beginTransactionApproval(
-    request: TransactionRequest,
+    intent: TransactionIntent,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalRequestRef>;
@@ -293,7 +292,7 @@ export type TransactionProposalCommandSet = Readonly<{
 
 export type ProviderTransactionApprovalCommands = {
   beginTransactionApproval(
-    request: TransactionRequest,
+    intent: TransactionIntent,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<ProviderTransactionSubmission>;

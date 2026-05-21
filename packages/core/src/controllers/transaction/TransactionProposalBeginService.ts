@@ -3,6 +3,7 @@ import type { AccountCodecRegistry } from "../../accounts/addressing/codec.js";
 import { parseChainRef } from "../../chains/caip.js";
 import type { AccountAddress, AccountController, OwnedAccountView } from "../../controllers/account/types.js";
 import type { RequestContext } from "../../rpc/requestContext.js";
+import type { TransactionIntent } from "../../transactions/intent/index.js";
 import type { NamespaceTransactions } from "../../transactions/namespace/NamespaceTransactions.js";
 import type { TransactionValidationContext } from "../../transactions/namespace/types.js";
 import type { TransactionRequest } from "../../transactions/types.js";
@@ -55,11 +56,11 @@ export class TransactionProposalBeginService {
   }
 
   async beginTransactionApproval(
-    request: TransactionRequest,
+    intent: TransactionIntent,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<TransactionApprovalRequestRef> {
-    const proposalMeta = this.createProposal(request, requestContext, options.from);
+    const proposalMeta = this.createProposal(intent, requestContext);
     const approvalId = this.requestApproval(proposalMeta, requestContext, options.requestBinding ?? null);
 
     return {
@@ -68,14 +69,17 @@ export class TransactionProposalBeginService {
     };
   }
 
-  createProposal(
-    request: TransactionRequest,
-    requestContext: RequestContext,
-    fromAddress: AccountAddress,
-  ): TransactionProposalMeta {
+  createProposal(intent: TransactionIntent, requestContext: RequestContext): TransactionProposalMeta {
+    const { request } = intent;
     const derived = parseChainRef(request.chainRef);
     if (request.namespace !== derived.namespace) {
       throw new Error(`Transaction namespace mismatch: request=${request.namespace} chainRef=${request.chainRef}`);
+    }
+    if (intent.namespace !== derived.namespace) {
+      throw new Error(`Transaction intent namespace mismatch: intent=${intent.namespace} chainRef=${intent.chainRef}`);
+    }
+    if (intent.chainRef !== request.chainRef) {
+      throw new Error(`Transaction intent chainRef mismatch: intent=${intent.chainRef} request=${request.chainRef}`);
     }
 
     const namespaceTransaction = this.#namespaces.get(derived.namespace);
@@ -86,10 +90,15 @@ export class TransactionProposalBeginService {
       throw createTransactionSubmissionUnavailableError({ namespace: derived.namespace, chainRef: request.chainRef });
     }
 
-    const fromAccountKey = this.#accountCodecs.toAccountKeyFromAddress({
+    const derivedAccountKey = this.#accountCodecs.toAccountKeyFromAddress({
       chainRef: request.chainRef,
-      address: fromAddress,
+      address: intent.account.accountAddress,
     });
+    if (intent.account.accountKey !== derivedAccountKey) {
+      throw new Error(
+        `Transaction intent account mismatch: accountKey=${intent.account.accountKey} derived=${derivedAccountKey}`,
+      );
+    }
     const derivedRequestCandidate =
       namespaceTransaction.request?.deriveForChain?.(request, request.chainRef) ?? request;
     if (derivedRequestCandidate.namespace !== derived.namespace) {
@@ -107,8 +116,8 @@ export class TransactionProposalBeginService {
     const ownedAccount = this.#requireOwnedFromAccount({
       namespace: derived.namespace,
       chainRef: request.chainRef,
-      fromAddress,
-      fromAccountKey,
+      accountAddress: intent.account.accountAddress,
+      accountKey: intent.account.accountKey,
     });
     const validationContext: TransactionValidationContext = {
       namespace: derived.namespace,
@@ -127,7 +136,8 @@ export class TransactionProposalBeginService {
       namespace: derived.namespace,
       chainRef: request.chainRef,
       origin: requestContext.origin,
-      fromAccountKey,
+      fromAccountKey: ownedAccount.accountKey,
+      requestedAddress: intent.account.requestedAddress ?? null,
       request: structuredClone(derivedRequest),
       updatedAt: timestamp,
     });
@@ -199,21 +209,26 @@ export class TransactionProposalBeginService {
   #requireOwnedFromAccount(params: {
     namespace: string;
     chainRef: string;
-    fromAddress: AccountAddress;
-    fromAccountKey: string;
+    accountAddress: AccountAddress;
+    accountKey: string;
   }): OwnedAccountView {
-    const { namespace, chainRef, fromAddress, fromAccountKey } = params;
+    const { namespace, chainRef, accountAddress, accountKey } = params;
     const ownedAccount = this.#accounts.listOwnedForNamespace({ namespace, chainRef }).find((account) => {
-      return account.accountKey === fromAccountKey;
+      return account.accountKey === accountKey;
     });
     if (ownedAccount) {
+      if (ownedAccount.canonicalAddress !== accountAddress) {
+        throw new Error(
+          `Transaction intent account address mismatch: accountKey=${accountKey} expected=${ownedAccount.canonicalAddress} actual=${accountAddress}`,
+        );
+      }
       return ownedAccount;
     }
 
     throw arxError({
       reason: ArxReasons.PermissionDenied,
       message: "Requested from address is not available in this wallet.",
-      data: { from: fromAddress, chainRef },
+      data: { from: accountAddress, chainRef },
     });
   }
 }

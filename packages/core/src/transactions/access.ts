@@ -13,12 +13,7 @@ import type {
   TransactionProposalView,
 } from "./proposal/index.js";
 import type { TransactionRecordView } from "./record/index.js";
-import type {
-  NamespaceTransactionDraftEdit,
-  TransactionError,
-  TransactionRequest,
-  TransactionSubmitted,
-} from "./types.js";
+import type { NamespaceTransactionDraftEdit, TransactionError, TransactionSubmitted } from "./types.js";
 
 export type TransactionRequestScope = {
   /** Caller-owned lifetime that can cancel approval before broadcast. */
@@ -127,7 +122,7 @@ export type TransactionAccess = {
 
 export type ProviderTransactionSubmissionCommands = {
   beginTransactionApproval(
-    request: TransactionRequest,
+    intent: TransactionIntent,
     requestContext: RequestContext,
     options: BeginTransactionApprovalOptions,
   ): Promise<ProviderTransactionSubmission>;

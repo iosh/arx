@@ -1188,6 +1188,32 @@ describe("eip155 handlers - core error paths", () => {
       ).rejects.toMatchObject({ code: -32602 });
 
       expect(txSpy).toHaveBeenCalledTimes(1);
+      expect(txSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: chain.namespace,
+          chainRef: chain.chainRef,
+          account: expect.objectContaining({
+            accountKey: toAccountKeyFromAddress({
+              chainRef: chain.chainRef,
+              address: account.address,
+              accountCodecs: runtime.services.accountCodecs,
+            }),
+            accountAddress: account.address,
+            requestedAddress: account.address,
+          }),
+          request: expect.objectContaining({
+            namespace: chain.namespace,
+            chainRef: chain.chainRef,
+          }),
+        }),
+        expect.any(Object),
+        expect.objectContaining({
+          requestBinding: expect.objectContaining({
+            abortSignal: expect.any(AbortSignal),
+            attachBlockingApproval: expect.any(Function),
+          }),
+        }),
+      );
       expect(approvalCreated).not.toHaveBeenCalled();
       expect(runtime.controllers.approvals.getState().pending).toHaveLength(0);
     } finally {

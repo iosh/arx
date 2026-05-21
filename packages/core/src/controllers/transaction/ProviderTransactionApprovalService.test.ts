@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { TransactionIntent } from "../../transactions/intent/index.js";
 import { ProviderTransactionApprovalService } from "./ProviderTransactionApprovalService.js";
 import type {
   BeginTransactionApprovalOptions,
@@ -19,6 +20,17 @@ const REQUEST = {
     data: "0x",
   },
 } as const;
+
+const INTENT: TransactionIntent = {
+  namespace: REQUEST.namespace,
+  chainRef: REQUEST.chainRef,
+  account: {
+    accountKey: "eip155:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    accountAddress: REQUEST.payload.from,
+    requestedAddress: REQUEST.payload.from,
+  },
+  request: REQUEST,
+};
 
 const REQUEST_CONTEXT = {
   transport: "provider" as const,
@@ -57,8 +69,7 @@ describe("ProviderTransactionApprovalService", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const submission = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
-      from: REQUEST.payload.from,
+    const submission = await service.beginTransactionApproval(INTENT, REQUEST_CONTEXT, {
       requestBinding: {
         abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),
@@ -95,8 +106,7 @@ describe("ProviderTransactionApprovalService", () => {
     const addEventListener = vi.spyOn(controller.signal, "addEventListener");
     const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
 
-    const submission = await service.beginTransactionApproval(REQUEST, REQUEST_CONTEXT, {
-      from: REQUEST.payload.from,
+    const submission = await service.beginTransactionApproval(INTENT, REQUEST_CONTEXT, {
       requestBinding: {
         abortSignal: controller.signal,
         attachBlockingApproval: vi.fn(),
